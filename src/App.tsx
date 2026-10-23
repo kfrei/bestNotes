@@ -445,6 +445,28 @@ export default function App() {
     if (pt.x < b.minX - tol || pt.x > b.maxX + tol || pt.y < b.minY - tol || pt.y > b.maxY + tol) {
       return false;
     }
+    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
+      const [p0, p1, p2, p3] = s.points;
+      const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
+      const cy = (p0.y + p1.y + p2.y + p3.y) / 4;
+      const v1x = (p1.x - p3.x) / 2;
+      const v1y = (p1.y - p3.y) / 2;
+      const v2x = (p2.x - p0.x) / 2;
+      const v2y = (p2.y - p0.y) / 2;
+      for (let i = 0; i < 28; i++) {
+        const ang = (i / 28) * Math.PI * 2;
+        const cosT = Math.cos(ang);
+        const sinT = Math.sin(ang);
+        const ex = cx + cosT * v1x + sinT * v2x;
+        const ey = cy + cosT * v1y + sinT * v2y;
+        if (distance(pt, { x: ex, y: ey }) < tol) return true;
+      }
+      // Also allow tapping inside a filled circle/ellipse
+      if (s.fillStyle && s.fillStyle !== 'none' && distance(pt, { x: cx, y: cy }) < Math.hypot(v1x, v1y) * 0.85) {
+        return true;
+      }
+      return false;
+    }
     if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
       const pPeak = s.points[0];
       const pEnd = s.points[1];
@@ -484,12 +506,17 @@ export default function App() {
       }
       return false;
     }
-    // Check segment midpoints for polygons/lines
+    // Check true perpendicular distance to every segment for polygons/lines/strokes
     for (let i = 1; i < s.points.length; i++) {
       const a = s.points[i - 1];
       const c = s.points[i];
-      const mid = { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 };
-      if (distance(pt, mid) < tol) return true;
+      const vx = c.x - a.x;
+      const vy = c.y - a.y;
+      const lenSq = vx * vx + vy * vy;
+      const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / lenSq)) : 0;
+      const projX = a.x + t * vx;
+      const projY = a.y + t * vy;
+      if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
     }
     return false;
   };
@@ -2571,81 +2598,10 @@ export default function App() {
         }
       }
 
-      // Check if user tapped directly on a stroke/shape or an image (respecting top-most unified zOrder!)
-      const imgList = activePage.images || [];
-      const strokeList = activePage.strokes || [];
-
-      let topHitImg: { img: ImageObject; z: number } | null = null;
-      for (let idx = 0; idx < imgList.length; idx++) {
-        const im = imgList[idx];
-        if (pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height) {
-          const z = im.zOrder ?? idx + 1;
-          if (!topHitImg || z >= topHitImg.z) {
-            topHitImg = { img: im, z };
-          }
-        }
-      }
-
-      let topHitStroke: { stroke: StrokeObject; z: number } | null = null;
-      for (let idx = 0; idx < strokeList.length; idx++) {
-        const s = strokeList[idx];
-        if (isPointNearStroke(pt, s, 18)) {
-          const z = s.zOrder ?? imgList.length + idx + 1;
-          if (!topHitStroke || z >= topHitStroke.z) {
-            topHitStroke = { stroke: s, z };
-          }
-        }
-      }
-
-      if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
-        const tappedStroke = topHitStroke.stroke;
-        setSelectedImageId(null);
-        const members = tappedStroke.groupId
-          ? activePage.strokes.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
-          : [tappedStroke.id];
-        setSelectedStrokeIds(members);
-        setActiveNodeStrokeId(tappedStroke.id);
-        selectionTransformRef.current = {
-          mode: 'move',
-          startX: pt.x,
-          startY: pt.y,
-          centerX: pt.x,
-          centerY: pt.y,
-          anchorX: pt.x,
-          anchorY: pt.y,
-          initialDist: 1,
-          initialAngle: 0,
-        };
-        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
-        isDrawingRef.current = true;
-        return;
-      }
-
-      if (topHitImg) {
-        const hitImg = (topHitImg as { img: ImageObject; z: number }).img;
-        setSelectedImageId(hitImg.id);
-        setSelectedStrokeIds([]);
-        setActiveNodeStrokeId(null);
-        selectionTransformRef.current = {
-          mode: 'move',
-          startX: pt.x,
-          startY: pt.y,
-          centerX: hitImg.x + hitImg.width / 2,
-          centerY: hitImg.y + hitImg.height / 2,
-          anchorX: hitImg.x,
-          anchorY: hitImg.y,
-          initialDist: 1,
-          initialAngle: 0,
-        };
-        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
-        isDrawingRef.current = true;
-        return;
-      }
-      setSelectedImageId(null);
-
-      setSelectedStrokeIds([]);
-      setActiveNodeStrokeId(null);
+      // Start Lasso trajectory so the Lasso ALWAYS follows the Apple Pencil 1:1 (even over an unselected image or shape!).
+      // If the user simply taps (< 16px path length), finalizeLassoSelection will select the tapped shape or image on pointerUp!
       selectionTransformRef.current = null;
+      isDraggingSelectionRef.current = null;
       lassoPolygonRef.current = [{ x: pt.x, y: pt.y }];
       isDrawingRef.current = true;
       return;
@@ -2665,6 +2621,117 @@ export default function App() {
     if (['pen', 'pencil', 'highlighter'].includes(activeTool)) {
       drawInitialDot(pt);
     }
+  };
+
+  // Finalize Lasso Selection (called either automatically when the pencil comes close to the start point, or on pointerUp!)
+  const finalizeLassoSelection = (poly: { x: number; y: number }[]) => {
+    clearActiveOverlay();
+    lassoPolygonRef.current = [];
+    isDrawingRef.current = false;
+    activePointerIdRef.current = null;
+    activePointerTypeRef.current = null;
+
+    if (poly.length === 0) return;
+
+    let pathLen = 0;
+    for (let i = 1; i < poly.length; i++) {
+      pathLen += distance(poly[i - 1], poly[i]);
+    }
+
+    const imgList = activePage.images || [];
+    const strokeList = activePage.strokes || [];
+    const lockedLayers = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
+
+    // Case 1: Quick Tap (< 16px movement) -> Select the top-most tapped shape/stroke or image at poly[0]!
+    if (pathLen < 16 || poly.length < 3) {
+      const pt = poly[0];
+      let topHitImg: { img: ImageObject; z: number } | null = null;
+      for (let idx = 0; idx < imgList.length; idx++) {
+        const im = imgList[idx];
+        if (lockedLayers.has(im.layerId)) continue;
+        if (pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height) {
+          const z = im.zOrder ?? idx + 1;
+          if (!topHitImg || z >= topHitImg.z) {
+            topHitImg = { img: im, z };
+          }
+        }
+      }
+
+      let topHitStroke: { stroke: StrokeObject; z: number } | null = null;
+      for (let idx = 0; idx < strokeList.length; idx++) {
+        const s = strokeList[idx];
+        if (lockedLayers.has(s.layerId)) continue;
+        if (isPointNearStroke(pt, s, 18)) {
+          const z = s.zOrder ?? imgList.length + idx + 1;
+          if (!topHitStroke || z >= topHitStroke.z) {
+            topHitStroke = { stroke: s, z };
+          }
+        }
+      }
+
+      if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
+        const tappedStroke = topHitStroke.stroke;
+        setSelectedImageId(null);
+        const members = tappedStroke.groupId
+          ? strokeList.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
+          : [tappedStroke.id];
+        setSelectedStrokeIds(members);
+        setActiveNodeStrokeId(tappedStroke.id);
+        return;
+      }
+
+      if (topHitImg) {
+        setSelectedImageId(topHitImg.img.id);
+        setSelectedStrokeIds([]);
+        setActiveNodeStrokeId(null);
+        return;
+      }
+
+      setSelectedImageId(null);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      return;
+    }
+
+    // Case 2: Drawn Lasso Loop -> Select all shapes/strokes/groups inside or intersected by the loop!
+    const directMatched = strokeList.filter((s) => {
+      if (lockedLayers.has(s.layerId)) return false;
+      if (s.points.some((p) => isPointInPolygon(p, poly))) return true;
+      const samplePts = getStrokeSamplePoints(s);
+      if (samplePts.some((p) => isPointInPolygon(p, poly))) return true;
+      const b = getStrokeBounds(s);
+      if (isPointInPolygon({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 }, poly)) return true;
+      return poly.some((lp) => isPointNearStroke(lp, s, 12));
+    });
+
+    const groupIds = new Set(directMatched.map((s) => s.groupId).filter(Boolean));
+    const finalIds = strokeList
+      .filter((s) => directMatched.some((m) => m.id === s.id) || (s.groupId && groupIds.has(s.groupId)))
+      .map((s) => s.id);
+
+    if (finalIds.length > 0) {
+      setSelectedImageId(null);
+      setSelectedStrokeIds(finalIds);
+      setActiveNodeStrokeId(finalIds.length === 1 ? finalIds[0] : null);
+      return;
+    }
+
+    // If no shapes/strokes were inside the loop, check if an Image's center is inside the lasso loop
+    const matchedImg = imgList.find(
+      (im) =>
+        !lockedLayers.has(im.layerId) &&
+        isPointInPolygon({ x: im.x + im.width / 2, y: im.y + im.height / 2 }, poly)
+    );
+    if (matchedImg) {
+      setSelectedImageId(matchedImg.id);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      return;
+    }
+
+    setSelectedImageId(null);
+    setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
   };
 
   const eraseAtPoint = (pt: { x: number; y: number }) => {
@@ -2715,39 +2782,85 @@ export default function App() {
     const latestPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = latestPt;
 
-    // 1. Image Freehand / Magnetic Lasso Crop on active overlay canvas
+    // 1. Image Freehand / Magnetic Lasso Crop on active overlay canvas (NO fill, auto-closes near start point!)
     if (imageCropMode !== 'none' && selectedImageId) {
       const imgObj = activePage.images.find((im) => im.id === selectedImageId);
       if (imgObj) {
-        let nextX = latestPt.x;
-        let nextY = latestPt.y;
-        if (imageCropMode === 'magnetic' && edgeMapRef.current && edgeMapRef.current.id === imgObj.id) {
-          const snapped = snapMagneticLassoPoint(
-            latestPt.x - imgObj.x,
-            latestPt.y - imgObj.y,
-            edgeMapRef.current.map,
-            edgeMapRef.current.w,
-            edgeMapRef.current.h,
-            20
-          );
-          nextX = imgObj.x + snapped.x;
-          nextY = imgObj.y + snapped.y;
+        for (const ce of coalesced) {
+          const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
+          let nextX = rawPt.x;
+          let nextY = rawPt.y;
+          if (imageCropMode === 'magnetic' && edgeMapRef.current && edgeMapRef.current.id === imgObj.id) {
+            const snapped = snapMagneticLassoPoint(
+              rawPt.x - imgObj.x,
+              rawPt.y - imgObj.y,
+              edgeMapRef.current.map,
+              edgeMapRef.current.w,
+              edgeMapRef.current.h,
+              20
+            );
+            nextX = imgObj.x + snapped.x;
+            nextY = imgObj.y + snapped.y;
+          }
+          const poly = lassoPolygonRef.current;
+          if (poly.length === 0 || distance(poly[poly.length - 1], { x: nextX, y: nextY }) >= 1.2) {
+            poly.push({ x: nextX, y: nextY });
+          }
         }
-        lassoPolygonRef.current.push({ x: nextX, y: nextY });
+
+        const poly = lassoPolygonRef.current;
+        let pathLen = 0;
+        for (let i = 1; i < poly.length; i++) {
+          pathLen += distance(poly[i - 1], poly[i]);
+        }
+
+        // Auto-close Image Lasso Crop when coming within 26px of the start point!
+        if (pathLen >= 48 && poly.length >= 8 && distance(poly[poly.length - 1], poly[0]) <= 26) {
+          clearActiveOverlay();
+          lassoPolygonRef.current = [];
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          const relPoly = poly.map((p) => ({
+            x: Math.max(0, Math.min(imgObj.width, p.x - imgObj.x)),
+            y: Math.max(0, Math.min(imgObj.height, p.y - imgObj.y)),
+          }));
+          updateActivePage((page) => ({
+            ...page,
+            images: page.images.map((im) => (im.id === selectedImageId ? { ...im, clipPolygon: relPoly } : im)),
+          }));
+          setImageCropMode('none');
+          setCropPolygonPts([]);
+          showToast(
+            imageCropMode === 'magnetic'
+              ? '🧲 Magnetic Lasso Crop έκλεισε αυτόματα!'
+              : '✂️ Ελεύθερο Lasso Crop έκλεισε αυτόματα!'
+          );
+          return;
+        }
+
         const ctx = activeCtxRef.current;
         const c = activeCanvasRef.current;
-        if (ctx && c && lassoPolygonRef.current.length > 1) {
+        if (ctx && c && poly.length > 1) {
           ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
           ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
           ctx.save();
           ctx.strokeStyle = imageCropMode === 'magnetic' ? '#10b981' : '#f59e0b';
-          ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
           ctx.lineWidth = 2.2;
+          ctx.setLineDash([6, 4]);
           ctx.beginPath();
-          ctx.moveTo(lassoPolygonRef.current[0].x, lassoPolygonRef.current[0].y);
-          for (let i = 1; i < lassoPolygonRef.current.length; i++) {
-            ctx.lineTo(lassoPolygonRef.current[i].x, lassoPolygonRef.current[i].y);
+          ctx.moveTo(poly[0].x, poly[0].y);
+          for (let i = 1; i < poly.length; i++) {
+            ctx.lineTo(poly[i].x, poly[i].y);
           }
+          ctx.stroke();
+
+          // Start-point target ring so user sees where to close the loop
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(poly[0].x, poly[0].y, 5.5, 0, Math.PI * 2);
+          ctx.fill();
           ctx.stroke();
           ctx.restore();
         }
@@ -3100,24 +3213,50 @@ export default function App() {
         return;
       }
 
-      // Draw Lasso loop directly on overlay canvas (0 React renders!)
-      lassoPolygonRef.current.push({ x: latestPt.x, y: latestPt.y });
+      // Draw Lasso trajectory directly on overlay canvas (follows Apple Pencil 1:1, NO fill, auto-closes near start point!)
+      const poly = lassoPolygonRef.current;
+      for (const ce of coalesced) {
+        const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
+        if (poly.length === 0 || distance(poly[poly.length - 1], rawPt) >= 1.2) {
+          poly.push({ x: rawPt.x, y: rawPt.y });
+        }
+      }
+
+      let pathLen = 0;
+      for (let i = 1; i < poly.length; i++) {
+        pathLen += distance(poly[i - 1], poly[i]);
+      }
+
+      // Auto-close Lasso as soon as the Apple Pencil comes very close (<= 26px) to the start point!
+      if (pathLen >= 48 && poly.length >= 8 && distance(poly[poly.length - 1], poly[0]) <= 26) {
+        finalizeLassoSelection([...poly]);
+        return;
+      }
+
       const ctx = activeCtxRef.current;
       const c = activeCanvasRef.current;
-      if (ctx && c && lassoPolygonRef.current.length > 1) {
+      if (ctx && c && poly.length > 1) {
         ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
         ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
         ctx.save();
         ctx.strokeStyle = '#0284c7';
-        ctx.fillStyle = 'rgba(2, 132, 199, 0.09)';
-        ctx.lineWidth = 1.8;
+        ctx.lineWidth = 2.0;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
-        ctx.moveTo(lassoPolygonRef.current[0].x, lassoPolygonRef.current[0].y);
-        for (let i = 1; i < lassoPolygonRef.current.length; i++) {
-          ctx.lineTo(lassoPolygonRef.current[i].x, lassoPolygonRef.current[i].y);
+        ctx.moveTo(poly[0].x, poly[0].y);
+        for (let i = 1; i < poly.length; i++) {
+          ctx.lineTo(poly[i].x, poly[i].y);
         }
-        ctx.closePath();
+        // NO closePath() chord and NO fill() while drawing the Lasso!
+        ctx.stroke();
+
+        // Draw start-point target ring so the user sees where the Lasso started
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(poly[0].x, poly[0].y, 5.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         ctx.restore();
@@ -3348,24 +3487,7 @@ export default function App() {
         isDraggingSelectionRef.current = null;
         return;
       }
-      const poly = lassoPolygonRef.current;
-      lassoPolygonRef.current = [];
-      if (poly.length >= 3) {
-        const lockedLayers = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
-        const directMatched = activePage.strokes.filter((s) => {
-          if (lockedLayers.has(s.layerId)) return false;
-          if (s.points.some((p) => isPointInPolygon(p, poly))) return true;
-          const b = getStrokeBounds(s);
-          if (isPointInPolygon({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 }, poly)) return true;
-          return poly.some((lp) => isPointNearStroke(lp, s, 12));
-        });
-        const groupIds = new Set(directMatched.map((s) => s.groupId).filter(Boolean));
-        const finalIds = activePage.strokes
-          .filter((s) => directMatched.some((m) => m.id === s.id) || (s.groupId && groupIds.has(s.groupId)))
-          .map((s) => s.id);
-        setSelectedStrokeIds(finalIds);
-        setActiveNodeStrokeId(finalIds.length === 1 ? finalIds[0] : null);
-      }
+      finalizeLassoSelection([...lassoPolygonRef.current]);
       return;
     }
 
