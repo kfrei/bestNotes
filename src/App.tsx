@@ -485,18 +485,20 @@ export default function App() {
       }
     }
 
-    if (s.fillColor && s.fillStyle && s.fillStyle !== 'none' && s.points.length > 2) {
+    if (s.fillStyle && s.fillStyle !== 'none' && s.points.length > 2) {
+      // Always use the stroke's border color (s.color) for the semi-transparent shape fill!
+      const shadeColor = s.color || s.fillColor || '#2563eb';
       ctx.save();
       if (s.fillStyle === 'solid') {
-        ctx.fillStyle = s.fillColor;
-        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = shadeColor;
+        ctx.globalAlpha = 0.25;
         ctx.fill();
       } else if (s.fillStyle === 'hatching') {
         ctx.clip();
         const b = getStrokeBounds(s);
-        ctx.strokeStyle = s.fillColor;
+        ctx.strokeStyle = shadeColor;
         ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.55;
+        ctx.globalAlpha = 0.5;
         ctx.setLineDash([]);
         for (let diag = b.minX - (b.maxY - b.minY); diag < b.maxX + (b.maxY - b.minY); diag += 10) {
           ctx.beginPath();
@@ -1681,7 +1683,7 @@ export default function App() {
       id: 'live',
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       color: strokeColor,
-      fillColor: fillStyle !== 'none' ? fillColor : undefined,
+      fillColor: fillStyle !== 'none' ? strokeColor : undefined,
       fillStyle,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
@@ -2731,7 +2733,7 @@ export default function App() {
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       penType: penSubType,
       color: strokeColor,
-      fillColor: fillStyle !== 'none' ? fillColor : undefined,
+      fillColor: fillStyle !== 'none' ? strokeColor : undefined,
       fillStyle,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
@@ -2776,6 +2778,177 @@ export default function App() {
       strokes: page.strokes.map((s) => (selectedStrokeIds.includes(s.id) ? { ...s, groupId: undefined } : s)),
     }));
     showToast('🔓 Ungroup ολοκληρώθηκε!');
+  };
+
+  // Z-Order / Layering for a Selected Shape, Group, or Image:
+  // - 'to-back': Send to Back (Εντελώς πίσω)
+  // - 'step-back': Send Backward (-1 βήμα πίσω)
+  // - 'step-front': Bring Forward (+1 βήμα μπροστά)
+  // - 'to-front': Bring to Front (Εντελώς μπροστά)
+  const handleZOrderSelected = (action: 'to-back' | 'step-back' | 'step-front' | 'to-front') => {
+    // 1. If an image is selected, reorder page.images
+    if (selectedImageId) {
+      updateActivePage((page) => {
+        const imgs = [...(page.images || [])];
+        const idx = imgs.findIndex((im) => im.id === selectedImageId);
+        if (idx === -1) return page;
+        const [item] = imgs.splice(idx, 1);
+        if (action === 'to-back') {
+          imgs.unshift(item);
+        } else if (action === 'to-front') {
+          imgs.push(item);
+        } else if (action === 'step-back') {
+          imgs.splice(Math.max(0, idx - 1), 0, item);
+        } else if (action === 'step-front') {
+          imgs.splice(Math.min(imgs.length, idx + 1), 0, item);
+        }
+        return { ...page, images: imgs };
+      });
+      showToast(
+        action === 'to-back'
+          ? '⏬ Η εικόνα μεταφέρθηκε εντελώς πίσω (Send to Back)!'
+          : action === 'to-front'
+          ? '⏫ Η εικόνα μεταφέρθηκε εντελώς μπροστά (Bring to Front)!'
+          : action === 'step-back'
+          ? '🔽 Η εικόνα μεταφέρθηκε 1 βήμα πίσω (-1)!'
+          : '🔼 Η εικόνα μεταφέρθηκε 1 βήμα μπροστά (+1)!'
+      );
+      return;
+    }
+
+    // 2. Reorder selected stroke(s) or group in page.strokes
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    if (baseIds.length === 0) return;
+
+    updateActivePage((page) => {
+      const baseSet = new Set(baseIds);
+      const groupIds = new Set(
+        page.strokes
+          .filter((s) => baseSet.has(s.id) && s.groupId)
+          .map((s) => s.groupId!)
+      );
+      const targetIds = new Set(
+        page.strokes
+          .filter((s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))
+          .map((s) => s.id)
+      );
+
+      // Partition strokes into logical units (the selected target unit + unselected strokes/groups)
+      type Unit = {
+        isTarget: boolean;
+        items: StrokeObject[];
+        bounds: { minX: number; minY: number; maxX: number; maxY: number };
+      };
+      const computeItemsBounds = (items: StrokeObject[]) => {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (const st of items) {
+          for (const p of st.points) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+        return { minX, minY, maxX, maxY };
+      };
+
+      const targetItems = page.strokes.filter((s) => targetIds.has(s.id));
+      if (targetItems.length === 0) return page;
+      const targetUnit: Unit = {
+        isTarget: true,
+        items: targetItems,
+        bounds: computeItemsBounds(targetItems),
+      };
+
+      const units: Unit[] = [];
+      let targetInserted = false;
+      const visitedGroupIds = new Set<string>();
+
+      for (const s of page.strokes) {
+        if (targetIds.has(s.id)) {
+          if (!targetInserted) {
+            units.push(targetUnit);
+            targetInserted = true;
+          }
+          continue;
+        }
+        if (s.groupId) {
+          if (visitedGroupIds.has(s.groupId)) continue;
+          visitedGroupIds.add(s.groupId);
+          const grpMembers = page.strokes.filter((m) => m.groupId === s.groupId && !targetIds.has(m.id));
+          units.push({
+            isTarget: false,
+            items: grpMembers,
+            bounds: computeItemsBounds(grpMembers),
+          });
+        } else {
+          units.push({
+            isTarget: false,
+            items: [s],
+            bounds: computeItemsBounds([s]),
+          });
+        }
+      }
+
+      const tIdx = units.findIndex((u) => u.isTarget);
+      if (tIdx === -1) return page;
+
+      const boxesOverlap = (
+        a: { minX: number; minY: number; maxX: number; maxY: number },
+        b: { minX: number; minY: number; maxX: number; maxY: number }
+      ) => a.minX <= b.maxX + 6 && a.maxX >= b.minX - 6 && a.minY <= b.maxY + 6 && a.maxY >= b.minY - 6;
+
+      const [removed] = units.splice(tIdx, 1);
+
+      if (action === 'to-back') {
+        units.unshift(removed);
+      } else if (action === 'to-front') {
+        units.push(removed);
+      } else if (action === 'step-back') {
+        // Find the nearest overlapping unit behind tIdx (or tIdx - 1 if none overlap)
+        let insertAt = Math.max(0, tIdx - 1);
+        for (let i = tIdx - 1; i >= 0; i--) {
+          if (boxesOverlap(removed.bounds, units[i].bounds)) {
+            insertAt = i;
+            break;
+          }
+        }
+        units.splice(insertAt, 0, removed);
+      } else if (action === 'step-front') {
+        // Find the nearest overlapping unit in front of tIdx (or tIdx + 1 if none overlap)
+        let insertAt = Math.min(units.length, tIdx + 1);
+        for (let i = tIdx; i < units.length; i++) {
+          if (boxesOverlap(removed.bounds, units[i].bounds)) {
+            insertAt = i + 1;
+            break;
+          }
+        }
+        units.splice(insertAt, 0, removed);
+      }
+
+      return {
+        ...page,
+        strokes: units.flatMap((u) => u.items),
+      };
+    });
+
+    showToast(
+      action === 'to-back'
+        ? '⏬ Send to Back: Μεταφέρθηκε εντελώς πίσω!'
+        : action === 'to-front'
+        ? '⏫ Bring to Front: Μεταφέρθηκε εντελώς μπροστά!'
+        : action === 'step-back'
+        ? '🔽 Send Backward: Μεταφέρθηκε 1 βήμα πίσω (-1)!'
+        : '🔼 Bring Forward: Μεταφέρθηκε 1 βήμα μπροστά (+1)!'
+    );
   };
 
   const handleBeautifySelected = () => {
@@ -3494,7 +3667,25 @@ export default function App() {
                 {colorSlots.map((c, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setStrokeColor(c)}
+                    onClick={() => {
+                      setStrokeColor(c);
+                      setFillColor(c);
+                      const selIds =
+                        selectedStrokeIds.length > 0
+                          ? selectedStrokeIds
+                          : activeNodeStrokeId
+                          ? [activeNodeStrokeId]
+                          : [];
+                      if (selIds.length > 0) {
+                        const selSet = new Set(selIds);
+                        updateActivePage((page) => ({
+                          ...page,
+                          strokes: page.strokes.map((s) =>
+                            selSet.has(s.id) ? { ...s, color: c, fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined } : s
+                          ),
+                        }));
+                      }
+                    }}
                     className={`w-6 h-6 rounded-full transition cursor-pointer ${
                       strokeColor === c ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110' : 'opacity-85 hover:opacity-100'
                     }`}
@@ -3599,6 +3790,22 @@ export default function App() {
                     key={c}
                     onClick={() => {
                       setStrokeColor(c);
+                      setFillColor(c);
+                      const selIds =
+                        selectedStrokeIds.length > 0
+                          ? selectedStrokeIds
+                          : activeNodeStrokeId
+                          ? [activeNodeStrokeId]
+                          : [];
+                      if (selIds.length > 0) {
+                        const selSet = new Set(selIds);
+                        updateActivePage((page) => ({
+                          ...page,
+                          strokes: page.strokes.map((s) =>
+                            selSet.has(s.id) ? { ...s, color: c, fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined } : s
+                          ),
+                        }));
+                      }
                       if (!colorSlots.includes(c)) {
                         setColorSlots([c, colorSlots[0], colorSlots[1]]);
                       }
@@ -3729,6 +3936,71 @@ export default function App() {
                       <span>Paste</span>
                     </button>
 
+                    {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                      <button
+                        onClick={() => handleZOrderSelected('to-back')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Send to Back (Εντελώς πίσω)"
+                      >
+                        ⏬ Πίσω
+                      </button>
+                      <button
+                        onClick={() => handleZOrderSelected('step-back')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Send Backward (1 βήμα πίσω)"
+                      >
+                        🔽 -1
+                      </button>
+                      <button
+                        onClick={() => handleZOrderSelected('step-front')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Bring Forward (1 βήμα μπροστά)"
+                      >
+                        🔼 +1
+                      </button>
+                      <button
+                        onClick={() => handleZOrderSelected('to-front')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Bring to Front (Εντελώς μπροστά)"
+                      >
+                        ⏫ Μπροστά
+                      </button>
+                    </div>
+
+                    {/* Shape Fill Style Toggle (Transparent shade matching border color!) */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                      {(['none', 'solid', 'hatching'] as FillStyleType[]).map((fs) => (
+                        <button
+                          key={fs}
+                          onClick={() => {
+                            setFillStyle(fs);
+                            const selIds =
+                              selectedStrokeIds.length > 0
+                                ? selectedStrokeIds
+                                : activeNodeStrokeId
+                                ? [activeNodeStrokeId]
+                                : [];
+                            const selSet = new Set(selIds);
+                            updateActivePage((page) => ({
+                              ...page,
+                              strokes: page.strokes.map((s) =>
+                                selSet.has(s.id)
+                                  ? { ...s, fillStyle: fs, fillColor: fs !== 'none' ? s.color : undefined }
+                                  : s
+                              ),
+                            }));
+                          }}
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold cursor-pointer ${
+                            fillStyle === fs ? 'bg-[#0066ff] text-white' : 'text-slate-700 hover:bg-white'
+                          }`}
+                          title="Γέμισμα σχήματος στην απόχρωση του περιγράμματος"
+                        >
+                          {fs === 'none' ? 'Χωρίς Fill' : fs === 'solid' ? '🎨 Fill' : '///'}
+                        </button>
+                      ))}
+                    </div>
+
                     {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (
                       <button
                         onClick={() => {
@@ -3809,6 +4081,38 @@ export default function App() {
                       <Copy className="w-3.5 h-3.5" />
                       <span>Copy</span>
                     </button>
+
+                    {/* Z-Order Controls for Selected Image */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                      <button
+                        onClick={() => handleZOrderSelected('to-back')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Send to Back (Εντελώς πίσω)"
+                      >
+                        ⏬ Πίσω
+                      </button>
+                      <button
+                        onClick={() => handleZOrderSelected('step-back')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Send Backward (-1 βήμα πίσω)"
+                      >
+                        🔽 -1
+                      </button>
+                      <button
+                        onClick={() => handleZOrderSelected('step-front')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Bring Forward (+1 βήμα μπροστά)"
+                      >
+                        🔼 +1
+                      </button>
+                      <button
+                        onClick={() => handleZOrderSelected('to-front')}
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        title="Bring to Front (Εντελώς μπροστά)"
+                      >
+                        ⏫ Μπροστά
+                      </button>
+                    </div>
                     <button
                       onClick={async () => {
                         const cleanUrl = await removeImageBackground(
@@ -4388,7 +4692,8 @@ export default function App() {
                           return (
                             <polyline
                               key={st.id}
-                              fill={st.fillStyle && st.fillStyle !== 'none' && st.fillColor ? st.fillColor : 'none'}
+                              fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
+                              fillOpacity={0.25}
                               stroke={st.color}
                               strokeWidth={Math.max(3, st.width * 1.6)}
                               strokeLinecap="round"
