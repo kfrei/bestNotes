@@ -198,6 +198,9 @@ export default function App() {
 
   const currentStrokePtsRef = useRef<BezierPoint[]>([]);
   const isDrawingRef = useRef<boolean>(false);
+  const activePointerIdRef = useRef<number | null>(null);
+  const activePointerTypeRef = useRef<string | null>(null);
+  const lastPenActivityTimeRef = useRef<number>(0);
   const holdTimerRef = useRef<number | null>(null);
   const snappedCurrentStrokeRef = useRef<{ points: BezierPoint[]; shapeType: string } | null>(null);
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
@@ -293,6 +296,15 @@ export default function App() {
     };
   }, []);
 
+  const clonePageFast = useCallback((p: NotePage): NotePage => ({
+    ...p,
+    layers: [...p.layers],
+    strokes: [...p.strokes],
+    texts: [...(p.texts || [])],
+    images: [...(p.images || [])],
+    tapes: [...(p.tapes || [])],
+  }), []);
+
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
       setNotebooks((prevNotebooks) =>
@@ -300,10 +312,10 @@ export default function App() {
           if (nb.id !== activeNotebook.id) return nb;
           const currentPage = nb.pages[activePageIndex] || nb.pages[0];
           if (recordUndo) {
-            setUndoStack((u) => [...u.slice(-24), structuredClone(currentPage)]);
+            setUndoStack((u) => [...u.slice(-24), clonePageFast(currentPage)]);
             setRedoStack([]);
           }
-          const updatedPage = updater(structuredClone(currentPage));
+          const updatedPage = updater(clonePageFast(currentPage));
           const newPages = [...nb.pages];
           newPages[activePageIndex] = updatedPage;
           return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
@@ -312,24 +324,24 @@ export default function App() {
       setIsDirty(true);
       setSyncStatus('dirty');
     },
-    [activeNotebook.id, activePageIndex]
+    [activeNotebook.id, activePageIndex, clonePageFast]
   );
 
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     const prevPage = undoStack[undoStack.length - 1];
     setUndoStack((u) => u.slice(0, -1));
-    setRedoStack((r) => [...r, structuredClone(activePage)]);
+    setRedoStack((r) => [...r, clonePageFast(activePage)]);
     updateActivePage(() => prevPage, false);
-  }, [undoStack, activePage, updateActivePage]);
+  }, [undoStack, activePage, updateActivePage, clonePageFast]);
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
     const nextPage = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
-    setUndoStack((u) => [...u, structuredClone(activePage)]);
+    setUndoStack((u) => [...u, clonePageFast(activePage)]);
     updateActivePage(() => nextPage, false);
-  }, [redoStack, activePage, updateActivePage]);
+  }, [redoStack, activePage, updateActivePage, clonePageFast]);
 
   const getStrokeBounds = (s: StrokeObject) => {
     let minX = Infinity,
@@ -432,12 +444,20 @@ export default function App() {
       ctx.closePath();
     } else {
       ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) {
-        const pt = s.points[i];
-        if (pt.cx !== undefined && pt.cy !== undefined) {
-          ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
-        } else {
-          ctx.lineTo(pt.x, pt.y);
+      if (s.points.length === 1) {
+        // 1-point tap/dot/accent: HTML5 Canvas requires a tiny non-zero segment to render a round cap dot!
+        ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
+      } else {
+        for (let i = 1; i < s.points.length; i++) {
+          const pt = s.points[i];
+          if (pt.cx !== undefined && pt.cy !== undefined) {
+            ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
+          } else {
+            ctx.lineTo(pt.x, pt.y);
+          }
+        }
+        if (s.points.length === 2 && distance(s.points[0], s.points[1]) < 0.4) {
+          ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
         }
       }
     }
@@ -1083,14 +1103,52 @@ export default function App() {
   }, [insertImageDataUrlOnPage]);
 
   // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 1-FINGER OUTSIDE-PAGE SCROLL + PULL-TO-ADD-PAGE
+  // (With strict Apple Pencil hardware isolation so resting palm + stylus NEVER triggers fake zoom or drops strokes!)
   useEffect(() => {
     const ws = workspaceRef.current;
     if (!ws || viewMode !== 'editor') return;
 
+    const hasStylusTouch = (touches: TouchList): boolean => {
+      for (let i = 0; i < touches.length; i++) {
+        if ((touches[i] as any).touchType === 'stylus') return true;
+      }
+      return false;
+    };
+
+    const getDirectFingerTouches = (touches: TouchList): Touch[] => {
+      const out: Touch[] = [];
+      for (let i = 0; i < touches.length; i++) {
+        const t = touches[i] as any;
+        if (t.touchType === 'stylus') continue;
+        // Reject large resting palm contact patches so 2 palm spots never trigger fake 2-finger pinch!
+        if ((t.radiusX && t.radiusX > 28) || (t.radiusY && t.radiusY > 28)) continue;
+        out.push(touches[i]);
+      }
+      return out;
+    };
+
     const onTouchStart = (e: TouchEvent) => {
+      // CRITICAL: If Apple Pencil is touching the screen or was active within the last 450ms,
+      // NEVER start pinch-to-zoom or outside pan, and NEVER cancel the active Apple Pencil stroke!
+      if (
+        hasStylusTouch(e.touches) ||
+        activePointerTypeRef.current === 'pen' ||
+        performance.now() - lastPenActivityTimeRef.current < 450
+      ) {
+        if (e.target === activeCanvasRef.current && e.cancelable) {
+          // Suppress iPadOS Safari double-tap zoom / text selection / callout during rapid consecutive pen strokes
+          e.preventDefault();
+        }
+        outsidePanDragRef.current = null;
+        pinchStateRef.current = null;
+        return;
+      }
+
+      const directTouches = getDirectFingerTouches(e.touches);
+
       // Case A: 1 finger touching OUTSIDE the paper canvas (on the gray margin) -> Scroll page up/down!
-      if (e.touches.length === 1 && e.target !== activeCanvasRef.current) {
-        const t = e.touches[0];
+      if (directTouches.length === 1 && e.target !== activeCanvasRef.current) {
+        const t = directTouches[0];
         outsidePanDragRef.current = {
           active: true,
           startClientX: t.clientX,
@@ -1101,18 +1159,20 @@ export default function App() {
         return;
       }
 
-      // Case B: 2+ fingers anywhere -> Pinch-to-Zoom & 2-Finger Pan + Pull-to-Add-Page
-      if (e.touches.length >= 2) {
-        e.preventDefault();
+      // Case B: 2+ genuine fingers (no stylus) -> Pinch-to-Zoom & 2-Finger Pan + Pull-to-Add-Page
+      if (directTouches.length >= 2) {
+        if (e.cancelable) e.preventDefault();
         outsidePanDragRef.current = null;
 
-        // Immediately cancel any accidental 1-finger ink dot that started milliseconds before the 2nd finger landed
+        // Only cancel an accidental 1-finger 'touch' dot that started <120ms before the 2nd finger landed (NEVER cancel 'pen'!)
         if (holdTimerRef.current) {
           window.clearTimeout(holdTimerRef.current);
           holdTimerRef.current = null;
         }
-        if (isDrawingRef.current) {
+        if (isDrawingRef.current && activePointerTypeRef.current !== 'pen') {
           isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
           currentStrokePtsRef.current = [];
           snappedCurrentStrokeRef.current = null;
           lassoPolygonRef.current = [];
@@ -1123,8 +1183,8 @@ export default function App() {
           if (c && ctx) ctx.clearRect(0, 0, c.width, c.height);
         }
 
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
+        const t1 = directTouches[0];
+        const t2 = directTouches[1];
         const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
         const midX = (t1.clientX + t2.clientX) / 2;
         const midY = (t1.clientY + t2.clientY) / 2;
@@ -1145,16 +1205,27 @@ export default function App() {
           paperOffsetY,
           startTime: performance.now(),
           maxMoved: 0,
-          touchCount: Math.max(pinchStateRef.current?.touchCount || 0, e.touches.length),
+          touchCount: Math.max(pinchStateRef.current?.touchCount || 0, directTouches.length),
         };
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (hasStylusTouch(e.touches) || activePointerTypeRef.current === 'pen') {
+        if (e.target === activeCanvasRef.current && e.cancelable) {
+          e.preventDefault();
+        }
+        outsidePanDragRef.current = null;
+        pinchStateRef.current = null;
+        return;
+      }
+
+      const directTouches = getDirectFingerTouches(e.touches);
+
       // Case A: 1-finger scroll outside the page
-      if (outsidePanDragRef.current?.active && e.touches.length === 1) {
-        e.preventDefault();
-        const t = e.touches[0];
+      if (outsidePanDragRef.current?.active && directTouches.length === 1) {
+        if (e.cancelable) e.preventDefault();
+        const t = directTouches[0];
         const dy = t.clientY - outsidePanDragRef.current.startClientY;
         const dx = t.clientX - outsidePanDragRef.current.startClientX;
         const nextPanX = outsidePanDragRef.current.initialPanX + dx;
@@ -1166,13 +1237,13 @@ export default function App() {
 
       // Case B: 2-finger pinch & pan
       if (!pinchStateRef.current?.active) return;
-      if (e.touches.length >= 2) {
-        e.preventDefault();
+      if (directTouches.length >= 2) {
+        if (e.cancelable) e.preventDefault();
         const st = pinchStateRef.current;
-        st.touchCount = Math.max(st.touchCount, e.touches.length);
+        st.touchCount = Math.max(st.touchCount, directTouches.length);
 
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
+        const t1 = directTouches[0];
+        const t2 = directTouches[1];
         const currDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
         const currMidX = (t1.clientX + t2.clientX) / 2;
         const currMidY = (t1.clientY + t2.clientY) / 2;
@@ -1190,23 +1261,28 @@ export default function App() {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length === 0) {
+      const directTouches = getDirectFingerTouches(e.touches);
+      if (directTouches.length === 0) {
         stopPullToAddPageHold();
       }
-      if (outsidePanDragRef.current?.active && e.touches.length === 0) {
+      if (outsidePanDragRef.current?.active && directTouches.length === 0) {
         outsidePanDragRef.current = null;
         setPan({ ...panRef.current });
         return;
       }
       if (!pinchStateRef.current?.active) return;
-      if (e.touches.length === 0) {
+      if (directTouches.length === 0) {
         const st = pinchStateRef.current;
         const elapsed = performance.now() - st.startTime;
         pinchStateRef.current = null;
         canvasRectRef.current = null;
 
         // Goodnotes 6 Gesture: Quick 2-finger tap = Undo, Quick 3-finger tap = Redo
-        if (elapsed < 260 && st.maxMoved < 14) {
+        if (
+          elapsed < 260 &&
+          st.maxMoved < 14 &&
+          performance.now() - lastPenActivityTimeRef.current > 500
+        ) {
           if (st.touchCount === 2) {
             handleUndo();
             showToast('↩️ 2-Finger Tap: Αναίρεση (Undo)');
@@ -1291,6 +1367,48 @@ export default function App() {
     drawStrokeOnContext(ctx, previewStroke);
   };
 
+  // 0ms First-Contact Dot: Renders immediately on pointerdown so taps, dots (., i, ϊ), and accents (τόνοι) never miss!
+  const drawInitialDot = (pt: BezierPoint) => {
+    const ctx = activeCtxRef.current;
+    if (!ctx) return;
+    ctx.save();
+    ctx.strokeStyle = strokeColor;
+    const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.72 + (pt.pressure ?? 0.5) * 0.55;
+    ctx.lineWidth =
+      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth * pressureFactor;
+    ctx.lineCap = activeTool === 'highlighter' ? 'butt' : 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
+
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+    ctx.lineTo(pt.x + 0.08, pt.y + 0.08);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // 0ms 2-Point Segment: Renders the very first movement segment (pts[0] -> mid(pts[0], pts[1])) immediately!
+  const drawTwoPointSegment = (p0: BezierPoint, p1: BezierPoint) => {
+    const ctx = activeCtxRef.current;
+    if (!ctx) return;
+    ctx.save();
+    ctx.strokeStyle = strokeColor;
+    const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.68 + (p1.pressure ?? 0.5) * 0.62;
+    ctx.lineWidth =
+      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth * pressureFactor;
+    ctx.lineCap = activeTool === 'highlighter' ? 'butt' : 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
+
+    const midX = (p0.x + p1.x) / 2;
+    const midY = (p0.y + p1.y) / 2;
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(midX, midY);
+    ctx.stroke();
+    ctx.restore();
+  };
+
   // Incremental 0ms segment draw for ultra-fast freehand pen strokes!
   const drawIncrementalSegment = (pPrev2: BezierPoint, pPrev1: BezierPoint, pCurr: BezierPoint) => {
     const ctx = activeCtxRef.current;
@@ -1358,8 +1476,33 @@ export default function App() {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (pinchStateRef.current?.active) return;
-    if (pencilOnlyMode && e.pointerType === 'touch') return;
+    const isPen = e.pointerType === 'pen';
+
+    if (isPen) {
+      // APPLE PENCIL HARDWARE PRIORITY:
+      // Always register Apple Pencil contact immediately! Cancel any palm-induced pinch/pan state.
+      lastPenActivityTimeRef.current = performance.now();
+      pinchStateRef.current = null;
+      outsidePanDragRef.current = null;
+      stopPullToAddPageHold();
+
+      // If a stray palm 'touch' stroke was in progress, wipe it immediately so the Apple Pencil takes over!
+      if (isDrawingRef.current && activePointerTypeRef.current === 'touch') {
+        isDrawingRef.current = false;
+        currentStrokePtsRef.current = [];
+        snappedCurrentStrokeRef.current = null;
+        clearActiveOverlay();
+      }
+    } else if (e.pointerType === 'touch') {
+      // Ignore finger/palm touches when Pencil-Only mode is enabled, or while Apple Pencil is active/recently used,
+      // or if pinch-to-zoom is active, or if the contact patch is a large palm (>28px).
+      if (pencilOnlyMode) return;
+      if (pinchStateRef.current?.active) return;
+      if (activePointerTypeRef.current === 'pen' || performance.now() - lastPenActivityTimeRef.current < 850) return;
+      const nev = e.nativeEvent as PointerEvent;
+      if ((nev.width && nev.width > 28) || (nev.height && nev.height > 28)) return;
+      if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
+    }
 
     const activeLayer = activePage.layers.find((l) => l.id === activeLayerId);
     if (activeLayer?.locked && ['pen', 'pencil', 'highlighter', 'eraser', 'shape'].includes(activeTool)) {
@@ -1367,8 +1510,14 @@ export default function App() {
       return;
     }
 
+    activePointerIdRef.current = e.pointerId;
+    activePointerTypeRef.current = e.pointerType;
     canvasRectRef.current = activeCanvasRef.current?.getBoundingClientRect() || null;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore pointer capture errors on rapid consecutive touches
+    }
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
 
     // 1. Image Crop Mode
@@ -1607,6 +1756,9 @@ export default function App() {
     isDrawingRef.current = true;
     snappedCurrentStrokeRef.current = null;
     currentStrokePtsRef.current = [pt];
+    if (['pen', 'pencil', 'highlighter'].includes(activeTool)) {
+      drawInitialDot(pt);
+    }
   };
 
   const eraseAtPoint = (pt: { x: number; y: number }) => {
@@ -1641,7 +1793,15 @@ export default function App() {
 
   // ULTRA-FAST POINTER MOVE: Zero React re-renders while drawing!
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (pinchStateRef.current?.active || !isDrawingRef.current) return;
+    if (!isDrawingRef.current) return;
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+
+    if (e.pointerType === 'pen') {
+      lastPenActivityTimeRef.current = performance.now();
+      pinchStateRef.current = null;
+    } else if (pinchStateRef.current?.active) {
+      return;
+    }
 
     // Collect coalesced high-frequency Apple Pencil events (up to 240Hz on iPad Pro)
     const nativeEv = e.nativeEvent as PointerEvent;
@@ -1950,10 +2110,13 @@ export default function App() {
         !arrowEnd &&
         fillStyle === 'none' &&
         activeTool !== 'shape' &&
-        activeTool !== 'tape' &&
-        pts.length >= 3
+        activeTool !== 'tape'
       ) {
-        drawIncrementalSegment(pts[pts.length - 3], pts[pts.length - 2], pts[pts.length - 1]);
+        if (pts.length === 2) {
+          drawTwoPointSegment(pts[0], pts[1]);
+        } else if (pts.length >= 3) {
+          drawIncrementalSegment(pts[pts.length - 3], pts[pts.length - 2], pts[pts.length - 1]);
+        }
       }
     }
 
@@ -1995,17 +2158,34 @@ export default function App() {
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Ignore palm/finger pointerup or pointercancel events while Apple Pencil (or another active pointerId) is drawing!
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+
+    if (e.pointerType === 'pen') {
+      lastPenActivityTimeRef.current = performance.now();
+    }
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      // Ignore pointer capture release errors
+    }
+
+    activePointerIdRef.current = null;
+    activePointerTypeRef.current = null;
+
     if (holdTimerRef.current) {
       window.clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
-    clearActiveOverlay();
 
     // 1. Finish Image Lasso / Magnetic Lasso Crop
     if (imageCropMode !== 'none' && selectedImageId && lassoPolygonRef.current.length >= 3) {
+      clearActiveOverlay();
       const poly = lassoPolygonRef.current;
       lassoPolygonRef.current = [];
       const imgObj = activePage.images.find((im) => im.id === selectedImageId);
@@ -2030,16 +2210,19 @@ export default function App() {
     }
 
     if (activeTool === 'direct-node') {
+      clearActiveOverlay();
       setDraggingNodeIdx(null);
       return;
     }
 
     if (activeTool === 'laser') {
+      clearActiveOverlay();
       currentStrokePtsRef.current = [];
       return;
     }
 
     if (activeTool === 'tape' && currentStrokePtsRef.current.length >= 2) {
+      clearActiveOverlay();
       const first = currentStrokePtsRef.current[0];
       const last = currentStrokePtsRef.current[currentStrokePtsRef.current.length - 1];
       if (distance(first, last) > 20) {
@@ -2062,6 +2245,7 @@ export default function App() {
 
     // 2. Finish Lasso Selection
     if (activeTool === 'lasso') {
+      clearActiveOverlay();
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
         selectionTransformRef.current = null;
         isDraggingSelectionRef.current = null;
@@ -2083,15 +2267,22 @@ export default function App() {
       return;
     }
 
-    if (!['pen', 'pencil', 'highlighter', 'shape'].includes(activeTool)) return;
+    if (!['pen', 'pencil', 'highlighter', 'shape'].includes(activeTool)) {
+      clearActiveOverlay();
+      return;
+    }
     const rawPts = currentStrokePtsRef.current;
     currentStrokePtsRef.current = [];
-    if (rawPts.length === 0) return;
+    if (rawPts.length === 0) {
+      clearActiveOverlay();
+      return;
+    }
 
     // 3. Check Scribble-to-Erase Gesture
     if (scribbleToEraseEnabled && activeTool === 'pen' && !snappedCurrentStrokeRef.current) {
       const scribble = isScribbleEraseGesture(rawPts);
       if (scribble.isScribble && scribble.bounds) {
+        clearActiveOverlay();
         const b = scribble.bounds;
         const lockedLayers = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
         updateActivePage((page) => ({
@@ -2108,6 +2299,7 @@ export default function App() {
 
     // 4. Physics Grouped Stencils
     if (activeTool === 'shape' && ['cylinder', 'axes', 'resistor'].includes(shapePreset)) {
+      clearActiveOverlay();
       let minX = Infinity,
         minY = Infinity,
         maxX = -Infinity,
@@ -2174,6 +2366,15 @@ export default function App() {
       isShape,
       shapeType,
     };
+
+    // Synchronously draw onto staticCanvasRef BEFORE clearing activeCanvasRef so there is 0ms gap between frames!
+    if (newStroke.tool !== 'highlighter') {
+      const sCtx = staticCanvasRef.current?.getContext('2d');
+      if (sCtx) {
+        drawStrokeOnContext(sCtx, newStroke);
+      }
+    }
+    clearActiveOverlay();
 
     updateActivePage((page) => ({
       ...page,
@@ -3334,7 +3535,14 @@ export default function App() {
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
-                className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
+                onContextMenu={(e) => e.preventDefault()}
+                style={{
+                  WebkitTouchCallout: 'none',
+                  WebkitUserSelect: 'none',
+                  userSelect: 'none',
+                  touchAction: 'none',
+                }}
+                className="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none"
               />
 
               {/* GOODNOTES PULL-TO-ADD-PAGE PEEK BELOW BOTTOM EDGE */}

@@ -7,8 +7,21 @@ export function distance(a: { x: number; y: number }, b: { x: number; y: number 
 /**
  * Converts raw Apple Pencil points into smooth Quadratic Bezier curves with StreamLine filtering.
  */
-export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.42): BezierPoint[] {
-  if (rawPoints.length <= 2) return rawPoints;
+export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.36): BezierPoint[] {
+  if (rawPoints.length === 0) return [];
+  if (rawPoints.length === 1) return [{ ...rawPoints[0] }];
+  if (rawPoints.length === 2) {
+    const p0 = rawPoints[0];
+    const p1 = rawPoints[1];
+    return [
+      { ...p0 },
+      {
+        ...p1,
+        cx: (p0.x + p1.x) / 2,
+        cy: (p0.y + p1.y) / 2,
+      },
+    ];
+  }
 
   // Step 1: Exponential moving average (StreamLine filter)
   const filtered: BezierPoint[] = [rawPoints[0]];
@@ -16,19 +29,29 @@ export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.42
     const prev = filtered[filtered.length - 1];
     const curr = rawPoints[i];
     const d = distance(prev, curr);
-    if (d < 0.8 && i < rawPoints.length - 1) continue;
-    const alpha = Math.max(0.25, Math.min(0.85, 1 - streamline * Math.exp(-d / 18)));
+    if (d < 0.35 && i < rawPoints.length - 1) continue;
+    const alpha = Math.max(0.32, Math.min(0.9, 1 - streamline * Math.exp(-d / 18)));
     filtered.push({
       x: prev.x + alpha * (curr.x - prev.x),
       y: prev.y + alpha * (curr.y - prev.y),
-      pressure: (prev.pressure ?? 0.5) * 0.4 + (curr.pressure ?? 0.5) * 0.6,
+      pressure: (prev.pressure ?? 0.5) * 0.35 + (curr.pressure ?? 0.5) * 0.65,
       tiltX: curr.tiltX,
       tiltY: curr.tiltY,
       twist: curr.twist,
     });
   }
 
-  if (filtered.length <= 2) return filtered;
+  if (filtered.length === 1) return filtered;
+  if (filtered.length === 2) {
+    return [
+      { ...filtered[0] },
+      {
+        ...filtered[1],
+        cx: (filtered[0].x + filtered[1].x) / 2,
+        cy: (filtered[0].y + filtered[1].y) / 2,
+      },
+    ];
+  }
 
   // Step 2: Build Quadratic Bezier control points (Midpoint interpolation)
   const result: BezierPoint[] = [{ ...filtered[0] }];
@@ -106,7 +129,7 @@ function perpendicularDistance(
  * Detects if a stroke is a quick "Scribble-to-Erase" gesture.
  */
 export function isScribbleEraseGesture(pts: BezierPoint[]): { isScribble: boolean; bounds?: { minX: number; minY: number; maxX: number; maxY: number } } {
-  if (pts.length < 18) return { isScribble: false };
+  if (pts.length < 28) return { isScribble: false };
   let pathLen = 0;
   let minX = Infinity,
     minY = Infinity,
@@ -124,7 +147,7 @@ export function isScribbleEraseGesture(pts: BezierPoint[]): { isScribble: boolea
     maxX = Math.max(maxX, pts[i].x);
     maxY = Math.max(maxY, pts[i].y);
 
-    if (Math.abs(dx) > 3) {
+    if (Math.abs(dx) > 4.5) {
       const sign = dx > 0 ? 1 : -1;
       if (lastDxSign !== 0 && sign !== lastDxSign) {
         xReversals++;
@@ -134,8 +157,8 @@ export function isScribbleEraseGesture(pts: BezierPoint[]): { isScribble: boolea
   }
 
   const diag = Math.hypot(maxX - minX, maxY - minY);
-  // If user scribbled back and forth at least 4 times in a compact region
-  if (xReversals >= 4 && diag > 18 && pathLen / Math.max(1, diag) > 2.9) {
+  // Require deliberate dense scribble (at least 6 wide horizontal reversals) so Greek curvy letters (ξ, ζ, Σ) are never erased
+  if (xReversals >= 6 && diag > 24 && pathLen / Math.max(1, diag) > 4.2) {
     return {
       isScribble: true,
       bounds: { minX: minX - 8, minY: minY - 8, maxX: maxX + 8, maxY: maxY + 8 },
