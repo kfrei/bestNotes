@@ -7,7 +7,7 @@ export function distance(a: { x: number; y: number }, b: { x: number; y: number 
 /**
  * Converts raw Apple Pencil points into smooth Quadratic Bezier curves with StreamLine filtering.
  */
-export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.36): BezierPoint[] {
+export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.54): BezierPoint[] {
   if (rawPoints.length === 0) return [];
   if (rawPoints.length === 1) return [{ ...rawPoints[0] }];
   if (rawPoints.length === 2) {
@@ -23,18 +23,22 @@ export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.36
     ];
   }
 
-  // Step 1: Exponential moving average (StreamLine filter)
-  const filtered: BezierPoint[] = [rawPoints[0]];
+  // Step 1: Decimate micro-jitter stair-steps (< 1.8px) & apply StreamLine EMA filter
+  const filtered: BezierPoint[] = [{ ...rawPoints[0] }];
   for (let i = 1; i < rawPoints.length; i++) {
     const prev = filtered[filtered.length - 1];
     const curr = rawPoints[i];
     const d = distance(prev, curr);
-    if (d < 0.35 && i < rawPoints.length - 1) continue;
-    const alpha = Math.max(0.32, Math.min(0.9, 1 - streamline * Math.exp(-d / 18)));
+    const isLast = i === rawPoints.length - 1;
+    if (d < 1.8 && !isLast) continue;
+
+    const alpha = isLast
+      ? 0.78
+      : Math.max(0.28, Math.min(0.72, 1 - streamline * Math.exp(-d / 16)));
     filtered.push({
       x: prev.x + alpha * (curr.x - prev.x),
       y: prev.y + alpha * (curr.y - prev.y),
-      pressure: (prev.pressure ?? 0.5) * 0.35 + (curr.pressure ?? 0.5) * 0.65,
+      pressure: (prev.pressure ?? 0.5) * 0.45 + (curr.pressure ?? 0.5) * 0.55,
       tiltX: curr.tiltX,
       tiltY: curr.tiltY,
       twist: curr.twist,
@@ -53,11 +57,35 @@ export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.36
     ];
   }
 
-  // Step 2: Build Quadratic Bezier control points (Midpoint interpolation)
-  const result: BezierPoint[] = [{ ...filtered[0] }];
-  for (let i = 1; i < filtered.length - 1; i++) {
-    const p0 = filtered[i];
-    const p1 = filtered[i + 1];
+  // Step 2: Two passes of Gaussian-Laplacian relaxation to eliminate digitizer stair-steps ("ζαγρέ")
+  let relaxed = filtered.map((p) => ({ ...p }));
+  for (let pass = 0; pass < 2; pass++) {
+    const next = relaxed.map((p) => ({ ...p }));
+    for (let i = 1; i < relaxed.length - 1; i++) {
+      next[i].x = 0.22 * relaxed[i - 1].x + 0.56 * relaxed[i].x + 0.22 * relaxed[i + 1].x;
+      next[i].y = 0.22 * relaxed[i - 1].y + 0.56 * relaxed[i].y + 0.22 * relaxed[i + 1].y;
+    }
+    relaxed = next;
+  }
+
+  // Step 3: True C1-continuous Quadratic Bezier Midpoint Spline (zero end-hooks!)
+  const result: BezierPoint[] = [{ ...relaxed[0] }];
+  const firstMidX = (relaxed[0].x + relaxed[1].x) / 2;
+  const firstMidY = (relaxed[0].y + relaxed[1].y) / 2;
+  result.push({
+    x: firstMidX,
+    y: firstMidY,
+    cx: (relaxed[0].x + firstMidX) / 2,
+    cy: (relaxed[0].y + firstMidY) / 2,
+    pressure: relaxed[0].pressure,
+    tiltX: relaxed[0].tiltX,
+    tiltY: relaxed[0].tiltY,
+    twist: relaxed[0].twist,
+  });
+
+  for (let i = 1; i < relaxed.length - 1; i++) {
+    const p0 = relaxed[i];
+    const p1 = relaxed[i + 1];
     const midX = (p0.x + p1.x) / 2;
     const midY = (p0.y + p1.y) / 2;
     result.push({
@@ -71,13 +99,14 @@ export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.36
       twist: p0.twist,
     });
   }
-  const last = filtered[filtered.length - 1];
-  const secondLast = filtered[filtered.length - 2];
+
+  const last = relaxed[relaxed.length - 1];
+  const prevEnd = result[result.length - 1];
   result.push({
     x: last.x,
     y: last.y,
-    cx: secondLast.x,
-    cy: secondLast.y,
+    cx: (prevEnd.x + last.x) / 2,
+    cy: (prevEnd.y + last.y) / 2,
     pressure: last.pressure,
     tiltX: last.tiltX,
     tiltY: last.tiltY,

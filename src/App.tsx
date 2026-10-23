@@ -78,6 +78,8 @@ import {
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
 const PRESET_COLORS = ['#111827', '#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0284c7', '#eab308'];
 const THICKNESS_PRESETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0];
+const CANVAS_DPR = 2; // 2x Retina HiDPI backing resolution (1840x2520) for razor-sharp, zero-"ζαγρέ" curves
+const PAGE_GAP = 44; // Vertical gap (px) between pages in Word-style continuous multi-page scroll
 
 export default function App() {
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
@@ -189,14 +191,18 @@ export default function App() {
   const [mathEquationToSolve, setMathEquationToSolve] = useState<string>('15 * t = 90');
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
 
-  // DUAL-CANVAS REFS FOR ZERO-LATENCY (0ms / 120Hz) APPLE PENCIL INKING!
-  // 1. staticCanvasRef: Renders background paper + committed strokes ONLY when page changes (NEVER during pointermove!)
-  // 2. activeCanvasRef: Desynchronized hardware overlay that draws ONLY the live wet ink segment in <0.03ms!
+  // DUAL-CANVAS REFS FOR ZERO-LATENCY (0ms / 120Hz) APPLE PENCIL INKING Across Multi-Page Word-Style Stack!
+  // 1. staticCanvasMapRef: Per-page 2x Retina canvas for background paper + committed strokes
+  // 2. activeCanvasMapRef: Per-page 2x Retina desynchronized hardware overlay for 0ms wet ink
+  const staticCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const activeCanvasMapRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const activeDrawingPageIndexRef = useRef<number>(0);
 
   const currentStrokePtsRef = useRef<BezierPoint[]>([]);
+  const lastRawCanvasPtRef = useRef<BezierPoint | null>(null);
   const isDrawingRef = useRef<boolean>(false);
   const activePointerIdRef = useRef<number | null>(null);
   const activePointerTypeRef = useRef<string | null>(null);
@@ -307,17 +313,19 @@ export default function App() {
 
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
+      const targetIdx = activeDrawingPageIndexRef.current ?? activePageIndex;
       setNotebooks((prevNotebooks) =>
         prevNotebooks.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
-          const currentPage = nb.pages[activePageIndex] || nb.pages[0];
+          const safeIdx = Math.min(targetIdx, nb.pages.length - 1);
+          const currentPage = nb.pages[safeIdx] || nb.pages[0];
           if (recordUndo) {
             setUndoStack((u) => [...u.slice(-24), clonePageFast(currentPage)]);
             setRedoStack([]);
           }
           const updatedPage = updater(clonePageFast(currentPage));
           const newPages = [...nb.pages];
-          newPages[activePageIndex] = updatedPage;
+          newPages[safeIdx] = updatedPage;
           return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
         })
       );
@@ -570,187 +578,224 @@ export default function App() {
     ctx.restore();
   };
 
-  // RENDER STATIC SCENE (Only runs when page state changes, NEVER while Apple Pencil is moving!)
+  // RENDER STATIC SCENE ACROSS ALL STACKED PAGES AT 2x RETINA HiDPI (1840x2520)
+  // (Only runs when page state changes, NEVER while Apple Pencil is moving!)
   const renderStaticScene = useCallback(() => {
-    const canvas = staticCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    activeNotebook.pages.forEach((pageObj, pageIdx) => {
+      const canvas = staticCanvasMapRef.current.get(pageObj.id) || (pageIdx === activePageIndex ? staticCanvasRef.current : null);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.clearRect(0, 0, width, height);
+      const pWidth = pageObj.orientation === 'landscape' ? 1260 : 920;
+      const pHeight = pageObj.orientation === 'landscape' ? 920 : 1260;
+      ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.clearRect(0, 0, pWidth, pHeight);
 
-    drawPaperBackground(ctx, width, height, activePage.template);
+      drawPaperBackground(ctx, pWidth, pHeight, pageObj.template);
 
-    const visibleLayerMap = new Map(activePage.layers.map((l) => [l.id, l]));
+      const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
+      const isCurrentActivePage = pageIdx === activePageIndex;
 
-    // 1. Images with Alpha Masking & Rotation
-    for (const imgObj of activePage.images || []) {
-      const layer = visibleLayerMap.get(imgObj.layerId);
-      if (layer && !layer.visible) continue;
+      // 1. Images with Alpha Masking & Rotation
+      for (const imgObj of pageObj.images || []) {
+        const layer = visibleLayerMap.get(imgObj.layerId);
+        if (layer && !layer.visible) continue;
 
-      let imgEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
-      if (!imgEl) {
-        imgEl = new Image();
-        imgEl.src = imgObj.dataUrl;
-        imgEl.onload = () => renderStaticScene();
-        imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
+        let imgEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
+        if (!imgEl) {
+          imgEl = new Image();
+          imgEl.src = imgObj.dataUrl;
+          imgEl.onload = () => renderStaticScene();
+          imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
+        }
+
+        if (imgEl.complete && imgEl.naturalWidth > 0) {
+          ctx.save();
+          ctx.globalAlpha = layer?.opacity ?? 1;
+          if (imgObj.rotation) {
+            const icx = imgObj.x + imgObj.width / 2;
+            const icy = imgObj.y + imgObj.height / 2;
+            ctx.translate(icx, icy);
+            ctx.rotate((imgObj.rotation * Math.PI) / 180);
+            ctx.translate(-icx, -icy);
+          }
+          if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
+            ctx.beginPath();
+            ctx.moveTo(imgObj.x + imgObj.clipPolygon[0].x, imgObj.y + imgObj.clipPolygon[0].y);
+            for (let i = 1; i < imgObj.clipPolygon.length; i++) {
+              ctx.lineTo(imgObj.x + imgObj.clipPolygon[i].x, imgObj.y + imgObj.clipPolygon[i].y);
+            }
+            ctx.closePath();
+            ctx.clip();
+          }
+          ctx.drawImage(imgEl, imgObj.x, imgObj.y, imgObj.width, imgObj.height);
+          ctx.restore();
+        }
       }
 
-      if (imgEl.complete && imgEl.naturalWidth > 0) {
-        ctx.save();
-        ctx.globalAlpha = layer?.opacity ?? 1;
-        if (imgObj.rotation) {
-          const icx = imgObj.x + imgObj.width / 2;
-          const icy = imgObj.y + imgObj.height / 2;
-          ctx.translate(icx, icy);
-          ctx.rotate((imgObj.rotation * Math.PI) / 180);
-          ctx.translate(-icx, -icy);
-        }
-        if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
+      // 2. Highlighters first (underneath Pen ink)
+      for (const s of pageObj.strokes) {
+        if (s.tool !== 'highlighter') continue;
+        const layer = visibleLayerMap.get(s.layerId);
+        if (layer && !layer.visible) continue;
+        drawStrokeOnContext(ctx, s, isCurrentActivePage && selectedStrokeIds.includes(s.id));
+      }
+
+      // 3. Pen & Pencil Strokes
+      for (const s of pageObj.strokes) {
+        if (s.tool === 'highlighter') continue;
+        const layer = visibleLayerMap.get(s.layerId);
+        if (layer && !layer.visible) continue;
+        drawStrokeOnContext(ctx, s, isCurrentActivePage && selectedStrokeIds.includes(s.id));
+      }
+
+      // 4. Goodnotes Select / Lasso Transform Bounding Box (on active page)
+      if (isCurrentActivePage) {
+        const selBounds = getSelectionBounds();
+        if (selBounds && activeTool !== 'direct-node') {
+          const pad = 8;
+          const bx1 = selBounds.minX - pad;
+          const by1 = selBounds.minY - pad;
+          const bx2 = selBounds.maxX + pad;
+          const by2 = selBounds.maxY + pad;
+          const bcx = selBounds.cx;
+          const rotHandleY = by1 - 30;
+
+          ctx.save();
+          ctx.strokeStyle = '#0066ff';
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([6, 4]);
+          ctx.strokeRect(bx1, by1, bx2 - bx1, by2 - by1);
+
+          // Rotation stem + Top Rotate Handle (↻)
+          ctx.setLineDash([]);
           ctx.beginPath();
-          ctx.moveTo(imgObj.x + imgObj.clipPolygon[0].x, imgObj.y + imgObj.clipPolygon[0].y);
-          for (let i = 1; i < imgObj.clipPolygon.length; i++) {
-            ctx.lineTo(imgObj.x + imgObj.clipPolygon[i].x, imgObj.y + imgObj.clipPolygon[i].y);
-          }
-          ctx.closePath();
-          ctx.clip();
-        }
-        ctx.drawImage(imgEl, imgObj.x, imgObj.y, imgObj.width, imgObj.height);
-        ctx.restore();
-      }
-    }
+          ctx.moveTo(bcx, by1);
+          ctx.lineTo(bcx, rotHandleY);
+          ctx.stroke();
 
-    // 2. Highlighters first (underneath Pen ink)
-    for (const s of activePage.strokes) {
-      if (s.tool !== 'highlighter') continue;
-      const layer = visibleLayerMap.get(s.layerId);
-      if (layer && !layer.visible) continue;
-      drawStrokeOnContext(ctx, s, selectedStrokeIds.includes(s.id));
-    }
-
-    // 3. Pen & Pencil Strokes
-    for (const s of activePage.strokes) {
-      if (s.tool === 'highlighter') continue;
-      const layer = visibleLayerMap.get(s.layerId);
-      if (layer && !layer.visible) continue;
-      drawStrokeOnContext(ctx, s, selectedStrokeIds.includes(s.id));
-    }
-
-    // 4. Goodnotes Select / Lasso Transform Bounding Box (Proportional Corner Resize + 360° Top Rotate Handle)
-    const selBounds = getSelectionBounds();
-    if (selBounds && activeTool !== 'direct-node') {
-      const pad = 8;
-      const bx1 = selBounds.minX - pad;
-      const by1 = selBounds.minY - pad;
-      const bx2 = selBounds.maxX + pad;
-      const by2 = selBounds.maxY + pad;
-      const bcx = selBounds.cx;
-      const rotHandleY = by1 - 30;
-
-      ctx.save();
-      ctx.strokeStyle = '#0066ff';
-      ctx.lineWidth = 1.8;
-      ctx.setLineDash([6, 4]);
-      ctx.strokeRect(bx1, by1, bx2 - bx1, by2 - by1);
-
-      // Rotation stem + Top Rotate Handle (↻)
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(bcx, by1);
-      ctx.lineTo(bcx, rotHandleY);
-      ctx.stroke();
-
-      ctx.fillStyle = '#10b981';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.arc(bcx, rotHandleY, 8.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // 4 Corner Proportional Resize Handles (NW, NE, SE, SW)
-      const corners = [
-        { x: bx1, y: by1 },
-        { x: bx2, y: by1 },
-        { x: bx2, y: by2 },
-        { x: bx1, y: by2 },
-      ];
-      for (const c of corners) {
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#0066ff';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    // 5. Direct Node Handles ("Λευκό Βελάκι" - strictly 4 nodes at 90° for circles/ellipses!)
-    if (activeTool === 'direct-node' && activeNodeStrokeId) {
-      const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
-      if (target) {
-        ctx.save();
-        const isClosedPoly =
-          target.shapeType === 'rectangle' ||
-          target.shapeType === 'parallelogram' ||
-          target.shapeType === 'triangle';
-        const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
-
-        for (let i = 0; i < nodeCount; i++) {
-          const p = target.points[i];
-          if (!target.isShape && p.cx !== undefined && p.cy !== undefined) {
-            ctx.strokeStyle = '#ec4899';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.cx, p.cy);
-            ctx.stroke();
-
-            ctx.fillStyle = '#ec4899';
-            ctx.beginPath();
-            ctx.arc(p.cx, p.cy, 4.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.fillStyle = '#ffffff';
-          ctx.strokeStyle = '#2563eb';
+          ctx.fillStyle = '#10b981';
+          ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2.2;
-          ctx.fillRect(p.x - 6, p.y - 6, 12, 12);
-          ctx.strokeRect(p.x - 6, p.y - 6, 12, 12);
+          ctx.beginPath();
+          ctx.arc(bcx, rotHandleY, 8.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // 4 Corner Proportional Resize Handles (NW, NE, SE, SW)
+          const corners = [
+            { x: bx1, y: by1 },
+            { x: bx2, y: by1 },
+            { x: bx2, y: by2 },
+            { x: bx1, y: by2 },
+          ];
+          for (const c of corners) {
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+          ctx.restore();
         }
+
+        // 5. Direct Node Handles ("Λευκό Βελάκι" - strictly 4 nodes at 90° for circles/ellipses!)
+        if (activeTool === 'direct-node' && activeNodeStrokeId) {
+          const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
+          if (target) {
+            ctx.save();
+            const isClosedPoly =
+              target.shapeType === 'rectangle' ||
+              target.shapeType === 'parallelogram' ||
+              target.shapeType === 'triangle';
+            const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
+
+            for (let i = 0; i < nodeCount; i++) {
+              const p = target.points[i];
+              if (!target.isShape && p.cx !== undefined && p.cy !== undefined) {
+                ctx.strokeStyle = '#ec4899';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.cx, p.cy);
+                ctx.stroke();
+
+                ctx.fillStyle = '#ec4899';
+                ctx.beginPath();
+                ctx.arc(p.cx, p.cy, 4.5, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              ctx.fillStyle = '#ffffff';
+              ctx.strokeStyle = '#2563eb';
+              ctx.lineWidth = 2.2;
+              ctx.fillRect(p.x - 6, p.y - 6, 12, 12);
+              ctx.strokeRect(p.x - 6, p.y - 6, 12, 12);
+            }
+            ctx.restore();
+          }
+        }
+      }
+
+      // 6. Tape Strips
+      for (const tape of pageObj.tapes || []) {
+        ctx.save();
+        ctx.strokeStyle = tape.color || '#f59e0b';
+        ctx.lineWidth = tape.width || 28;
+        ctx.lineCap = 'butt';
+        ctx.globalAlpha = tape.revealed ? 0.22 : 0.96;
+        ctx.beginPath();
+        ctx.moveTo(tape.x1, tape.y1);
+        ctx.lineTo(tape.x2, tape.y2);
+        ctx.stroke();
         ctx.restore();
       }
-    }
-
-    // 6. Tape Strips
-    for (const tape of activePage.tapes || []) {
-      ctx.save();
-      ctx.strokeStyle = tape.color || '#f59e0b';
-      ctx.lineWidth = tape.width || 28;
-      ctx.lineCap = 'butt';
-      ctx.globalAlpha = tape.revealed ? 0.22 : 0.96;
-      ctx.beginPath();
-      ctx.moveTo(tape.x1, tape.y1);
-      ctx.lineTo(tape.x2, tape.y2);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }, [activePage, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, getSelectionBounds]);
+    });
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, getSelectionBounds]);
 
   useEffect(() => {
     renderStaticScene();
   }, [renderStaticScene]);
 
-  // Initialize desynchronized low-latency context on activeCanvasRef for 0ms iPad Apple Pencil rendering!
+  // Sync activeCanvasRef & staticCanvasRef with the current active page in the multi-page stack
   useEffect(() => {
-    const c = activeCanvasRef.current;
-    if (!c) return;
-    activeCtxRef.current =
-      (c.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) || c.getContext('2d');
-  }, [viewMode]);
+    activeDrawingPageIndexRef.current = activePageIndex;
+    const st = staticCanvasMapRef.current.get(activePage.id);
+    const ac = activeCanvasMapRef.current.get(activePage.id);
+    if (st) staticCanvasRef.current = st;
+    if (ac) {
+      activeCanvasRef.current = ac;
+      const ctx =
+        (ac.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) || ac.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        activeCtxRef.current = ctx;
+      }
+    }
+  }, [activePage.id, activePageIndex, viewMode]);
+
+  const getPageTopOffset = useCallback(
+    (targetIdx: number) => {
+      let y = 0;
+      for (let i = 0; i < targetIdx && i < activeNotebook.pages.length; i++) {
+        const p = activeNotebook.pages[i];
+        y += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+      }
+      return y;
+    },
+    [activeNotebook.pages]
+  );
+
+  const totalDocumentHeight = activeNotebook.pages.reduce(
+    (acc, p, idx) => acc + (p.orientation === 'landscape' ? 920 : 1260) + (idx > 0 ? PAGE_GAP : 0),
+    0
+  );
 
   const applyPaperTransformDirect = useCallback(
     (nextZoom: number, nextPanX: number, nextPanY: number, commitReactState = false) => {
@@ -766,6 +811,45 @@ export default function App() {
       }
     },
     []
+  );
+
+  // Smoothly jump to a specific page in the Word-style vertical document stack
+  const scrollToPageIndex = useCallback(
+    (targetIdx: number) => {
+      const clampedIdx = Math.max(0, Math.min(activeNotebook.pages.length - 1, targetIdx));
+      setActivePageIndex(clampedIdx);
+      activeDrawingPageIndexRef.current = clampedIdx;
+      const topY = getPageTopOffset(clampedIdx);
+      applyPaperTransformDirect(zoomRef.current, panRef.current.x, -topY * zoomRef.current, true);
+    },
+    [activeNotebook.pages.length, getPageTopOffset, applyPaperTransformDirect]
+  );
+
+  // Automatically update activePageIndex (1/3 -> 2/3 -> 3/3) as user scrolls through Word-style pages!
+  const syncActivePageFromPanY = useCallback(
+    (panY: number) => {
+      const wsHeight = workspaceRef.current?.clientHeight || 820;
+      const docFocusY = (-panY + wsHeight * 0.35) / zoomRef.current;
+      let accumY = 0;
+      let bestIdx = 0;
+      for (let i = 0; i < activeNotebook.pages.length; i++) {
+        const p = activeNotebook.pages[i];
+        const pH = p.orientation === 'landscape' ? 920 : 1260;
+        if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
+          bestIdx = i;
+          break;
+        }
+        if (docFocusY > accumY + pH + PAGE_GAP) {
+          bestIdx = i;
+        }
+        accumY += pH + PAGE_GAP;
+      }
+      if (bestIdx !== activeDrawingPageIndexRef.current) {
+        activeDrawingPageIndexRef.current = bestIdx;
+        setActivePageIndex(bestIdx);
+      }
+    },
+    [activeNotebook.pages]
   );
 
   const insertNewPageRelative = useCallback(
@@ -784,7 +868,11 @@ export default function App() {
         images: [],
         tapes: [],
       };
-      const insertIdx = where === 'before' ? activePageIndex : activePageIndex + 1;
+      const insertIdx = where === 'before' ? 0 : activeNotebook.pages.length;
+      let newTopY = 0;
+      if (where === 'after') {
+        newTopY = totalDocumentHeight + PAGE_GAP;
+      }
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
@@ -794,14 +882,15 @@ export default function App() {
         })
       );
       setActivePageIndex(insertIdx);
-      applyPaperTransformDirect(zoomRef.current, 0, 0, true);
+      activeDrawingPageIndexRef.current = insertIdx;
+      applyPaperTransformDirect(zoomRef.current, panRef.current.x, -newTopY * zoomRef.current, true);
       showToast(
         where === 'before'
-          ? '📄 Προστέθηκε Νέα Σελίδα στην επάνω πλευρά!'
-          : '📄 Προστέθηκε Νέα Σελίδα παρακάτω!'
+          ? '📄 Προστέθηκε Νέα Σελίδα στην αρχή του εγγράφου!'
+          : '📄 Προστέθηκε Νέα Σελίδα στο τέλος του εγγράφου!'
       );
     },
-    [activeNotebook.id, activeNotebook.pages.length, activePage.orientation, activePage.template, activePageIndex, applyPaperTransformDirect, showToast]
+    [activeNotebook.id, activeNotebook.pages.length, activePage.orientation, activePage.template, totalDocumentHeight, applyPaperTransformDirect, showToast]
   );
 
   const stopPullToAddPageHold = useCallback(() => {
@@ -816,9 +905,9 @@ export default function App() {
   const checkPullToAddPageHold = useCallback(
     (nextPanY: number) => {
       const wsHeight = workspaceRef.current?.clientHeight || 820;
-      const scaledPageHeight = pageHeight * zoomRef.current;
-      const minPanY = Math.min(0, wsHeight - scaledPageHeight - 36);
-      const pullThreshold = 68;
+      const scaledDocHeight = totalDocumentHeight * zoomRef.current;
+      const minPanY = Math.min(0, wsHeight - scaledDocHeight - 48);
+      const pullThreshold = 72;
 
       let targetSide: 'top' | 'bottom' | null = null;
       if (nextPanY > pullThreshold) {
@@ -854,7 +943,7 @@ export default function App() {
         }
       }, 60);
     },
-    [pageHeight, stopPullToAddPageHold, insertNewPageRelative]
+    [totalDocumentHeight, stopPullToAddPageHold, insertNewPageRelative]
   );
 
   // Rotate Page 90° Left or Right (rotates page orientation + all strokes, images, texts, tapes)
@@ -1102,8 +1191,7 @@ export default function App() {
     return () => window.removeEventListener('paste', onWindowPaste);
   }, [insertImageDataUrlOnPage]);
 
-  // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 1-FINGER OUTSIDE-PAGE SCROLL + PULL-TO-ADD-PAGE
-  // (With strict Apple Pencil hardware isolation so resting palm + stylus NEVER triggers fake zoom or drops strokes!)
+  // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 1-FINGER OUTSIDE-PAGE SCROLL + WORD-STYLE CONTINUOUS MULTI-PAGE SCROLL
   useEffect(() => {
     const ws = workspaceRef.current;
     if (!ws || viewMode !== 'editor') return;
@@ -1120,23 +1208,15 @@ export default function App() {
       for (let i = 0; i < touches.length; i++) {
         const t = touches[i] as any;
         if (t.touchType === 'stylus') continue;
-        // Reject large resting palm contact patches so 2 palm spots never trigger fake 2-finger pinch!
-        if ((t.radiusX && t.radiusX > 28) || (t.radiusY && t.radiusY > 28)) continue;
         out.push(touches[i]);
       }
       return out;
     };
 
     const onTouchStart = (e: TouchEvent) => {
-      // CRITICAL: If Apple Pencil is touching the screen or was active within the last 450ms,
-      // NEVER start pinch-to-zoom or outside pan, and NEVER cancel the active Apple Pencil stroke!
-      if (
-        hasStylusTouch(e.touches) ||
-        activePointerTypeRef.current === 'pen' ||
-        performance.now() - lastPenActivityTimeRef.current < 450
-      ) {
-        if (e.target === activeCanvasRef.current && e.cancelable) {
-          // Suppress iPadOS Safari double-tap zoom / text selection / callout during rapid consecutive pen strokes
+      // Only block touch gestures if the Apple Pencil is physically touching the glass right now
+      if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
+        if (e.target instanceof HTMLCanvasElement && e.cancelable) {
           e.preventDefault();
         }
         outsidePanDragRef.current = null;
@@ -1145,9 +1225,11 @@ export default function App() {
       }
 
       const directTouches = getDirectFingerTouches(e.touches);
+      const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
-      // Case A: 1 finger touching OUTSIDE the paper canvas (on the gray margin) -> Scroll page up/down!
-      if (directTouches.length === 1 && e.target !== activeCanvasRef.current) {
+      // Case A: 1 finger touching OUTSIDE the paper canvas (or anywhere when Pencil-Only Mode is ON) -> Scroll pages like Word!
+      if (directTouches.length === 1 && (isOutsideCanvas || pencilOnlyMode)) {
+        if (e.cancelable) e.preventDefault();
         const t = directTouches[0];
         outsidePanDragRef.current = {
           active: true,
@@ -1159,12 +1241,12 @@ export default function App() {
         return;
       }
 
-      // Case B: 2+ genuine fingers (no stylus) -> Pinch-to-Zoom & 2-Finger Pan + Pull-to-Add-Page
+      // Case B: 2+ fingers anywhere -> Pinch-to-Zoom & 2-Finger Pan across all Word-style pages + Pull-to-Add-Page
       if (directTouches.length >= 2) {
         if (e.cancelable) e.preventDefault();
         outsidePanDragRef.current = null;
 
-        // Only cancel an accidental 1-finger 'touch' dot that started <120ms before the 2nd finger landed (NEVER cancel 'pen'!)
+        // Cancel any accidental 1-finger 'touch' dot that started milliseconds before the 2nd finger landed
         if (holdTimerRef.current) {
           window.clearTimeout(holdTimerRef.current);
           holdTimerRef.current = null;
@@ -1180,7 +1262,10 @@ export default function App() {
           selectionTransformRef.current = null;
           const c = activeCanvasRef.current;
           const ctx = activeCtxRef.current;
-          if (c && ctx) ctx.clearRect(0, 0, c.width, c.height);
+          if (c && ctx) {
+            ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+            ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+          }
         }
 
         const t1 = directTouches[0];
@@ -1211,8 +1296,8 @@ export default function App() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (hasStylusTouch(e.touches) || activePointerTypeRef.current === 'pen') {
-        if (e.target === activeCanvasRef.current && e.cancelable) {
+      if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
+        if (e.target instanceof HTMLCanvasElement && e.cancelable) {
           e.preventDefault();
         }
         outsidePanDragRef.current = null;
@@ -1222,7 +1307,7 @@ export default function App() {
 
       const directTouches = getDirectFingerTouches(e.touches);
 
-      // Case A: 1-finger scroll outside the page
+      // Case A: 1-finger scroll through Word-style pages
       if (outsidePanDragRef.current?.active && directTouches.length === 1) {
         if (e.cancelable) e.preventDefault();
         const t = directTouches[0];
@@ -1231,11 +1316,12 @@ export default function App() {
         const nextPanX = outsidePanDragRef.current.initialPanX + dx;
         const nextPanY = outsidePanDragRef.current.initialPanY + dy;
         applyPaperTransformDirect(zoomRef.current, nextPanX, nextPanY, false);
+        syncActivePageFromPanY(nextPanY);
         checkPullToAddPageHold(nextPanY);
         return;
       }
 
-      // Case B: 2-finger pinch & pan
+      // Case B: 2-finger pinch & pan across Word-style pages
       if (!pinchStateRef.current?.active) return;
       if (directTouches.length >= 2) {
         if (e.cancelable) e.preventDefault();
@@ -1256,6 +1342,7 @@ export default function App() {
         const newPanY = st.initialPanY + (currMidY - st.startMidY) - st.paperOffsetY * (newZoom - st.initialZoom);
 
         applyPaperTransformDirect(newZoom, newPanX, newPanY, false);
+        syncActivePageFromPanY(newPanY);
         checkPullToAddPageHold(newPanY);
       }
     };
@@ -1268,6 +1355,7 @@ export default function App() {
       if (outsidePanDragRef.current?.active && directTouches.length === 0) {
         outsidePanDragRef.current = null;
         setPan({ ...panRef.current });
+        syncActivePageFromPanY(panRef.current.y);
         return;
       }
       if (!pinchStateRef.current?.active) return;
@@ -1281,7 +1369,7 @@ export default function App() {
         if (
           elapsed < 260 &&
           st.maxMoved < 14 &&
-          performance.now() - lastPenActivityTimeRef.current > 500
+          performance.now() - lastPenActivityTimeRef.current > 400
         ) {
           if (st.touchCount === 2) {
             handleUndo();
@@ -1293,6 +1381,7 @@ export default function App() {
         } else {
           setZoom(zoomRef.current);
           setPan({ ...panRef.current });
+          syncActivePageFromPanY(panRef.current.y);
         }
       }
     };
@@ -1309,9 +1398,11 @@ export default function App() {
         const newPanX = panRef.current.x - offsetX * (newZoom - oldZoom);
         const newPanY = panRef.current.y - offsetY * (newZoom - oldZoom);
         applyPaperTransformDirect(newZoom, newPanX, newPanY, true);
+        syncActivePageFromPanY(newPanY);
       } else {
         const nextPanY = panRef.current.y - e.deltaY;
         applyPaperTransformDirect(zoomRef.current, panRef.current.x - e.deltaX, nextPanY, false);
+        syncActivePageFromPanY(nextPanY);
       }
     };
 
@@ -1328,21 +1419,23 @@ export default function App() {
       ws.removeEventListener('touchcancel', onTouchEnd);
       ws.removeEventListener('wheel', onWheel);
     };
-  }, [viewMode, applyPaperTransformDirect, checkPullToAddPageHold, stopPullToAddPageHold, handleUndo, handleRedo, showToast]);
+  }, [viewMode, pencilOnlyMode, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, handleUndo, handleRedo, showToast]);
 
   const clearActiveOverlay = () => {
     const c = activeCanvasRef.current;
     const ctx = activeCtxRef.current;
     if (!c || !ctx) return;
-    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+    ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
   };
 
-  // Draw live wet ink on the top overlay canvas ONLY (Zero React State, Zero Lag!)
+  // Draw live wet ink on the top 2x Retina overlay canvas ONLY (Zero React State, Zero Lag!)
   const renderLiveOverlayStroke = () => {
     const c = activeCanvasRef.current;
     const ctx = activeCtxRef.current;
     if (!c || !ctx) return;
-    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+    ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
 
     const pts = snappedCurrentStrokeRef.current
       ? snappedCurrentStrokeRef.current.points
@@ -1367,11 +1460,12 @@ export default function App() {
     drawStrokeOnContext(ctx, previewStroke);
   };
 
-  // 0ms First-Contact Dot: Renders immediately on pointerdown so taps, dots (., i, ϊ), and accents (τόνοι) never miss!
+  // 0ms First-Contact Dot at 2x Retina HiDPI
   const drawInitialDot = (pt: BezierPoint) => {
     const ctx = activeCtxRef.current;
     if (!ctx) return;
     ctx.save();
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
     const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.72 + (pt.pressure ?? 0.5) * 0.55;
     ctx.lineWidth =
@@ -1387,11 +1481,12 @@ export default function App() {
     ctx.restore();
   };
 
-  // 0ms 2-Point Segment: Renders the very first movement segment (pts[0] -> mid(pts[0], pts[1])) immediately!
+  // 0ms 2-Point Segment at 2x Retina HiDPI
   const drawTwoPointSegment = (p0: BezierPoint, p1: BezierPoint) => {
     const ctx = activeCtxRef.current;
     if (!ctx) return;
     ctx.save();
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
     const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.68 + (p1.pressure ?? 0.5) * 0.62;
     ctx.lineWidth =
@@ -1409,11 +1504,12 @@ export default function App() {
     ctx.restore();
   };
 
-  // Incremental 0ms segment draw for ultra-fast freehand pen strokes!
+  // Incremental 0ms Quadratic Bezier segment draw at 2x Retina HiDPI (zero "ζαγρέ"!)
   const drawIncrementalSegment = (pPrev2: BezierPoint, pPrev1: BezierPoint, pCurr: BezierPoint) => {
     const ctx = activeCtxRef.current;
     if (!ctx) return;
     ctx.save();
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
     const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.65 + (pCurr.pressure ?? 0.5) * 0.65;
     ctx.lineWidth =
@@ -1437,8 +1533,10 @@ export default function App() {
   const getCanvasPointFromNative = (clientX: number, clientY: number, pressure = 0.55): BezierPoint => {
     const canvas = activeCanvasRef.current!;
     const rect = canvasRectRef.current || canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const logicalW = canvas.width / CANVAS_DPR;
+    const logicalH = canvas.height / CANVAS_DPR;
+    const scaleX = logicalW / rect.width;
+    const scaleY = logicalH / rect.height;
     let x = (clientX - rect.left) * scaleX;
     let y = (clientY - rect.top) * scaleY;
 
@@ -1475,7 +1573,7 @@ export default function App() {
     return inside;
   };
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>, pageIdx = activePageIndex) => {
     const isPen = e.pointerType === 'pen';
 
     if (isPen) {
@@ -1494,17 +1592,35 @@ export default function App() {
         clearActiveOverlay();
       }
     } else if (e.pointerType === 'touch') {
-      // Ignore finger/palm touches when Pencil-Only mode is enabled, or while Apple Pencil is active/recently used,
-      // or if pinch-to-zoom is active, or if the contact patch is a large palm (>28px).
       if (pencilOnlyMode) return;
-      if (pinchStateRef.current?.active) return;
-      if (activePointerTypeRef.current === 'pen' || performance.now() - lastPenActivityTimeRef.current < 850) return;
+      if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
+      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 260) return;
       const nev = e.nativeEvent as PointerEvent;
-      if ((nev.width && nev.width > 28) || (nev.height && nev.height > 28)) return;
+      if ((nev.width && nev.width > 68) || (nev.height && nev.height > 68)) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
     }
 
-    const activeLayer = activePage.layers.find((l) => l.id === activeLayerId);
+    // Switch active page immediately if user touches another page in the Word-style vertical stack!
+    const targetPage = activeNotebook.pages[pageIdx] || activePage;
+    activeDrawingPageIndexRef.current = pageIdx;
+    if (pageIdx !== activePageIndex) {
+      setActivePageIndex(pageIdx);
+    }
+
+    const stCanvas = staticCanvasMapRef.current.get(targetPage.id);
+    if (stCanvas) staticCanvasRef.current = stCanvas;
+    activeCanvasRef.current = e.currentTarget;
+    const aCtx =
+      (e.currentTarget.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) ||
+      e.currentTarget.getContext('2d');
+    if (aCtx) {
+      aCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+      aCtx.imageSmoothingEnabled = true;
+      aCtx.imageSmoothingQuality = 'high';
+      activeCtxRef.current = aCtx;
+    }
+
+    const activeLayer = targetPage.layers.find((l) => l.id === activeLayerId);
     if (activeLayer?.locked && ['pen', 'pencil', 'highlighter', 'eraser', 'shape'].includes(activeTool)) {
       showToast('🔒 Το επιλεγμένο Layer είναι κλειδωμένο!');
       return;
@@ -1512,13 +1628,14 @@ export default function App() {
 
     activePointerIdRef.current = e.pointerId;
     activePointerTypeRef.current = e.pointerType;
-    canvasRectRef.current = activeCanvasRef.current?.getBoundingClientRect() || null;
+    canvasRectRef.current = e.currentTarget.getBoundingClientRect();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       // Ignore pointer capture errors on rapid consecutive touches
     }
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+    lastRawCanvasPtRef.current = pt;
 
     // 1. Image Crop Mode
     if (imageCropMode !== 'none' && selectedImageId) {
@@ -1807,6 +1924,7 @@ export default function App() {
     const nativeEv = e.nativeEvent as PointerEvent;
     const coalesced = nativeEv.getCoalescedEvents ? nativeEv.getCoalescedEvents() : [nativeEv];
     const latestPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+    lastRawCanvasPtRef.current = latestPt;
 
     // 1. Image Freehand / Magnetic Lasso Crop on active overlay canvas
     if (imageCropMode !== 'none' && selectedImageId) {
@@ -1830,7 +1948,8 @@ export default function App() {
         const ctx = activeCtxRef.current;
         const c = activeCanvasRef.current;
         if (ctx && c && lassoPolygonRef.current.length > 1) {
-          ctx.clearRect(0, 0, c.width, c.height);
+          ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+          ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
           ctx.save();
           ctx.strokeStyle = imageCropMode === 'magnetic' ? '#10b981' : '#f59e0b';
           ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
@@ -2045,7 +2164,8 @@ export default function App() {
       const ctx = activeCtxRef.current;
       const c = activeCanvasRef.current;
       if (ctx && c && lassoPolygonRef.current.length > 1) {
-        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
         ctx.save();
         ctx.strokeStyle = '#0284c7';
         ctx.fillStyle = 'rgba(2, 132, 199, 0.09)';
@@ -2079,7 +2199,8 @@ export default function App() {
       const ctx = activeCtxRef.current;
       const c = activeCanvasRef.current;
       if (ctx && c && currentStrokePtsRef.current.length > 1) {
-        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
         ctx.save();
         ctx.strokeStyle = '#ef4444';
         ctx.shadowColor = '#ef4444';
@@ -2097,11 +2218,26 @@ export default function App() {
       return;
     }
 
-    // 6. ZERO-LATENCY PEN / PENCIL / HIGHLIGHTER / SHAPE INKING!
+    // 6. ZERO-LATENCY, SILKY-SMOOTH PEN / PENCIL / HIGHLIGHTER / SHAPE INKING AT 2x RETINA!
     for (const ce of coalesced) {
-      const pt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
+      const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
       const pts = currentStrokePtsRef.current;
-      pts.push(pt);
+
+      if (pts.length > 0) {
+        const prev = pts[pts.length - 1];
+        const d = distance(prev, rawPt);
+        // Filter sub-pixel digitizer stair-steps (< 1.5px) so live wet ink is completely smooth ("εντελώς λείο")!
+        if (d < 1.5) continue;
+        const alpha = Math.max(0.36, Math.min(0.72, 1 - 0.5 * Math.exp(-d / 15)));
+        const smoothedPt: BezierPoint = {
+          x: prev.x + alpha * (rawPt.x - prev.x),
+          y: prev.y + alpha * (rawPt.y - prev.y),
+          pressure: (prev.pressure ?? 0.5) * 0.45 + (rawPt.pressure ?? 0.5) * 0.55,
+        };
+        pts.push(smoothedPt);
+      } else {
+        pts.push(rawPt);
+      }
 
       // If not yet snapped and using solid standard pen, draw only the new incremental Bezier segment in 0.02ms!
       if (
@@ -2277,6 +2413,10 @@ export default function App() {
       clearActiveOverlay();
       return;
     }
+    // Preserve short micro-strokes (like Greek accents / τόνοι) that moved < 1.5px
+    if (rawPts.length === 1 && lastRawCanvasPtRef.current && distance(rawPts[0], lastRawCanvasPtRef.current) > 0.35) {
+      rawPts.push(lastRawCanvasPtRef.current);
+    }
 
     // 3. Check Scribble-to-Erase Gesture
     if (scribbleToEraseEnabled && activeTool === 'pen' && !snappedCurrentStrokeRef.current) {
@@ -2367,10 +2507,11 @@ export default function App() {
       shapeType,
     };
 
-    // Synchronously draw onto staticCanvasRef BEFORE clearing activeCanvasRef so there is 0ms gap between frames!
+    // Synchronously draw onto staticCanvasRef at 2x Retina BEFORE clearing activeCanvasRef so there is 0ms gap!
     if (newStroke.tool !== 'highlighter') {
       const sCtx = staticCanvasRef.current?.getContext('2d');
       if (sCtx) {
+        sCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
         drawStrokeOnContext(sCtx, newStroke);
       }
     }
@@ -2649,12 +2790,13 @@ export default function App() {
             </button>
           </div>
 
-          {/* Page Indicator & Add Page */}
+          {/* Page Indicator & Add Page (Scrolls smoothly in Word-style continuous stack) */}
           <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
             <button
-              onClick={() => setActivePageIndex((i) => Math.max(0, i - 1))}
+              onClick={() => scrollToPageIndex(activePageIndex - 1)}
               disabled={activePageIndex === 0}
               className="p-0.5 disabled:opacity-30 cursor-pointer"
+              title="Προηγούμενη Σελίδα"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -2662,9 +2804,10 @@ export default function App() {
               {activePageIndex + 1}/{activeNotebook.pages.length}
             </span>
             <button
-              onClick={() => setActivePageIndex((i) => Math.min(activeNotebook.pages.length - 1, i + 1))}
+              onClick={() => scrollToPageIndex(activePageIndex + 1)}
               disabled={activePageIndex >= activeNotebook.pages.length - 1}
               className="p-0.5 disabled:opacity-30 cursor-pointer"
+              title="Επόμενη Σελίδα"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -3485,28 +3628,27 @@ export default function App() {
               </div>
             )}
 
-            {/* THE PAPER PAGE CONTAINER WITH STACKED STATIC + ACTIVE 120HZ CANVASES */}
+            {/* WORD-STYLE CONTINUOUS MULTI-PAGE VERTICAL DOCUMENT STACK (WITH 2x RETINA 120HZ CANVASES) */}
             <div
               ref={paperTransformElRef}
               style={{
-                width: pageWidth,
-                height: pageHeight,
                 transformOrigin: '0 0',
                 transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
                 willChange: 'transform',
+                gap: `${PAGE_GAP}px`,
               }}
-              className="relative shadow-lg bg-white border border-slate-300/90 shrink-0"
+              className="relative flex flex-col items-center shrink-0"
             >
-              {/* GOODNOTES PULL-TO-ADD-PAGE PEEK ABOVE TOP EDGE */}
+              {/* GOODNOTES PULL-TO-ADD-PAGE PEEK ABOVE FIRST PAGE */}
               {pullAddPageState?.side === 'top' && (
                 <div
                   style={{ width: pageWidth, height: 150, top: -168 }}
-                  className="absolute left-0 rounded-b-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-end pb-4 pointer-events-none"
+                  className="absolute left-0 rounded-b-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-end pb-4 pointer-events-none z-30"
                 >
                   <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0066ff] text-white text-xs font-bold shadow">
                     <Plus className="w-4 h-4" />
                     <span>
-                      Κράτα για προσθήκη Νέας Σελίδας από πάνω ({pullAddPageState.progress}%)
+                      Κράτα για προσθήκη Νέας Σελίδας στην αρχή ({pullAddPageState.progress}%)
                     </span>
                   </div>
                   <div className="w-48 h-1.5 bg-slate-200 rounded-full mt-2 overflow-hidden">
@@ -3518,38 +3660,158 @@ export default function App() {
                 </div>
               )}
 
-              {/* Layer 1: Static Committed Scene Canvas */}
-              <canvas
-                ref={staticCanvasRef}
-                width={pageWidth}
-                height={pageHeight}
-                className="absolute inset-0 w-full h-full pointer-events-none"
-              />
+              {/* Render All Pages Vertically (Word / Goodnotes Continuous Scroll) */}
+              {activeNotebook.pages.map((pageObj, pageIdx) => {
+                const pW = pageObj.orientation === 'landscape' ? 1260 : 920;
+                const pH = pageObj.orientation === 'landscape' ? 920 : 1260;
+                const isCurrentActive = pageIdx === activePageIndex;
 
-              {/* Layer 2: Desynchronized 0ms Hardware Wet-Ink Canvas */}
-              <canvas
-                ref={activeCanvasRef}
-                width={pageWidth}
-                height={pageHeight}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-                onContextMenu={(e) => e.preventDefault()}
-                style={{
-                  WebkitTouchCallout: 'none',
-                  WebkitUserSelect: 'none',
-                  userSelect: 'none',
-                  touchAction: 'none',
-                }}
-                className="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none"
-              />
+                return (
+                  <div
+                    key={pageObj.id}
+                    style={{ width: pW, height: pH }}
+                    className={`relative shadow-lg bg-white border transition-shadow shrink-0 ${
+                      isCurrentActive
+                        ? 'border-[#0066ff] ring-2 ring-[#0066ff]/20'
+                        : 'border-slate-300/90'
+                    }`}
+                  >
+                    {/* Word/Goodnotes Page Separator Header Badge */}
+                    <div className="absolute -top-6 left-0 right-0 flex items-center justify-between px-1 pointer-events-none select-none">
+                      <span
+                        className={`text-xs font-bold ${
+                          isCurrentActive ? 'text-[#0066ff]' : 'text-slate-500'
+                        }`}
+                      >
+                        Σελίδα {pageIdx + 1} από {activeNotebook.pages.length} — {pageObj.title}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-400">
+                        {pageObj.orientation === 'landscape' ? 'Landscape (1260×920)' : 'Portrait (920×1260)'}
+                      </span>
+                    </div>
 
-              {/* GOODNOTES PULL-TO-ADD-PAGE PEEK BELOW BOTTOM EDGE */}
+                    {/* Layer 1: 2x Retina Static Committed Scene Canvas */}
+                    <canvas
+                      ref={(el) => {
+                        if (el) {
+                          staticCanvasMapRef.current.set(pageObj.id, el);
+                          if (isCurrentActive) staticCanvasRef.current = el;
+                        } else {
+                          staticCanvasMapRef.current.delete(pageObj.id);
+                        }
+                      }}
+                      width={pW * CANVAS_DPR}
+                      height={pH * CANVAS_DPR}
+                      style={{ width: pW, height: pH }}
+                      className="absolute inset-0 pointer-events-none"
+                    />
+
+                    {/* Layer 2: 2x Retina Desynchronized 0ms Hardware Wet-Ink Canvas */}
+                    <canvas
+                      ref={(el) => {
+                        if (el) {
+                          activeCanvasMapRef.current.set(pageObj.id, el);
+                          if (isCurrentActive) {
+                            activeCanvasRef.current = el;
+                            const ctx =
+                              (el.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) ||
+                              el.getContext('2d');
+                            if (ctx) {
+                              ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+                              ctx.imageSmoothingEnabled = true;
+                              ctx.imageSmoothingQuality = 'high';
+                              activeCtxRef.current = ctx;
+                            }
+                          }
+                        } else {
+                          activeCanvasMapRef.current.delete(pageObj.id);
+                        }
+                      }}
+                      width={pW * CANVAS_DPR}
+                      height={pH * CANVAS_DPR}
+                      onPointerDown={(e) => handlePointerDown(e, pageIdx)}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={handlePointerUp}
+                      onPointerCancel={handlePointerUp}
+                      onContextMenu={(e) => e.preventDefault()}
+                      style={{
+                        width: pW,
+                        height: pH,
+                        WebkitTouchCallout: 'none',
+                        WebkitUserSelect: 'none',
+                        userSelect: 'none',
+                        touchAction: 'none',
+                      }}
+                      className="absolute inset-0 cursor-crosshair touch-none select-none"
+                    />
+
+                    {/* Rendered Text & LaTeX Blocks for this page */}
+                    {(pageObj.texts || []).map((txt) => (
+                      <div
+                        key={txt.id}
+                        style={{ left: txt.x, top: txt.y, color: txt.color, fontSize: txt.fontSize }}
+                        className="absolute px-2 py-1 rounded pointer-events-none"
+                      >
+                        {txt.isMath && txt.latex ? (
+                          <div
+                            dangerouslySetInnerHTML={{
+                              __html: katex.renderToString(txt.latex, { throwOnError: false, displayMode: true }),
+                            }}
+                          />
+                        ) : (
+                          <span className="font-medium">{txt.text}</span>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Movable & Rotatable Digital Ruler (shown on active page) */}
+                    {isCurrentActive && rulerState.visible && (
+                      <div
+                        style={{
+                          left: rulerState.x - 260,
+                          top: rulerState.y - 26,
+                          transform: `rotate(${rulerState.angle}deg)`,
+                        }}
+                        className="absolute w-[520px] h-[52px] bg-amber-200/85 border-2 border-amber-500 rounded-lg shadow-lg flex items-center justify-between px-4 select-none z-20"
+                      >
+                        <span className="text-xs font-bold text-slate-900">📏 Χάρακας ({rulerState.angle}°)</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setRulerState((r) => ({ ...r, angle: (r.angle - 15) % 360 }))}
+                            className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
+                          >
+                            -15°
+                          </button>
+                          <button
+                            onClick={() => setRulerState((r) => ({ ...r, angle: 0 }))}
+                            className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
+                          >
+                            0°
+                          </button>
+                          <button
+                            onClick={() => setRulerState((r) => ({ ...r, angle: (r.angle + 15) % 360 }))}
+                            className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
+                          >
+                            +15°
+                          </button>
+                          <button
+                            onClick={() => setRulerState((r) => ({ ...r, y: r.y + 40 }))}
+                            className="px-2 py-0.5 rounded bg-sky-700 text-white text-xs cursor-pointer"
+                          >
+                            ⬇
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* GOODNOTES PULL-TO-ADD-PAGE PEEK BELOW LAST PAGE */}
               {pullAddPageState?.side === 'bottom' && (
                 <div
                   style={{ width: pageWidth, height: 150, bottom: -168 }}
-                  className="absolute left-0 rounded-t-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-start pt-4 pointer-events-none"
+                  className="absolute left-0 rounded-t-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-start pt-4 pointer-events-none z-30"
                 >
                   <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0066ff] text-white text-xs font-bold shadow">
                     <Plus className="w-4 h-4" />
@@ -3562,65 +3824,6 @@ export default function App() {
                       className="h-full bg-emerald-500 transition-all duration-75"
                       style={{ width: `${pullAddPageState.progress}%` }}
                     />
-                  </div>
-                </div>
-              )}
-
-              {/* Rendered Text & LaTeX Blocks */}
-              {(activePage.texts || []).map((txt) => (
-                <div
-                  key={txt.id}
-                  style={{ left: txt.x, top: txt.y, color: txt.color, fontSize: txt.fontSize }}
-                  className="absolute px-2 py-1 rounded pointer-events-none"
-                >
-                  {txt.isMath && txt.latex ? (
-                    <div
-                      dangerouslySetInnerHTML={{
-                        __html: katex.renderToString(txt.latex, { throwOnError: false, displayMode: true }),
-                      }}
-                    />
-                  ) : (
-                    <span className="font-medium">{txt.text}</span>
-                  )}
-                </div>
-              ))}
-
-              {/* Movable & Rotatable Digital Ruler */}
-              {rulerState.visible && (
-                <div
-                  style={{
-                    left: rulerState.x - 260,
-                    top: rulerState.y - 26,
-                    transform: `rotate(${rulerState.angle}deg)`,
-                  }}
-                  className="absolute w-[520px] h-[52px] bg-amber-200/85 border-2 border-amber-500 rounded-lg shadow-lg flex items-center justify-between px-4 select-none z-20"
-                >
-                  <span className="text-xs font-bold text-slate-900">📏 Χάρακας ({rulerState.angle}°)</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setRulerState((r) => ({ ...r, angle: (r.angle - 15) % 360 }))}
-                      className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
-                    >
-                      -15°
-                    </button>
-                    <button
-                      onClick={() => setRulerState((r) => ({ ...r, angle: 0 }))}
-                      className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
-                    >
-                      0°
-                    </button>
-                    <button
-                      onClick={() => setRulerState((r) => ({ ...r, angle: (r.angle + 15) % 360 }))}
-                      className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
-                    >
-                      +15°
-                    </button>
-                    <button
-                      onClick={() => setRulerState((r) => ({ ...r, y: r.y + 40 }))}
-                      className="px-2 py-0.5 rounded bg-sky-700 text-white text-xs cursor-pointer"
-                    >
-                      ⬇
-                    </button>
                   </div>
                 </div>
               )}
