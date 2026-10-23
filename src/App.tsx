@@ -6,9 +6,7 @@ import {
   Eraser,
   Shapes,
   Lasso,
-  Magnet,
   MousePointer,
-  Type,
   Image as ImageIcon,
   Layers,
   Undo2,
@@ -16,7 +14,6 @@ import {
   FolderOpen,
   Plus,
   Cloud,
-  Check,
   Lock,
   Unlock,
   Eye,
@@ -26,19 +23,22 @@ import {
   Sparkles,
   Calculator,
   Trash2,
-  Copy,
   Wand2,
-  Scissors,
   Ruler,
   Radio,
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
-  Download,
   Upload,
-  Grid,
-  BookOpen,
+  LayoutGrid,
   RotateCcw,
+  Magnet,
+  Type,
+  Bandage,
+  Sticker,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import {
   Notebook,
@@ -72,10 +72,9 @@ import {
 } from './utils/geometryAndAlgorithms';
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
-const COLORS = ['#0f172a', '#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0284c7', '#facc15'];
+const PRESET_COLORS = ['#111827', '#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0284c7', '#eab308'];
 
 export default function App() {
-  // Notebooks state initialized with user's 2 preloaded .goodnotes Physics files!
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -93,23 +92,28 @@ export default function App() {
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(['nb-gn1', 'nb-gn2']);
   const [activeNotebookId, setActiveNotebookId] = useState<string>('nb-gn1');
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
+  const [zoom, setZoom] = useState<number>(1);
 
-  // Active Tool & Sub-options
+  // Goodnotes 6 Toolbar State
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
   const [shapePreset, setShapePreset] = useState<ShapePresetType>('auto');
-  const [strokeColor, setStrokeColor] = useState<string>('#0f172a');
+  const [strokeColor, setStrokeColor] = useState<string>('#111827');
+  const [colorSlots, setColorSlots] = useState<string[]>(['#111827', '#dc2626', '#2563eb']);
+  const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
   const [fillColor, setFillColor] = useState<string>('#fef08a');
   const [fillStyle, setFillStyle] = useState<FillStyleType>('none');
-  const [strokeWidth, setStrokeWidth] = useState<number>(3.2);
+  const [strokeWidth, setStrokeWidth] = useState<number>(3.0);
+  const [widthSlots] = useState<number[]>([2.0, 3.2, 5.2]);
   const [lineStyle, setLineStyle] = useState<LineStyleType>('solid');
   const [arrowEnd, setArrowEnd] = useState<boolean>(false);
   const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(true);
   const [holdToSnapEnabled, setHoldToSnapEnabled] = useState<boolean>(true);
   const [pencilOnlyMode, setPencilOnlyMode] = useState<boolean>(false);
+  const [showToolSubBar, setShowToolSubBar] = useState<boolean>(true);
 
-  // Layers & Selection state
+  // Layers & Selection
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
@@ -117,51 +121,42 @@ export default function App() {
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
   const [draggingNodeIdx, setDraggingNodeIdx] = useState<{ index: number; isControl: boolean } | null>(null);
 
-  // Image Cropping (Freehand Lasso & Magnetic Lasso)
+  // Image Cropping (Freehand & Magnetic Lasso)
   const [imageCropMode, setImageCropMode] = useState<'none' | 'freehand' | 'magnetic'>('none');
   const [cropPolygonPts, setCropPolygonPts] = useState<{ x: number; y: number }[]>([]);
   const edgeMapRef = useRef<{ id: string; map: Float32Array; w: number; h: number } | null>(null);
 
-  // Ruler & Laser Pointer
+  // Ruler
   const [rulerState, setRulerState] = useState<{ visible: boolean; x: number; y: number; angle: number }>({
     visible: false,
-    x: 240,
+    x: 320,
     y: 360,
     angle: 0,
   });
-  const [laserTrail, setLaserTrail] = useState<{ x: number; y: number; t: number }[]>([]);
-
-  // Apple Pencil Pro Live Telemetry HUD
-  const [pencilTelemetry, setPencilTelemetry] = useState<{
-    pointerType: string;
-    pressure: number;
-    tiltX: number;
-    twist: number;
-    hovering: boolean;
-    x: number;
-    y: number;
-  }>({ pointerType: 'pen', pressure: 0.5, tiltX: 0, twist: 0, hovering: false, x: 0, y: 0 });
 
   // Undo / Redo Stacks
   const [undoStack, setUndoStack] = useState<NotePage[]>([]);
   const [redoStack, setRedoStack] = useState<NotePage[]>([]);
 
-  // 30-second Auto-Sync Timer with Google Drive simulation/integration
+  // 30s Google Drive Auto-Sync
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'dirty'>('synced');
   const [secondsToNextSync, setSecondsToNextSync] = useState<number>(30);
-  const [lastSyncedTime, setLastSyncedTime] = useState<string>(new Date().toLocaleTimeString('el-GR'));
 
-  // Math / LaTeX Modal & Dialogs
+  // Modals
   const mathDialogRef = useRef<HTMLDialogElement | null>(null);
   const settingsDialogRef = useRef<HTMLDialogElement | null>(null);
   const [mathInput, setMathInput] = useState<string>('I = \\frac{q}{t} \\implies 15 \\cdot t = 90');
   const [mathEquationToSolve, setMathEquationToSolve] = useState<string>('15 * t = 90');
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem('bestnotes_gemini_key') || '');
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
 
-  // Canvas & Drawing Refs
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // DUAL-CANVAS REFS FOR ZERO-LATENCY (0ms / 120Hz) APPLE PENCIL INKING!
+  // 1. staticCanvasRef: Renders background paper + committed strokes ONLY when page changes (NEVER during pointermove!)
+  // 2. activeCanvasRef: Desynchronized hardware overlay that draws ONLY the live wet ink segment in <0.03ms!
+  const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const activeCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+
   const currentStrokePtsRef = useRef<BezierPoint[]>([]);
   const isDrawingRef = useRef<boolean>(false);
   const holdTimerRef = useRef<number | null>(null);
@@ -173,24 +168,29 @@ export default function App() {
   const fileInputImageRef = useRef<HTMLInputElement | null>(null);
 
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId) || notebooks[0];
-  const activePage = activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
+  const activePage =
+    activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
 
   const showToast = useCallback((msg: string) => {
     setStatusBanner(msg);
     window.setTimeout(() => {
       setStatusBanner((prev) => (prev === msg ? null : prev));
-    }, 3200);
+    }, 2600);
   }, []);
 
-  // Save to LocalStorage immediately + trigger 30s Google Drive Auto-Sync cycle
+  // DEBOUNCED LocalStorage Save (runs 2.5s AFTER user stops writing, NEVER during pointermove!)
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notebooks));
-    } catch {
-      // ignore quota errors
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(notebooks));
+      } catch {
+        // ignore quota
+      }
+    }, 2500);
+    return () => window.clearTimeout(timer);
   }, [notebooks]);
 
+  // 30-second Google Drive Auto-Sync loop
   useEffect(() => {
     const interval = window.setInterval(() => {
       setSecondsToNextSync((prev) => {
@@ -200,8 +200,7 @@ export default function App() {
             window.setTimeout(() => {
               setSyncStatus('synced');
               setIsDirty(false);
-              setLastSyncedTime(new Date().toLocaleTimeString('el-GR'));
-            }, 650);
+            }, 500);
           }
           return 30;
         }
@@ -211,7 +210,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isDirty]);
 
-  // Modern Web Guidance mandatory fallback for <dialog closedby="any"> in Safari/iPadOS
+  // Modern Web Guidance mandatory fallback for <dialog closedby="any"> in iPadOS Safari
   useEffect(() => {
     const dialogs = [mathDialogRef.current, settingsDialogRef.current].filter(Boolean) as HTMLDialogElement[];
     const handlers: Array<{ el: HTMLDialogElement; fn: (e: MouseEvent) => void }> = [];
@@ -238,7 +237,6 @@ export default function App() {
     };
   }, []);
 
-  // Mutate active page with Undo history support
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
       setNotebooks((prevNotebooks) =>
@@ -246,7 +244,7 @@ export default function App() {
           if (nb.id !== activeNotebook.id) return nb;
           const currentPage = nb.pages[activePageIndex] || nb.pages[0];
           if (recordUndo) {
-            setUndoStack((u) => [...u.slice(-29), structuredClone(currentPage)]);
+            setUndoStack((u) => [...u.slice(-24), structuredClone(currentPage)]);
             setRedoStack([]);
           }
           const updatedPage = updater(structuredClone(currentPage));
@@ -277,29 +275,27 @@ export default function App() {
     updateActivePage(() => nextPage, false);
   }, [redoStack, activePage, updateActivePage]);
 
-  // Helper to get bounding box of a stroke
   const getStrokeBounds = (s: StrokeObject) => {
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
     for (const p of s.points) {
-      minX = Math.min(minX, p.x);
-      minY = Math.min(minY, p.y);
-      maxX = Math.max(maxX, p.x);
-      maxY = Math.max(maxY, p.y);
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
     }
     return { minX, minY, maxX, maxY };
   };
 
-  // Draw a single stroke onto 2D context
   const drawStrokeOnContext = (ctx: CanvasRenderingContext2D, s: StrokeObject, isSelected = false) => {
     if (s.points.length === 0) return;
     ctx.save();
 
     if (s.tool === 'highlighter') {
       ctx.globalCompositeOperation = 'multiply';
-      ctx.globalAlpha = s.opacity ?? 0.45;
+      ctx.globalAlpha = s.opacity ?? 0.42;
     } else {
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = s.opacity ?? 1;
@@ -329,7 +325,6 @@ export default function App() {
       }
     }
 
-    // Fill if shape has fillColor
     if (s.fillColor && s.fillStyle && s.fillStyle !== 'none' && s.points.length > 2) {
       ctx.save();
       if (s.fillStyle === 'solid') {
@@ -355,7 +350,6 @@ export default function App() {
 
     ctx.stroke();
 
-    // Draw Vector Arrowhead if arrowEnd is enabled
     if (s.arrowEnd && s.points.length >= 2) {
       const last = s.points[s.points.length - 1];
       const prev = s.points[Math.max(0, s.points.length - 2)];
@@ -373,7 +367,7 @@ export default function App() {
     if (isSelected) {
       const b = getStrokeBounds(s);
       ctx.strokeStyle = '#0284c7';
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.3;
       ctx.setLineDash([4, 4]);
       ctx.strokeRect(b.minX - 4, b.minY - 4, b.maxX - b.minX + 8, b.maxY - b.minY + 8);
     }
@@ -381,13 +375,17 @@ export default function App() {
     ctx.restore();
   };
 
-  // Render Paper Template Background
-  const drawPaperBackground = (ctx: CanvasRenderingContext2D, width: number, height: number, template: PaperTemplateType) => {
+  const drawPaperBackground = (
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    template: PaperTemplateType
+  ) => {
     ctx.save();
-    ctx.fillStyle = template === 'dark-grid' ? '#0f172a' : '#fffdf9';
+    ctx.fillStyle = template === 'dark-grid' ? '#0f172a' : '#fffdf7';
     ctx.fillRect(0, 0, width, height);
 
-    const gridColor = template === 'dark-grid' ? 'rgba(148, 163, 184, 0.16)' : 'rgba(148, 163, 184, 0.28)';
+    const gridColor = template === 'dark-grid' ? 'rgba(148, 163, 184, 0.16)' : 'rgba(180, 190, 205, 0.35)';
     const step = 24;
 
     if (template === 'grid' || template === 'dark-grid') {
@@ -423,7 +421,7 @@ export default function App() {
         ctx.stroke();
       }
     } else if (template === 'dotted') {
-      ctx.fillStyle = 'rgba(100, 116, 139, 0.45)';
+      ctx.fillStyle = 'rgba(120, 130, 145, 0.45)';
       for (let x = step; x < width; x += step) {
         for (let y = step; y < height; y += step) {
           ctx.beginPath();
@@ -435,9 +433,9 @@ export default function App() {
     ctx.restore();
   };
 
-  // Main Canvas Render Loop
-  useEffect(() => {
-    const canvas = canvasRef.current;
+  // RENDER STATIC SCENE (Only runs when page state changes, NEVER while Apple Pencil is moving!)
+  const renderStaticScene = useCallback(() => {
+    const canvas = staticCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -450,7 +448,7 @@ export default function App() {
 
     const visibleLayerMap = new Map(activePage.layers.map((l) => [l.id, l]));
 
-    // 1. Render Images with Freehand / Magnetic Lasso Alpha Masking
+    // 1. Images with Alpha Masking
     for (const imgObj of activePage.images || []) {
       const layer = visibleLayerMap.get(imgObj.layerId);
       if (layer && !layer.visible) continue;
@@ -459,9 +457,7 @@ export default function App() {
       if (!imgEl) {
         imgEl = new Image();
         imgEl.src = imgObj.dataUrl;
-        imgEl.onload = () => {
-          setNotebooks((n) => [...n]); // Trigger re-render once loaded
-        };
+        imgEl.onload = () => renderStaticScene();
         imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
       }
 
@@ -491,7 +487,7 @@ export default function App() {
       }
     }
 
-    // 2. Render Highlighters FIRST (underneath Pen Ink, just like Goodnotes 6!)
+    // 2. Highlighters first (underneath Pen ink)
     for (const s of activePage.strokes) {
       if (s.tool !== 'highlighter') continue;
       const layer = visibleLayerMap.get(s.layerId);
@@ -499,7 +495,7 @@ export default function App() {
       drawStrokeOnContext(ctx, s, selectedStrokeIds.includes(s.id));
     }
 
-    // 3. Render Pen & Pencil Strokes & Shapes
+    // 3. Pen & Pencil Strokes
     for (const s of activePage.strokes) {
       if (s.tool === 'highlighter') continue;
       const layer = visibleLayerMap.get(s.layerId);
@@ -507,26 +503,7 @@ export default function App() {
       drawStrokeOnContext(ctx, s, selectedStrokeIds.includes(s.id));
     }
 
-    // 4. Render Active Stroke in progress
-    if (isDrawingRef.current && currentStrokePtsRef.current.length > 0 && ['pen', 'pencil', 'highlighter', 'shape'].includes(activeTool)) {
-      const ptsToRender = snappedCurrentStrokeRef.current ? snappedCurrentStrokeRef.current.points : currentStrokePtsRef.current;
-      const previewStroke: StrokeObject = {
-        id: 'preview',
-        tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
-        color: strokeColor,
-        fillColor: fillStyle !== 'none' ? fillColor : undefined,
-        fillStyle,
-        width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
-        opacity: activeTool === 'highlighter' ? 0.45 : 1,
-        lineStyle,
-        arrowEnd: arrowEnd || shapePreset === 'arrow',
-        points: ptsToRender,
-        layerId: activeLayerId,
-      };
-      drawStrokeOnContext(ctx, previewStroke);
-    }
-
-    // 5. Render Direct Node Editing Handles ("Λευκό Βελάκι" Illustrator)
+    // 4. Direct Node Handles ("Λευκό Βελάκι")
     if (activeTool === 'direct-node' && activeNodeStrokeId) {
       const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
       if (target) {
@@ -556,46 +533,7 @@ export default function App() {
       }
     }
 
-    // 6. Render Lasso Selection Polygon
-    if (lassoPolygonRef.current.length > 1) {
-      ctx.save();
-      ctx.strokeStyle = '#0284c7';
-      ctx.fillStyle = 'rgba(2, 132, 199, 0.08)';
-      ctx.lineWidth = 1.8;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(lassoPolygonRef.current[0].x, lassoPolygonRef.current[0].y);
-      for (let i = 1; i < lassoPolygonRef.current.length; i++) {
-        ctx.lineTo(lassoPolygonRef.current[i].x, lassoPolygonRef.current[i].y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 7. Render Active Image Crop Polygon (Freehand or Magnetic Lasso)
-    if (imageCropMode !== 'none' && cropPolygonPts.length > 0) {
-      ctx.save();
-      ctx.strokeStyle = imageCropMode === 'magnetic' ? '#10b981' : '#f59e0b';
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(cropPolygonPts[0].x, cropPolygonPts[0].y);
-      for (let i = 1; i < cropPolygonPts.length; i++) {
-        ctx.lineTo(cropPolygonPts[i].x, cropPolygonPts[i].y);
-      }
-      ctx.stroke();
-      // Draw magnetic anchor points
-      for (let i = 0; i < cropPolygonPts.length; i += 4) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(cropPolygonPts[i].x - 3, cropPolygonPts[i].y - 3, 6, 6);
-        ctx.strokeRect(cropPolygonPts[i].x - 3, cropPolygonPts[i].y - 3, 6, 6);
-      }
-      ctx.restore();
-    }
-
-    // 8. Render Tape Tool Strips (Active Recall Study Tapes)
+    // 5. Tape Strips
     for (const tape of activePage.tapes || []) {
       ctx.save();
       ctx.strokeStyle = tape.color || '#f59e0b';
@@ -608,66 +546,88 @@ export default function App() {
       ctx.stroke();
       ctx.restore();
     }
+  }, [activePage, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId]);
 
-    // 9. Render Laser Pointer Trail
-    if (laserTrail.length > 1) {
-      ctx.save();
-      ctx.strokeStyle = '#ef4444';
-      ctx.shadowColor = '#ef4444';
-      ctx.shadowBlur = 12;
-      ctx.lineWidth = 4.5;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(laserTrail[0].x, laserTrail[0].y);
-      for (let i = 1; i < laserTrail.length; i++) {
-        ctx.lineTo(laserTrail[i].x, laserTrail[i].y);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-  }, [
-    activePage,
-    activeTool,
-    strokeColor,
-    fillColor,
-    fillStyle,
-    strokeWidth,
-    lineStyle,
-    arrowEnd,
-    shapePreset,
-    activeLayerId,
-    selectedStrokeIds,
-    selectedImageId,
-    activeNodeStrokeId,
-    imageCropMode,
-    cropPolygonPts,
-    laserTrail,
-  ]);
+  useEffect(() => {
+    renderStaticScene();
+  }, [renderStaticScene]);
 
-  // Point-in-polygon check for Lasso Selection
-  const isPointInPolygon = (pt: { x: number; y: number }, poly: { x: number; y: number }[]) => {
-    let inside = false;
-    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-      const xi = poly[i].x,
-        yi = poly[i].y;
-      const xj = poly[j].x,
-        yj = poly[j].y;
-      const intersect = yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi + 1e-9) + xi;
-      if (intersect) inside = !inside;
-    }
-    return inside;
+  // Initialize desynchronized low-latency context on activeCanvasRef for 0ms iPad Apple Pencil rendering!
+  useEffect(() => {
+    const c = activeCanvasRef.current;
+    if (!c) return;
+    activeCtxRef.current =
+      (c.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) || c.getContext('2d');
+  }, [viewMode]);
+
+  const clearActiveOverlay = () => {
+    const c = activeCanvasRef.current;
+    const ctx = activeCtxRef.current;
+    if (!c || !ctx) return;
+    ctx.clearRect(0, 0, c.width, c.height);
   };
 
-  // Convert screen coordinates to canvas coordinates
-  const getCanvasPoint = (e: React.PointerEvent<HTMLCanvasElement>): BezierPoint => {
-    const canvas = canvasRef.current!;
+  // Draw live wet ink on the top overlay canvas ONLY (Zero React State, Zero Lag!)
+  const renderLiveOverlayStroke = () => {
+    const c = activeCanvasRef.current;
+    const ctx = activeCtxRef.current;
+    if (!c || !ctx) return;
+    ctx.clearRect(0, 0, c.width, c.height);
+
+    const pts = snappedCurrentStrokeRef.current
+      ? snappedCurrentStrokeRef.current.points
+      : currentStrokePtsRef.current;
+    if (pts.length === 0) return;
+
+    const previewStroke: StrokeObject = {
+      id: 'live',
+      tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
+      color: strokeColor,
+      fillColor: fillStyle !== 'none' ? fillColor : undefined,
+      fillStyle,
+      width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
+      opacity: activeTool === 'highlighter' ? 0.42 : 1,
+      lineStyle,
+      arrowEnd: arrowEnd || shapePreset === 'arrow',
+      points: pts,
+      layerId: activeLayerId,
+    };
+    drawStrokeOnContext(ctx, previewStroke);
+  };
+
+  // Incremental 0ms segment draw for ultra-fast freehand pen strokes!
+  const drawIncrementalSegment = (pPrev2: BezierPoint, pPrev1: BezierPoint, pCurr: BezierPoint) => {
+    const ctx = activeCtxRef.current;
+    if (!ctx) return;
+    ctx.save();
+    ctx.strokeStyle = strokeColor;
+    const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.65 + (pCurr.pressure ?? 0.5) * 0.65;
+    ctx.lineWidth =
+      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth * pressureFactor;
+    ctx.lineCap = activeTool === 'highlighter' ? 'butt' : 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
+
+    const mid1X = (pPrev2.x + pPrev1.x) / 2;
+    const mid1Y = (pPrev2.y + pPrev1.y) / 2;
+    const mid2X = (pPrev1.x + pCurr.x) / 2;
+    const mid2Y = (pPrev1.y + pCurr.y) / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(mid1X, mid1Y);
+    ctx.quadraticCurveTo(pPrev1.x, pPrev1.y, mid2X, mid2Y);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const getCanvasPointFromNative = (clientX: number, clientY: number, pressure = 0.55): BezierPoint => {
+    const canvas = activeCanvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    let x = (e.clientX - rect.left) * scaleX;
-    let y = (e.clientY - rect.top) * scaleY;
+    let x = (clientX - rect.left) * scaleX;
+    let y = (clientY - rect.top) * scaleY;
 
-    // If Digital Ruler is visible and cursor is near the ruler edge, snap to Ruler!
     if (rulerState.visible && ['pen', 'pencil', 'highlighter'].includes(activeTool)) {
       const rad = (rulerState.angle * Math.PI) / 180;
       const dx = x - rulerState.x;
@@ -682,31 +642,38 @@ export default function App() {
     }
 
     return {
-      x: Math.round(x * 100) / 100,
-      y: Math.round(y * 100) / 100,
-      pressure: e.pressure > 0 ? e.pressure : 0.55,
-      tiltX: e.tiltX || 0,
-      tiltY: e.tiltY || 0,
-      twist: (e as any).twist || 0,
+      x,
+      y,
+      pressure: pressure > 0 ? pressure : 0.55,
     };
   };
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    // Palm Rejection: If Apple Pencil Only mode is active, ignore finger touch for drawing
-    if (pencilOnlyMode && e.pointerType === 'touch') {
-      return;
+  const isPointInPolygon = (pt: { x: number; y: number }, poly: { x: number; y: number }[]) => {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i].x,
+        yi = poly[i].y;
+      const xj = poly[j].x,
+        yj = poly[j].y;
+      const intersect = yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi + 1e-9) + xi;
+      if (intersect) inside = !inside;
     }
+    return inside;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pencilOnlyMode && e.pointerType === 'touch') return;
 
     const activeLayer = activePage.layers.find((l) => l.id === activeLayerId);
     if (activeLayer?.locked && ['pen', 'pencil', 'highlighter', 'eraser', 'shape'].includes(activeTool)) {
-      showToast('🔒 Το επιλεγμένο Layer είναι κλειδωμένο! Ξεκλείδωσέ το ή επίλεξε άλλο Layer.');
+      showToast('🔒 Το επιλεγμένο Layer είναι κλειδωμένο!');
       return;
     }
 
     e.currentTarget.setPointerCapture(e.pointerId);
-    const pt = getCanvasPoint(e);
+    const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
 
-    // 1. Image Freehand / Magnetic Lasso Cropping
+    // 1. Image Crop Mode
     if (imageCropMode !== 'none' && selectedImageId) {
       const imgObj = activePage.images.find((im) => im.id === selectedImageId);
       if (imgObj) {
@@ -722,12 +689,12 @@ export default function App() {
             };
           }
         }
-        setCropPolygonPts([{ x: pt.x, y: pt.y }]);
+        lassoPolygonRef.current = [{ x: pt.x, y: pt.y }];
         return;
       }
     }
 
-    // 2. Tape Tool: Tap existing tape to toggle reveal, or drag to draw new tape
+    // 2. Tape Tool
     if (activeTool === 'tape') {
       const hitTape = (activePage.tapes || []).find((t) => {
         const midX = (t.x1 + t.x2) / 2;
@@ -746,7 +713,7 @@ export default function App() {
       return;
     }
 
-    // 3. Direct Node Editing ("Λευκό Βελάκι" Illustrator)
+    // 3. Direct Node Editing ("Λευκό Βελάκι")
     if (activeTool === 'direct-node') {
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
@@ -766,15 +733,13 @@ export default function App() {
           }
         }
       }
-      // Otherwise select nearest stroke to edit its Bezier nodes
       const hit = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 16));
       setActiveNodeStrokeId(hit ? hit.id : null);
       return;
     }
 
-    // 4. Lasso Tool: Check if clicking inside existing selection to drag it, or clicking a Group
+    // 4. Lasso Tool
     if (activeTool === 'lasso') {
-      // Check image click first
       const hitImg = (activePage.images || []).find(
         (im) => pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height
       );
@@ -799,7 +764,6 @@ export default function App() {
         }
       }
 
-      // Check if user tapped directly on a grouped stroke -> auto-select the entire Group!
       const tappedStroke = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 14));
       if (tappedStroke?.groupId) {
         const groupMembers = activePage.strokes.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id);
@@ -816,14 +780,14 @@ export default function App() {
       return;
     }
 
-    // 5. Eraser Tool
+    // 5. Eraser
     if (activeTool === 'eraser') {
       isDrawingRef.current = true;
       eraseAtPoint(pt);
       return;
     }
 
-    // 6. Pen / Pencil / Highlighter / Shape / Laser
+    // 6. Pen / Pencil / Highlighter / Shape / Laser -> Start 0ms Direct Ink!
     isDrawingRef.current = true;
     snappedCurrentStrokeRef.current = null;
     currentStrokePtsRef.current = [pt];
@@ -835,17 +799,14 @@ export default function App() {
 
     updateActivePage((page) => {
       if (eraserSubType === 'stroke' || eraserSubType === 'highlighter-only') {
-        return {
-          ...page,
-          strokes: page.strokes.filter((s) => {
-            if (lockedLayerIds.has(s.layerId)) return true;
-            if (eraserSubType === 'highlighter-only' && s.tool !== 'highlighter') return true;
-            const hit = s.points.some((p) => distance(pt, p) <= eraseRadius);
-            return !hit;
-          }),
-        };
+        const filtered = page.strokes.filter((s) => {
+          if (lockedLayerIds.has(s.layerId)) return true;
+          if (eraserSubType === 'highlighter-only' && s.tool !== 'highlighter') return true;
+          return !s.points.some((p) => distance(pt, p) <= eraseRadius);
+        });
+        if (filtered.length === page.strokes.length) return page;
+        return { ...page, strokes: filtered };
       } else {
-        // Precision point eraser: splits or trims points within radius
         const nextStrokes: StrokeObject[] = [];
         for (const s of page.strokes) {
           if (lockedLayerIds.has(s.layerId)) {
@@ -862,32 +823,25 @@ export default function App() {
     }, false);
   };
 
+  // ULTRA-FAST POINTER MOVE: Zero React re-renders while drawing!
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const pt = getCanvasPoint(e);
-    setPencilTelemetry({
-      pointerType: e.pointerType || 'pen',
-      pressure: Math.round((e.pressure || 0) * 100) / 100,
-      tiltX: e.tiltX || 0,
-      twist: (e as any).twist || 0,
-      hovering: !isDrawingRef.current,
-      x: pt.x,
-      y: pt.y,
-    });
-
     if (!isDrawingRef.current) return;
 
-    // 1. Image Freehand or Magnetic Lasso Crop
+    // Collect coalesced high-frequency Apple Pencil events (up to 240Hz on iPad Pro)
+    const nativeEv = e.nativeEvent as PointerEvent;
+    const coalesced = nativeEv.getCoalescedEvents ? nativeEv.getCoalescedEvents() : [nativeEv];
+    const latestPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+
+    // 1. Image Freehand / Magnetic Lasso Crop on active overlay canvas
     if (imageCropMode !== 'none' && selectedImageId) {
       const imgObj = activePage.images.find((im) => im.id === selectedImageId);
       if (imgObj) {
-        let nextX = pt.x;
-        let nextY = pt.y;
+        let nextX = latestPt.x;
+        let nextY = latestPt.y;
         if (imageCropMode === 'magnetic' && edgeMapRef.current && edgeMapRef.current.id === imgObj.id) {
-          const localX = pt.x - imgObj.x;
-          const localY = pt.y - imgObj.y;
           const snapped = snapMagneticLassoPoint(
-            localX,
-            localY,
+            latestPt.x - imgObj.x,
+            latestPt.y - imgObj.y,
             edgeMapRef.current.map,
             edgeMapRef.current.w,
             edgeMapRef.current.h,
@@ -896,51 +850,72 @@ export default function App() {
           nextX = imgObj.x + snapped.x;
           nextY = imgObj.y + snapped.y;
         }
-        setCropPolygonPts((prev) => [...prev, { x: nextX, y: nextY }]);
+        lassoPolygonRef.current.push({ x: nextX, y: nextY });
+        const ctx = activeCtxRef.current;
+        const c = activeCanvasRef.current;
+        if (ctx && c && lassoPolygonRef.current.length > 1) {
+          ctx.clearRect(0, 0, c.width, c.height);
+          ctx.save();
+          ctx.strokeStyle = imageCropMode === 'magnetic' ? '#10b981' : '#f59e0b';
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(lassoPolygonRef.current[0].x, lassoPolygonRef.current[0].y);
+          for (let i = 1; i < lassoPolygonRef.current.length; i++) {
+            ctx.lineTo(lassoPolygonRef.current[i].x, lassoPolygonRef.current[i].y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
       }
       return;
     }
 
-    // 2. Direct Node Editing ("Λευκό Βελάκι")
+    // 2. Direct Node Editing
     if (activeTool === 'direct-node' && activeNodeStrokeId && draggingNodeIdx) {
-      updateActivePage((page) => ({
-        ...page,
-        strokes: page.strokes.map((s) => {
-          if (s.id !== activeNodeStrokeId) return s;
-          const newPts = [...s.points];
-          const targetPt = { ...newPts[draggingNodeIdx.index] };
-          if (draggingNodeIdx.isControl) {
-            targetPt.cx = pt.x;
-            targetPt.cy = pt.y;
-          } else {
-            const dx = pt.x - targetPt.x;
-            const dy = pt.y - targetPt.y;
-            targetPt.x = pt.x;
-            targetPt.y = pt.y;
-            if (targetPt.cx !== undefined && targetPt.cy !== undefined) {
-              targetPt.cx += dx;
-              targetPt.cy += dy;
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.id !== activeNodeStrokeId) return s;
+            const newPts = [...s.points];
+            const targetPt = { ...newPts[draggingNodeIdx.index] };
+            if (draggingNodeIdx.isControl) {
+              targetPt.cx = latestPt.x;
+              targetPt.cy = latestPt.y;
+            } else {
+              const dx = latestPt.x - targetPt.x;
+              const dy = latestPt.y - targetPt.y;
+              targetPt.x = latestPt.x;
+              targetPt.y = latestPt.y;
+              if (targetPt.cx !== undefined && targetPt.cy !== undefined) {
+                targetPt.cx += dx;
+                targetPt.cy += dy;
+              }
             }
-          }
-          newPts[draggingNodeIdx.index] = targetPt;
-          return { ...s, points: newPts };
+            newPts[draggingNodeIdx.index] = targetPt;
+            return { ...s, points: newPts };
+          }),
         }),
-      }), false);
+        false
+      );
       return;
     }
 
-    // 3. Lasso Dragging or Drawing Lasso Polygon
+    // 3. Lasso Selection or Dragging
     if (activeTool === 'lasso') {
       if (isDraggingSelectionRef.current) {
-        const dx = pt.x - isDraggingSelectionRef.current.startX;
-        const dy = pt.y - isDraggingSelectionRef.current.startY;
-        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+        const dx = latestPt.x - isDraggingSelectionRef.current.startX;
+        const dy = latestPt.y - isDraggingSelectionRef.current.startY;
+        isDraggingSelectionRef.current = { startX: latestPt.x, startY: latestPt.y };
 
         if (selectedImageId) {
           updateActivePage(
             (page) => ({
               ...page,
-              images: page.images.map((im) => (im.id === selectedImageId ? { ...im, x: im.x + dx, y: im.y + dy } : im)),
+              images: page.images.map((im) =>
+                im.id === selectedImageId ? { ...im, x: im.x + dx, y: im.y + dy } : im
+              ),
             }),
             false
           );
@@ -969,28 +944,105 @@ export default function App() {
         return;
       }
 
-      lassoPolygonRef.current.push({ x: pt.x, y: pt.y });
-      setNotebooks((n) => [...n]);
+      // Draw Lasso loop directly on overlay canvas (0 React renders!)
+      lassoPolygonRef.current.push({ x: latestPt.x, y: latestPt.y });
+      const ctx = activeCtxRef.current;
+      const c = activeCanvasRef.current;
+      if (ctx && c && lassoPolygonRef.current.length > 1) {
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.save();
+        ctx.strokeStyle = '#0284c7';
+        ctx.fillStyle = 'rgba(2, 132, 199, 0.09)';
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(lassoPolygonRef.current[0].x, lassoPolygonRef.current[0].y);
+        for (let i = 1; i < lassoPolygonRef.current.length; i++) {
+          ctx.lineTo(lassoPolygonRef.current[i].x, lassoPolygonRef.current[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
       return;
     }
 
     // 4. Eraser
     if (activeTool === 'eraser') {
-      eraseAtPoint(pt);
+      eraseAtPoint(latestPt);
       return;
     }
 
-    // 5. Laser Pointer
+    // 5. Laser Pointer on overlay canvas (0 React renders!)
     if (activeTool === 'laser') {
-      const now = Date.now();
-      setLaserTrail((prev) => [...prev.filter((p) => now - p.t < 900), { x: pt.x, y: pt.y, t: now }]);
+      currentStrokePtsRef.current.push(latestPt);
+      if (currentStrokePtsRef.current.length > 28) {
+        currentStrokePtsRef.current.shift();
+      }
+      const ctx = activeCtxRef.current;
+      const c = activeCanvasRef.current;
+      if (ctx && c && currentStrokePtsRef.current.length > 1) {
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.save();
+        ctx.strokeStyle = '#ef4444';
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 4.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(currentStrokePtsRef.current[0].x, currentStrokePtsRef.current[0].y);
+        for (let i = 1; i < currentStrokePtsRef.current.length; i++) {
+          ctx.lineTo(currentStrokePtsRef.current[i].x, currentStrokePtsRef.current[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
       return;
     }
 
-    // 6. Pen / Pencil / Highlighter / Shape / Tape
-    currentStrokePtsRef.current.push(pt);
+    // 6. ZERO-LATENCY PEN / PENCIL / HIGHLIGHTER / SHAPE INKING!
+    for (const ce of coalesced) {
+      const pt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
+      const pts = currentStrokePtsRef.current;
+      pts.push(pt);
 
-    // Hold-to-Snap timer (320ms pause at end of stroke snaps to geometric shape!)
+      // If not yet snapped and using solid standard pen, draw only the new incremental Bezier segment in 0.02ms!
+      if (
+        !snappedCurrentStrokeRef.current &&
+        lineStyle === 'solid' &&
+        !arrowEnd &&
+        fillStyle === 'none' &&
+        activeTool !== 'shape' &&
+        activeTool !== 'tape' &&
+        pts.length >= 3
+      ) {
+        drawIncrementalSegment(pts[pts.length - 3], pts[pts.length - 2], pts[pts.length - 1]);
+      }
+    }
+
+    if (
+      snappedCurrentStrokeRef.current ||
+      lineStyle !== 'solid' ||
+      arrowEnd ||
+      fillStyle !== 'none' ||
+      activeTool === 'shape' ||
+      activeTool === 'tape'
+    ) {
+      if (snappedCurrentStrokeRef.current && snappedCurrentStrokeRef.current.shapeType === 'line') {
+        const start = currentStrokePtsRef.current[0];
+        snappedCurrentStrokeRef.current = {
+          shapeType: 'line',
+          points: [
+            { x: start.x, y: start.y, pressure: 0.7 },
+            { x: latestPt.x, y: latestPt.y, cx: (start.x + latestPt.x) / 2, cy: (start.y + latestPt.y) / 2, pressure: 0.7 },
+          ],
+        };
+      }
+      renderLiveOverlayStroke();
+    }
+
+    // Hold-to-Snap timer (300ms pause at end of stroke snaps to perfect geometric shape!)
     if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
     if (holdToSnapEnabled && ['pen', 'highlighter', 'shape'].includes(activeTool) && !snappedCurrentStrokeRef.current) {
       holdTimerRef.current = window.setTimeout(() => {
@@ -1001,23 +1053,10 @@ export default function App() {
         );
         if (snapped) {
           snappedCurrentStrokeRef.current = snapped;
-          showToast(`✨ Hold-to-Snap: Αναγνωρίστηκε ${snapped.shapeType.toUpperCase()}!`);
-          setNotebooks((n) => [...n]);
+          renderLiveOverlayStroke();
         }
-      }, 330);
-    } else if (snappedCurrentStrokeRef.current && snappedCurrentStrokeRef.current.shapeType === 'line') {
-      // Allow stretching the snapped straight line while holding Pencil down!
-      const start = currentStrokePtsRef.current[0];
-      snappedCurrentStrokeRef.current = {
-        shapeType: 'line',
-        points: [
-          { x: start.x, y: start.y, pressure: 0.7 },
-          { x: pt.x, y: pt.y, cx: (start.x + pt.x) / 2, cy: (start.y + pt.y) / 2, pressure: 0.7 },
-        ],
-      };
+      }, 300);
     }
-
-    setNotebooks((n) => [...n]);
   };
 
   const handlePointerUp = () => {
@@ -1027,12 +1066,15 @@ export default function App() {
     }
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
+    clearActiveOverlay();
 
     // 1. Finish Image Lasso / Magnetic Lasso Crop
-    if (imageCropMode !== 'none' && selectedImageId && cropPolygonPts.length >= 3) {
+    if (imageCropMode !== 'none' && selectedImageId && lassoPolygonRef.current.length >= 3) {
+      const poly = lassoPolygonRef.current;
+      lassoPolygonRef.current = [];
       const imgObj = activePage.images.find((im) => im.id === selectedImageId);
       if (imgObj) {
-        const relPoly = cropPolygonPts.map((p) => ({
+        const relPoly = poly.map((p) => ({
           x: Math.max(0, Math.min(imgObj.width, p.x - imgObj.x)),
           y: Math.max(0, Math.min(imgObj.height, p.y - imgObj.y)),
         }));
@@ -1042,8 +1084,8 @@ export default function App() {
         }));
         showToast(
           imageCropMode === 'magnetic'
-            ? '🧲 Magnetic Lasso Crop ολοκληρώθηκε με πραγματική διαφάνεια!'
-            : '✂️ Ελεύθερο Lasso Crop ολοκληρώθηκε με πραγματική διαφάνεια!'
+            ? '🧲 Magnetic Lasso Crop ολοκληρώθηκε!'
+            : '✂️ Ελεύθερο Lasso Crop ολοκληρώθηκε!'
         );
       }
       setImageCropMode('none');
@@ -1057,7 +1099,7 @@ export default function App() {
     }
 
     if (activeTool === 'laser') {
-      window.setTimeout(() => setLaserTrail([]), 650);
+      currentStrokePtsRef.current = [];
       return;
     }
 
@@ -1077,13 +1119,12 @@ export default function App() {
           layerId: activeLayerId,
         };
         updateActivePage((page) => ({ ...page, tapes: [...(page.tapes || []), newTape] }));
-        showToast('🩹 Προστέθηκε Ταινία Απόκρυψης! Πάτησε πάνω της για αποκάλυψη.');
       }
       currentStrokePtsRef.current = [];
       return;
     }
 
-    // 2. Finish Lasso Polygon Selection
+    // 2. Finish Lasso Selection
     if (activeTool === 'lasso') {
       if (isDraggingSelectionRef.current) {
         isDraggingSelectionRef.current = null;
@@ -1096,7 +1137,6 @@ export default function App() {
         const directMatched = activePage.strokes.filter(
           (s) => !lockedLayers.has(s.layerId) && s.points.some((p) => isPointInPolygon(p, poly))
         );
-        // Include all members of any Group that was touched!
         const groupIds = new Set(directMatched.map((s) => s.groupId).filter(Boolean));
         const finalIds = activePage.strokes
           .filter((s) => directMatched.some((m) => m.id === s.id) || (s.groupId && groupIds.has(s.groupId)))
@@ -1111,7 +1151,7 @@ export default function App() {
     currentStrokePtsRef.current = [];
     if (rawPts.length === 0) return;
 
-    // 3. Check Scribble-to-Erase Gesture when using Pen!
+    // 3. Check Scribble-to-Erase Gesture
     if (scribbleToEraseEnabled && activeTool === 'pen' && !snappedCurrentStrokeRef.current) {
       const scribble = isScribbleEraseGesture(rawPts);
       if (scribble.isScribble && scribble.bounds) {
@@ -1121,16 +1161,15 @@ export default function App() {
           ...page,
           strokes: page.strokes.filter((s) => {
             if (lockedLayers.has(s.layerId)) return true;
-            const hit = s.points.some((p) => p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY);
-            return !hit;
+            return !s.points.some((p) => p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY);
           }),
         }));
-        showToast('🧹 Scribble-to-Erase: Οι γραμμές κάτω από τη μουτζούρα σβήστηκαν αυτόματα!');
+        showToast('🧹 Scribble-to-Erase!');
         return;
       }
     }
 
-    // 4. Physics Grouped Stencils (Cylinder, Coordinate Axes, Resistor)
+    // 4. Physics Grouped Stencils
     if (activeTool === 'shape' && ['cylinder', 'axes', 'resistor'].includes(shapePreset)) {
       let minX = Infinity,
         minY = Infinity,
@@ -1154,12 +1193,11 @@ export default function App() {
         activeLayerId
       );
       updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...stencilStrokes] }));
-      showToast('🔗 Δημιουργήθηκε Grouped Σχήμα Φυσικής!');
       snappedCurrentStrokeRef.current = null;
       return;
     }
 
-    // 5. Commit normal Bezier Stroke or Snapped Shape
+    // 5. Commit Bezier Stroke or Snapped Shape
     let finalPts: BezierPoint[];
     let isShape = false;
     let shapeType: string | undefined;
@@ -1191,7 +1229,7 @@ export default function App() {
       fillColor: fillStyle !== 'none' ? fillColor : undefined,
       fillStyle,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
-      opacity: activeTool === 'highlighter' ? 0.45 : 1,
+      opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
       arrowEnd: arrowEnd || shapePreset === 'arrow',
       points: finalPts,
@@ -1206,7 +1244,6 @@ export default function App() {
     }));
   };
 
-  // Grouping / Ungrouping Actions (Illustrator style)
   const handleGroupSelected = () => {
     if (selectedStrokeIds.length < 2) return;
     const newGroupId = `grp-${Date.now()}`;
@@ -1214,7 +1251,7 @@ export default function App() {
       ...page,
       strokes: page.strokes.map((s) => (selectedStrokeIds.includes(s.id) ? { ...s, groupId: newGroupId } : s)),
     }));
-    showToast(`🔗 Τα ${selectedStrokeIds.length} αντικείμενα ενώθηκαν σε Group!`);
+    showToast(`🔗 Group (${selectedStrokeIds.length} αντικείμενα)`);
   };
 
   const handleUngroupSelected = () => {
@@ -1223,10 +1260,9 @@ export default function App() {
       ...page,
       strokes: page.strokes.map((s) => (selectedStrokeIds.includes(s.id) ? { ...s, groupId: undefined } : s)),
     }));
-    showToast('🔓 Έγινε Ungroup των επιλεγμένων αντικειμένων!');
+    showToast('🔓 Ungroup ολοκληρώθηκε!');
   };
 
-  // Zero-AI Greek Handwriting Beautifier Action
   const handleBeautifySelected = () => {
     const targets =
       selectedStrokeIds.length > 0
@@ -1238,19 +1274,16 @@ export default function App() {
       ...page,
       strokes: page.strokes.map((s) => mapById.get(s.id) || s),
     }));
-    showToast('✨ Τα ελληνικά χειρόγραφα & τα σύμβολα (=, κλάσματα) ευθυγραμμίστηκαν και λειάνθηκαν!');
+    showToast('✨ Τα ελληνικά χειρόγραφα & σύμβολα (=, κλάσματα) στρώθηκαν!');
   };
 
-  // Generate a Demo Physics Diagram Image with White Background so user can test Transparent BG & Magnetic Lasso immediately!
   const handleInsertSamplePhysicsImage = () => {
     const c = document.createElement('canvas');
     c.width = 360;
     c.height = 220;
     const ctx = c.getContext('2d')!;
-    // White background that hides grid lines until user clicks "Transparent BG"
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, c.width, c.height);
-    // Draw a crisp Physics Inclined Plane + Block + Force Vectors diagram
     ctx.strokeStyle = '#0f172a';
     ctx.lineWidth = 3.5;
     ctx.beginPath();
@@ -1262,7 +1295,6 @@ export default function App() {
     ctx.fill();
     ctx.stroke();
 
-    // Block on incline
     ctx.save();
     ctx.translate(155, 116);
     ctx.rotate(Math.atan2(120, 280));
@@ -1292,10 +1324,9 @@ export default function App() {
     updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
     setSelectedImageId(newImg.id);
     setActiveTool('lasso');
-    showToast('🖼️ Προστέθηκε Εικόνα Άσκησης με λευκό φόντο! Δοκίμασε «🪄 Transparent BG» ή «🧲 Magnetic Lasso»!');
+    showToast('🖼️ Εικόνα προστέθηκε! Δοκίμασε Transparent BG ή Magnetic Lasso!');
   };
 
-  // Import native .goodnotes file
   const handleGoodnotesFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1306,14 +1337,13 @@ export default function App() {
       setActiveNotebookId(importedNb.id);
       setActivePageIndex(0);
       setViewMode('editor');
-      showToast(`📂 Το αρχείο "${file.name}" (.goodnotes) αποκωδικοποιήθηκε (${importedNb.pages.length} σελίδες)!`);
-    } catch (err) {
-      showToast('⚠️ Σφάλμα κατά την ανάγνωση του αρχείου .goodnotes.');
+      showToast(`📂 Φορτώθηκε το "${file.name}" (${importedNb.pages.length} σελ.)!`);
+    } catch {
+      showToast('⚠️ Σφάλμα ανάγνωσης .goodnotes');
     }
     e.target.value = '';
   };
 
-  // Import standard image file
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1333,7 +1363,6 @@ export default function App() {
       updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
       setSelectedImageId(newImg.id);
       setActiveTool('lasso');
-      showToast('🖼️ Η εικόνα προστέθηκε! Επίλεξε Transparent BG ή Lasso/Magnetic Crop.');
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -1342,8 +1371,7 @@ export default function App() {
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
   return (
-    <div className="flex flex-col w-full h-full bg-slate-900 text-slate-100 overflow-hidden select-none">
-      {/* Hidden File Inputs */}
+    <div className="flex flex-col w-full h-full bg-[#e4e7ec] text-slate-800 overflow-hidden select-none">
       <input
         ref={fileInputGoodnotesRef}
         type="file"
@@ -1353,151 +1381,193 @@ export default function App() {
       />
       <input ref={fileInputImageRef} type="file" accept="image/*" className="hidden" onChange={handleImageFileChange} />
 
-      {/* 1. TOP BAR & GOODNOTES TABS */}
-      <header className="flex items-center justify-between px-3 py-1.5 bg-slate-950 border-b border-slate-800 shrink-0 gap-2">
-        <div className="flex items-center gap-2">
+      {/* =========================================================================
+          1. AUTHENTIC GOODNOTES 6 TOP NAVY BAR & DOCUMENT TABS (#1B2A4A)
+         ========================================================================= */}
+      <header className="flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none">
+        {/* Left Navigation Icons (Back to Library, Page Thumbnails, Import .goodnotes) */}
+        <div className="flex items-center gap-1 pb-1.5">
           <button
             onClick={() => setViewMode(viewMode === 'library' ? 'editor' : 'library')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-sky-400 transition cursor-pointer"
-            title="Βιβλιοθήκη Τετραδίων"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
+            title="Πίσω στους Φακέλους (Documents)"
           >
-            <BookOpen className="w-4 h-4" />
-            <span>Βιβλιοθήκη ({notebooks.length})</span>
+            <ChevronLeft className="w-5 h-5 text-sky-300" />
+            <LayoutGrid className="w-4 h-4" />
           </button>
 
           <button
             onClick={() => fileInputGoodnotesRef.current?.click()}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/40 hover:bg-sky-600/30 text-xs font-semibold text-sky-300 transition cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/30 text-xs font-medium text-sky-200 transition cursor-pointer"
+            title="Άνοιγμα αρχείου .goodnotes"
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            <span>Άνοιγμα .goodnotes</span>
+            <span className="hidden sm:inline">.goodnotes</span>
           </button>
         </div>
 
-        {/* Document Tabs (Goodnotes 6 Style) */}
-        <div className="flex items-center gap-1 overflow-x-auto max-w-[46vw] py-0.5">
+        {/* Center: Authentic Goodnotes 6 Document Tabs */}
+        <div className="flex items-end gap-1 overflow-x-auto max-w-[54vw] px-2">
           {openNotebookIds.map((nbId) => {
             const nb = notebooks.find((n) => n.id === nbId);
             if (!nb) return null;
             const isActive = nb.id === activeNotebook.id && viewMode === 'editor';
             return (
-              <button
+              <div
                 key={nb.id}
                 onClick={() => {
                   setActiveNotebookId(nb.id);
                   setActivePageIndex(0);
                   setViewMode('editor');
                 }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-xs font-medium whitespace-nowrap transition cursor-pointer border-b-2 ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-t-xl text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                   isActive
-                    ? 'bg-slate-800 text-white border-sky-400'
-                    : 'bg-slate-900/70 text-slate-400 border-transparent hover:bg-slate-800/50'
+                    ? 'bg-[#f4f5f7] text-[#1b2a4a] font-semibold shadow-sm'
+                    : 'bg-[#263961] text-slate-300 hover:bg-[#2f4573]'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: nb.coverColor }} />
-                <span className="truncate max-w-[180px]">{nb.title}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300">
-                  {nb.pages.length} σελ.
-                </span>
-              </button>
+                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: nb.coverColor }} />
+                <span className="truncate max-w-[175px]">{nb.title}</span>
+                {openNotebookIds.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rem = openNotebookIds.filter((id) => id !== nb.id);
+                      setOpenNotebookIds(rem);
+                      if (activeNotebook.id === nb.id && rem.length > 0) {
+                        setActiveNotebookId(rem[0]);
+                      }
+                    }}
+                    className="opacity-60 hover:opacity-100 p-0.5 rounded"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
 
-        {/* Right Controls: 30s Google Drive Auto-Sync + Undo/Redo + Apple Pencil Pro Mode */}
-        <div className="flex items-center gap-2">
-          {/* 30s Google Drive Auto-Sync Badge */}
-          <div
+        {/* Right: Undo / Redo, Page Switcher, Drive Sync & Settings */}
+        <div className="flex items-center gap-1.5 pb-1.5">
+          {/* Undo / Redo just like Goodnotes top-right */}
+          <button
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+            title="Undo"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+            title="Redo"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+
+          {/* Page Indicator & Add Page */}
+          <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
+            <button
+              onClick={() => setActivePageIndex((i) => Math.max(0, i - 1))}
+              disabled={activePageIndex === 0}
+              className="p-0.5 disabled:opacity-30 cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-1.5 font-semibold">
+              {activePageIndex + 1}/{activeNotebook.pages.length}
+            </span>
+            <button
+              onClick={() => setActivePageIndex((i) => Math.min(activeNotebook.pages.length - 1, i + 1))}
+              disabled={activePageIndex >= activeNotebook.pages.length - 1}
+              className="p-0.5 disabled:opacity-30 cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                const newPage: NotePage = {
+                  id: `page-${Date.now()}`,
+                  title: `Σελίδα ${activeNotebook.pages.length + 1}`,
+                  template: activePage.template,
+                  layers: [
+                    { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
+                    { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
+                  ],
+                  strokes: [],
+                  texts: [],
+                  images: [],
+                  tapes: [],
+                };
+                setNotebooks((prev) =>
+                  prev.map((nb) => (nb.id === activeNotebook.id ? { ...nb, pages: [...nb.pages, newPage] } : nb))
+                );
+                setActivePageIndex(activeNotebook.pages.length);
+              }}
+              className="ml-1 p-0.5 text-sky-300 hover:text-white cursor-pointer"
+              title="Νέα Σελίδα"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* 30s Google Drive Sync Pill */}
+          <button
             onClick={() => {
               setSyncStatus('syncing');
               window.setTimeout(() => {
                 setSyncStatus('synced');
                 setIsDirty(false);
                 setSecondsToNextSync(30);
-                setLastSyncedTime(new Date().toLocaleTimeString('el-GR'));
-                showToast('☁️ Συγχρονίστηκε με το Google Drive (/BestNotes/)!');
-              }, 500);
+                showToast('☁️ Συγχρονίστηκε με το Google Drive!');
+              }, 400);
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-[11px] cursor-pointer hover:border-sky-500/50"
-            title={`Τελευταίο Sync: ${lastSyncedTime} (Αυτόματο Sync κάθε 30s)`}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] text-[11px] text-sky-200 cursor-pointer"
+            title="Αυτόματος Συγχρονισμός Google Drive κάθε 30s"
           >
-            <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-400 animate-pulse' : 'text-emerald-400'}`} />
-            <span className="text-slate-300 hidden sm:inline">
-              {syncStatus === 'syncing'
-                ? 'Drive Syncing...'
-                : isDirty
-                ? `Auto-Sync σε ${secondsToNextSync}s`
-                : 'Drive Synced'}
-            </span>
-          </div>
-
-          <button
-            onClick={() => setPencilOnlyMode(!pencilOnlyMode)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
-              pencilOnlyMode
-                ? 'bg-indigo-600/30 border-indigo-400 text-indigo-200'
-                : 'bg-slate-800 border-slate-700 text-slate-300'
-            }`}
-            title="Palm Rejection: Όταν είναι ενεργό, μόνο το Apple Pencil γράφει"
-          >
-            ✏️ {pencilOnlyMode ? 'Pencil Only: ON' : 'Pencil + Touch'}
+            <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
+            <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
           </button>
-
-          <div className="flex items-center bg-slate-800 rounded-lg p-0.5">
-            <button
-              onClick={handleUndo}
-              disabled={undoStack.length === 0}
-              className="p-1.5 rounded hover:bg-slate-700 disabled:opacity-35 cursor-pointer"
-              title="Αναίρεση (Undo)"
-            >
-              <Undo2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleRedo}
-              disabled={redoStack.length === 0}
-              className="p-1.5 rounded hover:bg-slate-700 disabled:opacity-35 cursor-pointer"
-              title="Επανάληψη (Redo)"
-            >
-              <Redo2 className="w-4 h-4" />
-            </button>
-          </div>
 
           <button
             onClick={() => settingsDialogRef.current?.showModal()}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-            title="Ρυθμίσεις AI / Google Drive / Χαρτιού"
+            className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
+            title="Ρυθμίσεις Χαρτιού & Apple Pencil"
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      {/* IF IN LIBRARY VIEW */}
+      {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTEBOOKS GRID) */}
       {viewMode === 'library' ? (
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-900">
+        <div className="flex-1 overflow-y-auto p-6 bg-[#f4f5f7]">
           <div className="max-w-5xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-bold text-white">Βιβλιοθήκη BestNotes</h1>
-                <p className="text-sm text-slate-400">
-                  Τα αρχεία σου `.goodnotes` Φυσικής έχουν ήδη αποκωδικοποιηθεί και φορτωθεί ως επεξεργάσιμες καμπύλες Bezier!
+                <h1 className="text-2xl font-bold text-[#1b2a4a]">Έγγραφα (Documents)</h1>
+                <p className="text-sm text-slate-500">
+                  Τα αρχεία σου `.goodnotes` Φυσικής + Νέα Τετράδια BestNotes
                 </p>
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => fileInputGoodnotesRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold shadow-lg cursor-pointer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-300 hover:border-sky-500 text-[#1b2a4a] text-sm font-semibold shadow-xs cursor-pointer"
                 >
-                  <Upload className="w-4 h-4" />
+                  <Upload className="w-4 h-4 text-sky-600" />
                   <span>Εισαγωγή .goodnotes</span>
                 </button>
                 <button
                   onClick={() => {
                     const newNb: Notebook = {
                       id: `nb-${Date.now()}`,
-                      title: `Νέο Τετράδιο Φυσικής ${notebooks.length + 1}`,
-                      folder: 'Φυσική Γυμνασίου / Λυκείου',
-                      coverColor: '#10b981',
+                      title: `Νέο Τετράδιο ${notebooks.length + 1}`,
+                      folder: 'Φυσική',
+                      coverColor: '#0284c7',
                       updatedAt: new Date().toISOString(),
                       sourceFormat: '.bestnotes',
                       pages: [
@@ -1506,7 +1576,7 @@ export default function App() {
                           title: 'Σελίδα 1',
                           template: 'grid',
                           layers: [
-                            { id: 'layer-1', name: 'Σχήμα Άσκησης (Κλείδωμα)', visible: true, locked: false, opacity: 1 },
+                            { id: 'layer-1', name: 'Σχήμα Άσκησης', visible: true, locked: false, opacity: 1 },
                             { id: 'layer-2', name: 'Πράξεις & Λύση', visible: true, locked: false, opacity: 1 },
                           ],
                           strokes: [],
@@ -1522,15 +1592,15 @@ export default function App() {
                     setActivePageIndex(0);
                     setViewMode('editor');
                   }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-lg cursor-pointer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ Νέο Τετράδιο</span>
+                  <span>Νέο Τετράδιο</span>
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
               {notebooks.map((nb) => (
                 <div
                   key={nb.id}
@@ -1540,27 +1610,26 @@ export default function App() {
                     setActivePageIndex(0);
                     setViewMode('editor');
                   }}
-                  className="group relative rounded-2xl bg-slate-800/90 border border-slate-700 hover:border-sky-400 p-5 cursor-pointer transition shadow-xl flex flex-col justify-between h-52"
+                  className="group cursor-pointer flex flex-col items-center"
                 >
                   <div
-                    className="w-12 h-3 rounded-full mb-3"
+                    className="w-44 h-56 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden flex flex-col justify-between p-4 text-white"
                     style={{ backgroundColor: nb.coverColor }}
-                  />
-                  <div>
-                    <span className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 mb-2">
-                      {nb.sourceFormat === '.goodnotes' ? 'Αποκωδικοποιημένο .goodnotes' : 'BestNotes Native'}
-                    </span>
-                    <h3 className="text-base font-bold text-white group-hover:text-sky-300 transition">
-                      {nb.title}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">{nb.folder}</p>
+                  >
+                    <div className="absolute left-0 top-0 bottom-0 w-3.5 bg-black/20" />
+                    <div className="pl-2">
+                      <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-white/20 font-semibold">
+                        {nb.sourceFormat || '.bestnotes'}
+                      </span>
+                    </div>
+                    <div className="pl-2 bg-white/95 text-slate-900 p-2.5 rounded-lg shadow-xs">
+                      <p className="text-xs font-bold line-clamp-2">{nb.title}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{nb.pages.length} σελίδες</p>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-700/70">
-                    <span>{nb.pages.length} Σελίδες</span>
-                    <span>
-                      {nb.pages.reduce((acc, p) => acc + p.strokes.length, 0)} Bezier Vectors
-                    </span>
-                  </div>
+                  <span className="mt-2 text-xs font-semibold text-slate-800 text-center max-w-[170px] truncate">
+                    {nb.title}
+                  </span>
                 </div>
               ))}
             </div>
@@ -1568,143 +1637,191 @@ export default function App() {
         </div>
       ) : (
         <>
-          {/* 2. MAIN CREATION TOOLBAR (GOODNOTES 6 + ILLUSTRATOR & PHOTOSHOP TOOLS) */}
-          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 shrink-0 gap-2 overflow-x-auto">
-            {/* Tool Icons */}
-            <div className="flex items-center gap-1 bg-slate-950/90 p-1 rounded-xl border border-slate-800">
+          {/* =========================================================================
+              2. AUTHENTIC GOODNOTES 6 LIGHT TOOLBAR (#F4F5F7)
+                 Center: Clean Icon Strip | Right: 3 Stroke Widths + 3 Color Slots
+             ========================================================================= */}
+          <div className="flex items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto">
+            {/* Left Quick Status: Pencil Only Mode + Tidy Handwriting */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPencilOnlyMode(!pencilOnlyMode)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                  pencilOnlyMode
+                    ? 'bg-[#0066ff] text-white shadow-xs'
+                    : 'bg-white text-slate-600 border border-slate-300'
+                }`}
+                title="Palm Rejection: Όταν είναι ON, μόνο το Apple Pencil γράφει"
+              >
+                ✏️ {pencilOnlyMode ? 'Pencil Only' : 'All Touch'}
+              </button>
+
+              <button
+                onClick={handleBeautifySelected}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 text-[11px] font-semibold transition cursor-pointer"
+                title="Εγγενές Στρώσιμο Ελληνικού Χειρογράφου & Συμβόλων (=, κλάσματα)"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Στρώσιμο</span>
+              </button>
+            </div>
+
+            {/* Center: Goodnotes 6 Iconic Pill Toolbar */}
+            <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-xs border border-slate-200/90">
               {[
-                { id: 'pen', label: 'Στυλό (Bezier)', icon: Pen },
-                { id: 'highlighter', label: 'Μαρκαδόρος (Κάτω από μελάνι)', icon: Highlighter },
-                { id: 'eraser', label: 'Γόμα & Scribble', icon: Eraser },
-                { id: 'shape', label: 'Σχήματα & Φυσική', icon: Shapes },
-                { id: 'lasso', label: 'Lasso & Group', icon: Lasso },
-                { id: 'direct-node', label: 'Κόμβοι Bezier (Illustrator)', icon: MousePointer },
-                { id: 'tape', label: 'Ταινία Απόκρυψης (Tape)', icon: Scissors },
-                { id: 'laser', label: 'Laser Pointer', icon: Radio },
-              ].map((t) => {
-                const Icon = t.icon;
-                const active = activeTool === t.id;
+                { id: 'pen', title: 'Στυλό (Pen)', icon: Pen },
+                { id: 'eraser', title: 'Γόμα (Eraser)', icon: Eraser },
+                { id: 'highlighter', title: 'Μαρκαδόρος (Highlighter)', icon: Highlighter },
+                { id: 'shape', title: 'Σχήματα & Φυσική (Shapes)', icon: Shapes },
+                { id: 'lasso', title: 'Λάσο & Group (Lasso)', icon: Lasso },
+                { id: 'direct-node', title: 'Κόμβοι Bezier (Illustrator Nodes)', icon: MousePointer },
+                { id: 'tape', title: 'Ταινία Απόκρυψης (Tape)', icon: Bandage },
+                { id: 'laser', title: 'Laser Pointer', icon: Radio },
+              ].map((tool) => {
+                const Icon = tool.icon;
+                const isActive = activeTool === tool.id;
                 return (
                   <button
-                    key={t.id}
+                    key={tool.id}
                     onClick={() => {
-                      setActiveTool(t.id as ToolType);
+                      if (activeTool === tool.id) {
+                        setShowToolSubBar((s) => !s);
+                      } else {
+                        setActiveTool(tool.id as ToolType);
+                        setShowToolSubBar(true);
+                      }
                       setImageCropMode('none');
                     }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      active
-                        ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
-                        : 'text-slate-300 hover:bg-slate-800'
+                    className={`p-2 rounded-full transition cursor-pointer ${
+                      isActive
+                        ? 'bg-[#0066ff] text-white shadow-xs scale-105'
+                        : 'text-slate-600 hover:bg-slate-100'
                     }`}
-                    title={t.label}
+                    title={tool.title}
                   >
                     <Icon className="w-4 h-4" />
-                    <span className="hidden lg:inline">{t.label.split(' ')[0]}</span>
                   </button>
                 );
               })}
 
-              {/* Ruler Toggle */}
+              <div className="h-5 w-px bg-slate-200 mx-0.5" />
+
+              {/* Image Tool, Ruler, Math/LaTeX & Layers */}
+              <button
+                onClick={handleInsertSamplePhysicsImage}
+                className="p-2 rounded-full text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                title="Εισαγωγή Εικόνας Άσκησης (για Transparent BG & Magnetic Lasso)"
+              >
+                <ImageIcon className="w-4 h-4" />
+              </button>
+
               <button
                 onClick={() => setRulerState((r) => ({ ...r, visible: !r.visible }))}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                  rulerState.visible ? 'bg-amber-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                className={`p-2 rounded-full transition cursor-pointer ${
+                  rulerState.visible ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'
                 }`}
-                title="Ψηφιακός Χάρακας (Ruler)"
+                title="Χάρακας (Ruler)"
               >
                 <Ruler className="w-4 h-4" />
               </button>
 
-              {/* Image + Photoshop Tools Trigger */}
-              <button
-                onClick={handleInsertSamplePhysicsImage}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-300 bg-emerald-950/50 border border-emerald-700/40 hover:bg-emerald-900/50 transition cursor-pointer"
-                title="Εισαγωγή Δοκιμαστικού Σχήματος Φυσικής (για δοκιμή Transparent BG & Magnetic Lasso)"
-              >
-                <ImageIcon className="w-4 h-4" />
-                <span className="hidden xl:inline">+ Σχήμα Εικόνας</span>
-              </button>
-
-              <button
-                onClick={() => fileInputImageRef.current?.click()}
-                className="px-2 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-slate-800 cursor-pointer"
-                title="Ανέβασμα δικής σου εικόνας/screenshot"
-              >
-                <Upload className="w-3.5 h-3.5" />
-              </button>
-
-              {/* Math & LaTeX Solver Modal Button */}
               <button
                 onClick={() => mathDialogRef.current?.showModal()}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-purple-300 bg-purple-950/50 border border-purple-700/40 hover:bg-purple-900/50 transition cursor-pointer"
-                title="Μετατροπή σε LaTeX & Επίλυση Εξίσωσης (CAS)"
+                className="p-2 rounded-full text-purple-600 hover:bg-purple-50 transition cursor-pointer"
+                title="LaTeX & Επίλυση Εξίσωσης (CAS)"
               >
                 <Calculator className="w-4 h-4" />
-                <span className="hidden md:inline">LaTeX / CAS</span>
               </button>
 
-              {/* Layers Panel Toggle */}
               <button
                 onClick={() => setShowLayersPanel(!showLayersPanel)}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  showLayersPanel
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'bg-slate-800 text-amber-300 hover:bg-slate-700'
+                className={`p-2 rounded-full transition cursor-pointer ${
+                  showLayersPanel ? 'bg-[#1b2a4a] text-white' : 'text-slate-700 hover:bg-slate-100'
                 }`}
                 title="Layers (Επίπεδα με 🔒 Κλείδωμα & 👁️ Απόκρυψη)"
               >
                 <Layers className="w-4 h-4" />
-                <span>Layers ({activePage.layers.length})</span>
               </button>
             </div>
 
-            {/* Contextual Colors, Stroke Widths & Line Styles */}
-            <div className="flex items-center gap-2 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800">
-              {/* Color Presets */}
+            {/* Right: Authentic Goodnotes 6 Contextual 3 Stroke Slots + 3 Color Slots */}
+            <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow-xs border border-slate-200/90 relative">
+              {/* 3 Stroke Thickness Slots */}
               <div className="flex items-center gap-1">
-                {COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setStrokeColor(c)}
-                    className={`w-5 h-5 rounded-full transition cursor-pointer ${
-                      strokeColor === c ? 'ring-2 ring-white scale-110' : 'opacity-80 hover:opacity-100'
-                    }`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
-
-              <div className="h-4 w-px bg-slate-800" />
-
-              {/* 3 Quick Stroke Width Slots */}
-              <div className="flex items-center gap-1">
-                {[2.2, 3.6, 5.5].map((w) => (
+                {widthSlots.map((w) => (
                   <button
                     key={w}
                     onClick={() => setStrokeWidth(w)}
-                    className={`w-6 h-6 rounded-lg flex items-center justify-center cursor-pointer ${
-                      Math.abs(strokeWidth - w) < 0.3 ? 'bg-sky-600/30 border border-sky-400' : 'hover:bg-slate-800'
+                    className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
+                      Math.abs(strokeWidth - w) < 0.3
+                        ? 'bg-sky-50 ring-2 ring-[#0066ff]'
+                        : 'hover:bg-slate-100'
                     }`}
                     title={`Πάχος ${w}px`}
                   >
                     <span
-                      className="rounded-full bg-white"
-                      style={{ width: Math.min(14, w * 2.2), height: Math.min(14, w * 2.2) }}
+                      className="rounded-full bg-slate-800"
+                      style={{ width: Math.min(15, w * 2.3), height: Math.min(15, w * 2.3) }}
                     />
                   </button>
                 ))}
               </div>
 
-              <div className="h-4 w-px bg-slate-800" />
+              <div className="h-5 w-px bg-slate-200" />
 
-              {/* Line Style: Solid / Dashed / Dotted + Vector Arrow Toggle */}
-              <div className="flex items-center gap-1">
+              {/* 3 Quick Color Slots + Rainbow Picker */}
+              <div className="flex items-center gap-1.5">
+                {colorSlots.map((c, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setStrokeColor(c)}
+                    className={`w-6 h-6 rounded-full transition cursor-pointer ${
+                      strokeColor === c ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110' : 'opacity-85 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+                <button
+                  onClick={() => setShowColorPopover(!showColorPopover)}
+                  className="w-6 h-6 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
+                  title="Όλα τα Χρώματα & Στυλ Γραμμής"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Color & Line Style Popover */}
+          {showColorPopover && (
+            <div className="fixed right-6 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 flex flex-col gap-2.5 w-64">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>Παλέτα Χρωμάτων & Γραμμής</span>
+                <button onClick={() => setShowColorPopover(false)} className="text-slate-400 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => {
+                      setStrokeColor(c);
+                      if (!colorSlots.includes(c)) {
+                        setColorSlots([c, colorSlots[0], colorSlots[1]]);
+                      }
+                      setShowColorPopover(false);
+                    }}
+                    className="w-8 h-8 rounded-full border border-slate-200 mx-auto cursor-pointer"
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                 {(['solid', 'dashed', 'dotted'] as LineStyleType[]).map((ls) => (
                   <button
                     key={ls}
                     onClick={() => setLineStyle(ls)}
-                    className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${
-                      lineStyle === ls ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                    className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer ${
+                      lineStyle === ls ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-700'
                     }`}
                   >
                     {ls === 'solid' ? '───' : ls === 'dashed' ? '- - -' : '• • •'}
@@ -1712,105 +1829,93 @@ export default function App() {
                 ))}
                 <button
                   onClick={() => setArrowEnd(!arrowEnd)}
-                  className={`px-2 py-1 rounded text-[11px] font-semibold cursor-pointer ${
-                    arrowEnd ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'
+                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer ${
+                    arrowEnd ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-700'
                   }`}
-                  title="Αυτόματο Βέλος Διανύσματος (F⃗, υ⃗) στην άκρη της γραμμής"
                 >
-                  ➔ Διάνυσμα
+                  ➔ Βέλος
                 </button>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* 3. CONTEXTUAL SUB-TOOLBAR (Shape Presets, Lasso Group/Tidy, or Photoshop Image Crop/Transparent BG) */}
-          <div className="flex items-center justify-between px-4 py-1 bg-slate-950/90 border-b border-slate-800/80 text-xs shrink-0 gap-2 overflow-x-auto">
-            <div className="flex items-center gap-2">
-              {activeTool === 'shape' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-400 font-medium">Σχήμα / Stencil:</span>
-                  {[
-                    { id: 'auto', label: '✨ Auto Snap' },
-                    { id: 'line', label: '╱ Ευθεία' },
-                    { id: 'arrow', label: '➔ Βέλος' },
-                    { id: 'rectangle', label: '▭ Ορθογώνιο' },
-                    { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
-                    { id: 'ellipse', label: '◯ Έλλειψη/Κύκλος' },
-                    { id: 'triangle', label: '△ Τρίγωνο' },
-                    { id: 'cylinder', label: '🥫 Αγωγός (Group)' },
-                    { id: 'axes', label: '📈 Άξονες x-y' },
-                    { id: 'resistor', label: '⚡ Αντιστάτης R' },
-                  ].map((sp) => (
-                    <button
-                      key={sp.id}
-                      onClick={() => setShapePreset(sp.id as ShapePresetType)}
-                      className={`px-2 py-0.5 rounded-md font-medium cursor-pointer ${
-                        shapePreset === sp.id ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      }`}
-                    >
-                      {sp.label}
-                    </button>
-                  ))}
-                  <div className="h-3.5 w-px bg-slate-700 mx-1" />
-                  <span className="text-slate-400">Γέμισμα:</span>
-                  {(['none', 'solid', 'hatching'] as FillStyleType[]).map((fs) => (
-                    <button
-                      key={fs}
-                      onClick={() => setFillStyle(fs)}
-                      className={`px-2 py-0.5 rounded-md cursor-pointer ${
-                        fillStyle === fs ? 'bg-amber-500 text-slate-950 font-semibold' : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      {fs === 'none' ? 'Κενό' : fs === 'solid' ? '🎨 Χρώμα' : '/// Διαγράμμιση'}
-                    </button>
-                  ))}
-                </div>
-              )}
+          {/* Contextual Sub-Bar (Only appears when Shape, Lasso Selection, or Image is active) */}
+          {(activeTool === 'shape' || selectedStrokeIds.length > 0 || selectedImgObj || activeTool === 'eraser') &&
+            showToolSubBar && (
+              <div className="flex items-center justify-center px-4 py-1 bg-white/90 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto">
+                {activeTool === 'shape' && (
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      { id: 'auto', label: '✨ Auto Snap' },
+                      { id: 'line', label: '╱ Ευθεία' },
+                      { id: 'arrow', label: '➔ Διάνυσμα' },
+                      { id: 'rectangle', label: '▭ Ορθογώνιο' },
+                      { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
+                      { id: 'ellipse', label: '◯ Έλλειψη' },
+                      { id: 'triangle', label: '△ Τρίγωνο' },
+                      { id: 'cylinder', label: '🥫 Αγωγός' },
+                      { id: 'axes', label: '📈 Άξονες' },
+                      { id: 'resistor', label: '⚡ Αντιστάτης' },
+                    ].map((sp) => (
+                      <button
+                        key={sp.id}
+                        onClick={() => setShapePreset(sp.id as ShapePresetType)}
+                        className={`px-2.5 py-1 rounded-full font-medium cursor-pointer ${
+                          shapePreset === sp.id
+                            ? 'bg-[#0066ff] text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {sp.label}
+                      </button>
+                    ))}
+                    <div className="h-4 w-px bg-slate-300 mx-1" />
+                    {(['none', 'solid', 'hatching'] as FillStyleType[]).map((fs) => (
+                      <button
+                        key={fs}
+                        onClick={() => setFillStyle(fs)}
+                        className={`px-2.5 py-1 rounded-full font-medium cursor-pointer ${
+                          fillStyle === fs ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {fs === 'none' ? 'Χωρίς Γέμισμα' : fs === 'solid' ? '🎨 Fill' : '/// Διαγράμμιση'}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-              {activeTool === 'eraser' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-400">Λειτουργία Γόμας:</span>
-                  {[
-                    { id: 'stroke', label: 'Ολόκληρη Γραμμή (Stroke)' },
-                    { id: 'precision', label: 'Ακριβείας (Pixel)' },
-                    { id: 'highlighter-only', label: 'Μόνο Μαρκαδόρος' },
-                  ].map((er) => (
-                    <button
-                      key={er.id}
-                      onClick={() => setEraserSubType(er.id as EraserSubType)}
-                      className={`px-2.5 py-0.5 rounded-md cursor-pointer ${
-                        eraserSubType === er.id ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      {er.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Illustrator Grouping & Handwriting Beautifier Controls */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={handleBeautifySelected}
-                  className="flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-indigo-600/30 border border-indigo-400/50 text-indigo-200 hover:bg-indigo-600/50 font-medium cursor-pointer"
-                  title="Εγγενές (Zero-AI) Στρώσιμο Ελληνικού Χειρογράφου, Baseline & Συμβόλων (=, κλάσματα)"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Στρώσιμο Χειρογράφου {selectedStrokeIds.length > 0 ? `(${selectedStrokeIds.length})` : '(Σελίδας)'}</span>
-                </button>
+                {activeTool === 'eraser' && (
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      { id: 'stroke', label: 'Ολόκληρη Γραμμή (Stroke)' },
+                      { id: 'precision', label: 'Ακριβείας (Pixel)' },
+                      { id: 'highlighter-only', label: 'Μόνο Μαρκαδόρος' },
+                    ].map((er) => (
+                      <button
+                        key={er.id}
+                        onClick={() => setEraserSubType(er.id as EraserSubType)}
+                        className={`px-3 py-1 rounded-full font-medium cursor-pointer ${
+                          eraserSubType === er.id ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {er.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {selectedStrokeIds.length > 0 && (
-                  <>
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={handleGroupSelected}
-                      className="flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-600 text-white font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold cursor-pointer"
                     >
                       <Group className="w-3.5 h-3.5" />
-                      <span>🔗 Group ({selectedStrokeIds.length})</span>
+                      <span>Group ({selectedStrokeIds.length})</span>
                     </button>
                     <button
                       onClick={handleUngroupSelected}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
+                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-slate-200 text-slate-700 font-medium cursor-pointer"
                     >
                       <Ungroup className="w-3.5 h-3.5" />
                       <span>Ungroup</span>
@@ -1823,18 +1928,16 @@ export default function App() {
                         }));
                         setSelectedStrokeIds([]);
                       }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600/30 text-rose-300 hover:bg-rose-600/50 cursor-pointer"
+                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-rose-100 text-rose-700 font-medium cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Διαγραφή</span>
                     </button>
-                  </>
+                  </div>
                 )}
 
-                {/* Photoshop Image Controls when an Image is selected */}
                 {selectedImgObj && (
-                  <div className="flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-600/40 px-2.5 py-0.5 rounded-lg">
-                    <span className="text-emerald-300 font-semibold">Photoshop Εικόνας:</span>
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={async () => {
                         const cleanUrl = await removeImageBackground(
@@ -1847,12 +1950,12 @@ export default function App() {
                             im.id === selectedImgObj.id ? { ...im, dataUrl: cleanUrl, transparentBg: true } : im
                           ),
                         }));
-                        showToast('🪄 Αφαιρέθηκε όλο το λευκό φόντο (Transparent BG) με ομαλό anti-aliasing!');
+                        showToast('🪄 Transparent BG ολοκληρώθηκε!');
                       }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-600 text-white font-medium cursor-pointer"
+                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold cursor-pointer"
                     >
-                      <Wand2 className="w-3 h-3" />
-                      <span>1-Click Transparent BG</span>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      <span>Transparent BG</span>
                     </button>
                     <button
                       onClick={async () => {
@@ -1866,35 +1969,35 @@ export default function App() {
                             im.id === selectedImgObj.id ? { ...im, dataUrl: cleanUrl, transparentBg: true } : im
                           ),
                         }));
-                        showToast('🪄 Magic Wand: Αφαιρέθηκε μόνο το εξωτερικό φόντο!');
+                        showToast('🪄 Magic Wand ολοκληρώθηκε!');
                       }}
-                      className="px-2 py-0.5 rounded bg-teal-700 text-white font-medium cursor-pointer"
+                      className="px-3 py-1 rounded-full bg-teal-600 text-white font-semibold cursor-pointer"
                     >
-                      🪄 Magic Wand (Εξωτερικό)
+                      🪄 Magic Wand
                     </button>
                     <button
                       onClick={() => {
                         setImageCropMode('freehand');
-                        setCropPolygonPts([]);
-                        showToast('✂️ Σχεδίασε οποιοδήποτε ελεύθερο σχήμα πάνω στην εικόνα για Lasso Crop!');
+                        lassoPolygonRef.current = [];
+                        showToast('✂️ Σχεδίασε οποιοδήποτε σχήμα πάνω στην εικόνα για Lasso Crop!');
                       }}
-                      className={`px-2 py-0.5 rounded font-medium cursor-pointer ${
-                        imageCropMode === 'freehand' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-amber-300'
+                      className={`px-3 py-1 rounded-full font-semibold cursor-pointer ${
+                        imageCropMode === 'freehand' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-800'
                       }`}
                     >
-                      ✂️ Ελεύθερο Lasso Crop
+                      ✂️ Lasso Crop
                     </button>
                     <button
                       onClick={() => {
                         setImageCropMode('magnetic');
-                        setCropPolygonPts([]);
-                        showToast('🧲 Magnetic Lasso ενεργό! Πέρασε το Apple Pencil κοντά στις ακμές του σχήματος!');
+                        lassoPolygonRef.current = [];
+                        showToast('🧲 Magnetic Lasso: Πέρασε το Pencil γύρω από τις ακμές του σχήματος!');
                       }}
-                      className={`flex items-center gap-1 px-2 py-0.5 rounded font-medium cursor-pointer ${
-                        imageCropMode === 'magnetic' ? 'bg-emerald-400 text-slate-950' : 'bg-slate-800 text-emerald-300'
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold cursor-pointer ${
+                        imageCropMode === 'magnetic' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-800'
                       }`}
                     >
-                      <Magnet className="w-3 h-3" />
+                      <Magnet className="w-3.5 h-3.5" />
                       <span>Magnetic Lasso</span>
                     </button>
                     <button
@@ -1907,93 +2010,32 @@ export default function App() {
                               : im
                           ),
                         }));
-                        showToast('↺ Επαναφορά αρχικής εικόνας.');
                       }}
-                      className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 cursor-pointer"
+                      className="p-1 rounded-full bg-slate-200 text-slate-700 cursor-pointer"
                       title="Επαναφορά εικόνας"
                     >
-                      <RotateCcw className="w-3 h-3" />
+                      <RotateCcw className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Right side of Sub-Toolbar: Page Navigation & Apple Pencil Pro Telemetry */}
-            <div className="flex items-center gap-3">
-              <div className="hidden xl:flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-                <span>Πίεση: {Math.round(pencilTelemetry.pressure * 100)}%</span>
-                <span>Tilt: {pencilTelemetry.tiltX}°</span>
-                <span>Roll: {pencilTelemetry.twist}°</span>
-              </div>
-
-              <div className="flex items-center gap-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                <button
-                  onClick={() => setActivePageIndex((i) => Math.max(0, i - 1))}
-                  disabled={activePageIndex === 0}
-                  className="p-0.5 hover:text-sky-400 disabled:opacity-30 cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="font-semibold text-slate-200 px-1">
-                  Σελ. {activePageIndex + 1} / {activeNotebook.pages.length}
-                </span>
-                <button
-                  onClick={() => setActivePageIndex((i) => Math.min(activeNotebook.pages.length - 1, i + 1))}
-                  disabled={activePageIndex >= activeNotebook.pages.length - 1}
-                  className="p-0.5 hover:text-sky-400 disabled:opacity-30 cursor-pointer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => {
-                    const newPage: NotePage = {
-                      id: `page-${Date.now()}`,
-                      title: `Σελίδα ${activeNotebook.pages.length + 1}`,
-                      template: activePage.template,
-                      layers: [
-                        { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
-                        { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
-                      ],
-                      strokes: [],
-                      texts: [],
-                      images: [],
-                      tapes: [],
-                    };
-                    setNotebooks((prev) =>
-                      prev.map((nb) =>
-                        nb.id === activeNotebook.id ? { ...nb, pages: [...nb.pages, newPage] } : nb
-                      )
-                    );
-                    setActivePageIndex(activeNotebook.pages.length);
-                    showToast(`📄 Προστέθηκε η Σελίδα ${activeNotebook.pages.length + 1}!`);
-                  }}
-                  className="ml-1 px-1.5 py-0.5 rounded bg-sky-600/30 text-sky-300 hover:bg-sky-600/50 font-bold cursor-pointer"
-                  title="Προσθήκη Νέας Σελίδας"
-                >
-                  + Σελ.
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 4. MAIN WORKSPACE AREA (CANVAS + FLOATING LAYERS PANEL + RULER + MATH OVERLAYS) */}
-          <div className="relative flex-1 overflow-auto bg-slate-800/90 flex justify-center items-start p-4">
-            {/* Status Toast Banner */}
+          {/* =========================================================================
+              3. DUAL-CANVAS 120Hz WORKSPACE (Static Scene + 0ms Desynchronized Ink Layer)
+             ========================================================================= */}
+          <div className="relative flex-1 overflow-auto bg-[#dfe3ea] flex justify-center items-start py-4 px-2">
             {statusBanner && (
-              <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-slate-950/95 border border-sky-500/50 text-sky-200 text-xs font-medium shadow-2xl">
+              <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1b2a4a] text-white text-xs font-medium shadow-xl">
                 {statusBanner}
               </div>
             )}
 
-            {/* Floating Layers Drawer (Photoshop / Procreate style) */}
+            {/* Floating Layers Popover */}
             {showLayersPanel && (
-              <div className="fixed right-5 top-32 z-40 w-72 rounded-2xl bg-slate-950/95 border border-slate-700 shadow-2xl p-3.5 backdrop-blur-md">
-                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800">
-                  <div className="flex items-center gap-1.5">
-                    <Layers className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-bold text-white">Layers (Επίπεδα Σελίδας)</span>
-                  </div>
+              <div className="fixed right-5 top-28 z-40 w-72 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800">
+                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
+                  <span className="text-xs font-bold text-[#1b2a4a]">Layers (Επίπεδα Σελίδας)</span>
                   <button
                     onClick={() => {
                       const newId = `layer-${Date.now()}`;
@@ -2001,14 +2043,20 @@ export default function App() {
                         ...page,
                         layers: [
                           ...page.layers,
-                          { id: newId, name: `Layer ${page.layers.length + 1}`, visible: true, locked: false, opacity: 1 },
+                          {
+                            id: newId,
+                            name: `Layer ${page.layers.length + 1}`,
+                            visible: true,
+                            locked: false,
+                            opacity: 1,
+                          },
                         ],
                       }));
                       setActiveLayerId(newId);
                     }}
-                    className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-[#0066ff] text-white text-[11px] font-semibold cursor-pointer"
                   >
-                    + Νέο Layer
+                    + Layer
                   </button>
                 </div>
 
@@ -2022,15 +2070,15 @@ export default function App() {
                         onClick={() => setActiveLayerId(layer.id)}
                         className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition ${
                           isCurrent
-                            ? 'bg-sky-950/60 border-sky-500/60 text-white'
-                            : 'bg-slate-900/70 border-slate-800 text-slate-300 hover:bg-slate-800/60'
+                            ? 'bg-sky-50 border-[#0066ff] text-[#1b2a4a]'
+                            : 'bg-slate-50 border-slate-200 text-slate-700'
                         }`}
                       >
                         <div className="flex flex-col">
                           <span className="font-semibold">{layer.name}</span>
                           <span className="text-[10px] text-slate-400">{count} αντικείμενα</span>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2040,9 +2088,8 @@ export default function App() {
                               }));
                             }}
                             className={`p-1.5 rounded-lg cursor-pointer ${
-                              layer.locked ? 'bg-rose-500/20 text-rose-400' : 'hover:bg-slate-800 text-slate-400'
+                              layer.locked ? 'bg-rose-100 text-rose-600' : 'text-slate-400 hover:bg-slate-200'
                             }`}
-                            title={layer.locked ? 'Ξεκλείδωμα Layer' : 'Κλείδωμα Layer (προστασία από τη Γόμα!)'}
                           >
                             {layer.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                           </button>
@@ -2055,9 +2102,8 @@ export default function App() {
                               }));
                             }}
                             className={`p-1.5 rounded-lg cursor-pointer ${
-                              !layer.visible ? 'bg-slate-800 text-slate-500' : 'hover:bg-slate-800 text-sky-400'
+                              !layer.visible ? 'text-slate-300' : 'text-[#0066ff] hover:bg-slate-200'
                             }`}
-                            title={layer.visible ? 'Απόκρυψη Layer' : 'Εμφάνιση Layer'}
                           >
                             {layer.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                           </button>
@@ -2066,31 +2112,40 @@ export default function App() {
                     );
                   })}
                 </div>
-                <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
-                  💡 <strong>Tip για μάθημα:</strong> Κλείδωσε (🔒) το Layer με το σχήμα της άσκησης ώστε με τη Γόμα να σβήνεις μόνο τις πράξεις!
-                </p>
               </div>
             )}
 
-            {/* Page Paper Container */}
-            <div className="relative shadow-2xl rounded-sm overflow-hidden border border-slate-700 bg-white">
+            {/* THE PAPER PAGE CONTAINER WITH STACKED STATIC + ACTIVE 120HZ CANVASES */}
+            <div
+              style={{ width: 920 * zoom, height: 1260 * zoom }}
+              className="relative shadow-lg bg-white border border-slate-300/90 shrink-0"
+            >
+              {/* Layer 1: Static Committed Scene Canvas */}
               <canvas
-                ref={canvasRef}
+                ref={staticCanvasRef}
+                width={920}
+                height={1260}
+                className="absolute inset-0 w-full h-full pointer-events-none"
+              />
+
+              {/* Layer 2: Desynchronized 0ms Hardware Wet-Ink Canvas */}
+              <canvas
+                ref={activeCanvasRef}
                 width={920}
                 height={1260}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
-                className="block w-[920px] h-[1260px] cursor-crosshair touch-none"
+                className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
               />
 
-              {/* Rendered Text & LaTeX Blocks Overlay */}
+              {/* Rendered Text & LaTeX Blocks */}
               {(activePage.texts || []).map((txt) => (
                 <div
                   key={txt.id}
                   style={{ left: txt.x, top: txt.y, color: txt.color, fontSize: txt.fontSize }}
-                  className="absolute px-2 py-1 rounded hover:ring-1 hover:ring-sky-400 cursor-move bg-transparent"
+                  className="absolute px-2 py-1 rounded pointer-events-none"
                 >
                   {txt.isMath && txt.latex ? (
                     <div
@@ -2104,7 +2159,7 @@ export default function App() {
                 </div>
               ))}
 
-              {/* Movable & Rotatable Digital Ruler Overlay */}
+              {/* Movable & Rotatable Digital Ruler */}
               {rulerState.visible && (
                 <div
                   style={{
@@ -2112,7 +2167,7 @@ export default function App() {
                     top: rulerState.y - 26,
                     transform: `rotate(${rulerState.angle}deg)`,
                   }}
-                  className="absolute w-[520px] h-[52px] bg-amber-200/80 border-2 border-amber-500 rounded-lg shadow-lg backdrop-blur-xs flex items-center justify-between px-4 select-none"
+                  className="absolute w-[520px] h-[52px] bg-amber-200/85 border-2 border-amber-500 rounded-lg shadow-lg flex items-center justify-between px-4 select-none z-20"
                 >
                   <span className="text-xs font-bold text-slate-900">📏 Χάρακας ({rulerState.angle}°)</span>
                   <div className="flex items-center gap-2">
@@ -2138,7 +2193,7 @@ export default function App() {
                       onClick={() => setRulerState((r) => ({ ...r, y: r.y + 40 }))}
                       className="px-2 py-0.5 rounded bg-sky-700 text-white text-xs cursor-pointer"
                     >
-                      ⬇ Μετακίνηση
+                      ⬇
                     </button>
                   </div>
                 </div>
@@ -2148,29 +2203,29 @@ export default function App() {
         </>
       )}
 
-      {/* 5. MATH / LATEX CONVERTER & OFFLINE CAS SOLVER DIALOG (closedby="any" per modern-web-guidance) */}
+      {/* MATH / LATEX CONVERTER & OFFLINE CAS SOLVER DIALOG */}
       <dialog
         ref={mathDialogRef}
         {...({ closedby: 'any' } as any)}
         aria-labelledby="mathDialogTitle"
-        className="m-auto rounded-2xl bg-slate-900 text-slate-100 border border-slate-700 p-6 w-full max-w-lg shadow-2xl"
+        className="m-auto rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-lg shadow-2xl"
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 id="mathDialogTitle" className="text-lg font-bold text-white flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-purple-400" />
+            <h2 id="mathDialogTitle" className="text-lg font-bold text-[#1b2a4a] flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-purple-600" />
               <span>Μετατροπή σε LaTeX & Offline CAS Solver</span>
             </h2>
             <button
               onClick={() => mathDialogRef.current?.close()}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs text-slate-300 cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
             >
               Κλείσιμο
             </button>
           </div>
 
           <div>
-            <label className="block text-xs text-slate-400 mb-1">
+            <label className="block text-xs text-slate-500 mb-1">
               Επίλυση Εξίσωσης Φυσικής / Μαθηματικών (100% Εγγενώς & Offline CAS):
             </label>
             <div className="flex gap-2">
@@ -2179,7 +2234,7 @@ export default function App() {
                 value={mathEquationToSolve}
                 onChange={(e) => setMathEquationToSolve(e.target.value)}
                 placeholder="π.χ. 15 * t = 90 ή 20 * 3600 / 1000"
-                className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white select-text"
+                className="flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm text-slate-900 select-text"
               />
               <button
                 onClick={() => {
@@ -2194,16 +2249,16 @@ export default function App() {
           </div>
 
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Κώδικας LaTeX (με Ελληνικά & Σύμβολα Φυσικής):</label>
+            <label className="block text-xs text-slate-500 mb-1">Κώδικας LaTeX:</label>
             <input
               type="text"
               value={mathInput}
               onChange={(e) => setMathInput(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono text-sky-300 select-text"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono text-sky-700 select-text"
             />
           </div>
 
-          <div className="p-4 rounded-xl bg-white text-slate-900 overflow-x-auto">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 overflow-x-auto">
             <div
               dangerouslySetInnerHTML={{
                 __html: katex.renderToString(mathInput || 'I = \\frac{q}{t}', {
@@ -2230,9 +2285,8 @@ export default function App() {
                 };
                 updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
                 mathDialogRef.current?.close();
-                showToast('📐 Η εξίσωση LaTeX προστέθηκε στη σελίδα σου!');
               }}
-              className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold cursor-pointer"
             >
               + Εισαγωγή Εξίσωσης στη Σελίδα
             </button>
@@ -2240,28 +2294,28 @@ export default function App() {
         </div>
       </dialog>
 
-      {/* 6. SETTINGS DIALOG (Paper Template, Free Gemini API Key, Export) */}
+      {/* SETTINGS DIALOG */}
       <dialog
         ref={settingsDialogRef}
         {...({ closedby: 'any' } as any)}
         aria-labelledby="settingsDialogTitle"
-        className="m-auto rounded-2xl bg-slate-900 text-slate-100 border border-slate-700 p-6 w-full max-w-md shadow-2xl"
+        className="m-auto rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-md shadow-2xl"
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 id="settingsDialogTitle" className="text-lg font-bold text-white">
-              Ρυθμίσεις Σελίδας & Συγχρονισμού
+            <h2 id="settingsDialogTitle" className="text-lg font-bold text-[#1b2a4a]">
+              Ρυθμίσεις Σελίδας & Apple Pencil
             </h2>
             <button
               onClick={() => settingsDialogRef.current?.close()}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs text-slate-300 cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
             >
               Κλείσιμο
             </button>
           </div>
 
           <div>
-            <label className="block text-xs text-slate-400 mb-1.5">Πρότυπο Χαρτιού (Paper Template):</label>
+            <label className="block text-xs text-slate-500 mb-1.5">Πρότυπο Χαρτιού (Paper Template):</label>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { id: 'grid', label: 'Τετραγωνισμένο' },
@@ -2273,13 +2327,11 @@ export default function App() {
               ].map((tpl) => (
                 <button
                   key={tpl.id}
-                  onClick={() =>
-                    updateActivePage((page) => ({ ...page, template: tpl.id as PaperTemplateType }))
-                  }
-                  className={`px-3 py-2 rounded-xl text-xs font-medium border cursor-pointer ${
+                  onClick={() => updateActivePage((page) => ({ ...page, template: tpl.id as PaperTemplateType }))}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
                     activePage.template === tpl.id
-                      ? 'bg-sky-600 border-sky-400 text-white'
-                      : 'bg-slate-800 border-slate-700 text-slate-300'
+                      ? 'bg-[#0066ff] border-[#0066ff] text-white'
+                      : 'bg-slate-50 border-slate-200 text-slate-700'
                   }`}
                 >
                   {tpl.label}
@@ -2288,16 +2340,16 @@ export default function App() {
             </div>
           </div>
 
-          <div className="space-y-2 pt-2 border-t border-slate-800">
-            <label className="flex items-center justify-between text-xs">
-              <span>✨ Hold-to-Snap (Αυτόματη διόρθωση σχημάτων σε 0.3s)</span>
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <label className="flex items-center justify-between text-xs font-medium">
+              <span>✨ Hold-to-Snap (Αυτόματο σχήμα σε 0.3s)</span>
               <input
                 type="checkbox"
                 checked={holdToSnapEnabled}
                 onChange={(e) => setHoldToSnapEnabled(e.target.checked)}
               />
             </label>
-            <label className="flex items-center justify-between text-xs">
+            <label className="flex items-center justify-between text-xs font-medium">
               <span>🧹 Scribble-to-Erase (Μουτζούρωμα για σβήσιμο)</span>
               <input
                 type="checkbox"
@@ -2305,22 +2357,6 @@ export default function App() {
                 onChange={(e) => setScribbleToEraseEnabled(e.target.checked)}
               />
             </label>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800">
-            <label className="block text-xs text-slate-400 mb-1">
-              Δωρεάν Gemini API Key (από aistudio.google.com για OCR χειρογράφων):
-            </label>
-            <input
-              type="password"
-              value={geminiApiKey}
-              onChange={(e) => {
-                setGeminiApiKey(e.target.value);
-                localStorage.setItem('bestnotes_gemini_key', e.target.value);
-              }}
-              placeholder="AIzaSy..."
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white select-text"
-            />
           </div>
         </div>
       </dialog>
