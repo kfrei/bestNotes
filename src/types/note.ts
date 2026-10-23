@@ -65,6 +65,7 @@ export interface StrokeObject {
   groupId?: string;
   isShape?: boolean;
   shapeType?: string;
+  rotation?: number; // Rotation angle in radians for oriented selection bounding box
 }
 
 export interface TextObject {

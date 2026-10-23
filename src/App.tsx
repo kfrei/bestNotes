@@ -366,25 +366,55 @@ export default function App() {
     updateActivePage(() => nextPage, false);
   }, [redoStack, activePage, updateActivePage, clonePageFast]);
 
-  const getStrokeBounds = (s: StrokeObject) => {
+  const getStrokeSamplePoints = (s: StrokeObject): { x: number; y: number }[] => {
     if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
       const pPeak = s.points[0];
       const pEnd = s.points[1];
-      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y };
-      const yAxis = pEnd.y;
-      const absAmp = Math.abs(yAxis - pPeak.y);
-      return {
-        minX: Math.min(pStart.x, pEnd.x),
-        maxX: Math.max(pStart.x, pEnd.x),
-        minY: yAxis - absAmp,
-        maxY: yAxis + absAmp,
-      };
+      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
+      const dx = pEnd.x - pStart.x;
+      const dy = pEnd.y - pStart.y;
+      const spanL = Math.hypot(dx, dy) || 1;
+      const ux = dx / spanL;
+      const uy = dy / spanL;
+      const nx = uy;
+      const ny = -ux;
+      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
+      return [
+        { x: pStart.x + amp * nx, y: pStart.y + amp * ny },
+        { x: pStart.x - amp * nx, y: pStart.y - amp * ny },
+        { x: pEnd.x + amp * nx, y: pEnd.y + amp * ny },
+        { x: pEnd.x - amp * nx, y: pEnd.y - amp * ny },
+      ];
     }
+    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
+      const [p0, p1, p2, p3] = s.points;
+      const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
+      const cy = (p0.y + p1.y + p2.y + p3.y) / 4;
+      const v0x = p0.x - cx,
+        v0y = p0.y - cy;
+      const v1x = p1.x - cx,
+        v1y = p1.y - cy;
+      const v2x = p2.x - cx,
+        v2y = p2.y - cy;
+      const v3x = p3.x - cx,
+        v3y = p3.y - cy;
+      return [
+        { x: cx + v0x + v1x, y: cy + v0y + v1y },
+        { x: cx + v0x + v3x, y: cy + v0y + v3y },
+        { x: cx + v2x + v1x, y: cy + v2y + v1y },
+        { x: cx + v2x + v3x, y: cy + v2y + v3y },
+      ];
+    }
+    return s.points;
+  };
+
+  const getStrokeBounds = (s: StrokeObject) => {
+    const pts = getStrokeSamplePoints(s);
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
-    for (const p of s.points) {
+    for (const p of pts) {
       if (p.x < minX) minX = p.x;
       if (p.y < minY) minY = p.y;
       if (p.x > maxX) maxX = p.x;
@@ -403,17 +433,24 @@ export default function App() {
       const pPeak = s.points[0];
       const pEnd = s.points[1];
       const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-      const yAxis = pEnd.y;
-      const amp = yAxis - pPeak.y;
-      const spanW = pEnd.x - pStart.x;
+      const dx = pEnd.x - pStart.x;
+      const dy = pEnd.y - pStart.y;
+      const spanL = Math.hypot(dx, dy) || 1;
+      const ux = dx / spanL;
+      const uy = dy / spanL;
+      const nx = uy;
+      const ny = -ux;
+      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
       const halfCycles = Math.max(1, pStart.twist || 2);
       for (let i = 0; i <= 32; i++) {
         const t = i / 32;
-        const x = pStart.x + t * spanW;
-        const y =
+        const along = t * spanL;
+        const waveOffset =
           s.shapeType === 'sine'
-            ? yAxis - amp * Math.sin(t * halfCycles * Math.PI)
-            : yAxis + amp * Math.cos(t * halfCycles * Math.PI);
+            ? amp * Math.sin(t * halfCycles * Math.PI)
+            : -amp * Math.cos(t * halfCycles * Math.PI);
+        const x = pStart.x + along * ux + waveOffset * nx;
+        const y = pStart.y + along * uy + waveOffset * ny;
         if (distance(pt, { x, y }) < tol) return true;
       }
       return false;
@@ -445,37 +482,61 @@ export default function App() {
     if (selectedImageId) {
       const im = activePage.images?.find((i) => i.id === selectedImageId);
       if (im) {
+        const cx = im.x + im.width / 2;
+        const cy = im.y + im.height / 2;
+        const hw = im.width / 2;
+        const hh = im.height / 2;
+        const angle = ((im.rotation || 0) * Math.PI) / 180;
         return {
           minX: im.x,
           minY: im.y,
           maxX: im.x + im.width,
           maxY: im.y + im.height,
-          cx: im.x + im.width / 2,
-          cy: im.y + im.height / 2,
+          cx,
+          cy,
+          hw,
+          hh,
+          angle,
         };
       }
     }
     if (selectedStrokeIds.length > 0) {
       const sel = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
       if (sel.length > 0) {
-        let minX = Infinity,
-          minY = Infinity,
-          maxX = -Infinity,
-          maxY = -Infinity;
+        const angle = sel[0].rotation || 0;
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+        let minU = Infinity,
+          minV = Infinity,
+          maxU = -Infinity,
+          maxV = -Infinity;
         for (const s of sel) {
-          const sb = getStrokeBounds(s);
-          if (sb.minX < minX) minX = sb.minX;
-          if (sb.minY < minY) minY = sb.minY;
-          if (sb.maxX > maxX) maxX = sb.maxX;
-          if (sb.maxY > maxY) maxY = sb.maxY;
+          const samplePts = getStrokeSamplePoints(s);
+          for (const p of samplePts) {
+            const u = p.x * cosA + p.y * sinA;
+            const v = -p.x * sinA + p.y * cosA;
+            if (u < minU) minU = u;
+            if (v < minV) minV = v;
+            if (u > maxU) maxU = u;
+            if (v > maxV) maxV = v;
+          }
         }
+        const midU = (minU + maxU) / 2;
+        const midV = (minV + maxV) / 2;
+        const hw = Math.max(8, (maxU - minU) / 2);
+        const hh = Math.max(8, (maxV - minV) / 2);
+        const cx = midU * cosA - midV * sinA;
+        const cy = midU * sinA + midV * cosA;
         return {
-          minX,
-          minY,
-          maxX,
-          maxY,
-          cx: (minX + maxX) / 2,
-          cy: (minY + maxY) / 2,
+          minX: cx - hw,
+          minY: cy - hh,
+          maxX: cx + hw,
+          maxY: cy + hh,
+          cx,
+          cy,
+          hw,
+          hh,
+          angle,
         };
       }
     }
@@ -526,23 +587,30 @@ export default function App() {
       }
       ctx.closePath();
     } else if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
-      // 2. Symmetrical Sine ('sine') & Cosine ('cosine') Wave
+      // 2. Symmetrical Sine ('sine') & Cosine ('cosine') Wave (supports full 360° rotation!)
       //    points[0] = Peak handle (up/down), points[1] = Right Endpoint handle (left/right), points[2] = Left Origin
       const pPeak = s.points[0];
       const pEnd = s.points[1];
       const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-      const yAxis = pEnd.y;
-      const amp = yAxis - pPeak.y;
-      const spanW = pEnd.x - pStart.x;
+      const dx = pEnd.x - pStart.x;
+      const dy = pEnd.y - pStart.y;
+      const spanL = Math.hypot(dx, dy) || 1;
+      const ux = dx / spanL;
+      const uy = dy / spanL;
+      const nx = uy;
+      const ny = -ux;
+      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
       const halfCycles = Math.max(1, pStart.twist || 2);
       const steps = 72;
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const x = pStart.x + t * spanW;
-        const y =
+        const along = t * spanL;
+        const waveOffset =
           s.shapeType === 'sine'
-            ? yAxis - amp * Math.sin(t * halfCycles * Math.PI)
-            : yAxis + amp * Math.cos(t * halfCycles * Math.PI);
+            ? amp * Math.sin(t * halfCycles * Math.PI)
+            : -amp * Math.cos(t * halfCycles * Math.PI);
+        const x = pStart.x + along * ux + waveOffset * nx;
+        const y = pStart.y + along * uy + waveOffset * ny;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
@@ -634,14 +702,6 @@ export default function App() {
       ctx.moveTo(last.x, last.y);
       ctx.lineTo(last.x - headLen * Math.cos(angle + Math.PI / 6), last.y - headLen * Math.sin(angle + Math.PI / 6));
       ctx.stroke();
-    }
-
-    if (isSelected) {
-      const b = getStrokeBounds(s);
-      ctx.strokeStyle = 'rgba(2, 132, 199, 0.35)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      ctx.strokeRect(b.minX - 2, b.minY - 2, b.maxX - b.minX + 4, b.maxY - b.minY + 4);
     }
 
     ctx.restore();
@@ -800,47 +860,82 @@ export default function App() {
         drawStrokeOnContext(ctx, s, isCurrentActivePage && selectedStrokeIds.includes(s.id));
       }
 
-      // 4. Goodnotes Select / Lasso Transform Bounding Box (on active page)
+      // 4. Goodnotes Select / Lasso Transform Bounding Box (Oriented Bounding Box that rotates with the shape + Semicircular Rotation Arrow!)
       if (isCurrentActivePage) {
         const selBounds = getSelectionBounds();
         if (selBounds && activeTool !== 'direct-node') {
           const pad = 8;
-          const bx1 = selBounds.minX - pad;
-          const by1 = selBounds.minY - pad;
-          const bx2 = selBounds.maxX + pad;
-          const by2 = selBounds.maxY + pad;
+          const hw = selBounds.hw + pad;
+          const hh = selBounds.hh + pad;
           const bcx = selBounds.cx;
-          const rotHandleY = by1 - 30;
+          const bcy = selBounds.cy;
+          const angle = selBounds.angle || 0;
+          const rotStemTopY = -hh - 32;
 
           ctx.save();
+          ctx.translate(bcx, bcy);
+          ctx.rotate(angle);
+
+          // Oriented Dashed Selection Frame (follows shape rotation!)
           ctx.strokeStyle = '#0066ff';
           ctx.lineWidth = 1.8;
           ctx.setLineDash([6, 4]);
-          ctx.strokeRect(bx1, by1, bx2 - bx1, by2 - by1);
+          ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
 
-          // Rotation stem + Top Rotate Handle (↻)
+          // Rotation Stem
           ctx.setLineDash([]);
           ctx.beginPath();
-          ctx.moveTo(bcx, by1);
-          ctx.lineTo(bcx, rotHandleY);
+          ctx.moveTo(0, -hh);
+          ctx.lineTo(0, rotStemTopY + 12);
           ctx.stroke();
 
-          ctx.fillStyle = '#10b981';
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2.2;
+          // Semicircular Rotation Arrow Badge (replaces the old green dot!)
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#0066ff';
+          ctx.lineWidth = 2.0;
           ctx.beginPath();
-          ctx.arc(bcx, rotHandleY, 8.5, 0, Math.PI * 2);
+          ctx.arc(0, rotStemTopY, 12, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
 
-          // 4 Corner Proportional Resize Handles (NW, NE, SE, SW)
-          const corners = [
-            { x: bx1, y: by1 },
-            { x: bx2, y: by1 },
-            { x: bx2, y: by2 },
-            { x: bx1, y: by2 },
+          // Draw Semicircular Curved Arrow (↻) inside the badge
+          const arcRadius = 6.2;
+          const startAng = Math.PI * 0.8;
+          const endAng = Math.PI * 2.15;
+          ctx.strokeStyle = '#0066ff';
+          ctx.lineWidth = 2.1;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(0, rotStemTopY, arcRadius, startAng, endAng, false);
+          ctx.stroke();
+
+          // Arrowhead at the end of the semicircular arc
+          const tipX = arcRadius * Math.cos(endAng);
+          const tipY = rotStemTopY + arcRadius * Math.sin(endAng);
+          const tangentAng = endAng + Math.PI / 2;
+          const headLen = 4.8;
+          ctx.fillStyle = '#0066ff';
+          ctx.beginPath();
+          ctx.moveTo(tipX + 1.2 * Math.cos(tangentAng), tipY + 1.2 * Math.sin(tangentAng));
+          ctx.lineTo(
+            tipX - headLen * Math.cos(tangentAng - 0.65),
+            tipY - headLen * Math.sin(tangentAng - 0.65)
+          );
+          ctx.lineTo(
+            tipX - headLen * Math.cos(tangentAng + 0.65),
+            tipY - headLen * Math.sin(tangentAng + 0.65)
+          );
+          ctx.closePath();
+          ctx.fill();
+
+          // 4 Corner Proportional Resize Handles (NW, NE, SE, SW in rotated frame)
+          const localCorners = [
+            { x: -hw, y: -hh },
+            { x: hw, y: -hh },
+            { x: hw, y: hh },
+            { x: -hw, y: hh },
           ];
-          for (const c of corners) {
+          for (const c of localCorners) {
             ctx.fillStyle = '#ffffff';
             ctx.strokeStyle = '#0066ff';
             ctx.lineWidth = 2.2;
@@ -2141,21 +2236,28 @@ export default function App() {
       return;
     }
 
-    // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle)
+    // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle on Oriented Bounding Box!)
     if (activeTool === 'lasso') {
       const selBounds = getSelectionBounds();
       if (selBounds) {
         const pad = 8;
-        const bx1 = selBounds.minX - pad;
-        const by1 = selBounds.minY - pad;
-        const bx2 = selBounds.maxX + pad;
-        const by2 = selBounds.maxY + pad;
+        const hw = selBounds.hw + pad;
+        const hh = selBounds.hh + pad;
         const bcx = selBounds.cx;
         const bcy = selBounds.cy;
-        const rotHandle = { x: bcx, y: by1 - 30 };
+        const angle = selBounds.angle || 0;
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
 
-        // A. Check Top Rotation Handle (↻)
-        if (distance(pt, rotHandle) < 18) {
+        // Transform pointer pt into the rotated selection box's local coordinate system
+        const dx = pt.x - bcx;
+        const dy = pt.y - bcy;
+        const localX = dx * cosA + dy * sinA;
+        const localY = -dx * sinA + dy * cosA;
+        const rotStemTopY = -hh - 32;
+
+        // A. Check Top Semicircular Rotation Arrow Handle (↻)
+        if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
           selectionTransformRef.current = {
             mode: 'rotate',
             startX: pt.x,
@@ -2171,24 +2273,26 @@ export default function App() {
           return;
         }
 
-        // B. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW)
-        const corners = [
-          { x: bx1, y: by1, oppX: bx2, oppY: by2 },
-          { x: bx2, y: by1, oppX: bx1, oppY: by2 },
-          { x: bx2, y: by2, oppX: bx1, oppY: by1 },
-          { x: bx1, y: by2, oppX: bx2, oppY: by1 },
+        // B. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW in rotated frame)
+        const localCorners = [
+          { lx: -hw, ly: -hh, oppLx: hw, oppLy: hh },
+          { lx: hw, ly: -hh, oppLx: -hw, oppLy: hh },
+          { lx: hw, ly: hh, oppLx: -hw, oppLy: -hh },
+          { lx: -hw, ly: hh, oppLx: hw, oppLy: -hh },
         ];
-        for (const c of corners) {
-          if (distance(pt, c) < 18) {
+        for (const c of localCorners) {
+          if (Math.hypot(localX - c.lx, localY - c.ly) < 18) {
+            const oppWorldX = bcx + c.oppLx * cosA - c.oppLy * sinA;
+            const oppWorldY = bcy + c.oppLx * sinA + c.oppLy * cosA;
             selectionTransformRef.current = {
               mode: 'scale',
               startX: pt.x,
               startY: pt.y,
               centerX: bcx,
               centerY: bcy,
-              anchorX: c.oppX,
-              anchorY: c.oppY,
-              initialDist: Math.max(12, distance(pt, { x: c.oppX, y: c.oppY })),
+              anchorX: oppWorldX,
+              anchorY: oppWorldY,
+              initialDist: Math.max(12, distance(pt, { x: oppWorldX, y: oppWorldY })),
               initialAngle: 0,
             };
             isDrawingRef.current = true;
@@ -2196,8 +2300,8 @@ export default function App() {
           }
         }
 
-        // C. Check inside selection bounding box -> Move
-        if (pt.x >= bx1 - 6 && pt.x <= bx2 + 6 && pt.y >= by1 - 6 && pt.y <= by2 + 6) {
+        // C. Check inside rotated selection bounding box -> Move
+        if (Math.abs(localX) <= hw + 6 && Math.abs(localY) <= hh + 6) {
           selectionTransformRef.current = {
             mode: 'move',
             startX: pt.x,
@@ -2479,6 +2583,7 @@ export default function App() {
                 if (!selectedStrokeIds.includes(s.id)) return s;
                 return {
                   ...s,
+                  rotation: (s.rotation || 0) + dAngle,
                   points: s.points.map((p) => {
                     const rx = p.x - tf.centerX;
                     const ry = p.y - tf.centerY;
