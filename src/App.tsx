@@ -1582,6 +1582,85 @@ export default function App() {
     showToast('✂️ Αποκόπηκε (Cut) στο πρόχειρο!');
   }, [activePage.strokes, activePage.images, selectedStrokeIds, selectedImageId, updateActivePage, showToast]);
 
+  // Instant 1-Tap Duplicate ("Αντίγραφο"): clones the selected shape/group or image slightly lower and slightly to the right (+28px, +28px)!
+  const handleDuplicateSelected = useCallback(() => {
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+
+    if (selImg) {
+      const dupImg: ImageObject = {
+        ...structuredClone(selImg),
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: selImg.x + 28,
+        y: selImg.y + 28,
+      };
+      updateActivePage((page) => ({
+        ...page,
+        images: [...(page.images || []), { ...dupImg, zOrder: getNextPageZOrder(page) }],
+      }));
+      setSelectedImageId(dupImg.id);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setActiveTool('lasso');
+      showToast('📑 Δημιουργήθηκε αντίγραφο εικόνας!');
+      return;
+    }
+
+    if (selStrokes.length > 0) {
+      const newGroupId = selStrokes.some((s) => s.groupId) ? `grp-${Date.now()}` : undefined;
+      const duplicated = selStrokes.map((s) => ({
+        ...structuredClone(s),
+        id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        groupId: s.groupId ? newGroupId : undefined,
+        points: s.points.map((p) => ({
+          ...p,
+          x: p.x + 28,
+          y: p.y + 28,
+          cx: p.cx !== undefined ? p.cx + 28 : undefined,
+          cy: p.cy !== undefined ? p.cy + 28 : undefined,
+        })),
+      }));
+      updateActivePage((page) => {
+        const baseZ = getNextPageZOrder(page);
+        return {
+          ...page,
+          strokes: [...page.strokes, ...duplicated.map((s, idx) => ({ ...s, zOrder: baseZ + idx }))],
+        };
+      });
+      const dupIds = duplicated.map((s) => s.id);
+      setSelectedStrokeIds(dupIds);
+      setActiveNodeStrokeId(dupIds.length === 1 ? dupIds[0] : null);
+      setSelectedImageId(null);
+      setActiveTool('lasso');
+      showToast('📑 Δημιουργήθηκε αντίγραφο σχήματος!');
+      return;
+    }
+
+    showToast('ℹ️ Επίλεξε πρώτα σχήμα ή εικόνα για Αντίγραφο!');
+  }, [
+    activePage.strokes,
+    activePage.images,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    selectedImageId,
+    updateActivePage,
+    showToast,
+  ]);
+
   const insertImageDataUrlOnPage = useCallback(
     (dataUrl: string, customToast?: string) => {
       const img = new Image();
@@ -4689,6 +4768,14 @@ export default function App() {
                       <ClipboardPaste className="w-3.5 h-3.5" />
                       <span>Paste</span>
                     </button>
+                    <button
+                      onClick={handleDuplicateSelected}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold cursor-pointer"
+                      title="Άμεση δημιουργία αντιγράφου λίγο πιο κάτω και λίγο πιο δεξιά"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Αντίγραφο</span>
+                    </button>
 
                     {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
@@ -4867,6 +4954,22 @@ export default function App() {
                     >
                       <Copy className="w-3.5 h-3.5" />
                       <span>Copy</span>
+                    </button>
+                    <button
+                      onClick={handlePaste}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
+                      title="Επικόλληση (Paste)"
+                    >
+                      <ClipboardPaste className="w-3.5 h-3.5" />
+                      <span>Paste</span>
+                    </button>
+                    <button
+                      onClick={handleDuplicateSelected}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold cursor-pointer"
+                      title="Άμεση δημιουργία αντιγράφου λίγο πιο κάτω και λίγο πιο δεξιά"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Αντίγραφο</span>
                     </button>
 
                     {/* Z-Order Controls for Selected Image */}
