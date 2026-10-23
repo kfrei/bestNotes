@@ -798,16 +798,17 @@ export default function App() {
   );
 
   const applyPaperTransformDirect = useCallback(
-    (nextZoom: number, nextPanX: number, nextPanY: number, commitReactState = false) => {
+    (nextZoom: number, _nextPanX: number, nextPanY: number, commitReactState = false) => {
       const clampedZoom = Math.min(3.5, Math.max(0.45, nextZoom));
       zoomRef.current = clampedZoom;
-      panRef.current = { x: nextPanX, y: nextPanY };
+      // Strictly lock X to 0 so the page is ALWAYS horizontally centered and only scrolls vertically (up/down)!
+      panRef.current = { x: 0, y: nextPanY };
       if (paperTransformElRef.current) {
-        paperTransformElRef.current.style.transform = `translate3d(${nextPanX}px, ${nextPanY}px, 0) scale(${clampedZoom})`;
+        paperTransformElRef.current.style.transform = `translate3d(0px, ${nextPanY}px, 0) scale(${clampedZoom})`;
       }
       if (commitReactState) {
         setZoom(clampedZoom);
-        setPan({ x: nextPanX, y: nextPanY });
+        setPan({ x: 0, y: nextPanY });
       }
     },
     []
@@ -3632,8 +3633,8 @@ export default function App() {
             <div
               ref={paperTransformElRef}
               style={{
-                transformOrigin: '0 0',
-                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+                transformOrigin: '50% 0',
+                transform: `translate3d(0px, ${pan.y}px, 0) scale(${zoom})`,
                 willChange: 'transform',
                 gap: `${PAGE_GAP}px`,
               }}
