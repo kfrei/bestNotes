@@ -88,6 +88,8 @@ export interface ImageObject {
   y: number;
   width: number;
   height: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
   rotation?: number; // Rotation in degrees
   dataUrl: string;
   originalDataUrl?: string;

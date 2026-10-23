@@ -869,12 +869,56 @@ export default function App() {
             imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
           }
 
-          if (imgEl.complete && imgEl.naturalWidth > 0) {
+          if (imgEl.complete && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+            const natW = imgEl.naturalWidth;
+            const natH = imgEl.naturalHeight;
+            let drawW = imgObj.width;
+            let drawH = imgObj.height;
+
+            // Auto-repair any existing image that lacked naturalWidth/naturalHeight (e.g. old hardcoded 340x240)
+            if (!imgObj.naturalWidth || !imgObj.naturalHeight) {
+              const longest = Math.max(imgObj.width, imgObj.height, 280);
+              const scale = longest / Math.max(1, natW, natH);
+              drawW = Math.max(24, Math.round(natW * scale));
+              drawH = Math.max(24, Math.round(natH * scale));
+              const targetPageId = pageObj.id;
+              const targetImgId = imgObj.id;
+              window.setTimeout(() => {
+                setNotebooks((prev) =>
+                  prev.map((nb) =>
+                    nb.id !== activeNotebook.id
+                      ? nb
+                      : {
+                          ...nb,
+                          pages: nb.pages.map((p) =>
+                            p.id !== targetPageId
+                              ? p
+                              : {
+                                  ...p,
+                                  images: (p.images || []).map((im) =>
+                                    im.id === targetImgId && (!im.naturalWidth || !im.naturalHeight)
+                                      ? {
+                                          ...im,
+                                          width: drawW,
+                                          height: drawH,
+                                          naturalWidth: natW,
+                                          naturalHeight: natH,
+                                        }
+                                      : im
+                                  ),
+                                }
+                          ),
+                        }
+                  )
+                );
+              }, 0);
+            }
+
             ctx.save();
             ctx.globalAlpha = layer?.opacity ?? 1;
             if (imgObj.rotation) {
-              const icx = imgObj.x + imgObj.width / 2;
-              const icy = imgObj.y + imgObj.height / 2;
+              const icx = imgObj.x + drawW / 2;
+              const icy = imgObj.y + drawH / 2;
               ctx.translate(icx, icy);
               ctx.rotate((imgObj.rotation * Math.PI) / 180);
               ctx.translate(-icx, -icy);
@@ -888,7 +932,7 @@ export default function App() {
               ctx.closePath();
               ctx.clip();
             }
-            ctx.drawImage(imgEl, imgObj.x, imgObj.y, imgObj.width, imgObj.height);
+            ctx.drawImage(imgEl, imgObj.x, imgObj.y, drawW, drawH);
             ctx.restore();
           }
         } else {
@@ -1519,19 +1563,28 @@ export default function App() {
   }, [activePage.strokes, activePage.images, selectedStrokeIds, selectedImageId, updateActivePage, showToast]);
 
   const insertImageDataUrlOnPage = useCallback(
-    (dataUrl: string) => {
+    (dataUrl: string, customToast?: string) => {
       const img = new Image();
       img.onload = () => {
-        const maxW = 380;
-        const ratio = img.naturalHeight / Math.max(1, img.naturalWidth);
-        const w = Math.min(maxW, Math.max(140, img.naturalWidth));
-        const h = Math.round(w * ratio);
+        const natW = Math.max(1, img.naturalWidth || img.width || 360);
+        const natH = Math.max(1, img.naturalHeight || img.height || 260);
+        const maxW = 440;
+        const maxH = 540;
+        let scale = Math.min(1, maxW / natW, maxH / natH);
+        const longestScaled = Math.max(natW * scale, natH * scale);
+        if (longestScaled < 180) {
+          scale = 180 / Math.max(natW, natH);
+        }
+        const w = Math.max(24, Math.round(natW * scale));
+        const h = Math.max(24, Math.round(natH * scale));
         const newImg: ImageObject = {
           id: `img-${Date.now()}`,
           x: 160,
           y: 180,
           width: w,
           height: h,
+          naturalWidth: natW,
+          naturalHeight: natH,
           dataUrl,
           originalDataUrl: dataUrl,
           layerId: activeLayerId,
@@ -1543,7 +1596,7 @@ export default function App() {
         setSelectedImageId(newImg.id);
         setSelectedStrokeIds([]);
         setActiveTool('lasso');
-        showToast('📥 Επικολλήθηκε εικόνα από το πρόχειρο!');
+        showToast(customToast || `📥 Επικολλήθηκε εικόνα (${natW}×${natH}px) με ακριβείς αναλογίες!`);
       };
       img.src = dataUrl;
     },
@@ -2696,15 +2749,18 @@ export default function App() {
                 ...page,
                 images: page.images.map((im) => {
                   if (im.id !== selectedImageId) return im;
-                  const newW = Math.max(40, im.width * scaleFactor);
-                  const newH = Math.max(40, im.height * scaleFactor);
+                  // Clamp scaleFactor uniformly so the aspect ratio of elongated images NEVER distorts into a square!
+                  const minSide = Math.max(1, Math.min(im.width, im.height));
+                  const clampedScale = Math.max(24 / minSide, scaleFactor);
+                  const newW = im.width * clampedScale;
+                  const newH = im.height * clampedScale;
                   return {
                     ...im,
                     width: newW,
                     height: newH,
                     clipPolygon: im.clipPolygon?.map((cp) => ({
-                      x: cp.x * scaleFactor,
-                      y: cp.y * scaleFactor,
+                      x: cp.x * clampedScale,
+                      y: cp.y * clampedScale,
                     })),
                   };
                 }),
@@ -3534,6 +3590,8 @@ export default function App() {
       y: 260,
       width: 360,
       height: 220,
+      naturalWidth: 360,
+      naturalHeight: 220,
       dataUrl,
       originalDataUrl: dataUrl,
       layerId: activeLayerId,
@@ -3569,23 +3627,9 @@ export default function App() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const newImg: ImageObject = {
-        id: `img-${Date.now()}`,
-        x: 140,
-        y: 180,
-        width: 340,
-        height: 240,
-        dataUrl,
-        originalDataUrl: dataUrl,
-        layerId: activeLayerId,
-      };
-      updateActivePage((page) => ({
-        ...page,
-        images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
-      }));
-      setSelectedImageId(newImg.id);
-      setActiveTool('lasso');
+      if (typeof reader.result === 'string') {
+        insertImageDataUrlOnPage(reader.result);
+      }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -4668,6 +4712,30 @@ export default function App() {
                         ⏫ Μπροστά
                       </button>
                     </div>
+                    <button
+                      onClick={() => {
+                        const cached = imageElementsCacheRef.current.get(selectedImgObj.dataUrl);
+                        const natW = selectedImgObj.naturalWidth || cached?.naturalWidth || selectedImgObj.width;
+                        const natH = selectedImgObj.naturalHeight || cached?.naturalHeight || selectedImgObj.height;
+                        const longest = Math.max(selectedImgObj.width, selectedImgObj.height, 260);
+                        const scale = longest / Math.max(1, natW, natH);
+                        const fixedW = Math.max(24, Math.round(natW * scale));
+                        const fixedH = Math.max(24, Math.round(natH * scale));
+                        updateActivePage((page) => ({
+                          ...page,
+                          images: page.images.map((im) =>
+                            im.id === selectedImgObj.id
+                              ? { ...im, width: fixedW, height: fixedH, naturalWidth: natW, naturalHeight: natH }
+                              : im
+                          ),
+                        }));
+                        showToast(`📐 Επαναφέρθηκαν οι πραγματικές αναλογίες (${natW}×${natH}px)!`);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold cursor-pointer"
+                      title="Επαναφορά στις πραγματικές αρχικές αναλογίες (Aspect Ratio) της εικόνας"
+                    >
+                      <span>📐 1:1 Αναλογίες</span>
+                    </button>
                     <button
                       onClick={async () => {
                         const cleanUrl = await removeImageBackground(
