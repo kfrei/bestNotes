@@ -197,13 +197,14 @@ export function isScribbleEraseGesture(pts: BezierPoint[]): { isScribble: boolea
 }
 
 /**
- * Hold-to-Snap & Geometric Shape Recognizer (Line, Rectangle, Parallelogram, Ellipse, Triangle).
+ * Hold-to-Snap & Geometric Shape Recognizer (Line, Circle, Ellipse, Square, Rectangle, Parallelogram, Triangle).
+ * Triggered automatically after ~0.42s hold in Pen, Pencil, Highlighter, or Shape tools WITHOUT lifting the Apple Pencil!
  */
 export function recognizeAndSnapShape(
   rawPoints: BezierPoint[],
   forcedPreset: ShapePresetType = 'auto'
 ): { points: BezierPoint[]; shapeType: string } | null {
-  if (rawPoints.length < 3) return null;
+  if (rawPoints.length < 2) return null;
 
   const start = rawPoints[0];
   const end = rawPoints[rawPoints.length - 1];
@@ -221,7 +222,7 @@ export function recognizeAndSnapShape(
     maxY = Math.max(maxY, rawPoints[i].y);
   }
 
-  if (totalLen < 20) return null;
+  if (totalLen < 18) return null;
   const directDist = distance(start, end);
   const straightness = directDist / totalLen;
 
@@ -231,15 +232,15 @@ export function recognizeAndSnapShape(
   }
 
   // 1. Straight Line Test (snaps to 0°, 45°, 90° if close)
-  if (straightness > 0.89) {
+  if (straightness > 0.85) {
     let x2 = end.x;
     let y2 = end.y;
     const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;
     const absAngle = Math.abs(angleDeg);
 
-    if (absAngle < 6 || absAngle > 174) {
-      y2 = start.y; // Horizontal snap (great for fraction bars & underlines!)
-    } else if (Math.abs(absAngle - 90) < 6) {
+    if (absAngle < 5.5 || absAngle > 174.5) {
+      y2 = start.y; // Horizontal snap
+    } else if (Math.abs(absAngle - 90) < 5.5) {
       x2 = start.x; // Vertical snap
     }
 
@@ -252,65 +253,133 @@ export function recognizeAndSnapShape(
     };
   }
 
-  // 2. Closed Shape Test (Circle/Ellipse, Rectangle, Parallelogram, Triangle)
-  const isClosed = directDist < totalLen * 0.24 || directDist < 45;
-  if (isClosed) {
-    const w = maxX - minX;
-    const h = maxY - minY;
-    const diag = Math.hypot(w, h);
-    const simplified = rdpSimplify(rawPoints, diag * 0.065);
+  // 2. Closed Shape Test (Circle, Ellipse, Square, Rectangle, Parallelogram, Triangle)
+  const w = Math.max(16, maxX - minX);
+  const h = Math.max(16, maxY - minY);
+  const diag = Math.hypot(w, h);
+  const isClosed = directDist < totalLen * 0.35 || directDist < Math.max(52, diag * 0.32);
 
-    // Triangle (3 vertices -> 4 points in closed simplified polyline)
-    if (simplified.length === 4) {
-      const [p0, p1, p2] = simplified;
+  if (isClosed && diag > 22) {
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const rx = w / 2;
+    const ry = h / 2;
+
+    // Measure how closely rawPoints hug the Bounding Box vs an Inscribed Ellipse
+    let rectErrSum = 0;
+    let ellipseErrSum = 0;
+    for (const p of rawPoints) {
+      const distToBoxEdge = Math.min(
+        Math.abs(p.x - minX),
+        Math.abs(maxX - p.x),
+        Math.abs(p.y - minY),
+        Math.abs(maxY - p.y)
+      );
+      rectErrSum += distToBoxEdge / diag;
+
+      const normEllipseR = Math.hypot((p.x - cx) / Math.max(1, rx), (p.y - cy) / Math.max(1, ry));
+      ellipseErrSum += Math.abs(normEllipseR - 1);
+    }
+    const rectErr = rectErrSum / rawPoints.length;
+    const ellipseErr = ellipseErrSum / rawPoints.length;
+
+    // Simplify polygon and merge nearby vertices + remove nearly-collinear points
+    const rdp = rdpSimplify(rawPoints, diag * 0.068);
+    const mergedCorners: BezierPoint[] = [];
+    for (const pt of rdp) {
+      if (mergedCorners.length === 0 || distance(mergedCorners[mergedCorners.length - 1], pt) > diag * 0.14) {
+        mergedCorners.push(pt);
+      }
+    }
+    if (mergedCorners.length > 2 && distance(mergedCorners[0], mergedCorners[mergedCorners.length - 1]) < diag * 0.22) {
+      mergedCorners.pop();
+    }
+
+    // Filter out collinear mid-side vertices (turn angle < 25°)
+    const trueCorners: BezierPoint[] = [];
+    const nC = mergedCorners.length;
+    if (nC >= 3) {
+      for (let i = 0; i < nC; i++) {
+        const prev = mergedCorners[(i - 1 + nC) % nC];
+        const curr = mergedCorners[i];
+        const next = mergedCorners[(i + 1) % nC];
+        const v1x = curr.x - prev.x,
+          v1y = curr.y - prev.y;
+        const v2x = next.x - curr.x,
+          v2y = next.y - curr.y;
+        const m1 = Math.hypot(v1x, v1y);
+        const m2 = Math.hypot(v2x, v2y);
+        if (m1 < 1 || m2 < 1) continue;
+        const cosTurn = (v1x * v2x + v1y * v2y) / (m1 * m2);
+        // Keep vertex if turn angle is > ~26 degrees (cosTurn < 0.898)
+        if (cosTurn < 0.898) {
+          trueCorners.push(curr);
+        }
+      }
+    }
+
+    // A. Triangle (3 distinct corners)
+    if (trueCorners.length === 3 && ellipseErr > 0.105) {
+      const [p0, p1, p2] = trueCorners;
       return {
         shapeType: 'triangle',
         points: makePolygonBezier([p0, p1, p2]),
       };
     }
 
-    // Quadrilateral: Rectangle or Parallelogram (4 vertices -> 5 points)
-    if (simplified.length === 5) {
-      const [p0, p1, p2, p3] = simplified;
-      // Check angle at p0-p1-p2
-      const v1x = p1.x - p0.x,
-        v1y = p1.y - p0.y;
-      const v2x = p2.x - p1.x,
-        v2y = p2.y - p1.y;
-      const cosAngle =
-        (v1x * v2x + v1y * v2y) / (Math.max(1, Math.hypot(v1x, v1y)) * Math.max(1, Math.hypot(v2x, v2y)));
+    // B. Square / Rectangle / Parallelogram (4 distinct corners OR points hug the bounding box closer than an ellipse)
+    const isBoxLike =
+      (trueCorners.length === 4 && ellipseErr > 0.115) ||
+      (trueCorners.length >= 4 && rectErr < 0.072 && rectErr < ellipseErr * 0.62);
 
-      if (Math.abs(cosAngle) < 0.22) {
-        // Axis-aligned clean rectangle
-        const rectPts = [
-          { x: minX, y: minY },
-          { x: maxX, y: minY },
-          { x: maxX, y: maxY },
-          { x: minX, y: maxY },
-        ];
-        return {
-          shapeType: 'rectangle',
-          points: makePolygonBezier(rectPts),
-        };
-      } else {
-        // True Parallelogram (force opposite sides parallel: p3 = p0 + (p2 - p1))
-        const paraPts = [
-          { x: p0.x, y: p0.y },
-          { x: p1.x, y: p1.y },
-          { x: p2.x, y: p2.y },
-          { x: p0.x + (p2.x - p1.x), y: p0.y + (p2.y - p1.y) },
-        ];
-        return {
-          shapeType: 'parallelogram',
-          points: makePolygonBezier(paraPts),
-        };
+    if (isBoxLike) {
+      if (trueCorners.length === 4) {
+        const [p0, p1, p2] = trueCorners;
+        const v1x = p1.x - p0.x,
+          v1y = p1.y - p0.y;
+        const v2x = p2.x - p1.x,
+          v2y = p2.y - p1.y;
+        const cosAngle =
+          (v1x * v2x + v1y * v2y) / (Math.max(1, Math.hypot(v1x, v1y)) * Math.max(1, Math.hypot(v2x, v2y)));
+
+        // Tilted Parallelogram
+        if (Math.abs(cosAngle) >= 0.26) {
+          const paraPts = [
+            { x: p0.x, y: p0.y },
+            { x: p1.x, y: p1.y },
+            { x: p2.x, y: p2.y },
+            { x: p0.x + (p2.x - p1.x), y: p0.y + (p2.y - p1.y) },
+          ];
+          return {
+            shapeType: 'parallelogram',
+            points: makePolygonBezier(paraPts),
+          };
+        }
       }
+
+      // Check if it's a Square (width and height within 16% of each other) vs Rectangle
+      const isSquare = Math.abs(w - h) < Math.max(w, h) * 0.16;
+      const halfW = isSquare ? (w + h) / 4 : w / 2;
+      const halfH = isSquare ? (w + h) / 4 : h / 2;
+      const rectPts = [
+        { x: cx - halfW, y: cy - halfH },
+        { x: cx + halfW, y: cy - halfH },
+        { x: cx + halfW, y: cy + halfH },
+        { x: cx - halfW, y: cy + halfH },
+      ];
+      return {
+        shapeType: 'rectangle',
+        points: makePolygonBezier(rectPts),
+      };
     }
 
-    // Smooth closed loop -> Ellipse / Circle!
+    // C. Smooth closed loop -> Perfect Circle (equal radius) or Ellipse (4 cardinal 90° nodes)!
+    const isCircle = Math.abs(w - h) < Math.max(w, h) * 0.22;
+    const finalRx = isCircle ? (w + h) / 4 : rx;
+    const finalRy = isCircle ? (w + h) / 4 : ry;
     return {
-      shapeType: Math.abs(w - h) < Math.max(w, h) * 0.18 ? 'circle' : 'ellipse',
-      points: makeEllipseBezier((minX + maxX) / 2, (minY + maxY) / 2, w / 2, h / 2),
+      shapeType: isCircle ? 'circle' : 'ellipse',
+      points: makeEllipseBezier(cx, cy, finalRx, finalRy),
     };
   }
 

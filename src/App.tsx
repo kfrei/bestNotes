@@ -2457,6 +2457,7 @@ export default function App() {
     }
 
     // 6. ZERO-LATENCY, SILKY-SMOOTH PEN / PENCIL / HIGHLIGHTER / SHAPE INKING AT 2x RETINA!
+    let didMoveSignificantly = false;
     for (const ce of coalesced) {
       const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
       const pts = currentStrokePtsRef.current;
@@ -2466,6 +2467,9 @@ export default function App() {
         const d = distance(prev, rawPt);
         // Filter sub-pixel digitizer stair-steps (< 1.5px) so live wet ink is completely smooth ("εντελώς λείο")!
         if (d < 1.5) continue;
+        if (d >= 2.2) {
+          didMoveSignificantly = true;
+        }
         const alpha = Math.max(0.36, Math.min(0.72, 1 - 0.5 * Math.exp(-d / 15)));
         const smoothedPt: BezierPoint = {
           x: prev.x + alpha * (rawPt.x - prev.x),
@@ -2475,6 +2479,7 @@ export default function App() {
         pts.push(smoothedPt);
       } else {
         pts.push(rawPt);
+        didMoveSignificantly = true;
       }
 
       // If not yet snapped and using solid standard pen, draw only the new incremental Bezier segment in 0.02ms!
@@ -2504,31 +2509,48 @@ export default function App() {
     ) {
       if (snappedCurrentStrokeRef.current && snappedCurrentStrokeRef.current.shapeType === 'line') {
         const start = currentStrokePtsRef.current[0];
+        let x2 = latestPt.x;
+        let y2 = latestPt.y;
+        const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;
+        const absAngle = Math.abs(angleDeg);
+        if (absAngle < 5 || absAngle > 175) y2 = start.y;
+        else if (Math.abs(absAngle - 90) < 5) x2 = start.x;
+
         snappedCurrentStrokeRef.current = {
           shapeType: 'line',
           points: [
             { x: start.x, y: start.y, pressure: 0.7 },
-            { x: latestPt.x, y: latestPt.y, cx: (start.x + latestPt.x) / 2, cy: (start.y + latestPt.y) / 2, pressure: 0.7 },
+            { x: x2, y: y2, cx: (start.x + x2) / 2, cy: (start.y + y2) / 2, pressure: 0.7 },
           ],
         };
       }
       renderLiveOverlayStroke();
     }
 
-    // Hold-to-Snap timer (300ms pause at end of stroke snaps to perfect geometric shape!)
-    if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
-    if (holdToSnapEnabled && ['pen', 'highlighter', 'shape'].includes(activeTool) && !snappedCurrentStrokeRef.current) {
-      holdTimerRef.current = window.setTimeout(() => {
-        if (!isDrawingRef.current || currentStrokePtsRef.current.length < 5) return;
-        const snapped = recognizeAndSnapShape(
-          currentStrokePtsRef.current,
-          activeTool === 'shape' ? shapePreset : 'auto'
-        );
-        if (snapped) {
-          snappedCurrentStrokeRef.current = snapped;
-          renderLiveOverlayStroke();
-        }
-      }, 300);
+    // Hold-to-Snap (~0.42s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
+    // IMPORTANT: Only reset the timer when the Apple Pencil actually moves (>= 2.2px)!
+    // That way, iPadOS 240Hz pressure/tilt micro-events while holding the pencil still do NOT cancel the timer,
+    // and the shape snaps LIVE on screen after ~0.42s WITHOUT lifting the Apple Pencil!
+    if (
+      holdToSnapEnabled &&
+      ['pen', 'pencil', 'highlighter', 'shape'].includes(activeTool) &&
+      !snappedCurrentStrokeRef.current
+    ) {
+      if (didMoveSignificantly || !holdTimerRef.current) {
+        if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = window.setTimeout(() => {
+          holdTimerRef.current = null;
+          if (!isDrawingRef.current || currentStrokePtsRef.current.length < 2) return;
+          const snapped = recognizeAndSnapShape(
+            currentStrokePtsRef.current,
+            activeTool === 'shape' ? shapePreset : 'auto'
+          );
+          if (snapped) {
+            snappedCurrentStrokeRef.current = snapped;
+            renderLiveOverlayStroke();
+          }
+        }, 420);
+      }
     }
   };
 
