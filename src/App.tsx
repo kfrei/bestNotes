@@ -160,7 +160,7 @@ export default function App() {
   const [arrowEnd, setArrowEnd] = useState<boolean>(false);
   const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(true);
   const [holdToSnapEnabled, setHoldToSnapEnabled] = useState<boolean>(true);
-  const [pencilOnlyMode, setPencilOnlyMode] = useState<boolean>(false);
+  const [pencilOnlyMode, setPencilOnlyMode] = useState<boolean>(true);
   const [showToolSubBar, setShowToolSubBar] = useState<boolean>(true);
 
   // Layers & Selection
