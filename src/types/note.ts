@@ -81,6 +81,7 @@ export interface ImageObject {
   y: number;
   width: number;
   height: number;
+  rotation?: number; // Rotation in degrees
   dataUrl: string;
   originalDataUrl?: string;
   clipPolygon?: { x: number; y: number }[]; // Freehand or Magnetic Lasso crop mask (relative 0..width, 0..height)
@@ -113,6 +114,8 @@ export interface NotePage {
   id: string;
   title: string;
   template: PaperTemplateType;
+  orientation?: 'portrait' | 'landscape';
+  rotation?: number; // 0, 90, 180, 270
   layers: LayerItem[];
   strokes: StrokeObject[];
   shapes?: StrokeObject[];

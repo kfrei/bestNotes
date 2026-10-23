@@ -32,6 +32,7 @@ import {
   Upload,
   LayoutGrid,
   RotateCcw,
+  RotateCw,
   Magnet,
   Type,
   Bandage,
@@ -39,6 +40,9 @@ import {
   X,
   ZoomIn,
   ZoomOut,
+  Scissors,
+  Copy,
+  ClipboardPaste,
 } from 'lucide-react';
 import {
   Notebook,
@@ -73,6 +77,7 @@ import {
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
 const PRESET_COLORS = ['#111827', '#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0284c7', '#eab308'];
+const THICKNESS_PRESETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0];
 
 export default function App() {
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
@@ -114,6 +119,18 @@ export default function App() {
     touchCount: number;
   } | null>(null);
 
+  // Outside-page 1-finger scroll & Goodnotes Pull-to-Add-Page (hold 1.2s at top or bottom)
+  const [pullAddPageState, setPullAddPageState] = useState<{ side: 'top' | 'bottom'; progress: number } | null>(null);
+  const pullHoldIntervalRef = useRef<number | null>(null);
+  const pullSideActiveRef = useRef<'top' | 'bottom' | null>(null);
+  const outsidePanDragRef = useRef<{
+    active: boolean;
+    startClientX: number;
+    startClientY: number;
+    initialPanX: number;
+    initialPanY: number;
+  } | null>(null);
+
   // Goodnotes 6 Toolbar State
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
@@ -125,7 +142,9 @@ export default function App() {
   const [fillColor, setFillColor] = useState<string>('#fef08a');
   const [fillStyle, setFillStyle] = useState<FillStyleType>('none');
   const [strokeWidth, setStrokeWidth] = useState<number>(3.0);
-  const [widthSlots] = useState<number[]>([2.0, 3.2, 5.2]);
+  const [widthSlots, setWidthSlots] = useState<number[]>([2.0, 3.5, 6.5]);
+  const [activeWidthSlotIdx, setActiveWidthSlotIdx] = useState<number>(1);
+  const [showWidthPopover, setShowWidthPopover] = useState<boolean>(false);
   const [lineStyle, setLineStyle] = useState<LineStyleType>('solid');
   const [arrowEnd, setArrowEnd] = useState<boolean>(false);
   const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(true);
@@ -183,6 +202,21 @@ export default function App() {
   const snappedCurrentStrokeRef = useRef<{ points: BezierPoint[]; shapeType: string } | null>(null);
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
   const isDraggingSelectionRef = useRef<{ startX: number; startY: number } | null>(null);
+  const selectionTransformRef = useRef<{
+    mode: 'move' | 'scale' | 'rotate';
+    startX: number;
+    startY: number;
+    centerX: number;
+    centerY: number;
+    anchorX: number;
+    anchorY: number;
+    initialDist: number;
+    initialAngle: number;
+  } | null>(null);
+  const internalClipboardRef = useRef<{
+    strokes: StrokeObject[];
+    image?: ImageObject;
+  } | null>(null);
   const imageElementsCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const fileInputGoodnotesRef = useRef<HTMLInputElement | null>(null);
   const fileInputImageRef = useRef<HTMLInputElement | null>(null);
@@ -190,6 +224,8 @@ export default function App() {
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId) || notebooks[0];
   const activePage =
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
+  const pageWidth = activePage.orientation === 'landscape' ? 1260 : 920;
+  const pageHeight = activePage.orientation === 'landscape' ? 920 : 1260;
 
   const showToast = useCallback((msg: string) => {
     setStatusBanner(msg);
@@ -309,6 +345,48 @@ export default function App() {
     return { minX, minY, maxX, maxY };
   };
 
+  const getSelectionBounds = useCallback(() => {
+    if (selectedImageId) {
+      const im = activePage.images?.find((i) => i.id === selectedImageId);
+      if (im) {
+        return {
+          minX: im.x,
+          minY: im.y,
+          maxX: im.x + im.width,
+          maxY: im.y + im.height,
+          cx: im.x + im.width / 2,
+          cy: im.y + im.height / 2,
+        };
+      }
+    }
+    if (selectedStrokeIds.length > 0) {
+      const sel = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+      if (sel.length > 0) {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (const s of sel) {
+          for (const p of s.points) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+        return {
+          minX,
+          minY,
+          maxX,
+          maxY,
+          cx: (minX + maxX) / 2,
+          cy: (minY + maxY) / 2,
+        };
+      }
+    }
+    return null;
+  }, [selectedImageId, selectedStrokeIds, activePage.images, activePage.strokes]);
+
   const drawStrokeOnContext = (ctx: CanvasRenderingContext2D, s: StrokeObject, isSelected = false) => {
     if (s.points.length === 0) return;
     ctx.save();
@@ -335,13 +413,32 @@ export default function App() {
     }
 
     ctx.beginPath();
-    ctx.moveTo(s.points[0].x, s.points[0].y);
-    for (let i = 1; i < s.points.length; i++) {
-      const pt = s.points[i];
-      if (pt.cx !== undefined && pt.cy !== undefined) {
-        ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
-      } else {
-        ctx.lineTo(pt.x, pt.y);
+    // 4-Node Circle / Ellipse (strictly 4 cardinal points every 90°: Top, Right, Bottom, Left)
+    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
+      const pts = s.points;
+      const kappa = 0.55228475;
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 0; i < 4; i++) {
+        const pA = pts[i];
+        const pB = pts[(i + 1) % 4];
+        const pPrev = pts[(i + 3) % 4];
+        const pNext = pts[(i + 2) % 4];
+        const cp1x = pA.x + ((pB.x - pPrev.x) / 2) * kappa;
+        const cp1y = pA.y + ((pB.y - pPrev.y) / 2) * kappa;
+        const cp2x = pB.x - ((pNext.x - pA.x) / 2) * kappa;
+        const cp2y = pB.y - ((pNext.y - pA.y) / 2) * kappa;
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pB.x, pB.y);
+      }
+      ctx.closePath();
+    } else {
+      ctx.moveTo(s.points[0].x, s.points[0].y);
+      for (let i = 1; i < s.points.length; i++) {
+        const pt = s.points[i];
+        if (pt.cx !== undefined && pt.cy !== undefined) {
+          ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
+        } else {
+          ctx.lineTo(pt.x, pt.y);
+        }
       }
     }
 
@@ -386,10 +483,10 @@ export default function App() {
 
     if (isSelected) {
       const b = getStrokeBounds(s);
-      ctx.strokeStyle = '#0284c7';
-      ctx.lineWidth = 1.3;
-      ctx.setLineDash([4, 4]);
-      ctx.strokeRect(b.minX - 4, b.minY - 4, b.maxX - b.minX + 8, b.maxY - b.minY + 8);
+      ctx.strokeStyle = 'rgba(2, 132, 199, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(b.minX - 2, b.minY - 2, b.maxX - b.minX + 4, b.maxY - b.minY + 4);
     }
 
     ctx.restore();
@@ -468,7 +565,7 @@ export default function App() {
 
     const visibleLayerMap = new Map(activePage.layers.map((l) => [l.id, l]));
 
-    // 1. Images with Alpha Masking
+    // 1. Images with Alpha Masking & Rotation
     for (const imgObj of activePage.images || []) {
       const layer = visibleLayerMap.get(imgObj.layerId);
       if (layer && !layer.visible) continue;
@@ -484,6 +581,13 @@ export default function App() {
       if (imgEl.complete && imgEl.naturalWidth > 0) {
         ctx.save();
         ctx.globalAlpha = layer?.opacity ?? 1;
+        if (imgObj.rotation) {
+          const icx = imgObj.x + imgObj.width / 2;
+          const icy = imgObj.y + imgObj.height / 2;
+          ctx.translate(icx, icy);
+          ctx.rotate((imgObj.rotation * Math.PI) / 180);
+          ctx.translate(-icx, -icy);
+        }
         if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
           ctx.beginPath();
           ctx.moveTo(imgObj.x + imgObj.clipPolygon[0].x, imgObj.y + imgObj.clipPolygon[0].y);
@@ -495,15 +599,6 @@ export default function App() {
         }
         ctx.drawImage(imgEl, imgObj.x, imgObj.y, imgObj.width, imgObj.height);
         ctx.restore();
-
-        if (selectedImageId === imgObj.id) {
-          ctx.save();
-          ctx.strokeStyle = '#0284c7';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([6, 4]);
-          ctx.strokeRect(imgObj.x - 2, imgObj.y - 2, imgObj.width + 4, imgObj.height + 4);
-          ctx.restore();
-        }
       }
     }
 
@@ -523,14 +618,71 @@ export default function App() {
       drawStrokeOnContext(ctx, s, selectedStrokeIds.includes(s.id));
     }
 
-    // 4. Direct Node Handles ("Λευκό Βελάκι")
+    // 4. Goodnotes Select / Lasso Transform Bounding Box (Proportional Corner Resize + 360° Top Rotate Handle)
+    const selBounds = getSelectionBounds();
+    if (selBounds && activeTool !== 'direct-node') {
+      const pad = 8;
+      const bx1 = selBounds.minX - pad;
+      const by1 = selBounds.minY - pad;
+      const bx2 = selBounds.maxX + pad;
+      const by2 = selBounds.maxY + pad;
+      const bcx = selBounds.cx;
+      const rotHandleY = by1 - 30;
+
+      ctx.save();
+      ctx.strokeStyle = '#0066ff';
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(bx1, by1, bx2 - bx1, by2 - by1);
+
+      // Rotation stem + Top Rotate Handle (↻)
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(bcx, by1);
+      ctx.lineTo(bcx, rotHandleY);
+      ctx.stroke();
+
+      ctx.fillStyle = '#10b981';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(bcx, rotHandleY, 8.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 4 Corner Proportional Resize Handles (NW, NE, SE, SW)
+      const corners = [
+        { x: bx1, y: by1 },
+        { x: bx2, y: by1 },
+        { x: bx2, y: by2 },
+        { x: bx1, y: by2 },
+      ];
+      for (const c of corners) {
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#0066ff';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 5. Direct Node Handles ("Λευκό Βελάκι" - strictly 4 nodes at 90° for circles/ellipses!)
     if (activeTool === 'direct-node' && activeNodeStrokeId) {
       const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
       if (target) {
         ctx.save();
-        for (let i = 0; i < target.points.length; i++) {
+        const isClosedPoly =
+          target.shapeType === 'rectangle' ||
+          target.shapeType === 'parallelogram' ||
+          target.shapeType === 'triangle';
+        const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
+
+        for (let i = 0; i < nodeCount; i++) {
           const p = target.points[i];
-          if (p.cx !== undefined && p.cy !== undefined) {
+          if (!target.isShape && p.cx !== undefined && p.cy !== undefined) {
             ctx.strokeStyle = '#ec4899';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -545,15 +697,15 @@ export default function App() {
           }
           ctx.fillStyle = '#ffffff';
           ctx.strokeStyle = '#2563eb';
-          ctx.lineWidth = 2;
-          ctx.fillRect(p.x - 5, p.y - 5, 10, 10);
-          ctx.strokeRect(p.x - 5, p.y - 5, 10, 10);
+          ctx.lineWidth = 2.2;
+          ctx.fillRect(p.x - 6, p.y - 6, 12, 12);
+          ctx.strokeRect(p.x - 6, p.y - 6, 12, 12);
         }
         ctx.restore();
       }
     }
 
-    // 5. Tape Strips
+    // 6. Tape Strips
     for (const tape of activePage.tapes || []) {
       ctx.save();
       ctx.strokeStyle = tape.color || '#f59e0b';
@@ -566,7 +718,7 @@ export default function App() {
       ctx.stroke();
       ctx.restore();
     }
-  }, [activePage, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId]);
+  }, [activePage, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, getSelectionBounds]);
 
   useEffect(() => {
     renderStaticScene();
@@ -596,14 +748,363 @@ export default function App() {
     []
   );
 
-  // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 2-FINGER TAP UNDO / 3-FINGER TAP REDO (Native non-passive listeners)
+  const insertNewPageRelative = useCallback(
+    (where: 'before' | 'after') => {
+      const newPage: NotePage = {
+        id: `page-${Date.now()}`,
+        title: `Σελίδα ${activeNotebook.pages.length + 1}`,
+        template: activePage.template,
+        orientation: activePage.orientation || 'portrait',
+        layers: [
+          { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
+          { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
+        ],
+        strokes: [],
+        texts: [],
+        images: [],
+        tapes: [],
+      };
+      const insertIdx = where === 'before' ? activePageIndex : activePageIndex + 1;
+      setNotebooks((prev) =>
+        prev.map((nb) => {
+          if (nb.id !== activeNotebook.id) return nb;
+          const nextPages = [...nb.pages];
+          nextPages.splice(insertIdx, 0, newPage);
+          return { ...nb, updatedAt: new Date().toISOString(), pages: nextPages };
+        })
+      );
+      setActivePageIndex(insertIdx);
+      applyPaperTransformDirect(zoomRef.current, 0, 0, true);
+      showToast(
+        where === 'before'
+          ? '📄 Προστέθηκε Νέα Σελίδα στην επάνω πλευρά!'
+          : '📄 Προστέθηκε Νέα Σελίδα παρακάτω!'
+      );
+    },
+    [activeNotebook.id, activeNotebook.pages.length, activePage.orientation, activePage.template, activePageIndex, applyPaperTransformDirect, showToast]
+  );
+
+  const stopPullToAddPageHold = useCallback(() => {
+    if (pullHoldIntervalRef.current) {
+      window.clearInterval(pullHoldIntervalRef.current);
+      pullHoldIntervalRef.current = null;
+    }
+    pullSideActiveRef.current = null;
+    setPullAddPageState(null);
+  }, []);
+
+  const checkPullToAddPageHold = useCallback(
+    (nextPanY: number) => {
+      const wsHeight = workspaceRef.current?.clientHeight || 820;
+      const scaledPageHeight = pageHeight * zoomRef.current;
+      const minPanY = Math.min(0, wsHeight - scaledPageHeight - 36);
+      const pullThreshold = 68;
+
+      let targetSide: 'top' | 'bottom' | null = null;
+      if (nextPanY > pullThreshold) {
+        targetSide = 'top';
+      } else if (nextPanY < minPanY - pullThreshold) {
+        targetSide = 'bottom';
+      }
+
+      if (!targetSide) {
+        if (pullSideActiveRef.current) {
+          stopPullToAddPageHold();
+        }
+        return;
+      }
+
+      if (pullSideActiveRef.current === targetSide) return;
+
+      if (pullHoldIntervalRef.current) {
+        window.clearInterval(pullHoldIntervalRef.current);
+      }
+      pullSideActiveRef.current = targetSide;
+      const holdStart = performance.now();
+      const holdDurationMs = 1250; // 1.25s hold adds the new page!
+      setPullAddPageState({ side: targetSide, progress: 8 });
+
+      pullHoldIntervalRef.current = window.setInterval(() => {
+        const elapsed = performance.now() - holdStart;
+        const pct = Math.min(100, Math.round((elapsed / holdDurationMs) * 100));
+        setPullAddPageState({ side: targetSide!, progress: pct });
+        if (pct >= 100) {
+          stopPullToAddPageHold();
+          insertNewPageRelative(targetSide === 'top' ? 'before' : 'after');
+        }
+      }, 60);
+    },
+    [pageHeight, stopPullToAddPageHold, insertNewPageRelative]
+  );
+
+  // Rotate Page 90° Left or Right (rotates page orientation + all strokes, images, texts, tapes)
+  const handleRotatePage = useCallback(
+    (direction: 'left' | 'right') => {
+      const oldW = activePage.orientation === 'landscape' ? 1260 : 920;
+      const oldH = activePage.orientation === 'landscape' ? 920 : 1260;
+      const nextOrientation: 'portrait' | 'landscape' =
+        activePage.orientation === 'landscape' ? 'portrait' : 'landscape';
+
+      const mapPt = (x: number, y: number) =>
+        direction === 'right' ? { x: oldH - y, y: x } : { x: y, y: oldW - x };
+
+      updateActivePage((page) => ({
+        ...page,
+        orientation: nextOrientation,
+        rotation: (((page.rotation || 0) + (direction === 'right' ? 90 : 270)) % 360),
+        strokes: page.strokes.map((s) => ({
+          ...s,
+          points: s.points.map((p) => {
+            const np = mapPt(p.x, p.y);
+            const nc = p.cx !== undefined && p.cy !== undefined ? mapPt(p.cx, p.cy) : null;
+            return {
+              ...p,
+              x: np.x,
+              y: np.y,
+              cx: nc ? nc.x : undefined,
+              cy: nc ? nc.y : undefined,
+            };
+          }),
+        })),
+        images: (page.images || []).map((im) => {
+          const center = mapPt(im.x + im.width / 2, im.y + im.height / 2);
+          return {
+            ...im,
+            x: center.x - im.height / 2,
+            y: center.y - im.width / 2,
+            width: im.height,
+            height: im.width,
+            clipPolygon: im.clipPolygon?.map((cp) =>
+              direction === 'right' ? { x: im.height - cp.y, y: cp.x } : { x: cp.y, y: im.width - cp.x }
+            ),
+          };
+        }),
+        texts: (page.texts || []).map((t) => {
+          const nt = mapPt(t.x, t.y);
+          return { ...t, x: nt.x, y: nt.y };
+        }),
+        tapes: (page.tapes || []).map((tp) => {
+          const p1 = mapPt(tp.x1, tp.y1);
+          const p2 = mapPt(tp.x2, tp.y2);
+          return { ...tp, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+        }),
+      }));
+
+      applyPaperTransformDirect(zoomRef.current, 0, 0, true);
+      showToast(
+        direction === 'right'
+          ? `↻ Περιστροφή σελίδας +90° (${nextOrientation === 'landscape' ? 'Landscape' : 'Portrait'})`
+          : `↺ Περιστροφή σελίδας -90° (${nextOrientation === 'landscape' ? 'Landscape' : 'Portrait'})`
+      );
+    },
+    [activePage.orientation, updateActivePage, applyPaperTransformDirect, showToast]
+  );
+
+  // CUT / COPY / PASTE (Supports internal strokes/images AND external photos/screenshots from iPad Clipboard!)
+  const handleCopySelected = useCallback(() => {
+    const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+    if (selStrokes.length === 0 && !selImg) {
+      showToast('ℹ️ Επίλεξε πρώτα σχήμα ή εικόνα με το Lasso για Copy!');
+      return;
+    }
+    internalClipboardRef.current = {
+      strokes: structuredClone(selStrokes),
+      image: selImg ? structuredClone(selImg) : undefined,
+    };
+    showToast('📋 Αντιγράφηκε (Copy) στο πρόχειρο!');
+  }, [activePage.strokes, activePage.images, selectedStrokeIds, selectedImageId, showToast]);
+
+  const handleCutSelected = useCallback(() => {
+    const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+    if (selStrokes.length === 0 && !selImg) {
+      showToast('ℹ️ Επίλεξε πρώτα σχήμα ή εικόνα με το Lasso για Cut!');
+      return;
+    }
+    internalClipboardRef.current = {
+      strokes: structuredClone(selStrokes),
+      image: selImg ? structuredClone(selImg) : undefined,
+    };
+    updateActivePage((page) => ({
+      ...page,
+      strokes: page.strokes.filter((s) => !selectedStrokeIds.includes(s.id)),
+      images: (page.images || []).filter((im) => im.id !== selectedImageId),
+    }));
+    setSelectedStrokeIds([]);
+    setSelectedImageId(null);
+    showToast('✂️ Αποκόπηκε (Cut) στο πρόχειρο!');
+  }, [activePage.strokes, activePage.images, selectedStrokeIds, selectedImageId, updateActivePage, showToast]);
+
+  const insertImageDataUrlOnPage = useCallback(
+    (dataUrl: string) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 380;
+        const ratio = img.naturalHeight / Math.max(1, img.naturalWidth);
+        const w = Math.min(maxW, Math.max(140, img.naturalWidth));
+        const h = Math.round(w * ratio);
+        const newImg: ImageObject = {
+          id: `img-${Date.now()}`,
+          x: 160,
+          y: 180,
+          width: w,
+          height: h,
+          dataUrl,
+          originalDataUrl: dataUrl,
+          layerId: activeLayerId,
+        };
+        updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
+        setSelectedImageId(newImg.id);
+        setSelectedStrokeIds([]);
+        setActiveTool('lasso');
+        showToast('📥 Επικολλήθηκε εικόνα από το πρόχειρο!');
+      };
+      img.src = dataUrl;
+    },
+    [activeLayerId, updateActivePage, showToast]
+  );
+
+  const handlePaste = useCallback(async () => {
+    // 1. Try reading external image/photo from System Clipboard (e.g. copied from Safari/Photos on iPad)
+    try {
+      if (navigator.clipboard && 'read' in navigator.clipboard) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imgType = item.types.find((t) => t.startsWith('image/'));
+          if (imgType) {
+            const blob = await item.getType(imgType);
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') {
+                insertImageDataUrlOnPage(reader.result);
+              }
+            };
+            reader.readAsDataURL(blob);
+            return;
+          }
+        }
+      }
+    } catch {
+      // Fall back to internal clipboard if system clipboard permission is declined or empty
+    }
+
+    // 2. Paste from Internal BestNotes Clipboard (strokes or image)
+    if (internalClipboardRef.current) {
+      const { strokes: copiedStrokes, image: copiedImg } = internalClipboardRef.current;
+      if (copiedImg) {
+        const newImg: ImageObject = {
+          ...structuredClone(copiedImg),
+          id: `img-${Date.now()}`,
+          x: copiedImg.x + 28,
+          y: copiedImg.y + 28,
+        };
+        updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
+        setSelectedImageId(newImg.id);
+        setSelectedStrokeIds([]);
+        setActiveTool('lasso');
+        showToast('📥 Επικόλληση εικόνας (Paste)!');
+        return;
+      }
+      if (copiedStrokes.length > 0) {
+        const newGroupId = copiedStrokes.some((s) => s.groupId) ? `grp-${Date.now()}` : undefined;
+        const pasted = copiedStrokes.map((s) => ({
+          ...structuredClone(s),
+          id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          groupId: s.groupId ? newGroupId : undefined,
+          points: s.points.map((p) => ({
+            ...p,
+            x: p.x + 26,
+            y: p.y + 26,
+            cx: p.cx !== undefined ? p.cx + 26 : undefined,
+            cy: p.cy !== undefined ? p.cy + 26 : undefined,
+          })),
+        }));
+        updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...pasted] }));
+        setSelectedStrokeIds(pasted.map((s) => s.id));
+        setSelectedImageId(null);
+        setActiveTool('lasso');
+        showToast(`📥 Επικόλληση (${pasted.length} αντικείμενα)!`);
+        return;
+      }
+    }
+
+    // 3. Try reading text from System Clipboard
+    try {
+      if (navigator.clipboard && 'readText' in navigator.clipboard) {
+        const txt = await navigator.clipboard.readText();
+        if (txt && txt.trim()) {
+          const newTxt: TextObject = {
+            id: `txt-${Date.now()}`,
+            x: 160,
+            y: 200,
+            text: txt.trim(),
+            color: strokeColor,
+            fontSize: 18,
+            layerId: activeLayerId,
+          };
+          updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+          showToast('📥 Επικόλληση κειμένου από το πρόχειρο!');
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    showToast('ℹ️ Το πρόχειρο είναι κενό (Κάνε Copy μια φωτό εκτός app ή επίλεξε σχήμα με Lasso)!');
+  }, [insertImageDataUrlOnPage, updateActivePage, strokeColor, activeLayerId, showToast]);
+
+  // Global Paste event listener (handles Cmd+V / iPad 3-finger Paste of external photos & screenshots)
+  useEffect(() => {
+    const onWindowPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') {
+                insertImageDataUrlOnPage(reader.result);
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+          return;
+        }
+      }
+    };
+    window.addEventListener('paste', onWindowPaste);
+    return () => window.removeEventListener('paste', onWindowPaste);
+  }, [insertImageDataUrlOnPage]);
+
+  // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 1-FINGER OUTSIDE-PAGE SCROLL + PULL-TO-ADD-PAGE
   useEffect(() => {
     const ws = workspaceRef.current;
     if (!ws || viewMode !== 'editor') return;
 
     const onTouchStart = (e: TouchEvent) => {
+      // Case A: 1 finger touching OUTSIDE the paper canvas (on the gray margin) -> Scroll page up/down!
+      if (e.touches.length === 1 && e.target !== activeCanvasRef.current) {
+        const t = e.touches[0];
+        outsidePanDragRef.current = {
+          active: true,
+          startClientX: t.clientX,
+          startClientY: t.clientY,
+          initialPanX: panRef.current.x,
+          initialPanY: panRef.current.y,
+        };
+        return;
+      }
+
+      // Case B: 2+ fingers anywhere -> Pinch-to-Zoom & 2-Finger Pan + Pull-to-Add-Page
       if (e.touches.length >= 2) {
         e.preventDefault();
+        outsidePanDragRef.current = null;
 
         // Immediately cancel any accidental 1-finger ink dot that started milliseconds before the 2nd finger landed
         if (holdTimerRef.current) {
@@ -616,6 +1117,7 @@ export default function App() {
           snappedCurrentStrokeRef.current = null;
           lassoPolygonRef.current = [];
           isDraggingSelectionRef.current = null;
+          selectionTransformRef.current = null;
           const c = activeCanvasRef.current;
           const ctx = activeCtxRef.current;
           if (c && ctx) ctx.clearRect(0, 0, c.width, c.height);
@@ -649,6 +1151,20 @@ export default function App() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      // Case A: 1-finger scroll outside the page
+      if (outsidePanDragRef.current?.active && e.touches.length === 1) {
+        e.preventDefault();
+        const t = e.touches[0];
+        const dy = t.clientY - outsidePanDragRef.current.startClientY;
+        const dx = t.clientX - outsidePanDragRef.current.startClientX;
+        const nextPanX = outsidePanDragRef.current.initialPanX + dx;
+        const nextPanY = outsidePanDragRef.current.initialPanY + dy;
+        applyPaperTransformDirect(zoomRef.current, nextPanX, nextPanY, false);
+        checkPullToAddPageHold(nextPanY);
+        return;
+      }
+
+      // Case B: 2-finger pinch & pan
       if (!pinchStateRef.current?.active) return;
       if (e.touches.length >= 2) {
         e.preventDefault();
@@ -669,10 +1185,19 @@ export default function App() {
         const newPanY = st.initialPanY + (currMidY - st.startMidY) - st.paperOffsetY * (newZoom - st.initialZoom);
 
         applyPaperTransformDirect(newZoom, newPanX, newPanY, false);
+        checkPullToAddPageHold(newPanY);
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        stopPullToAddPageHold();
+      }
+      if (outsidePanDragRef.current?.active && e.touches.length === 0) {
+        outsidePanDragRef.current = null;
+        setPan({ ...panRef.current });
+        return;
+      }
       if (!pinchStateRef.current?.active) return;
       if (e.touches.length === 0) {
         const st = pinchStateRef.current;
@@ -709,12 +1234,8 @@ export default function App() {
         const newPanY = panRef.current.y - offsetY * (newZoom - oldZoom);
         applyPaperTransformDirect(newZoom, newPanX, newPanY, true);
       } else {
-        applyPaperTransformDirect(
-          zoomRef.current,
-          panRef.current.x - e.deltaX,
-          panRef.current.y - e.deltaY,
-          false
-        );
+        const nextPanY = panRef.current.y - e.deltaY;
+        applyPaperTransformDirect(zoomRef.current, panRef.current.x - e.deltaX, nextPanY, false);
       }
     };
 
@@ -731,7 +1252,7 @@ export default function App() {
       ws.removeEventListener('touchcancel', onTouchEnd);
       ws.removeEventListener('wheel', onWheel);
     };
-  }, [viewMode, applyPaperTransformDirect, handleUndo, handleRedo, showToast]);
+  }, [viewMode, applyPaperTransformDirect, checkPullToAddPageHold, stopPullToAddPageHold, handleUndo, handleRedo, showToast]);
 
   const clearActiveOverlay = () => {
     const c = activeCanvasRef.current;
@@ -764,6 +1285,8 @@ export default function App() {
       arrowEnd: arrowEnd || shapePreset === 'arrow',
       points: pts,
       layerId: activeLayerId,
+      isShape: Boolean(snappedCurrentStrokeRef.current),
+      shapeType: snappedCurrentStrokeRef.current?.shapeType,
     };
     drawStrokeOnContext(ctx, previewStroke);
   };
@@ -888,19 +1411,25 @@ export default function App() {
       return;
     }
 
-    // 3. Direct Node Editing ("Λευκό Βελάκι")
+    // 3. Direct Node Editing ("Λευκό Βελάκι" - strictly 4 nodes at 90° for circles/ellipses!)
     if (activeTool === 'direct-node') {
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target) {
-          for (let i = 0; i < target.points.length; i++) {
+          const isClosedPoly =
+            target.shapeType === 'rectangle' ||
+            target.shapeType === 'parallelogram' ||
+            target.shapeType === 'triangle';
+          const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
+
+          for (let i = 0; i < nodeCount; i++) {
             const p = target.points[i];
-            if (distance(pt, p) < 14) {
+            if (distance(pt, p) < 16) {
               setDraggingNodeIdx({ index: i, isControl: false });
               isDrawingRef.current = true;
               return;
             }
-            if (p.cx !== undefined && p.cy !== undefined && distance(pt, { x: p.cx, y: p.cy }) < 14) {
+            if (!target.isShape && p.cx !== undefined && p.cy !== undefined && distance(pt, { x: p.cx, y: p.cy }) < 15) {
               setDraggingNodeIdx({ index: i, isControl: true });
               isDrawingRef.current = true;
               return;
@@ -908,48 +1437,160 @@ export default function App() {
           }
         }
       }
-      const hit = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 16));
-      setActiveNodeStrokeId(hit ? hit.id : null);
+      const hit = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 18));
+      if (hit) {
+        // If an older ellipse/circle had >4 points, normalize it to 4 cardinal 90° points immediately!
+        if ((hit.shapeType === 'ellipse' || hit.shapeType === 'circle') && hit.points.length > 4) {
+          const b = getStrokeBounds(hit);
+          const cx = (b.minX + b.maxX) / 2;
+          const cy = (b.minY + b.maxY) / 2;
+          const rx = Math.max(12, (b.maxX - b.minX) / 2);
+          const ry = Math.max(12, (b.maxY - b.minY) / 2);
+          const fourPts: BezierPoint[] = [
+            { x: cx, y: cy - ry, pressure: 0.7 },
+            { x: cx + rx, y: cy, pressure: 0.7 },
+            { x: cx, y: cy + ry, pressure: 0.7 },
+            { x: cx - rx, y: cy, pressure: 0.7 },
+          ];
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.map((s) => (s.id === hit.id ? { ...s, points: fourPts } : s)),
+            }),
+            false
+          );
+        }
+        setActiveNodeStrokeId(hit.id);
+        setSelectedStrokeIds([hit.id]);
+      } else {
+        setActiveNodeStrokeId(null);
+      }
       return;
     }
 
-    // 4. Lasso Tool
+    // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle)
     if (activeTool === 'lasso') {
-      const hitImg = (activePage.images || []).find(
-        (im) => pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height
-      );
-      if (hitImg) {
-        setSelectedImageId(hitImg.id);
-        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
-        isDrawingRef.current = true;
-        return;
-      }
-      setSelectedImageId(null);
+      const selBounds = getSelectionBounds();
+      if (selBounds) {
+        const pad = 8;
+        const bx1 = selBounds.minX - pad;
+        const by1 = selBounds.minY - pad;
+        const bx2 = selBounds.maxX + pad;
+        const by2 = selBounds.maxY + pad;
+        const bcx = selBounds.cx;
+        const bcy = selBounds.cy;
+        const rotHandle = { x: bcx, y: by1 - 30 };
 
-      if (selectedStrokeIds.length > 0) {
-        const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
-        const inBounds = selStrokes.some((s) => {
-          const b = getStrokeBounds(s);
-          return pt.x >= b.minX - 15 && pt.x <= b.maxX + 15 && pt.y >= b.minY - 15 && pt.y <= b.maxY + 15;
-        });
-        if (inBounds) {
+        // A. Check Top Rotation Handle (↻)
+        if (distance(pt, rotHandle) < 18) {
+          selectionTransformRef.current = {
+            mode: 'rotate',
+            startX: pt.x,
+            startY: pt.y,
+            centerX: bcx,
+            centerY: bcy,
+            anchorX: bcx,
+            anchorY: bcy,
+            initialDist: Math.max(10, distance(pt, { x: bcx, y: bcy })),
+            initialAngle: Math.atan2(pt.y - bcy, pt.x - bcx),
+          };
+          isDrawingRef.current = true;
+          return;
+        }
+
+        // B. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW)
+        const corners = [
+          { x: bx1, y: by1, oppX: bx2, oppY: by2 },
+          { x: bx2, y: by1, oppX: bx1, oppY: by2 },
+          { x: bx2, y: by2, oppX: bx1, oppY: by1 },
+          { x: bx1, y: by2, oppX: bx2, oppY: by1 },
+        ];
+        for (const c of corners) {
+          if (distance(pt, c) < 18) {
+            selectionTransformRef.current = {
+              mode: 'scale',
+              startX: pt.x,
+              startY: pt.y,
+              centerX: bcx,
+              centerY: bcy,
+              anchorX: c.oppX,
+              anchorY: c.oppY,
+              initialDist: Math.max(12, distance(pt, { x: c.oppX, y: c.oppY })),
+              initialAngle: 0,
+            };
+            isDrawingRef.current = true;
+            return;
+          }
+        }
+
+        // C. Check inside selection bounding box -> Move
+        if (pt.x >= bx1 - 6 && pt.x <= bx2 + 6 && pt.y >= by1 - 6 && pt.y <= by2 + 6) {
+          selectionTransformRef.current = {
+            mode: 'move',
+            startX: pt.x,
+            startY: pt.y,
+            centerX: bcx,
+            centerY: bcy,
+            anchorX: bcx,
+            anchorY: bcy,
+            initialDist: 1,
+            initialAngle: 0,
+          };
           isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
           isDrawingRef.current = true;
           return;
         }
       }
 
-      const tappedStroke = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 14));
-      if (tappedStroke?.groupId) {
-        const groupMembers = activePage.strokes.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id);
-        setSelectedStrokeIds(groupMembers);
+      // Check if user tapped directly on an image
+      const hitImg = (activePage.images || []).find(
+        (im) => pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height
+      );
+      if (hitImg) {
+        setSelectedImageId(hitImg.id);
+        setSelectedStrokeIds([]);
+        selectionTransformRef.current = {
+          mode: 'move',
+          startX: pt.x,
+          startY: pt.y,
+          centerX: hitImg.x + hitImg.width / 2,
+          centerY: hitImg.y + hitImg.height / 2,
+          anchorX: hitImg.x,
+          anchorY: hitImg.y,
+          initialDist: 1,
+          initialAngle: 0,
+        };
         isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
         isDrawingRef.current = true;
-        showToast(`🔗 Επιλέχθηκε ολόκληρο το Group (${groupMembers.length} αντικείμενα)`);
+        return;
+      }
+      setSelectedImageId(null);
+
+      // Check if user tapped directly on a stroke or shape (selects it immediately with Transform handles!)
+      const tappedStroke = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 16));
+      if (tappedStroke) {
+        const members = tappedStroke.groupId
+          ? activePage.strokes.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
+          : [tappedStroke.id];
+        setSelectedStrokeIds(members);
+        selectionTransformRef.current = {
+          mode: 'move',
+          startX: pt.x,
+          startY: pt.y,
+          centerX: pt.x,
+          centerY: pt.y,
+          anchorX: pt.x,
+          anchorY: pt.y,
+          initialDist: 1,
+          initialAngle: 0,
+        };
+        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+        isDrawingRef.current = true;
         return;
       }
 
       setSelectedStrokeIds([]);
+      selectionTransformRef.current = null;
       lassoPolygonRef.current = [{ x: pt.x, y: pt.y }];
       isDrawingRef.current = true;
       return;
@@ -1046,7 +1687,7 @@ export default function App() {
       return;
     }
 
-    // 2. Direct Node Editing
+    // 2. Direct Node Editing (syncs closing point for polygons & keeps 4 nodes for ellipses!)
     if (activeTool === 'direct-node' && activeNodeStrokeId && draggingNodeIdx) {
       updateActivePage(
         (page) => ({
@@ -1069,6 +1710,17 @@ export default function App() {
               }
             }
             newPts[draggingNodeIdx.index] = targetPt;
+            const isClosedPoly =
+              s.shapeType === 'rectangle' ||
+              s.shapeType === 'parallelogram' ||
+              s.shapeType === 'triangle';
+            if (isClosedPoly && draggingNodeIdx.index === 0 && newPts.length > 1) {
+              newPts[newPts.length - 1] = {
+                ...newPts[newPts.length - 1],
+                x: latestPt.x,
+                y: latestPt.y,
+              };
+            }
             return { ...s, points: newPts };
           }),
         }),
@@ -1077,12 +1729,121 @@ export default function App() {
       return;
     }
 
-    // 3. Lasso Selection or Dragging
+    // 3. Lasso Selection or Transform (Move, 4-Corner Proportional Resize, 360° Rotate)
     if (activeTool === 'lasso') {
-      if (isDraggingSelectionRef.current) {
-        const dx = latestPt.x - isDraggingSelectionRef.current.startX;
-        const dy = latestPt.y - isDraggingSelectionRef.current.startY;
-        isDraggingSelectionRef.current = { startX: latestPt.x, startY: latestPt.y };
+      if (selectionTransformRef.current) {
+        const tf = selectionTransformRef.current;
+
+        // A. 360° Rotation around selection center
+        if (tf.mode === 'rotate') {
+          const currAngle = Math.atan2(latestPt.y - tf.centerY, latestPt.x - tf.centerX);
+          const dAngle = currAngle - tf.initialAngle;
+          tf.initialAngle = currAngle;
+          const cosA = Math.cos(dAngle);
+          const sinA = Math.sin(dAngle);
+
+          if (selectedImageId) {
+            const degDelta = (dAngle * 180) / Math.PI;
+            updateActivePage(
+              (page) => ({
+                ...page,
+                images: page.images.map((im) =>
+                  im.id === selectedImageId ? { ...im, rotation: ((im.rotation || 0) + degDelta) % 360 } : im
+                ),
+              }),
+              false
+            );
+            return;
+          }
+
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.map((s) => {
+                if (!selectedStrokeIds.includes(s.id)) return s;
+                return {
+                  ...s,
+                  points: s.points.map((p) => {
+                    const rx = p.x - tf.centerX;
+                    const ry = p.y - tf.centerY;
+                    const nextPt: BezierPoint = {
+                      ...p,
+                      x: tf.centerX + rx * cosA - ry * sinA,
+                      y: tf.centerY + rx * sinA + ry * cosA,
+                    };
+                    if (p.cx !== undefined && p.cy !== undefined) {
+                      const rcx = p.cx - tf.centerX;
+                      const rcy = p.cy - tf.centerY;
+                      nextPt.cx = tf.centerX + rcx * cosA - rcy * sinA;
+                      nextPt.cy = tf.centerY + rcx * sinA + rcy * cosA;
+                    }
+                    return nextPt;
+                  }),
+                };
+              }),
+            }),
+            false
+          );
+          return;
+        }
+
+        // B. Proportional Resize from 4 Corners
+        if (tf.mode === 'scale') {
+          const currDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
+          const scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
+          tf.initialDist = currDist;
+
+          if (selectedImageId) {
+            updateActivePage(
+              (page) => ({
+                ...page,
+                images: page.images.map((im) => {
+                  if (im.id !== selectedImageId) return im;
+                  const newW = Math.max(40, im.width * scaleFactor);
+                  const newH = Math.max(40, im.height * scaleFactor);
+                  return {
+                    ...im,
+                    width: newW,
+                    height: newH,
+                    clipPolygon: im.clipPolygon?.map((cp) => ({
+                      x: cp.x * scaleFactor,
+                      y: cp.y * scaleFactor,
+                    })),
+                  };
+                }),
+              }),
+              false
+            );
+            return;
+          }
+
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.map((s) => {
+                if (!selectedStrokeIds.includes(s.id)) return s;
+                return {
+                  ...s,
+                  points: s.points.map((p) => ({
+                    ...p,
+                    x: tf.anchorX + (p.x - tf.anchorX) * scaleFactor,
+                    y: tf.anchorY + (p.y - tf.anchorY) * scaleFactor,
+                    cx: p.cx !== undefined ? tf.anchorX + (p.cx - tf.anchorX) * scaleFactor : undefined,
+                    cy: p.cy !== undefined ? tf.anchorY + (p.cy - tf.anchorY) * scaleFactor : undefined,
+                  })),
+                };
+              }),
+            }),
+            false
+          );
+          return;
+        }
+
+        // C. Move selection
+        const dx = latestPt.x - tf.startX;
+        const dy = latestPt.y - tf.startY;
+        tf.startX = latestPt.x;
+        tf.startY = latestPt.y;
 
         if (selectedImageId) {
           updateActivePage(
@@ -1301,7 +2062,8 @@ export default function App() {
 
     // 2. Finish Lasso Selection
     if (activeTool === 'lasso') {
-      if (isDraggingSelectionRef.current) {
+      if (selectionTransformRef.current || isDraggingSelectionRef.current) {
+        selectionTransformRef.current = null;
         isDraggingSelectionRef.current = null;
         return;
       }
@@ -1668,6 +2430,24 @@ export default function App() {
             </button>
           </div>
 
+          {/* Rotate Page 90° Left / Right in Top Bar */}
+          <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
+            <button
+              onClick={() => handleRotatePage('left')}
+              className="p-1 text-slate-200 hover:text-white cursor-pointer"
+              title="Περιστροφή Σελίδας 90° Αριστερά (-90°)"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => handleRotatePage('right')}
+              className="p-1 text-slate-200 hover:text-white cursor-pointer"
+              title="Περιστροφή Σελίδας 90° Δεξιά (+90°)"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Page Indicator & Add Page */}
           <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
             <button
@@ -1688,25 +2468,7 @@ export default function App() {
               <ChevronRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => {
-                const newPage: NotePage = {
-                  id: `page-${Date.now()}`,
-                  title: `Σελίδα ${activeNotebook.pages.length + 1}`,
-                  template: activePage.template,
-                  layers: [
-                    { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
-                    { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
-                  ],
-                  strokes: [],
-                  texts: [],
-                  images: [],
-                  tapes: [],
-                };
-                setNotebooks((prev) =>
-                  prev.map((nb) => (nb.id === activeNotebook.id ? { ...nb, pages: [...nb.pages, newPage] } : nb))
-                );
-                setActivePageIndex(activeNotebook.pages.length);
-              }}
+              onClick={() => insertNewPageRelative('after')}
               className="ml-1 p-0.5 text-sky-300 hover:text-white cursor-pointer"
               title="Νέα Σελίδα"
             >
@@ -1735,7 +2497,7 @@ export default function App() {
           <button
             onClick={() => settingsDialogRef.current?.showModal()}
             className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
-            title="Ρυθμίσεις Χαρτιού & Apple Pencil"
+            title="Ρυθμίσεις Χαρτιού, Προσανατολισμού (Portrait/Landscape) & Apple Pencil"
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
@@ -1775,6 +2537,7 @@ export default function App() {
                           id: `p-${Date.now()}`,
                           title: 'Σελίδα 1',
                           template: 'grid',
+                          orientation: 'portrait',
                           layers: [
                             { id: 'layer-1', name: 'Σχήμα Άσκησης', visible: true, locked: false, opacity: 1 },
                             { id: 'layer-2', name: 'Πράξεις & Λύση', visible: true, locked: false, opacity: 1 },
@@ -1839,10 +2602,10 @@ export default function App() {
         <>
           {/* =========================================================================
               2. AUTHENTIC GOODNOTES 6 LIGHT TOOLBAR (#F4F5F7)
-                 Center: Clean Icon Strip | Right: 3 Stroke Widths + 3 Color Slots
+                 Center: Clean Icon Strip | Right: 3 Stroke Widths (12 Presets) + 3 Color Slots
              ========================================================================= */}
           <div className="flex items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto">
-            {/* Left Quick Status: Pencil Only Mode + Tidy Handwriting */}
+            {/* Left Quick Status: Pencil Only Mode + Tidy Handwriting + Paste */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setPencilOnlyMode(!pencilOnlyMode)}
@@ -1864,6 +2627,16 @@ export default function App() {
                 <Sparkles className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Στρώσιμο</span>
               </button>
+
+              {/* Quick Paste Button (for photos copied outside the app or internal objects) */}
+              <button
+                onClick={handlePaste}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white hover:bg-sky-50 text-[#0066ff] border border-sky-200 text-[11px] font-semibold transition cursor-pointer"
+                title="Επικόλληση (Paste) φωτογραφίας από το iPad Clipboard ή αντικειμένου"
+              >
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                <span>Paste</span>
+              </button>
             </div>
 
             {/* Center: Goodnotes 6 Iconic Pill Toolbar */}
@@ -1873,8 +2646,8 @@ export default function App() {
                 { id: 'eraser', title: 'Γόμα (Eraser)', icon: Eraser },
                 { id: 'highlighter', title: 'Μαρκαδόρος (Highlighter)', icon: Highlighter },
                 { id: 'shape', title: 'Σχήματα & Φυσική (Shapes)', icon: Shapes },
-                { id: 'lasso', title: 'Λάσο & Group (Lasso)', icon: Lasso },
-                { id: 'direct-node', title: 'Κόμβοι Bezier (Illustrator Nodes)', icon: MousePointer },
+                { id: 'lasso', title: 'Επιλογή / Μεγέθυνση / Περιστροφή (Select & Transform)', icon: Lasso },
+                { id: 'direct-node', title: 'Κόμβοι Bezier (4 Κόμβοι σε Κύκλο/Έλλειψη)', icon: MousePointer },
                 { id: 'tape', title: 'Ταινία Απόκρυψης (Tape)', icon: Bandage },
                 { id: 'laser', title: 'Laser Pointer', icon: Radio },
               ].map((tool) => {
@@ -1906,7 +2679,15 @@ export default function App() {
 
               <div className="h-5 w-px bg-slate-200 mx-0.5" />
 
-              {/* Image Tool, Ruler, Math/LaTeX & Layers */}
+              {/* Upload Photo from Device + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
+              <button
+                onClick={() => fileInputImageRef.current?.click()}
+                className="p-2 rounded-full text-sky-600 hover:bg-sky-50 transition cursor-pointer"
+                title="Εισαγωγή Φωτογραφίας από το iPad"
+              >
+                <Upload className="w-4 h-4" />
+              </button>
+
               <button
                 onClick={handleInsertSamplePhysicsImage}
                 className="p-2 rounded-full text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
@@ -1944,27 +2725,48 @@ export default function App() {
               </button>
             </div>
 
-            {/* Right: Authentic Goodnotes 6 Contextual 3 Stroke Slots + 3 Color Slots */}
+            {/* Right: Authentic Goodnotes 6 Contextual 3 Stroke Slots (with 12-Step Popover!) + 3 Color Slots */}
             <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow-xs border border-slate-200/90 relative">
-              {/* 3 Stroke Thickness Slots */}
+              {/* 3 Stroke Thickness Slots + 12-Preset Popover Trigger */}
               <div className="flex items-center gap-1">
-                {widthSlots.map((w) => (
-                  <button
-                    key={w}
-                    onClick={() => setStrokeWidth(w)}
-                    className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
-                      Math.abs(strokeWidth - w) < 0.3
-                        ? 'bg-sky-50 ring-2 ring-[#0066ff]'
-                        : 'hover:bg-slate-100'
-                    }`}
-                    title={`Πάχος ${w}px`}
-                  >
-                    <span
-                      className="rounded-full bg-slate-800"
-                      style={{ width: Math.min(15, w * 2.3), height: Math.min(15, w * 2.3) }}
-                    />
-                  </button>
-                ))}
+                {widthSlots.map((w, idx) => {
+                  const isSlotActive = Math.abs(strokeWidth - w) < 0.25 && activeWidthSlotIdx === idx;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setActiveWidthSlotIdx(idx);
+                        if (Math.abs(strokeWidth - w) < 0.25) {
+                          setShowWidthPopover((prev) => !prev);
+                          setShowColorPopover(false);
+                        } else {
+                          setStrokeWidth(w);
+                        }
+                      }}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
+                        isSlotActive || Math.abs(strokeWidth - w) < 0.25
+                          ? 'bg-sky-50 ring-2 ring-[#0066ff]'
+                          : 'hover:bg-slate-100'
+                      }`}
+                      title={`Πάχος ${w}px (Πάτα ξανά για 12 επιλογές πάχους)`}
+                    >
+                      <span
+                        className="rounded-full bg-slate-800"
+                        style={{ width: Math.min(18, Math.max(4, w * 1.9)), height: Math.min(18, Math.max(4, w * 1.9)) }}
+                      />
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => {
+                    setShowWidthPopover((prev) => !prev);
+                    setShowColorPopover(false);
+                  }}
+                  className="px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-sky-50 text-[10px] font-bold text-[#0066ff] cursor-pointer"
+                  title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
+                >
+                  {strokeWidth.toFixed(1)}px
+                </button>
               </div>
 
               <div className="h-5 w-px bg-slate-200" />
@@ -1982,13 +2784,87 @@ export default function App() {
                   />
                 ))}
                 <button
-                  onClick={() => setShowColorPopover(!showColorPopover)}
+                  onClick={() => {
+                    setShowColorPopover(!showColorPopover);
+                    setShowWidthPopover(false);
+                  }}
                   className="w-6 h-6 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
                   title="Όλα τα Χρώματα & Στυλ Γραμμής"
                 />
               </div>
             </div>
           </div>
+
+          {/* 12-Step Stroke Thickness Popover (for Pen, Pencil, Highlighter & Eraser) */}
+          {showWidthPopover && (
+            <div className="fixed right-20 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 flex flex-col gap-3 w-72">
+              <div className="flex items-center justify-between text-xs font-bold text-[#1b2a4a]">
+                <span>Πάχος Γραμμής (12 Επιλογές)</span>
+                <button onClick={() => setShowWidthPopover(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {THICKNESS_PRESETS.map((presetW) => {
+                  const isSelected = Math.abs(strokeWidth - presetW) < 0.2;
+                  return (
+                    <button
+                      key={presetW}
+                      onClick={() => {
+                        setStrokeWidth(presetW);
+                        setWidthSlots((prev) => {
+                          const next = [...prev];
+                          next[activeWidthSlotIdx] = presetW;
+                          return next;
+                        });
+                      }}
+                      className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl border text-[10px] font-semibold transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-sky-50 border-[#0066ff] text-[#0066ff]'
+                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="h-5 flex items-center justify-center">
+                        <span
+                          className="rounded-full bg-slate-800"
+                          style={{
+                            width: Math.min(20, Math.max(3, presetW * 1.3)),
+                            height: Math.min(20, Math.max(3, presetW * 1.3)),
+                          }}
+                        />
+                      </div>
+                      <span>{presetW}px</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="pt-1 border-t border-slate-100">
+                <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                  <span>Ακριβής Ρύθμιση:</span>
+                  <span className="font-bold text-[#0066ff]">{strokeWidth.toFixed(1)} px</span>
+                </div>
+                <input
+                  type="range"
+                  min={0.8}
+                  max={24}
+                  step={0.2}
+                  value={strokeWidth}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setStrokeWidth(val);
+                    setWidthSlots((prev) => {
+                      const next = [...prev];
+                      next[activeWidthSlotIdx] = val;
+                      return next;
+                    });
+                  }}
+                  className="w-full accent-[#0066ff]"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Color & Line Style Popover */}
           {showColorPopover && (
@@ -2039,10 +2915,14 @@ export default function App() {
             </div>
           )}
 
-          {/* Contextual Sub-Bar (Only appears when Shape, Lasso Selection, or Image is active) */}
-          {(activeTool === 'shape' || selectedStrokeIds.length > 0 || selectedImgObj || activeTool === 'eraser') &&
+          {/* Contextual Sub-Bar (Appears for Shape, Lasso Selection, Direct Node, or Eraser) */}
+          {(activeTool === 'shape' ||
+            activeTool === 'direct-node' ||
+            selectedStrokeIds.length > 0 ||
+            selectedImgObj ||
+            activeTool === 'eraser') &&
             showToolSubBar && (
-              <div className="flex items-center justify-center px-4 py-1 bg-white/90 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto">
+              <div className="flex items-center justify-center px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto">
                 {activeTool === 'shape' && (
                   <div className="flex items-center gap-1.5">
                     {[
@@ -2051,7 +2931,7 @@ export default function App() {
                       { id: 'arrow', label: '➔ Διάνυσμα' },
                       { id: 'rectangle', label: '▭ Ορθογώνιο' },
                       { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
-                      { id: 'ellipse', label: '◯ Έλλειψη' },
+                      { id: 'ellipse', label: '◯ Έλλειψη (4 Κόμβοι)' },
                       { id: 'triangle', label: '△ Τρίγωνο' },
                       { id: 'cylinder', label: '🥫 Αγωγός' },
                       { id: 'axes', label: '📈 Άξονες' },
@@ -2104,40 +2984,113 @@ export default function App() {
                   </div>
                 )}
 
-                {selectedStrokeIds.length > 0 && (
+                {(selectedStrokeIds.length > 0 || activeTool === 'direct-node') && (
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={handleGroupSelected}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold cursor-pointer"
+                      onClick={handleCutSelected}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold cursor-pointer"
+                      title="Αποκοπή (Cut)"
                     >
-                      <Group className="w-3.5 h-3.5" />
-                      <span>Group ({selectedStrokeIds.length})</span>
+                      <Scissors className="w-3.5 h-3.5" />
+                      <span>Cut</span>
                     </button>
                     <button
-                      onClick={handleUngroupSelected}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-slate-200 text-slate-700 font-medium cursor-pointer"
+                      onClick={handleCopySelected}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold cursor-pointer"
+                      title="Αντιγραφή (Copy)"
                     >
-                      <Ungroup className="w-3.5 h-3.5" />
-                      <span>Ungroup</span>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
                     </button>
                     <button
-                      onClick={() => {
-                        updateActivePage((page) => ({
-                          ...page,
-                          strokes: page.strokes.filter((s) => !selectedStrokeIds.includes(s.id)),
-                        }));
-                        setSelectedStrokeIds([]);
-                      }}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-rose-100 text-rose-700 font-medium cursor-pointer"
+                      onClick={handlePaste}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
+                      title="Επικόλληση (Paste)"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Διαγραφή</span>
+                      <ClipboardPaste className="w-3.5 h-3.5" />
+                      <span>Paste</span>
                     </button>
+
+                    {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (
+                      <button
+                        onClick={() => {
+                          setActiveNodeStrokeId(selectedStrokeIds[0]);
+                          setActiveTool('direct-node');
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 text-white font-semibold cursor-pointer"
+                        title="Επεξεργασία των 4 Κόμβων του σχήματος"
+                      >
+                        <MousePointer className="w-3.5 h-3.5" />
+                        <span>4 Κόμβοι</span>
+                      </button>
+                    )}
+
+                    {activeTool === 'direct-node' && activeNodeStrokeId && (
+                      <button
+                        onClick={() => {
+                          setSelectedStrokeIds([activeNodeStrokeId]);
+                          setActiveTool('lasso');
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0066ff] text-white font-semibold cursor-pointer"
+                        title="Επιστροφή σε Resize (Μεγέθυνση) & Περιστροφή"
+                      >
+                        <Lasso className="w-3.5 h-3.5" />
+                        <span>Resize & Περιστροφή</span>
+                      </button>
+                    )}
+
+                    {selectedStrokeIds.length >= 2 && (
+                      <button
+                        onClick={handleGroupSelected}
+                        className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold cursor-pointer"
+                      >
+                        <Group className="w-3.5 h-3.5" />
+                        <span>Group ({selectedStrokeIds.length})</span>
+                      </button>
+                    )}
+                    {selectedStrokeIds.length > 0 && (
+                      <button
+                        onClick={handleUngroupSelected}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 font-medium cursor-pointer"
+                      >
+                        <Ungroup className="w-3.5 h-3.5" />
+                        <span>Ungroup</span>
+                      </button>
+                    )}
+                    {selectedStrokeIds.length > 0 && (
+                      <button
+                        onClick={() => {
+                          updateActivePage((page) => ({
+                            ...page,
+                            strokes: page.strokes.filter((s) => !selectedStrokeIds.includes(s.id)),
+                          }));
+                          setSelectedStrokeIds([]);
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-medium cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Διαγραφή</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
                 {selectedImgObj && (
                   <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={handleCutSelected}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold cursor-pointer"
+                    >
+                      <Scissors className="w-3.5 h-3.5" />
+                      <span>Cut</span>
+                    </button>
+                    <button
+                      onClick={handleCopySelected}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
+                    </button>
                     <button
                       onClick={async () => {
                         const cleanUrl = await removeImageBackground(
@@ -2206,7 +3159,7 @@ export default function App() {
                           ...page,
                           images: page.images.map((im) =>
                             im.id === selectedImgObj.id
-                              ? { ...im, dataUrl: im.originalDataUrl || im.dataUrl, clipPolygon: undefined }
+                              ? { ...im, dataUrl: im.originalDataUrl || im.dataUrl, clipPolygon: undefined, rotation: 0 }
                               : im
                           ),
                         }));
@@ -2215,6 +3168,19 @@ export default function App() {
                       title="Επαναφορά εικόνας"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        updateActivePage((page) => ({
+                          ...page,
+                          images: page.images.filter((im) => im.id !== selectedImgObj.id),
+                        }));
+                        setSelectedImageId(null);
+                      }}
+                      className="p-1 rounded-full bg-rose-100 text-rose-700 cursor-pointer"
+                      title="Διαγραφή εικόνας"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
@@ -2226,7 +3192,7 @@ export default function App() {
              ========================================================================= */}
           <div
             ref={workspaceRef}
-            className="relative flex-1 overflow-hidden bg-[#dfe3ea] flex justify-center items-start py-4 px-2 touch-none"
+            className="relative flex-1 overflow-hidden bg-[#dfe3ea] flex justify-center items-start py-6 px-8 touch-none"
           >
             {statusBanner && (
               <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1b2a4a] text-white text-xs font-medium shadow-xl">
@@ -2322,33 +3288,75 @@ export default function App() {
             <div
               ref={paperTransformElRef}
               style={{
-                width: 920,
-                height: 1260,
+                width: pageWidth,
+                height: pageHeight,
                 transformOrigin: '0 0',
                 transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
                 willChange: 'transform',
               }}
               className="relative shadow-lg bg-white border border-slate-300/90 shrink-0"
             >
+              {/* GOODNOTES PULL-TO-ADD-PAGE PEEK ABOVE TOP EDGE */}
+              {pullAddPageState?.side === 'top' && (
+                <div
+                  style={{ width: pageWidth, height: 150, top: -168 }}
+                  className="absolute left-0 rounded-b-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-end pb-4 pointer-events-none"
+                >
+                  <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0066ff] text-white text-xs font-bold shadow">
+                    <Plus className="w-4 h-4" />
+                    <span>
+                      Κράτα για προσθήκη Νέας Σελίδας από πάνω ({pullAddPageState.progress}%)
+                    </span>
+                  </div>
+                  <div className="w-48 h-1.5 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-75"
+                      style={{ width: `${pullAddPageState.progress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Layer 1: Static Committed Scene Canvas */}
               <canvas
                 ref={staticCanvasRef}
-                width={920}
-                height={1260}
+                width={pageWidth}
+                height={pageHeight}
                 className="absolute inset-0 w-full h-full pointer-events-none"
               />
 
               {/* Layer 2: Desynchronized 0ms Hardware Wet-Ink Canvas */}
               <canvas
                 ref={activeCanvasRef}
-                width={920}
-                height={1260}
+                width={pageWidth}
+                height={pageHeight}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
                 className="absolute inset-0 w-full h-full cursor-crosshair touch-none"
               />
+
+              {/* GOODNOTES PULL-TO-ADD-PAGE PEEK BELOW BOTTOM EDGE */}
+              {pullAddPageState?.side === 'bottom' && (
+                <div
+                  style={{ width: pageWidth, height: 150, bottom: -168 }}
+                  className="absolute left-0 rounded-t-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-start pt-4 pointer-events-none"
+                >
+                  <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0066ff] text-white text-xs font-bold shadow">
+                    <Plus className="w-4 h-4" />
+                    <span>
+                      Κράτα για προσθήκη Νέας Σελίδας παρακάτω ({pullAddPageState.progress}%)
+                    </span>
+                  </div>
+                  <div className="w-48 h-1.5 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-75"
+                      style={{ width: `${pullAddPageState.progress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Rendered Text & LaTeX Blocks */}
               {(activePage.texts || []).map((txt) => (
@@ -2522,6 +3530,55 @@ export default function App() {
             >
               Κλείσιμο
             </button>
+          </div>
+
+          {/* Page Orientation: Portrait / Landscape + 90° Rotation */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1.5">
+              Προσανατολισμός & Περιστροφή Σελίδας:
+            </label>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <button
+                onClick={() =>
+                  updateActivePage((page) => ({ ...page, orientation: 'portrait' }))
+                }
+                className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
+                  (activePage.orientation || 'portrait') === 'portrait'
+                    ? 'bg-[#0066ff] border-[#0066ff] text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                📄 Κάθετη (Portrait)
+              </button>
+              <button
+                onClick={() =>
+                  updateActivePage((page) => ({ ...page, orientation: 'landscape' }))
+                }
+                className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
+                  activePage.orientation === 'landscape'
+                    ? 'bg-[#0066ff] border-[#0066ff] text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                🖼️ Οριζόντια (Landscape)
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleRotatePage('left')}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Περιστροφή -90° Αριστερά</span>
+              </button>
+              <button
+                onClick={() => handleRotatePage('right')}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Περιστροφή +90° Δεξιά</span>
+              </button>
+            </div>
           </div>
 
           <div>

@@ -268,13 +268,10 @@ export function recognizeAndSnapShape(
 export function makePolygonBezier(corners: { x: number; y: number }[]): BezierPoint[] {
   const pts: BezierPoint[] = [{ x: corners[0].x, y: corners[0].y, pressure: 0.7 }];
   for (let i = 1; i <= corners.length; i++) {
-    const prev = corners[i - 1];
     const curr = corners[i % corners.length];
     pts.push({
       x: curr.x,
       y: curr.y,
-      cx: (prev.x + curr.x) / 2,
-      cy: (prev.y + curr.y) / 2,
       pressure: 0.7,
     });
   }
@@ -282,27 +279,13 @@ export function makePolygonBezier(corners: { x: number; y: number }[]): BezierPo
 }
 
 export function makeEllipseBezier(cx: number, cy: number, rx: number, ry: number): BezierPoint[] {
-  const steps = 24;
-  const pts: BezierPoint[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const theta = (i / steps) * Math.PI * 2;
-    const x = cx + rx * Math.cos(theta);
-    const y = cy + ry * Math.sin(theta);
-    if (i === 0) {
-      pts.push({ x, y, pressure: 0.7 });
-    } else {
-      const prevTheta = ((i - 0.5) / steps) * Math.PI * 2;
-      const ctrlR = 1 / Math.cos(Math.PI / steps);
-      pts.push({
-        x,
-        y,
-        cx: cx + rx * ctrlR * Math.cos(prevTheta),
-        cy: cy + ry * ctrlR * Math.sin(prevTheta),
-        pressure: 0.7,
-      });
-    }
-  }
-  return pts;
+  // Strictly 4 cardinal nodes every 90 degrees (Top 270°, Right 0°, Bottom 90°, Left 180°)
+  return [
+    { x: cx, y: cy - ry, pressure: 0.7 },
+    { x: cx + rx, y: cy, pressure: 0.7 },
+    { x: cx, y: cy + ry, pressure: 0.7 },
+    { x: cx - rx, y: cy, pressure: 0.7 },
+  ];
 }
 
 function buildPresetShape(
