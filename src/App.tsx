@@ -366,6 +366,19 @@ export default function App() {
     updateActivePage(() => nextPage, false);
   }, [redoStack, activePage, updateActivePage, clonePageFast]);
 
+  const getNextPageZOrder = (page: NotePage): number => {
+    const imgCount = (page.images || []).length;
+    const strokeCount = (page.strokes || []).length;
+    let maxZ = imgCount + strokeCount;
+    for (const im of page.images || []) {
+      if (im.zOrder !== undefined && im.zOrder > maxZ) maxZ = im.zOrder;
+    }
+    for (const st of page.strokes || []) {
+      if (st.zOrder !== undefined && st.zOrder > maxZ) maxZ = st.zOrder;
+    }
+    return maxZ + 1;
+  };
+
   const getStrokeSamplePoints = (s: StrokeObject): { x: number; y: number }[] => {
     if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
       const pPeak = s.points[0];
@@ -814,57 +827,76 @@ export default function App() {
       const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
       const isCurrentActivePage = pageIdx === activePageIndex;
 
-      // 1. Images with Alpha Masking & Rotation
-      for (const imgObj of pageObj.images || []) {
-        const layer = visibleLayerMap.get(imgObj.layerId);
-        if (layer && !layer.visible) continue;
+      // 1-3. Unified Z-Order Rendering for BOTH Images and Strokes/Shapes!
+      // This allows any Shape/Group to be sent behind an Image (-1 / Send to Back) or brought in front of an Image (+1 / Bring to Front).
+      const imgList = pageObj.images || [];
+      const strokeList = pageObj.strokes || [];
+      type RenderEntry =
+        | { kind: 'image'; z: number; img: ImageObject }
+        | { kind: 'stroke'; z: number; stroke: StrokeObject };
+      const entries: RenderEntry[] = [];
 
-        let imgEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
-        if (!imgEl) {
-          imgEl = new Image();
-          imgEl.src = imgObj.dataUrl;
-          imgEl.onload = () => renderStaticScene();
-          imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
-        }
+      imgList.forEach((imgObj, idx) => {
+        entries.push({
+          kind: 'image',
+          z: imgObj.zOrder ?? idx + 1,
+          img: imgObj,
+        });
+      });
 
-        if (imgEl.complete && imgEl.naturalWidth > 0) {
-          ctx.save();
-          ctx.globalAlpha = layer?.opacity ?? 1;
-          if (imgObj.rotation) {
-            const icx = imgObj.x + imgObj.width / 2;
-            const icy = imgObj.y + imgObj.height / 2;
-            ctx.translate(icx, icy);
-            ctx.rotate((imgObj.rotation * Math.PI) / 180);
-            ctx.translate(-icx, -icy);
+      strokeList.forEach((s, idx) => {
+        const defaultZ = imgList.length + idx + 1 + (s.tool === 'highlighter' ? -0.25 : 0);
+        entries.push({
+          kind: 'stroke',
+          z: s.zOrder ?? defaultZ,
+          stroke: s,
+        });
+      });
+
+      entries.sort((a, b) => a.z - b.z);
+
+      for (const entry of entries) {
+        if (entry.kind === 'image') {
+          const imgObj = entry.img;
+          const layer = visibleLayerMap.get(imgObj.layerId);
+          if (layer && !layer.visible) continue;
+
+          let imgEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
+          if (!imgEl) {
+            imgEl = new Image();
+            imgEl.src = imgObj.dataUrl;
+            imgEl.onload = () => renderStaticScene();
+            imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
           }
-          if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
-            ctx.beginPath();
-            ctx.moveTo(imgObj.x + imgObj.clipPolygon[0].x, imgObj.y + imgObj.clipPolygon[0].y);
-            for (let i = 1; i < imgObj.clipPolygon.length; i++) {
-              ctx.lineTo(imgObj.x + imgObj.clipPolygon[i].x, imgObj.y + imgObj.clipPolygon[i].y);
+
+          if (imgEl.complete && imgEl.naturalWidth > 0) {
+            ctx.save();
+            ctx.globalAlpha = layer?.opacity ?? 1;
+            if (imgObj.rotation) {
+              const icx = imgObj.x + imgObj.width / 2;
+              const icy = imgObj.y + imgObj.height / 2;
+              ctx.translate(icx, icy);
+              ctx.rotate((imgObj.rotation * Math.PI) / 180);
+              ctx.translate(-icx, -icy);
             }
-            ctx.closePath();
-            ctx.clip();
+            if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
+              ctx.beginPath();
+              ctx.moveTo(imgObj.x + imgObj.clipPolygon[0].x, imgObj.y + imgObj.clipPolygon[0].y);
+              for (let i = 1; i < imgObj.clipPolygon.length; i++) {
+                ctx.lineTo(imgObj.x + imgObj.clipPolygon[i].x, imgObj.y + imgObj.clipPolygon[i].y);
+              }
+              ctx.closePath();
+              ctx.clip();
+            }
+            ctx.drawImage(imgEl, imgObj.x, imgObj.y, imgObj.width, imgObj.height);
+            ctx.restore();
           }
-          ctx.drawImage(imgEl, imgObj.x, imgObj.y, imgObj.width, imgObj.height);
-          ctx.restore();
+        } else {
+          const s = entry.stroke;
+          const layer = visibleLayerMap.get(s.layerId);
+          if (layer && !layer.visible) continue;
+          drawStrokeOnContext(ctx, s, isCurrentActivePage && selectedStrokeIds.includes(s.id));
         }
-      }
-
-      // 2. Highlighters first (underneath Pen ink)
-      for (const s of pageObj.strokes) {
-        if (s.tool !== 'highlighter') continue;
-        const layer = visibleLayerMap.get(s.layerId);
-        if (layer && !layer.visible) continue;
-        drawStrokeOnContext(ctx, s, isCurrentActivePage && selectedStrokeIds.includes(s.id));
-      }
-
-      // 3. Pen & Pencil Strokes
-      for (const s of pageObj.strokes) {
-        if (s.tool === 'highlighter') continue;
-        const layer = visibleLayerMap.get(s.layerId);
-        if (layer && !layer.visible) continue;
-        drawStrokeOnContext(ctx, s, isCurrentActivePage && selectedStrokeIds.includes(s.id));
       }
 
       // 4. Goodnotes Select / Lasso Transform Bounding Box (Oriented Bounding Box that rotates with the shape + Semicircular Rotation Arrow!)
@@ -1504,7 +1536,10 @@ export default function App() {
           originalDataUrl: dataUrl,
           layerId: activeLayerId,
         };
-        updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
+        updateActivePage((page) => ({
+          ...page,
+          images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
+        }));
         setSelectedImageId(newImg.id);
         setSelectedStrokeIds([]);
         setActiveTool('lasso');
@@ -1549,7 +1584,10 @@ export default function App() {
           x: copiedImg.x + 28,
           y: copiedImg.y + 28,
         };
-        updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
+        updateActivePage((page) => ({
+          ...page,
+          images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
+        }));
         setSelectedImageId(newImg.id);
         setSelectedStrokeIds([]);
         setActiveTool('lasso');
@@ -1570,7 +1608,13 @@ export default function App() {
             cy: p.cy !== undefined ? p.cy + 26 : undefined,
           })),
         }));
-        updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...pasted] }));
+        updateActivePage((page) => {
+          const baseZ = getNextPageZOrder(page);
+          return {
+            ...page,
+            strokes: [...page.strokes, ...pasted.map((s, idx) => ({ ...s, zOrder: baseZ + idx }))],
+          };
+        });
         setSelectedStrokeIds(pasted.map((s) => s.id));
         setSelectedImageId(null);
         setActiveTool('lasso');
@@ -2328,34 +2372,35 @@ export default function App() {
         }
       }
 
-      // Check if user tapped directly on an image
-      const hitImg = (activePage.images || []).find(
-        (im) => pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height
-      );
-      if (hitImg) {
-        setSelectedImageId(hitImg.id);
-        setSelectedStrokeIds([]);
-        setActiveNodeStrokeId(null);
-        selectionTransformRef.current = {
-          mode: 'move',
-          startX: pt.x,
-          startY: pt.y,
-          centerX: hitImg.x + hitImg.width / 2,
-          centerY: hitImg.y + hitImg.height / 2,
-          anchorX: hitImg.x,
-          anchorY: hitImg.y,
-          initialDist: 1,
-          initialAngle: 0,
-        };
-        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
-        isDrawingRef.current = true;
-        return;
-      }
-      setSelectedImageId(null);
+      // Check if user tapped directly on a stroke/shape or an image (respecting top-most unified zOrder!)
+      const imgList = activePage.images || [];
+      const strokeList = activePage.strokes || [];
 
-      // Check if user tapped directly on a stroke or shape (selects it immediately with Transform handles!)
-      const tappedStroke = activePage.strokes.find((s) => isPointNearStroke(pt, s, 18));
-      if (tappedStroke) {
+      let topHitImg: { img: ImageObject; z: number } | null = null;
+      for (let idx = 0; idx < imgList.length; idx++) {
+        const im = imgList[idx];
+        if (pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height) {
+          const z = im.zOrder ?? idx + 1;
+          if (!topHitImg || z >= topHitImg.z) {
+            topHitImg = { img: im, z };
+          }
+        }
+      }
+
+      let topHitStroke: { stroke: StrokeObject; z: number } | null = null;
+      for (let idx = 0; idx < strokeList.length; idx++) {
+        const s = strokeList[idx];
+        if (isPointNearStroke(pt, s, 18)) {
+          const z = s.zOrder ?? imgList.length + idx + 1;
+          if (!topHitStroke || z >= topHitStroke.z) {
+            topHitStroke = { stroke: s, z };
+          }
+        }
+      }
+
+      if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
+        const tappedStroke = topHitStroke.stroke;
+        setSelectedImageId(null);
         const members = tappedStroke.groupId
           ? activePage.strokes.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
           : [tappedStroke.id];
@@ -2376,6 +2421,28 @@ export default function App() {
         isDrawingRef.current = true;
         return;
       }
+
+      if (topHitImg) {
+        const hitImg = (topHitImg as { img: ImageObject; z: number }).img;
+        setSelectedImageId(hitImg.id);
+        setSelectedStrokeIds([]);
+        setActiveNodeStrokeId(null);
+        selectionTransformRef.current = {
+          mode: 'move',
+          startX: pt.x,
+          startY: pt.y,
+          centerX: hitImg.x + hitImg.width / 2,
+          centerY: hitImg.y + hitImg.height / 2,
+          anchorX: hitImg.x,
+          anchorY: hitImg.y,
+          initialDist: 1,
+          initialAngle: 0,
+        };
+        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+        isDrawingRef.current = true;
+        return;
+      }
+      setSelectedImageId(null);
 
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
@@ -3095,7 +3162,7 @@ export default function App() {
 
     updateActivePage((page) => ({
       ...page,
-      strokes: [...page.strokes, newStroke],
+      strokes: [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }],
     }));
   };
 
@@ -3118,123 +3185,131 @@ export default function App() {
     showToast('🔓 Ungroup ολοκληρώθηκε!');
   };
 
-  // Z-Order / Layering for a Selected Shape, Group, or Image:
+  // Unified Z-Order / Layering across BOTH Images and Shapes / Strokes / Groups:
   // - 'to-back': Send to Back (Εντελώς πίσω)
-  // - 'step-back': Send Backward (-1 βήμα πίσω)
-  // - 'step-front': Bring Forward (+1 βήμα μπροστά)
+  // - 'step-back': Send Backward (-1 επίπεδο πίσω — περνάει πίσω από την επικαλυπτόμενη εικόνα ή σχήμα!)
+  // - 'step-front': Bring Forward (+1 επίπεδο μπροστά — περνάει μπροστά από την επικαλυπτόμενη εικόνα ή σχήμα!)
   // - 'to-front': Bring to Front (Εντελώς μπροστά)
   const handleZOrderSelected = (action: 'to-back' | 'step-back' | 'step-front' | 'to-front') => {
-    // 1. If an image is selected, reorder page.images
-    if (selectedImageId) {
-      updateActivePage((page) => {
-        const imgs = [...(page.images || [])];
-        const idx = imgs.findIndex((im) => im.id === selectedImageId);
-        if (idx === -1) return page;
-        const [item] = imgs.splice(idx, 1);
-        if (action === 'to-back') {
-          imgs.unshift(item);
-        } else if (action === 'to-front') {
-          imgs.push(item);
-        } else if (action === 'step-back') {
-          imgs.splice(Math.max(0, idx - 1), 0, item);
-        } else if (action === 'step-front') {
-          imgs.splice(Math.min(imgs.length, idx + 1), 0, item);
-        }
-        return { ...page, images: imgs };
-      });
-      showToast(
-        action === 'to-back'
-          ? '⏬ Η εικόνα μεταφέρθηκε εντελώς πίσω (Send to Back)!'
-          : action === 'to-front'
-          ? '⏫ Η εικόνα μεταφέρθηκε εντελώς μπροστά (Bring to Front)!'
-          : action === 'step-back'
-          ? '🔽 Η εικόνα μεταφέρθηκε 1 βήμα πίσω (-1)!'
-          : '🔼 Η εικόνα μεταφέρθηκε 1 βήμα μπροστά (+1)!'
-      );
-      return;
-    }
-
-    // 2. Reorder selected stroke(s) or group in page.strokes
-    const baseIds =
+    const baseStrokeIds =
       selectedStrokeIds.length > 0
         ? selectedStrokeIds
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
         : [];
-    if (baseIds.length === 0) return;
+    if (!selectedImageId && baseStrokeIds.length === 0) return;
 
     updateActivePage((page) => {
-      const baseSet = new Set(baseIds);
+      const imgList = page.images || [];
+      const strokeList = page.strokes || [];
+
+      const baseSet = new Set(baseStrokeIds);
       const groupIds = new Set(
-        page.strokes
+        strokeList
           .filter((s) => baseSet.has(s.id) && s.groupId)
           .map((s) => s.groupId!)
       );
-      const targetIds = new Set(
-        page.strokes
+      const targetStrokeIds = new Set(
+        strokeList
           .filter((s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))
           .map((s) => s.id)
       );
 
-      // Partition strokes into logical units (the selected target unit + unselected strokes/groups)
-      type Unit = {
+      type ZUnit = {
         isTarget: boolean;
-        items: StrokeObject[];
+        z: number;
+        images: ImageObject[];
+        strokes: StrokeObject[];
         bounds: { minX: number; minY: number; maxX: number; maxY: number };
       };
-      const computeItemsBounds = (items: StrokeObject[]) => {
+
+      const computeStrokesBounds = (items: StrokeObject[]) => {
         let minX = Infinity,
           minY = Infinity,
           maxX = -Infinity,
           maxY = -Infinity;
         for (const st of items) {
-          for (const p of st.points) {
-            if (p.x < minX) minX = p.x;
-            if (p.y < minY) minY = p.y;
-            if (p.x > maxX) maxX = p.x;
-            if (p.y > maxY) maxY = p.y;
-          }
+          const sb = getStrokeBounds(st);
+          if (sb.minX < minX) minX = sb.minX;
+          if (sb.minY < minY) minY = sb.minY;
+          if (sb.maxX > maxX) maxX = sb.maxX;
+          if (sb.maxY > maxY) maxY = sb.maxY;
         }
         return { minX, minY, maxX, maxY };
       };
 
-      const targetItems = page.strokes.filter((s) => targetIds.has(s.id));
-      if (targetItems.length === 0) return page;
-      const targetUnit: Unit = {
-        isTarget: true,
-        items: targetItems,
-        bounds: computeItemsBounds(targetItems),
-      };
+      const units: ZUnit[] = [];
 
-      const units: Unit[] = [];
-      let targetInserted = false;
+      // 1. Add all Images into unified ZUnit list
+      imgList.forEach((im, idx) => {
+        const z = im.zOrder ?? idx + 1;
+        const isTarget = Boolean(selectedImageId && im.id === selectedImageId);
+        units.push({
+          isTarget,
+          z,
+          images: [im],
+          strokes: [],
+          bounds: {
+            minX: im.x,
+            minY: im.y,
+            maxX: im.x + im.width,
+            maxY: im.y + im.height,
+          },
+        });
+      });
+
+      // 2. Add all Strokes / Stroke Groups into unified ZUnit list
+      const targetStrokes = !selectedImageId ? strokeList.filter((s) => targetStrokeIds.has(s.id)) : [];
+      let targetStrokesInserted = false;
       const visitedGroupIds = new Set<string>();
 
-      for (const s of page.strokes) {
-        if (targetIds.has(s.id)) {
-          if (!targetInserted) {
-            units.push(targetUnit);
-            targetInserted = true;
+      strokeList.forEach((s, idx) => {
+        const defaultZ = imgList.length + idx + 1;
+        const z = s.zOrder ?? defaultZ;
+
+        if (!selectedImageId && targetStrokeIds.has(s.id)) {
+          if (!targetStrokesInserted && targetStrokes.length > 0) {
+            const maxTargetZ = Math.max(
+              ...targetStrokes.map((ts) => ts.zOrder ?? defaultZ)
+            );
+            units.push({
+              isTarget: true,
+              z: maxTargetZ,
+              images: [],
+              strokes: targetStrokes,
+              bounds: computeStrokesBounds(targetStrokes),
+            });
+            targetStrokesInserted = true;
           }
-          continue;
+          return;
         }
+
         if (s.groupId) {
-          if (visitedGroupIds.has(s.groupId)) continue;
+          if (visitedGroupIds.has(s.groupId)) return;
           visitedGroupIds.add(s.groupId);
-          const grpMembers = page.strokes.filter((m) => m.groupId === s.groupId && !targetIds.has(m.id));
-          units.push({
-            isTarget: false,
-            items: grpMembers,
-            bounds: computeItemsBounds(grpMembers),
-          });
+          const grpMembers = strokeList.filter((m) => m.groupId === s.groupId && !targetStrokeIds.has(m.id));
+          if (grpMembers.length > 0) {
+            units.push({
+              isTarget: false,
+              z,
+              images: [],
+              strokes: grpMembers,
+              bounds: computeStrokesBounds(grpMembers),
+            });
+          }
         } else {
           units.push({
             isTarget: false,
-            items: [s],
-            bounds: computeItemsBounds([s]),
+            z,
+            images: [],
+            strokes: [s],
+            bounds: computeStrokesBounds([s]),
           });
         }
-      }
+      });
+
+      // Sort all units (Images + Strokes/Shapes) by their current visual zOrder (back-to-front)
+      units.sort((a, b) => a.z - b.z);
 
       const tIdx = units.findIndex((u) => u.isTarget);
       if (tIdx === -1) return page;
@@ -3242,7 +3317,7 @@ export default function App() {
       const boxesOverlap = (
         a: { minX: number; minY: number; maxX: number; maxY: number },
         b: { minX: number; minY: number; maxX: number; maxY: number }
-      ) => a.minX <= b.maxX + 6 && a.maxX >= b.minX - 6 && a.minY <= b.maxY + 6 && a.maxY >= b.minY - 6;
+      ) => a.minX <= b.maxX + 8 && a.maxX >= b.minX - 8 && a.minY <= b.maxY + 8 && a.maxY >= b.minY - 8;
 
       const [removed] = units.splice(tIdx, 1);
 
@@ -3251,7 +3326,7 @@ export default function App() {
       } else if (action === 'to-front') {
         units.push(removed);
       } else if (action === 'step-back') {
-        // Find the nearest overlapping unit behind tIdx (or tIdx - 1 if none overlap)
+        // Find the nearest overlapping Image or Shape/Stroke behind tIdx (or tIdx - 1 if none overlap)
         let insertAt = Math.max(0, tIdx - 1);
         for (let i = tIdx - 1; i >= 0; i--) {
           if (boxesOverlap(removed.bounds, units[i].bounds)) {
@@ -3261,7 +3336,7 @@ export default function App() {
         }
         units.splice(insertAt, 0, removed);
       } else if (action === 'step-front') {
-        // Find the nearest overlapping unit in front of tIdx (or tIdx + 1 if none overlap)
+        // Find the nearest overlapping Image or Shape/Stroke in front of tIdx (or tIdx + 1 if none overlap)
         let insertAt = Math.min(units.length, tIdx + 1);
         for (let i = tIdx; i < units.length; i++) {
           if (boxesOverlap(removed.bounds, units[i].bounds)) {
@@ -3272,9 +3347,24 @@ export default function App() {
         units.splice(insertAt, 0, removed);
       }
 
+      // Reassign clean sequential zOrder (1, 2, 3, ...) across all Images and Strokes
+      let nextZ = 1;
+      const nextImages: ImageObject[] = [];
+      const nextStrokes: StrokeObject[] = [];
+
+      for (const u of units) {
+        for (const im of u.images) {
+          nextImages.push({ ...im, zOrder: nextZ++ });
+        }
+        for (const st of u.strokes) {
+          nextStrokes.push({ ...st, zOrder: nextZ++ });
+        }
+      }
+
       return {
         ...page,
-        strokes: units.flatMap((u) => u.items),
+        images: nextImages,
+        strokes: nextStrokes,
       };
     });
 
@@ -3284,8 +3374,8 @@ export default function App() {
         : action === 'to-front'
         ? '⏫ Bring to Front: Μεταφέρθηκε εντελώς μπροστά!'
         : action === 'step-back'
-        ? '🔽 Send Backward: Μεταφέρθηκε 1 βήμα πίσω (-1)!'
-        : '🔼 Bring Forward: Μεταφέρθηκε 1 βήμα μπροστά (+1)!'
+        ? '🔽 -1 Επίπεδο Πίσω (πίσω από το επικαλυπτόμενο αντικείμενο)!'
+        : '🔼 +1 Επίπεδο Μπροστά (μπροστά από το επικαλυπτόμενο αντικείμενο)!'
     );
   };
 
@@ -3448,7 +3538,10 @@ export default function App() {
       originalDataUrl: dataUrl,
       layerId: activeLayerId,
     };
-    updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
+    updateActivePage((page) => ({
+      ...page,
+      images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
+    }));
     setSelectedImageId(newImg.id);
     setActiveTool('lasso');
     showToast('🖼️ Εικόνα προστέθηκε! Δοκίμασε Transparent BG ή Magnetic Lasso!');
@@ -3487,7 +3580,10 @@ export default function App() {
         originalDataUrl: dataUrl,
         layerId: activeLayerId,
       };
-      updateActivePage((page) => ({ ...page, images: [...(page.images || []), newImg] }));
+      updateActivePage((page) => ({
+        ...page,
+        images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
+      }));
       setSelectedImageId(newImg.id);
       setActiveTool('lasso');
     };

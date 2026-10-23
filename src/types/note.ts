@@ -66,6 +66,7 @@ export interface StrokeObject {
   isShape?: boolean;
   shapeType?: string;
   rotation?: number; // Rotation angle in radians for oriented selection bounding box
+  zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
 }
 
 export interface TextObject {
@@ -94,6 +95,7 @@ export interface ImageObject {
   transparentBg?: boolean;
   layerId: string;
   groupId?: string;
+  zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
 }
 
 export interface TapeObject {
