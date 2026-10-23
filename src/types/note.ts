@@ -24,6 +24,11 @@ export type ShapePresetType =
   | 'parallelogram'
   | 'ellipse'
   | 'triangle'
+  | 'arc'
+  | 'parabola'
+  | 'hyperbola'
+  | 'sine'
+  | 'cosine'
   | 'cylinder'
   | 'axes'
   | 'resistor';

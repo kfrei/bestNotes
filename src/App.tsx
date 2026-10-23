@@ -367,6 +367,19 @@ export default function App() {
   }, [redoStack, activePage, updateActivePage, clonePageFast]);
 
   const getStrokeBounds = (s: StrokeObject) => {
+    if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
+      const pPeak = s.points[0];
+      const pEnd = s.points[1];
+      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y };
+      const yAxis = pEnd.y;
+      const absAmp = Math.abs(yAxis - pPeak.y);
+      return {
+        minX: Math.min(pStart.x, pEnd.x),
+        maxX: Math.max(pStart.x, pEnd.x),
+        minY: yAxis - absAmp,
+        maxY: yAxis + absAmp,
+      };
+    }
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -378,6 +391,54 @@ export default function App() {
       if (p.y > maxY) maxY = p.y;
     }
     return { minX, minY, maxX, maxY };
+  };
+
+  const isPointNearStroke = (pt: { x: number; y: number }, s: StrokeObject, tol = 18): boolean => {
+    if (s.points.some((p) => distance(pt, p) < tol)) return true;
+    const b = getStrokeBounds(s);
+    if (pt.x < b.minX - tol || pt.x > b.maxX + tol || pt.y < b.minY - tol || pt.y > b.maxY + tol) {
+      return false;
+    }
+    if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
+      const pPeak = s.points[0];
+      const pEnd = s.points[1];
+      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
+      const yAxis = pEnd.y;
+      const amp = yAxis - pPeak.y;
+      const spanW = pEnd.x - pStart.x;
+      const halfCycles = Math.max(1, pStart.twist || 2);
+      for (let i = 0; i <= 32; i++) {
+        const t = i / 32;
+        const x = pStart.x + t * spanW;
+        const y =
+          s.shapeType === 'sine'
+            ? yAxis - amp * Math.sin(t * halfCycles * Math.PI)
+            : yAxis + amp * Math.cos(t * halfCycles * Math.PI);
+        if (distance(pt, { x, y }) < tol) return true;
+      }
+      return false;
+    }
+    if ((s.shapeType === 'parabola' || s.shapeType === 'hyperbola' || s.shapeType === 'arc') && s.points.length === 3) {
+      const [p0, pMid, p2] = s.points;
+      const cx = 2 * pMid.x - (p0.x + p2.x) / 2;
+      const cy = 2 * pMid.y - (p0.y + p2.y) / 2;
+      for (let i = 0; i <= 24; i++) {
+        const t = i / 24;
+        const u = 1 - t;
+        const x = u * u * p0.x + 2 * u * t * cx + t * t * p2.x;
+        const y = u * u * p0.y + 2 * u * t * cy + t * t * p2.y;
+        if (distance(pt, { x, y }) < tol) return true;
+      }
+      return false;
+    }
+    // Check segment midpoints for polygons/lines
+    for (let i = 1; i < s.points.length; i++) {
+      const a = s.points[i - 1];
+      const c = s.points[i];
+      const mid = { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 };
+      if (distance(pt, mid) < tol) return true;
+    }
+    return false;
   };
 
   const getSelectionBounds = useCallback(() => {
@@ -402,12 +463,11 @@ export default function App() {
           maxX = -Infinity,
           maxY = -Infinity;
         for (const s of sel) {
-          for (const p of s.points) {
-            if (p.x < minX) minX = p.x;
-            if (p.y < minY) minY = p.y;
-            if (p.x > maxX) maxX = p.x;
-            if (p.y > maxY) maxY = p.y;
-          }
+          const sb = getStrokeBounds(s);
+          if (sb.minX < minX) minX = sb.minX;
+          if (sb.minY < minY) minY = sb.minY;
+          if (sb.maxX > maxX) maxX = sb.maxX;
+          if (sb.maxY > maxY) maxY = sb.maxY;
         }
         return {
           minX,
@@ -448,7 +508,7 @@ export default function App() {
     }
 
     ctx.beginPath();
-    // 4-Node Circle / Ellipse (strictly 4 cardinal points every 90°: Top, Right, Bottom, Left)
+    // 1. 4-Node Circle / Ellipse (strictly 4 cardinal points every 90°: Top, Right, Bottom, Left)
     if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
       const pts = s.points;
       const kappa = 0.55228475;
@@ -465,6 +525,56 @@ export default function App() {
         ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pB.x, pB.y);
       }
       ctx.closePath();
+    } else if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
+      // 2. Symmetrical Sine ('sine') & Cosine ('cosine') Wave
+      //    points[0] = Peak handle (up/down), points[1] = Right Endpoint handle (left/right), points[2] = Left Origin
+      const pPeak = s.points[0];
+      const pEnd = s.points[1];
+      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
+      const yAxis = pEnd.y;
+      const amp = yAxis - pPeak.y;
+      const spanW = pEnd.x - pStart.x;
+      const halfCycles = Math.max(1, pStart.twist || 2);
+      const steps = 72;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = pStart.x + t * spanW;
+        const y =
+          s.shapeType === 'sine'
+            ? yAxis - amp * Math.sin(t * halfCycles * Math.PI)
+            : yAxis + amp * Math.cos(t * halfCycles * Math.PI);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+    } else if ((s.shapeType === 'parabola' || s.shapeType === 'arc') && s.points.length === 3) {
+      // 3. Symmetrical 3-Node Parabola ('parabola') & Circular Arc ('arc')
+      //    points[0] = Left End, points[1] = Middle Vertex (curvature control), points[2] = Right End
+      const [p0, pMid, p2] = s.points;
+      const ctrlX = 2 * pMid.x - (p0.x + p2.x) / 2;
+      const ctrlY = 2 * pMid.y - (p0.y + p2.y) / 2;
+      ctx.moveTo(p0.x, p0.y);
+      ctx.quadraticCurveTo(ctrlX, ctrlY, p2.x, p2.y);
+    } else if (s.shapeType === 'hyperbola' && s.points.length === 3) {
+      // 4. Symmetrical 3-Node Hyperbola ('hyperbola')
+      //    Passes 100% through p0 (t=-1), pMid (t=0 vertex), and p2 (t=+1) with hyperbolic asymptotes!
+      const [p0, pMid, p2] = s.points;
+      const midChordX = (p0.x + p2.x) / 2;
+      const midChordY = (p0.y + p2.y) / 2;
+      const ux = (p2.x - p0.x) / 2;
+      const uy = (p2.y - p0.y) / 2;
+      const vx = pMid.x - midChordX;
+      const vy = pMid.y - midChordY;
+      const k = 2.25;
+      const denom = Math.sqrt(1 + k * k) - 1;
+      const steps = 56;
+      for (let i = 0; i <= steps; i++) {
+        const u = -1 + (2 * i) / steps; // -1 .. +1
+        const phi = (Math.sqrt(1 + k * u * (k * u)) - 1) / denom;
+        const x = pMid.x + u * ux - phi * vx;
+        const y = pMid.y + u * uy - phi * vy;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
     } else {
       ctx.moveTo(s.points[0].x, s.points[0].y);
       if (s.points.length === 1) {
@@ -742,16 +852,43 @@ export default function App() {
           ctx.restore();
         }
 
-        // 5. Direct Node Handles ("Λευκό Βελάκι" - strictly 4 nodes at 90° for circles/ellipses!)
+        // 5. Direct Node Handles ("Λευκό Βελάκι"):
+        //    - Circle/Ellipse: strictly 4 nodes at 90°
+        //    - Parabola/Hyperbola/Arc: strictly 3 nodes (2 Endpoints + 1 Middle Curvature)
+        //    - Sine/Cosine: strictly 2 nodes (0: Peak [up/down only], 1: Right Endpoint [left/right only])
         if (activeTool === 'direct-node' && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
           if (target) {
             ctx.save();
+            const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
+            const isThreePtCurve =
+              target.shapeType === 'parabola' ||
+              target.shapeType === 'hyperbola' ||
+              target.shapeType === 'arc';
             const isClosedPoly =
               target.shapeType === 'rectangle' ||
               target.shapeType === 'parallelogram' ||
               target.shapeType === 'triangle';
-            const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
+            const nodeCount = isWave
+              ? Math.min(2, target.points.length)
+              : isThreePtCurve
+              ? Math.min(3, target.points.length)
+              : isClosedPoly
+              ? Math.max(1, target.points.length - 1)
+              : target.points.length;
+
+            if (isWave && target.points.length >= 3) {
+              const pStart = target.points[2];
+              const pEnd = target.points[1];
+              ctx.strokeStyle = 'rgba(37, 99, 235, 0.35)';
+              ctx.lineWidth = 1.2;
+              ctx.setLineDash([4, 4]);
+              ctx.beginPath();
+              ctx.moveTo(pStart.x, pEnd.y);
+              ctx.lineTo(pEnd.x, pEnd.y);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
 
             for (let i = 0; i < nodeCount; i++) {
               const p = target.points[i];
@@ -768,11 +905,25 @@ export default function App() {
                 ctx.arc(p.cx, p.cy, 4.5, 0, Math.PI * 2);
                 ctx.fill();
               }
-              ctx.fillStyle = '#ffffff';
+              ctx.fillStyle = isWave && i === 0 ? '#fef08a' : isThreePtCurve && i === 1 ? '#fef08a' : '#ffffff';
               ctx.strokeStyle = '#2563eb';
-              ctx.lineWidth = 2.2;
-              ctx.fillRect(p.x - 6, p.y - 6, 12, 12);
-              ctx.strokeRect(p.x - 6, p.y - 6, 12, 12);
+              ctx.lineWidth = 2.4;
+              ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
+              ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
+
+              if (isWave) {
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillStyle = '#1e3a8a';
+                if (i === 0) {
+                  ctx.fillText('↕ Κορυφή', p.x - 24, p.y - 12);
+                } else if (i === 1) {
+                  ctx.fillText('↔ Άκρο', p.x + 10, p.y + 4);
+                }
+              } else if (isThreePtCurve && i === 1) {
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillStyle = '#1e3a8a';
+                ctx.fillText('✦ Μέση (Καμπυλότητα)', p.x - 45, p.y - 12);
+              }
             }
             ctx.restore();
           }
@@ -1915,20 +2066,34 @@ export default function App() {
       return;
     }
 
-    // 3. Direct Node Editing ("Λευκό Βελάκι" - strictly 4 nodes at 90° for circles/ellipses!)
+    // 3. Direct Node Editing ("Λευκό Βελάκι"):
+    //    - Circle/Ellipse: strictly 4 nodes at 90°
+    //    - Parabola/Hyperbola/Arc: strictly 3 nodes (2 Endpoints + 1 Middle Curvature)
+    //    - Sine/Cosine: strictly 2 nodes (0: Peak [up/down only], 1: Right Endpoint [left/right only])
     if (activeTool === 'direct-node') {
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target) {
+          const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
+          const isThreePtCurve =
+            target.shapeType === 'parabola' ||
+            target.shapeType === 'hyperbola' ||
+            target.shapeType === 'arc';
           const isClosedPoly =
             target.shapeType === 'rectangle' ||
             target.shapeType === 'parallelogram' ||
             target.shapeType === 'triangle';
-          const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
+          const nodeCount = isWave
+            ? Math.min(2, target.points.length)
+            : isThreePtCurve
+            ? Math.min(3, target.points.length)
+            : isClosedPoly
+            ? Math.max(1, target.points.length - 1)
+            : target.points.length;
 
           for (let i = 0; i < nodeCount; i++) {
             const p = target.points[i];
-            if (distance(pt, p) < 16) {
+            if (distance(pt, p) < 18) {
               setDraggingNodeIdx({ index: i, isControl: false });
               isDrawingRef.current = true;
               return;
@@ -1941,7 +2106,7 @@ export default function App() {
           }
         }
       }
-      const hit = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 18));
+      const hit = activePage.strokes.find((s) => isPointNearStroke(pt, s, 20));
       if (hit) {
         // If an older ellipse/circle had >4 points, normalize it to 4 cardinal 90° points immediately!
         if ((hit.shapeType === 'ellipse' || hit.shapeType === 'circle') && hit.points.length > 4) {
@@ -2071,7 +2236,7 @@ export default function App() {
       setSelectedImageId(null);
 
       // Check if user tapped directly on a stroke or shape (selects it immediately with Transform handles!)
-      const tappedStroke = activePage.strokes.find((s) => s.points.some((p) => distance(pt, p) < 16));
+      const tappedStroke = activePage.strokes.find((s) => isPointNearStroke(pt, s, 18));
       if (tappedStroke) {
         const members = tappedStroke.groupId
           ? activePage.strokes.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
@@ -2125,7 +2290,7 @@ export default function App() {
         const filtered = page.strokes.filter((s) => {
           if (lockedLayerIds.has(s.layerId)) return true;
           if (eraserSubType === 'highlighter-only' && s.tool !== 'highlighter') return true;
-          return !s.points.some((p) => distance(pt, p) <= eraseRadius);
+          return !isPointNearStroke(pt, s, eraseRadius);
         });
         if (filtered.length === page.strokes.length) return page;
         return { ...page, strokes: filtered };
@@ -2204,7 +2369,7 @@ export default function App() {
       return;
     }
 
-    // 2. Direct Node Editing (syncs closing point for polygons & keeps 4 nodes for ellipses!)
+    // 2. Direct Node Editing (syncs closing point for polygons, 4 nodes for ellipses, 3 curvature handles for Parabola/Hyperbola/Arc, & 2 constrained handles for Sine/Cosine!)
     if (activeTool === 'direct-node' && activeNodeStrokeId && draggingNodeIdx) {
       updateActivePage(
         (page) => ({
@@ -2213,6 +2378,33 @@ export default function App() {
             if (s.id !== activeNodeStrokeId) return s;
             const newPts = [...s.points];
             const targetPt = { ...newPts[draggingNodeIdx.index] };
+
+            // Special strict axis constraints for Sine / Cosine waves:
+            // - index 0 (Κορυφή / Peak): moves ONLY vertically (up/down) to change amplitude
+            // - index 1 (Δεξί Άκρο / Endpoint): moves ONLY horizontally (left/right) to widen/narrow the wave
+            if (s.shapeType === 'sine' || s.shapeType === 'cosine') {
+              const pStart = newPts[2] || { x: newPts[0].x - 80, y: newPts[1].y, twist: 2 };
+              const halfCycles = Math.max(1, Math.round(pStart.twist || 2));
+              const tPeak = s.shapeType === 'sine' ? 1 / (2 * halfCycles) : 0;
+
+              if (draggingNodeIdx.index === 0) {
+                // Peak handle: strictly vertical (taller / shorter)
+                targetPt.y = latestPt.y;
+                newPts[0] = targetPt;
+              } else if (draggingNodeIdx.index === 1) {
+                // Endpoint handle: strictly horizontal (wider / narrower)
+                const nextEndX = Math.max(pStart.x + 48, latestPt.x);
+                targetPt.x = nextEndX;
+                newPts[1] = targetPt;
+                // Keep the Peak handle's X locked at the crest of the first half-cycle
+                newPts[0] = {
+                  ...newPts[0],
+                  x: pStart.x + (nextEndX - pStart.x) * tPeak,
+                };
+              }
+              return { ...s, points: newPts };
+            }
+
             if (draggingNodeIdx.isControl) {
               targetPt.cx = latestPt.x;
               targetPt.cy = latestPt.y;
@@ -3874,6 +4066,11 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     {[
                       { id: 'auto', label: '✨ Auto Snap' },
+                      { id: 'sine', label: '〰️ Ημίτονο (2 Κόμβοι)' },
+                      { id: 'cosine', label: '〰️ Συνημίτονο (2 Κόμβοι)' },
+                      { id: 'parabola', label: '∪ Παραβολή (3 Κόμβοι)' },
+                      { id: 'hyperbola', label: ')( Υπερβολή (3 Κόμβοι)' },
+                      { id: 'arc', label: '⌒ Τόξο (3 Κόμβοι)' },
                       { id: 'line', label: '╱ Ευθεία' },
                       { id: 'arrow', label: '➔ Διάνυσμα' },
                       { id: 'rectangle', label: '▭ Ορθογώνιο' },
@@ -3887,7 +4084,7 @@ export default function App() {
                       <button
                         key={sp.id}
                         onClick={() => setShapePreset(sp.id as ShapePresetType)}
-                        className={`px-2.5 py-1 rounded-full font-medium cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap cursor-pointer ${
                           shapePreset === sp.id
                             ? 'bg-[#0066ff] text-white'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -3896,12 +4093,12 @@ export default function App() {
                         {sp.label}
                       </button>
                     ))}
-                    <div className="h-4 w-px bg-slate-300 mx-1" />
+                    <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
                     {(['none', 'solid', 'hatching'] as FillStyleType[]).map((fs) => (
                       <button
                         key={fs}
                         onClick={() => setFillStyle(fs)}
-                        className={`px-2.5 py-1 rounded-full font-medium cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap cursor-pointer ${
                           fillStyle === fs ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-700'
                         }`}
                       >

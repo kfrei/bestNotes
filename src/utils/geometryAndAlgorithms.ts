@@ -383,6 +383,178 @@ export function recognizeAndSnapShape(
     };
   }
 
+  // 3. Open Mathematical Curves:
+  //    - Sine ('sine') & Cosine ('cosine') waves -> 2 interactive handles (Peak + Right Endpoint)
+  //    - Parabola ('parabola'), Hyperbola ('hyperbola'), Circular Arc ('arc') -> 3 handles (2 Endpoints + 1 Middle)
+  if (!isClosed && totalLen > 36) {
+    const yMid = (minY + maxY) / 2;
+    const amp = Math.max(18, h / 2);
+
+    // A. Check if stroke is a Sine or Cosine wave (oscillates across yMid with >= 2 lobes)
+    if (w > 50 && h > 20) {
+      // Sort or walk points along X and count significant extrema / zero-crossings around yMid
+      let crossings = 0;
+      let lastSign = 0;
+      const deadband = Math.max(4, amp * 0.18);
+      let firstLobeSign = 0;
+
+      for (const p of rawPoints) {
+        const dy = p.y - yMid;
+        if (Math.abs(dy) > deadband) {
+          const sign = dy < 0 ? 1 : -1; // +1 = above midline (screen Y smaller), -1 = below midline
+          if (firstLobeSign === 0) firstLobeSign = sign;
+          if (lastSign !== 0 && sign !== lastSign) {
+            crossings++;
+          }
+          lastSign = sign;
+        }
+      }
+
+      // At least 1 crossing (2 half-lobes = 1 full wave period) and predominantly horizontal progression
+      if (crossings >= 1 && Math.abs(end.x - start.x) > w * 0.65) {
+        const halfCycles = Math.max(2, Math.min(6, crossings + 1));
+        const startDistFromMid = Math.abs(start.y - yMid);
+        const isCosine = startDistFromMid >= amp * 0.48;
+        const leftX = Math.min(start.x, end.x);
+        const rightX = Math.max(start.x, end.x);
+        const spanW = Math.max(80, rightX - leftX);
+        const signDir = firstLobeSign !== 0 ? firstLobeSign : 1;
+
+        if (isCosine) {
+          // Cosine wave: Peak control point at central extremum t = 1 / halfCycles
+          const tPeak = 1 / halfCycles;
+          const peakPt: BezierPoint = {
+            x: leftX + spanW * tPeak,
+            y: yMid - signDir * amp,
+            pressure: 0.7,
+          };
+          const rightEndPt: BezierPoint = {
+            x: leftX + spanW,
+            y: yMid,
+            pressure: 0.7,
+          };
+          const leftOriginPt: BezierPoint = {
+            x: leftX,
+            y: yMid,
+            twist: halfCycles,
+            pressure: 0.7,
+          };
+          return {
+            shapeType: 'cosine',
+            points: [peakPt, rightEndPt, leftOriginPt],
+          };
+        } else {
+          // Sine wave: Peak control point at first crest t = 1 / (2 * halfCycles)
+          const tPeak = 1 / (2 * halfCycles);
+          const peakPt: BezierPoint = {
+            x: leftX + spanW * tPeak,
+            y: yMid - signDir * amp,
+            pressure: 0.7,
+          };
+          const rightEndPt: BezierPoint = {
+            x: leftX + spanW,
+            y: yMid,
+            pressure: 0.7,
+          };
+          const leftOriginPt: BezierPoint = {
+            x: leftX,
+            y: yMid,
+            twist: halfCycles,
+            pressure: 0.7,
+          };
+          return {
+            shapeType: 'sine',
+            points: [peakPt, rightEndPt, leftOriginPt],
+          };
+        }
+      }
+    }
+
+    // B. Single-Arch Open Curve -> Symmetrical Circular Arc ('arc'), Parabola ('parabola'), or Hyperbola ('hyperbola')
+    //    Strictly 3 Control Points: [Endpoint 1, Middle Apex, Endpoint 2]
+    let maxPerpDist = 0;
+    let apexIdx = Math.floor(rawPoints.length / 2);
+    for (let i = 1; i < rawPoints.length - 1; i++) {
+      const d = perpendicularDistance(rawPoints[i], start, end);
+      if (d > maxPerpDist) {
+        maxPerpDist = d;
+        apexIdx = i;
+      }
+    }
+
+    if (maxPerpDist > 14 && directDist > 28) {
+      let x0 = start.x,
+        y0 = start.y;
+      let x2 = end.x,
+        y2 = end.y;
+
+      // Symmetrize endpoints: if chord is nearly horizontal or vertical (within 16°), level the endpoints!
+      const chordAngleDeg = (Math.atan2(y2 - y0, x2 - x0) * 180) / Math.PI;
+      const absChordDeg = Math.abs(chordAngleDeg);
+      if (absChordDeg < 16 || absChordDeg > 164) {
+        const avgY = (y0 + y2) / 2;
+        y0 = avgY;
+        y2 = avgY;
+      } else if (Math.abs(absChordDeg - 90) < 16) {
+        const avgX = (x0 + x2) / 2;
+        x0 = avgX;
+        x2 = avgX;
+      }
+
+      const chordMidX = (x0 + x2) / 2;
+      const chordMidY = (y0 + y2) / 2;
+      const cdx = x2 - x0;
+      const cdy = y2 - y0;
+      const chordLen = Math.max(20, Math.hypot(cdx, cdy));
+      // Unit normal perpendicular to chord
+      const nx = -cdy / chordLen;
+      const ny = cdx / chordLen;
+
+      const rawApex = rawPoints[apexIdx];
+      const signedH = (rawApex.x - chordMidX) * nx + (rawApex.y - chordMidY) * ny;
+      const symMidX = chordMidX + nx * signedH;
+      const symMidY = chordMidY + ny * signedH;
+
+      // Measure width at half-height (0.5 * signedH) to distinguish Arc vs Parabola vs Hyperbola
+      const halfH = signedH * 0.5;
+      let minHalfProj = Infinity;
+      let maxHalfProj = -Infinity;
+      const ux = cdx / chordLen;
+      const uy = cdy / chordLen;
+
+      for (const p of rawPoints) {
+        const pH = (p.x - chordMidX) * nx + (p.y - chordMidY) * ny;
+        if (Math.abs(pH - halfH) < Math.abs(signedH) * 0.22) {
+          const projU = (p.x - chordMidX) * ux + (p.y - chordMidY) * uy;
+          if (projU < minHalfProj) minHalfProj = projU;
+          if (projU > maxHalfProj) maxHalfProj = projU;
+        }
+      }
+
+      const halfWidthRatio =
+        maxHalfProj > minHalfProj ? (maxHalfProj - minHalfProj) / chordLen : 0.7;
+      const archRatio = Math.abs(signedH) / chordLen;
+
+      let curveType: 'arc' | 'parabola' | 'hyperbola' = 'parabola';
+      if (archRatio < 0.36 || halfWidthRatio > 0.77) {
+        curveType = 'arc';
+      } else if (halfWidthRatio < 0.61) {
+        curveType = 'hyperbola';
+      } else {
+        curveType = 'parabola';
+      }
+
+      return {
+        shapeType: curveType,
+        points: [
+          { x: x0, y: y0, pressure: 0.7 },
+          { x: symMidX, y: symMidY, pressure: 0.7 },
+          { x: x2, y: y2, pressure: 0.7 },
+        ],
+      };
+    }
+  }
+
   return null;
 }
 
@@ -418,14 +590,51 @@ function buildPresetShape(
   maxY: number,
   preset: ShapePresetType
 ): { points: BezierPoint[]; shapeType: string } {
-  const w = Math.max(24, maxX - minX);
-  const h = Math.max(24, maxY - minY);
+  const w = Math.max(40, maxX - minX);
+  const h = Math.max(32, maxY - minY);
   if (preset === 'line' || preset === 'arrow') {
     return {
       shapeType: preset,
       points: [
         { x: start.x, y: start.y, pressure: 0.7 },
         { x: end.x, y: end.y, cx: (start.x + end.x) / 2, cy: (start.y + end.y) / 2, pressure: 0.7 },
+      ],
+    };
+  }
+  if (preset === 'sine') {
+    const yAxis = (minY + maxY) / 2;
+    const amp = Math.max(24, h / 2);
+    return {
+      shapeType: 'sine',
+      points: [
+        { x: minX + w * 0.25, y: yAxis - amp, pressure: 0.7 }, // Handle 0: Peak (up/down only)
+        { x: minX + w, y: yAxis, pressure: 0.7 }, // Handle 1: Right Endpoint (left/right only)
+        { x: minX, y: yAxis, twist: 2, pressure: 0.7 }, // Origin anchor
+      ],
+    };
+  }
+  if (preset === 'cosine') {
+    const yAxis = (minY + maxY) / 2;
+    const amp = Math.max(24, h / 2);
+    return {
+      shapeType: 'cosine',
+      points: [
+        { x: minX + w * 0.5, y: yAxis - amp, pressure: 0.7 }, // Handle 0: Peak (up/down only)
+        { x: minX + w, y: yAxis, pressure: 0.7 }, // Handle 1: Right Endpoint (left/right only)
+        { x: minX, y: yAxis, twist: 2, pressure: 0.7 }, // Origin anchor
+      ],
+    };
+  }
+  if (preset === 'parabola' || preset === 'hyperbola' || preset === 'arc') {
+    const isInverted = start.y > minY + h * 0.5 && end.y > minY + h * 0.5;
+    const yEnds = isInverted ? minY + h : minY;
+    const yVertex = isInverted ? minY : minY + h;
+    return {
+      shapeType: preset,
+      points: [
+        { x: minX, y: yEnds, pressure: 0.7 },
+        { x: minX + w / 2, y: yVertex, pressure: 0.7 },
+        { x: minX + w, y: yEnds, pressure: 0.7 },
       ],
     };
   }
