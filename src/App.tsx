@@ -114,6 +114,9 @@ export default function App() {
     initialPanY: number;
     startMidX: number;
     startMidY: number;
+    lastMidY: number;
+    lastMoveTime: number;
+    velocityY: number;
     paperOffsetX: number;
     paperOffsetY: number;
     startTime: number;
@@ -121,14 +124,18 @@ export default function App() {
     touchCount: number;
   } | null>(null);
 
-  // Outside-page 1-finger scroll & Goodnotes Pull-to-Add-Page (hold 1.2s at top or bottom)
+  // Outside-page 1-finger scroll & Goodnotes Pull-to-Add-Page (hold 1.2s at top or bottom) + 120Hz Velocity Momentum
   const [pullAddPageState, setPullAddPageState] = useState<{ side: 'top' | 'bottom'; progress: number } | null>(null);
   const pullHoldIntervalRef = useRef<number | null>(null);
   const pullSideActiveRef = useRef<'top' | 'bottom' | null>(null);
+  const scrollMomentumRafRef = useRef<number | null>(null);
   const outsidePanDragRef = useRef<{
     active: boolean;
     startClientX: number;
     startClientY: number;
+    lastClientY: number;
+    lastMoveTime: number;
+    velocityY: number;
     initialPanX: number;
     initialPanY: number;
   } | null>(null);
@@ -903,6 +910,64 @@ export default function App() {
     setPullAddPageState(null);
   }, []);
 
+  const cancelScrollMomentum = useCallback(() => {
+    if (scrollMomentumRafRef.current !== null) {
+      window.cancelAnimationFrame(scrollMomentumRafRef.current);
+      scrollMomentumRafRef.current = null;
+    }
+  }, []);
+
+  // 120Hz Physics-Based Kinetic Momentum Scroll (Slow finger = slow 1:1 stop; Fast finger = fast accelerated glide)
+  const startScrollMomentum = useCallback(
+    (initialVelocityPxPerMs: number) => {
+      cancelScrollMomentum();
+      let vy = Math.max(-7.5, Math.min(7.5, initialVelocityPxPerMs));
+      if (Math.abs(vy) < 0.15) {
+        setPan({ ...panRef.current });
+        syncActivePageFromPanY(panRef.current.y);
+        return;
+      }
+
+      let lastFrameTime = performance.now();
+      const step = (now: number) => {
+        const dt = Math.max(4, Math.min(34, now - lastFrameTime));
+        lastFrameTime = now;
+
+        const wsHeight = workspaceRef.current?.clientHeight || 820;
+        const scaledDocHeight = totalDocumentHeight * zoomRef.current;
+        const minPanY = Math.min(0, wsHeight - scaledDocHeight - 48);
+
+        let nextPanY = panRef.current.y + vy * dt;
+
+        // Exponential friction (0.945 per 60Hz frame, smoothly scaled for 120Hz ProMotion)
+        vy *= Math.pow(0.945, dt / 16.67);
+
+        // Soft brake at document top/bottom boundaries so fast flicks don't fly off into empty space
+        if (nextPanY > 0) {
+          nextPanY = nextPanY * 0.45;
+          vy *= 0.55;
+        } else if (nextPanY < minPanY) {
+          nextPanY = minPanY + (nextPanY - minPanY) * 0.45;
+          vy *= 0.55;
+        }
+
+        applyPaperTransformDirect(zoomRef.current, 0, nextPanY, false);
+        syncActivePageFromPanY(nextPanY);
+
+        if (Math.abs(vy) > 0.035) {
+          scrollMomentumRafRef.current = window.requestAnimationFrame(step);
+        } else {
+          scrollMomentumRafRef.current = null;
+          setPan({ ...panRef.current });
+          syncActivePageFromPanY(panRef.current.y);
+        }
+      };
+
+      scrollMomentumRafRef.current = window.requestAnimationFrame(step);
+    },
+    [cancelScrollMomentum, totalDocumentHeight, applyPaperTransformDirect, syncActivePageFromPanY]
+  );
+
   const checkPullToAddPageHold = useCallback(
     (nextPanY: number) => {
       const wsHeight = workspaceRef.current?.clientHeight || 820;
@@ -1214,7 +1279,17 @@ export default function App() {
       return out;
     };
 
+    // Nonlinear Finger-Speed Gain Curve:
+    // - Slow finger (<= 0.35 px/ms) -> 1.0x exact 1:1 slow scroll
+    // - Fast finger (> 0.35 px/ms) -> up to 3.6x accelerated fast scroll!
+    const computeFingerSpeedGain = (speedPxPerMs: number): number => {
+      if (speedPxPerMs <= 0.35) return 1.0;
+      return 1.0 + Math.min(2.6, Math.pow((speedPxPerMs - 0.35) * 1.45, 1.15));
+    };
+
     const onTouchStart = (e: TouchEvent) => {
+      cancelScrollMomentum();
+
       // Only block touch gestures if the Apple Pencil is physically touching the glass right now
       if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
         if (e.target instanceof HTMLCanvasElement && e.cancelable) {
@@ -1236,6 +1311,9 @@ export default function App() {
           active: true,
           startClientX: t.clientX,
           startClientY: t.clientY,
+          lastClientY: t.clientY,
+          lastMoveTime: performance.now(),
+          velocityY: 0,
           initialPanX: panRef.current.x,
           initialPanY: panRef.current.y,
         };
@@ -1278,6 +1356,7 @@ export default function App() {
         const paperRect = paperTransformElRef.current?.getBoundingClientRect();
         const paperOffsetX = paperRect ? (midX - paperRect.left) / zoomRef.current : 460;
         const paperOffsetY = paperRect ? (midY - paperRect.top) / zoomRef.current : 630;
+        const now = performance.now();
 
         pinchStateRef.current = {
           active: true,
@@ -1287,9 +1366,12 @@ export default function App() {
           initialPanY: panRef.current.y,
           startMidX: midX,
           startMidY: midY,
+          lastMidY: midY,
+          lastMoveTime: now,
+          velocityY: 0,
           paperOffsetX,
           paperOffsetY,
-          startTime: performance.now(),
+          startTime: now,
           maxMoved: 0,
           touchCount: Math.max(pinchStateRef.current?.touchCount || 0, directTouches.length),
         };
@@ -1308,21 +1390,29 @@ export default function App() {
 
       const directTouches = getDirectFingerTouches(e.touches);
 
-      // Case A: 1-finger scroll through Word-style pages
+      // Case A: 1-finger velocity-sensitive scroll through Word-style pages
       if (outsidePanDragRef.current?.active && directTouches.length === 1) {
         if (e.cancelable) e.preventDefault();
         const t = directTouches[0];
-        const dy = t.clientY - outsidePanDragRef.current.startClientY;
-        const dx = t.clientX - outsidePanDragRef.current.startClientX;
-        const nextPanX = outsidePanDragRef.current.initialPanX + dx;
-        const nextPanY = outsidePanDragRef.current.initialPanY + dy;
-        applyPaperTransformDirect(zoomRef.current, nextPanX, nextPanY, false);
+        const drag = outsidePanDragRef.current;
+        const now = performance.now();
+        const dt = Math.max(4, Math.min(60, now - drag.lastMoveTime));
+        const stepDy = t.clientY - drag.lastClientY;
+        const instVy = stepDy / dt;
+        const gain = computeFingerSpeedGain(Math.abs(instVy));
+
+        drag.velocityY = drag.velocityY * 0.4 + instVy * gain * 0.6;
+        drag.lastClientY = t.clientY;
+        drag.lastMoveTime = now;
+
+        const nextPanY = panRef.current.y + stepDy * gain;
+        applyPaperTransformDirect(zoomRef.current, 0, nextPanY, false);
         syncActivePageFromPanY(nextPanY);
         checkPullToAddPageHold(nextPanY);
         return;
       }
 
-      // Case B: 2-finger pinch & pan across Word-style pages
+      // Case B: 2-finger pinch & velocity-sensitive vertical scroll across Word-style pages
       if (!pinchStateRef.current?.active) return;
       if (directTouches.length >= 2) {
         if (e.cancelable) e.preventDefault();
@@ -1338,13 +1428,24 @@ export default function App() {
         const moved = Math.hypot(currMidX - st.startMidX, currMidY - st.startMidY) + Math.abs(currDist - st.initialDist);
         if (moved > st.maxMoved) st.maxMoved = moved;
 
-        const newZoom = Math.min(3.5, Math.max(0.45, st.initialZoom * (currDist / st.initialDist)));
-        const newPanX = st.initialPanX + (currMidX - st.startMidX) - st.paperOffsetX * (newZoom - st.initialZoom);
-        const newPanY = st.initialPanY + (currMidY - st.startMidY) - st.paperOffsetY * (newZoom - st.initialZoom);
+        const now = performance.now();
+        const dt = Math.max(4, Math.min(60, now - st.lastMoveTime));
+        const stepMidY = currMidY - st.lastMidY;
+        const instVy = stepMidY / dt;
+        const isPrimarilyVerticalScroll = Math.abs(currDist - st.initialDist) < 32;
+        const gain = isPrimarilyVerticalScroll ? computeFingerSpeedGain(Math.abs(instVy)) : 1.0;
 
-        applyPaperTransformDirect(newZoom, newPanX, newPanY, false);
-        syncActivePageFromPanY(newPanY);
-        checkPullToAddPageHold(newPanY);
+        st.velocityY = st.velocityY * 0.4 + instVy * gain * 0.6;
+        st.lastMidY = currMidY;
+        st.lastMoveTime = now;
+
+        const oldZoom = zoomRef.current;
+        const newZoom = Math.min(3.5, Math.max(0.45, st.initialZoom * (currDist / st.initialDist)));
+        const nextPanY = panRef.current.y + stepMidY * gain - st.paperOffsetY * (newZoom - oldZoom);
+
+        applyPaperTransformDirect(newZoom, 0, nextPanY, false);
+        syncActivePageFromPanY(nextPanY);
+        checkPullToAddPageHold(nextPanY);
       }
     };
 
@@ -1354,9 +1455,14 @@ export default function App() {
         stopPullToAddPageHold();
       }
       if (outsidePanDragRef.current?.active && directTouches.length === 0) {
+        const drag = outsidePanDragRef.current;
         outsidePanDragRef.current = null;
-        setPan({ ...panRef.current });
-        syncActivePageFromPanY(panRef.current.y);
+        if (performance.now() - drag.lastMoveTime < 90 && Math.abs(drag.velocityY) > 0.16) {
+          startScrollMomentum(drag.velocityY);
+        } else {
+          setPan({ ...panRef.current });
+          syncActivePageFromPanY(panRef.current.y);
+        }
         return;
       }
       if (!pinchStateRef.current?.active) return;
@@ -1381,8 +1487,16 @@ export default function App() {
           }
         } else {
           setZoom(zoomRef.current);
-          setPan({ ...panRef.current });
-          syncActivePageFromPanY(panRef.current.y);
+          if (
+            performance.now() - st.lastMoveTime < 90 &&
+            Math.abs(st.velocityY) > 0.16 &&
+            Math.abs(zoomRef.current - st.initialZoom) < 0.08
+          ) {
+            startScrollMomentum(st.velocityY);
+          } else {
+            setPan({ ...panRef.current });
+            syncActivePageFromPanY(panRef.current.y);
+          }
         }
       }
     };
@@ -1420,7 +1534,7 @@ export default function App() {
       ws.removeEventListener('touchcancel', onTouchEnd);
       ws.removeEventListener('wheel', onWheel);
     };
-  }, [viewMode, pencilOnlyMode, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, handleUndo, handleRedo, showToast]);
+  }, [viewMode, pencilOnlyMode, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, cancelScrollMomentum, startScrollMomentum, handleUndo, handleRedo, showToast]);
 
   const clearActiveOverlay = () => {
     const c = activeCanvasRef.current;
@@ -1584,6 +1698,7 @@ export default function App() {
       pinchStateRef.current = null;
       outsidePanDragRef.current = null;
       stopPullToAddPageHold();
+      cancelScrollMomentum();
 
       // If a stray palm 'touch' stroke was in progress, wipe it immediately so the Apple Pencil takes over!
       if (isDrawingRef.current && activePointerTypeRef.current === 'touch') {
