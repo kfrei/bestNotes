@@ -663,7 +663,14 @@ export default function App() {
       }
     }
 
-    if (s.fillStyle && s.fillStyle !== 'none' && s.points.length > 2) {
+    const canFillShape =
+      s.isShape &&
+      s.shapeType !== 'line' &&
+      s.shapeType !== 'arrow' &&
+      s.fillStyle &&
+      s.fillStyle !== 'none' &&
+      s.points.length > 2;
+    if (canFillShape) {
       // Always use the stroke's border color (s.color) for the semi-transparent shape fill!
       const shadeColor = s.color || s.fillColor || '#2563eb';
       ctx.save();
@@ -1925,19 +1932,21 @@ export default function App() {
       : currentStrokePtsRef.current;
     if (pts.length === 0) return;
 
+    // Only show shape fill once the shape is actually completed/snapped (never while drawing the raw stroke!)
+    const isCompletedShape = Boolean(snappedCurrentStrokeRef.current);
     const previewStroke: StrokeObject = {
       id: 'live',
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       color: strokeColor,
-      fillColor: fillStyle !== 'none' ? strokeColor : undefined,
-      fillStyle,
+      fillColor: isCompletedShape && fillStyle !== 'none' ? strokeColor : undefined,
+      fillStyle: isCompletedShape ? fillStyle : 'none',
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
       arrowEnd: arrowEnd || shapePreset === 'arrow',
       points: pts,
       layerId: activeLayerId,
-      isShape: Boolean(snappedCurrentStrokeRef.current),
+      isShape: isCompletedShape,
       shapeType: snappedCurrentStrokeRef.current?.shapeType,
     };
     drawStrokeOnContext(ctx, previewStroke);
@@ -2791,7 +2800,6 @@ export default function App() {
         !snappedCurrentStrokeRef.current &&
         lineStyle === 'solid' &&
         !arrowEnd &&
-        fillStyle === 'none' &&
         activeTool !== 'shape' &&
         activeTool !== 'tape'
       ) {
@@ -2807,7 +2815,6 @@ export default function App() {
       snappedCurrentStrokeRef.current ||
       lineStyle !== 'solid' ||
       arrowEnd ||
-      fillStyle !== 'none' ||
       activeTool === 'shape' ||
       activeTool === 'tape'
     ) {
@@ -3064,8 +3071,8 @@ export default function App() {
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       penType: penSubType,
       color: strokeColor,
-      fillColor: fillStyle !== 'none' ? strokeColor : undefined,
-      fillStyle,
+      fillColor: isShape && fillStyle !== 'none' ? strokeColor : undefined,
+      fillStyle: isShape ? fillStyle : 'none',
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
