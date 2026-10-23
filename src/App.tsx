@@ -43,6 +43,7 @@ import {
   Scissors,
   Copy,
   ClipboardPaste,
+  FileText,
 } from 'lucide-react';
 import {
   Notebook,
@@ -62,6 +63,7 @@ import {
 } from './types/note';
 import preloadedData from './data/preloadedNotebooks.json';
 import { importGoodnotesFile } from './utils/goodnotesParser';
+import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
 import {
   distance,
   smoothStrokeToBezier,
@@ -194,6 +196,8 @@ export default function App() {
   // Modals
   const mathDialogRef = useRef<HTMLDialogElement | null>(null);
   const settingsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const thumbnailsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const [thumbnailCols, setThumbnailCols] = useState<3 | 4>(3);
   const [mathInput, setMathInput] = useState<string>('I = \\frac{q}{t} \\implies 15 \\cdot t = 90');
   const [mathEquationToSolve, setMathEquationToSolve] = useState<string>('15 * t = 90');
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
@@ -236,6 +240,8 @@ export default function App() {
   const imageElementsCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const fileInputGoodnotesRef = useRef<HTMLInputElement | null>(null);
   const fileInputImageRef = useRef<HTMLInputElement | null>(null);
+  const fileInputPdfOrDocRef = useRef<HTMLInputElement | null>(null);
+  const pdfImportModeRef = useRef<'new-notebook' | 'insert-pages'>('insert-pages');
 
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId) || notebooks[0];
   const activePage =
@@ -284,7 +290,9 @@ export default function App() {
 
   // Modern Web Guidance mandatory fallback for <dialog closedby="any"> in iPadOS Safari
   useEffect(() => {
-    const dialogs = [mathDialogRef.current, settingsDialogRef.current].filter(Boolean) as HTMLDialogElement[];
+    const dialogs = [mathDialogRef.current, settingsDialogRef.current, thumbnailsDialogRef.current].filter(
+      Boolean
+    ) as HTMLDialogElement[];
     const handlers: Array<{ el: HTMLDialogElement; fn: (e: MouseEvent) => void }> = [];
 
     for (const dialog of dialogs) {
@@ -603,6 +611,27 @@ export default function App() {
 
       drawPaperBackground(ctx, pWidth, pHeight, pageObj.template);
 
+      // 0. Full-Page PDF or JPG/PNG Document Background (write/highlight directly on top without erasing it!)
+      if (pageObj.backgroundDataUrl) {
+        let bgImg = imageElementsCacheRef.current.get(pageObj.backgroundDataUrl);
+        if (!bgImg) {
+          bgImg = new Image();
+          bgImg.src = pageObj.backgroundDataUrl;
+          bgImg.onload = () => renderStaticScene();
+          imageElementsCacheRef.current.set(pageObj.backgroundDataUrl, bgImg);
+        }
+        if (bgImg.complete && bgImg.naturalWidth > 0) {
+          ctx.save();
+          const scale = Math.min(pWidth / bgImg.naturalWidth, pHeight / bgImg.naturalHeight);
+          const drawW = bgImg.naturalWidth * scale;
+          const drawH = bgImg.naturalHeight * scale;
+          const drawX = (pWidth - drawW) / 2;
+          const drawY = (pHeight - drawH) / 2;
+          ctx.drawImage(bgImg, drawX, drawY, drawW, drawH);
+          ctx.restore();
+        }
+      }
+
       const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
       const isCurrentActivePage = pageIdx === activePageIndex;
 
@@ -860,13 +889,15 @@ export default function App() {
     [activeNotebook.pages]
   );
 
-  const insertNewPageRelative = useCallback(
-    (where: 'before' | 'after') => {
+  const insertPageAtIndex = useCallback(
+    (insertIdx: number) => {
+      const clampedIdx = Math.max(0, Math.min(activeNotebook.pages.length, insertIdx));
+      const refPage = activeNotebook.pages[Math.min(clampedIdx, activeNotebook.pages.length - 1)] || activePage;
       const newPage: NotePage = {
-        id: `page-${Date.now()}`,
-        title: `Σελίδα ${activeNotebook.pages.length + 1}`,
-        template: activePage.template,
-        orientation: activePage.orientation || 'portrait',
+        id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: `Σελίδα ${clampedIdx + 1}`,
+        template: refPage.template,
+        orientation: refPage.orientation || 'portrait',
         layers: [
           { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
           { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
@@ -876,29 +907,118 @@ export default function App() {
         images: [],
         tapes: [],
       };
-      const insertIdx = where === 'before' ? 0 : activeNotebook.pages.length;
+
       let newTopY = 0;
-      if (where === 'after') {
-        newTopY = totalDocumentHeight + PAGE_GAP;
+      for (let i = 0; i < clampedIdx && i < activeNotebook.pages.length; i++) {
+        const p = activeNotebook.pages[i];
+        newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+      }
+
+      setNotebooks((prev) =>
+        prev.map((nb) => {
+          if (nb.id !== activeNotebook.id) return nb;
+          const nextPages = [...nb.pages];
+          nextPages.splice(clampedIdx, 0, newPage);
+          return { ...nb, updatedAt: new Date().toISOString(), pages: nextPages };
+        })
+      );
+      setActivePageIndex(clampedIdx);
+      activeDrawingPageIndexRef.current = clampedIdx;
+      applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
+      showToast(
+        clampedIdx === 0
+          ? '📄 Προστέθηκε Νέα Σελίδα στην αρχή του εγγράφου!'
+          : clampedIdx === activeNotebook.pages.length
+          ? '📄 Προστέθηκε Νέα Σελίδα στο τέλος του εγγράφου!'
+          : `📄 Προστέθηκε Νέα Σελίδα στη μέση (Θέση #${clampedIdx + 1})!`
+      );
+    },
+    [activeNotebook.id, activeNotebook.pages, activePage, applyPaperTransformDirect, showToast]
+  );
+
+  const insertNewPageRelative = useCallback(
+    (where: 'before' | 'after' | 'after-current') => {
+      if (where === 'before') {
+        insertPageAtIndex(0);
+      } else if (where === 'after-current') {
+        insertPageAtIndex(activePageIndex + 1);
+      } else {
+        insertPageAtIndex(activeNotebook.pages.length);
+      }
+    },
+    [activePageIndex, activeNotebook.pages.length, insertPageAtIndex]
+  );
+
+  const duplicatePageAtIndex = useCallback(
+    (sourceIdx: number) => {
+      const srcPage = activeNotebook.pages[sourceIdx];
+      if (!srcPage) return;
+      const cloned: NotePage = {
+        ...clonePageFast(srcPage),
+        id: `page-dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: `${srcPage.title} (Αντίγραφο)`,
+      };
+      const insertIdx = sourceIdx + 1;
+      let newTopY = 0;
+      for (let i = 0; i < insertIdx && i < activeNotebook.pages.length; i++) {
+        const p = activeNotebook.pages[i];
+        newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
       }
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
           const nextPages = [...nb.pages];
-          nextPages.splice(insertIdx, 0, newPage);
+          nextPages.splice(insertIdx, 0, cloned);
           return { ...nb, updatedAt: new Date().toISOString(), pages: nextPages };
         })
       );
       setActivePageIndex(insertIdx);
       activeDrawingPageIndexRef.current = insertIdx;
-      applyPaperTransformDirect(zoomRef.current, panRef.current.x, -newTopY * zoomRef.current, true);
-      showToast(
-        where === 'before'
-          ? '📄 Προστέθηκε Νέα Σελίδα στην αρχή του εγγράφου!'
-          : '📄 Προστέθηκε Νέα Σελίδα στο τέλος του εγγράφου!'
-      );
+      applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
+      showToast(`📑 Διπλασιάστηκε η Σελίδα #${sourceIdx + 1} στη θέση #${insertIdx + 1}!`);
     },
-    [activeNotebook.id, activeNotebook.pages.length, activePage.orientation, activePage.template, totalDocumentHeight, applyPaperTransformDirect, showToast]
+    [activeNotebook.id, activeNotebook.pages, clonePageFast, applyPaperTransformDirect, showToast]
+  );
+
+  const deletePageAtIndex = useCallback(
+    (targetIdx: number) => {
+      if (activeNotebook.pages.length <= 1) {
+        updateActivePage((page) => ({
+          ...page,
+          backgroundDataUrl: undefined,
+          strokes: [],
+          texts: [],
+          images: [],
+          tapes: [],
+        }));
+        showToast('🧹 Το έγγραφο έχει μόνο 1 σελίδα — καθαρίστηκε το περιεχόμενό της!');
+        return;
+      }
+
+      const nextIdx = Math.max(0, Math.min(targetIdx, activeNotebook.pages.length - 2));
+      let newTopY = 0;
+      const remainingPages = activeNotebook.pages.filter((_, i) => i !== targetIdx);
+      for (let i = 0; i < nextIdx && i < remainingPages.length; i++) {
+        const p = remainingPages[i];
+        newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+      }
+
+      setNotebooks((prev) =>
+        prev.map((nb) => {
+          if (nb.id !== activeNotebook.id) return nb;
+          return {
+            ...nb,
+            updatedAt: new Date().toISOString(),
+            pages: nb.pages.filter((_, idx) => idx !== targetIdx),
+          };
+        })
+      );
+      setActivePageIndex(nextIdx);
+      activeDrawingPageIndexRef.current = nextIdx;
+      applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
+      showToast(`🗑️ Διαγράφηκε η Σελίδα #${targetIdx + 1}!`);
+    },
+    [activeNotebook.id, activeNotebook.pages, updateActivePage, applyPaperTransformDirect, showToast]
   );
 
   const stopPullToAddPageHold = useCallback(() => {
@@ -2763,6 +2883,92 @@ export default function App() {
     e.target.value = '';
   };
 
+  // Open / Import PDF (multi-page up to 30+ pages!) or JPG/PNG/WebP to write directly on top of!
+  const handlePdfOrDocFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    e.target.value = '';
+
+    try {
+      const importedPages: NotePage[] = [];
+      for (const file of files) {
+        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+        if (isPdf) {
+          setStatusBanner(`⏳ Φόρτωση PDF "${file.name}"...`);
+          const pdfPages = await renderPdfFileToPages(file, activePage.template, (curr, total) => {
+            setStatusBanner(`⏳ Φόρτωση PDF "${file.name}": Σελίδα ${curr} από ${total}...`);
+          });
+          importedPages.push(...pdfPages);
+        } else {
+          setStatusBanner(`⏳ Φόρτωση εικόνας "${file.name}" ως σελίδα εγγράφου...`);
+          const imgPage = await renderImageFileToPage(file, activePage.template);
+          importedPages.push(imgPage);
+        }
+      }
+
+      if (importedPages.length === 0) {
+        setStatusBanner(null);
+        return;
+      }
+
+      if (pdfImportModeRef.current === 'new-notebook' || viewMode === 'library') {
+        const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|webp)$/i, '');
+        const newNb: Notebook = {
+          id: `nb-doc-${Date.now()}`,
+          title: baseTitle,
+          folder: 'Έγγραφα & PDF',
+          coverColor: '#0284c7',
+          updatedAt: new Date().toISOString(),
+          sourceFormat: '.bestnotes',
+          pages: importedPages,
+        };
+        setNotebooks((prev) => [newNb, ...prev]);
+        setOpenNotebookIds((prev) => (prev.includes(newNb.id) ? prev : [...prev, newNb.id]));
+        setActiveNotebookId(newNb.id);
+        setActivePageIndex(0);
+        activeDrawingPageIndexRef.current = 0;
+        setViewMode('editor');
+        applyPaperTransformDirect(zoomRef.current, 0, 0, true);
+        showToast(`📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`);
+      } else {
+        // Insert into current notebook right after activePageIndex (or replace current page if completely blank)
+        const isCurrentPageEmpty =
+          activePage.strokes.length === 0 &&
+          !activePage.backgroundDataUrl &&
+          (activePage.images?.length || 0) === 0 &&
+          (activePage.texts?.length || 0) === 0;
+
+        const targetInsertIdx = isCurrentPageEmpty ? activePageIndex : activePageIndex + 1;
+        let newTopY = 0;
+        for (let i = 0; i < targetInsertIdx && i < activeNotebook.pages.length; i++) {
+          const p = activeNotebook.pages[i];
+          newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+        }
+
+        setNotebooks((prev) =>
+          prev.map((nb) => {
+            if (nb.id !== activeNotebook.id) return nb;
+            const nextPages = [...nb.pages];
+            if (isCurrentPageEmpty) {
+              nextPages.splice(activePageIndex, 1, ...importedPages);
+            } else {
+              nextPages.splice(targetInsertIdx, 0, ...importedPages);
+            }
+            return { ...nb, updatedAt: new Date().toISOString(), pages: nextPages };
+          })
+        );
+        setActivePageIndex(targetInsertIdx);
+        activeDrawingPageIndexRef.current = targetInsertIdx;
+        applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
+        thumbnailsDialogRef.current?.close();
+        showToast(`📄 Προστέθηκαν ${importedPages.length} σελίδες (PDF/Εικόνα) — γράψε απευθείας πάνω τους!`);
+      }
+    } catch {
+      showToast('⚠️ Σφάλμα κατά το άνοιγμα του PDF / Εικόνας');
+    }
+  };
+
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
   return (
@@ -2775,21 +2981,40 @@ export default function App() {
         onChange={handleGoodnotesFileChange}
       />
       <input ref={fileInputImageRef} type="file" accept="image/*" className="hidden" onChange={handleImageFileChange} />
+      <input
+        ref={fileInputPdfOrDocRef}
+        type="file"
+        accept=".pdf,application/pdf,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png"
+        multiple
+        className="hidden"
+        onChange={handlePdfOrDocFileChange}
+      />
 
       {/* =========================================================================
           1. AUTHENTIC GOODNOTES 6 TOP NAVY BAR & DOCUMENT TABS (#1B2A4A)
          ========================================================================= */}
       <header className="flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none">
-        {/* Left Navigation Icons (Back to Library, Page Thumbnails, Import .goodnotes) */}
+        {/* Left Navigation Icons (Back to Library, Page Thumbnails Grid, Import .goodnotes, Open PDF/JPG/PNG) */}
         <div className="flex items-center gap-1 pb-1.5">
           <button
             onClick={() => setViewMode(viewMode === 'library' ? 'editor' : 'library')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
             title="Πίσω στους Φακέλους (Documents)"
           >
             <ChevronLeft className="w-5 h-5 text-sky-300" />
-            <LayoutGrid className="w-4 h-4" />
           </button>
+
+          {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
+          {viewMode === 'editor' && (
+            <button
+              onClick={() => thumbnailsDialogRef.current?.showModal()}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/40 text-xs font-semibold text-indigo-100 transition cursor-pointer"
+              title="Προβολή όλων των σελίδων σε Μικρογραφίες (3 ή 4 στήλες με scroll)"
+            >
+              <LayoutGrid className="w-4 h-4 text-sky-300" />
+              <span className="hidden md:inline">Σελίδες ({activeNotebook.pages.length})</span>
+            </button>
+          )}
 
           <button
             onClick={() => fileInputGoodnotesRef.current?.click()}
@@ -2799,10 +3024,22 @@ export default function App() {
             <FolderOpen className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">.goodnotes</span>
           </button>
+
+          <button
+            onClick={() => {
+              pdfImportModeRef.current = viewMode === 'library' ? 'new-notebook' : 'insert-pages';
+              fileInputPdfOrDocRef.current?.click();
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-xs font-semibold text-emerald-200 transition cursor-pointer"
+            title="Άνοιγμα PDF, JPG ή PNG για γραφή απευθείας πάνω του!"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">+ PDF / JPG</span>
+          </button>
         </div>
 
         {/* Center: Authentic Goodnotes 6 Document Tabs */}
-        <div className="flex items-end gap-1 overflow-x-auto max-w-[54vw] px-2">
+        <div className="flex items-end gap-1 overflow-x-auto max-w-[46vw] px-2">
           {openNotebookIds.map((nbId) => {
             const nb = notebooks.find((n) => n.id === nbId);
             if (!nb) return null;
@@ -2822,7 +3059,7 @@ export default function App() {
                 }`}
               >
                 <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: nb.coverColor }} />
-                <span className="truncate max-w-[175px]">{nb.title}</span>
+                <span className="truncate max-w-[165px]">{nb.title}</span>
                 {openNotebookIds.length > 1 && (
                   <button
                     onClick={(e) => {
@@ -2843,7 +3080,7 @@ export default function App() {
           })}
         </div>
 
-        {/* Right: Undo / Redo, Page Switcher, Drive Sync & Settings */}
+        {/* Right: Undo / Redo, Page Switcher, Insert/Delete Page, Drive Sync & Settings */}
         <div className="flex items-center gap-1.5 pb-1.5">
           {/* Undo / Redo just like Goodnotes top-right */}
           <button
@@ -2906,7 +3143,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Page Indicator & Add Page (Scrolls smoothly in Word-style continuous stack) */}
+          {/* Page Indicator (Click to open Thumbnail Grid!), Insert Page in Middle (+), Delete Page (🗑️) */}
           <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
             <button
               onClick={() => scrollToPageIndex(activePageIndex - 1)}
@@ -2916,9 +3153,13 @@ export default function App() {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="px-1.5 font-semibold">
+            <button
+              onClick={() => thumbnailsDialogRef.current?.showModal()}
+              className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
+              title="Πάτησε για Προβολή Μικρογραφιών Σελίδων (Grid View)"
+            >
               {activePageIndex + 1}/{activeNotebook.pages.length}
-            </span>
+            </button>
             <button
               onClick={() => scrollToPageIndex(activePageIndex + 1)}
               disabled={activePageIndex >= activeNotebook.pages.length - 1}
@@ -2928,11 +3169,18 @@ export default function App() {
               <ChevronRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => insertNewPageRelative('after')}
-              className="ml-1 p-0.5 text-sky-300 hover:text-white cursor-pointer"
-              title="Νέα Σελίδα"
+              onClick={() => insertNewPageRelative('after-current')}
+              className="ml-1 p-0.5 text-emerald-300 hover:text-white cursor-pointer"
+              title="Προσθήκη Νέας Σελίδας ακριβώς μετά την τρέχουσα (στη μέση ή στο τέλος)"
             >
               <Plus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => deletePageAtIndex(activePageIndex)}
+              className="ml-1 p-0.5 text-rose-300 hover:text-rose-100 cursor-pointer"
+              title="Διαγραφή τρέχουσας σελίδας"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -2968,14 +3216,24 @@ export default function App() {
       {viewMode === 'library' ? (
         <div className="flex-1 overflow-y-auto p-6 bg-[#f4f5f7]">
           <div className="max-w-5xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
               <div>
                 <h1 className="text-2xl font-bold text-[#1b2a4a]">Έγγραφα (Documents)</h1>
                 <p className="text-sm text-slate-500">
-                  Τα αρχεία σου `.goodnotes` Φυσικής + Νέα Τετράδια BestNotes
+                  Τα αρχεία σου `.goodnotes`, PDF, JPG/PNG + Νέα Τετράδια BestNotes
                 </p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-2.5 flex-wrap">
+                <button
+                  onClick={() => {
+                    pdfImportModeRef.current = 'new-notebook';
+                    fileInputPdfOrDocRef.current?.click();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-xs cursor-pointer"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Άνοιγμα PDF / JPG / PNG</span>
+                </button>
                 <button
                   onClick={() => fileInputGoodnotesRef.current?.click()}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-300 hover:border-sky-500 text-[#1b2a4a] text-sm font-semibold shadow-xs cursor-pointer"
@@ -3792,19 +4050,60 @@ export default function App() {
                         : 'border-slate-300/90'
                     }`}
                   >
-                    {/* Word/Goodnotes Page Separator Header Badge */}
-                    <div className="absolute -top-6 left-0 right-0 flex items-center justify-between px-1 pointer-events-none select-none">
+                    {/* Word/Goodnotes Page Separator Header Badge + Quick Insert/Delete Page Actions */}
+                    <div className="absolute -top-7 left-0 right-0 flex items-center justify-between px-1 select-none z-20">
                       <span
                         className={`text-xs font-bold ${
-                          isCurrentActive ? 'text-[#0066ff]' : 'text-slate-500'
+                          isCurrentActive ? 'text-[#0066ff]' : 'text-slate-600'
                         }`}
                       >
                         Σελίδα {pageIdx + 1} από {activeNotebook.pages.length} — {pageObj.title}
                       </span>
-                      <span className="text-[11px] font-medium text-slate-400">
-                        {pageObj.orientation === 'landscape' ? 'Landscape (1260×920)' : 'Portrait (920×1260)'}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => insertPageAtIndex(pageIdx)}
+                          className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-sky-50 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
+                          title="Προσθήκη νέας σελίδας ΠΡΙΝ από αυτή τη σελίδα"
+                        >
+                          + Πριν
+                        </button>
+                        <button
+                          onClick={() => insertPageAtIndex(pageIdx + 1)}
+                          className="px-2 py-0.5 rounded-full bg-sky-600 hover:bg-sky-500 text-[10px] font-semibold text-white shadow-2xs cursor-pointer"
+                          title="Προσθήκη νέας σελίδας ΜΕΤΑ από αυτή τη σελίδα (στη μέση)"
+                        >
+                          + Σελίδα Μετά
+                        </button>
+                        <button
+                          onClick={() => duplicatePageAtIndex(pageIdx)}
+                          className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-slate-100 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
+                          title="Διπλασιασμός αυτής της σελίδας"
+                        >
+                          📑 Αντίγραφο
+                        </button>
+                        <button
+                          onClick={() => deletePageAtIndex(pageIdx)}
+                          className="px-2 py-0.5 rounded-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 shadow-2xs cursor-pointer"
+                          title="Διαγραφή αυτής της σελίδας"
+                        >
+                          🗑️ Διαγραφή
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Interactive "+ Add Page in the Middle" Pill between consecutive pages */}
+                    {pageIdx < activeNotebook.pages.length - 1 && (
+                      <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-center">
+                        <button
+                          onClick={() => insertPageAtIndex(pageIdx + 1)}
+                          className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-white/95 hover:bg-[#0066ff] text-slate-600 hover:text-white border border-slate-300 hover:border-[#0066ff] text-[11px] font-semibold shadow-sm transition cursor-pointer"
+                          title={`Προσθήκη νέας σελίδας ανάμεσα στη Σελίδα ${pageIdx + 1} και ${pageIdx + 2}`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Προσθήκη σελίδας εδώ ({pageIdx + 1} ↔ {pageIdx + 2})</span>
+                        </button>
+                      </div>
+                    )}
 
                     {/* Layer 1: 2x Retina Static Committed Scene Canvas */}
                     <canvas
@@ -3947,6 +4246,220 @@ export default function App() {
           </div>
         </>
       )}
+
+      {/* =========================================================================
+          MULTI-PAGE THUMBNAIL GRID VIEW (3 or 4 Columns × Scrollable Rows for 30+ Pages)
+         ========================================================================= */}
+      <dialog
+        ref={thumbnailsDialogRef}
+        {...({ closedby: 'any' } as any)}
+        aria-labelledby="thumbnailsDialogTitle"
+        className="m-auto rounded-2xl bg-[#f4f5f7] text-slate-800 border border-slate-300 p-0 w-[94vw] max-w-5xl max-h-[88vh] shadow-2xl overflow-hidden"
+      >
+        <div className="flex flex-col h-full max-h-[88vh]">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-5 py-3.5 bg-[#1b2a4a] text-white shrink-0 flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <LayoutGrid className="w-5 h-5 text-sky-300" />
+              <div>
+                <h2 id="thumbnailsDialogTitle" className="text-sm sm:text-base font-bold">
+                  Μικρογραφίες Σελίδων — {activeNotebook.title}
+                </h2>
+                <p className="text-[11px] text-slate-300">
+                  Σύνολο: {activeNotebook.pages.length} σελίδες • Πάτησε σε οποιαδήποτε σελίδα για άμεση μετάβαση
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* 3 vs 4 Columns Switcher */}
+              <div className="flex items-center bg-[#263961] rounded-lg p-0.5 text-xs">
+                <button
+                  onClick={() => setThumbnailCols(3)}
+                  className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
+                    thumbnailCols === 3 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  3 Στήλες
+                </button>
+                <button
+                  onClick={() => setThumbnailCols(4)}
+                  className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
+                    thumbnailCols === 4 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  4 Στήλες
+                </button>
+              </div>
+
+              <button
+                onClick={() => insertPageAtIndex(activePageIndex + 1)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0066ff] hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+                title="Προσθήκη νέας σελίδας μετά την τρέχουσα"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Σελίδα (Μετά την #{activePageIndex + 1})</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  pdfImportModeRef.current = 'insert-pages';
+                  fileInputPdfOrDocRef.current?.click();
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                title="Εισαγωγή PDF, JPG ή PNG στο έγγραφο"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>+ PDF / JPG</span>
+              </button>
+
+              <button
+                onClick={() => thumbnailsDialogRef.current?.close()}
+                className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold text-white cursor-pointer"
+              >
+                Κλείσιμο ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Thumbnail Grid (e.g. 4 rows × 3 columns or 4 columns for 30+ page documents) */}
+          <div className="flex-1 overflow-y-auto p-5">
+            <div
+              className={`grid gap-5 ${
+                thumbnailCols === 3
+                  ? 'grid-cols-2 sm:grid-cols-3'
+                  : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
+              }`}
+            >
+              {activeNotebook.pages.map((pObj, pIdx) => {
+                const isSelectedPage = pIdx === activePageIndex;
+                const pW = pObj.orientation === 'landscape' ? 1260 : 920;
+                const pH = pObj.orientation === 'landscape' ? 920 : 1260;
+
+                return (
+                  <div
+                    key={pObj.id}
+                    className={`group flex flex-col rounded-xl bg-white border-2 shadow-sm hover:shadow-md transition overflow-hidden ${
+                      isSelectedPage
+                        ? 'border-[#0066ff] ring-2 ring-[#0066ff]/25'
+                        : 'border-slate-200 hover:border-sky-400'
+                    }`}
+                  >
+                    {/* Clickable Miniature Page Preview */}
+                    <div
+                      onClick={() => {
+                        scrollToPageIndex(pIdx);
+                        thumbnailsDialogRef.current?.close();
+                      }}
+                      className="relative w-full aspect-[3/4] bg-[#fffdf7] overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-100"
+                    >
+                      {/* Page Number Badge */}
+                      <div
+                        className={`absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-full text-xs font-bold shadow ${
+                          isSelectedPage ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
+                        }`}
+                      >
+                        {pIdx + 1}
+                      </div>
+
+                      {isSelectedPage && (
+                        <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow">
+                          Ενεργή
+                        </div>
+                      )}
+
+                      {/* PDF / JPG / PNG Background Preview if present */}
+                      {pObj.backgroundDataUrl && (
+                        <img
+                          src={pObj.backgroundDataUrl}
+                          alt={pObj.title}
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                        />
+                      )}
+
+                      {/* Miniature Vector SVG Preview of All Handwritten Strokes & Shapes */}
+                      <svg
+                        viewBox={`0 0 ${pW} ${pH}`}
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                      >
+                        {pObj.strokes.map((st) => {
+                          if (st.points.length < 2) return null;
+                          const ptsStr = st.points.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
+                          return (
+                            <polyline
+                              key={st.id}
+                              fill={st.fillStyle && st.fillStyle !== 'none' && st.fillColor ? st.fillColor : 'none'}
+                              stroke={st.color}
+                              strokeWidth={Math.max(3, st.width * 1.6)}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              opacity={st.opacity ?? 1}
+                              points={ptsStr}
+                            />
+                          );
+                        })}
+                      </svg>
+                    </div>
+
+                    {/* Card Footer: Title + Quick Insert Before / Insert After (in Middle) / Duplicate / Delete */}
+                    <div className="p-2.5 bg-slate-50 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-800 truncate">{pObj.title}</span>
+                        <span className="text-[10px] text-slate-400 shrink-0">
+                          {pObj.orientation === 'landscape' ? 'Landscape' : 'Portrait'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-200/80">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            insertPageAtIndex(pIdx);
+                          }}
+                          className="flex-1 py-1 rounded bg-white hover:bg-sky-50 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
+                          title="Προσθήκη σελίδας ΠΡΙΝ από αυτή"
+                        >
+                          + Πριν
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            insertPageAtIndex(pIdx + 1);
+                          }}
+                          className="flex-1 py-1 rounded bg-sky-600 hover:bg-sky-500 text-[10px] font-semibold text-white cursor-pointer"
+                          title="Προσθήκη σελίδας ΜΕΤΑ από αυτή (στη μέση)"
+                        >
+                          + Μετά
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicatePageAtIndex(pIdx);
+                          }}
+                          className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
+                          title="Διπλασιασμός σελίδας"
+                        >
+                          📑
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deletePageAtIndex(pIdx);
+                          }}
+                          className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 cursor-pointer"
+                          title="Διαγραφή αυτής της σελίδας"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </dialog>
 
       {/* MATH / LATEX CONVERTER & OFFLINE CAS SOLVER DIALOG */}
       <dialog

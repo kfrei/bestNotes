@@ -116,6 +116,7 @@ export interface NotePage {
   template: PaperTemplateType;
   orientation?: 'portrait' | 'landscape';
   rotation?: number; // 0, 90, 180, 270
+  backgroundDataUrl?: string; // Full-page PDF page or imported JPG/PNG background to write on top of
   layers: LayerItem[];
   strokes: StrokeObject[];
   shapes?: StrokeObject[];
