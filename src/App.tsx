@@ -223,7 +223,7 @@ export default function App() {
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
   const isDraggingSelectionRef = useRef<{ startX: number; startY: number } | null>(null);
   const selectionTransformRef = useRef<{
-    mode: 'move' | 'scale' | 'rotate';
+    mode: 'move' | 'scale' | 'scale-x' | 'scale-y' | 'rotate';
     startX: number;
     startY: number;
     centerX: number;
@@ -232,6 +232,9 @@ export default function App() {
     anchorY: number;
     initialDist: number;
     initialAngle: number;
+    frameAngle?: number;
+    sideSignX?: number;
+    sideSignY?: number;
   } | null>(null);
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
@@ -1011,7 +1014,24 @@ export default function App() {
           ctx.closePath();
           ctx.fill();
 
-          // 4 Corner Proportional Resize Handles (NW, NE, SE, SW in rotated frame)
+          // 4 Mid-Side Aspect-Ratio Stretch Handles (Top, Right, Bottom, Left — Orange #f97316 dots!)
+          const localSideMidpoints = [
+            { x: 0, y: -hh }, // Top (height stretch)
+            { x: hw, y: 0 },  // Right (width stretch)
+            { x: 0, y: hh },  // Bottom (height stretch)
+            { x: -hw, y: 0 }, // Left (width stretch)
+          ];
+          for (const m of localSideMidpoints) {
+            ctx.fillStyle = '#f97316';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          // 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots!)
           const localCorners = [
             { x: -hw, y: -hh },
             { x: hw, y: -hh },
@@ -1019,11 +1039,11 @@ export default function App() {
             { x: -hw, y: hh },
           ];
           for (const c of localCorners) {
-            ctx.fillStyle = '#ffffff';
-            ctx.strokeStyle = '#0066ff';
+            ctx.fillStyle = '#0066ff';
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2.2;
             ctx.beginPath();
-            ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+            ctx.arc(c.x, c.y, 7.5, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
           }
@@ -2379,12 +2399,12 @@ export default function App() {
           return;
         }
 
-        // B. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW in rotated frame)
+        // B1. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots)
         const localCorners = [
-          { lx: -hw, ly: -hh, oppLx: hw, oppLy: hh },
-          { lx: hw, ly: -hh, oppLx: -hw, oppLy: hh },
-          { lx: hw, ly: hh, oppLx: -hw, oppLy: -hh },
-          { lx: -hw, ly: hh, oppLx: hw, oppLy: -hh },
+          { lx: -hw, ly: -hh, oppLx: hw, oppLy: hh, sx: -1, sy: -1 },
+          { lx: hw, ly: -hh, oppLx: -hw, oppLy: hh, sx: 1, sy: -1 },
+          { lx: hw, ly: hh, oppLx: -hw, oppLy: -hh, sx: 1, sy: 1 },
+          { lx: -hw, ly: hh, oppLx: hw, oppLy: -hh, sx: -1, sy: 1 },
         ];
         for (const c of localCorners) {
           if (Math.hypot(localX - c.lx, localY - c.ly) < 18) {
@@ -2400,6 +2420,53 @@ export default function App() {
               anchorY: oppWorldY,
               initialDist: Math.max(12, distance(pt, { x: oppWorldX, y: oppWorldY })),
               initialAngle: 0,
+              frameAngle: angle,
+              sideSignX: c.sx,
+              sideSignY: c.sy,
+            };
+            isDrawingRef.current = true;
+            return;
+          }
+        }
+
+        // B2. Check 4 Mid-Side Aspect-Ratio Stretch Handles (Top, Right, Bottom, Left — Orange #f97316 dots)
+        const localSides: {
+          lx: number;
+          ly: number;
+          oppLx: number;
+          oppLy: number;
+          mode: 'scale-x' | 'scale-y';
+          sx: number;
+          sy: number;
+        }[] = [
+          { lx: 0, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
+          { lx: hw, ly: 0, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+          { lx: 0, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
+          { lx: -hw, ly: 0, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+        ];
+        for (const m of localSides) {
+          if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
+            const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
+            const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
+            const rx = pt.x - oppWorldX;
+            const ry = pt.y - oppWorldY;
+            const initialSpan =
+              m.mode === 'scale-x'
+                ? Math.max(16, Math.abs(rx * cosA + ry * sinA))
+                : Math.max(16, Math.abs(-rx * sinA + ry * cosA));
+            selectionTransformRef.current = {
+              mode: m.mode,
+              startX: pt.x,
+              startY: pt.y,
+              centerX: bcx,
+              centerY: bcy,
+              anchorX: oppWorldX,
+              anchorY: oppWorldY,
+              initialDist: initialSpan,
+              initialAngle: 0,
+              frameAngle: angle,
+              sideSignX: m.sx,
+              sideSignY: m.sy,
             };
             isDrawingRef.current = true;
             return;
@@ -2737,13 +2804,19 @@ export default function App() {
           return;
         }
 
-        // B. Proportional Resize from 4 Corners
+        // B1. Proportional Resize from 4 Corners (Blue #0066ff dots — preserves exact aspect ratio!)
         if (tf.mode === 'scale') {
           const currDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
           const scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
           tf.initialDist = currDist;
 
           if (selectedImageId) {
+            const fAngle = tf.frameAngle || 0;
+            const cosF = Math.cos(fAngle);
+            const sinF = Math.sin(fAngle);
+            const sx = tf.sideSignX || 1;
+            const sy = tf.sideSignY || 1;
+
             updateActivePage(
               (page) => ({
                 ...page,
@@ -2754,8 +2827,16 @@ export default function App() {
                   const clampedScale = Math.max(24 / minSide, scaleFactor);
                   const newW = im.width * clampedScale;
                   const newH = im.height * clampedScale;
+                  const dW = newW - im.width;
+                  const dH = newH - im.height;
+                  const oldCx = im.x + im.width / 2;
+                  const oldCy = im.y + im.height / 2;
+                  const nextCx = oldCx + (dW / 2) * sx * cosF + (dH / 2) * sy * -sinF;
+                  const nextCy = oldCy + (dW / 2) * sx * sinF + (dH / 2) * sy * cosF;
                   return {
                     ...im,
+                    x: nextCx - newW / 2,
+                    y: nextCy - newH / 2,
                     width: newW,
                     height: newH,
                     clipPolygon: im.clipPolygon?.map((cp) => ({
@@ -2784,6 +2865,113 @@ export default function App() {
                     cx: p.cx !== undefined ? tf.anchorX + (p.cx - tf.anchorX) * scaleFactor : undefined,
                     cy: p.cy !== undefined ? tf.anchorY + (p.cy - tf.anchorY) * scaleFactor : undefined,
                   })),
+                };
+              }),
+            }),
+            false
+          );
+          return;
+        }
+
+        // B2. Aspect-Ratio Stretch (Widen/Narrow or Taller/Shorter) from 4 Mid-Side Handles (Orange #f97316 dots!)
+        if (tf.mode === 'scale-x' || tf.mode === 'scale-y') {
+          const fAngle = tf.frameAngle || 0;
+          const cosF = Math.cos(fAngle);
+          const sinF = Math.sin(fAngle);
+          const rx = latestPt.x - tf.anchorX;
+          const ry = latestPt.y - tf.anchorY;
+          const currSpan =
+            tf.mode === 'scale-x'
+              ? Math.max(16, Math.abs(rx * cosF + ry * sinF))
+              : Math.max(16, Math.abs(-rx * sinF + ry * cosF));
+          const scaleFactor = Math.max(0.84, Math.min(1.2, currSpan / tf.initialDist));
+          tf.initialDist = currSpan;
+
+          if (selectedImageId) {
+            const sx = tf.sideSignX || 0;
+            const sy = tf.sideSignY || 0;
+            updateActivePage(
+              (page) => ({
+                ...page,
+                images: page.images.map((im) => {
+                  if (im.id !== selectedImageId) return im;
+                  if (tf.mode === 'scale-x') {
+                    const newW = Math.max(24, im.width * scaleFactor);
+                    const actualScaleX = newW / Math.max(1, im.width);
+                    const dW = newW - im.width;
+                    const oldCx = im.x + im.width / 2;
+                    const oldCy = im.y + im.height / 2;
+                    const nextCx = oldCx + (dW / 2) * sx * cosF;
+                    const nextCy = oldCy + (dW / 2) * sx * sinF;
+                    return {
+                      ...im,
+                      x: nextCx - newW / 2,
+                      y: nextCy - im.height / 2,
+                      width: newW,
+                      clipPolygon: im.clipPolygon?.map((cp) => ({
+                        x: cp.x * actualScaleX,
+                        y: cp.y,
+                      })),
+                    };
+                  } else {
+                    const newH = Math.max(24, im.height * scaleFactor);
+                    const actualScaleY = newH / Math.max(1, im.height);
+                    const dH = newH - im.height;
+                    const oldCx = im.x + im.width / 2;
+                    const oldCy = im.y + im.height / 2;
+                    const nextCx = oldCx + (dH / 2) * sy * -sinF;
+                    const nextCy = oldCy + (dH / 2) * sy * cosF;
+                    return {
+                      ...im,
+                      x: nextCx - im.width / 2,
+                      y: nextCy - newH / 2,
+                      height: newH,
+                      clipPolygon: im.clipPolygon?.map((cp) => ({
+                        x: cp.x,
+                        y: cp.y * actualScaleY,
+                      })),
+                    };
+                  }
+                }),
+              }),
+              false
+            );
+            return;
+          }
+
+          // Stretch selected Shapes / Strokes / Groups along local X ('scale-x') or local Y ('scale-y') axis!
+          const stretchPoint = (px: number, py: number) => {
+            const dx = px - tf.anchorX;
+            const dy = py - tf.anchorY;
+            const lx = (dx * cosF + dy * sinF) * (tf.mode === 'scale-x' ? scaleFactor : 1);
+            const ly = (-dx * sinF + dy * cosF) * (tf.mode === 'scale-y' ? scaleFactor : 1);
+            return {
+              x: tf.anchorX + lx * cosF - ly * sinF,
+              y: tf.anchorY + lx * sinF + ly * cosF,
+            };
+          };
+
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.map((s) => {
+                if (!selectedStrokeIds.includes(s.id)) return s;
+                return {
+                  ...s,
+                  points: s.points.map((p) => {
+                    const sp = stretchPoint(p.x, p.y);
+                    const nextPt: BezierPoint = {
+                      ...p,
+                      x: sp.x,
+                      y: sp.y,
+                    };
+                    if (p.cx !== undefined && p.cy !== undefined) {
+                      const sc = stretchPoint(p.cx, p.cy);
+                      nextPt.cx = sc.x;
+                      nextPt.cy = sc.y;
+                    }
+                    return nextPt;
+                  }),
                 };
               }),
             }),
