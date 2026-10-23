@@ -2130,9 +2130,13 @@ export default function App() {
           );
         }
         setActiveNodeStrokeId(hit.id);
-        setSelectedStrokeIds([hit.id]);
+        const members = hit.groupId
+          ? activePage.strokes.filter((s) => s.groupId === hit.groupId).map((s) => s.id)
+          : [hit.id];
+        setSelectedStrokeIds(members);
       } else {
         setActiveNodeStrokeId(null);
+        setSelectedStrokeIds([]);
       }
       return;
     }
@@ -2218,6 +2222,7 @@ export default function App() {
       if (hitImg) {
         setSelectedImageId(hitImg.id);
         setSelectedStrokeIds([]);
+        setActiveNodeStrokeId(null);
         selectionTransformRef.current = {
           mode: 'move',
           startX: pt.x,
@@ -2242,6 +2247,7 @@ export default function App() {
           ? activePage.strokes.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
           : [tappedStroke.id];
         setSelectedStrokeIds(members);
+        setActiveNodeStrokeId(tappedStroke.id);
         selectionTransformRef.current = {
           mode: 'move',
           startX: pt.x,
@@ -2259,6 +2265,7 @@ export default function App() {
       }
 
       setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
       selectionTransformRef.current = null;
       lassoPolygonRef.current = [{ x: pt.x, y: pt.y }];
       isDrawingRef.current = true;
@@ -2843,14 +2850,19 @@ export default function App() {
       lassoPolygonRef.current = [];
       if (poly.length >= 3) {
         const lockedLayers = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
-        const directMatched = activePage.strokes.filter(
-          (s) => !lockedLayers.has(s.layerId) && s.points.some((p) => isPointInPolygon(p, poly))
-        );
+        const directMatched = activePage.strokes.filter((s) => {
+          if (lockedLayers.has(s.layerId)) return false;
+          if (s.points.some((p) => isPointInPolygon(p, poly))) return true;
+          const b = getStrokeBounds(s);
+          if (isPointInPolygon({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 }, poly)) return true;
+          return poly.some((lp) => isPointNearStroke(lp, s, 12));
+        });
         const groupIds = new Set(directMatched.map((s) => s.groupId).filter(Boolean));
         const finalIds = activePage.strokes
           .filter((s) => directMatched.some((m) => m.id === s.id) || (s.groupId && groupIds.has(s.groupId)))
           .map((s) => s.id);
         setSelectedStrokeIds(finalIds);
+        setActiveNodeStrokeId(finalIds.length === 1 ? finalIds[0] : null);
       }
       return;
     }
@@ -3164,6 +3176,107 @@ export default function App() {
         : '🔼 Bring Forward: Μεταφέρθηκε 1 βήμα μπροστά (+1)!'
     );
   };
+
+  // Apply Color, Thickness, or Line Style to any selected line, shape, or group of lines!
+  const applyColorToSelection = useCallback(
+    (c: string) => {
+      setStrokeColor(c);
+      setFillColor(c);
+      const baseIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : [];
+      if (baseIds.length === 0) return;
+
+      updateActivePage((page) => {
+        const baseSet = new Set(baseIds);
+        const groupIds = new Set(
+          page.strokes
+            .filter((s) => baseSet.has(s.id) && s.groupId)
+            .map((s) => s.groupId as string)
+        );
+        return {
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
+              return {
+                ...s,
+                color: c,
+                fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined,
+              };
+            }
+            return s;
+          }),
+        };
+      });
+    },
+    [selectedStrokeIds, activeNodeStrokeId, updateActivePage]
+  );
+
+  const applyWidthToSelection = useCallback(
+    (w: number) => {
+      setStrokeWidth(w);
+      const baseIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : [];
+      if (baseIds.length === 0) return;
+
+      updateActivePage((page) => {
+        const baseSet = new Set(baseIds);
+        const groupIds = new Set(
+          page.strokes
+            .filter((s) => baseSet.has(s.id) && s.groupId)
+            .map((s) => s.groupId as string)
+        );
+        return {
+          ...page,
+          strokes: page.strokes.map((s) =>
+            baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)) ? { ...s, width: w } : s
+          ),
+        };
+      });
+    },
+    [selectedStrokeIds, activeNodeStrokeId, updateActivePage]
+  );
+
+  const applyLineStyleToSelection = useCallback(
+    (ls: LineStyleType, nextArrowEnd?: boolean) => {
+      setLineStyle(ls);
+      if (nextArrowEnd !== undefined) {
+        setArrowEnd(nextArrowEnd);
+      }
+      const baseIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : [];
+      if (baseIds.length === 0) return;
+
+      updateActivePage((page) => {
+        const baseSet = new Set(baseIds);
+        const groupIds = new Set(
+          page.strokes
+            .filter((s) => baseSet.has(s.id) && s.groupId)
+            .map((s) => s.groupId as string)
+        );
+        return {
+          ...page,
+          strokes: page.strokes.map((s) =>
+            baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+              ? { ...s, lineStyle: ls, arrowEnd: nextArrowEnd !== undefined ? nextArrowEnd : s.arrowEnd }
+              : s
+          ),
+        };
+      });
+    },
+    [selectedStrokeIds, activeNodeStrokeId, updateActivePage]
+  );
 
   const handleBeautifySelected = () => {
     const targets =
@@ -3845,7 +3958,7 @@ export default function App() {
                           setShowWidthPopover((prev) => !prev);
                           setShowColorPopover(false);
                         } else {
-                          setStrokeWidth(w);
+                          applyWidthToSelection(w);
                         }
                       }}
                       className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
@@ -3881,29 +3994,12 @@ export default function App() {
                 {colorSlots.map((c, idx) => (
                   <button
                     key={idx}
-                    onClick={() => {
-                      setStrokeColor(c);
-                      setFillColor(c);
-                      const selIds =
-                        selectedStrokeIds.length > 0
-                          ? selectedStrokeIds
-                          : activeNodeStrokeId
-                          ? [activeNodeStrokeId]
-                          : [];
-                      if (selIds.length > 0) {
-                        const selSet = new Set(selIds);
-                        updateActivePage((page) => ({
-                          ...page,
-                          strokes: page.strokes.map((s) =>
-                            selSet.has(s.id) ? { ...s, color: c, fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined } : s
-                          ),
-                        }));
-                      }
-                    }}
+                    onClick={() => applyColorToSelection(c)}
                     className={`w-6 h-6 rounded-full transition cursor-pointer ${
                       strokeColor === c ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110' : 'opacity-85 hover:opacity-100'
                     }`}
                     style={{ backgroundColor: c }}
+                    title="Αλλαγή χρώματος (και σε επιλεγμένη γραμμή / σχήμα / group)"
                   />
                 ))}
                 <button
@@ -3935,7 +4031,7 @@ export default function App() {
                     <button
                       key={presetW}
                       onClick={() => {
-                        setStrokeWidth(presetW);
+                        applyWidthToSelection(presetW);
                         setWidthSlots((prev) => {
                           const next = [...prev];
                           next[activeWidthSlotIdx] = presetW;
@@ -3976,7 +4072,7 @@ export default function App() {
                   value={strokeWidth}
                   onChange={(e) => {
                     const val = parseFloat(e.target.value);
-                    setStrokeWidth(val);
+                    applyWidthToSelection(val);
                     setWidthSlots((prev) => {
                       const next = [...prev];
                       next[activeWidthSlotIdx] = val;
@@ -4003,23 +4099,7 @@ export default function App() {
                   <button
                     key={c}
                     onClick={() => {
-                      setStrokeColor(c);
-                      setFillColor(c);
-                      const selIds =
-                        selectedStrokeIds.length > 0
-                          ? selectedStrokeIds
-                          : activeNodeStrokeId
-                          ? [activeNodeStrokeId]
-                          : [];
-                      if (selIds.length > 0) {
-                        const selSet = new Set(selIds);
-                        updateActivePage((page) => ({
-                          ...page,
-                          strokes: page.strokes.map((s) =>
-                            selSet.has(s.id) ? { ...s, color: c, fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined } : s
-                          ),
-                        }));
-                      }
+                      applyColorToSelection(c);
                       if (!colorSlots.includes(c)) {
                         setColorSlots([c, colorSlots[0], colorSlots[1]]);
                       }
@@ -4031,10 +4111,25 @@ export default function App() {
                 ))}
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                <span className="text-[11px] font-semibold text-slate-600">Ελεύθερο Χρώμα:</span>
+                <input
+                  type="color"
+                  value={strokeColor}
+                  onChange={(e) => {
+                    const c = e.target.value;
+                    applyColorToSelection(c);
+                    if (!colorSlots.includes(c)) {
+                      setColorSlots([c, colorSlots[0], colorSlots[1]]);
+                    }
+                  }}
+                  className="w-8 h-7 rounded cursor-pointer border border-slate-200"
+                />
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                 {(['solid', 'dashed', 'dotted'] as LineStyleType[]).map((ls) => (
                   <button
                     key={ls}
-                    onClick={() => setLineStyle(ls)}
+                    onClick={() => applyLineStyleToSelection(ls)}
                     className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer ${
                       lineStyle === ls ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-700'
                     }`}
@@ -4043,7 +4138,7 @@ export default function App() {
                   </button>
                 ))}
                 <button
-                  onClick={() => setArrowEnd(!arrowEnd)}
+                  onClick={() => applyLineStyleToSelection(lineStyle, !arrowEnd)}
                   className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer ${
                     arrowEnd ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-700'
                   }`}
@@ -4201,14 +4296,21 @@ export default function App() {
                                 ? [activeNodeStrokeId]
                                 : [];
                             const selSet = new Set(selIds);
-                            updateActivePage((page) => ({
-                              ...page,
-                              strokes: page.strokes.map((s) =>
-                                selSet.has(s.id)
-                                  ? { ...s, fillStyle: fs, fillColor: fs !== 'none' ? s.color : undefined }
-                                  : s
-                              ),
-                            }));
+                            updateActivePage((page) => {
+                              const groupIds = new Set(
+                                page.strokes
+                                  .filter((s) => selSet.has(s.id) && s.groupId)
+                                  .map((s) => s.groupId as string)
+                              );
+                              return {
+                                ...page,
+                                strokes: page.strokes.map((s) =>
+                                  selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+                                    ? { ...s, fillStyle: fs, fillColor: fs !== 'none' ? s.color : undefined }
+                                    : s
+                                ),
+                              };
+                            });
                           }}
                           className={`px-2 py-0.5 rounded-full text-[11px] font-semibold cursor-pointer ${
                             fillStyle === fs ? 'bg-[#0066ff] text-white' : 'text-slate-700 hover:bg-white'
@@ -4218,6 +4320,32 @@ export default function App() {
                           {fs === 'none' ? 'Χωρίς Fill' : fs === 'solid' ? '🎨 Fill' : '///'}
                         </button>
                       ))}
+                    </div>
+
+                    {/* Direct Inline Color Swatches for Selected Line, Shape, or Group of Lines! */}
+                    <div
+                      className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200"
+                      title="Αλλαγή χρώματος επιλεγμένης γραμμής, σχήματος ή Group"
+                    >
+                      <span className="text-[10px] font-bold text-slate-500 mr-0.5">Χρώμα:</span>
+                      {PRESET_COLORS.slice(0, 8).map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => applyColorToSelection(c)}
+                          className={`w-4 h-4 rounded-full border border-white/80 shadow-2xs transition cursor-pointer ${
+                            strokeColor === c ? 'ring-2 ring-[#0066ff] scale-110' : 'hover:scale-110'
+                          }`}
+                          style={{ backgroundColor: c }}
+                          title={`Αλλαγή χρώματος σε ${c}`}
+                        />
+                      ))}
+                      <input
+                        type="color"
+                        value={strokeColor}
+                        onChange={(e) => applyColorToSelection(e.target.value)}
+                        className="w-5 h-5 rounded-full cursor-pointer border-0 bg-transparent p-0"
+                        title="Επιλογή οποιουδήποτε χρώματος για την επιλογή"
+                      />
                     </div>
 
                     {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (
