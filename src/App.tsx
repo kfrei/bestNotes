@@ -93,6 +93,26 @@ export default function App() {
   const [activeNotebookId, setActiveNotebookId] = useState<string>('nb-gn1');
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
   const [zoom, setZoom] = useState<number>(1);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const zoomRef = useRef<number>(1);
+  const panRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const paperTransformElRef = useRef<HTMLDivElement | null>(null);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const canvasRectRef = useRef<DOMRect | null>(null);
+  const pinchStateRef = useRef<{
+    active: boolean;
+    initialDist: number;
+    initialZoom: number;
+    initialPanX: number;
+    initialPanY: number;
+    startMidX: number;
+    startMidY: number;
+    paperOffsetX: number;
+    paperOffsetY: number;
+    startTime: number;
+    maxMoved: number;
+    touchCount: number;
+  } | null>(null);
 
   // Goodnotes 6 Toolbar State
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
@@ -560,6 +580,159 @@ export default function App() {
       (c.getContext('2d', { desynchronized: true }) as CanvasRenderingContext2D) || c.getContext('2d');
   }, [viewMode]);
 
+  const applyPaperTransformDirect = useCallback(
+    (nextZoom: number, nextPanX: number, nextPanY: number, commitReactState = false) => {
+      const clampedZoom = Math.min(3.5, Math.max(0.45, nextZoom));
+      zoomRef.current = clampedZoom;
+      panRef.current = { x: nextPanX, y: nextPanY };
+      if (paperTransformElRef.current) {
+        paperTransformElRef.current.style.transform = `translate3d(${nextPanX}px, ${nextPanY}px, 0) scale(${clampedZoom})`;
+      }
+      if (commitReactState) {
+        setZoom(clampedZoom);
+        setPan({ x: nextPanX, y: nextPanY });
+      }
+    },
+    []
+  );
+
+  // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 2-FINGER TAP UNDO / 3-FINGER TAP REDO (Native non-passive listeners)
+  useEffect(() => {
+    const ws = workspaceRef.current;
+    if (!ws || viewMode !== 'editor') return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+
+        // Immediately cancel any accidental 1-finger ink dot that started milliseconds before the 2nd finger landed
+        if (holdTimerRef.current) {
+          window.clearTimeout(holdTimerRef.current);
+          holdTimerRef.current = null;
+        }
+        if (isDrawingRef.current) {
+          isDrawingRef.current = false;
+          currentStrokePtsRef.current = [];
+          snappedCurrentStrokeRef.current = null;
+          lassoPolygonRef.current = [];
+          isDraggingSelectionRef.current = null;
+          const c = activeCanvasRef.current;
+          const ctx = activeCtxRef.current;
+          if (c && ctx) ctx.clearRect(0, 0, c.width, c.height);
+        }
+
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const midX = (t1.clientX + t2.clientX) / 2;
+        const midY = (t1.clientY + t2.clientY) / 2;
+
+        const paperRect = paperTransformElRef.current?.getBoundingClientRect();
+        const paperOffsetX = paperRect ? (midX - paperRect.left) / zoomRef.current : 460;
+        const paperOffsetY = paperRect ? (midY - paperRect.top) / zoomRef.current : 630;
+
+        pinchStateRef.current = {
+          active: true,
+          initialDist: Math.max(20, dist),
+          initialZoom: zoomRef.current,
+          initialPanX: panRef.current.x,
+          initialPanY: panRef.current.y,
+          startMidX: midX,
+          startMidY: midY,
+          paperOffsetX,
+          paperOffsetY,
+          startTime: performance.now(),
+          maxMoved: 0,
+          touchCount: Math.max(pinchStateRef.current?.touchCount || 0, e.touches.length),
+        };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!pinchStateRef.current?.active) return;
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        const st = pinchStateRef.current;
+        st.touchCount = Math.max(st.touchCount, e.touches.length);
+
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const currMidX = (t1.clientX + t2.clientX) / 2;
+        const currMidY = (t1.clientY + t2.clientY) / 2;
+
+        const moved = Math.hypot(currMidX - st.startMidX, currMidY - st.startMidY) + Math.abs(currDist - st.initialDist);
+        if (moved > st.maxMoved) st.maxMoved = moved;
+
+        const newZoom = Math.min(3.5, Math.max(0.45, st.initialZoom * (currDist / st.initialDist)));
+        const newPanX = st.initialPanX + (currMidX - st.startMidX) - st.paperOffsetX * (newZoom - st.initialZoom);
+        const newPanY = st.initialPanY + (currMidY - st.startMidY) - st.paperOffsetY * (newZoom - st.initialZoom);
+
+        applyPaperTransformDirect(newZoom, newPanX, newPanY, false);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!pinchStateRef.current?.active) return;
+      if (e.touches.length === 0) {
+        const st = pinchStateRef.current;
+        const elapsed = performance.now() - st.startTime;
+        pinchStateRef.current = null;
+        canvasRectRef.current = null;
+
+        // Goodnotes 6 Gesture: Quick 2-finger tap = Undo, Quick 3-finger tap = Redo
+        if (elapsed < 260 && st.maxMoved < 14) {
+          if (st.touchCount === 2) {
+            handleUndo();
+            showToast('↩️ 2-Finger Tap: Αναίρεση (Undo)');
+          } else if (st.touchCount >= 3) {
+            handleRedo();
+            showToast('↪️ 3-Finger Tap: Επανάληψη (Redo)');
+          }
+        } else {
+          setZoom(zoomRef.current);
+          setPan({ ...panRef.current });
+        }
+      }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const paperRect = paperTransformElRef.current?.getBoundingClientRect();
+        const oldZoom = zoomRef.current;
+        const factor = Math.exp(-e.deltaY * 0.0045);
+        const newZoom = Math.min(3.5, Math.max(0.45, oldZoom * factor));
+        const offsetX = paperRect ? (e.clientX - paperRect.left) / oldZoom : 460;
+        const offsetY = paperRect ? (e.clientY - paperRect.top) / oldZoom : 630;
+        const newPanX = panRef.current.x - offsetX * (newZoom - oldZoom);
+        const newPanY = panRef.current.y - offsetY * (newZoom - oldZoom);
+        applyPaperTransformDirect(newZoom, newPanX, newPanY, true);
+      } else {
+        applyPaperTransformDirect(
+          zoomRef.current,
+          panRef.current.x - e.deltaX,
+          panRef.current.y - e.deltaY,
+          false
+        );
+      }
+    };
+
+    ws.addEventListener('touchstart', onTouchStart, { passive: false });
+    ws.addEventListener('touchmove', onTouchMove, { passive: false });
+    ws.addEventListener('touchend', onTouchEnd, { passive: false });
+    ws.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    ws.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+      ws.removeEventListener('touchstart', onTouchStart);
+      ws.removeEventListener('touchmove', onTouchMove);
+      ws.removeEventListener('touchend', onTouchEnd);
+      ws.removeEventListener('touchcancel', onTouchEnd);
+      ws.removeEventListener('wheel', onWheel);
+    };
+  }, [viewMode, applyPaperTransformDirect, handleUndo, handleRedo, showToast]);
+
   const clearActiveOverlay = () => {
     const c = activeCanvasRef.current;
     const ctx = activeCtxRef.current;
@@ -622,7 +795,7 @@ export default function App() {
 
   const getCanvasPointFromNative = (clientX: number, clientY: number, pressure = 0.55): BezierPoint => {
     const canvas = activeCanvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
+    const rect = canvasRectRef.current || canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     let x = (clientX - rect.left) * scaleX;
@@ -662,6 +835,7 @@ export default function App() {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pinchStateRef.current?.active) return;
     if (pencilOnlyMode && e.pointerType === 'touch') return;
 
     const activeLayer = activePage.layers.find((l) => l.id === activeLayerId);
@@ -670,6 +844,7 @@ export default function App() {
       return;
     }
 
+    canvasRectRef.current = activeCanvasRef.current?.getBoundingClientRect() || null;
     e.currentTarget.setPointerCapture(e.pointerId);
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
 
@@ -825,7 +1000,7 @@ export default function App() {
 
   // ULTRA-FAST POINTER MOVE: Zero React re-renders while drawing!
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
+    if (pinchStateRef.current?.active || !isDrawingRef.current) return;
 
     // Collect coalesced high-frequency Apple Pencil events (up to 240Hz on iPad Pro)
     const nativeEv = e.nativeEvent as PointerEvent;
@@ -1455,7 +1630,7 @@ export default function App() {
             onClick={handleUndo}
             disabled={undoStack.length === 0}
             className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
-            title="Undo"
+            title="Undo (ή Tap με 2 δάχτυλα)"
           >
             <Undo2 className="w-4 h-4" />
           </button>
@@ -1463,10 +1638,35 @@ export default function App() {
             onClick={handleRedo}
             disabled={redoStack.length === 0}
             className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
-            title="Redo"
+            title="Redo (ή Tap με 3 δάχτυλα)"
           >
             <Redo2 className="w-4 h-4" />
           </button>
+
+          {/* 2-Finger Pinch Zoom Pill (- / 100% Reset / +) */}
+          <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
+            <button
+              onClick={() => applyPaperTransformDirect(zoomRef.current - 0.15, panRef.current.x, panRef.current.y, true)}
+              className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
+              title="Σμίκρυνση (Zoom Out)"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => applyPaperTransformDirect(1, 0, 0, true)}
+              className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
+              title="Επαναφορά Zoom στο 100% (ή Pinch με 2 δάχτυλα στο χαρτί)"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              onClick={() => applyPaperTransformDirect(zoomRef.current + 0.15, panRef.current.x, panRef.current.y, true)}
+              className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
+              title="Μεγέθυνση (Zoom In)"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           {/* Page Indicator & Add Page */}
           <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
@@ -2024,7 +2224,10 @@ export default function App() {
           {/* =========================================================================
               3. DUAL-CANVAS 120Hz WORKSPACE (Static Scene + 0ms Desynchronized Ink Layer)
              ========================================================================= */}
-          <div className="relative flex-1 overflow-auto bg-[#dfe3ea] flex justify-center items-start py-4 px-2">
+          <div
+            ref={workspaceRef}
+            className="relative flex-1 overflow-hidden bg-[#dfe3ea] flex justify-center items-start py-4 px-2 touch-none"
+          >
             {statusBanner && (
               <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1b2a4a] text-white text-xs font-medium shadow-xl">
                 {statusBanner}
@@ -2117,7 +2320,14 @@ export default function App() {
 
             {/* THE PAPER PAGE CONTAINER WITH STACKED STATIC + ACTIVE 120HZ CANVASES */}
             <div
-              style={{ width: 920 * zoom, height: 1260 * zoom }}
+              ref={paperTransformElRef}
+              style={{
+                width: 920,
+                height: 1260,
+                transformOrigin: '0 0',
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+                willChange: 'transform',
+              }}
               className="relative shadow-lg bg-white border border-slate-300/90 shrink-0"
             >
               {/* Layer 1: Static Committed Scene Canvas */}
