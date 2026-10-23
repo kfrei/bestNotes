@@ -1,0 +1,132 @@
+export type ToolType =
+  | 'pen'
+  | 'pencil'
+  | 'highlighter'
+  | 'eraser'
+  | 'shape'
+  | 'lasso'
+  | 'magnetic-lasso'
+  | 'direct-node'
+  | 'text'
+  | 'image'
+  | 'tape'
+  | 'laser'
+  | 'ruler'
+  | 'pan';
+
+export type PenSubType = 'fountain' | 'ballpoint' | 'brush';
+export type EraserSubType = 'stroke' | 'precision' | 'highlighter-only';
+export type ShapePresetType =
+  | 'auto'
+  | 'line'
+  | 'arrow'
+  | 'rectangle'
+  | 'parallelogram'
+  | 'ellipse'
+  | 'triangle'
+  | 'cylinder'
+  | 'axes'
+  | 'resistor';
+
+export type LineStyleType = 'solid' | 'dashed' | 'dotted';
+export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';
+export type PaperTemplateType = 'grid' | 'ruled' | 'dotted' | 'cornell' | 'blank' | 'dark-grid';
+
+export interface BezierPoint {
+  x: number;
+  y: number;
+  cx?: number;
+  cy?: number;
+  pressure?: number;
+  tiltX?: number;
+  tiltY?: number;
+  twist?: number; // Apple Pencil Pro barrel roll (0-359)
+}
+
+export interface StrokeObject {
+  id: string;
+  tool: 'pen' | 'pencil' | 'highlighter';
+  penType?: PenSubType;
+  color: string;
+  fillColor?: string;
+  fillStyle?: FillStyleType;
+  width: number;
+  opacity: number;
+  lineStyle?: LineStyleType;
+  arrowStart?: boolean;
+  arrowEnd?: boolean;
+  points: BezierPoint[];
+  layerId: string;
+  groupId?: string;
+  isShape?: boolean;
+  shapeType?: string;
+}
+
+export interface TextObject {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  latex?: string;
+  isMath?: boolean;
+  color: string;
+  fontSize: number;
+  layerId: string;
+  groupId?: string;
+}
+
+export interface ImageObject {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  dataUrl: string;
+  originalDataUrl?: string;
+  clipPolygon?: { x: number; y: number }[]; // Freehand or Magnetic Lasso crop mask (relative 0..width, 0..height)
+  transparentBg?: boolean;
+  layerId: string;
+  groupId?: string;
+}
+
+export interface TapeObject {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  width: number;
+  color: string;
+  revealed: boolean;
+  layerId: string;
+}
+
+export interface LayerItem {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+}
+
+export interface NotePage {
+  id: string;
+  title: string;
+  template: PaperTemplateType;
+  layers: LayerItem[];
+  strokes: StrokeObject[];
+  shapes?: StrokeObject[];
+  texts: TextObject[];
+  images: ImageObject[];
+  tapes: TapeObject[];
+}
+
+export interface Notebook {
+  id: string;
+  title: string;
+  folder: string;
+  coverColor: string;
+  updatedAt: string;
+  sourceFormat?: '.goodnotes' | '.bestnotes';
+  pages: NotePage[];
+}
