@@ -5041,6 +5041,173 @@ export default function App() {
     [activeTool, selectedStrokeIds, activeNodeStrokeId, updateActivePage]
   );
 
+  // Toggle Fill ("Γέμισμα" <-> "Χωρίς Γέμισμα") for both future shapes/closed loops AND any selected/recently drawn shape
+  const toggleFillStyleToSelection = useCallback(
+    (showFeedbackToast = false) => {
+      const baseIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+          ? lastCreatedShapeIdsRef.current
+          : [];
+
+      const baseSet = new Set(baseIds);
+      const groupIds = new Set(
+        activePage.strokes
+          .filter((s) => baseSet.has(s.id) && s.groupId)
+          .map((s) => s.groupId as string)
+      );
+      const targetStrokes = activePage.strokes.filter(
+        (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+      );
+
+      // Determine next fill state: if a shape is selected, toggle relative to its current fill; otherwise toggle global fillStyle
+      const currentlyFilled =
+        targetStrokes.length > 0
+          ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
+          : fillStyle !== 'none';
+      const nextFill: FillStyleType = currentlyFilled ? 'none' : 'solid';
+      setFillStyle(nextFill);
+
+      if (targetStrokes.length > 0) {
+        const canAnyFill = targetStrokes.some(
+          (s) => s.isShape || isFreehandLoopClosed(s.points, true)
+        );
+        if (!canAnyFill && nextFill !== 'none') {
+          showToast('ℹ️ Η γραμμή πρέπει να είναι κλειστή (να ενώνονται οι άκρες της) για να πάρει γέμισμα!');
+          return;
+        }
+        updateActivePage((page) => ({
+          ...page,
+          strokes: page.strokes.map((s) =>
+            (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
+            (s.isShape || isFreehandLoopClosed(s.points, true))
+              ? {
+                  ...s,
+                  fillStyle: nextFill,
+                  fillColor: nextFill !== 'none' ? s.color : undefined,
+                }
+              : s
+          ),
+        }));
+      }
+
+      if (showFeedbackToast) {
+        showToast(
+          nextFill !== 'none'
+            ? '🎨 Γέμισμα: Ενεργό (Πλήκτρο F / Φ)'
+            : '⭕ Χωρίς Γέμισμα (Πλήκτρο F / Φ)'
+        );
+      }
+    },
+    [
+      activeTool,
+      selectedStrokeIds,
+      activeNodeStrokeId,
+      activePage.strokes,
+      fillStyle,
+      updateActivePage,
+      showToast,
+    ]
+  );
+
+  // GLOBAL KEYBOARD SHORTCUTS (Works identically in both Greek [Ελληνικά] & English [Αγγλικά] keyboard layouts!)
+  // P / Π -> Pencil/Pen ('pen')
+  // E / Ε -> Eraser ('eraser')
+  // L / Λ -> Red Laser ('laser')
+  // F / Φ -> Toggle Fill / Unfill ('solid' <-> 'none')
+  // S / Σ -> Select / Lasso ('lasso')
+  // H / Η -> Highlighter ('highlighter')
+  // T / Τ -> Text ('text')
+  useEffect(() => {
+    if (viewMode !== 'editor') return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (editingTextId !== null || showMathModal) return;
+
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[contenteditable="true"]'))
+      ) {
+        return;
+      }
+
+      const code = e.code;
+      const key = e.key.toLowerCase();
+
+      const switchToTool = (nextTool: ToolType, labelToast: string) => {
+        e.preventDefault();
+        setActiveTool(nextTool);
+        setShowToolSubBar(true);
+        if (nextTool !== 'lasso' && nextTool !== 'direct-node') {
+          setSelectedStrokeIds([]);
+          setActiveNodeStrokeId(null);
+          setSelectedImageId(null);
+        }
+        if (nextTool !== 'text') {
+          setSelectedTextId(null);
+          setEditingTextId(null);
+        }
+        setImageCropMode('none');
+        showToast(labelToast);
+      };
+
+      // P / Π -> Μολύβι / Στυλό ('pen')
+      if (code === 'KeyP' || key === 'p' || key === 'π') {
+        switchToTool('pen', '✏️ Μολύβι / Στυλό (Πλήκτρο P / Π)');
+        return;
+      }
+
+      // E / Ε -> Σβήστρα ('eraser')
+      if (code === 'KeyE' || key === 'e' || key === 'ε') {
+        switchToTool('eraser', '🧹 Σβήστρα (Πλήκτρο E / Ε)');
+        return;
+      }
+
+      // L / Λ -> Κόκκινο Laser ('laser')
+      if (code === 'KeyL' || key === 'l' || key === 'λ') {
+        switchToTool('laser', '🔴 Κόκκινο Laser (Πλήκτρο L / Λ)');
+        return;
+      }
+
+      // F / Φ -> Εναλλαγή Γέμισμα <-> Ξεγέμισμα (Fill Toggle)
+      if (code === 'KeyF' || key === 'f' || key === 'φ') {
+        e.preventDefault();
+        toggleFillStyleToSelection(true);
+        return;
+      }
+
+      // S / Σ / ς -> Λάσο Επιλογής ('lasso')
+      if (code === 'KeyS' || key === 's' || key === 'σ' || key === 'ς') {
+        switchToTool('lasso', '🪢 Επιλογή Λάσο (Πλήκτρο S / Σ)');
+        return;
+      }
+
+      // H / Η -> Υπογραμμιστής ('highlighter')
+      if (code === 'KeyH' || key === 'h' || key === 'η') {
+        switchToTool('highlighter', '🖍️ Υπογραμμιστής (Πλήκτρο H / Η)');
+        return;
+      }
+
+      // T / Τ -> Κείμενο ('text')
+      if (code === 'KeyT' || key === 't' || key === 'τ') {
+        switchToTool('text', '🔤 Κείμενο (Πλήκτρο T / Τ)');
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [viewMode, editingTextId, showMathModal, toggleFillStyleToSelection, showToast]);
+
   // NOTE: Temporarily disabled from toolbar until final phase ("Στρώσιμο" handwriting beautifier)
   const _handleBeautifySelected = () => {
     void Sparkles;
@@ -5739,15 +5906,15 @@ export default function App() {
             {/* Center: Goodnotes 6 Iconic Pill Toolbar */}
             <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-xs border border-slate-200/90">
               {[
-                { id: 'pen', title: 'Στυλό (Pen)', icon: Pen },
-                { id: 'eraser', title: 'Γόμα (Eraser)', icon: Eraser },
-                { id: 'highlighter', title: 'Μαρκαδόρος (Highlighter)', icon: Highlighter },
+                { id: 'pen', title: 'Μολύβι / Στυλό (Pen) — Συντόμευση: P / Π', icon: Pen },
+                { id: 'eraser', title: 'Σβήστρα (Eraser) — Συντόμευση: E / Ε', icon: Eraser },
+                { id: 'highlighter', title: 'Υπογραμμιστής (Highlighter) — Συντόμευση: H / Η', icon: Highlighter },
                 { id: 'shape', title: 'Σχήματα & Φυσική (Shapes)', icon: Shapes },
-                { id: 'text', title: 'Προσθήκη Κειμένου (Text - Bold, Μέγεθος, Χρώμα)', icon: Type },
-                { id: 'lasso', title: 'Επιλογή / Μεγέθυνση / Περιστροφή (Select & Transform)', icon: Lasso },
+                { id: 'text', title: 'Προσθήκη Κειμένου (Text) — Συντόμευση: T / Τ', icon: Type },
+                { id: 'lasso', title: 'Επιλογή Λάσο (Select & Transform) — Συντόμευση: S / Σ', icon: Lasso },
                 { id: 'direct-node', title: 'Κόμβοι Bezier (4 Κόμβοι σε Κύκλο/Έλλειψη)', icon: MousePointer },
                 { id: 'tape', title: 'Ταινία Απόκρυψης (Tape)', icon: Bandage },
-                { id: 'laser', title: 'Laser Pointer', icon: Radio },
+                { id: 'laser', title: 'Κόκκινο Laser Pointer — Συντόμευση: L / Λ', icon: Radio },
               ].map((tool) => {
                 const Icon = tool.icon;
                 const isActive = activeTool === tool.id;
@@ -5936,44 +6103,13 @@ export default function App() {
                 />
                 <div className="h-4 w-px bg-slate-200 mx-0.5" />
                 <button
-                  onClick={() => {
-                    const nextFill: FillStyleType = fillStyle === 'none' ? 'solid' : 'none';
-                    setFillStyle(nextFill);
-                    if (
-                      (activeTool === 'lasso' || activeTool === 'direct-node') &&
-                      (selectedStrokeIds.length > 0 || activeNodeStrokeId)
-                    ) {
-                      const selIds =
-                        selectedStrokeIds.length > 0
-                          ? selectedStrokeIds
-                          : activeNodeStrokeId
-                          ? [activeNodeStrokeId]
-                          : [];
-                      const selSet = new Set(selIds);
-                      updateActivePage((page) => {
-                        const groupIds = new Set(
-                          page.strokes
-                            .filter((s) => selSet.has(s.id) && s.groupId)
-                            .map((s) => s.groupId as string)
-                        );
-                        return {
-                          ...page,
-                          strokes: page.strokes.map((s) =>
-                            (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
-                            (s.isShape || isFreehandLoopClosed(s.points, true))
-                              ? { ...s, fillStyle: nextFill, fillColor: nextFill !== 'none' ? s.color : undefined }
-                              : s
-                          ),
-                        };
-                      });
-                    }
-                  }}
+                  onClick={() => toggleFillStyleToSelection(false)}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
                     fillStyle !== 'none'
                       ? 'bg-[#0066ff] text-white shadow-xs'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
-                  title="Εναλλαγή με 1 κλικ: Γέμισμα (Fill) / Χωρίς Γέμισμα (και για κλειστά σχήματα με το μολύβι)"
+                  title="Εναλλαγή με 1 κλικ: Γέμισμα (Fill) / Χωρίς Γέμισμα — Συντόμευση: F / Φ"
                 >
                   {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
                 </button>
@@ -6333,13 +6469,13 @@ export default function App() {
                     ))}
                     <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
                     <button
-                      onClick={() => setFillStyle((prev) => (prev === 'none' ? 'solid' : 'none'))}
+                      onClick={() => toggleFillStyleToSelection(false)}
                       className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap cursor-pointer ${
                         fillStyle !== 'none'
                           ? 'bg-[#0066ff] text-white'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
-                      title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα"
+                      title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα — Συντόμευση: F / Φ"
                     >
                       {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
                     </button>
@@ -8209,6 +8345,36 @@ export default function App() {
                   onChange={(e) => setScribbleToEraseEnabled(e.target.checked)}
                 />
               </label>
+            </div>
+
+            {/* Keyboard Shortcuts Quick Reference (Greek & English) */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-[#1b2a4a]">⌨️ Συντομεύσεις Πληκτρολογίου (GR / EN):</span>
+                <span className="text-[10px] text-slate-400">SHORTCUTS.md</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                {[
+                  { keys: 'P / Π', label: '✏️ Μολύβι (Pen)' },
+                  { keys: 'E / Ε', label: '🧹 Σβήστρα (Erase)' },
+                  { keys: 'L / Λ', label: '🔴 Κόκκινο Laser' },
+                  { keys: 'F / Φ', label: '🎨 Γέμισμα ↔ Ξεγέμισμα' },
+                  { keys: 'S / Σ', label: '🪢 Επιλογή Λάσο' },
+                  { keys: 'H / Η', label: '🖍️ Υπογραμμιστής' },
+                  { keys: 'T / Τ', label: '🔤 Κείμενο (Text)' },
+                  { keys: 'Esc', label: '✖️ Κλείσιμο Παραθύρων' },
+                ].map((sc) => (
+                  <div
+                    key={sc.keys}
+                    className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1"
+                  >
+                    <span className="text-slate-700 font-medium">{sc.label}</span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-[10px] font-bold text-[#0066ff] shadow-2xs">
+                      {sc.keys}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
