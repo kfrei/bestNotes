@@ -570,8 +570,13 @@ export default function App() {
       if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
     }
 
-    // Also allow tapping inside any filled shape or filled closed freehand loop
-    if (s.fillStyle && s.fillStyle !== 'none' && s.points.length >= 3) {
+    // Also allow tapping inside any filled shape, filled closed freehand loop, or 3D shape
+    const is3DShape =
+      s.shapeType === 'cuboid' ||
+      s.shapeType === 'cylinder' ||
+      s.shapeType === 'sphere' ||
+      s.shapeType === 'pyramid';
+    if (((s.fillStyle && s.fillStyle !== 'none') || is3DShape) && s.points.length >= 3) {
       let inside = false;
       for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
         const xi = s.points[i].x,
@@ -824,6 +829,243 @@ export default function App() {
       ctx.setLineDash([s.width * 0.8, s.width * 2.2]);
     } else {
       ctx.setLineDash([]);
+    }
+
+    // 0. 3D Geometric Shapes ('cuboid' = Cuboid/Cube, 'cylinder' = 3D Cylinder, 'sphere' = 3D Sphere, 'pyramid' = 3D Pyramid)
+    //    Uses bilinear interpolation on the 4 bounding quad corners s.points[0..3] so 360° rotation,
+    //    proportional corner scaling, and independent width/height stretching (turning cuboid <-> cube) all work natively!
+    if (
+      (s.shapeType === 'cuboid' ||
+        s.shapeType === 'cylinder' ||
+        s.shapeType === 'sphere' ||
+        s.shapeType === 'pyramid') &&
+      s.points.length >= 4
+    ) {
+      const [q0, q1, q2, q3] = s.points;
+      const bilerp = (u: number, v: number) => ({
+        x: (1 - u) * (1 - v) * q0.x + u * (1 - v) * q1.x + u * v * q2.x + (1 - u) * v * q3.x,
+        y: (1 - u) * (1 - v) * q0.y + u * (1 - v) * q1.y + u * v * q2.y + (1 - u) * v * q3.y,
+      });
+      const isFilled3D = Boolean(s.fillStyle && s.fillStyle !== 'none');
+      const shadeColor = s.color || s.fillColor || '#2563eb';
+
+      const traceEllipseBilerp = (
+        uc: number,
+        vc: number,
+        ru: number,
+        rv: number,
+        startAng = 0,
+        endAng = Math.PI * 2,
+        moveToFirst = true
+      ) => {
+        const steps = 48;
+        for (let i = 0; i <= steps; i++) {
+          const ang = startAng + ((endAng - startAng) * i) / steps;
+          const pt = bilerp(uc + ru * Math.cos(ang), vc + rv * Math.sin(ang));
+          if (i === 0 && moveToFirst) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+      };
+
+      if (s.shapeType === 'cuboid') {
+        // 3D Cuboid / Cube matching screenshot:
+        // Front face: u in [0..0.74], v in [0..0.78]
+        // Right slanted face: (0.74, 0) -> (1.0, 0.22) -> (1.0, 1.0) -> (0.74, 0.78)
+        // Bottom slanted face: (0, 0.78) -> (0.74, 0.78) -> (1.0, 1.0) -> (0.26, 1.0)
+        const fTL = bilerp(0, 0);
+        const fTR = bilerp(0.74, 0);
+        const fBR = bilerp(0.74, 0.78);
+        const fBL = bilerp(0, 0.78);
+        const bTR = bilerp(1.0, 0.22);
+        const bBR = bilerp(1.0, 1.0);
+        const bBL = bilerp(0.26, 1.0);
+
+        if (isFilled3D) {
+          // Front face fill
+          ctx.save();
+          ctx.fillStyle = shadeColor;
+          ctx.globalAlpha = 0.22;
+          ctx.beginPath();
+          ctx.moveTo(fTL.x, fTL.y);
+          ctx.lineTo(fTR.x, fTR.y);
+          ctx.lineTo(fBR.x, fBR.y);
+          ctx.lineTo(fBL.x, fBL.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Right 3D face fill (medium shade)
+          ctx.globalAlpha = 0.34;
+          ctx.beginPath();
+          ctx.moveTo(fTR.x, fTR.y);
+          ctx.lineTo(bTR.x, bTR.y);
+          ctx.lineTo(bBR.x, bBR.y);
+          ctx.lineTo(fBR.x, fBR.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Bottom 3D face fill (deeper shade)
+          ctx.globalAlpha = 0.44;
+          ctx.beginPath();
+          ctx.moveTo(fBL.x, fBL.y);
+          ctx.lineTo(fBR.x, fBR.y);
+          ctx.lineTo(bBR.x, bBR.y);
+          ctx.lineTo(bBL.x, bBL.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.beginPath();
+        // Front rectangle
+        ctx.moveTo(fTL.x, fTL.y);
+        ctx.lineTo(fTR.x, fTR.y);
+        ctx.lineTo(fBR.x, fBR.y);
+        ctx.lineTo(fBL.x, fBL.y);
+        ctx.closePath();
+        // Right slanted face edges
+        ctx.moveTo(fTR.x, fTR.y);
+        ctx.lineTo(bTR.x, bTR.y);
+        ctx.lineTo(bBR.x, bBR.y);
+        ctx.lineTo(fBR.x, fBR.y);
+        // Bottom slanted face edges
+        ctx.moveTo(fBL.x, fBL.y);
+        ctx.lineTo(bBL.x, bBL.y);
+        ctx.lineTo(bBR.x, bBR.y);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      if (s.shapeType === 'cylinder') {
+        // 3D Vertical Cylinder matching screenshot:
+        // Top ellipse at v=0.14 (rv=0.14), bottom ellipse at v=0.86 (rv=0.14), vertical walls at u=0 and u=1
+        const topLeft = bilerp(0, 0.14);
+        const topRight = bilerp(1, 0.14);
+        const botLeft = bilerp(0, 0.86);
+        const botRight = bilerp(1, 0.86);
+
+        if (isFilled3D) {
+          ctx.save();
+          ctx.fillStyle = shadeColor;
+          // Cylinder body fill
+          ctx.globalAlpha = 0.22;
+          ctx.beginPath();
+          traceEllipseBilerp(0.5, 0.14, 0.5, 0.14, Math.PI, Math.PI * 2, true);
+          ctx.lineTo(botRight.x, botRight.y);
+          traceEllipseBilerp(0.5, 0.86, 0.5, 0.14, 0, Math.PI, false);
+          ctx.lineTo(topLeft.x, topLeft.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Top cap ellipse fill (slightly deeper shade for 3D depth)
+          ctx.globalAlpha = 0.36;
+          ctx.beginPath();
+          traceEllipseBilerp(0.5, 0.14, 0.5, 0.14, 0, Math.PI * 2, true);
+          ctx.closePath();
+          ctx.fill();
+
+          // Bottom cap ellipse subtle fill
+          ctx.globalAlpha = 0.28;
+          ctx.beginPath();
+          traceEllipseBilerp(0.5, 0.86, 0.5, 0.14, 0, Math.PI * 2, true);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.beginPath();
+        // Top full ellipse
+        traceEllipseBilerp(0.5, 0.14, 0.5, 0.14, 0, Math.PI * 2, true);
+        // Bottom full ellipse
+        traceEllipseBilerp(0.5, 0.86, 0.5, 0.14, 0, Math.PI * 2, true);
+        // Left vertical wall
+        ctx.moveTo(topLeft.x, topLeft.y);
+        ctx.lineTo(botLeft.x, botLeft.y);
+        // Right vertical wall
+        ctx.moveTo(topRight.x, topRight.y);
+        ctx.lineTo(botRight.x, botRight.y);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      if (s.shapeType === 'sphere') {
+        // 3D Sphere matching screenshot:
+        // Outer circle/ellipse (uc=0.5, vc=0.5, ru=0.5, rv=0.5) + curved front equatorial belt arc
+        if (isFilled3D) {
+          ctx.save();
+          ctx.fillStyle = shadeColor;
+          ctx.globalAlpha = 0.24;
+          ctx.beginPath();
+          traceEllipseBilerp(0.5, 0.5, 0.5, 0.5, 0, Math.PI * 2, true);
+          ctx.closePath();
+          ctx.fill();
+
+          // Lower hemisphere extra 3D shading below the equatorial belt
+          ctx.globalAlpha = 0.14;
+          ctx.beginPath();
+          traceEllipseBilerp(0.5, 0.5, 0.5, 0.18, 0, Math.PI, true);
+          traceEllipseBilerp(0.5, 0.5, 0.5, 0.5, Math.PI, 0, false);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.beginPath();
+        // Outer sphere perimeter
+        traceEllipseBilerp(0.5, 0.5, 0.5, 0.5, 0, Math.PI * 2, true);
+        // Curved 3D front equatorial belt (from left equator (0, 0.5) curving down through (0.5, 0.68) to right equator (1, 0.5))
+        traceEllipseBilerp(0.5, 0.5, 0.5, 0.18, 0, Math.PI, true);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      if (s.shapeType === 'pyramid') {
+        // 3D Pyramid matching screenshot:
+        // Apex at (0.5, 0), Left base corner at (0, 0.76), Front-bottom vertex at (0.5, 1.0), Right base corner at (1.0, 0.76)
+        const pApex = bilerp(0.5, 0);
+        const pLeft = bilerp(0, 0.76);
+        const pFront = bilerp(0.5, 1.0);
+        const pRight = bilerp(1.0, 0.76);
+
+        if (isFilled3D) {
+          ctx.save();
+          ctx.fillStyle = shadeColor;
+          // Left triangular face
+          ctx.globalAlpha = 0.22;
+          ctx.beginPath();
+          ctx.moveTo(pApex.x, pApex.y);
+          ctx.lineTo(pLeft.x, pLeft.y);
+          ctx.lineTo(pFront.x, pFront.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Right triangular face (slightly darker for 3D depth)
+          ctx.globalAlpha = 0.38;
+          ctx.beginPath();
+          ctx.moveTo(pApex.x, pApex.y);
+          ctx.lineTo(pFront.x, pFront.y);
+          ctx.lineTo(pRight.x, pRight.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.beginPath();
+        // Outer pyramid boundary
+        ctx.moveTo(pApex.x, pApex.y);
+        ctx.lineTo(pLeft.x, pLeft.y);
+        ctx.lineTo(pFront.x, pFront.y);
+        ctx.lineTo(pRight.x, pRight.y);
+        ctx.closePath();
+        // Central front ridge
+        ctx.moveTo(pApex.x, pApex.y);
+        ctx.lineTo(pFront.x, pFront.y);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
     }
 
     ctx.beginPath();
@@ -2455,13 +2697,21 @@ export default function App() {
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
 
-    const pts = snappedCurrentStrokeRef.current
-      ? snappedCurrentStrokeRef.current.points
-      : currentStrokePtsRef.current;
+    const liveForcedShape =
+      !snappedCurrentStrokeRef.current &&
+      activeTool === 'shape' &&
+      shapePreset !== 'auto' &&
+      !['axes', 'resistor'].includes(shapePreset) &&
+      currentStrokePtsRef.current.length >= 2
+        ? recognizeAndSnapShape(currentStrokePtsRef.current, shapePreset)
+        : null;
+    const activeSnap = snappedCurrentStrokeRef.current || liveForcedShape;
+
+    const pts = activeSnap ? activeSnap.points : currentStrokePtsRef.current;
     if (pts.length === 0) return;
 
-    // Only show shape fill once the shape is actually completed/snapped (never while drawing the raw stroke!)
-    const isCompletedShape = Boolean(snappedCurrentStrokeRef.current);
+    // Show shape fill when shape is completed/snapped OR when actively drawing a preset shape in the Shape tool
+    const isCompletedShape = Boolean(activeSnap);
     const previewStroke: StrokeObject = {
       id: 'live',
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
@@ -2475,7 +2725,7 @@ export default function App() {
       points: pts,
       layerId: activeLayerId,
       isShape: isCompletedShape,
-      shapeType: snappedCurrentStrokeRef.current?.shapeType,
+      shapeType: activeSnap?.shapeType,
     };
     drawStrokeOnContext(ctx, previewStroke);
   };
@@ -4117,7 +4367,7 @@ export default function App() {
     }
 
     // 4. Physics Grouped Stencils
-    if (activeTool === 'shape' && ['cylinder', 'axes', 'resistor'].includes(shapePreset)) {
+    if (activeTool === 'shape' && ['axes', 'resistor'].includes(shapePreset)) {
       clearActiveOverlay();
       let minX = Infinity,
         minY = Infinity,
@@ -4132,7 +4382,7 @@ export default function App() {
       const w = Math.max(120, maxX - minX);
       const h = Math.max(65, maxY - minY);
       const stencilStrokes = createPhysicsStencilStrokes(
-        shapePreset as 'cylinder' | 'axes' | 'resistor',
+        shapePreset as 'axes' | 'resistor',
         minX,
         minY,
         w,
@@ -5758,6 +6008,10 @@ export default function App() {
                       To restore the simple shapes to the Shapes button, uncomment/re-insert the entries above and set default shapePreset back to 'auto'.
                     */}
                     {[
+                      { id: 'cuboid', label: '📦 Παραλληλεπίπεδο / Κύβος 3D' },
+                      { id: 'cylinder', label: '🛢️ Κύλινδρος 3D' },
+                      { id: 'sphere', label: '🌐 Σφαίρα 3D' },
+                      { id: 'pyramid', label: '🔺 Πυραμίδα 3D' },
                       { id: 'sine', label: '〰️ Ημίτονο (2 Κόμβοι)' },
                       { id: 'cosine', label: '〰️ Συνημίτονο (2 Κόμβοι)' },
                       { id: 'parabola', label: '∪ Παραβολή (3 Κόμβοι)' },
@@ -5765,7 +6019,6 @@ export default function App() {
                       { id: 'arc', label: '⌒ Τόξο (3 Κόμβοι)' },
                       { id: 'arrow', label: '➔ Διάνυσμα' },
                       { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
-                      { id: 'cylinder', label: '🥫 Αγωγός' },
                       { id: 'axes', label: '📈 Άξονες' },
                       { id: 'resistor', label: '⚡ Αντιστάτης' },
                     ].map((sp) => (

@@ -222,14 +222,14 @@ export function recognizeAndSnapShape(
     maxY = Math.max(maxY, rawPoints[i].y);
   }
 
+  // Forced presets when user picks a specific shape from the Shape toolbar
+  if (forcedPreset !== 'auto' && totalLen >= 3) {
+    return buildPresetShape(start, end, minX, minY, maxX, maxY, forcedPreset);
+  }
+
   if (totalLen < 18) return null;
   const directDist = distance(start, end);
   const straightness = directDist / totalLen;
-
-  // Forced presets when user picks a specific shape from the Shape toolbar
-  if (forcedPreset !== 'auto') {
-    return buildPresetShape(start, end, minX, minY, maxX, maxY, forcedPreset);
-  }
 
   // 1. Straight Line Test (snaps to 0°, 45°, 90° if close)
   if (straightness > 0.85) {
@@ -706,6 +706,26 @@ function buildPresetShape(
         { x: minX + w / 2, y: yVertex, pressure: 0.7 },
         { x: minX + w, y: yEnds, pressure: 0.7 },
       ],
+    };
+  }
+  if (preset === 'cuboid' || preset === 'cylinder' || preset === 'sphere' || preset === 'pyramid') {
+    const w3d = Math.max(72, maxX - minX);
+    const h3d = Math.max(72, maxY - minY);
+    const cx = minX + w3d / 2;
+    const cy = minY + h3d / 2;
+    const isNearSquare = Math.abs(w3d - h3d) < Math.max(w3d, h3d) * 0.24;
+    const finalW = preset === 'sphere' || (preset === 'cuboid' && isNearSquare) ? (w3d + h3d) / 2 : w3d;
+    const finalH = preset === 'sphere' || (preset === 'cuboid' && isNearSquare) ? (w3d + h3d) / 2 : h3d;
+    const halfW = finalW / 2;
+    const halfH = finalH / 2;
+    return {
+      shapeType: preset,
+      points: makePolygonBezier([
+        { x: cx - halfW, y: cy - halfH },
+        { x: cx + halfW, y: cy - halfH },
+        { x: cx + halfW, y: cy + halfH },
+        { x: cx - halfW, y: cy + halfH },
+      ]),
     };
   }
   if (preset === 'rectangle') {

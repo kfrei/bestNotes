@@ -29,7 +29,10 @@ export type ShapePresetType =
   | 'hyperbola'
   | 'sine'
   | 'cosine'
+  | 'cuboid'
   | 'cylinder'
+  | 'sphere'
+  | 'pyramid'
   | 'axes'
   | 'resistor';
 
