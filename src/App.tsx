@@ -342,34 +342,82 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isDirty]);
 
-  // Modern Web Guidance mandatory fallback for <dialog closedby="any"> in iPadOS Safari
+  // Close any open <dialog> modal (Thumbnails, Math/LaTeX, Settings) when clicking/tapping outside its box
   useEffect(() => {
     const dialogs = [mathDialogRef.current, settingsDialogRef.current, thumbnailsDialogRef.current].filter(
       Boolean
     ) as HTMLDialogElement[];
-    const handlers: Array<{ el: HTMLDialogElement; fn: (e: MouseEvent) => void }> = [];
+    const handlers: Array<{ el: HTMLDialogElement; fn: (e: PointerEvent) => void }> = [];
 
     for (const dialog of dialogs) {
-      if (!('closedBy' in HTMLDialogElement.prototype)) {
-        const fn = (event: MouseEvent) => {
-          if (event.target !== dialog) return;
-          const rect = dialog.getBoundingClientRect();
-          const isDialogContent =
-            rect.top <= event.clientY &&
-            event.clientY <= rect.top + rect.height &&
-            rect.left <= event.clientX &&
-            event.clientX <= rect.left + rect.width;
-          if (isDialogContent) return;
-          dialog.close();
-        };
-        dialog.addEventListener('click', fn);
-        handlers.push({ el: dialog, fn });
-      }
+      const fn = (event: PointerEvent) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const isDialogContent =
+          rect.top <= event.clientY &&
+          event.clientY <= rect.top + rect.height &&
+          rect.left <= event.clientX &&
+          event.clientX <= rect.left + rect.width;
+        if (isDialogContent) return;
+        dialog.close();
+      };
+      dialog.addEventListener('pointerdown', fn);
+      handlers.push({ el: dialog, fn });
     }
     return () => {
-      for (const h of handlers) h.el.removeEventListener('click', h.fn);
+      for (const h of handlers) h.el.removeEventListener('pointerdown', h.fn);
     };
   }, []);
+
+  // Close any open floating popover/panel (Color, Width, Layers, Shape Library) when clicking/tapping anywhere outside it
+  useEffect(() => {
+    if (!showWidthPopover && !showColorPopover && !showLayersPanel && !showShapeLibraryPanel) {
+      return;
+    }
+
+    const handleOutsidePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      // If click/tap is inside any open popover panel, keep it open
+      if (target.closest('[data-popover-panel]')) {
+        return;
+      }
+
+      // If click/tap is on one of the popover trigger buttons, close the OTHER popovers and let the button's onClick toggle its own popover
+      const triggerEl = target.closest('[data-popover-trigger]') as HTMLElement | null;
+      if (triggerEl) {
+        const triggerType = triggerEl.getAttribute('data-popover-trigger');
+        if (triggerType !== 'width') setShowWidthPopover(false);
+        if (triggerType !== 'color') setShowColorPopover(false);
+        if (triggerType !== 'layers') setShowLayersPanel(false);
+        if (triggerType !== 'library') setShowShapeLibraryPanel(false);
+        return;
+      }
+
+      // Clicked anywhere outside -> close all open popovers while preserving the last selected option
+      setShowWidthPopover(false);
+      setShowColorPopover(false);
+      setShowLayersPanel(false);
+      setShowShapeLibraryPanel(false);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowWidthPopover(false);
+        setShowColorPopover(false);
+        setShowLayersPanel(false);
+        setShowShapeLibraryPanel(false);
+      }
+    };
+
+    window.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showWidthPopover, showColorPopover, showLayersPanel, showShapeLibraryPanel]);
 
   const clonePageFast = useCallback((p: NotePage): NotePage => ({
     ...p,
@@ -5557,9 +5605,12 @@ export default function App() {
               </button>
 
               <button
+                data-popover-trigger="library"
                 onClick={() => {
                   setShowShapeLibraryPanel((v) => !v);
                   setShowLayersPanel(false);
+                  setShowWidthPopover(false);
+                  setShowColorPopover(false);
                 }}
                 className={`relative p-2 rounded-full transition cursor-pointer ${
                   showShapeLibraryPanel
@@ -5595,7 +5646,13 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => setShowLayersPanel(!showLayersPanel)}
+                data-popover-trigger="layers"
+                onClick={() => {
+                  setShowLayersPanel((v) => !v);
+                  setShowShapeLibraryPanel(false);
+                  setShowWidthPopover(false);
+                  setShowColorPopover(false);
+                }}
                 className={`p-2 rounded-full transition cursor-pointer ${
                   showLayersPanel ? 'bg-[#1b2a4a] text-white' : 'text-slate-700 hover:bg-slate-100'
                 }`}
@@ -5614,11 +5671,14 @@ export default function App() {
                   return (
                     <button
                       key={idx}
+                      data-popover-trigger="width"
                       onClick={() => {
                         setActiveWidthSlotIdx(idx);
                         if (Math.abs(strokeWidth - w) < 0.25) {
                           setShowWidthPopover((prev) => !prev);
                           setShowColorPopover(false);
+                          setShowLayersPanel(false);
+                          setShowShapeLibraryPanel(false);
                         } else {
                           applyWidthToSelection(w);
                         }
@@ -5638,9 +5698,12 @@ export default function App() {
                   );
                 })}
                 <button
+                  data-popover-trigger="width"
                   onClick={() => {
                     setShowWidthPopover((prev) => !prev);
                     setShowColorPopover(false);
+                    setShowLayersPanel(false);
+                    setShowShapeLibraryPanel(false);
                   }}
                   className="px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-sky-50 text-[10px] font-bold text-[#0066ff] cursor-pointer"
                   title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
@@ -5665,9 +5728,12 @@ export default function App() {
                   />
                 ))}
                 <button
+                  data-popover-trigger="color"
                   onClick={() => {
-                    setShowColorPopover(!showColorPopover);
+                    setShowColorPopover((v) => !v);
                     setShowWidthPopover(false);
+                    setShowLayersPanel(false);
+                    setShowShapeLibraryPanel(false);
                   }}
                   className="w-6 h-6 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
                   title="Όλα τα Χρώματα & Στυλ Γραμμής"
@@ -5721,7 +5787,12 @@ export default function App() {
 
           {/* 12-Step Stroke Thickness Popover (for Pen, Pencil, Highlighter & Eraser) */}
           {showWidthPopover && (
-            <div className="fixed right-20 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 flex flex-col gap-3 w-72">
+            <div
+              data-ui-panel="true"
+              data-popover-panel="width"
+              onPointerDown={(e) => e.stopPropagation()}
+              className="fixed right-20 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3.5 flex flex-col gap-3 w-72"
+            >
               <div className="flex items-center justify-between text-xs font-bold text-[#1b2a4a]">
                 <span>Πάχος Γραμμής (12 Επιλογές)</span>
                 <button onClick={() => setShowWidthPopover(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
@@ -5792,10 +5863,15 @@ export default function App() {
 
           {/* Color & Line Style Popover */}
           {showColorPopover && (
-            <div className="fixed right-6 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 flex flex-col gap-2.5 w-64">
+            <div
+              data-ui-panel="true"
+              data-popover-panel="color"
+              onPointerDown={(e) => e.stopPropagation()}
+              className="fixed right-6 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 flex flex-col gap-2.5 w-64"
+            >
               <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                 <span>Παλέτα Χρωμάτων & Γραμμής</span>
-                <button onClick={() => setShowColorPopover(false)} className="text-slate-400 hover:text-slate-700">
+                <button onClick={() => setShowColorPopover(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -5808,9 +5884,10 @@ export default function App() {
                       if (!colorSlots.includes(c)) {
                         setColorSlots([c, colorSlots[0], colorSlots[1]]);
                       }
-                      setShowColorPopover(false);
                     }}
-                    className="w-8 h-8 rounded-full border border-slate-200 mx-auto cursor-pointer"
+                    className={`w-8 h-8 rounded-full border border-slate-200 mx-auto cursor-pointer transition ${
+                      strokeColor === c ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110' : 'hover:scale-105'
+                    }`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
@@ -6559,6 +6636,7 @@ export default function App() {
             {showShapeLibraryPanel && (
               <div
                 data-ui-panel="true"
+                data-popover-panel="library"
                 onPointerDown={(e) => e.stopPropagation()}
                 className="fixed right-16 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800"
               >
@@ -6632,6 +6710,7 @@ export default function App() {
             {showLayersPanel && (
               <div
                 data-ui-panel="true"
+                data-popover-panel="layers"
                 onPointerDown={(e) => e.stopPropagation()}
                 className="fixed right-5 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800"
               >
