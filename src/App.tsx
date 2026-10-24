@@ -5778,12 +5778,20 @@ export default function App() {
           </button>
         </div>
 
-        {/* Center: Authentic Goodnotes 6 Document Tabs */}
-        <div className="flex items-end gap-1 overflow-x-auto max-w-[46vw] px-2">
+        {/* Center: Authentic Goodnotes 6 / Chrome-Style Elastic Document Tabs */}
+        <div className="flex-1 min-w-0 flex items-end gap-1.5 overflow-x-auto px-3">
           {openNotebookIds.map((nbId) => {
             const nb = notebooks.find((n) => n.id === nbId);
             if (!nb) return null;
             const isActive = nb.id === activeNotebook.id && viewMode === 'editor';
+            const tabMaxWidthClass =
+              openNotebookIds.length === 1
+                ? 'max-w-[440px]'
+                : openNotebookIds.length <= 3
+                ? 'max-w-[340px]'
+                : openNotebookIds.length === 4
+                ? 'max-w-[270px]'
+                : 'max-w-[210px]';
             return (
               <div
                 key={nb.id}
@@ -5792,29 +5800,31 @@ export default function App() {
                   setActivePageIndex(0);
                   setViewMode('editor');
                 }}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-t-xl text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+                title={nb.title}
+                className={`flex-1 min-w-[115px] ${tabMaxWidthClass} flex items-center gap-2 px-3.5 py-1.5 rounded-t-xl text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                   isActive
                     ? 'bg-[#f4f5f7] text-[#1b2a4a] font-semibold shadow-sm'
                     : 'bg-[#263961] text-slate-300 hover:bg-[#2f4573]'
                 }`}
               >
                 <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: nb.coverColor }} />
-                <span className="truncate max-w-[165px]">{nb.title}</span>
-                {openNotebookIds.length > 1 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const rem = openNotebookIds.filter((id) => id !== nb.id);
-                      setOpenNotebookIds(rem);
-                      if (activeNotebook.id === nb.id && rem.length > 0) {
-                        setActiveNotebookId(rem[0]);
-                      }
-                    }}
-                    className="opacity-60 hover:opacity-100 p-0.5 rounded"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
+                <span className="flex-1 min-w-0 truncate text-left">{nb.title}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rem = openNotebookIds.filter((id) => id !== nb.id);
+                    setOpenNotebookIds(rem);
+                    if (rem.length === 0) {
+                      setViewMode('library');
+                    } else if (activeNotebook.id === nb.id) {
+                      setActiveNotebookId(rem[0]);
+                    }
+                  }}
+                  title="Κλείσιμο καρτέλας εγγράφου"
+                  className="shrink-0 ml-auto opacity-65 hover:opacity-100 hover:bg-black/10 p-0.5 rounded transition cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             );
           })}
