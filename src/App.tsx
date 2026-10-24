@@ -77,7 +77,6 @@ import {
   TextObject,
   TapeObject,
 } from './types/note';
-import preloadedData from './data/preloadedNotebooks.json';
 import { importGoodnotesFile } from './utils/goodnotesParser';
 import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
 import {
@@ -100,11 +99,49 @@ import {
   get3DShapeSubPaths,
 } from './utils/geometryAndAlgorithms';
 
-const STORAGE_KEY = 'bestnotes_notebooks_v1';
-const SHAPE_LIBRARY_STORAGE_KEY = 'bestnotes_shape_library_v1';
-const UI_SESSION_STORAGE_KEY = 'bestnotes_ui_session_v1';
+const STORAGE_KEY = 'bestnotes_notebooks_v2';
+const CUSTOM_FOLDERS_STORAGE_KEY = 'bestnotes_custom_folders_v2';
+const SHAPE_LIBRARY_STORAGE_KEY = 'bestnotes_shape_library_v2';
+const UI_SESSION_STORAGE_KEY = 'bestnotes_ui_session_v2';
 const AUTH_FLAG_STORAGE_KEY = 'bestnotes_auth_logged_in';
+const AUTH_UID_STORAGE_KEY = 'bestnotes_auth_uid';
 const COLOR_SLOTS_STORAGE_KEY = 'bestnotes_color_slots_v1';
+
+// Clean 1-Page Blank Notebook & Single Empty "Μαθήματα" Folder (for both Guests and Newly Registered Users)
+const createDefaultBlankNotebooks = (): Notebook[] => [
+  {
+    id: 'nb-blank-1',
+    title: 'Σημείωση 1',
+    folder: '',
+    updatedAt: new Date().toISOString(),
+    coverColor: '#0066ff',
+    pages: [
+      {
+        id: 'page-1',
+        title: 'Σελίδα 1',
+        template: 'grid',
+        orientation: 'portrait',
+        layers: [
+          {
+            id: 'layer-1',
+            name: 'Layer 1',
+            visible: true,
+            locked: false,
+            opacity: 1,
+          },
+        ],
+        strokes: [],
+        images: [],
+        texts: [],
+        tapes: [],
+      },
+    ],
+  },
+];
+
+const createDefaultFolders = (): { name: string; updatedAt: string }[] => [
+  { name: 'Μαθήματα', updatedAt: new Date().toISOString() },
+];
 const PRESET_COLORS = [
   '#111827',
   '#dc2626',
@@ -207,22 +244,41 @@ const MirrorVerticalIcon: React.FC<{ className?: string }> = ({ className = 'w-3
 );
 
 export default function App() {
-  const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
+  // Purge legacy v1 preloaded test notebooks/folders from localStorage once on startup
+  const initialAuthUid = (() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      localStorage.removeItem('bestnotes_notebooks_v1');
+      localStorage.removeItem('bestnotes_custom_folders_v1');
+      localStorage.removeItem('bestnotes_ui_session_v1');
+      localStorage.removeItem('bestnotes_shape_library_v1');
+      if (localStorage.getItem(AUTH_FLAG_STORAGE_KEY) === 'true') {
+        return localStorage.getItem(AUTH_UID_STORAGE_KEY) || null;
       }
     } catch {
       // ignore
     }
-    return preloadedData as unknown as Notebook[];
+    return null;
+  })();
+
+  const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
+    if (initialAuthUid) {
+      try {
+        const saved = localStorage.getItem(`${STORAGE_KEY}_${initialAuthUid}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return createDefaultBlankNotebooks();
   });
 
   const initialSession = (() => {
+    if (!initialAuthUid) return null;
     try {
-      const raw = localStorage.getItem(UI_SESSION_STORAGE_KEY);
+      const raw = localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${initialAuthUid}`);
       if (raw) {
         return JSON.parse(raw) as {
           viewMode?: 'landing' | 'editor' | 'library';
@@ -238,17 +294,13 @@ export default function App() {
   })();
 
   const [viewMode, setViewMode] = useState<'landing' | 'editor' | 'library'>(() => {
-    if (initialSession?.viewMode === 'editor' || initialSession?.viewMode === 'library') {
-      return initialSession.viewMode;
-    }
-    try {
-      if (localStorage.getItem(AUTH_FLAG_STORAGE_KEY) === 'true') {
-        return 'editor';
+    if (initialAuthUid) {
+      if (initialSession?.viewMode === 'editor' || initialSession?.viewMode === 'library') {
+        return initialSession.viewMode;
       }
-    } catch {
-      // ignore
+      return 'editor';
     }
-    return initialSession?.viewMode || 'landing';
+    return 'landing';
   });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
@@ -256,13 +308,13 @@ export default function App() {
   const explicitLandingNavRef = useRef<boolean>(false);
 
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(() => {
-    if (Array.isArray(initialSession?.openNotebookIds)) {
+    if (Array.isArray(initialSession?.openNotebookIds) && initialSession.openNotebookIds.length > 0) {
       return initialSession.openNotebookIds;
     }
-    return ['nb-gn1', 'nb-gn2'];
+    return ['nb-blank-1'];
   });
   const [activeNotebookId, setActiveNotebookId] = useState<string>(() => {
-    return initialSession?.activeNotebookId || 'nb-gn1';
+    return initialSession?.activeNotebookId || 'nb-blank-1';
   });
   const [activePageIndex, setActivePageIndex] = useState<number>(() => {
     return typeof initialSession?.activePageIndex === 'number' ? initialSession.activePageIndex : 0;
@@ -274,12 +326,70 @@ export default function App() {
       try {
         if (user) {
           localStorage.setItem(AUTH_FLAG_STORAGE_KEY, 'true');
+          localStorage.setItem(AUTH_UID_STORAGE_KEY, user.uid);
+
+          // Load this user's saved notebooks (or start with 1 clean blank page if newly registered!)
+          const savedNbs = localStorage.getItem(`${STORAGE_KEY}_${user.uid}`);
+          let loadedNbs: Notebook[] | null = null;
+          if (savedNbs) {
+            try {
+              const parsed = JSON.parse(savedNbs);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                loadedNbs = parsed;
+              }
+            } catch {
+              // ignore
+            }
+          }
+          const finalNbs = loadedNbs || createDefaultBlankNotebooks();
+          setNotebooks(finalNbs);
+          setOpenNotebookIds([finalNbs[0].id]);
+          setActiveNotebookId(finalNbs[0].id);
+          setActivePageIndex(0);
+
+          // Load this user's saved folders (or start with 1 empty folder "Μαθήματα" if newly registered!)
+          const savedFolders = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${user.uid}`);
+          let loadedFolders: { name: string; updatedAt: string }[] | null = null;
+          if (savedFolders) {
+            try {
+              const parsedF = JSON.parse(savedFolders);
+              if (Array.isArray(parsedF)) {
+                loadedFolders = parsedF;
+              }
+            } catch {
+              // ignore
+            }
+          }
+          setCustomFolders(loadedFolders || createDefaultFolders());
+
+          // Load this user's saved shape library
+          const savedLib = localStorage.getItem(`${SHAPE_LIBRARY_STORAGE_KEY}_${user.uid}`);
+          if (savedLib) {
+            try {
+              const parsedL = JSON.parse(savedLib);
+              if (Array.isArray(parsedL)) setShapeLibrary(parsedL);
+            } catch {
+              // ignore
+            }
+          } else {
+            setShapeLibrary([]);
+          }
+
           // If user is already logged in on page load/refresh and didn't explicitly navigate to Landing Page, keep them in the app!
           if (!explicitLandingNavRef.current) {
             setViewMode((prev) => (prev === 'landing' ? 'editor' : prev));
           }
         } else {
           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
+          localStorage.removeItem(AUTH_UID_STORAGE_KEY);
+          // Guest mode: strictly ephemeral 1 blank page + 1 empty "Μαθήματα" folder
+          const freshBlank = createDefaultBlankNotebooks();
+          setNotebooks(freshBlank);
+          setOpenNotebookIds([freshBlank[0].id]);
+          setActiveNotebookId(freshBlank[0].id);
+          setActivePageIndex(0);
+          setCustomFolders(createDefaultFolders());
+          setShapeLibrary([]);
         }
       } catch {
         // ignore
@@ -289,9 +399,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!currentUser) return; // Guests never persist session state!
     try {
       localStorage.setItem(
-        UI_SESSION_STORAGE_KEY,
+        `${UI_SESSION_STORAGE_KEY}_${currentUser.uid}`,
         JSON.stringify({
           viewMode,
           openNotebookIds,
@@ -302,7 +413,7 @@ export default function App() {
     } catch {
       // ignore
     }
-  }, [viewMode, openNotebookIds, activeNotebookId, activePageIndex]);
+  }, [currentUser, viewMode, openNotebookIds, activeNotebookId, activePageIndex]);
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const zoomRef = useRef<number>(1);
@@ -403,8 +514,9 @@ export default function App() {
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
   const [shapeLibrary, setShapeLibrary] = useState<SavedLibraryItem[]>(() => {
+    if (!initialAuthUid) return [];
     try {
-      const saved = localStorage.getItem(SHAPE_LIBRARY_STORAGE_KEY);
+      const saved = localStorage.getItem(`${SHAPE_LIBRARY_STORAGE_KEY}_${initialAuthUid}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) return parsed;
@@ -546,19 +658,18 @@ export default function App() {
   const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
   const [activeLibraryFolder, setActiveLibraryFolder] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<{ name: string; updatedAt: string }[]>(() => {
-    try {
-      const raw = localStorage.getItem('bestnotes_custom_folders_v1');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+    if (initialAuthUid) {
+      try {
+        const raw = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${initialAuthUid}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
-    return [
-      { name: 'Φυσική', updatedAt: new Date().toISOString() },
-      { name: 'Μαθηματικά', updatedAt: new Date().toISOString() },
-    ];
+    return createDefaultFolders();
   });
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderNameInput, setNewFolderNameInput] = useState<string>('');
@@ -638,20 +749,37 @@ export default function App() {
     }, 2600);
   }, []);
 
-  // DEBOUNCED LocalStorage Save (runs 2.5s AFTER user stops writing, NEVER during pointermove!)
+  // DEBOUNCED LocalStorage Save (runs 2.5s AFTER user stops writing, ONLY for logged-in users — Guests are strictly temporary!)
   useEffect(() => {
+    if (!currentUser) return;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(notebooks));
+        localStorage.setItem(`${STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(notebooks));
       } catch {
         // ignore quota
       }
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [notebooks]);
+  }, [currentUser, notebooks]);
+
+  // Persist customFolders ONLY for logged-in users (Guests are strictly temporary!)
+  useEffect(() => {
+    if (!currentUser) return;
+    try {
+      localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(customFolders));
+    } catch {
+      // ignore quota
+    }
+  }, [currentUser, customFolders]);
 
   const performDrivePdfSync = useCallback(
     async (showFeedback = true, overrideToken?: string, overrideNotebook?: Notebook) => {
+      if (!currentUser) {
+        if (showFeedback) {
+          showToast('🔒 Λειτουργία Επισκέπτη (Προσωρινή): Κάνε Σύνδεση / Εγγραφή από το προφίλ 👤 για αποθήκευση!');
+        }
+        return;
+      }
       const token = overrideToken ?? driveAccessToken;
       const targetNb = overrideNotebook ?? activeNotebook;
       if (!token) {
@@ -703,7 +831,7 @@ export default function App() {
         }
       }
     },
-    [driveAccessToken, activeNotebook, showToast]
+    [currentUser, driveAccessToken, activeNotebook, showToast]
   );
 
   const performAllNotebooksDrivePdfSync = useCallback(
@@ -6905,14 +7033,15 @@ export default function App() {
   };
   void _handleBeautifySelected;
 
-  // Persist custom Shape Library to localStorage
+  // Persist custom Shape Library to localStorage (ONLY for logged-in users — Guests are strictly temporary!)
   useEffect(() => {
+    if (!currentUser) return;
     try {
-      localStorage.setItem(SHAPE_LIBRARY_STORAGE_KEY, JSON.stringify(shapeLibrary));
+      localStorage.setItem(`${SHAPE_LIBRARY_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(shapeLibrary));
     } catch {
       // ignore quota errors
     }
-  }, [shapeLibrary]);
+  }, [currentUser, shapeLibrary]);
 
   // Add currently selected Shape / Group of Strokes / Image to the Custom Shape Library ("(+) Βιβλιοθήκη")
   const handleAddSelectedToShapeLibrary = () => {
@@ -7829,11 +7958,6 @@ export default function App() {
               const deleteFolderByName = (folderName: string) => {
                 const nextCustom = customFolders.filter((f) => f.name.trim() !== folderName);
                 setCustomFolders(nextCustom);
-                try {
-                  localStorage.setItem('bestnotes_custom_folders_v1', JSON.stringify(nextCustom));
-                } catch {
-                  // ignore
-                }
                 // Move any notebooks inside this folder to unassigned ('') so no user work is lost, or remove folder tag
                 setNotebooks((prev) =>
                   prev.map((nb) => ((nb.folder || '').trim() === folderName ? { ...nb, folder: '' } : nb))
@@ -7851,11 +7975,6 @@ export default function App() {
                   ...customFolders.filter((f) => f.name.trim() !== trimmed),
                 ];
                 setCustomFolders(nextCustom);
-                try {
-                  localStorage.setItem('bestnotes_custom_folders_v1', JSON.stringify(nextCustom));
-                } catch {
-                  // ignore
-                }
                 setNewFolderNameInput('');
                 setIsCreatingFolder(false);
                 showToast(`📁 Δημιουργήθηκε ο φάκελος "${trimmed}"!`);
