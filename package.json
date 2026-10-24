@@ -9,6 +9,7 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "firebase": "^13.1.0",
     "jszip": "^3.10.1",
     "katex": "^0.16.11",
     "lucide-react": "^0.468.0",

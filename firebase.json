@@ -1,4 +1,21 @@
 {
+  "auth": {
+    "providers": {
+      "anonymous": true,
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "BestNotes",
+        "supportEmail": "freiderikoskostas@gmail.com",
+        "authorizedRedirectUris": [
+          "https://bestnotes-2026.firebaseapp.com/__/auth/handler",
+          "https://mybestnotes.firebaseapp.com/__/auth/handler",
+          "https://mybestnotes.web.app/__/auth/handler",
+          "https://bestnotes-2026.web.app/__/auth/handler",
+          "http://localhost:5173"
+        ]
+      }
+    }
+  },
   "hosting": [
     {
       "site": "mybestnotes",

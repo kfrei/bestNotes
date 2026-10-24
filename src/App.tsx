@@ -47,7 +47,12 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
+  LogIn,
+  LogOut,
+  Home,
 } from 'lucide-react';
+import { auth, onAuthStateChanged, signOut, type User } from './firebase';
+import { LandingPage, AuthModal } from './components/LandingPage';
 import {
   Notebook,
   NotePage,
@@ -116,7 +121,17 @@ export default function App() {
     return preloadedData as unknown as Notebook[];
   });
 
-  const [viewMode, setViewMode] = useState<'editor' | 'library'>('editor');
+  const [viewMode, setViewMode] = useState<'landing' | 'editor' | 'library'>('landing');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(['nb-gn1', 'nb-gn2']);
   const [activeNotebookId, setActiveNotebookId] = useState<string>('nb-gn1');
   const [activePageIndex, setActivePageIndex] = useState<number>(0);
@@ -5659,6 +5674,29 @@ export default function App() {
 
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
+  if (viewMode === 'landing') {
+    return (
+      <LandingPage
+        currentUser={currentUser}
+        onEnterApp={() => {
+          if (openNotebookIds.length === 0 && notebooks.length > 0) {
+            setOpenNotebookIds([notebooks[0].id]);
+            setActiveNotebookId(notebooks[0].id);
+          }
+          setViewMode('editor');
+        }}
+        onOpenAuthModal={(initialMode) => {
+          setAuthMode(initialMode);
+          setShowAuthModal(true);
+        }}
+        showAuthModal={showAuthModal}
+        setShowAuthModal={setShowAuthModal}
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+      />
+    );
+  }
+
   return (
     <div className="fixed inset-0 flex flex-col w-full h-[100dvh] max-h-[100dvh] bg-[#f1f3f6] text-slate-800 overflow-clip overscroll-none select-none">
       <input
@@ -5687,8 +5725,15 @@ export default function App() {
         style={{ touchAction: 'manipulation' }}
         className="sticky top-0 z-40 flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none"
       >
-        {/* Left Navigation Icons (Back to Library, Page Thumbnails Grid, Import .goodnotes, Open PDF/JPG/PNG) */}
+        {/* Left Navigation Icons (Landing Page Home, Back to Library, Page Thumbnails Grid, Import .goodnotes, Open PDF/JPG/PNG) */}
         <div className="flex items-center gap-1 pb-1.5">
+          <button
+            onClick={() => setViewMode('landing')}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-cyan-300 transition cursor-pointer"
+            title="Αρχική Σελίδα Παρουσίασης (Landing Page)"
+          >
+            <Home className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setViewMode(viewMode === 'library' ? 'editor' : 'library')}
             className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
@@ -5918,6 +5963,35 @@ export default function App() {
           >
             <SlidersHorizontal className="w-4 h-4" />
           </button>
+
+          {/* Firebase Auth User / Login Button */}
+          {currentUser ? (
+            <button
+              onClick={async () => {
+                await signOut(auth);
+                showToast('👋 Αποσυνδέθηκες από τον λογαριασμό σου.');
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-rose-500/25 border border-emerald-400/40 text-xs font-semibold text-emerald-100 transition cursor-pointer"
+              title={`Συνδεδεμένος ως ${currentUser.email || currentUser.displayName || 'Χρήστης'} — Πάτησε για Αποσύνδεση`}
+            >
+              <span className="max-w-[90px] truncate hidden sm:inline">
+                {currentUser.displayName || currentUser.email?.split('@')[0] || 'Account'}
+              </span>
+              <LogOut className="w-3.5 h-3.5 text-emerald-300" />
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setAuthMode('signin');
+                setShowAuthModal(true);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#007185] hover:bg-[#005f70] text-xs font-bold text-white transition cursor-pointer shadow-xs"
+              title="Σύνδεση / Εγγραφή με Google ή Email"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Login</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -8740,6 +8814,18 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Global Firebase Auth Modal (Google Sign-In & Email/Password Sign-In / Sign-Up) */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        mode={authMode}
+        setMode={setAuthMode}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          showToast('🎉 Συνδέθηκες επιτυχώς στο BestNotes Cloud!');
+        }}
+      />
     </div>
   );
 }
