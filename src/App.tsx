@@ -1269,6 +1269,7 @@ export default function App() {
     const canFillShape =
       s.shapeType !== 'line' &&
       s.shapeType !== 'arrow' &&
+      s.shapeType !== 'double-arrow' &&
       s.shapeType !== 'resistor' &&
       s.shapeType !== 'spring' &&
       s.shapeType !== 'sine' &&
@@ -1289,7 +1290,27 @@ export default function App() {
 
     ctx.stroke();
 
-    if (s.arrowEnd && s.points.length >= 2) {
+    if ((s.arrowStart || s.shapeType === 'double-arrow') && s.points.length >= 2) {
+      const first = s.points[0];
+      const second = s.points[Math.min(s.points.length - 1, 1)];
+      const angle = Math.atan2(first.y - second.y, first.x - second.x);
+      const headLen = Math.max(12, s.width * 4);
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(first.x, first.y);
+      ctx.lineTo(
+        first.x - headLen * Math.cos(angle - Math.PI / 6),
+        first.y - headLen * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.moveTo(first.x, first.y);
+      ctx.lineTo(
+        first.x - headLen * Math.cos(angle + Math.PI / 6),
+        first.y - headLen * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.stroke();
+    }
+
+    if ((s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') && s.points.length >= 2) {
       const last = s.points[s.points.length - 1];
       const prev = s.points[Math.max(0, s.points.length - 2)];
       const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
@@ -2868,7 +2889,8 @@ export default function App() {
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
-      arrowEnd: arrowEnd || shapePreset === 'arrow',
+      arrowStart: shapePreset === 'double-arrow',
+      arrowEnd: arrowEnd || shapePreset === 'arrow' || shapePreset === 'double-arrow',
       points: pts,
       layerId: activeLayerId,
       isShape: isCompletedShape,
@@ -4643,6 +4665,7 @@ export default function App() {
       (isShape || isClosedFreehand) &&
       shapeType !== 'line' &&
       shapeType !== 'arrow' &&
+      shapeType !== 'double-arrow' &&
       shapeType !== 'resistor' &&
       shapeType !== 'spring' &&
       shapeType !== 'sine' &&
@@ -6265,6 +6288,7 @@ export default function App() {
                       { id: 'hyperbola', label: ')( Υπερβολή (3 Κόμβοι)' },
                       { id: 'arc', label: '⌒ Τόξο (3 Κόμβοι)' },
                       { id: 'arrow', label: '➔ Διάνυσμα' },
+                      { id: 'double-arrow', label: '↔ Διπλό Βέλος' },
                       { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
                       { id: 'axes', label: '📈 Άξονες' },
                       { id: 'resistor', label: '⚡ Αντιστάτης' },
@@ -6523,7 +6547,13 @@ export default function App() {
                               ? selStroke.keyNodeIndices
                               : computeFreehandKeyNodeIndices(selStroke.points);
                           nodeCountLabel = kIndices.length;
-                        } else if (selStroke.shapeType === 'sine' || selStroke.shapeType === 'cosine' || selStroke.shapeType === 'line' || selStroke.shapeType === 'arrow') {
+                        } else if (
+                          selStroke.shapeType === 'sine' ||
+                          selStroke.shapeType === 'cosine' ||
+                          selStroke.shapeType === 'line' ||
+                          selStroke.shapeType === 'arrow' ||
+                          selStroke.shapeType === 'double-arrow'
+                        ) {
                           nodeCountLabel = 2;
                         } else if (
                           selStroke.shapeType === 'parabola' ||

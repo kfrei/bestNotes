@@ -720,12 +720,21 @@ function buildPresetShape(
 ): { points: BezierPoint[]; shapeType: string } {
   const w = Math.max(40, maxX - minX);
   const h = Math.max(32, maxY - minY);
-  if (preset === 'line' || preset === 'arrow') {
+  if (preset === 'line' || preset === 'arrow' || preset === 'double-arrow') {
+    let x2 = end.x;
+    let y2 = end.y;
+    const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;
+    const absAngle = Math.abs(angleDeg);
+    if (absAngle < 5.5 || absAngle > 174.5) {
+      y2 = start.y;
+    } else if (Math.abs(absAngle - 90) < 5.5) {
+      x2 = start.x;
+    }
     return {
       shapeType: preset,
       points: [
         { x: start.x, y: start.y, pressure: 0.7 },
-        { x: end.x, y: end.y, cx: (start.x + end.x) / 2, cy: (start.y + end.y) / 2, pressure: 0.7 },
+        { x: x2, y: y2, cx: (start.x + x2) / 2, cy: (start.y + y2) / 2, pressure: 0.7 },
       ],
     };
   }
@@ -2014,7 +2023,11 @@ export function eraseStrokeByCircle(
     return { modified: true, pieces: [] };
   }
 
-  const wasStraightLine = s.shapeType === 'line' || s.shapeType === 'arrow' || basePts.length === 2;
+  const wasStraightLine =
+    s.shapeType === 'line' ||
+    s.shapeType === 'arrow' ||
+    s.shapeType === 'double-arrow' ||
+    basePts.length === 2;
 
   const pieces: StrokeObject[] = validChains.map((ch, idx) => {
     const pieceId =
@@ -2027,13 +2040,22 @@ export function eraseStrokeByCircle(
     if (wasStraightLine && ch.length === 2) {
       const p0 = ch[0];
       const p1 = ch[1];
-      const keepArrowEnd = Boolean(s.arrowEnd && endsAtOriginalEnd);
-      const keepArrowStart = Boolean(s.arrowStart && startsAtOriginalStart);
+      const keepArrowEnd = Boolean(
+        (s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') && endsAtOriginalEnd
+      );
+      const keepArrowStart = Boolean(
+        (s.arrowStart || s.shapeType === 'double-arrow') && startsAtOriginalStart
+      );
       return {
         ...s,
         id: pieceId,
         isShape: true,
-        shapeType: keepArrowEnd && s.shapeType === 'arrow' ? 'arrow' : 'line',
+        shapeType:
+          keepArrowStart && keepArrowEnd
+            ? 'double-arrow'
+            : keepArrowEnd && (s.shapeType === 'arrow' || s.shapeType === 'double-arrow')
+            ? 'arrow'
+            : 'line',
         arrowEnd: keepArrowEnd,
         arrowStart: keepArrowStart,
         fillStyle: 'none',
@@ -2051,8 +2073,10 @@ export function eraseStrokeByCircle(
       id: pieceId,
       isShape: false,
       shapeType: undefined,
-      arrowEnd: Boolean(s.arrowEnd && endsAtOriginalEnd),
-      arrowStart: Boolean(s.arrowStart && startsAtOriginalStart),
+      arrowEnd: Boolean(
+        (s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') && endsAtOriginalEnd
+      ),
+      arrowStart: Boolean((s.arrowStart || s.shapeType === 'double-arrow') && startsAtOriginalStart),
       fillStyle: 'none',
       fillColor: undefined,
       points: ch,

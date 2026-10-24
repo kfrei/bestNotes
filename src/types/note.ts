@@ -20,6 +20,7 @@ export type ShapePresetType =
   | 'auto'
   | 'line'
   | 'arrow'
+  | 'double-arrow'
   | 'rectangle'
   | 'parallelogram'
   | 'ellipse'
