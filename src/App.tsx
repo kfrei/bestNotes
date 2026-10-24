@@ -343,7 +343,7 @@ export default function App() {
   const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
   const [fillColor, setFillColor] = useState<string>('#fef08a');
   const [fillStyle, setFillStyle] = useState<FillStyleType>('none');
-  const [fillTransparency, setFillTransparency] = useState<20 | 50 | 90>(90);
+  const [fillTransparency, setFillTransparency] = useState<25 | 45 | 90>(90);
   const [strokeWidth, setStrokeWidth] = useState<number>(3.0);
   const [widthSlots, setWidthSlots] = useState<number[]>([2.0, 3.5, 6.5]);
   const [activeWidthSlotIdx, setActiveWidthSlotIdx] = useState<number>(1);
@@ -1333,7 +1333,12 @@ export default function App() {
       const isFilled3D = Boolean(s.fillStyle && s.fillStyle !== 'none');
       const shadeColor = s.color || s.fillColor || '#2563eb';
       const fillTrans3D = s.fillTransparency ?? 90;
-      const alphaScale3D = (fillTrans3D === 20 ? 0.8 : fillTrans3D === 50 ? 0.5 : 0.11) / 0.24;
+      const alphaScale3D =
+        (fillTrans3D === 25 || fillTrans3D === 20
+          ? 0.75
+          : fillTrans3D === 45 || fillTrans3D === 50
+          ? 0.55
+          : 0.11) / 0.24;
 
       const traceEllipseBilerp = (
         uc: number,
@@ -1685,7 +1690,12 @@ export default function App() {
       const fillTrans = s.fillTransparency ?? 90;
       ctx.save();
       ctx.fillStyle = shadeColor;
-      ctx.globalAlpha = fillTrans === 20 ? 0.8 : fillTrans === 50 ? 0.5 : 0.11;
+      ctx.globalAlpha =
+        fillTrans === 25 || fillTrans === 20
+          ? 0.75
+          : fillTrans === 45 || fillTrans === 50
+          ? 0.55
+          : 0.11;
       ctx.fill();
       ctx.restore();
     }
@@ -5847,7 +5857,7 @@ export default function App() {
     ]
   );
 
-  // Cycle Fill Transparency: 20% -> 50% -> 90% (default: 90% very transparent)
+  // Cycle Fill Transparency: 25% -> 45% -> 90% (default: 90% very transparent)
   const cycleFillTransparency = useCallback(() => {
     const baseIds =
       selectedStrokeIds.length > 0
@@ -5867,11 +5877,17 @@ export default function App() {
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
 
-    const currentTrans: 20 | 50 | 90 =
+    const rawCurrent =
       targetStrokes.length > 0
         ? targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency
         : fillTransparency;
-    const nextTrans: 20 | 50 | 90 = currentTrans === 20 ? 50 : currentTrans === 50 ? 90 : 20;
+    const currentTrans: 25 | 45 | 90 =
+      rawCurrent === 20 || rawCurrent === 25
+        ? 25
+        : rawCurrent === 45 || rawCurrent === 50
+        ? 45
+        : 90;
+    const nextTrans: 25 | 45 | 90 = currentTrans === 25 ? 45 : currentTrans === 45 ? 90 : 25;
     setFillTransparency(nextTrans);
 
     if (targetStrokes.length > 0) {
@@ -6826,10 +6842,10 @@ export default function App() {
                                 key={st.id}
                                 fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
                                 fillOpacity={
-                                  st.fillTransparency === 20
-                                    ? 0.8
-                                    : st.fillTransparency === 50
-                                    ? 0.5
+                                  st.fillTransparency === 25 || st.fillTransparency === 20
+                                    ? 0.75
+                                    : st.fillTransparency === 45 || st.fillTransparency === 50
+                                    ? 0.55
                                     : 0.11
                                 }
                                 stroke={st.color}
@@ -7263,7 +7279,7 @@ export default function App() {
                   <button
                     onClick={() => cycleFillTransparency()}
                     className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-slate-600 hover:text-[#0066ff] hover:bg-white transition cursor-pointer"
-                    title={`Διαφάνεια Γεμίσματος: ${fillTransparency}% (Κλικ για εναλλαγή: 20% → 50% → 90%)`}
+                    title={`Διαφάνεια Γεμίσματος: ${fillTransparency}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
                   >
                     {fillTransparency}%
                   </button>
@@ -7809,8 +7825,14 @@ export default function App() {
                       const isCurrentlyFilled = targetStrokes.some(
                         (s) => s.fillStyle && s.fillStyle !== 'none'
                       );
-                      const effectiveTrans: 20 | 50 | 90 =
+                      const rawTrans =
                         targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency;
+                      const effectiveTrans: 25 | 45 | 90 =
+                        rawTrans === 20 || rawTrans === 25
+                          ? 25
+                          : rawTrans === 45 || rawTrans === 50
+                          ? 45
+                          : 90;
                       return (
                         <div className="inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                           <button
@@ -7851,7 +7873,7 @@ export default function App() {
                           <button
                             onClick={() => cycleFillTransparency()}
                             className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-slate-600 hover:text-[#0066ff] hover:bg-white transition cursor-pointer"
-                            title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για εναλλαγή: 20% → 50% → 90%)`}
+                            title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
                           >
                             {effectiveTrans}%
                           </button>
@@ -9433,10 +9455,10 @@ export default function App() {
                                 key={st.id}
                                 fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
                                 fillOpacity={
-                                  st.fillTransparency === 20
-                                    ? 0.8
-                                    : st.fillTransparency === 50
-                                    ? 0.5
+                                  st.fillTransparency === 25 || st.fillTransparency === 20
+                                    ? 0.75
+                                    : st.fillTransparency === 45 || st.fillTransparency === 50
+                                    ? 0.55
                                     : 0.11
                                 }
                                 stroke={st.color}
