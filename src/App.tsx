@@ -400,6 +400,17 @@ export default function App() {
     nodeMagnetTimerRef.current = null;
     setNodeMagnetState(null);
   }, []);
+  const addNodeLongPressRef = useRef<{
+    timerId: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const cancelAddNodeLongPress = useCallback(() => {
+    if (addNodeLongPressRef.current) {
+      window.clearTimeout(addNodeLongPressRef.current.timerId);
+      addNodeLongPressRef.current = null;
+    }
+  }, []);
   const [textFontSize, setTextFontSize] = useState<number>(22);
   const [textBold, setTextBold] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -1247,9 +1258,23 @@ export default function App() {
         }
       }
 
+      if (activeTool === 'direct-node' && activeNodeStrokeId) {
+        const nodeStroke = targetPageObj.strokes.find((s) => s.id === activeNodeStrokeId);
+        if (nodeStroke && isPointNearStroke({ x: ptX, y: ptY }, nodeStroke, 26)) {
+          return true;
+        }
+      }
+
       return findSelectableObjectAtPagePoint({ x: ptX, y: ptY }, targetPageObj) !== null;
     },
-    [isClientPointInLassoSelection, activePage, activeNotebook.pages, findSelectableObjectAtPagePoint]
+    [
+      isClientPointInLassoSelection,
+      activeTool,
+      activeNodeStrokeId,
+      activePage,
+      activeNotebook.pages,
+      findSelectableObjectAtPagePoint,
+    ]
   );
 
   const drawStrokeOnContext = (ctx: CanvasRenderingContext2D, s: StrokeObject, isSelected = false) => {
@@ -3516,12 +3541,13 @@ export default function App() {
     //    - When Finger Drawing is ON (`!pencilOnlyMode`): only select/drag when Lasso ('lasso') or Nodes ('direct-node') is active (so Pen draws with finger)!
     if (
       e.pointerType === 'touch' &&
-      (pencilOnlyMode || activeTool === 'lasso' || activeTool === 'direct-node') &&
+      activeTool !== 'direct-node' &&
+      (pencilOnlyMode || activeTool === 'lasso') &&
       !(activeTool === 'lasso' && isClientPointInLassoSelection(e.clientX, e.clientY))
     ) {
       const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
       if (fingerHit) {
-        if (activeTool !== 'lasso' && activeTool !== 'direct-node') {
+        if (activeTool !== 'lasso') {
           setActiveTool('lasso');
         }
         setShowToolSubBar(true);
@@ -3617,6 +3643,7 @@ export default function App() {
     //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices)
     if (activeTool === 'direct-node') {
       cancelNodeMagnetTimer();
+      cancelAddNodeLongPress();
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target) {
@@ -3629,7 +3656,7 @@ export default function App() {
             for (let k = 0; k < keyIndices.length; k++) {
               if (isWeldedClosed && k === keyIndices.length - 1) continue;
               const p = target.points[keyIndices[k]];
-              if (p && distance(pt, p) < 20) {
+              if (p && distance(pt, p) < 22) {
                 if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
                   updateActivePage(
                     (page) => ({
@@ -3666,12 +3693,116 @@ export default function App() {
 
             for (let i = 0; i < nodeCount; i++) {
               const p = target.points[i];
-              if (distance(pt, p) < 18) {
+              if (distance(pt, p) < 20) {
                 setDraggingNodeIdx({ index: i, isControl: false });
                 isDrawingRef.current = true;
                 return;
               }
             }
+          }
+
+          // Long-Press (~420ms) on any point of the selected stroke/shape perimeter to ADD a new Node!
+          if (isPointNearStroke(pt, target, 24)) {
+            const pressX = pt.x;
+            const pressY = pt.y;
+            const targetId = target.id;
+            const timerId = window.setTimeout(() => {
+              addNodeLongPressRef.current = null;
+              let newDragIdx: number | null = null;
+
+              updateActivePage(
+                (page) => ({
+                  ...page,
+                  strokes: page.strokes.map((s) => {
+                    if (s.id !== targetId) return s;
+
+                    if (!s.isShape && s.points.length >= 3) {
+                      const kIndices =
+                        s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                          ? s.keyNodeIndices
+                          : computeFreehandKeyNodeIndices(s.points);
+                      let bestIdx = -1;
+                      let minDist = Infinity;
+                      for (let i = 1; i < s.points.length - 1; i++) {
+                        if (kIndices.includes(i)) continue;
+                        const d = distance({ x: pressX, y: pressY }, s.points[i]);
+                        if (d < minDist) {
+                          minDist = d;
+                          bestIdx = i;
+                        }
+                      }
+                      if (bestIdx >= 1) {
+                        const nextKeys = Array.from(new Set([...kIndices, bestIdx])).sort(
+                          (a, b) => a - b
+                        );
+                        newDragIdx = nextKeys.indexOf(bestIdx);
+                        return { ...s, keyNodeIndices: nextKeys };
+                      }
+                      return s;
+                    }
+
+                    // Geometric shape (polygon / line): split the closest segment and insert a new vertex node!
+                    const isEditablePoly =
+                      s.shapeType === 'rectangle' ||
+                      s.shapeType === 'parallelogram' ||
+                      s.shapeType === 'triangle' ||
+                      s.shapeType === 'line' ||
+                      s.shapeType === 'arrow' ||
+                      s.shapeType === 'double-arrow';
+                    if (isEditablePoly && s.points.length >= 2) {
+                      let bestSeg = 0;
+                      let bestDist = Infinity;
+                      let bestProjX = pressX;
+                      let bestProjY = pressY;
+                      for (let i = 0; i < s.points.length - 1; i++) {
+                        const pA = s.points[i];
+                        const pB = s.points[i + 1];
+                        const dx = pB.x - pA.x;
+                        const dy = pB.y - pA.y;
+                        const lenSq = dx * dx + dy * dy;
+                        const t =
+                          lenSq > 1e-4
+                            ? Math.max(0.1, Math.min(0.9, ((pressX - pA.x) * dx + (pressY - pA.y) * dy) / lenSq))
+                            : 0.5;
+                        const px = pA.x + t * dx;
+                        const py = pA.y + t * dy;
+                        const d = Math.hypot(pressX - px, pressY - py);
+                        if (d < bestDist) {
+                          bestDist = d;
+                          bestSeg = i;
+                          bestProjX = px;
+                          bestProjY = py;
+                        }
+                      }
+                      const nextPts = [...s.points];
+                      nextPts.splice(bestSeg + 1, 0, {
+                        x: bestProjX,
+                        y: bestProjY,
+                        pressure: 0.7,
+                      });
+                      newDragIdx = bestSeg + 1;
+                      return { ...s, points: nextPts };
+                    }
+
+                    return s;
+                  }),
+                }),
+                true
+              );
+
+              if (newDragIdx !== null) {
+                setDraggingNodeIdx({ index: newDragIdx, isControl: false });
+                isDrawingRef.current = true;
+                showToast('➕ Προστέθηκε νέος κόμβος (Node) στο σημείο!');
+              }
+            }, 420);
+
+            addNodeLongPressRef.current = {
+              timerId,
+              startX: pressX,
+              startY: pressY,
+            };
+            return;
           }
         }
       }
@@ -4135,6 +4266,17 @@ export default function App() {
 
   // ULTRA-FAST POINTER MOVE: Zero React re-renders while drawing!
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (addNodeLongPressRef.current) {
+      const checkPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+      if (
+        Math.hypot(
+          checkPt.x - addNodeLongPressRef.current.startX,
+          checkPt.y - addNodeLongPressRef.current.startY
+        ) > 10
+      ) {
+        cancelAddNodeLongPress();
+      }
+    }
     if (!isDrawingRef.current) return;
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
@@ -4948,6 +5090,7 @@ export default function App() {
       window.clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
+    cancelAddNodeLongPress();
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
 
