@@ -9574,16 +9574,16 @@ export default function App() {
                         className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
                         title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
                       >
-                        <MirrorHorizontalIcon className="w-3.5 h-3.5" />
-                        <span>↔ Mirror</span>
+                        <MirrorHorizontalIcon className="w-4 h-4" />
+                        <span>Mirror</span>
                       </button>
                       <button
                         onClick={() => handleMirrorSelected('vertical')}
                         className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
                         title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
                       >
-                        <MirrorVerticalIcon className="w-3.5 h-3.5" />
-                        <span>↕ Mirror</span>
+                        <MirrorVerticalIcon className="w-4 h-4" />
+                        <span>Mirror</span>
                       </button>
                     </div>
 
