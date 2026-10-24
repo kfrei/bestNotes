@@ -243,37 +243,79 @@ export function recognizeAndSnapShape(
   if (isClosed && diag > 22) {
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
-    const rx = w / 2;
-    const ry = h / 2;
+    const rx = Math.max(8, w / 2);
+    const ry = Math.max(8, h / 2);
 
-    // Measure how closely rawPoints hug the Bounding Box vs an Inscribed Ellipse (in identical px/diag units!)
+    // Helper: Euclidean distance from point P to line segment AB
+    const distToSeg = (
+      px: number,
+      py: number,
+      ax: number,
+      ay: number,
+      bx: number,
+      by: number
+    ): number => {
+      const abx = bx - ax;
+      const aby = by - ay;
+      const lenSq = abx * abx + aby * aby;
+      if (lenSq < 1e-6) return Math.hypot(px - ax, py - ay);
+      const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / lenSq));
+      return Math.hypot(px - (ax + t * abx), py - (ay + t * aby));
+    };
+
+    // 2a. Robust Trimmed Bounding Box (3rd–97th percentile) so a single corner overshoot doesn't skew an entire box wall
+    const sortedX = rawPoints.map((p) => p.x).sort((a, b) => a - b);
+    const sortedY = rawPoints.map((p) => p.y).sort((a, b) => a - b);
+    const pLowIdx = Math.floor((rawPoints.length - 1) * 0.03);
+    const pHighIdx = Math.ceil((rawPoints.length - 1) * 0.97);
+    const trimMinX = sortedX[pLowIdx];
+    const trimMaxX = sortedX[pHighIdx];
+    const trimMinY = sortedY[pLowIdx];
+    const trimMaxY = sortedY[pHighIdx];
+
+    // 2b. Measure Bounding-Box Fit Error, Ellipse Fit Error, and Diagonal-to-Cardinal Radial Expansion
     let rectErrSum = 0;
     let ellipseDistErrSum = 0;
-    let ellipseErrSum = 0;
+    let diagRadiusSum = 0;
+    let diagRadiusCount = 0;
+    let cardRadiusSum = 0;
+    let cardRadiusCount = 0;
+
     for (const p of rawPoints) {
       const distToBoxEdge = Math.min(
-        Math.abs(p.x - minX),
-        Math.abs(maxX - p.x),
-        Math.abs(p.y - minY),
-        Math.abs(maxY - p.y)
+        Math.abs(p.x - trimMinX),
+        Math.abs(trimMaxX - p.x),
+        Math.abs(p.y - trimMinY),
+        Math.abs(trimMaxY - p.y)
       );
       rectErrSum += distToBoxEdge / diag;
 
-      const normEllipseR = Math.hypot((p.x - cx) / Math.max(1, rx), (p.y - cy) / Math.max(1, ry));
-      ellipseErrSum += Math.abs(normEllipseR - 1);
-
-      const ang = Math.atan2((p.y - cy) / Math.max(1, ry), (p.x - cx) / Math.max(1, rx));
+      const ux = (p.x - cx) / rx;
+      const uy = (p.y - cy) / ry;
+      const normR = Math.hypot(ux, uy);
+      const ang = Math.atan2(uy, ux);
       const ex = cx + rx * Math.cos(ang);
       const ey = cy + ry * Math.sin(ang);
       ellipseDistErrSum += Math.hypot(p.x - ex, p.y - ey) / diag;
+
+      // cos(2*ang) is near ±1 on cardinal axes (0°, 90°, 180°, 270°) and near 0 on diagonals (±45°, ±135°)
+      const cos2A = Math.abs(Math.cos(2 * ang));
+      if (cos2A < 0.45) {
+        diagRadiusSum += normR;
+        diagRadiusCount++;
+      } else if (cos2A > 0.55) {
+        cardRadiusSum += normR;
+        cardRadiusCount++;
+      }
     }
     const rectErr = rectErrSum / rawPoints.length;
     const ellipseDistErr = ellipseDistErrSum / rawPoints.length;
-    const ellipseErr = ellipseErrSum / rawPoints.length;
+    const diagonalExpansion =
+      diagRadiusCount >= 3 && cardRadiusCount >= 3
+        ? diagRadiusSum / diagRadiusCount / Math.max(0.1, cardRadiusSum / cardRadiusCount)
+        : 1.0;
 
-    // Measure how close the stroke gets to the 4 corners of the bounding box:
-    // - A circle/ellipse stays ~0.146 * diag away from the 4 corners of its bounding box!
-    // - A square/rectangle with obvious corners goes right into the 4 corners (< 0.088 * diag).
+    // 2c. Distance from the 4 Bounding-Box Corners to the stroke
     const boxCorners = [
       { x: minX, y: minY },
       { x: maxX, y: minY },
@@ -291,53 +333,109 @@ export function recognizeAndSnapShape(
     }
     const avgBoxCornerDist = cornerDistSum / 4;
 
-    // Count localized sharp corner bends along the stroke (arm length ~ 0.11 * diag, bend angle >= 56°):
-    // Hand-drawn circles have smooth curvature (0-1 sharp bend at closure), while squares/triangles have distinct sharp corners!
-    const armLen = Math.max(12, diag * 0.11);
-    const sharpPeaks: BezierPoint[] = [];
-    for (let i = 1; i < rawPoints.length - 1; i++) {
-      const curr = rawPoints[i];
-      let prevIdx = i - 1;
-      while (prevIdx > 0 && distance(rawPoints[prevIdx], curr) < armLen) prevIdx--;
-      let nextIdx = i + 1;
-      while (nextIdx < rawPoints.length - 1 && distance(rawPoints[nextIdx], curr) < armLen) nextIdx++;
+    // 2d. Resample closed loop into N=64 equidistant points (with wrap-around!) so the start/end corner is never missed
+    const closedPoly: BezierPoint[] = [...rawPoints];
+    if (distance(rawPoints[rawPoints.length - 1], rawPoints[0]) > 2) {
+      closedPoly.push(rawPoints[0]);
+    }
+    const cumLen: number[] = [0];
+    for (let i = 1; i < closedPoly.length; i++) {
+      cumLen.push(cumLen[i - 1] + distance(closedPoly[i - 1], closedPoly[i]));
+    }
+    const loopTotalLen = Math.max(1, cumLen[cumLen.length - 1]);
+    const N_SAMPLES = 64;
+    const loopSamples: { x: number; y: number }[] = [];
+    let segPtr = 0;
+    for (let k = 0; k < N_SAMPLES; k++) {
+      const targetS = (k / N_SAMPLES) * loopTotalLen;
+      while (segPtr < cumLen.length - 2 && cumLen[segPtr + 1] < targetS) {
+        segPtr++;
+      }
+      const s0 = cumLen[segPtr];
+      const s1 = cumLen[segPtr + 1];
+      const t = s1 > s0 ? (targetS - s0) / (s1 - s0) : 0;
+      loopSamples.push({
+        x: closedPoly[segPtr].x + (closedPoly[segPtr + 1].x - closedPoly[segPtr].x) * t,
+        y: closedPoly[segPtr].y + (closedPoly[segPtr + 1].y - closedPoly[segPtr].y) * t,
+      });
+    }
 
-      const prev = rawPoints[prevIdx];
-      const next = rawPoints[nextIdx];
-      const d1 = distance(prev, curr);
-      const d2 = distance(curr, next);
-      if (d1 < armLen * 0.65 || d2 < armLen * 0.65) continue;
+    // Compute local turning angle (in degrees) at each of the 64 samples using a ±4-step wrap-around chord (~6.25% of perimeter)
+    const bendDegs: number[] = new Array(N_SAMPLES).fill(0);
+    let flatSampleCount = 0;
+    const STEP = 4;
+    for (let k = 0; k < N_SAMPLES; k++) {
+      const prev = loopSamples[(k - STEP + N_SAMPLES) % N_SAMPLES];
+      const curr = loopSamples[k];
+      const next = loopSamples[(k + STEP) % N_SAMPLES];
+      const v1x = curr.x - prev.x;
+      const v1y = curr.y - prev.y;
+      const v2x = next.x - curr.x;
+      const v2y = next.y - curr.y;
+      const m1 = Math.hypot(v1x, v1y);
+      const m2 = Math.hypot(v2x, v2y);
+      if (m1 > 1e-3 && m2 > 1e-3) {
+        const cosB = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (m1 * m2)));
+        const deg = (Math.acos(cosB) * 180) / Math.PI;
+        bendDegs[k] = deg;
+        if (deg < 16) flatSampleCount++;
+      }
+    }
+    const flatSideRatio = flatSampleCount / N_SAMPLES;
 
-      const v1x = curr.x - prev.x,
-        v1y = curr.y - prev.y;
-      const v2x = next.x - curr.x,
-        v2y = next.y - curr.y;
-      const cosBend = (v1x * v2x + v1y * v2y) / (d1 * d2);
-      // cos(56°) ≈ 0.559 -> sharp local corner bend >= 56°
-      if (cosBend < 0.56) {
-        if (
-          sharpPeaks.length === 0 ||
-          distance(sharpPeaks[sharpPeaks.length - 1], curr) > diag * 0.18
-        ) {
-          sharpPeaks.push(curr);
+    // Count distinct wrap-around corner peaks (local maxima with bend >= 38°, separated by >= 7 samples around the loop)
+    const peakIndices: number[] = [];
+    for (let k = 0; k < N_SAMPLES; k++) {
+      const b = bendDegs[k];
+      if (b < 38) continue;
+      let isLocalMax = true;
+      for (let d = -3; d <= 3; d++) {
+        if (d !== 0 && bendDegs[(k + d + N_SAMPLES) % N_SAMPLES] > b) {
+          isLocalMax = false;
+          break;
+        }
+      }
+      if (isLocalMax) {
+        const tooClose = peakIndices.some((pi) => {
+          const diff = Math.abs(k - pi);
+          return Math.min(diff, N_SAMPLES - diff) < 7;
+        });
+        if (!tooClose) {
+          peakIndices.push(k);
         }
       }
     }
-    const sharpCornerCount = sharpPeaks.length;
+    const loopCornerCount = peakIndices.length;
 
-    // Simplify polygon and merge nearby vertices + remove nearly-collinear points
-    const rdp = rdpSimplify(rawPoints, diag * 0.072);
+    // 2e. Corner-Anchored RDP Polygon Extraction:
+    // Rotate rawPoints so index 0 is the point farthest from the center (guaranteed to be a true polygon vertex, never mid-side!)
+    let farthestIdx = 0;
+    let maxNormDist = -1;
+    for (let i = 0; i < rawPoints.length; i++) {
+      const nd = Math.hypot((rawPoints[i].x - cx) / rx, (rawPoints[i].y - cy) / ry);
+      if (nd > maxNormDist) {
+        maxNormDist = nd;
+        farthestIdx = i;
+      }
+    }
+    const rotatedLoop: BezierPoint[] = [
+      ...rawPoints.slice(farthestIdx),
+      ...rawPoints.slice(0, farthestIdx),
+      rawPoints[farthestIdx],
+    ];
+
+    const rdp = rdpSimplify(rotatedLoop, diag * 0.062);
     const mergedCorners: BezierPoint[] = [];
     for (const pt of rdp) {
-      if (mergedCorners.length === 0 || distance(mergedCorners[mergedCorners.length - 1], pt) > diag * 0.15) {
+      if (mergedCorners.length === 0 || distance(mergedCorners[mergedCorners.length - 1], pt) > diag * 0.14) {
         mergedCorners.push(pt);
       }
     }
-    if (mergedCorners.length > 2 && distance(mergedCorners[0], mergedCorners[mergedCorners.length - 1]) < diag * 0.22) {
+    if (mergedCorners.length > 2 && distance(mergedCorners[0], mergedCorners[mergedCorners.length - 1]) < diag * 0.20) {
       mergedCorners.pop();
     }
 
-    // Filter out collinear mid-side vertices (require a genuinely obvious corner turn angle > 38°, cosTurn < 0.788)
+    // Filter out collinear mid-side vertices (require corner turn angle > 34°, cosTurn < 0.829)
     const trueCorners: BezierPoint[] = [];
     const nC = mergedCorners.length;
     if (nC >= 3) {
@@ -353,18 +451,36 @@ export function recognizeAndSnapShape(
         const m2 = Math.hypot(v2x, v2y);
         if (m1 < 1 || m2 < 1) continue;
         const cosTurn = (v1x * v2x + v1y * v2y) / (m1 * m2);
-        if (cosTurn < 0.788) {
+        if (cosTurn < 0.829) {
           trueCorners.push(curr);
         }
       }
     }
 
-    // A. Triangle (3 distinct sharp corners and clearly not an ellipse)
+    // Measure how closely rawPoints hug the extracted polygon's straight edges (polyEdgeErr)
+    let polyEdgeErr = Infinity;
+    if (trueCorners.length >= 3 && trueCorners.length <= 6) {
+      let sumPolyDist = 0;
+      const m = trueCorners.length;
+      for (const p of rawPoints) {
+        let minEdgeD = Infinity;
+        for (let k = 0; k < m; k++) {
+          const a = trueCorners[k];
+          const b = trueCorners[(k + 1) % m];
+          const d = distToSeg(p.x, p.y, a.x, a.y, b.x, b.y);
+          if (d < minEdgeD) minEdgeD = d;
+        }
+        sumPolyDist += minEdgeD / diag;
+      }
+      polyEdgeErr = sumPolyDist / rawPoints.length;
+    }
+
+    // A. Triangle (3 distinct corners, polygon edge fit beats ellipse fit)
     if (
       trueCorners.length === 3 &&
-      sharpCornerCount >= 2 &&
-      ellipseErr > 0.15 &&
-      ellipseDistErr > 0.055
+      loopCornerCount >= 2 &&
+      polyEdgeErr < ellipseDistErr * 0.90 &&
+      ellipseDistErr > 0.042
     ) {
       const [p0, p1, p2] = trueCorners;
       return {
@@ -373,15 +489,20 @@ export function recognizeAndSnapShape(
       };
     }
 
-    // B. Square / Rectangle / Parallelogram:
-    // Require genuinely obvious corners (sharpCornerCount >= 3 AND stroke reaches near the 4 box corners AND hugs box edges closer than ellipse!)
-    // That way, any hand-drawn circle or oval prioritizes snapping to Circle/Ellipse!
+    // B. Square / Rectangle / Parallelogram vs Circle / Ellipse:
+    // Compare the best 4-sided straight-edge model (bestQuadErr) directly against the smooth Ellipse model (ellipseDistErr),
+    // combined with wrap-around corner count, flat-side ratio, and diagonal corner expansion!
+    const bestQuadErr = trueCorners.length === 4 ? Math.min(rectErr, polyEdgeErr) : rectErr;
     const isBoxLike =
-      sharpCornerCount >= 3 &&
-      avgBoxCornerDist < 0.092 &&
-      rectErr < ellipseDistErr * 0.82 &&
-      ((trueCorners.length === 4 && ellipseErr > 0.165) ||
-        (trueCorners.length >= 4 && rectErr < 0.055));
+      // Case 1: 4-sided polygon/box model fits the stroke better than the ellipse, backed by corners & flat sides
+      (bestQuadErr < ellipseDistErr * 0.96 &&
+        (loopCornerCount >= 3 || trueCorners.length === 4) &&
+        (flatSideRatio >= 0.26 || diagonalExpansion >= 1.075 || avgBoxCornerDist < 0.115)) ||
+      // Case 2: Clear 4-corner axis-aligned box with diagonal corner expansion & flat sides (even if drawn fast with soft corners)
+      (avgBoxCornerDist < 0.105 &&
+        diagonalExpansion >= 1.085 &&
+        rectErr < ellipseDistErr * 1.05 &&
+        (loopCornerCount >= 3 || flatSideRatio >= 0.30));
 
     if (isBoxLike) {
       if (trueCorners.length === 4) {
@@ -394,7 +515,7 @@ export function recognizeAndSnapShape(
           (v1x * v2x + v1y * v2y) / (Math.max(1, Math.hypot(v1x, v1y)) * Math.max(1, Math.hypot(v2x, v2y)));
 
         // Tilted Parallelogram
-        if (Math.abs(cosAngle) >= 0.26) {
+        if (Math.abs(cosAngle) >= 0.26 && polyEdgeErr < rectErr * 0.85) {
           const paraPts = [
             { x: p0.x, y: p0.y },
             { x: p1.x, y: p1.y },
@@ -408,8 +529,8 @@ export function recognizeAndSnapShape(
         }
       }
 
-      // Check if it's a Square (width and height within 16% of each other) vs Rectangle
-      const isSquare = Math.abs(w - h) < Math.max(w, h) * 0.16;
+      // Check if it's a Square (width and height within 18% of each other) vs Rectangle
+      const isSquare = Math.abs(w - h) < Math.max(w, h) * 0.18;
       const halfW = isSquare ? (w + h) / 4 : w / 2;
       const halfH = isSquare ? (w + h) / 4 : h / 2;
       const rectPts = [
