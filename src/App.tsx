@@ -224,13 +224,25 @@ export default function App() {
   const [cropPolygonPts, setCropPolygonPts] = useState<{ x: number; y: number }[]>([]);
   const edgeMapRef = useRef<{ id: string; map: Float32Array; w: number; h: number } | null>(null);
 
-  // Ruler
+  // Ruler (centered on A4 page: x = 460, y = 420)
   const [rulerState, setRulerState] = useState<{ visible: boolean; x: number; y: number; angle: number }>({
     visible: false,
-    x: 320,
-    y: 360,
+    x: 460,
+    y: 420,
     angle: 0,
   });
+  const rulerDragRef = useRef<{
+    mode: 'move' | 'rotate';
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    initialX: number;
+    initialY: number;
+    initialAngle: number;
+    startPointerAngleDeg: number;
+    centerClientX: number;
+    centerClientY: number;
+  } | null>(null);
 
   // Undo / Redo Stacks
   const [undoStack, setUndoStack] = useState<NotePage[]>([]);
@@ -2985,8 +2997,10 @@ export default function App() {
       const dy = y - rulerState.y;
       const localY = -dx * Math.sin(rad) + dy * Math.cos(rad);
       const localX = dx * Math.cos(rad) + dy * Math.sin(rad);
-      if (Math.abs(localY) < 42 && Math.abs(localX) < 280) {
-        const snapLocalY = localY >= 0 ? 26 : -26;
+      const halfRulerW = (logicalW * 0.8) / 2;
+      const halfRulerH = 27;
+      if (Math.abs(localY) < halfRulerH + 18 && Math.abs(localX) <= halfRulerW + 12) {
+        const snapLocalY = localY >= 0 ? halfRulerH : -halfRulerH;
         x = rulerState.x + localX * Math.cos(rad) - snapLocalY * Math.sin(rad);
         y = rulerState.y + localX * Math.sin(rad) + snapLocalY * Math.cos(rad);
       }
@@ -7795,45 +7809,212 @@ export default function App() {
                       );
                     })}
 
-                    {/* Movable & Rotatable Digital Ruler (shown on active page) */}
-                    {isCurrentActive && rulerState.visible && (
-                      <div
-                        style={{
-                          left: rulerState.x - 260,
-                          top: rulerState.y - 26,
-                          transform: `rotate(${rulerState.angle}deg)`,
-                        }}
-                        className="absolute w-[520px] h-[52px] bg-amber-200/85 border-2 border-amber-500 rounded-lg shadow-lg flex items-center justify-between px-4 select-none z-20"
-                      >
-                        <span className="text-xs font-bold text-slate-900">📏 Χάρακας ({rulerState.angle}°)</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setRulerState((r) => ({ ...r, angle: (r.angle - 15) % 360 }))}
-                            className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
+                    {/* Movable & Rotatable Minimalist A4 Ruler (80% of paper width, soft gray, real A4 1cm tick marks, no text/degrees, top-center rotation handle) */}
+                    {isCurrentActive &&
+                      rulerState.visible &&
+                      (() => {
+                        // 100% of A4 Portrait width (920px) = 20cm => 1cm = 46px in page coordinates!
+                        // 80% of paper width = 736px (16cm) in Portrait, or 1008px in Landscape.
+                        const rulerW = Math.round(pW * 0.8);
+                        const rulerH = 54;
+                        const oneCmPx = 920 / 20; // 46px per 1cm
+                        const halfCmPx = oneCmPx / 2; // 23px per 0.5cm
+                        const totalHalfCmSteps = Math.floor(rulerW / halfCmPx);
+
+                        return (
+                          <div
+                            data-ui-panel="true"
+                            data-ruler-root="true"
+                            tabIndex={0}
+                            aria-label="Χάρακας (σύρετε με το χέρι ή μετακινήστε με τα βελάκια)"
+                            onKeyDown={(e) => {
+                              const step = 15;
+                              if (e.key === 'ArrowLeft') {
+                                e.preventDefault();
+                                setRulerState((r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x - step)) }));
+                              } else if (e.key === 'ArrowRight') {
+                                e.preventDefault();
+                                setRulerState((r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x + step)) }));
+                              } else if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setRulerState((r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y - step)) }));
+                              } else if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setRulerState((r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y + step)) }));
+                              }
+                            }}
+                            onPointerDown={(e) => {
+                              if (e.pointerType === 'mouse' && e.button !== 0) return;
+                              if ((e.target as HTMLElement).closest('[data-ruler-rotate="true"]')) return;
+                              e.stopPropagation();
+                              try {
+                                e.currentTarget.setPointerCapture(e.pointerId);
+                              } catch {
+                                // ignore capture error
+                              }
+                              rulerDragRef.current = {
+                                mode: 'move',
+                                pointerId: e.pointerId,
+                                startClientX: e.clientX,
+                                startClientY: e.clientY,
+                                initialX: rulerState.x,
+                                initialY: rulerState.y,
+                                initialAngle: rulerState.angle,
+                                startPointerAngleDeg: 0,
+                                centerClientX: 0,
+                                centerClientY: 0,
+                              };
+                            }}
+                            onPointerMove={(e) => {
+                              const st = rulerDragRef.current;
+                              if (!st || st.mode !== 'move' || st.pointerId !== e.pointerId) return;
+                              e.stopPropagation();
+                              const dx = (e.clientX - st.startClientX) / zoomRef.current;
+                              const dy = (e.clientY - st.startClientY) / zoomRef.current;
+                              const nextX = Math.max(40, Math.min(pW - 40, st.initialX + dx));
+                              const nextY = Math.max(40, Math.min(pH - 40, st.initialY + dy));
+                              setRulerState((prev) => ({ ...prev, x: nextX, y: nextY }));
+                            }}
+                            onPointerUp={(e) => {
+                              if (rulerDragRef.current?.pointerId === e.pointerId) {
+                                rulerDragRef.current = null;
+                              }
+                            }}
+                            onLostPointerCapture={() => {
+                              if (rulerDragRef.current?.mode === 'move') {
+                                rulerDragRef.current = null;
+                              }
+                            }}
+                            style={{
+                              width: rulerW,
+                              height: rulerH,
+                              left: rulerState.x - rulerW / 2,
+                              top: rulerState.y - rulerH / 2,
+                              transform: `rotate(${rulerState.angle}deg)`,
+                              touchAction: 'none',
+                              WebkitUserSelect: 'none',
+                              userSelect: 'none',
+                            }}
+                            className="absolute bg-slate-200/75 backdrop-blur-[1.5px] border border-slate-400/65 rounded-md shadow-md cursor-grab active:cursor-grabbing z-20 outline-none"
                           >
-                            -15°
-                          </button>
-                          <button
-                            onClick={() => setRulerState((r) => ({ ...r, angle: 0 }))}
-                            className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
-                          >
-                            0°
-                          </button>
-                          <button
-                            onClick={() => setRulerState((r) => ({ ...r, angle: (r.angle + 15) % 360 }))}
-                            className="px-2 py-0.5 rounded bg-slate-900 text-white text-xs cursor-pointer"
-                          >
-                            +15°
-                          </button>
-                          <button
-                            onClick={() => setRulerState((r) => ({ ...r, y: r.y + 40 }))}
-                            className="px-2 py-0.5 rounded bg-sky-700 text-white text-xs cursor-pointer"
-                          >
-                            ⬇
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                            {/* Top-Center Rotation Stem & Circular Handle */}
+                            <div
+                              data-ui-panel="true"
+                              data-ruler-rotate="true"
+                              title="Σύρετε για περιστροφή του χάρακα"
+                              onPointerDown={(e) => {
+                                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                                e.stopPropagation();
+                                try {
+                                  e.currentTarget.setPointerCapture(e.pointerId);
+                                } catch {
+                                  // ignore capture error
+                                }
+                                const rulerEl = e.currentTarget.closest('[data-ruler-root="true"]') as HTMLElement | null;
+                                const rect = rulerEl?.getBoundingClientRect();
+                                const centerClientX = rect ? rect.left + rect.width / 2 : e.clientX;
+                                const centerClientY = rect ? rect.top + rect.height / 2 : e.clientY + 44;
+                                const startAng =
+                                  (Math.atan2(e.clientY - centerClientY, e.clientX - centerClientX) * 180) / Math.PI;
+                                rulerDragRef.current = {
+                                  mode: 'rotate',
+                                  pointerId: e.pointerId,
+                                  startClientX: e.clientX,
+                                  startClientY: e.clientY,
+                                  initialX: rulerState.x,
+                                  initialY: rulerState.y,
+                                  initialAngle: rulerState.angle,
+                                  startPointerAngleDeg: startAng,
+                                  centerClientX,
+                                  centerClientY,
+                                };
+                              }}
+                              onPointerMove={(e) => {
+                                const st = rulerDragRef.current;
+                                if (!st || st.mode !== 'rotate' || st.pointerId !== e.pointerId) return;
+                                e.stopPropagation();
+                                const currAng =
+                                  (Math.atan2(e.clientY - st.centerClientY, e.clientX - st.centerClientX) * 180) /
+                                  Math.PI;
+                                let delta = currAng - st.startPointerAngleDeg;
+                                while (delta > 180) delta -= 360;
+                                while (delta < -180) delta += 360;
+                                let nextAngle = st.initialAngle + delta;
+                                // Normalize to (-180, 180]
+                                while (nextAngle > 180) nextAngle -= 360;
+                                while (nextAngle <= -180) nextAngle += 360;
+                                // Gentle magnetic snap within ±1.2° of cardinal/45° angles
+                                for (const snapDeg of [0, 45, 90, 135, 180, -45, -90, -135, -180]) {
+                                  if (Math.abs(nextAngle - snapDeg) <= 1.2) {
+                                    nextAngle = snapDeg === -180 ? 180 : snapDeg;
+                                    break;
+                                  }
+                                }
+                                setRulerState((prev) => ({ ...prev, angle: nextAngle }));
+                              }}
+                              onPointerUp={(e) => {
+                                if (rulerDragRef.current?.pointerId === e.pointerId) {
+                                  rulerDragRef.current = null;
+                                }
+                              }}
+                              onLostPointerCapture={() => {
+                                if (rulerDragRef.current?.mode === 'rotate') {
+                                  rulerDragRef.current = null;
+                                }
+                              }}
+                              style={{
+                                touchAction: 'none',
+                                WebkitUserSelect: 'none',
+                                userSelect: 'none',
+                              }}
+                              className="absolute left-1/2 -top-9 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing"
+                            >
+                              <div className="w-7 h-7 rounded-full bg-white/95 border border-slate-400/80 shadow-md flex items-center justify-center text-slate-600 hover:text-slate-900 transition">
+                                <RotateCw className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="w-[1.5px] h-2 bg-slate-400/80" />
+                            </div>
+
+                            {/* Soft 1cm (46px) & 0.5cm (23px) Tick Lines Along Top and Bottom Edges (No text/numbers) */}
+                            <div className="relative w-full h-full pointer-events-none overflow-hidden rounded-md">
+                              {/* Subtle center groove */}
+                              <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 h-px bg-slate-400/30" />
+
+                              {Array.from({ length: totalHalfCmSteps - 1 }, (_, i) => {
+                                const stepIdx = i + 1;
+                                const isFullCm = stepIdx % 2 === 0;
+                                const xPos = stepIdx * halfCmPx;
+                                return (
+                                  <React.Fragment key={stepIdx}>
+                                    {/* Top edge tick */}
+                                    <div
+                                      style={{
+                                        left: xPos,
+                                        height: isFullCm ? 12 : 6,
+                                        width: isFullCm ? 1.5 : 1,
+                                      }}
+                                      className={`absolute top-0 -translate-x-1/2 ${
+                                        isFullCm ? 'bg-slate-500/55' : 'bg-slate-400/40'
+                                      }`}
+                                    />
+                                    {/* Bottom edge tick */}
+                                    <div
+                                      style={{
+                                        left: xPos,
+                                        height: isFullCm ? 12 : 6,
+                                        width: isFullCm ? 1.5 : 1,
+                                      }}
+                                      className={`absolute bottom-0 -translate-x-1/2 ${
+                                        isFullCm ? 'bg-slate-500/55' : 'bg-slate-400/40'
+                                      }`}
+                                    />
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                   </div>
                 );
               })}
