@@ -84,10 +84,20 @@ import {
 } from './utils/geometryAndAlgorithms';
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
+const SHAPE_LIBRARY_STORAGE_KEY = 'bestnotes_shape_library_v1';
 const PRESET_COLORS = ['#111827', '#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0284c7', '#eab308'];
 const THICKNESS_PRESETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0];
 const CANVAS_DPR = 2; // 2x Retina HiDPI backing resolution (1840x2520) for razor-sharp, zero-"ζαγρέ" curves
 const PAGE_GAP = 44; // Vertical gap (px) between pages in Word-style continuous multi-page scroll
+
+interface SavedLibraryItem {
+  id: string;
+  title: string;
+  createdAt: string;
+  thumbnailDataUrl: string;
+  strokes?: StrokeObject[];
+  image?: ImageObject;
+}
 
 export default function App() {
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
@@ -169,9 +179,22 @@ export default function App() {
   const [pencilOnlyMode, setPencilOnlyMode] = useState<boolean>(true);
   const [showToolSubBar, setShowToolSubBar] = useState<boolean>(true);
 
-  // Layers & Selection
+  // Layers, Shape Library & Selection
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
+  const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
+  const [shapeLibrary, setShapeLibrary] = useState<SavedLibraryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(SHAPE_LIBRARY_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
   const layerDragStartYRef = useRef<number>(0);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
@@ -4217,59 +4240,172 @@ export default function App() {
   };
   void _handleBeautifySelected;
 
-  const handleInsertSamplePhysicsImage = () => {
-    const c = document.createElement('canvas');
-    c.width = 360;
-    c.height = 220;
-    const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.moveTo(35, 185);
-    ctx.lineTo(315, 185);
-    ctx.lineTo(35, 65);
-    ctx.closePath();
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fill();
-    ctx.stroke();
+  // Persist custom Shape Library to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHAPE_LIBRARY_STORAGE_KEY, JSON.stringify(shapeLibrary));
+    } catch {
+      // ignore quota errors
+    }
+  }, [shapeLibrary]);
 
+  // Add currently selected Shape / Group of Strokes / Image to the Custom Shape Library ("(+) Βιβλιοθήκη")
+  const handleAddSelectedToShapeLibrary = () => {
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+
+    if (selImg) {
+      const newItem: SavedLibraryItem = {
+        id: `lib-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title: `Εικόνα #${shapeLibrary.length + 1}`,
+        createdAt: new Date().toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit' }),
+        thumbnailDataUrl: selImg.dataUrl,
+        image: structuredClone(selImg),
+      };
+      setShapeLibrary((prev) => [newItem, ...prev]);
+      showToast('📚 Η εικόνα αποθηκεύτηκε στη Βιβλιοθήκη Σχημάτων!');
+      return;
+    }
+
+    if (selStrokes.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα ένα σχήμα με το Lasso!');
+      return;
+    }
+
+    // Compute tight bounding box of the selected stroke(s)
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (const s of selStrokes) {
+      const pts = getStrokeSamplePoints(s);
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+    const spanW = Math.max(24, maxX - minX);
+    const spanH = Math.max(24, maxY - minY);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Render 2x Retina miniature thumbnail using the exact drawStrokeOnContext engine
+    const thumbW = 180;
+    const thumbH = 128;
+    const c = document.createElement('canvas');
+    c.width = thumbW * 2;
+    c.height = thumbH * 2;
+    const ctx = c.getContext('2d')!;
+    ctx.scale(2, 2);
+    const pad = 18;
+    const scale = Math.min((thumbW - pad * 2) / spanW, (thumbH - pad * 2) / spanH, 2.2);
     ctx.save();
-    ctx.translate(155, 116);
-    ctx.rotate(Math.atan2(120, 280));
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillRect(-28, -44, 56, 44);
-    ctx.strokeRect(-28, -44, 56, 44);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 16px sans-serif';
-    ctx.fillText('m', -8, -16);
+    ctx.translate(thumbW / 2, thumbH / 2);
+    ctx.scale(scale, scale);
+    ctx.translate(-centerX, -centerY);
+    for (const s of selStrokes) {
+      drawStrokeOnContext(ctx, s, false);
+    }
     ctx.restore();
 
-    ctx.fillStyle = '#dc2626';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.fillText('Άσκηση: Κεκλιμένο Επίπεδο (θ = 30°)', 42, 32);
-
-    const dataUrl = c.toDataURL('image/png');
-    const newImg: ImageObject = {
-      id: `img-${Date.now()}`,
-      x: 180,
-      y: 260,
-      width: 360,
-      height: 220,
-      naturalWidth: 360,
-      naturalHeight: 220,
-      dataUrl,
-      originalDataUrl: dataUrl,
-      layerId: activeLayerId,
+    const thumbnailDataUrl = c.toDataURL('image/png');
+    const newItem: SavedLibraryItem = {
+      id: `lib-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: `Σχήμα #${shapeLibrary.length + 1}`,
+      createdAt: new Date().toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit' }),
+      thumbnailDataUrl,
+      strokes: structuredClone(selStrokes),
     };
-    updateActivePage((page) => ({
-      ...page,
-      images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
-    }));
-    setSelectedImageId(newImg.id);
-    setActiveTool('lasso');
-    showToast('🖼️ Εικόνα προστέθηκε! Δοκίμασε Transparent BG ή Magnetic Lasso!');
+
+    setShapeLibrary((prev) => [newItem, ...prev]);
+    showToast('📚 Προστέθηκε στη Βιβλιοθήκη Σχημάτων!');
+  };
+
+  // Insert a saved Shape / Group / Image from the Library onto the current active page
+  const handleInsertFromShapeLibrary = (item: SavedLibraryItem) => {
+    if (item.image) {
+      const clonedImg: ImageObject = {
+        ...structuredClone(item.image),
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: 240,
+        y: 260,
+        layerId: activeLayerId,
+      };
+      updateActivePage((page) => ({
+        ...page,
+        images: [...(page.images || []), { ...clonedImg, zOrder: getNextPageZOrder(page) }],
+      }));
+      setSelectedImageId(clonedImg.id);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setActiveTool('lasso');
+      setShowShapeLibraryPanel(false);
+      showToast(`📥 Εισήχθη "${item.title}" από τη Βιβλιοθήκη!`);
+      return;
+    }
+
+    if (item.strokes && item.strokes.length > 0) {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const s of item.strokes) {
+        for (const p of s.points) {
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+        }
+      }
+      const targetCenterX = 420;
+      const targetCenterY = 380;
+      const dx = targetCenterX - (minX + maxX) / 2;
+      const dy = targetCenterY - (minY + maxY) / 2;
+      const newGroupId = item.strokes.length > 1 ? `grp-${Date.now()}` : undefined;
+
+      const baseZ = getNextPageZOrder(activePage);
+      const insertedStrokes: StrokeObject[] = item.strokes.map((s, idx) => ({
+        ...structuredClone(s),
+        id: `st-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        layerId: activeLayerId,
+        groupId: newGroupId,
+        zOrder: baseZ + idx,
+        points: s.points.map((p) => ({
+          ...p,
+          x: p.x + dx,
+          y: p.y + dy,
+          cx: p.cx !== undefined ? p.cx + dx : undefined,
+          cy: p.cy !== undefined ? p.cy + dy : undefined,
+        })),
+      }));
+
+      updateActivePage((page) => ({
+        ...page,
+        strokes: [...page.strokes, ...insertedStrokes],
+      }));
+      setSelectedStrokeIds(insertedStrokes.map((s) => s.id));
+      setSelectedImageId(null);
+      setActiveNodeStrokeId(null);
+      setActiveTool('lasso');
+      setShowShapeLibraryPanel(false);
+      showToast(`📥 Εισήχθη "${item.title}" από τη Βιβλιοθήκη!`);
+    }
   };
 
   const handleGoodnotesFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4838,11 +4974,23 @@ export default function App() {
               </button>
 
               <button
-                onClick={handleInsertSamplePhysicsImage}
-                className="p-2 rounded-full text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
-                title="Εισαγωγή Εικόνας Άσκησης (για Transparent BG & Magnetic Lasso)"
+                onClick={() => {
+                  setShowShapeLibraryPanel((v) => !v);
+                  setShowLayersPanel(false);
+                }}
+                className={`relative p-2 rounded-full transition cursor-pointer ${
+                  showShapeLibraryPanel
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-emerald-600 hover:bg-emerald-50'
+                }`}
+                title="Βιβλιοθήκη Αποθηκευμένων Σχημάτων & Εικόνων"
               >
                 <ImageIcon className="w-4 h-4" />
+                {shapeLibrary.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center border border-white">
+                    {shapeLibrary.length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -5236,6 +5384,14 @@ export default function App() {
                       <Copy className="w-3.5 h-3.5" />
                       <span>Αντίγραφο</span>
                     </button>
+                    <button
+                      onClick={handleAddSelectedToShapeLibrary}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
+                      title="Αποθήκευση του επιλεγμένου σχήματος στη Βιβλιοθήκη Σχημάτων"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>(+) Βιβλιοθήκη</span>
+                    </button>
 
                     {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
@@ -5473,6 +5629,14 @@ export default function App() {
                       <Copy className="w-3.5 h-3.5" />
                       <span>Αντίγραφο</span>
                     </button>
+                    <button
+                      onClick={handleAddSelectedToShapeLibrary}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
+                      title="Αποθήκευση του επιλεγμένου σχήματος στη Βιβλιοθήκη Σχημάτων"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>(+) Βιβλιοθήκη</span>
+                    </button>
 
                     {/* Z-Order Controls for Selected Image */}
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
@@ -5635,6 +5799,75 @@ export default function App() {
             {statusBanner && (
               <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1b2a4a] text-white text-xs font-medium shadow-xl">
                 {statusBanner}
+              </div>
+            )}
+
+            {/* Floating Saved Shapes Library Popover (Starts empty; stores user-saved shapes/groups/images as miniature thumbnails with scroll!) */}
+            {showShapeLibraryPanel && (
+              <div className="fixed right-16 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800">
+                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-emerald-800">📚 Βιβλιοθήκη Σχημάτων ({shapeLibrary.length})</span>
+                    <span className="text-[10px] text-slate-400">Πάτα σε μια μικρογραφία για εισαγωγή στη σελίδα</span>
+                  </div>
+                  <button
+                    onClick={() => setShowShapeLibraryPanel(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    title="Κλείσιμο Βιβλιοθήκης"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {shapeLibrary.length === 0 ? (
+                  <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <ImageIcon className="w-7 h-7 text-emerald-400" />
+                    <p className="text-xs font-semibold text-slate-600">Η Βιβλιοθήκη Σχημάτων είναι κενή</p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Επίλεξε οποιοδήποτε σχήμα, γραμμή ή group με το <b>Lasso</b> και πάτα το κουμπί{' '}
+                      <span className="text-emerald-700 font-bold">«(+) Βιβλιοθήκη»</span> στην πάνω μπάρα για να αποθηκευτεί εδώ!
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                    className="max-h-80 overflow-y-auto pr-1 grid grid-cols-2 gap-2.5"
+                  >
+                    {shapeLibrary.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => handleInsertFromShapeLibrary(item)}
+                        className="group relative flex flex-col items-center justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
+                        title={`Εισαγωγή "${item.title}" στη σελίδα`}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShapeLibrary((prev) => prev.filter((x) => x.id !== item.id));
+                            showToast('🗑️ Αφαιρέθηκε από τη Βιβλιοθήκη Σχημάτων!');
+                          }}
+                          className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition cursor-pointer z-10"
+                          title="Διαγραφή αυτού του σχήματος από τη Βιβλιοθήκη"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+
+                        <div className="w-full h-24 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
+                          <img
+                            src={item.thumbnailDataUrl}
+                            alt={item.title}
+                            className="max-w-full max-h-full object-contain pointer-events-none select-none"
+                          />
+                        </div>
+
+                        <div className="w-full flex items-center justify-between mt-1.5 px-0.5">
+                          <span className="text-[10px] font-semibold text-slate-700 truncate">{item.title}</span>
+                          <span className="text-[9px] text-slate-400">{item.createdAt}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
