@@ -190,20 +190,38 @@ export function recognizeAndSnapShape(
     return buildPresetShape(start, end, minX, minY, maxX, maxY, forcedPreset, rawPoints);
   }
 
-  if (totalLen < 18) return null;
+  if (totalLen < 14) return null;
   const directDist = distance(start, end);
   const straightness = directDist / totalLen;
 
-  // 1. Straight Line Test (snaps to 0°, 45°, 90° if close)
-  if (straightness > 0.85) {
+  // Compute maximum perpendicular deviation of stroke points from the chord (start -> end)
+  let maxPerpDev = 0;
+  if (directDist > 10) {
+    const ux = (end.x - start.x) / directDist;
+    const uy = (end.y - start.y) / directDist;
+    for (let i = 1; i < rawPoints.length - 1; i++) {
+      const vx = rawPoints[i].x - start.x;
+      const vy = rawPoints[i].y - start.y;
+      const perp = Math.abs(vx * uy - vy * ux);
+      if (perp > maxPerpDev) maxPerpDev = perp;
+    }
+  }
+
+  // 1. Straight Line Test (snaps horizontal, vertical, or any diagonal line reliably even with slight hand arc or end-hold hook!)
+  const isStraightLine =
+    directDist >= 14 &&
+    (straightness > 0.80 ||
+      (straightness > 0.70 && maxPerpDev < Math.max(26, directDist * 0.17)));
+
+  if (isStraightLine) {
     let x2 = end.x;
     let y2 = end.y;
     const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;
     const absAngle = Math.abs(angleDeg);
 
-    if (absAngle < 5.5 || absAngle > 174.5) {
+    if (absAngle < 4.5 || absAngle > 175.5) {
       y2 = start.y; // Horizontal snap
-    } else if (Math.abs(absAngle - 90) < 5.5) {
+    } else if (Math.abs(absAngle - 90) < 4.5) {
       x2 = start.x; // Vertical snap
     }
 

@@ -324,6 +324,8 @@ export default function App() {
   const activePointerTypeRef = useRef<string | null>(null);
   const lastPenActivityTimeRef = useRef<number>(0);
   const holdTimerRef = useRef<number | null>(null);
+  const holdAnchorPtRef = useRef<{ x: number; y: number } | null>(null);
+  const lastHoldMoveTimeRef = useRef<number>(0);
   const laserStrokesRef = useRef<BezierPoint[][]>([]);
   const laserClearTimerRef = useRef<number | null>(null);
   const laserFadeRafRef = useRef<number | null>(null);
@@ -3709,6 +3711,8 @@ export default function App() {
     isDrawingRef.current = true;
     snappedCurrentStrokeRef.current = null;
     currentStrokePtsRef.current = [pt];
+    holdAnchorPtRef.current = { x: pt.x, y: pt.y };
+    lastHoldMoveTimeRef.current = performance.now();
     if (activeTool === 'laser') {
       cancelLaserTimers();
       renderLaserOverlay(1);
@@ -4535,7 +4539,6 @@ export default function App() {
     }
 
     // 6. ZERO-LATENCY, SILKY-SMOOTH PEN / PENCIL / HIGHLIGHTER / SHAPE INKING AT 2x RETINA!
-    let didMoveSignificantly = false;
     for (const ce of coalesced) {
       const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
       const pts = currentStrokePtsRef.current;
@@ -4545,9 +4548,6 @@ export default function App() {
         const d = distance(prev, rawPt);
         // Filter sub-pixel digitizer stair-steps (< 1.5px) so live wet ink is completely smooth ("εντελώς λείο")!
         if (d < 1.5) continue;
-        if (d >= 2.2) {
-          didMoveSignificantly = true;
-        }
         const alpha = Math.max(0.36, Math.min(0.72, 1 - 0.5 * Math.exp(-d / 15)));
         const smoothedPt: BezierPoint = {
           x: prev.x + alpha * (rawPt.x - prev.x),
@@ -4557,7 +4557,6 @@ export default function App() {
         pts.push(smoothedPt);
       } else {
         pts.push(rawPt);
-        didMoveSignificantly = true;
       }
 
       // If not yet snapped and using solid opaque pen/pencil, draw only the new incremental Bezier segment in 0.02ms!
@@ -4606,16 +4605,21 @@ export default function App() {
       renderLiveOverlayStroke();
     }
 
-    // Hold-to-Snap (~0.42s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
-    // IMPORTANT: Only reset the timer when the Apple Pencil actually moves (>= 2.2px)!
-    // That way, iPadOS 240Hz pressure/tilt micro-events while holding the pencil still do NOT cancel the timer,
-    // and the shape snaps LIVE on screen after ~0.42s WITHOUT lifting the Apple Pencil!
+    // Hold-to-Snap (~0.27s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
+    // IMPORTANT: We anchor a 7.5px radius around holdAnchorPtRef so natural hand micro-tremors or
+    // 240Hz pressure/tilt events while holding the pencil pressed on the glass NEVER reset the timer!
     if (
       holdToSnapEnabled &&
       ['pen', 'pencil', 'highlighter', 'shape'].includes(activeTool) &&
       !snappedCurrentStrokeRef.current
     ) {
-      if (didMoveSignificantly || !holdTimerRef.current) {
+      const movedFromHoldAnchor =
+        !holdAnchorPtRef.current || distance(holdAnchorPtRef.current, latestPt) >= 7.5;
+      if (movedFromHoldAnchor) {
+        holdAnchorPtRef.current = { x: latestPt.x, y: latestPt.y };
+        lastHoldMoveTimeRef.current = performance.now();
+      }
+      if (movedFromHoldAnchor || !holdTimerRef.current) {
         if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
         holdTimerRef.current = window.setTimeout(() => {
           holdTimerRef.current = null;
@@ -4628,7 +4632,7 @@ export default function App() {
             snappedCurrentStrokeRef.current = snapped;
             renderLiveOverlayStroke();
           }
-        }, 420);
+        }, 270);
       }
     }
   };
@@ -4848,11 +4852,26 @@ export default function App() {
       } else {
         finalPts = smoothStrokeToBezier(rawPts);
       }
+    } else if (
+      holdToSnapEnabled &&
+      ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
+      performance.now() - lastHoldMoveTimeRef.current >= 165
+    ) {
+      // Fallback if user paused briefly (>= 0.165s) at the end of a straight line/shape and lifted just before the live timer fired!
+      const snapped = recognizeAndSnapShape(rawPts, 'auto');
+      if (snapped) {
+        finalPts = snapped.points;
+        isShape = true;
+        shapeType = snapped.shapeType;
+      } else {
+        finalPts = smoothStrokeToBezier(rawPts);
+      }
     } else {
       finalPts = smoothStrokeToBezier(rawPts);
     }
 
     snappedCurrentStrokeRef.current = null;
+    holdAnchorPtRef.current = null;
 
     // Check if a freehand stroke drawn with Pen/Pencil forms a closed loop (one end touches/approaches the other)
     // WITHOUT needing to hold the pencil at the end!
