@@ -606,6 +606,42 @@ export default function App() {
     return null;
   }, [selectedImageId, selectedStrokeIds, activePage.images, activePage.strokes]);
 
+  // Checks if a screen touch point (clientX, clientY) lands inside or on a handle of the active Lasso selection box,
+  // allowing 1-finger drag-and-drop (and resize/rotate) of selected shapes/images even when Pencil-Only Mode is ON!
+  const isClientPointInLassoSelection = useCallback(
+    (clientX: number, clientY: number): boolean => {
+      if (activeTool !== 'lasso') return false;
+      const selBounds = getSelectionBounds();
+      if (!selBounds) return false;
+      const canvas = activeCanvasRef.current;
+      if (!canvas) return false;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+
+      const logicalW = canvas.width / CANVAS_DPR;
+      const logicalH = canvas.height / CANVAS_DPR;
+      const ptX = (clientX - rect.left) * (logicalW / rect.width);
+      const ptY = (clientY - rect.top) * (logicalH / rect.height);
+
+      const pad = 8;
+      const hw = selBounds.hw + pad;
+      const hh = selBounds.hh + pad;
+      const dx = ptX - selBounds.cx;
+      const dy = ptY - selBounds.cy;
+      const angle = selBounds.angle || 0;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const localX = dx * cosA + dy * sinA;
+      const localY = -dx * sinA + dy * cosA;
+      const rotStemTopY = -hh - 32;
+
+      if (Math.hypot(localX, localY - rotStemTopY) <= 24) return true;
+      if (Math.abs(localX) <= hw + 22 && Math.abs(localY) <= hh + 22) return true;
+      return false;
+    },
+    [activeTool, getSelectionBounds]
+  );
+
   const drawStrokeOnContext = (ctx: CanvasRenderingContext2D, s: StrokeObject, isSelected = false) => {
     if (s.points.length === 0) return;
     ctx.save();
@@ -1914,13 +1950,18 @@ export default function App() {
       const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
       // Case A: 1 finger touching OUTSIDE the paper canvas (or 1 finger when Pencil-Only Mode is ON) -> Scroll pages like Word!
-      // IMPORTANT: Never call e.preventDefault() on <canvas> during 1-touch touchstart and ignore palm contacts so Apple Pencil 1st-touch sensitivity is 100% instant!
+      // IMPORTANT: If a shape or image is selected with the Lasso and the finger touches inside its selection box/handles,
+      // allow 1-finger drag-and-drop instead of scrolling the page!
       if (
         directTouches.length === 1 &&
         (isOutsideCanvas || pencilOnlyMode) &&
         performance.now() - lastPenActivityTimeRef.current > 320
       ) {
         const t = directTouches[0] as any;
+        if (!isOutsideCanvas && isClientPointInLassoSelection(t.clientX, t.clientY)) {
+          outsidePanDragRef.current = null;
+          return;
+        }
         if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 22) || (t.radiusY && t.radiusY > 22))) {
           return;
         }
@@ -2003,6 +2044,13 @@ export default function App() {
         }
         outsidePanDragRef.current = null;
         pinchStateRef.current = null;
+        return;
+      }
+
+      // If 1-finger drag-and-drop (or resize/rotate) of a Lasso-selected shape/image is active, prevent page scroll!
+      if (isDrawingRef.current && (selectionTransformRef.current || isDraggingSelectionRef.current)) {
+        if (e.cancelable) e.preventDefault();
+        outsidePanDragRef.current = null;
         return;
       }
 
@@ -2152,7 +2200,7 @@ export default function App() {
       ws.removeEventListener('touchcancel', onTouchEnd);
       ws.removeEventListener('wheel', onWheel);
     };
-  }, [viewMode, pencilOnlyMode, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, cancelScrollMomentum, startScrollMomentum, handleUndo, handleRedo, showToast]);
+  }, [viewMode, pencilOnlyMode, isClientPointInLassoSelection, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, cancelScrollMomentum, startScrollMomentum, handleUndo, handleRedo, showToast]);
 
   const clearActiveOverlay = () => {
     const c = activeCanvasRef.current;
@@ -2386,9 +2434,15 @@ export default function App() {
         clearActiveOverlay();
       }
     } else if (e.pointerType === 'touch') {
-      if (pencilOnlyMode) return;
-      if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
-      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 260) return;
+      const isFingerOnSelectedLassoBox = isClientPointInLassoSelection(e.clientX, e.clientY);
+      if (isFingerOnSelectedLassoBox) {
+        outsidePanDragRef.current = null;
+        cancelScrollMomentum();
+      } else {
+        if (pencilOnlyMode) return;
+        if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
+        if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 260) return;
+      }
       const nev = e.nativeEvent as PointerEvent;
       if ((nev.width && nev.width > 68) || (nev.height && nev.height > 68)) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
