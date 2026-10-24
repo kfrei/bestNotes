@@ -326,6 +326,7 @@ export default function App() {
   const holdTimerRef = useRef<number | null>(null);
   const laserStrokesRef = useRef<BezierPoint[][]>([]);
   const laserClearTimerRef = useRef<number | null>(null);
+  const laserFadeRafRef = useRef<number | null>(null);
   const lastEraserPtRef = useRef<{ x: number; y: number } | null>(null);
   const snappedCurrentStrokeRef = useRef<{ points: BezierPoint[]; shapeType: string } | null>(null);
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
@@ -2991,8 +2992,19 @@ export default function App() {
     ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
   };
 
-  // Render Persistent Red Laser Pointer Strokes (stays while drawing + for 2 full seconds after lifting so user can draw multiple circles!)
-  const renderLaserOverlay = () => {
+  const cancelLaserTimers = () => {
+    if (laserClearTimerRef.current) {
+      window.clearTimeout(laserClearTimerRef.current);
+      laserClearTimerRef.current = null;
+    }
+    if (laserFadeRafRef.current) {
+      window.cancelAnimationFrame(laserFadeRafRef.current);
+      laserFadeRafRef.current = null;
+    }
+  };
+
+  // Render Persistent Red Laser Pointer Strokes (stays while drawing + for 1s after lifting, then gently fades out over 0.35s!)
+  const renderLaserOverlay = (alpha = 1) => {
     const c = activeCanvasRef.current;
     const ctx = activeCtxRef.current;
     if (!c || !ctx) return;
@@ -3006,13 +3018,14 @@ export default function App() {
     if (allLaserPaths.length === 0) return;
 
     ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
     // Outer red laser glow
     ctx.strokeStyle = '#ef4444';
     ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 14;
+    ctx.shadowBlur = 14 * alpha;
     ctx.lineWidth = 5.0;
     for (const path of allLaserPaths) {
       if (path.length === 0) continue;
@@ -3697,11 +3710,8 @@ export default function App() {
     snappedCurrentStrokeRef.current = null;
     currentStrokePtsRef.current = [pt];
     if (activeTool === 'laser') {
-      if (laserClearTimerRef.current) {
-        window.clearTimeout(laserClearTimerRef.current);
-        laserClearTimerRef.current = null;
-      }
-      renderLaserOverlay();
+      cancelLaserTimers();
+      renderLaserOverlay(1);
     } else if (['pen', 'pencil'].includes(activeTool)) {
       drawInitialDot(pt);
     }
@@ -4510,12 +4520,9 @@ export default function App() {
       return;
     }
 
-    // 5. Laser Pointer on overlay canvas (stays visible while holding pencil + 2s after lifting, never disappears like a tail!)
+    // 5. Laser Pointer on overlay canvas (stays visible while holding pencil + 1s after lifting, then fades out smoothly in 0.35s!)
     if (activeTool === 'laser') {
-      if (laserClearTimerRef.current) {
-        window.clearTimeout(laserClearTimerRef.current);
-        laserClearTimerRef.current = null;
-      }
+      cancelLaserTimers();
       for (const ce of coalesced) {
         const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
         const pts = currentStrokePtsRef.current;
@@ -4523,7 +4530,7 @@ export default function App() {
           pts.push(rawPt);
         }
       }
-      renderLaserOverlay();
+      renderLaserOverlay(1);
       return;
     }
 
@@ -4688,17 +4695,33 @@ export default function App() {
         laserStrokesRef.current.push([...currentStrokePtsRef.current]);
         currentStrokePtsRef.current = [];
       }
-      renderLaserOverlay();
-      if (laserClearTimerRef.current) {
-        window.clearTimeout(laserClearTimerRef.current);
-      }
-      // Keep all drawn laser circles/strokes on screen for 1 second (1000ms) after lifting the pencil!
+      cancelLaserTimers();
+      renderLaserOverlay(1);
+      // Keep all drawn laser circles/strokes on screen for 1 second (1000ms) after lifting the pencil,
+      // then smoothly fade out over 0.35 seconds (350ms)!
       laserClearTimerRef.current = window.setTimeout(() => {
         laserClearTimerRef.current = null;
-        if (!isDrawingRef.current) {
-          laserStrokesRef.current = [];
-          clearActiveOverlay();
-        }
+        if (isDrawingRef.current) return;
+        const fadeStart = performance.now();
+        const fadeDurationMs = 350;
+        const stepFade = (now: number) => {
+          if (isDrawingRef.current) {
+            laserFadeRafRef.current = null;
+            return;
+          }
+          const t = Math.min(1, (now - fadeStart) / fadeDurationMs);
+          if (t < 1) {
+            // Smooth ease-out fade curve
+            const alpha = Math.pow(1 - t, 1.4);
+            renderLaserOverlay(alpha);
+            laserFadeRafRef.current = window.requestAnimationFrame(stepFade);
+          } else {
+            laserFadeRafRef.current = null;
+            laserStrokesRef.current = [];
+            clearActiveOverlay();
+          }
+        };
+        laserFadeRafRef.current = window.requestAnimationFrame(stepFade);
       }, 1000);
       return;
     }
