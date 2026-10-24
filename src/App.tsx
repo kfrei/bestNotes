@@ -5974,6 +5974,20 @@ export default function App() {
                 >
                   {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
                 </button>
+                <button
+                  onClick={() => {
+                    const nextLineStyle: LineStyleType = lineStyle === 'dashed' ? 'solid' : 'dashed';
+                    applyLineStyleToSelection(nextLineStyle);
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                    lineStyle === 'dashed'
+                      ? 'bg-[#0066ff] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                  title="Εναλλαγή με 1 κλικ: Συνεχής Γραμμή (───) / Διακεκομμένη (- - -)"
+                >
+                  {lineStyle === 'dashed' ? '- - - Διακεκομμένη' : '─── Συνεχής'}
+                </button>
               </div>
             </div>
           </div>
@@ -6101,15 +6115,20 @@ export default function App() {
                 />
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                {(['solid', 'dashed', 'dotted'] as LineStyleType[]).map((ls) => (
+                {/*
+                  NOTE (Backup / Restore Point):
+                  'dotted' ('• • •') option was removed per user request ("βγαλε την επιλογη dotted και αν τη χρειαστουμε θα τη βαλουμε μετα").
+                  To restore 'dotted', change the array below back to: (['solid', 'dashed', 'dotted'] as LineStyleType[])
+                */}
+                {(['solid', 'dashed'] as LineStyleType[]).map((ls) => (
                   <button
                     key={ls}
                     onClick={() => applyLineStyleToSelection(ls)}
-                    className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer ${
+                    className={`px-3 py-1 rounded-lg font-semibold cursor-pointer ${
                       lineStyle === ls ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-700'
                     }`}
                   >
-                    {ls === 'solid' ? '───' : ls === 'dashed' ? '- - -' : '• • •'}
+                    {ls === 'solid' ? '─── Συνεχής' : '- - - Διακεκομμένη'}
                   </button>
                 ))}
                 <button
@@ -6321,6 +6340,20 @@ export default function App() {
                     >
                       {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
                     </button>
+                    <button
+                      onClick={() => {
+                        const nextLineStyle: LineStyleType = lineStyle === 'dashed' ? 'solid' : 'dashed';
+                        applyLineStyleToSelection(nextLineStyle);
+                      }}
+                      className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap cursor-pointer ${
+                        lineStyle === 'dashed'
+                          ? 'bg-[#0066ff] text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                      title="Εναλλαγή με 1 κλικ: Συνεχής Γραμμή (───) / Διακεκομμένη (- - -)"
+                    >
+                      {lineStyle === 'dashed' ? '- - - Διακεκομμένη' : '─── Συνεχής'}
+                    </button>
                   </div>
                 )}
 
@@ -6473,41 +6506,60 @@ export default function App() {
                       const isCurrentlyFilled = targetStrokes.some(
                         (s) => s.fillStyle && s.fillStyle !== 'none'
                       );
+                      const isCurrentlyDashed = targetStrokes.some(
+                        (s) => s.lineStyle === 'dashed'
+                      );
                       return (
-                        <button
-                          onClick={() => {
-                            const nextFill: FillStyleType = isCurrentlyFilled ? 'none' : 'solid';
-                            setFillStyle(nextFill);
-                            const canAnyFill = targetStrokes.some(
-                              (s) => s.isShape || isFreehandLoopClosed(s.points, true)
-                            );
-                            if (!canAnyFill && nextFill !== 'none') {
-                              showToast('ℹ️ Η γραμμή πρέπει να είναι κλειστή (να ενώνονται οι άκρες της) για να πάρει γέμισμα!');
-                              return;
-                            }
-                            updateActivePage((page) => ({
-                              ...page,
-                              strokes: page.strokes.map((s) =>
-                                (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
-                                (s.isShape || isFreehandLoopClosed(s.points, true))
-                                  ? {
-                                      ...s,
-                                      fillStyle: nextFill,
-                                      fillColor: nextFill !== 'none' ? s.color : undefined,
-                                    }
-                                  : s
-                              ),
-                            }));
-                          }}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
-                            isCurrentlyFilled
-                              ? 'bg-[#0066ff] text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
-                          }`}
-                          title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα (λειτουργεί και σε κλειστά ελεύθερα σχήματα!)"
-                        >
-                          {isCurrentlyFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => {
+                              const nextFill: FillStyleType = isCurrentlyFilled ? 'none' : 'solid';
+                              setFillStyle(nextFill);
+                              const canAnyFill = targetStrokes.some(
+                                (s) => s.isShape || isFreehandLoopClosed(s.points, true)
+                              );
+                              if (!canAnyFill && nextFill !== 'none') {
+                                showToast('ℹ️ Η γραμμή πρέπει να είναι κλειστή (να ενώνονται οι άκρες της) για να πάρει γέμισμα!');
+                                return;
+                              }
+                              updateActivePage((page) => ({
+                                ...page,
+                                strokes: page.strokes.map((s) =>
+                                  (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
+                                  (s.isShape || isFreehandLoopClosed(s.points, true))
+                                    ? {
+                                        ...s,
+                                        fillStyle: nextFill,
+                                        fillColor: nextFill !== 'none' ? s.color : undefined,
+                                      }
+                                    : s
+                                ),
+                              }));
+                            }}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                              isCurrentlyFilled
+                                ? 'bg-[#0066ff] text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                            }`}
+                            title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα (λειτουργεί και σε κλειστά ελεύθερα σχήματα!)"
+                          >
+                            {isCurrentlyFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              const nextLineStyle: LineStyleType = isCurrentlyDashed ? 'solid' : 'dashed';
+                              applyLineStyleToSelection(nextLineStyle);
+                            }}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                              isCurrentlyDashed
+                                ? 'bg-[#0066ff] text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                            }`}
+                            title="Εναλλαγή με 1 κλικ: Συνεχής Γραμμή (───) / Διακεκομμένη (- - -)"
+                          >
+                            {isCurrentlyDashed ? '- - - Διακεκομμένη' : '─── Συνεχής'}
+                          </button>
+                        </>
                       );
                     })()}
 
