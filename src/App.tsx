@@ -3073,9 +3073,8 @@ export default function App() {
     ctx.save();
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
-    const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.72 + (pt.pressure ?? 0.5) * 0.55;
     ctx.lineWidth =
-      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth * pressureFactor;
+      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
     ctx.lineCap = activeTool === 'highlighter' ? 'butt' : 'round';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
@@ -3094,9 +3093,8 @@ export default function App() {
     ctx.save();
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
-    const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.68 + (p1.pressure ?? 0.5) * 0.62;
     ctx.lineWidth =
-      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth * pressureFactor;
+      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
     ctx.lineCap = activeTool === 'highlighter' ? 'butt' : 'round';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;
@@ -3117,9 +3115,8 @@ export default function App() {
     ctx.save();
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.strokeStyle = strokeColor;
-    const pressureFactor = penSubType === 'ballpoint' ? 1 : 0.65 + (pCurr.pressure ?? 0.5) * 0.65;
     ctx.lineWidth =
-      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth * pressureFactor;
+      activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth;
     ctx.lineCap = activeTool === 'highlighter' ? 'butt' : 'round';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = activeTool === 'highlighter' ? 0.42 : 1;

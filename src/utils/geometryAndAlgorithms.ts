@@ -7,7 +7,7 @@ export function distance(a: { x: number; y: number }, b: { x: number; y: number 
 /**
  * Converts raw Apple Pencil points into smooth Quadratic Bezier curves with StreamLine filtering.
  */
-export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.54): BezierPoint[] {
+export function smoothStrokeToBezier(rawPoints: BezierPoint[], _streamline = 0.54): BezierPoint[] {
   if (rawPoints.length === 0) return [];
   if (rawPoints.length === 1) return [{ ...rawPoints[0] }];
   if (rawPoints.length === 2) {
@@ -23,69 +23,32 @@ export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.54
     ];
   }
 
-  // Step 1: Decimate micro-jitter stair-steps (< 1.8px) & apply StreamLine EMA filter
-  const filtered: BezierPoint[] = [{ ...rawPoints[0] }];
-  for (let i = 1; i < rawPoints.length; i++) {
-    const prev = filtered[filtered.length - 1];
-    const curr = rawPoints[i];
-    const d = distance(prev, curr);
-    const isLast = i === rawPoints.length - 1;
-    if (d < 1.8 && !isLast) continue;
+  /*
+   * NOTE (Backup / Restore Point):
+   * Post-stroke StreamLine EMA + 2-pass Gaussian-Laplacian relaxation ("στρώσιμο" after lifting the pencil)
+   * is disabled per user request ("οτι γραφω ας μενει ιδιο ... θα το δουμε πολυ πολυ μετα") so the committed
+   * stroke matches 100% what was drawn live on the canvas without shifting or morphing on pointerUp.
+   */
+  const pts = rawPoints;
 
-    const alpha = isLast
-      ? 0.78
-      : Math.max(0.28, Math.min(0.72, 1 - streamline * Math.exp(-d / 16)));
-    filtered.push({
-      x: prev.x + alpha * (curr.x - prev.x),
-      y: prev.y + alpha * (curr.y - prev.y),
-      pressure: (prev.pressure ?? 0.5) * 0.45 + (curr.pressure ?? 0.5) * 0.55,
-      tiltX: curr.tiltX,
-      tiltY: curr.tiltY,
-      twist: curr.twist,
-    });
-  }
-
-  if (filtered.length === 1) return filtered;
-  if (filtered.length === 2) {
-    return [
-      { ...filtered[0] },
-      {
-        ...filtered[1],
-        cx: (filtered[0].x + filtered[1].x) / 2,
-        cy: (filtered[0].y + filtered[1].y) / 2,
-      },
-    ];
-  }
-
-  // Step 2: Two passes of Gaussian-Laplacian relaxation to eliminate digitizer stair-steps ("ζαγρέ")
-  let relaxed = filtered.map((p) => ({ ...p }));
-  for (let pass = 0; pass < 2; pass++) {
-    const next = relaxed.map((p) => ({ ...p }));
-    for (let i = 1; i < relaxed.length - 1; i++) {
-      next[i].x = 0.22 * relaxed[i - 1].x + 0.56 * relaxed[i].x + 0.22 * relaxed[i + 1].x;
-      next[i].y = 0.22 * relaxed[i - 1].y + 0.56 * relaxed[i].y + 0.22 * relaxed[i + 1].y;
-    }
-    relaxed = next;
-  }
-
-  // Step 3: True C1-continuous Quadratic Bezier Midpoint Spline (zero end-hooks!)
-  const result: BezierPoint[] = [{ ...relaxed[0] }];
-  const firstMidX = (relaxed[0].x + relaxed[1].x) / 2;
-  const firstMidY = (relaxed[0].y + relaxed[1].y) / 2;
+  // Exact 1:1 C1-continuous Quadratic Bezier Midpoint Spline matching drawIncrementalSegment live ink!
+  const result: BezierPoint[] = [{ ...pts[0] }];
+  const firstMidX = (pts[0].x + pts[1].x) / 2;
+  const firstMidY = (pts[0].y + pts[1].y) / 2;
   result.push({
     x: firstMidX,
     y: firstMidY,
-    cx: (relaxed[0].x + firstMidX) / 2,
-    cy: (relaxed[0].y + firstMidY) / 2,
-    pressure: relaxed[0].pressure,
-    tiltX: relaxed[0].tiltX,
-    tiltY: relaxed[0].tiltY,
-    twist: relaxed[0].twist,
+    cx: (pts[0].x + firstMidX) / 2,
+    cy: (pts[0].y + firstMidY) / 2,
+    pressure: pts[0].pressure,
+    tiltX: pts[0].tiltX,
+    tiltY: pts[0].tiltY,
+    twist: pts[0].twist,
   });
 
-  for (let i = 1; i < relaxed.length - 1; i++) {
-    const p0 = relaxed[i];
-    const p1 = relaxed[i + 1];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p0 = pts[i];
+    const p1 = pts[i + 1];
     const midX = (p0.x + p1.x) / 2;
     const midY = (p0.y + p1.y) / 2;
     result.push({
@@ -100,7 +63,7 @@ export function smoothStrokeToBezier(rawPoints: BezierPoint[], streamline = 0.54
     });
   }
 
-  const last = relaxed[relaxed.length - 1];
+  const last = pts[pts.length - 1];
   const prevEnd = result[result.length - 1];
   result.push({
     x: last.x,
