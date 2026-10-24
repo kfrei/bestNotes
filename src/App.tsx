@@ -1260,8 +1260,21 @@ export default function App() {
 
       if (activeTool === 'direct-node' && activeNodeStrokeId) {
         const nodeStroke = targetPageObj.strokes.find((s) => s.id === activeNodeStrokeId);
-        if (nodeStroke && isPointNearStroke({ x: ptX, y: ptY }, nodeStroke, 26)) {
-          return true;
+        if (nodeStroke) {
+          const checkPts = !nodeStroke.isShape
+            ? (nodeStroke.keyNodeIndices && nodeStroke.keyNodeIndices.length >= 2
+                ? nodeStroke.keyNodeIndices
+                : computeFreehandKeyNodeIndices(nodeStroke.points)
+              )
+                .map((idx) => nodeStroke.points[idx])
+                .filter(Boolean)
+            : nodeStroke.points;
+          if (checkPts.some((np) => distance({ x: ptX, y: ptY }, np) <= 32)) {
+            return true;
+          }
+          if (isPointNearStroke({ x: ptX, y: ptY }, nodeStroke, 26, true)) {
+            return true;
+          }
         }
       }
 
@@ -3644,6 +3657,7 @@ export default function App() {
     if (activeTool === 'direct-node') {
       cancelNodeMagnetTimer();
       cancelAddNodeLongPress();
+      const nodeHitRadius = e.pointerType === 'touch' ? 30 : 22;
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target) {
@@ -3653,25 +3667,34 @@ export default function App() {
                 ? target.keyNodeIndices
                 : computeFreehandKeyNodeIndices(target.points);
             const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
+            let bestK = -1;
+            let bestDist = nodeHitRadius;
             for (let k = 0; k < keyIndices.length; k++) {
               if (isWeldedClosed && k === keyIndices.length - 1) continue;
               const p = target.points[keyIndices[k]];
-              if (p && distance(pt, p) < 22) {
-                if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
-                  updateActivePage(
-                    (page) => ({
-                      ...page,
-                      strokes: page.strokes.map((s) =>
-                        s.id === target.id ? { ...s, keyNodeIndices: keyIndices } : s
-                      ),
-                    }),
-                    false
-                  );
+              if (p) {
+                const d = distance(pt, p);
+                if (d < bestDist) {
+                  bestDist = d;
+                  bestK = k;
                 }
-                setDraggingNodeIdx({ index: k, isControl: false });
-                isDrawingRef.current = true;
-                return;
               }
+            }
+            if (bestK >= 0) {
+              if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
+                updateActivePage(
+                  (page) => ({
+                    ...page,
+                    strokes: page.strokes.map((s) =>
+                      s.id === target.id ? { ...s, keyNodeIndices: keyIndices } : s
+                    ),
+                  }),
+                  false
+                );
+              }
+              setDraggingNodeIdx({ index: bestK, isControl: false });
+              isDrawingRef.current = true;
+              return;
             }
           } else {
             const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
@@ -3682,7 +3705,13 @@ export default function App() {
             const isClosedPoly =
               target.shapeType === 'rectangle' ||
               target.shapeType === 'parallelogram' ||
-              target.shapeType === 'triangle';
+              target.shapeType === 'triangle' ||
+              target.shapeType === 'cuboid' ||
+              target.shapeType === 'cylinder' ||
+              target.shapeType === 'sphere' ||
+              target.shapeType === 'pyramid' ||
+              target.shapeType === 'resistor' ||
+              target.shapeType === 'spring';
             const nodeCount = isWave
               ? Math.min(2, target.points.length)
               : isThreePtCurve
@@ -3691,117 +3720,153 @@ export default function App() {
               ? Math.max(1, target.points.length - 1)
               : target.points.length;
 
+            let bestIdx = -1;
+            let bestDist = nodeHitRadius;
             for (let i = 0; i < nodeCount; i++) {
               const p = target.points[i];
-              if (distance(pt, p) < 20) {
-                setDraggingNodeIdx({ index: i, isControl: false });
-                isDrawingRef.current = true;
-                return;
+              if (p) {
+                const d = distance(pt, p);
+                if (d < bestDist) {
+                  bestDist = d;
+                  bestIdx = i;
+                }
               }
+            }
+            if (bestIdx >= 0) {
+              setDraggingNodeIdx({ index: bestIdx, isControl: false });
+              isDrawingRef.current = true;
+              return;
             }
           }
 
-          // Long-Press (~420ms) on any point of the selected stroke/shape perimeter to ADD a new Node!
-          if (isPointNearStroke(pt, target, 24)) {
+          // Far from nodes, touching ON the stroke/shape itself:
+          // - Hold still (~420ms) on the perimeter -> ADD a new Node!
+          // - Drag immediately (moves > 10px) -> Drag/Move the shape (while keeping Nodes mode active)!
+          if (isPointNearStroke(pt, target, 24, true)) {
             const pressX = pt.x;
             const pressY = pt.y;
             const targetId = target.id;
-            const timerId = window.setTimeout(() => {
-              addNodeLongPressRef.current = null;
-              let newDragIdx: number | null = null;
-
-              updateActivePage(
-                (page) => ({
-                  ...page,
-                  strokes: page.strokes.map((s) => {
-                    if (s.id !== targetId) return s;
-
-                    if (!s.isShape && s.points.length >= 3) {
-                      const kIndices =
-                        s.keyNodeIndices && s.keyNodeIndices.length >= 2
-                          ? s.keyNodeIndices
-                          : computeFreehandKeyNodeIndices(s.points);
-                      let bestIdx = -1;
-                      let minDist = Infinity;
-                      for (let i = 1; i < s.points.length - 1; i++) {
-                        if (kIndices.includes(i)) continue;
-                        const d = distance({ x: pressX, y: pressY }, s.points[i]);
-                        if (d < minDist) {
-                          minDist = d;
-                          bestIdx = i;
-                        }
-                      }
-                      if (bestIdx >= 1) {
-                        const nextKeys = Array.from(new Set([...kIndices, bestIdx])).sort(
-                          (a, b) => a - b
-                        );
-                        newDragIdx = nextKeys.indexOf(bestIdx);
-                        return { ...s, keyNodeIndices: nextKeys };
-                      }
-                      return s;
-                    }
-
-                    // Geometric shape (polygon / line): split the closest segment and insert a new vertex node!
-                    const isEditablePoly =
-                      s.shapeType === 'rectangle' ||
-                      s.shapeType === 'parallelogram' ||
-                      s.shapeType === 'triangle' ||
-                      s.shapeType === 'line' ||
-                      s.shapeType === 'arrow' ||
-                      s.shapeType === 'double-arrow';
-                    if (isEditablePoly && s.points.length >= 2) {
-                      let bestSeg = 0;
-                      let bestDist = Infinity;
-                      let bestProjX = pressX;
-                      let bestProjY = pressY;
-                      for (let i = 0; i < s.points.length - 1; i++) {
-                        const pA = s.points[i];
-                        const pB = s.points[i + 1];
-                        const dx = pB.x - pA.x;
-                        const dy = pB.y - pA.y;
-                        const lenSq = dx * dx + dy * dy;
-                        const t =
-                          lenSq > 1e-4
-                            ? Math.max(0.1, Math.min(0.9, ((pressX - pA.x) * dx + (pressY - pA.y) * dy) / lenSq))
-                            : 0.5;
-                        const px = pA.x + t * dx;
-                        const py = pA.y + t * dy;
-                        const d = Math.hypot(pressX - px, pressY - py);
-                        if (d < bestDist) {
-                          bestDist = d;
-                          bestSeg = i;
-                          bestProjX = px;
-                          bestProjY = py;
-                        }
-                      }
-                      const nextPts = [...s.points];
-                      nextPts.splice(bestSeg + 1, 0, {
-                        x: bestProjX,
-                        y: bestProjY,
-                        pressure: 0.7,
-                      });
-                      newDragIdx = bestSeg + 1;
-                      return { ...s, points: nextPts };
-                    }
-
-                    return s;
-                  }),
-                }),
-                true
-              );
-
-              if (newDragIdx !== null) {
-                setDraggingNodeIdx({ index: newDragIdx, isControl: false });
-                isDrawingRef.current = true;
-                showToast('➕ Προστέθηκε νέος κόμβος (Node) στο σημείο!');
-              }
-            }, 420);
-
-            addNodeLongPressRef.current = {
-              timerId,
-              startX: pressX,
-              startY: pressY,
+            const b = getStrokeBounds(target);
+            const memberIds = target.groupId
+              ? activePage.strokes.filter((s) => s.groupId === target.groupId).map((s) => s.id)
+              : [target.id];
+            setSelectedStrokeIds(memberIds);
+            selectionTransformRef.current = {
+              mode: 'move',
+              startX: pt.x,
+              startY: pt.y,
+              centerX: (b.minX + b.maxX) / 2,
+              centerY: (b.minY + b.maxY) / 2,
+              anchorX: (b.minX + b.maxX) / 2,
+              anchorY: (b.minY + b.maxY) / 2,
+              initialDist: 1,
+              initialAngle: 0,
+              targetStrokeIds: memberIds,
+              targetImageId: null,
             };
+            isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+            isDrawingRef.current = true;
+
+            if (isPointNearStroke(pt, target, 24, false)) {
+              const timerId = window.setTimeout(() => {
+                addNodeLongPressRef.current = null;
+                let newDragIdx: number | null = null;
+
+                updateActivePage(
+                  (page) => ({
+                    ...page,
+                    strokes: page.strokes.map((s) => {
+                      if (s.id !== targetId) return s;
+
+                      if (!s.isShape && s.points.length >= 3) {
+                        const kIndices =
+                          s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                            ? s.keyNodeIndices
+                            : computeFreehandKeyNodeIndices(s.points);
+                        let bestIdx = -1;
+                        let minDist = Infinity;
+                        for (let i = 1; i < s.points.length - 1; i++) {
+                          if (kIndices.includes(i)) continue;
+                          const d = distance({ x: pressX, y: pressY }, s.points[i]);
+                          if (d < minDist) {
+                            minDist = d;
+                            bestIdx = i;
+                          }
+                        }
+                        if (bestIdx >= 1) {
+                          const nextKeys = Array.from(new Set([...kIndices, bestIdx])).sort(
+                            (a, b) => a - b
+                          );
+                          newDragIdx = nextKeys.indexOf(bestIdx);
+                          return { ...s, keyNodeIndices: nextKeys };
+                        }
+                        return s;
+                      }
+
+                      // Geometric shape (polygon / line): split the closest segment and insert a new vertex node!
+                      const isEditablePoly =
+                        s.shapeType === 'rectangle' ||
+                        s.shapeType === 'parallelogram' ||
+                        s.shapeType === 'triangle' ||
+                        s.shapeType === 'line' ||
+                        s.shapeType === 'arrow' ||
+                        s.shapeType === 'double-arrow';
+                      if (isEditablePoly && s.points.length >= 2) {
+                        let bestSeg = 0;
+                        let bestDist = Infinity;
+                        let bestProjX = pressX;
+                        let bestProjY = pressY;
+                        for (let i = 0; i < s.points.length - 1; i++) {
+                          const pA = s.points[i];
+                          const pB = s.points[i + 1];
+                          const dx = pB.x - pA.x;
+                          const dy = pB.y - pA.y;
+                          const lenSq = dx * dx + dy * dy;
+                          const t =
+                            lenSq > 1e-4
+                              ? Math.max(0.1, Math.min(0.9, ((pressX - pA.x) * dx + (pressY - pA.y) * dy) / lenSq))
+                              : 0.5;
+                          const px = pA.x + t * dx;
+                          const py = pA.y + t * dy;
+                          const d = Math.hypot(pressX - px, pressY - py);
+                          if (d < bestDist) {
+                            bestDist = d;
+                            bestSeg = i;
+                            bestProjX = px;
+                            bestProjY = py;
+                          }
+                        }
+                        const nextPts = [...s.points];
+                        nextPts.splice(bestSeg + 1, 0, {
+                          x: bestProjX,
+                          y: bestProjY,
+                          pressure: 0.7,
+                        });
+                        newDragIdx = bestSeg + 1;
+                        return { ...s, points: nextPts };
+                      }
+
+                      return s;
+                    }),
+                  }),
+                  true
+                );
+
+                if (newDragIdx !== null) {
+                  selectionTransformRef.current = null;
+                  isDraggingSelectionRef.current = null;
+                  setDraggingNodeIdx({ index: newDragIdx, isControl: false });
+                  isDrawingRef.current = true;
+                  showToast('➕ Προστέθηκε νέος κόμβος (Node) στο σημείο!');
+                }
+              }, 420);
+
+              addNodeLongPressRef.current = {
+                timerId,
+                startX: pressX,
+                startY: pressY,
+              };
+            }
             return;
           }
         }
@@ -5123,6 +5188,8 @@ export default function App() {
     if (activeTool === 'direct-node') {
       clearActiveOverlay();
       setDraggingNodeIdx(null);
+      selectionTransformRef.current = null;
+      isDraggingSelectionRef.current = null;
       return;
     }
 
