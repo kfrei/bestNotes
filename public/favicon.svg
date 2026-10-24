@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Outer Squircle with White Fill and Soft Gray Border (1:1 Goodnotes Icon Frame) -->
+  <rect x="4" y="4" width="92" height="92" rx="23" fill="#ffffff" stroke="#dcdfe4" stroke-width="5.5" />
+
+  <!-- Red Horizontal Note Lines & Curved Smile on the Right -->
+  <line x1="42" y1="31" x2="77" y2="31" stroke="#e11d48" stroke-width="6.6" stroke-linecap="round" />
+  <line x1="48" y1="49" x2="77" y2="49" stroke="#e11d48" stroke-width="6.6" stroke-linecap="round" />
+  <path d="M 44 73.5 C 51 82, 69 81, 76 63" stroke="#e11d48" stroke-width="6.6" stroke-linecap="round" fill="none" />
+
+  <!-- Iconic Seamless Black Stylus / Pencil on the Left (Tilted Down-Right toward the Red Curve) -->
+  <g transform="translate(30.5, 47.5) rotate(-21)">
+    <path
+      d="M -5.3 -16.5 A 5.3 5.3 0 0 1 5.3 -16.5 L 5.3 8.5 L 1.0 21.2 C 0.5 22.5 -0.5 22.5 -1.0 21.2 L -5.3 8.5 Z"
+      fill="#111315"
+    />
+  </g>
+</svg>

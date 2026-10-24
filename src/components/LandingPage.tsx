@@ -254,6 +254,24 @@ const BiologyFloraFaunaSketch: React.FC<{ className?: string }> = ({ className =
   </svg>
 );
 
+export const BestNotesLogoIcon: React.FC<{ className?: string }> = ({ className = 'w-9 h-9' }) => (
+  <svg className={className} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Outer Squircle with White Fill and Soft Gray Border (1:1 Goodnotes Icon Frame) */}
+    <rect x="4" y="4" width="92" height="92" rx="23" fill="#ffffff" stroke="#dcdfe4" strokeWidth="5.5" />
+    {/* Red Horizontal Note Lines & Curved Smile on the Right */}
+    <line x1="42" y1="31" x2="77" y2="31" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" />
+    <line x1="48" y1="49" x2="77" y2="49" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" />
+    <path d="M 44 73.5 C 51 82, 69 81, 76 63" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" fill="none" />
+    {/* Iconic Seamless Black Stylus / Pencil on the Left (Tilted Down-Right toward the Red Curve) */}
+    <g transform="translate(30.5, 47.5) rotate(-21)">
+      <path
+        d="M -5.3 -16.5 A 5.3 5.3 0 0 1 5.3 -16.5 L 5.3 8.5 L 1.0 21.2 C 0.5 22.5 -0.5 22.5 -1.0 21.2 L -5.3 8.5 Z"
+        fill="#111315"
+      />
+    </g>
+  </svg>
+);
+
 export const AuthModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -343,12 +361,13 @@ export const AuthModal: React.FC<{
         </button>
 
         {/* Brand Header */}
-        <div className="flex items-center gap-2.5 mb-5">
-          <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0066ff] shadow-2xs">
-            <Pen className="w-5 h-5" />
-          </div>
+        <div className="flex items-center gap-3 mb-5">
+          <BestNotesLogoIcon className="w-10 h-10 shrink-0 shadow-2xs" />
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight text-slate-900">
+            <h2
+              className="text-lg font-semibold tracking-[-0.025em] text-[#111315]"
+              style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+            >
               {mode === 'signin' ? 'Σύνδεση στο BestNotes' : 'Δημιουργία Λογαριασμού'}
             </h2>
             <p className="text-xs text-slate-500">
@@ -645,11 +664,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={onEnterApp}
               className="flex items-center gap-2.5 cursor-pointer group"
             >
-              <div className="w-8 h-8 rounded-lg bg-white border-2 border-[#0095ff] flex items-center justify-center shadow-2xs group-hover:scale-105 transition">
-                <Pen className="w-4 h-4 text-[#0095ff]" />
-              </div>
-              <span className="text-xl font-extrabold tracking-tight text-slate-900">
+              <BestNotesLogoIcon className="w-9 h-9 group-hover:scale-105 transition shrink-0" />
+              <span
+                className="text-[22px] font-semibold tracking-[-0.03em] text-[#111315] inline-flex items-start leading-none"
+                style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+              >
                 BestNotes
+                <sup className="text-[7px] font-bold tracking-normal text-[#111315] ml-0.5 mt-0.5">
+                  TM
+                </sup>
               </span>
             </div>
 
