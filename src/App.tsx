@@ -3716,14 +3716,14 @@ export default function App() {
       if (laserClearTimerRef.current) {
         window.clearTimeout(laserClearTimerRef.current);
       }
-      // Keep all drawn laser circles/strokes on screen for 2 full seconds (2000ms) after lifting the pencil!
+      // Keep all drawn laser circles/strokes on screen for 1 second (1000ms) after lifting the pencil!
       laserClearTimerRef.current = window.setTimeout(() => {
         laserClearTimerRef.current = null;
         if (!isDrawingRef.current) {
           laserStrokesRef.current = [];
           clearActiveOverlay();
         }
-      }, 2000);
+      }, 1000);
       return;
     }
 
