@@ -34,7 +34,8 @@ export type ShapePresetType =
   | 'sphere'
   | 'pyramid'
   | 'axes'
-  | 'resistor';
+  | 'resistor'
+  | 'spring';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
 export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';

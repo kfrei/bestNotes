@@ -651,6 +651,64 @@ export function makeEllipseBezier(cx: number, cy: number, rx: number, ry: number
   ];
 }
 
+/**
+ * Computes the high-precision polyline points for a Physics Resistor ('resistor' with 10 zig-zag peaks/valleys)
+ * or Helical Coiled Spring ('spring' with 9 full coils / σπείρες) mapped onto the 4 bounding quad corners.
+ * Supports 360° rotation, proportional corner scaling, and independent width/height side stretching!
+ */
+export function computeResistorOrSpringPoints(
+  shapeType: 'resistor' | 'spring',
+  corners: BezierPoint[]
+): BezierPoint[] {
+  if (corners.length < 4) return corners;
+  const [q0, q1, q2, q3] = corners;
+  const bilerp = (u: number, v: number): BezierPoint => ({
+    x: (1 - u) * (1 - v) * q0.x + u * (1 - v) * q1.x + u * v * q2.x + (1 - u) * v * q3.x,
+    y: (1 - u) * (1 - v) * q0.y + u * (1 - v) * q1.y + u * v * q2.y + (1 - u) * v * q3.y,
+    pressure: 0.7,
+  });
+
+  if (shapeType === 'resistor') {
+    // 10 zig-zag peaks/valleys (5 top crests + 5 bottom troughs) with straight lead terminals on both ends
+    const uStart = 0.12;
+    const uEnd = 0.88;
+    const uSpan = uEnd - uStart;
+    const numPeaks = 10;
+    const out: BezierPoint[] = [bilerp(0, 0.5), bilerp(uStart, 0.5)];
+    for (let k = 0; k < numPeaks; k++) {
+      const u = uStart + ((k + 0.5) / numPeaks) * uSpan;
+      const v = k % 2 === 0 ? 0.04 : 0.96;
+      out.push(bilerp(u, v));
+    }
+    out.push(bilerp(uEnd, 0.5));
+    out.push(bilerp(1, 0.5));
+    return out;
+  }
+
+  // Helical coiled spring ('spring') with 9 full inner coils (σπείρες) and straight lead ends
+  const uStart = 0.08;
+  const uEnd = 0.92;
+  const numCoils = 9;
+  const ru = 0.038;
+  const rv = 0.46;
+  const theta0 = -Math.PI / 2;
+  const theta1 = 2 * Math.PI * numCoils + Math.PI / 2;
+  const dTheta = theta1 - theta0;
+  const steps = 216;
+
+  const out: BezierPoint[] = [bilerp(0, 0.5)];
+  for (let i = 0; i <= steps; i++) {
+    const s = i / steps;
+    const theta = theta0 + s * dTheta;
+    const uBase = uStart + ru + s * (uEnd - ru - (uStart + ru));
+    const u = uBase + ru * Math.sin(theta);
+    const v = 0.5 - rv * Math.cos(theta);
+    out.push(bilerp(u, v));
+  }
+  out.push(bilerp(1, 0.5));
+  return out;
+}
+
 function buildPresetShape(
   start: BezierPoint,
   end: BezierPoint,
@@ -727,6 +785,45 @@ function buildPresetShape(
         { x: cx - halfW, y: cy + halfH },
       ]),
     };
+  }
+  if (preset === 'resistor' || preset === 'spring') {
+    const rawW = maxX - minX;
+    const rawH = maxY - minY;
+    const isVertical = rawH > rawW * 1.35;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    if (isVertical) {
+      const spanLen = Math.max(120, rawH);
+      const defaultThick = Math.max(42, Math.min(72, spanLen * 0.3));
+      const thick = rawW < 32 ? defaultThick : Math.max(38, rawW);
+      const halfW = thick / 2;
+      const halfH = spanLen / 2;
+      return {
+        shapeType: preset,
+        points: makePolygonBezier([
+          { x: cx + halfW, y: cy - halfH },
+          { x: cx + halfW, y: cy + halfH },
+          { x: cx - halfW, y: cy + halfH },
+          { x: cx - halfW, y: cy - halfH },
+        ]),
+      };
+    } else {
+      const spanLen = Math.max(120, rawW);
+      const defaultThick = Math.max(42, Math.min(72, spanLen * 0.3));
+      const thick = rawH < 32 ? defaultThick : Math.max(38, rawH);
+      const halfW = spanLen / 2;
+      const halfH = thick / 2;
+      return {
+        shapeType: preset,
+        points: makePolygonBezier([
+          { x: cx - halfW, y: cy - halfH },
+          { x: cx + halfW, y: cy - halfH },
+          { x: cx + halfW, y: cy + halfH },
+          { x: cx - halfW, y: cy + halfH },
+        ]),
+      };
+    }
   }
   if (preset === 'rectangle') {
     return {
@@ -889,39 +986,23 @@ export function createPhysicsStencilStrokes(
       isShape: true,
     });
   } else if (preset === 'resistor') {
-    const cy = y + h / 2;
-    const segW = w / 8;
-    const zigPts: { x: number; y: number }[] = [
-      { x, y: cy },
-      { x: x + segW, y: cy },
-      { x: x + segW * 1.75, y: y },
-      { x: x + segW * 2.75, y: y + h },
-      { x: x + segW * 3.75, y: y },
-      { x: x + segW * 4.75, y: y + h },
-      { x: x + segW * 5.75, y: y },
-      { x: x + segW * 6.5, y: cy },
-      { x: x + w, y: cy },
-    ];
-    const pts: BezierPoint[] = [{ x: zigPts[0].x, y: zigPts[0].y, pressure: 0.7 }];
-    for (let i = 1; i < zigPts.length; i++) {
-      pts.push({
-        x: zigPts[i].x,
-        y: zigPts[i].y,
-        cx: (zigPts[i - 1].x + zigPts[i].x) / 2,
-        cy: (zigPts[i - 1].y + zigPts[i].y) / 2,
-        pressure: 0.7,
-      });
-    }
+    const corners = makePolygonBezier([
+      { x, y },
+      { x: x + w, y },
+      { x: x + w, y: y + h },
+      { x, y: y + h },
+    ]);
     out.push({
       id: `st-${Date.now()}-res`,
       tool: 'pen',
       color,
       width: 2.8,
       opacity: 1,
-      points: pts,
+      points: corners,
       layerId,
       groupId,
       isShape: true,
+      shapeType: 'resistor',
     });
   }
 
@@ -1704,6 +1785,10 @@ function tessellateParametricShapeForErase(s: StrokeObject): BezierPoint[] {
     return out;
   }
 
+  if ((s.shapeType === 'resistor' || s.shapeType === 'spring') && s.points.length >= 4) {
+    return computeResistorOrSpringPoints(s.shapeType, s.points);
+  }
+
   return s.points;
 }
 
@@ -1724,7 +1809,8 @@ export function eraseStrokeByCircle(
   const isParametric =
     ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) ||
     ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) ||
-    ((s.shapeType === 'parabola' || s.shapeType === 'arc' || s.shapeType === 'hyperbola') && s.points.length === 3);
+    ((s.shapeType === 'parabola' || s.shapeType === 'arc' || s.shapeType === 'hyperbola') && s.points.length === 3) ||
+    ((s.shapeType === 'resistor' || s.shapeType === 'spring') && s.points.length >= 4);
 
   const basePts = isParametric ? tessellateParametricShapeForErase(s) : s.points;
 

@@ -82,6 +82,7 @@ import {
   deformStrokeAtKeyNode,
   isFreehandLoopClosed,
   eraseStrokeByCircle,
+  computeResistorOrSpringPoints,
 } from './utils/geometryAndAlgorithms';
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
@@ -201,6 +202,7 @@ export default function App() {
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
+  const lastCreatedShapeIdsRef = useRef<string[]>([]);
   const [draggingNodeIdx, setDraggingNodeIdx] = useState<{ index: number; isControl: boolean } | null>(null);
   const [textFontSize, setTextFontSize] = useState<number>(22);
   const [textBold, setTextBold] = useState<boolean>(false);
@@ -604,25 +606,42 @@ export default function App() {
       return false;
     }
     // Check true perpendicular distance to every segment for polygons/lines/strokes
-    for (let i = 1; i < s.points.length; i++) {
-      const a = s.points[i - 1];
-      const c = s.points[i];
-      const vx = c.x - a.x;
-      const vy = c.y - a.y;
-      const lenSq = vx * vx + vy * vy;
-      const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / lenSq)) : 0;
-      const projX = a.x + t * vx;
-      const projY = a.y + t * vy;
-      if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
+    if ((s.shapeType === 'resistor' || s.shapeType === 'spring') && s.points.length >= 4) {
+      const polyPts = computeResistorOrSpringPoints(s.shapeType, s.points);
+      for (let i = 1; i < polyPts.length; i++) {
+        const a = polyPts[i - 1];
+        const c = polyPts[i];
+        const vx = c.x - a.x;
+        const vy = c.y - a.y;
+        const lenSq = vx * vx + vy * vy;
+        const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / lenSq)) : 0;
+        const projX = a.x + t * vx;
+        const projY = a.y + t * vy;
+        if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
+      }
+    } else {
+      for (let i = 1; i < s.points.length; i++) {
+        const a = s.points[i - 1];
+        const c = s.points[i];
+        const vx = c.x - a.x;
+        const vy = c.y - a.y;
+        const lenSq = vx * vx + vy * vy;
+        const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / lenSq)) : 0;
+        const projX = a.x + t * vx;
+        const projY = a.y + t * vy;
+        if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
+      }
     }
 
-    // Also allow tapping inside any filled shape, filled closed freehand loop, or 3D shape
-    const is3DShape =
+    // Also allow tapping inside any filled shape, filled closed freehand loop, 3D shape, resistor, or spring
+    const is3DOrPhysicsBoxShape =
       s.shapeType === 'cuboid' ||
       s.shapeType === 'cylinder' ||
       s.shapeType === 'sphere' ||
-      s.shapeType === 'pyramid';
-    if (((s.fillStyle && s.fillStyle !== 'none') || is3DShape) && s.points.length >= 3) {
+      s.shapeType === 'pyramid' ||
+      s.shapeType === 'resistor' ||
+      s.shapeType === 'spring';
+    if (((s.fillStyle && s.fillStyle !== 'none') || is3DOrPhysicsBoxShape) && s.points.length >= 3) {
       let inside = false;
       for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
         const xi = s.points[i].x,
@@ -1136,6 +1155,21 @@ export default function App() {
       }
     }
 
+    // 0b. Physics Resistor ('resistor' with 10 zig-zag vertices) & Helical Spring ('spring' with 9 coils / σπείρες)
+    if ((s.shapeType === 'resistor' || s.shapeType === 'spring') && s.points.length >= 4) {
+      const polyPts = computeResistorOrSpringPoints(s.shapeType, s.points);
+      if (polyPts.length > 0) {
+        ctx.beginPath();
+        ctx.moveTo(polyPts[0].x, polyPts[0].y);
+        for (let i = 1; i < polyPts.length; i++) {
+          ctx.lineTo(polyPts[i].x, polyPts[i].y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
+
     ctx.beginPath();
     // 1. 4-Node Circle / Ellipse (strictly 4 cardinal points every 90°: Top, Right, Bottom, Left)
     if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
@@ -1235,6 +1269,10 @@ export default function App() {
     const canFillShape =
       s.shapeType !== 'line' &&
       s.shapeType !== 'arrow' &&
+      s.shapeType !== 'resistor' &&
+      s.shapeType !== 'spring' &&
+      s.shapeType !== 'sine' &&
+      s.shapeType !== 'cosine' &&
       s.fillStyle &&
       s.fillStyle !== 'none' &&
       s.points.length > 2 &&
@@ -1632,7 +1670,13 @@ export default function App() {
               const isClosedPoly =
                 target.shapeType === 'rectangle' ||
                 target.shapeType === 'parallelogram' ||
-                target.shapeType === 'triangle';
+                target.shapeType === 'triangle' ||
+                target.shapeType === 'cuboid' ||
+                target.shapeType === 'cylinder' ||
+                target.shapeType === 'sphere' ||
+                target.shapeType === 'pyramid' ||
+                target.shapeType === 'resistor' ||
+                target.shapeType === 'spring';
               const nodeCount = isWave
                 ? Math.min(2, target.points.length)
                 : isThreePtCurve
@@ -2804,7 +2848,7 @@ export default function App() {
       !snappedCurrentStrokeRef.current &&
       activeTool === 'shape' &&
       shapePreset !== 'auto' &&
-      !['axes', 'resistor'].includes(shapePreset) &&
+      shapePreset !== 'axes' &&
       currentStrokePtsRef.current.length >= 2
         ? recognizeAndSnapShape(currentStrokePtsRef.current, shapePreset)
         : null;
@@ -3859,7 +3903,13 @@ export default function App() {
             const isClosedPoly =
               s.shapeType === 'rectangle' ||
               s.shapeType === 'parallelogram' ||
-              s.shapeType === 'triangle';
+              s.shapeType === 'triangle' ||
+              s.shapeType === 'cuboid' ||
+              s.shapeType === 'cylinder' ||
+              s.shapeType === 'sphere' ||
+              s.shapeType === 'pyramid' ||
+              s.shapeType === 'resistor' ||
+              s.shapeType === 'spring';
             if (isClosedPoly && draggingNodeIdx.index === 0 && newPts.length > 1) {
               newPts[newPts.length - 1] = {
                 ...newPts[newPts.length - 1],
@@ -4513,8 +4563,8 @@ export default function App() {
       }
     }
 
-    // 4. Physics Grouped Stencils
-    if (activeTool === 'shape' && ['axes', 'resistor'].includes(shapePreset)) {
+    // 4. Physics Grouped Stencils ('axes')
+    if (activeTool === 'shape' && shapePreset === 'axes') {
       clearActiveOverlay();
       let minX = Infinity,
         minY = Infinity,
@@ -4529,7 +4579,7 @@ export default function App() {
       const w = Math.max(120, maxX - minX);
       const h = Math.max(65, maxY - minY);
       const stencilStrokes = createPhysicsStencilStrokes(
-        shapePreset as 'axes' | 'resistor',
+        'axes',
         minX,
         minY,
         w,
@@ -4537,6 +4587,7 @@ export default function App() {
         strokeColor,
         activeLayerId
       );
+      lastCreatedShapeIdsRef.current = stencilStrokes.map((s) => s.id);
       updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...stencilStrokes] }));
       snappedCurrentStrokeRef.current = null;
       return;
@@ -4588,7 +4639,14 @@ export default function App() {
         },
       ];
     }
-    const canAutoFillStroke = (isShape || isClosedFreehand) && shapeType !== 'line' && shapeType !== 'arrow';
+    const canAutoFillStroke =
+      (isShape || isClosedFreehand) &&
+      shapeType !== 'line' &&
+      shapeType !== 'arrow' &&
+      shapeType !== 'resistor' &&
+      shapeType !== 'spring' &&
+      shapeType !== 'sine' &&
+      shapeType !== 'cosine';
 
     const newStroke: StrokeObject = {
       id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -4607,6 +4665,12 @@ export default function App() {
       shapeType,
       keyNodeIndices: !isShape ? computeFreehandKeyNodeIndices(finalPts) : undefined,
     };
+
+    if (activeTool === 'shape' || isShape) {
+      lastCreatedShapeIdsRef.current = [newStroke.id];
+    } else {
+      lastCreatedShapeIdsRef.current = [];
+    }
 
     // Synchronously draw onto staticCanvasRef at 2x Retina BEFORE clearing activeCanvasRef so there is 0ms gap!
     if (newStroke.tool !== 'highlighter') {
@@ -4837,7 +4901,7 @@ export default function App() {
     );
   };
 
-  // Apply Color, Thickness, or Line Style to any selected line, shape, group of lines, or selected Text Box!
+  // Apply Color, Thickness, or Line Style to any selected line, shape, group of lines, recently drawn shape, or selected Text Box!
   const applyColorToSelection = useCallback(
     (c: string) => {
       setStrokeColor(c);
@@ -4849,12 +4913,13 @@ export default function App() {
           texts: (page.texts || []).map((t) => (t.id === activeTxtId ? { ...t, color: c } : t)),
         }));
       }
-      if (activeTool !== 'lasso' && activeTool !== 'direct-node') return;
       const baseIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
           : activeNodeStrokeId
           ? [activeNodeStrokeId]
+          : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+          ? lastCreatedShapeIdsRef.current
           : [];
       if (baseIds.length === 0) return;
 
@@ -4886,12 +4951,13 @@ export default function App() {
   const applyWidthToSelection = useCallback(
     (w: number) => {
       setStrokeWidth(w);
-      if (activeTool !== 'lasso' && activeTool !== 'direct-node') return;
       const baseIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
           : activeNodeStrokeId
           ? [activeNodeStrokeId]
+          : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+          ? lastCreatedShapeIdsRef.current
           : [];
       if (baseIds.length === 0) return;
 
@@ -4919,12 +4985,13 @@ export default function App() {
       if (nextArrowEnd !== undefined) {
         setArrowEnd(nextArrowEnd);
       }
-      if (activeTool !== 'lasso' && activeTool !== 'direct-node') return;
       const baseIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
           : activeNodeStrokeId
           ? [activeNodeStrokeId]
+          : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+          ? lastCreatedShapeIdsRef.current
           : [];
       if (baseIds.length === 0) return;
 
@@ -6201,10 +6268,14 @@ export default function App() {
                       { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
                       { id: 'axes', label: '📈 Άξονες' },
                       { id: 'resistor', label: '⚡ Αντιστάτης' },
+                      { id: 'spring', label: '🌀 Ελατήριο' },
                     ].map((sp) => (
                       <button
                         key={sp.id}
-                        onClick={() => setShapePreset(sp.id as ShapePresetType)}
+                        onClick={() => {
+                          setShapePreset(sp.id as ShapePresetType);
+                          lastCreatedShapeIdsRef.current = [];
+                        }}
                         className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap cursor-pointer ${
                           shapePreset === sp.id
                             ? 'bg-[#0066ff] text-white'
@@ -7744,7 +7815,11 @@ export default function App() {
                                 />
                               );
                             }
-                            const ptsStr = st.points.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
+                            const renderPts =
+                              (st.shapeType === 'resistor' || st.shapeType === 'spring') && st.points.length >= 4
+                                ? computeResistorOrSpringPoints(st.shapeType, st.points)
+                                : st.points;
+                            const ptsStr = renderPts.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
                             return (
                               <polyline
                                 key={st.id}
