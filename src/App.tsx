@@ -609,6 +609,7 @@ export default function App() {
     initialDist: number;
     initialAngle: number;
     frameAngle?: number;
+    appliedAngle?: number;
     sideSignX?: number;
     sideSignY?: number;
     targetStrokeIds?: string[];
@@ -2343,10 +2344,15 @@ export default function App() {
           ctx.lineTo(0, rotStemTopY + 12);
           ctx.stroke();
 
-          // Semicircular Rotation Arrow Badge (replaces the old green dot!)
+          // Semicircular Rotation Arrow Badge (turns emerald when snapped to 0° / 90° / 180° / 270° / 360°)
+          const degNorm = (Math.round((angle * 180) / Math.PI) % 360 + 360) % 360;
+          const isCardinalSnap = degNorm === 0 || degNorm === 90 || degNorm === 180 || degNorm === 270;
+          const isActivelyRotating = selectionTransformRef.current?.mode === 'rotate';
+          const badgeStrokeColor = isActivelyRotating && isCardinalSnap ? '#10b981' : '#0066ff';
+
           ctx.fillStyle = '#ffffff';
-          ctx.strokeStyle = '#0066ff';
-          ctx.lineWidth = 2.0;
+          ctx.strokeStyle = badgeStrokeColor;
+          ctx.lineWidth = isActivelyRotating && isCardinalSnap ? 2.6 : 2.0;
           ctx.beginPath();
           ctx.arc(0, rotStemTopY, 12, 0, Math.PI * 2);
           ctx.fill();
@@ -2356,7 +2362,7 @@ export default function App() {
           const arcRadius = 6.2;
           const startAng = Math.PI * 0.8;
           const endAng = Math.PI * 2.15;
-          ctx.strokeStyle = '#0066ff';
+          ctx.strokeStyle = badgeStrokeColor;
           ctx.lineWidth = 2.1;
           ctx.lineCap = 'round';
           ctx.beginPath();
@@ -2368,7 +2374,7 @@ export default function App() {
           const tipY = rotStemTopY + arcRadius * Math.sin(endAng);
           const tangentAng = endAng + Math.PI / 2;
           const headLen = 4.8;
-          ctx.fillStyle = '#0066ff';
+          ctx.fillStyle = badgeStrokeColor;
           ctx.beginPath();
           ctx.moveTo(tipX + 1.2 * Math.cos(tangentAng), tipY + 1.2 * Math.sin(tangentAng));
           ctx.lineTo(
@@ -2381,6 +2387,23 @@ export default function App() {
           );
           ctx.closePath();
           ctx.fill();
+
+          // Live Degree Readout Pill while rotating (or when rotated away from 0°)
+          if (isActivelyRotating || degNorm !== 0) {
+            ctx.save();
+            ctx.translate(28, rotStemTopY);
+            ctx.rotate(-angle); // Keep text upright!
+            ctx.fillStyle = isCardinalSnap ? '#059669' : '#1b2a4a';
+            ctx.beginPath();
+            ctx.roundRect(-20, -10, 40, 20, 10);
+            ctx.fill();
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${degNorm}°`, 0, 0.5);
+            ctx.restore();
+          }
 
           // 4 Mid-Side Aspect-Ratio Stretch Handles (Top, Right, Bottom, Left — Orange #f97316 dots!)
           const localSideMidpoints = [
@@ -4658,6 +4681,8 @@ export default function App() {
               anchorY: bcy,
               initialDist: Math.max(10, distance(pt, { x: bcx, y: bcy })),
               initialAngle: Math.atan2(pt.y - bcy, pt.x - bcx),
+              frameAngle: angle,
+              appliedAngle: angle,
             };
             isDrawingRef.current = true;
             return;
@@ -5402,21 +5427,36 @@ export default function App() {
       if (selectionTransformRef.current) {
         const tf = selectionTransformRef.current;
 
-        // A. 360° Rotation around selection center
+        // A. 360° Rotation around selection center (with ±6° Magnetic Snap to exact 0° / 90° / 180° / 270° / 360°)
         if (tf.mode === 'rotate') {
-          const currAngle = Math.atan2(latestPt.y - tf.centerY, latestPt.x - tf.centerX);
-          const dAngle = currAngle - tf.initialAngle;
-          tf.initialAngle = currAngle;
+          const currPointerAngle = Math.atan2(latestPt.y - tf.centerY, latestPt.x - tf.centerX);
+          const rawDelta = currPointerAngle - tf.initialAngle;
+          const baseAngleRad = tf.frameAngle || 0;
+          const rawTotalRad = baseAngleRad + rawDelta;
+          const rawTotalDeg = (rawTotalRad * 180) / Math.PI;
+
+          // Lock to exact 0° / 90° / 180° / 270° / 360° (every multiple of 90°) when within ±6°
+          const nearest90Deg = Math.round(rawTotalDeg / 90) * 90;
+          const isSnapped90 = Math.abs(rawTotalDeg - nearest90Deg) <= 6;
+          const snappedTotalDeg = isSnapped90 ? nearest90Deg : Math.round(rawTotalDeg);
+          const snappedTotalRad = (snappedTotalDeg * Math.PI) / 180;
+
+          const prevAppliedRad = tf.appliedAngle ?? baseAngleRad;
+          const dAngle = snappedTotalRad - prevAppliedRad;
+          if (Math.abs(dAngle) < 1e-7) {
+            return;
+          }
+          tf.appliedAngle = snappedTotalRad;
           const cosA = Math.cos(dAngle);
           const sinA = Math.sin(dAngle);
 
           if (selectedImageId) {
-            const degDelta = (dAngle * 180) / Math.PI;
+            const normDeg = ((snappedTotalDeg % 360) + 360) % 360;
             updateActivePage(
               (page) => ({
                 ...page,
                 images: page.images.map((im) =>
-                  im.id === selectedImageId ? { ...im, rotation: ((im.rotation || 0) + degDelta) % 360 } : im
+                  im.id === selectedImageId ? { ...im, rotation: normDeg } : im
                 ),
               }),
               false
@@ -5429,9 +5469,12 @@ export default function App() {
               ...page,
               strokes: page.strokes.map((s) => {
                 if (!selectedStrokeIds.includes(s.id)) return s;
+                const nextRot = (s.rotation || 0) + dAngle;
+                const cleanRot =
+                  Math.abs(nextRot - snappedTotalRad) < 1e-3 ? snappedTotalRad : nextRot;
                 return {
                   ...s,
-                  rotation: (s.rotation || 0) + dAngle,
+                  rotation: cleanRot,
                   points: s.points.map((p) => {
                     const rx = p.x - tf.centerX;
                     const ry = p.y - tf.centerY;
@@ -10677,9 +10720,9 @@ export default function App() {
                                 // Normalize to (-180, 180]
                                 while (nextAngle > 180) nextAngle -= 360;
                                 while (nextAngle <= -180) nextAngle += 360;
-                                // Gentle magnetic snap within ±1.2° of cardinal/45° angles
+                                // Magnetic snap within ±5° of cardinal (0°, 90°, 180°, 270°/360°) & 45° angles
                                 for (const snapDeg of [0, 45, 90, 135, 180, -45, -90, -135, -180]) {
-                                  if (Math.abs(nextAngle - snapDeg) <= 1.2) {
+                                  if (Math.abs(nextAngle - snapDeg) <= 5) {
                                     nextAngle = snapDeg === -180 ? 180 : snapDeg;
                                     break;
                                   }
