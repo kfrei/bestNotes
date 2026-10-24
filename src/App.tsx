@@ -146,7 +146,7 @@ export default function App() {
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
-  const [shapePreset, setShapePreset] = useState<ShapePresetType>('auto');
+  const [shapePreset, setShapePreset] = useState<ShapePresetType>('sine');
   const [strokeColor, setStrokeColor] = useState<string>('#111827');
   const [colorSlots, setColorSlots] = useState<string[]>(['#111827', '#dc2626', '#2563eb']);
   const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
@@ -4928,19 +4928,24 @@ export default function App() {
               <div className="flex items-center justify-center px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto">
                 {activeTool === 'shape' && (
                   <div className="flex items-center gap-1.5">
+                    {/*
+                      NOTE (Backup / Restore Point - git commit 94339ed):
+                      Simple shapes handled automatically by Pen/Pencil Hold-to-Snap ('auto' mode) were removed from this sub-bar:
+                      - { id: 'auto', label: '✨ Auto Snap' },
+                      - { id: 'line', label: '╱ Ευθεία' },
+                      - { id: 'rectangle', label: '▭ Ορθογώνιο' },
+                      - { id: 'ellipse', label: '◯ Έλλειψη (4 Κόμβοι)' },
+                      - { id: 'triangle', label: '△ Τρίγωνο' },
+                      To restore the simple shapes to the Shapes button, uncomment/re-insert the entries above and set default shapePreset back to 'auto'.
+                    */}
                     {[
-                      { id: 'auto', label: '✨ Auto Snap' },
                       { id: 'sine', label: '〰️ Ημίτονο (2 Κόμβοι)' },
                       { id: 'cosine', label: '〰️ Συνημίτονο (2 Κόμβοι)' },
                       { id: 'parabola', label: '∪ Παραβολή (3 Κόμβοι)' },
                       { id: 'hyperbola', label: ')( Υπερβολή (3 Κόμβοι)' },
                       { id: 'arc', label: '⌒ Τόξο (3 Κόμβοι)' },
-                      { id: 'line', label: '╱ Ευθεία' },
                       { id: 'arrow', label: '➔ Διάνυσμα' },
-                      { id: 'rectangle', label: '▭ Ορθογώνιο' },
                       { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
-                      { id: 'ellipse', label: '◯ Έλλειψη (4 Κόμβοι)' },
-                      { id: 'triangle', label: '△ Τρίγωνο' },
                       { id: 'cylinder', label: '🥫 Αγωγός' },
                       { id: 'axes', label: '📈 Άξονες' },
                       { id: 'resistor', label: '⚡ Αντιστάτης' },
