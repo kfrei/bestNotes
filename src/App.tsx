@@ -329,7 +329,6 @@ export default function App() {
     return DEFAULT_COLOR_SLOTS;
   });
   const colorStripRef = useRef<HTMLDivElement | null>(null);
-  const [colorStripPage, setColorStripPage] = useState<0 | 1>(0);
   useEffect(() => {
     try {
       localStorage.setItem(COLOR_SLOTS_STORAGE_KEY, JSON.stringify(colorSlots));
@@ -8051,10 +8050,6 @@ export default function App() {
               <div className="flex items-center gap-1">
                 <div
                   ref={colorStripRef}
-                  onScroll={(e) => {
-                    const sl = e.currentTarget.scrollLeft;
-                    setColorStripPage(sl > 70 ? 1 : 0);
-                  }}
                   onWheel={(e) => {
                     const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
                     if (Math.abs(delta) > 2) {
@@ -8104,28 +8099,6 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-                <button
-                  onClick={() => {
-                    const nextPage: 0 | 1 = colorStripPage === 0 ? 1 : 0;
-                    setColorStripPage(nextPage);
-                    colorStripRef.current?.scrollTo({
-                      left: nextPage === 1 ? 152 : 0,
-                      behavior: 'smooth',
-                    });
-                  }}
-                  className="flex flex-col items-center justify-center px-1 py-0.5 rounded hover:bg-slate-200/70 text-[9px] font-bold text-slate-500 cursor-pointer leading-none"
-                  title={
-                    colorStripPage === 0
-                      ? 'Προβολή: 5 Μνήμες (Κλικ ή Scroll για τα 5 Πρόσφατα)'
-                      : 'Προβολή: 5 Πρόσφατα (Κλικ ή Scroll για τις 5 Μνήμες)'
-                  }
-                >
-                  <span>{colorStripPage === 0 ? '1/2' : '2/2'}</span>
-                  <span className="flex gap-0.5 mt-0.5">
-                    <span className={`w-1 h-1 rounded-full ${colorStripPage === 0 ? 'bg-[#0066ff]' : 'bg-slate-300'}`} />
-                    <span className={`w-1 h-1 rounded-full ${colorStripPage === 1 ? 'bg-[#0066ff]' : 'bg-slate-300'}`} />
-                  </span>
-                </button>
                 <button
                   data-popover-trigger="color"
                   onClick={() => {
@@ -8298,7 +8271,6 @@ export default function App() {
                     onClick={() => {
                       applyColorToSelection(c);
                       if (!colorSlots.slice(0, 5).includes(c)) {
-                        setColorStripPage(1);
                         colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                       }
                     }}
@@ -8318,7 +8290,6 @@ export default function App() {
                     const c = e.target.value;
                     applyColorToSelection(c);
                     if (!colorSlots.slice(0, 5).includes(c)) {
-                      setColorStripPage(1);
                       colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                     }
                   }}
