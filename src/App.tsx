@@ -6570,8 +6570,8 @@ export default function App() {
       if (showFeedbackToast) {
         showToast(
           nextFill !== 'none'
-            ? `🎨 Γέμισμα: Ενεργό (${fillTransparency}% διαφάνεια — Πλήκτρο F / Φ)`
-            : '⭕ Χωρίς Γέμισμα (Πλήκτρο F / Φ)'
+            ? `🎨 Fill (Γέμισμα: Ενεργό ${fillTransparency}% — F / Φ)`
+            : '⭕ Fill (Χωρίς Γέμισμα — F / Φ)'
         );
       }
     },
@@ -6711,52 +6711,52 @@ export default function App() {
         showToast(labelToast);
       };
 
-      // P / Π -> Μολύβι / Στυλό ('pen') — πάντα γυρνάει σε Χωρίς Γέμισμα ('none')
+      // P / Π -> Pen (Μολύβι / Στυλό) — πάντα γυρνάει σε Χωρίς Γέμισμα ('none')
       if (code === 'KeyP' || key === 'p' || key === 'π') {
         setFillStyle('none');
-        switchToTool('pen', '✏️ Μολύβι / Στυλό (Πλήκτρο P / Π)');
+        switchToTool('pen', '✏️ Pen (Μολύβι) — P / Π');
         return;
       }
 
-      // E / Ε -> Σβήστρα ('eraser')
+      // E / Ε -> Erase (Σβήστρα)
       if (code === 'KeyE' || key === 'e' || key === 'ε') {
         setEraserSubType('stroke');
-        switchToTool('eraser', '🧹 Σβήστρα Stroke (Πλήκτρο E / Ε)');
+        switchToTool('eraser', '🧹 Erase (Σβήστρα) — E / Ε');
         return;
       }
 
-      // L / Λ -> Κόκκινο Laser ('laser')
+      // L / Λ -> Laser (Κόκκινο Laser)
       if (code === 'KeyL' || key === 'l' || key === 'λ') {
-        switchToTool('laser', '🔴 Κόκκινο Laser (Πλήκτρο L / Λ)');
+        switchToTool('laser', '🔴 Laser (Κόκκινο Laser) — L / Λ');
         return;
       }
 
-      // F / Φ -> Εναλλαγή Γέμισμα <-> Ξεγέμισμα (Fill Toggle)
+      // F / Φ -> Fill (Εναλλαγή Γέμισμα <-> Ξεγέμισμα)
       if (code === 'KeyF' || key === 'f' || key === 'φ') {
         e.preventDefault();
         toggleFillStyleToSelection(true);
         return;
       }
 
-      // S / Σ / ς -> Λάσο Επιλογής ('lasso')
+      // S / Σ / ς -> Select (Λάσο)
       if (code === 'KeyS' || key === 's' || key === 'σ' || key === 'ς') {
-        switchToTool('lasso', '🪢 Επιλογή Λάσο (Πλήκτρο S / Σ)');
+        switchToTool('lasso', '🪢 Select (Λάσο) — S / Σ');
         return;
       }
 
-      // H / Η -> Υπογραμμιστής ('highlighter')
+      // H / Η -> Highlight (Υπογραμμιστής)
       if (code === 'KeyH' || key === 'h' || key === 'η') {
-        switchToTool('highlighter', '🖍️ Υπογραμμιστής (Πλήκτρο H / Η)');
+        switchToTool('highlighter', '🖍️ Highlight (Υπογραμμιστής) — H / Η');
         return;
       }
 
-      // T / Τ -> Κείμενο ('text')
+      // T / Τ -> Text (Κείμενο)
       if (code === 'KeyT' || key === 't' || key === 'τ') {
-        switchToTool('text', '🔤 Κείμενο (Πλήκτρο T / Τ)');
+        switchToTool('text', '🔤 Text (Κείμενο) — T / Τ');
         return;
       }
 
-      // N / Ν -> Κόμβοι Bezier ('direct-node')
+      // N / Ν -> Nodes (Κόμβοι)
       if (code === 'KeyN' || key === 'n' || key === 'ν') {
         e.preventDefault();
         setActiveTool('direct-node');
@@ -6767,7 +6767,7 @@ export default function App() {
         setSelectedTextId(null);
         setEditingTextId(null);
         setImageCropMode('none');
-        showToast('✒️ Κόμβοι Bezier (Πλήκτρο N / Ν)');
+        showToast('✒️ Nodes (Κόμβοι) — N / Ν');
         return;
       }
     };
@@ -8464,15 +8464,15 @@ export default function App() {
             {/* Center: Goodnotes 6 Iconic Pill Toolbar */}
             <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-xs border border-slate-200/90">
               {[
-                { id: 'pen', title: 'Μολύβι / Στυλό (Pen) — Συντόμευση: P / Π', icon: Pen },
-                { id: 'eraser', title: 'Σβήστρα (Eraser) — Συντόμευση: E / Ε', icon: Eraser },
-                { id: 'highlighter', title: 'Υπογραμμιστής (Highlighter) — Συντόμευση: H / Η', icon: Highlighter },
-                { id: 'shape', title: 'Σχήματα & Φυσική (Shapes)', icon: Shapes },
-                { id: 'text', title: 'Προσθήκη Κειμένου (Text) — Συντόμευση: T / Τ', icon: Type },
-                { id: 'lasso', title: 'Επιλογή Λάσο (Select & Transform) — Συντόμευση: S / Σ', icon: Lasso },
-                { id: 'direct-node', title: 'Κόμβοι Καμπύλης & Σχημάτων (Nodes) — Συντόμευση: N / Ν', icon: BezierNodesIcon },
-                { id: 'tape', title: 'Ταινία Απόκρυψης (Tape)', icon: Bandage },
-                { id: 'laser', title: 'Κόκκινο Laser Pointer — Συντόμευση: L / Λ', icon: Radio },
+                { id: 'pen', title: 'Pen (Μολύβι / Στυλό) — P / Π', icon: Pen },
+                { id: 'eraser', title: 'Erase (Σβήστρα) — E / Ε', icon: Eraser },
+                { id: 'highlighter', title: 'Highlight (Υπογραμμιστής) — H / Η', icon: Highlighter },
+                { id: 'shape', title: 'Shapes (Σχήματα & Φυσική)', icon: Shapes },
+                { id: 'text', title: 'Text (Κείμενο) — T / Τ', icon: Type },
+                { id: 'lasso', title: 'Select (Επιλογή Λάσο) — S / Σ', icon: Lasso },
+                { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', icon: BezierNodesIcon },
+                { id: 'tape', title: 'Tape (Ταινία Απόκρυψης)', icon: Bandage },
+                { id: 'laser', title: 'Laser (Κόκκινο Laser) — L / Λ', icon: Radio },
               ].map((tool) => {
                 const Icon = tool.icon;
                 const isActive = activeTool === tool.id;
@@ -11434,23 +11434,24 @@ export default function App() {
               </label>
             </div>
 
-            {/* Keyboard Shortcuts Quick Reference (Greek & English) */}
+            {/* Keyboard Shortcuts Quick Reference (English first -> Greek, for instant mnemonic connection with key letter) */}
             <div className="pt-2 border-t border-slate-100">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold text-[#1b2a4a]">Συντομεύσεις Πληκτρολογίου (GR / EN):</span>
+                <span className="text-xs font-bold text-[#1b2a4a]">Συντομεύσεις Πληκτρολογίου (EN / GR):</span>
                 <span className="text-[10px] text-slate-400">SHORTCUTS.md</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                 {[
-                  { keys: 'P / Π', label: 'Μολύβι (Pen)', icon: <Pen className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'E / Ε', label: 'Σβήστρα (Erase)', icon: <Eraser className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'L / Λ', label: 'Κόκκινο Laser', icon: <Radio className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'F / Φ', label: 'Γέμισμα ↔ Ξεγέμισμα', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'S / Σ', label: 'Επιλογή Λάσο', icon: <Lasso className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'N / Ν', label: 'Κόμβοι (Nodes)', icon: <BezierNodesIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'H / Η', label: 'Υπογραμμιστής', icon: <Highlighter className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'T / Τ', label: 'Κείμενο (Text)', icon: <Type className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'Esc', label: 'Κλείσιμο Παραθύρων', icon: <X className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'P / Π', label: 'Pen (Μολύβι)', icon: <Pen className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'E / Ε', label: 'Erase (Σβήστρα)', icon: <Eraser className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'L / Λ', label: 'Laser (Κόκκινο Laser)', icon: <Radio className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'F / Φ', label: 'Fill (Γέμισμα)', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'N / Ν', label: 'Nodes (Κόμβοι)', icon: <BezierNodesIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'H / Η', label: 'Highlight (Υπογραμμιστής)', icon: <Highlighter className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'T / Τ', label: 'Text (Κείμενο)', icon: <Type className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'G / Γ', label: 'Group (Ομαδοποίηση)', icon: <Layers className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'Esc', label: 'Escape (Κλείσιμο)', icon: <X className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                 ].map((sc) => (
                   <div
                     key={sc.keys}
