@@ -3498,14 +3498,34 @@ export default function App() {
     const pts = activeSnap ? activeSnap.points : currentStrokePtsRef.current;
     if (pts.length === 0) return;
 
-    // Show shape fill when shape is completed/snapped OR when actively drawing a preset shape in the Shape tool
+    // Show shape fill when shape is completed/snapped OR when actively drawing a preset shape in the Shape tool.
+    // In Pen/Pencil mode, if a shape is formed via Hold-to-Snap (snappedCurrentStrokeRef.current), auto-fill it with color while Pen stays in 'none'!
     const isCompletedShape = Boolean(activeSnap);
+    const snapType = activeSnap?.shapeType;
+    const isFillableSnapShape =
+      isCompletedShape &&
+      snapType !== 'line' &&
+      snapType !== 'arrow' &&
+      snapType !== 'double-arrow' &&
+      snapType !== 'resistor' &&
+      snapType !== 'spring' &&
+      snapType !== 'sine' &&
+      snapType !== 'cosine' &&
+      snapType !== 'parabola' &&
+      snapType !== 'hyperbola' &&
+      snapType !== 'arc';
+    const liveFillStyle: FillStyleType =
+      isFillableSnapShape && Boolean(snappedCurrentStrokeRef.current) && (activeTool === 'pen' || activeTool === 'pencil')
+        ? 'solid'
+        : isFillableSnapShape
+        ? fillStyle
+        : 'none';
     const previewStroke: StrokeObject = {
       id: 'live',
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       color: strokeColor,
-      fillColor: isCompletedShape && fillStyle !== 'none' ? strokeColor : undefined,
-      fillStyle: isCompletedShape ? fillStyle : 'none',
+      fillColor: liveFillStyle !== 'none' ? strokeColor : undefined,
+      fillStyle: liveFillStyle,
       fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
@@ -5600,15 +5620,27 @@ export default function App() {
       shapeType !== 'resistor' &&
       shapeType !== 'spring' &&
       shapeType !== 'sine' &&
-      shapeType !== 'cosine';
+      shapeType !== 'cosine' &&
+      shapeType !== 'parabola' &&
+      shapeType !== 'hyperbola' &&
+      shapeType !== 'arc';
+
+    // When drawing with Pen ('pen' or 'pencil'), if the stroke snapped into a shape by holding the pencil (isShape === true),
+    // automatically fill that shape with color while keeping the Pen tool itself in 'none' (unfilled)!
+    const commitFillStyle: FillStyleType =
+      canAutoFillStroke && isShape && (activeTool === 'pen' || activeTool === 'pencil')
+        ? 'solid'
+        : canAutoFillStroke
+        ? fillStyle
+        : 'none';
 
     const newStroke: StrokeObject = {
       id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       penType: penSubType,
       color: strokeColor,
-      fillColor: canAutoFillStroke && fillStyle !== 'none' ? strokeColor : undefined,
-      fillStyle: canAutoFillStroke ? fillStyle : 'none',
+      fillColor: commitFillStyle !== 'none' ? strokeColor : undefined,
+      fillStyle: commitFillStyle,
       fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
@@ -6052,7 +6084,8 @@ export default function App() {
         ? selectedStrokeIds
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
-        : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+        : (activeTool === 'shape' || activeTool === 'pen' || activeTool === 'pencil') &&
+          lastCreatedShapeIdsRef.current.length > 0
         ? lastCreatedShapeIdsRef.current
         : [];
     const baseSet = new Set(baseIds);
@@ -6150,8 +6183,9 @@ export default function App() {
         showToast(labelToast);
       };
 
-      // P / Π -> Μολύβι / Στυλό ('pen')
+      // P / Π -> Μολύβι / Στυλό ('pen') — πάντα γυρνάει σε Χωρίς Γέμισμα ('none')
       if (code === 'KeyP' || key === 'p' || key === 'π') {
+        setFillStyle('none');
         switchToTool('pen', '✏️ Μολύβι / Στυλό (Πλήκτρο P / Π)');
         return;
       }
@@ -7852,6 +7886,9 @@ export default function App() {
                   <button
                     key={tool.id}
                     onClick={() => {
+                      if (tool.id === 'pen') {
+                        setFillStyle('none');
+                      }
                       if (activeTool === tool.id && tool.id !== 'eraser' && tool.id !== 'text' && tool.id !== 'shape') {
                         setShowToolSubBar((s) => !s);
                       } else {
