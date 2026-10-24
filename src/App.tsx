@@ -4182,7 +4182,7 @@ export default function App() {
       return eraserSubType === 'precision' ? 6 : 10;
     }
     if (eraserSize === 'medium') {
-      return eraserSubType === 'precision' ? 18 : 26;
+      return eraserSubType === 'precision' ? 13 : 18;
     }
     // 'large' — significantly larger eraser radius
     return eraserSubType === 'precision' ? 46 : 60;
