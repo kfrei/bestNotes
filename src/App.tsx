@@ -10,7 +10,6 @@ import {
   Layers,
   Undo2,
   Redo2,
-  FolderOpen,
   Plus,
   Cloud,
   Lock,
@@ -5883,6 +5882,16 @@ export default function App() {
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const lowerName = file.name.toLowerCase();
+    if (lowerName.endsWith('.goodnotes') || lowerName.endsWith('.zip')) {
+      void handleGoodnotesFileChange(e);
+      return;
+    }
+    if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
+      pdfImportModeRef.current = 'insert-pages';
+      void handlePdfOrDocFileChange(e);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -6014,7 +6023,13 @@ export default function App() {
         className="hidden"
         onChange={handleGoodnotesFileChange}
       />
-      <input ref={fileInputImageRef} type="file" accept="image/*" className="hidden" onChange={handleImageFileChange} />
+      <input
+        ref={fileInputImageRef}
+        type="file"
+        accept="image/*,.pdf,application/pdf,.goodnotes,.zip"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
       <input
         ref={fileInputPdfOrDocRef}
         type="file"
@@ -6033,7 +6048,7 @@ export default function App() {
         style={{ touchAction: 'manipulation' }}
         className="sticky top-0 z-40 flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none"
       >
-        {/* Left Navigation Icons (Landing Page Home, Back to Library, Page Thumbnails Grid, Import .goodnotes, Open PDF/JPG/PNG) */}
+        {/* Left Navigation Icons (Landing Page Home, Back to Library, Page Thumbnails Grid) */}
         <div className="flex items-center gap-1 pb-1.5">
           <button
             onClick={() => {
@@ -6048,7 +6063,7 @@ export default function App() {
           <button
             onClick={() => setViewMode(viewMode === 'library' ? 'editor' : 'library')}
             className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
-            title="Πίσω στους Φακέλους (Documents)"
+            title="Πίσω στις Σημειώσεις (Βιβλιοθήκη)"
           >
             <ChevronLeft className="w-5 h-5 text-sky-300" />
           </button>
@@ -6065,27 +6080,6 @@ export default function App() {
               <span className="hidden md:inline">Σελίδες ({activeNotebook.pages.length})</span>
             </button>
           )}
-
-          <button
-            onClick={() => fileInputGoodnotesRef.current?.click()}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/30 text-xs font-medium text-sky-200 transition cursor-pointer"
-            title="Άνοιγμα αρχείου .goodnotes"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">.goodnotes</span>
-          </button>
-
-          <button
-            onClick={() => {
-              pdfImportModeRef.current = viewMode === 'library' ? 'new-notebook' : 'insert-pages';
-              fileInputPdfOrDocRef.current?.click();
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-xs font-semibold text-emerald-200 transition cursor-pointer"
-            title="Άνοιγμα PDF, JPG ή PNG για γραφή απευθείας πάνω του!"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">+ PDF / JPG</span>
-          </button>
         </div>
 
         {/* Center: Authentic Goodnotes 6 / Chrome-Style Elastic Document Tabs */}
@@ -6332,15 +6326,15 @@ export default function App() {
         </div>
       </header>
 
-      {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTEBOOKS GRID) */}
+      {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTES GRID) */}
       {viewMode === 'library' ? (
         <div className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]">
           <div className="max-w-5xl mx-auto">
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-[#1b2a4a]">Έγγραφα (Documents)</h1>
+                <h1 className="text-2xl font-bold text-[#1b2a4a]">Σημειώσεις (Notes)</h1>
                 <p className="text-sm text-slate-500">
-                  Τα αρχεία σου `.goodnotes`, PDF, JPG/PNG + Νέα Τετράδια BestNotes
+                  Οι σημειώσεις σου, αρχεία `.goodnotes`, PDF και εικόνες (με ζωντανή μικρογραφία 1ης σελίδας)
                 </p>
               </div>
               <div className="flex gap-2.5 flex-wrap">
@@ -6365,7 +6359,7 @@ export default function App() {
                   onClick={() => {
                     const newNb: Notebook = {
                       id: `nb-${Date.now()}`,
-                      title: `Νέο Τετράδιο ${notebooks.length + 1}`,
+                      title: `Νέα Σημείωση ${notebooks.length + 1}`,
                       folder: 'Φυσική',
                       coverColor: '#0284c7',
                       updatedAt: new Date().toISOString(),
@@ -6399,46 +6393,201 @@ export default function App() {
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Νέο Τετράδιο</span>
+                  <span>Νέα Σημείωση</span>
                 </button>
               </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-              {notebooks.map((nb) => (
-                <div
-                  key={nb.id}
-                  onClick={() => {
-                    if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
-                    setActiveNotebookId(nb.id);
-                    setActivePageIndex(0);
-                    activeDrawingPageIndexRef.current = 0;
-                    panRef.current = { x: 0, y: 0 };
-                    setPan({ x: 0, y: 0 });
-                    setViewMode('editor');
-                  }}
-                  className="group cursor-pointer flex flex-col items-center"
-                >
+              {notebooks.map((nb) => {
+                const p0 = nb.pages[0];
+                const pW = p0?.orientation === 'landscape' ? 1260 : 920;
+                const pH = p0?.orientation === 'landscape' ? 920 : 1260;
+                return (
                   <div
-                    className="w-44 h-56 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden flex flex-col justify-between p-4 text-white"
-                    style={{ backgroundColor: nb.coverColor }}
+                    key={nb.id}
+                    onClick={() => {
+                      if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
+                      setActiveNotebookId(nb.id);
+                      setActivePageIndex(0);
+                      activeDrawingPageIndexRef.current = 0;
+                      panRef.current = { x: 0, y: 0 };
+                      setPan({ x: 0, y: 0 });
+                      setViewMode('editor');
+                    }}
+                    className="group cursor-pointer flex flex-col items-center"
                   >
-                    <div className="absolute left-0 top-0 bottom-0 w-3.5 bg-black/20" />
-                    <div className="pl-2">
-                      <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-white/20 font-semibold">
-                        {nb.sourceFormat || '.bestnotes'}
-                      </span>
+                    <div
+                      className="w-48 h-64 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border border-slate-300/90 flex flex-col justify-between"
+                      style={{
+                        backgroundColor: p0?.template === 'dark-grid' ? '#0f172a' : '#fffdf7',
+                        backgroundImage:
+                          p0?.template === 'grid' || !p0?.template
+                            ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
+                            : p0?.template === 'ruled'
+                            ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
+                            : undefined,
+                        backgroundSize: '14px 14px',
+                      }}
+                    >
+                      {/* Colored Spine on Left */}
+                      <div
+                        className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
+                        style={{ backgroundColor: nb.coverColor }}
+                      />
+
+                      {/* 1st Page PDF / Image Background if present */}
+                      {p0?.backgroundDataUrl && (
+                        <img
+                          src={p0.backgroundDataUrl}
+                          alt={nb.title}
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none pl-3"
+                        />
+                      )}
+
+                      {/* 1st Page Live Vector SVG Miniature Thumbnail */}
+                      {p0 && (
+                        <svg
+                          viewBox={`0 0 ${pW} ${pH}`}
+                          preserveAspectRatio="xMidYMid meet"
+                          className="absolute inset-0 w-full h-full pointer-events-none pl-3"
+                        >
+                          {(p0.images || []).map((im) => (
+                            <image
+                              key={im.id}
+                              href={im.dataUrl}
+                              x={im.x}
+                              y={im.y}
+                              width={im.width}
+                              height={im.height}
+                            />
+                          ))}
+                          {(p0.strokes || []).map((st) => {
+                            if (!st.points || st.points.length === 0) return null;
+                            if (st.points.length === 1) {
+                              return (
+                                <circle
+                                  key={st.id}
+                                  cx={st.points[0].x}
+                                  cy={st.points[0].y}
+                                  r={Math.max(4, st.width * 1.5)}
+                                  fill={st.color}
+                                />
+                              );
+                            }
+                            const renderPts =
+                              (st.shapeType === 'resistor' || st.shapeType === 'spring') && st.points.length >= 4
+                                ? computeResistorOrSpringPoints(st.shapeType, st.points)
+                                : st.points;
+                            const ptsStr = renderPts.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
+                            return (
+                              <polyline
+                                key={st.id}
+                                fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
+                                fillOpacity={
+                                  st.fillTransparency === 20
+                                    ? 0.8
+                                    : st.fillTransparency === 50
+                                    ? 0.5
+                                    : 0.11
+                                }
+                                stroke={st.color}
+                                strokeWidth={Math.max(3.5, st.width * 1.8)}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                opacity={st.opacity ?? 1}
+                                points={ptsStr}
+                              />
+                            );
+                          })}
+                          {(p0.texts || []).map((tx) => (
+                            <text
+                              key={tx.id}
+                              x={tx.x}
+                              y={tx.y + (tx.fontSize || 20)}
+                              fill={tx.color}
+                              fontSize={(tx.fontSize || 20) * 1.2}
+                              fontWeight={tx.bold ? 'bold' : 'normal'}
+                            >
+                              {tx.text}
+                            </text>
+                          ))}
+                        </svg>
+                      )}
+
+                      {/* Top Row: Format Badge + Delete Note Button */}
+                      <div className="relative z-20 flex items-center justify-between pl-4 pr-2 pt-2">
+                        <span
+                          className="text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs"
+                          style={{ backgroundColor: nb.coverColor }}
+                        >
+                          {nb.sourceFormat || '.bestnotes'}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const remaining = notebooks.filter((n) => n.id !== nb.id);
+                            if (remaining.length === 0) {
+                              const fallbackNb: Notebook = {
+                                id: `nb-${Date.now()}`,
+                                title: 'Νέα Σημείωση 1',
+                                folder: 'Γενικά',
+                                coverColor: '#0284c7',
+                                updatedAt: new Date().toISOString(),
+                                sourceFormat: '.bestnotes',
+                                pages: [
+                                  {
+                                    id: `p-${Date.now()}`,
+                                    title: 'Σελίδα 1',
+                                    template: 'grid',
+                                    orientation: 'portrait',
+                                    layers: [
+                                      { id: 'layer-1', name: 'Κύριο Επίπεδο', visible: true, locked: false, opacity: 1 },
+                                    ],
+                                    strokes: [],
+                                    texts: [],
+                                    images: [],
+                                    tapes: [],
+                                  },
+                                ],
+                              };
+                              setNotebooks([fallbackNb]);
+                              setOpenNotebookIds([fallbackNb.id]);
+                              setActiveNotebookId(fallbackNb.id);
+                              setActivePageIndex(0);
+                            } else {
+                              setNotebooks(remaining);
+                              const nextOpen = openNotebookIds.filter((id) => id !== nb.id);
+                              const finalOpen = nextOpen.length > 0 ? nextOpen : [remaining[0].id];
+                              setOpenNotebookIds(finalOpen);
+                              if (activeNotebookId === nb.id) {
+                                setActiveNotebookId(finalOpen[0]);
+                                setActivePageIndex(0);
+                              }
+                            }
+                            showToast(`🗑️ Διαγράφηκε η σημείωση "${nb.title}".`);
+                          }}
+                          className="p-1.5 rounded-lg bg-white/90 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                          title={`Διαγραφή σημείωσης "${nb.title}"`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Bottom Info Strip */}
+                      <div className="relative z-20 pl-4 pr-2.5 py-2 bg-white/92 backdrop-blur-xs border-t border-slate-200/80 text-slate-900">
+                        <p className="text-xs font-bold truncate">{nb.title}</p>
+                        <p className="text-[10px] text-slate-500">
+                          {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • Προεπισκόπηση 1ης σελ.
+                        </p>
+                      </div>
                     </div>
-                    <div className="pl-2 bg-white/95 text-slate-900 p-2.5 rounded-lg shadow-xs">
-                      <p className="text-xs font-bold line-clamp-2">{nb.title}</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">{nb.pages.length} σελίδες</p>
-                    </div>
+                    <span className="mt-2 text-xs font-semibold text-slate-800 text-center max-w-[180px] truncate">
+                      {nb.title}
+                    </span>
                   </div>
-                  <span className="mt-2 text-xs font-semibold text-slate-800 text-center max-w-[170px] truncate">
-                    {nb.title}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -6547,11 +6696,11 @@ export default function App() {
 
               <div className="h-5 w-px bg-slate-200 mx-0.5" />
 
-              {/* Upload Photo from Device + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
+              {/* Upload Photo / PDF / .goodnotes from Device + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
               <button
                 onClick={() => fileInputImageRef.current?.click()}
                 className="p-2 rounded-full text-sky-600 hover:bg-sky-50 transition cursor-pointer"
-                title="Εισαγωγή Φωτογραφίας από το iPad"
+                title="Εισαγωγή Εικόνας, PDF ή .goodnotes"
               >
                 <Upload className="w-4 h-4" />
               </button>
