@@ -5660,7 +5660,7 @@ export default function App() {
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
   return (
-    <div className="fixed inset-0 flex flex-col w-full h-[100dvh] max-h-[100dvh] bg-[#e4e7ec] text-slate-800 overflow-clip overscroll-none select-none">
+    <div className="fixed inset-0 flex flex-col w-full h-[100dvh] max-h-[100dvh] bg-[#f1f3f6] text-slate-800 overflow-clip overscroll-none select-none">
       <input
         ref={fileInputGoodnotesRef}
         type="file"
@@ -7177,7 +7177,7 @@ export default function App() {
              ========================================================================= */}
           <div
             ref={workspaceRef}
-            className="relative flex-1 overflow-hidden bg-[#dfe3ea] flex justify-center items-start py-6 px-8 touch-none"
+            className="relative flex-1 overflow-hidden bg-[#f1f3f6] flex justify-center items-start py-6 px-8 touch-none"
           >
             {statusBanner && (
               <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1b2a4a] text-white text-xs font-medium shadow-xl">
@@ -7565,11 +7565,7 @@ export default function App() {
                   <div
                     key={pageObj.id}
                     style={{ width: pW, height: pH }}
-                    className={`relative shadow-lg bg-white border transition-shadow shrink-0 ${
-                      isCurrentActive
-                        ? 'border-[#0066ff] ring-2 ring-[#0066ff]/20'
-                        : 'border-slate-300/90'
-                    }`}
+                    className="relative shadow-md bg-white border border-slate-200/80 transition-shadow shrink-0"
                   >
                     {/* Word/Goodnotes Page Separator Header Badge + Quick Insert/Delete Page Actions */}
                     <div className="absolute -top-7 left-0 right-0 flex items-center justify-between px-1 select-none z-20">
