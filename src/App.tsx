@@ -8250,7 +8250,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Color & Line Style Popover */}
+          {/* Color Popover */}
           {showColorPopover && (
             <div
               data-ui-panel="true"
@@ -8259,7 +8259,7 @@ export default function App() {
               className="fixed right-6 top-24 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 flex flex-col gap-2.5 w-64"
             >
               <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                <span>Παλέτα Χρωμάτων & Γραμμής</span>
+                <span>Παλέτα Χρωμάτων</span>
                 <button onClick={() => setShowColorPopover(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
                   <X className="w-4 h-4" />
                 </button>
@@ -8282,7 +8282,7 @@ export default function App() {
                 ))}
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                <span className="text-[11px] font-semibold text-slate-600">Ελεύθερο Χρώμα:</span>
+                <span className="text-[11px] font-semibold text-slate-600">Επιλογή Νέου Χρώματος:</span>
                 <input
                   type="color"
                   value={strokeColor}
@@ -8295,32 +8295,6 @@ export default function App() {
                   }}
                   className="w-8 h-7 rounded cursor-pointer border border-slate-200"
                 />
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                {/*
-                  NOTE (Backup / Restore Point):
-                  'dotted' ('• • •') option was removed per user request ("βγαλε την επιλογη dotted και αν τη χρειαστουμε θα τη βαλουμε μετα").
-                  To restore 'dotted', change the array below back to: (['solid', 'dashed', 'dotted'] as LineStyleType[])
-                */}
-                {(['solid', 'dashed'] as LineStyleType[]).map((ls) => (
-                  <button
-                    key={ls}
-                    onClick={() => applyLineStyleToSelection(ls)}
-                    className={`px-3 py-1 rounded-lg font-semibold cursor-pointer ${
-                      lineStyle === ls ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {ls === 'solid' ? '─── Συνεχής' : '- - - Διακεκομμένη'}
-                  </button>
-                ))}
-                <button
-                  onClick={() => applyLineStyleToSelection(lineStyle, !arrowEnd)}
-                  className={`px-2.5 py-1 rounded-lg font-semibold cursor-pointer ${
-                    arrowEnd ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  ➔ Βέλος
-                </button>
               </div>
             </div>
           )}
