@@ -65,6 +65,7 @@ export interface StrokeObject {
   groupId?: string;
   isShape?: boolean;
   shapeType?: string;
+  keyNodeIndices?: number[]; // Sparse key-node indices (2 endpoints + distinct peaks/vertices) for freehand Direct-Node editing
   rotation?: number; // Rotation angle in radians for oriented selection bounding box
   zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
 }

@@ -1213,3 +1213,300 @@ export function solveMathExpressionOffline(input: string): { latex: string; solu
     solution: clean,
   };
 }
+
+/**
+ * Extracts a sparse, meaningful set of Key Node indices for a freehand stroke:
+ * - Always includes the 2 endpoints (index 0 and index n - 1)
+ * - Places interior nodes strictly at distinct peaks, valleys, and sharp turning corners ("διακριτές κορυφές")
+ *   (e.g. ~5 interior peaks -> ~7 total nodes for a multi-peak wave, and capped at 8-10 nodes even for complex lines).
+ */
+export function computeFreehandKeyNodeIndices(pts: BezierPoint[]): number[] {
+  const n = pts.length;
+  if (n === 0) return [];
+  if (n === 1) return [0];
+  if (n === 2) return [0, 1];
+  if (n <= 5) return pts.map((_, idx) => idx);
+
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  const cumLen = new Float64Array(n);
+  cumLen[0] = 0;
+
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+    if (i > 0) {
+      cumLen[i] = cumLen[i - 1] + distance(pts[i - 1], p);
+    }
+  }
+
+  const totalLen = cumLen[n - 1];
+  const diag = Math.hypot(maxX - minX, maxY - minY);
+  if (totalLen < 24 || diag < 16) {
+    return [0, Math.floor((n - 1) / 2), n - 1];
+  }
+
+  // Lightly smooth a copy of points (3 passes) so 1-2px hand tremor never triggers false peaks
+  let sm = pts.map((p) => ({ x: p.x, y: p.y }));
+  for (let pass = 0; pass < 3; pass++) {
+    const next = sm.map((p) => ({ ...p }));
+    for (let i = 1; i < n - 1; i++) {
+      next[i].x = 0.25 * sm[i - 1].x + 0.5 * sm[i].x + 0.25 * sm[i + 1].x;
+      next[i].y = 0.25 * sm[i - 1].y + 0.5 * sm[i].y + 0.25 * sm[i + 1].y;
+    }
+    sm = next;
+  }
+
+  // 1. Compute local turning angle (0..180 deg) at each interior point over an arc-length window
+  const lookDist = Math.max(10, Math.min(28, diag * 0.09, totalLen * 0.065));
+  const turnDeg = new Float64Array(n);
+  for (let i = 1; i < n - 1; i++) {
+    let prev = i - 1;
+    while (prev > 0 && cumLen[i] - cumLen[prev] < lookDist) prev--;
+    let next = i + 1;
+    while (next < n - 1 && cumLen[next] - cumLen[i] < lookDist) next++;
+
+    const v1x = sm[i].x - sm[prev].x;
+    const v1y = sm[i].y - sm[prev].y;
+    const v2x = sm[next].x - sm[i].x;
+    const v2y = sm[next].y - sm[i].y;
+    const m1 = Math.hypot(v1x, v1y);
+    const m2 = Math.hypot(v2x, v2y);
+    if (m1 > 1e-3 && m2 > 1e-3) {
+      const cosA = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (m1 * m2)));
+      turnDeg[i] = (Math.acos(cosA) * 180) / Math.PI;
+    }
+  }
+
+  // 2. Hysteresis 1D Local Extrema detector (finds true crests & troughs without slope noise)
+  const findHysteresisExtrema = (coord: 'x' | 'y', prom: number): { idx: number; prominence: number }[] => {
+    const out: { idx: number; prominence: number }[] = [];
+    let minVal = sm[0][coord];
+    let maxVal = sm[0][coord];
+    let minIdx = 0;
+    let maxIdx = 0;
+    let mode: 'max' | 'min' | 'both' = 'both';
+
+    for (let i = 1; i < n; i++) {
+      const v = sm[i][coord];
+      if (mode === 'both') {
+        if (v > maxVal) {
+          maxVal = v;
+          maxIdx = i;
+        }
+        if (v < minVal) {
+          minVal = v;
+          minIdx = i;
+        }
+        if (maxVal - v >= prom && maxIdx > 0) {
+          out.push({ idx: maxIdx, prominence: maxVal - minVal });
+          minVal = v;
+          minIdx = i;
+          mode = 'min';
+        } else if (v - minVal >= prom && minIdx > 0) {
+          out.push({ idx: minIdx, prominence: maxVal - minVal });
+          maxVal = v;
+          maxIdx = i;
+          mode = 'max';
+        }
+      } else if (mode === 'max') {
+        if (v > maxVal) {
+          maxVal = v;
+          maxIdx = i;
+        } else if (maxVal - v >= prom) {
+          out.push({ idx: maxIdx, prominence: maxVal - minVal });
+          minVal = v;
+          minIdx = i;
+          mode = 'min';
+        }
+      } else {
+        if (v < minVal) {
+          minVal = v;
+          minIdx = i;
+        } else if (v - minVal >= prom) {
+          out.push({ idx: minIdx, prominence: maxVal - minVal });
+          maxVal = v;
+          maxIdx = i;
+          mode = 'max';
+        }
+      }
+    }
+    return out;
+  };
+
+  const prominenceThreshold = Math.max(5.5, diag * 0.042);
+  const yExtrema = findHysteresisExtrema('y', prominenceThreshold);
+  const xExtrema = findHysteresisExtrema('x', prominenceThreshold * 1.15);
+
+  const candidateMap = new Map<number, number>(); // idx -> score
+  const minEndArc = Math.max(12, Math.min(30, totalLen * 0.055));
+
+  const addCandidate = (rawIdx: number, bonusScore: number) => {
+    // Refine within a small local neighborhood to sit right on the sharpest apex of the peak
+    let bestIdx = rawIdx;
+    let bestTurn = turnDeg[rawIdx];
+    for (let j = Math.max(1, rawIdx - 4); j <= Math.min(n - 2, rawIdx + 4); j++) {
+      if (Math.abs(cumLen[j] - cumLen[rawIdx]) <= lookDist * 0.65 && turnDeg[j] > bestTurn * 1.05) {
+        bestTurn = turnDeg[j];
+        bestIdx = j;
+      }
+    }
+    if (cumLen[bestIdx] < minEndArc || totalLen - cumLen[bestIdx] < minEndArc) return;
+    const score = bestTurn + bonusScore;
+    const prevScore = candidateMap.get(bestIdx) ?? -1;
+    if (score > prevScore) {
+      candidateMap.set(bestIdx, score);
+    }
+  };
+
+  for (const ex of yExtrema) addCandidate(ex.idx, 45 + Math.min(40, ex.prominence * 0.4));
+  for (const ex of xExtrema) addCandidate(ex.idx, 35 + Math.min(35, ex.prominence * 0.35));
+
+  // Also include sharp local turning-angle peaks (e.g., diagonal corners that don't reverse X or Y)
+  for (let i = 2; i < n - 2; i++) {
+    if (turnDeg[i] >= 36 && turnDeg[i] >= turnDeg[i - 1] && turnDeg[i] >= turnDeg[i + 1]) {
+      addCandidate(i, 15);
+    }
+  }
+
+  // 3. Sort candidates along the stroke and merge any candidates that are too close to each other
+  const sortedCandidates = Array.from(candidateMap.entries())
+    .map(([idx, score]) => ({ idx, score }))
+    .sort((a, b) => a.idx - b.idx);
+
+  const minNodeArc = Math.max(16, Math.min(40, totalLen * 0.068, diag * 0.095));
+  const minNodeEuclid = Math.max(12, diag * 0.065);
+  const merged: { idx: number; score: number }[] = [];
+
+  for (const cand of sortedCandidates) {
+    if (merged.length === 0) {
+      merged.push(cand);
+      continue;
+    }
+    const prev = merged[merged.length - 1];
+    const arcDiff = cumLen[cand.idx] - cumLen[prev.idx];
+    const euclidDiff = distance(pts[cand.idx], pts[prev.idx]);
+    if (arcDiff < minNodeArc || euclidDiff < minNodeEuclid) {
+      if (cand.score > prev.score) {
+        merged[merged.length - 1] = cand;
+      }
+    } else {
+      merged.push(cand);
+    }
+  }
+
+  // 4. Cap maximum interior nodes so even very complex lines have a clean, small set of nodes (e.g. <= 7 interior + 2 ends = <= 9 nodes)
+  const maxInterior = totalLen > diag * 3.2 ? 7 : 6;
+  let finalInteriorIndices: number[];
+  if (merged.length > maxInterior) {
+    finalInteriorIndices = [...merged]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxInterior)
+      .map((c) => c.idx)
+      .sort((a, b) => a - b);
+  } else {
+    finalInteriorIndices = merged.map((c) => c.idx);
+  }
+
+  // 5. Fallback for smooth single-arch or gentle curves that had 0 or 1 extrema:
+  //    Add the point(s) of maximum perpendicular deviation from the chord so the user still has 1-2 middle nodes to bend the line!
+  if (finalInteriorIndices.length === 0) {
+    let bestIdx = Math.floor((n - 1) / 2);
+    let maxDev = -1;
+    for (let i = 1; i < n - 1; i++) {
+      const d = perpendicularDistance(pts[i], pts[0], pts[n - 1]);
+      if (d > maxDev) {
+        maxDev = d;
+        bestIdx = i;
+      }
+    }
+    if (totalLen >= 80 && n >= 7) {
+      const q1 = Math.max(1, Math.floor((n - 1) / 3));
+      const q2 = Math.min(n - 2, Math.floor(((n - 1) * 2) / 3));
+      finalInteriorIndices = q1 !== q2 ? [q1, q2] : [bestIdx];
+    } else {
+      finalInteriorIndices = [bestIdx];
+    }
+  }
+
+  return [0, ...finalInteriorIndices, n - 1];
+}
+
+/**
+ * Smoothly deforms a freehand stroke when the user drags one of its sparse Key Nodes (`keyNodePosIdx`),
+ * using a C1-continuous Cosine Hermite bell curve anchored at the neighboring key nodes (`keyNodePosIdx - 1` and `keyNodePosIdx + 1`).
+ */
+export function deformStrokeAtKeyNode(
+  pts: BezierPoint[],
+  keyNodeIndices: number[],
+  keyNodePosIdx: number,
+  targetX: number,
+  targetY: number
+): BezierPoint[] {
+  const n = pts.length;
+  if (n === 0 || keyNodePosIdx < 0 || keyNodePosIdx >= keyNodeIndices.length) return pts;
+
+  const centerIdx = Math.max(0, Math.min(n - 1, keyNodeIndices[keyNodePosIdx]));
+  const dx = targetX - pts[centerIdx].x;
+  const dy = targetY - pts[centerIdx].y;
+  if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) return pts;
+
+  const leftIdx = keyNodePosIdx > 0 ? Math.max(0, keyNodeIndices[keyNodePosIdx - 1]) : 0;
+  const rightIdx =
+    keyNodePosIdx < keyNodeIndices.length - 1
+      ? Math.min(n - 1, keyNodeIndices[keyNodePosIdx + 1])
+      : n - 1;
+
+  // Precompute cumulative arc lengths along [leftIdx .. rightIdx]
+  const cum = new Float64Array(n);
+  for (let i = leftIdx + 1; i <= rightIdx; i++) {
+    cum[i] = cum[i - 1] + distance(pts[i - 1], pts[i]);
+  }
+
+  const leftSpan = Math.max(1e-4, cum[centerIdx] - cum[leftIdx]);
+  const rightSpan = Math.max(1e-4, cum[rightIdx] - cum[centerIdx]);
+
+  const weights = new Float64Array(n);
+  weights[centerIdx] = 1.0;
+
+  if (centerIdx > leftIdx) {
+    for (let i = leftIdx; i < centerIdx; i++) {
+      if (keyNodePosIdx === 0 && i === leftIdx) {
+        weights[i] = 1.0;
+      } else {
+        const u = (cum[i] - cum[leftIdx]) / leftSpan; // 0 at leftIdx -> 1 at centerIdx
+        weights[i] = 0.5 - 0.5 * Math.cos(Math.PI * u);
+      }
+    }
+  }
+
+  if (rightIdx > centerIdx) {
+    for (let i = centerIdx + 1; i <= rightIdx; i++) {
+      if (keyNodePosIdx === keyNodeIndices.length - 1 && i === rightIdx) {
+        weights[i] = 1.0;
+      } else {
+        const v = (cum[i] - cum[centerIdx]) / rightSpan; // 0 at centerIdx -> 1 at rightIdx
+        weights[i] = 0.5 + 0.5 * Math.cos(Math.PI * v);
+      }
+    }
+  }
+
+  return pts.map((p, i) => {
+    const w = weights[i];
+    const wPrev = i > 0 ? weights[i - 1] : w;
+    const wCtrl = 0.5 * (wPrev + w);
+    if (w === 0 && wCtrl === 0) return p;
+    return {
+      ...p,
+      x: p.x + w * dx,
+      y: p.y + w * dy,
+      cx: p.cx !== undefined ? p.cx + wCtrl * dx : undefined,
+      cy: p.cy !== undefined ? p.cy + wCtrl * dy : undefined,
+    };
+  });
+}

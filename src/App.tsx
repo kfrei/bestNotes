@@ -75,6 +75,8 @@ import {
   computeImageSobelEdgeMap,
   snapMagneticLassoPoint,
   solveMathExpressionOffline,
+  computeFreehandKeyNodeIndices,
+  deformStrokeAtKeyNode,
 } from './utils/geometryAndAlgorithms';
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
@@ -1083,73 +1085,79 @@ export default function App() {
         //    - Circle/Ellipse: strictly 4 nodes at 90°
         //    - Parabola/Hyperbola/Arc: strictly 3 nodes (2 Endpoints + 1 Middle Curvature)
         //    - Sine/Cosine: strictly 2 nodes (0: Peak [up/down only], 1: Right Endpoint [left/right only])
+        //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices, NEVER 500!)
         if (activeTool === 'direct-node' && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
           if (target) {
             ctx.save();
-            const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
-            const isThreePtCurve =
-              target.shapeType === 'parabola' ||
-              target.shapeType === 'hyperbola' ||
-              target.shapeType === 'arc';
-            const isClosedPoly =
-              target.shapeType === 'rectangle' ||
-              target.shapeType === 'parallelogram' ||
-              target.shapeType === 'triangle';
-            const nodeCount = isWave
-              ? Math.min(2, target.points.length)
-              : isThreePtCurve
-              ? Math.min(3, target.points.length)
-              : isClosedPoly
-              ? Math.max(1, target.points.length - 1)
-              : target.points.length;
-
-            if (isWave && target.points.length >= 3) {
-              const pStart = target.points[2];
-              const pEnd = target.points[1];
-              ctx.strokeStyle = 'rgba(37, 99, 235, 0.35)';
-              ctx.lineWidth = 1.2;
-              ctx.setLineDash([4, 4]);
-              ctx.beginPath();
-              ctx.moveTo(pStart.x, pEnd.y);
-              ctx.lineTo(pEnd.x, pEnd.y);
-              ctx.stroke();
-              ctx.setLineDash([]);
-            }
-
-            for (let i = 0; i < nodeCount; i++) {
-              const p = target.points[i];
-              if (!target.isShape && p.cx !== undefined && p.cy !== undefined) {
-                ctx.strokeStyle = '#ec4899';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(p.x, p.y);
-                ctx.lineTo(p.cx, p.cy);
-                ctx.stroke();
-
-                ctx.fillStyle = '#ec4899';
-                ctx.beginPath();
-                ctx.arc(p.cx, p.cy, 4.5, 0, Math.PI * 2);
-                ctx.fill();
+            if (!target.isShape) {
+              const keyIndices =
+                target.keyNodeIndices && target.keyNodeIndices.length >= 2
+                  ? target.keyNodeIndices
+                  : computeFreehandKeyNodeIndices(target.points);
+              for (let k = 0; k < keyIndices.length; k++) {
+                const ptIdx = keyIndices[k];
+                const p = target.points[ptIdx];
+                if (!p) continue;
+                const isEndpoint = k === 0 || k === keyIndices.length - 1;
+                ctx.fillStyle = isEndpoint ? '#ffffff' : '#fef08a';
+                ctx.strokeStyle = '#2563eb';
+                ctx.lineWidth = 2.4;
+                ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
+                ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
               }
-              ctx.fillStyle = isWave && i === 0 ? '#fef08a' : isThreePtCurve && i === 1 ? '#fef08a' : '#ffffff';
-              ctx.strokeStyle = '#2563eb';
-              ctx.lineWidth = 2.4;
-              ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
-              ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
+            } else {
+              const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
+              const isThreePtCurve =
+                target.shapeType === 'parabola' ||
+                target.shapeType === 'hyperbola' ||
+                target.shapeType === 'arc';
+              const isClosedPoly =
+                target.shapeType === 'rectangle' ||
+                target.shapeType === 'parallelogram' ||
+                target.shapeType === 'triangle';
+              const nodeCount = isWave
+                ? Math.min(2, target.points.length)
+                : isThreePtCurve
+                ? Math.min(3, target.points.length)
+                : isClosedPoly
+                ? Math.max(1, target.points.length - 1)
+                : target.points.length;
 
-              if (isWave) {
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillStyle = '#1e3a8a';
-                if (i === 0) {
-                  ctx.fillText('↕ Κορυφή', p.x - 24, p.y - 12);
-                } else if (i === 1) {
-                  ctx.fillText('↔ Άκρο', p.x + 10, p.y + 4);
+              if (isWave && target.points.length >= 3) {
+                const pStart = target.points[2];
+                const pEnd = target.points[1];
+                ctx.strokeStyle = 'rgba(37, 99, 235, 0.35)';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(pStart.x, pEnd.y);
+                ctx.lineTo(pEnd.x, pEnd.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+              }
+
+              for (let i = 0; i < nodeCount; i++) {
+                const p = target.points[i];
+                ctx.fillStyle = isWave && i === 0 ? '#fef08a' : isThreePtCurve && i === 1 ? '#fef08a' : '#ffffff';
+                ctx.strokeStyle = '#2563eb';
+                ctx.lineWidth = 2.4;
+                ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
+                ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
+
+                if (isWave) {
+                  ctx.font = 'bold 11px sans-serif';
+                  ctx.fillStyle = '#1e3a8a';
+                  if (i === 0) {
+                    ctx.fillText('↕ Κορυφή', p.x - 24, p.y - 12);
+                  } else if (i === 1) {
+                    ctx.fillText('↔ Άκρο', p.x + 10, p.y + 4);
+                  }
+                } else if (isThreePtCurve && i === 1) {
+                  ctx.font = 'bold 11px sans-serif';
+                  ctx.fillStyle = '#1e3a8a';
+                  ctx.fillText('✦ Μέση (Καμπυλότητα)', p.x - 45, p.y - 12);
                 }
-              } else if (isThreePtCurve && i === 1) {
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillStyle = '#1e3a8a';
-                ctx.fillText('✦ Μέση (Καμπυλότητα)', p.x - 45, p.y - 12);
               }
             }
             ctx.restore();
@@ -2465,38 +2473,60 @@ export default function App() {
     //    - Circle/Ellipse: strictly 4 nodes at 90°
     //    - Parabola/Hyperbola/Arc: strictly 3 nodes (2 Endpoints + 1 Middle Curvature)
     //    - Sine/Cosine: strictly 2 nodes (0: Peak [up/down only], 1: Right Endpoint [left/right only])
+    //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices)
     if (activeTool === 'direct-node') {
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target) {
-          const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
-          const isThreePtCurve =
-            target.shapeType === 'parabola' ||
-            target.shapeType === 'hyperbola' ||
-            target.shapeType === 'arc';
-          const isClosedPoly =
-            target.shapeType === 'rectangle' ||
-            target.shapeType === 'parallelogram' ||
-            target.shapeType === 'triangle';
-          const nodeCount = isWave
-            ? Math.min(2, target.points.length)
-            : isThreePtCurve
-            ? Math.min(3, target.points.length)
-            : isClosedPoly
-            ? Math.max(1, target.points.length - 1)
-            : target.points.length;
-
-          for (let i = 0; i < nodeCount; i++) {
-            const p = target.points[i];
-            if (distance(pt, p) < 18) {
-              setDraggingNodeIdx({ index: i, isControl: false });
-              isDrawingRef.current = true;
-              return;
+          if (!target.isShape) {
+            const keyIndices =
+              target.keyNodeIndices && target.keyNodeIndices.length >= 2
+                ? target.keyNodeIndices
+                : computeFreehandKeyNodeIndices(target.points);
+            for (let k = 0; k < keyIndices.length; k++) {
+              const p = target.points[keyIndices[k]];
+              if (p && distance(pt, p) < 20) {
+                if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
+                  updateActivePage(
+                    (page) => ({
+                      ...page,
+                      strokes: page.strokes.map((s) =>
+                        s.id === target.id ? { ...s, keyNodeIndices: keyIndices } : s
+                      ),
+                    }),
+                    false
+                  );
+                }
+                setDraggingNodeIdx({ index: k, isControl: false });
+                isDrawingRef.current = true;
+                return;
+              }
             }
-            if (!target.isShape && p.cx !== undefined && p.cy !== undefined && distance(pt, { x: p.cx, y: p.cy }) < 15) {
-              setDraggingNodeIdx({ index: i, isControl: true });
-              isDrawingRef.current = true;
-              return;
+          } else {
+            const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
+            const isThreePtCurve =
+              target.shapeType === 'parabola' ||
+              target.shapeType === 'hyperbola' ||
+              target.shapeType === 'arc';
+            const isClosedPoly =
+              target.shapeType === 'rectangle' ||
+              target.shapeType === 'parallelogram' ||
+              target.shapeType === 'triangle';
+            const nodeCount = isWave
+              ? Math.min(2, target.points.length)
+              : isThreePtCurve
+              ? Math.min(3, target.points.length)
+              : isClosedPoly
+              ? Math.max(1, target.points.length - 1)
+              : target.points.length;
+
+            for (let i = 0; i < nodeCount; i++) {
+              const p = target.points[i];
+              if (distance(pt, p) < 18) {
+                setDraggingNodeIdx({ index: i, isControl: false });
+                isDrawingRef.current = true;
+                return;
+              }
             }
           }
         }
@@ -2520,6 +2550,17 @@ export default function App() {
             (page) => ({
               ...page,
               strokes: page.strokes.map((s) => (s.id === hit.id ? { ...s, points: fourPts } : s)),
+            }),
+            false
+          );
+        } else if (!hit.isShape && (!hit.keyNodeIndices || hit.keyNodeIndices.length < 2)) {
+          const keyIndices = computeFreehandKeyNodeIndices(hit.points);
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.map((s) =>
+                s.id === hit.id ? { ...s, keyNodeIndices: keyIndices } : s
+              ),
             }),
             false
           );
@@ -2970,13 +3011,30 @@ export default function App() {
       return;
     }
 
-    // 2. Direct Node Editing (syncs closing point for polygons, 4 nodes for ellipses, 3 curvature handles for Parabola/Hyperbola/Arc, & 2 constrained handles for Sine/Cosine!)
+    // 2. Direct Node Editing (syncs closing point for polygons, 4 nodes for ellipses, 3 curvature handles for Parabola/Hyperbola/Arc, 2 constrained handles for Sine/Cosine, & smooth Cosine-Hermite deformation for Freehand Key Nodes!)
     if (activeTool === 'direct-node' && activeNodeStrokeId && draggingNodeIdx) {
       updateActivePage(
         (page) => ({
           ...page,
           strokes: page.strokes.map((s) => {
             if (s.id !== activeNodeStrokeId) return s;
+
+            // Freehand Line / Curve (!s.isShape): smoothly deform around the dragged Key Node!
+            if (!s.isShape) {
+              const keyIndices =
+                s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                  ? s.keyNodeIndices
+                  : computeFreehandKeyNodeIndices(s.points);
+              const deformedPts = deformStrokeAtKeyNode(
+                s.points,
+                keyIndices,
+                draggingNodeIdx.index,
+                latestPt.x,
+                latestPt.y
+              );
+              return { ...s, points: deformedPts, keyNodeIndices: keyIndices };
+            }
+
             const newPts = [...s.points];
             const targetPt = { ...newPts[draggingNodeIdx.index] };
 
@@ -3711,6 +3769,7 @@ export default function App() {
       layerId: activeLayerId,
       isShape,
       shapeType,
+      keyNodeIndices: !isShape ? computeFreehandKeyNodeIndices(finalPts) : undefined,
     };
 
     // Synchronously draw onto staticCanvasRef at 2x Retina BEFORE clearing activeCanvasRef so there is 0ms gap!
@@ -4642,7 +4701,9 @@ export default function App() {
                       } else {
                         setActiveTool(tool.id as ToolType);
                         setShowToolSubBar(true);
-                        if (tool.id !== 'lasso' && tool.id !== 'direct-node') {
+                        if (tool.id === 'direct-node' && selectedStrokeIds.length > 0 && !activeNodeStrokeId) {
+                          setActiveNodeStrokeId(selectedStrokeIds[0]);
+                        } else if (tool.id !== 'lasso' && tool.id !== 'direct-node') {
                           setSelectedStrokeIds([]);
                           setActiveNodeStrokeId(null);
                           setSelectedImageId(null);
@@ -5130,19 +5191,43 @@ export default function App() {
                       />
                     </div>
 
-                    {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (
-                      <button
-                        onClick={() => {
-                          setActiveNodeStrokeId(selectedStrokeIds[0]);
-                          setActiveTool('direct-node');
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 text-white font-semibold cursor-pointer"
-                        title="Επεξεργασία των 4 Κόμβων του σχήματος"
-                      >
-                        <MousePointer className="w-3.5 h-3.5" />
-                        <span>4 Κόμβοι</span>
-                      </button>
-                    )}
+                    {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (() => {
+                      const selStroke = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
+                      let nodeCountLabel = 4;
+                      if (selStroke) {
+                        if (!selStroke.isShape) {
+                          const kIndices =
+                            selStroke.keyNodeIndices && selStroke.keyNodeIndices.length >= 2
+                              ? selStroke.keyNodeIndices
+                              : computeFreehandKeyNodeIndices(selStroke.points);
+                          nodeCountLabel = kIndices.length;
+                        } else if (selStroke.shapeType === 'sine' || selStroke.shapeType === 'cosine' || selStroke.shapeType === 'line' || selStroke.shapeType === 'arrow') {
+                          nodeCountLabel = 2;
+                        } else if (
+                          selStroke.shapeType === 'parabola' ||
+                          selStroke.shapeType === 'hyperbola' ||
+                          selStroke.shapeType === 'arc' ||
+                          selStroke.shapeType === 'triangle'
+                        ) {
+                          nodeCountLabel = 3;
+                        } else {
+                          nodeCountLabel = 4;
+                        }
+                      }
+                      return (
+                        <button
+                          onClick={() => {
+                            setActiveNodeStrokeId(selectedStrokeIds[0]);
+                            setActiveTool('direct-node');
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 text-white font-semibold cursor-pointer"
+                          title="Επεξεργασία των βασικών Κόμβων (Άκρα & Κορυφές) της γραμμής ή του σχήματος"
+                        >
+                          <MousePointer className="w-3.5 h-3.5" />
+                          <span>{nodeCountLabel} Κόμβοι</span>
+                        </button>
+                      );
+                    })()}
 
                     {activeTool === 'direct-node' && activeNodeStrokeId && (
                       <button
