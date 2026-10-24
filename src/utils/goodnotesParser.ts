@@ -363,14 +363,14 @@ export async function importGoodnotesFile(file: File): Promise<Notebook> {
     });
   }
 
-  const cleanTitle = file.name.replace(/\.goodnotes$/i, '');
+  const cleanTitle = file.name.replace(/\.(goodnotes|bestnotes)$/i, '');
   return {
     id: `nb-${Date.now()}`,
     title: cleanTitle,
-    folder: 'Εισαγωγή από Goodnotes',
+    folder: 'Φυσική',
     coverColor: '#0284c7',
     updatedAt: new Date().toISOString(),
-    sourceFormat: '.goodnotes',
+    sourceFormat: '.bestNotes',
     pages,
   };
 }

@@ -56,6 +56,7 @@ import {
   List,
   Search,
   ArrowUpDown,
+  Share2,
 } from 'lucide-react';
 import { auth, onAuthStateChanged, signOut, signInToGoogleDrive, type User } from './firebase';
 import { LandingPage, AuthModal } from './components/LandingPage';
@@ -707,6 +708,8 @@ export default function App() {
     [driveAccessToken, notebooks, activeNotebook.id, showToast]
   );
 
+  const [pendingShareFile, setPendingShareFile] = useState<{ file: File; title: string } | null>(null);
+
   const handleDownloadActiveNotebookPdf = useCallback(async () => {
     try {
       showToast(`📄 Δημιουργία PDF «${activeNotebook.title}.pdf»...`);
@@ -725,6 +728,70 @@ export default function App() {
       showToast(`❌ Σφάλμα εξαγωγής PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
     }
   }, [activeNotebook, showToast]);
+
+  const handleShareNotebookPdf = useCallback(
+    async (targetNotebook?: Notebook) => {
+      const nb = targetNotebook ?? activeNotebook;
+      const safeTitle = (nb.title || 'Σημείωση').replace(/[\\/:*?"<>|]/g, '_').trim();
+      const fileName = `${safeTitle}.pdf`;
+      try {
+        showToast(`📤 Προετοιμασία PDF «${fileName}» για Κοινοποίηση (AirDrop, Viber, Messenger, Goodnotes)...`);
+        const blob = await exportNotebookToPdfBlob(nb);
+        const pdfFile = new File([blob], fileName, {
+          type: 'application/pdf',
+          lastModified: Date.now(),
+        });
+
+        const nav = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean;
+          share?: (data?: ShareData) => Promise<void>;
+        };
+
+        if (typeof nav.share === 'function') {
+          const canShareFiles =
+            typeof nav.canShare === 'function' ? nav.canShare({ files: [pdfFile] }) : true;
+
+          if (canShareFiles) {
+            try {
+              await nav.share({
+                files: [pdfFile],
+                title: safeTitle,
+                text: `${safeTitle}.pdf — BestNotes`,
+              });
+              showToast(`✅ Κοινοποιήθηκε το «${fileName}»!`);
+              return;
+            } catch (shareErr: any) {
+              if (shareErr?.name === 'AbortError') {
+                setStatusBanner(null);
+                return;
+              }
+              if (shareErr?.name === 'NotAllowedError') {
+                // Safari/iPadOS transient user activation expired during PDF generation of a multi-page note:
+                // Show 1-tap instant share modal with the already-built PDF File in memory!
+                setPendingShareFile({ file: pdfFile, title: safeTitle });
+                setStatusBanner(null);
+                return;
+              }
+            }
+          }
+        }
+
+        // Fallback for desktop browsers without Web Share API file support: download the PDF directly
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast(`📥 Κατέβηκε το PDF «${fileName}»!`);
+      } catch (err: any) {
+        showToast(`❌ Σφάλμα κοινοποίησης PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
+      }
+    },
+    [activeNotebook, showToast]
+  );
 
   // 30-second Google Drive Auto-Sync loop (automatically updates same-name PDF in /BestNotes if Drive is connected)
   useEffect(() => {
@@ -6452,7 +6519,7 @@ export default function App() {
       setViewMode('editor');
       showToast(`📂 Φορτώθηκε το "${file.name}" (${importedNb.pages.length} σελ.)!`);
     } catch {
-      showToast('⚠️ Σφάλμα ανάγνωσης .goodnotes');
+      showToast('⚠️ Σφάλμα ανάγνωσης αρχείου .bestNotes');
     }
     e.target.value = '';
   };
@@ -6461,7 +6528,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     const lowerName = file.name.toLowerCase();
-    if (lowerName.endsWith('.goodnotes') || lowerName.endsWith('.zip')) {
+    if (lowerName.endsWith('.bestnotes') || lowerName.endsWith('.goodnotes') || lowerName.endsWith('.zip')) {
       void handleGoodnotesFileChange(e);
       return;
     }
@@ -6597,14 +6664,14 @@ export default function App() {
       <input
         ref={fileInputGoodnotesRef}
         type="file"
-        accept=".goodnotes,.zip"
+        accept=".bestNotes,.bestnotes,.goodnotes,.zip"
         className="hidden"
         onChange={handleGoodnotesFileChange}
       />
       <input
         ref={fileInputImageRef}
         type="file"
-        accept="image/*,.pdf,application/pdf,.goodnotes,.zip"
+        accept="image/*,.pdf,application/pdf,.bestNotes,.bestnotes,.goodnotes,.zip"
         className="hidden"
         onChange={handleImageFileChange}
       />
@@ -6829,6 +6896,16 @@ export default function App() {
           >
             <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
             <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
+          </button>
+
+          {/* Native iPadOS / System Share PDF Button (AirDrop, Viber, Messenger, Goodnotes, Mail, Files) */}
+          <button
+            onClick={() => void handleShareNotebookPdf(activeNotebook)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#0066ff] text-[11px] font-semibold text-sky-100 hover:text-white transition cursor-pointer"
+            title={`Κοινοποίηση PDF «${activeNotebook.title}.pdf» (AirDrop, Viber, Messenger, Goodnotes, Mail, Αρχεία)`}
+          >
+            <Share2 className="w-3.5 h-3.5 text-sky-300" />
+            <span className="hidden sm:inline">Share</span>
           </button>
 
           <button
@@ -7317,9 +7394,19 @@ export default function App() {
                       <button
                         onClick={() => fileInputGoodnotesRef.current?.click()}
                         className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-sky-500 text-[#1b2a4a] text-sm font-semibold shadow-xs cursor-pointer"
+                        title="Άνοιγμα αρχείου .bestNotes / .goodnotes"
                       >
                         <Upload className="w-4 h-4 text-sky-600" />
-                        <span>.goodnotes</span>
+                        <span>.bestNotes</span>
+                      </button>
+
+                      <button
+                        onClick={() => void handleShareNotebookPdf(activeNotebook)}
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-[#0066ff] border border-sky-200 hover:border-[#0066ff] text-[#0066ff] hover:text-white text-sm font-semibold shadow-xs transition cursor-pointer"
+                        title="Κοινοποίηση σε PDF (AirDrop, Viber, Messenger, Goodnotes, Mail)"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        <span>Share PDF</span>
                       </button>
                     </div>
                   </div>
@@ -7642,15 +7729,31 @@ export default function App() {
                                     </svg>
                                   )}
 
-                                  {/* Top Row: Folder Badge + Edit Pencil (Direct Open) + Red Trash Delete */}
+                                  {/* Top Row: Folder/.bestNotes Badge + Share PDF + Edit Pencil (Direct Open) + Red Trash Delete */}
                                   <div className="relative z-20 flex items-center justify-between pl-4 pr-2 pt-2">
-                                    <span
-                                      className="text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[90px]"
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleShareNotebookPdf(nb);
+                                      }}
+                                      className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[78px] cursor-pointer hover:opacity-90"
                                       style={{ backgroundColor: nb.coverColor }}
+                                      title={`Κοινοποίηση «${nb.title}.pdf» (AirDrop, Viber, Messenger, Goodnotes)`}
                                     >
-                                      {nb.folder || nb.sourceFormat || '.bestnotes'}
-                                    </span>
+                                      {nb.folder || '.bestNotes'}
+                                    </button>
                                     <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          void handleShareNotebookPdf(nb);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-white/90 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
+                                      >
+                                        <Share2 className="w-3.5 h-3.5" />
+                                      </button>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -7678,7 +7781,7 @@ export default function App() {
                                   <div className="relative z-20 pl-4 pr-2.5 py-2 bg-white/92 backdrop-blur-xs border-t border-slate-200/80 text-slate-900">
                                     <p className="text-xs font-bold truncate">{nb.title}</p>
                                     <p className="text-[10px] text-slate-500">
-                                      {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • Προεπισκόπηση 1ης σελ.
+                                      {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • .bestNotes
                                     </p>
                                   </div>
                                 </div>
@@ -7772,8 +7875,7 @@ export default function App() {
                                 )}
                               </div>
                               <p className="text-[11px] text-slate-500">
-                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} •{' '}
-                                {nb.sourceFormat || '.bestnotes'}
+                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • .bestNotes
                               </p>
                             </div>
                           </div>
@@ -7782,6 +7884,16 @@ export default function App() {
                             <span className="text-[11px] text-slate-400 hidden sm:inline">
                               {new Date(nb.updatedAt || Date.now()).toLocaleDateString('el-GR')}
                             </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleShareNotebookPdf(nb);
+                              }}
+                              className="p-2 rounded-xl bg-sky-50 hover:bg-sky-600 text-sky-600 hover:text-white border border-sky-200/80 transition cursor-pointer"
+                              title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
+                            >
+                              <Share2 className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -10628,6 +10740,69 @@ export default function App() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1-Tap Instant Native Share Sheet Modal (if Safari transient activation expired during multi-page PDF creation) */}
+      {pendingShareFile && (
+        <div
+          onClick={() => setPendingShareFile(null)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div
+            data-ui-panel="true"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-sm shadow-2xl space-y-4 text-center"
+          >
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0066ff]">
+              <Share2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[#1b2a4a]">
+                Το PDF «{pendingShareFile.title}.pdf» είναι έτοιμο!
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Πάτησε παρακάτω για να ανοίξει το παράθυρο κοινοποίησης του iPadOS (AirDrop, Viber, Messenger, Goodnotes, Mail, Αρχεία).
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={async () => {
+                  const ready = pendingShareFile;
+                  setPendingShareFile(null);
+                  try {
+                    await navigator.share({
+                      files: [ready.file],
+                      title: ready.title,
+                      text: `${ready.title}.pdf — BestNotes`,
+                    });
+                    showToast(`✅ Κοινοποιήθηκε το «${ready.file.name}»!`);
+                  } catch (err: any) {
+                    if (err?.name !== 'AbortError') {
+                      const url = URL.createObjectURL(ready.file);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = ready.file.name;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    }
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-sm font-bold shadow-md cursor-pointer"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Άνοιγμα iPadOS Share ({pendingShareFile.title}.pdf)</span>
+              </button>
+              <button
+                onClick={() => setPendingShareFile(null)}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 cursor-pointer"
+              >
+                Ακύρωση
+              </button>
             </div>
           </div>
         </div>

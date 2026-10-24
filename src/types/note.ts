@@ -149,6 +149,6 @@ export interface Notebook {
   folder: string;
   coverColor: string;
   updatedAt: string;
-  sourceFormat?: '.goodnotes' | '.bestnotes';
+  sourceFormat?: '.goodnotes' | '.bestnotes' | '.bestNotes';
   pages: NotePage[];
 }
