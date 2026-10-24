@@ -8159,14 +8159,29 @@ export default function App() {
                         const nextLineStyle: LineStyleType = effectiveDashed ? 'solid' : 'dashed';
                         applyLineStyleToSelection(nextLineStyle);
                       }}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                      className={`w-[68px] h-[26px] inline-flex items-center justify-center rounded-full border transition cursor-pointer ${
                         effectiveDashed
-                          ? 'bg-[#0066ff] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
+                          : 'bg-slate-100 border-slate-200/90 text-slate-800 hover:bg-slate-200'
                       }`}
-                      title="Εναλλαγή με 1 κλικ: Συνεχής Γραμμή (───) / Διακεκομμένη (- - -) για όλα τα εργαλεία & σχήματα"
+                      title={
+                        effectiveDashed
+                          ? 'Διακεκομμένη Γραμμή (Κλικ για Συνεχή Γραμμή)'
+                          : 'Συνεχής Γραμμή (Κλικ για Διακεκομμένη Γραμμή)'
+                      }
                     >
-                      {effectiveDashed ? '- - - Διακεκομμένη' : '─── Συνεχής'}
+                      <svg width="46" height="8" viewBox="0 0 46 8" fill="none" className="overflow-visible">
+                        <line
+                          x1="2"
+                          y1="4"
+                          x2="44"
+                          y2="4"
+                          stroke="currentColor"
+                          strokeWidth="3.2"
+                          strokeLinecap="round"
+                          strokeDasharray={effectiveDashed ? '6.5 6' : undefined}
+                        />
+                      </svg>
                     </button>
                   );
                 })()}
