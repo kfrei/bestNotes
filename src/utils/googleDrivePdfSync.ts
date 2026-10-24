@@ -606,6 +606,25 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
   return new Blob(chunks, { type: 'application/pdf' });
 }
 
+async function throwDriveError(res: Response, contextLabel: string): Promise<never> {
+  if (res.status === 401) {
+    throw new Error('DRIVE_TOKEN_EXPIRED');
+  }
+  let detail = '';
+  try {
+    const errJson = await res.json();
+    const msg = errJson?.error?.message || '';
+    const reason = errJson?.error?.errors?.[0]?.reason || '';
+    if (res.status === 403 && (reason === 'insufficientPermissions' || msg.toLowerCase().includes('insufficient'))) {
+      throw new Error('DRIVE_SCOPE_MISSING');
+    }
+    if (msg) detail = `: ${msg}`;
+  } catch (e: any) {
+    if (e?.message === 'DRIVE_SCOPE_MISSING') throw e;
+  }
+  throw new Error(`${contextLabel} (${res.status})${detail}`);
+}
+
 async function ensureDriveFolder(
   accessToken: string,
   folderName: string,
@@ -622,7 +641,7 @@ async function ensureDriveFolder(
     }
   );
   if (!searchRes.ok) {
-    throw new Error(`Drive API error (${searchRes.status})`);
+    await throwDriveError(searchRes, 'Drive API error');
   }
   const data = await searchRes.json();
   if (Array.isArray(data.files) && data.files.length > 0) {
@@ -642,7 +661,7 @@ async function ensureDriveFolder(
     }),
   });
   if (!createRes.ok) {
-    throw new Error(`Αποτυχία δημιουργίας φακέλου ${folderName} στο Google Drive`);
+    await throwDriveError(createRes, `Αποτυχία δημιουργίας φακέλου ${folderName}`);
   }
   const created = await createRes.json();
   return created.id as string;
@@ -666,7 +685,7 @@ async function uploadOrUpdateDriveFile(
     }
   );
   if (!searchRes.ok) {
-    throw new Error(`Drive search error (${searchRes.status})`);
+    await throwDriveError(searchRes, 'Drive search error');
   }
   const searchData = await searchRes.json();
   const existingFile = Array.isArray(searchData.files) && searchData.files[0] ? searchData.files[0] : null;
@@ -695,7 +714,7 @@ async function uploadOrUpdateDriveFile(
   });
 
   if (!uploadRes.ok) {
-    throw new Error(`Drive upload error (${uploadRes.status})`);
+    await throwDriveError(uploadRes, 'Drive upload error');
   }
   return await uploadRes.json();
 }

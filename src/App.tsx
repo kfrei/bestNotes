@@ -683,15 +683,20 @@ export default function App() {
         }
       } catch (err: any) {
         setSyncStatus('dirty');
-        if (err?.message === 'DRIVE_TOKEN_EXPIRED') {
+        if (err?.message === 'DRIVE_TOKEN_EXPIRED' || err?.message === 'DRIVE_SCOPE_MISSING') {
           setDriveAccessToken(null);
           try {
             localStorage.removeItem('bestnotes_drive_token_v1');
+            localStorage.removeItem('bestnotes_gdrive_session_v1');
           } catch {
             // ignore
           }
           if (showFeedback) {
-            showToast('⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login από το προφίλ 👤.');
+            showToast(
+              err?.message === 'DRIVE_SCOPE_MISSING'
+                ? '⚠️ Κάνε ξανά Google Drive Login από το προφίλ 👤 και επίλεξε το κουτάκι δικαιωμάτων Google Drive!'
+                : '⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login από το προφίλ 👤.'
+            );
           }
         } else if (showFeedback) {
           showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
@@ -727,14 +732,19 @@ export default function App() {
         showToast(`☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & φάκελοι σε PDF στον φάκελο /BestNotes του Google Drive!`);
       } catch (err: any) {
         setSyncStatus('dirty');
-        if (err?.message === 'DRIVE_TOKEN_EXPIRED') {
+        if (err?.message === 'DRIVE_TOKEN_EXPIRED' || err?.message === 'DRIVE_SCOPE_MISSING') {
           setDriveAccessToken(null);
           try {
             localStorage.removeItem('bestnotes_drive_token_v1');
+            localStorage.removeItem('bestnotes_gdrive_session_v1');
           } catch {
             // ignore
           }
-          showToast('⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login.');
+          showToast(
+            err?.message === 'DRIVE_SCOPE_MISSING'
+              ? '⚠️ Κάνε ξανά Google Drive Login και επίλεξε το κουτάκι δικαιωμάτων Google Drive!'
+              : '⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login.'
+          );
         } else {
           showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
         }
