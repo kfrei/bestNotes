@@ -738,24 +738,9 @@ export default function App() {
       // Always use the stroke's border color (s.color) for the semi-transparent shape fill!
       const shadeColor = s.color || s.fillColor || '#2563eb';
       ctx.save();
-      if (s.fillStyle === 'solid') {
-        ctx.fillStyle = shadeColor;
-        ctx.globalAlpha = 0.25;
-        ctx.fill();
-      } else if (s.fillStyle === 'hatching') {
-        ctx.clip();
-        const b = getStrokeBounds(s);
-        ctx.strokeStyle = shadeColor;
-        ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.5;
-        ctx.setLineDash([]);
-        for (let diag = b.minX - (b.maxY - b.minY); diag < b.maxX + (b.maxY - b.minY); diag += 10) {
-          ctx.beginPath();
-          ctx.moveTo(diag, b.minY);
-          ctx.lineTo(diag + (b.maxY - b.minY), b.maxY);
-          ctx.stroke();
-        }
-      }
+      ctx.fillStyle = shadeColor;
+      ctx.globalAlpha = 0.25;
+      ctx.fill();
       ctx.restore();
     }
 
