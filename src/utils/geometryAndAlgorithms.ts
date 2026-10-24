@@ -1571,3 +1571,388 @@ export function isFreehandLoopClosed(pts: BezierPoint[], lenientForManualToggle 
 
   return false;
 }
+
+/**
+ * Tessellates parametric shapes (4-node circle/ellipse, 2-node sine/cosine, 3-node parabola/hyperbola/arc)
+ * into a high-resolution polyline of BezierPoints when intersected by the Pixel Eraser.
+ */
+function tessellateParametricShapeForErase(s: StrokeObject): BezierPoint[] {
+  if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
+    const pts = s.points;
+    const kappa = 0.55228475;
+    const out: BezierPoint[] = [];
+    const stepsPerQuad = 24;
+    for (let i = 0; i < 4; i++) {
+      const pA = pts[i];
+      const pB = pts[(i + 1) % 4];
+      const pPrev = pts[(i + 3) % 4];
+      const pNext = pts[(i + 2) % 4];
+      const cp1x = pA.x + ((pB.x - pPrev.x) / 2) * kappa;
+      const cp1y = pA.y + ((pB.y - pPrev.y) / 2) * kappa;
+      const cp2x = pB.x - ((pNext.x - pA.x) / 2) * kappa;
+      const cp2y = pB.y - ((pNext.y - pA.y) / 2) * kappa;
+      const startStep = i === 0 ? 0 : 1;
+      for (let step = startStep; step <= stepsPerQuad; step++) {
+        const t = step / stepsPerQuad;
+        const u = 1 - t;
+        const x =
+          u * u * u * pA.x +
+          3 * u * u * t * cp1x +
+          3 * u * t * t * cp2x +
+          t * t * t * pB.x;
+        const y =
+          u * u * u * pA.y +
+          3 * u * u * t * cp1y +
+          3 * u * t * t * cp2y +
+          t * t * t * pB.y;
+        out.push({ x, y, pressure: pA.pressure ?? 0.7 });
+      }
+    }
+    return out;
+  }
+
+  if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
+    const pPeak = s.points[0];
+    const pEnd = s.points[1];
+    const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
+    const dx = pEnd.x - pStart.x;
+    const dy = pEnd.y - pStart.y;
+    const spanL = Math.hypot(dx, dy) || 1;
+    const ux = dx / spanL;
+    const uy = dy / spanL;
+    const nx = uy;
+    const ny = -ux;
+    const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
+    const halfCycles = Math.max(1, pStart.twist || 2);
+    const steps = 80;
+    const out: BezierPoint[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const along = t * spanL;
+      const waveOffset =
+        s.shapeType === 'sine'
+          ? amp * Math.sin(t * halfCycles * Math.PI)
+          : -amp * Math.cos(t * halfCycles * Math.PI);
+      out.push({
+        x: pStart.x + along * ux + waveOffset * nx,
+        y: pStart.y + along * uy + waveOffset * ny,
+        pressure: pPeak.pressure ?? 0.7,
+      });
+    }
+    return out;
+  }
+
+  if ((s.shapeType === 'parabola' || s.shapeType === 'arc') && s.points.length === 3) {
+    const [p0, pMid, p2] = s.points;
+    const ctrlX = 2 * pMid.x - (p0.x + p2.x) / 2;
+    const ctrlY = 2 * pMid.y - (p0.y + p2.y) / 2;
+    const steps = 56;
+    const out: BezierPoint[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const u = 1 - t;
+      out.push({
+        x: u * u * p0.x + 2 * u * t * ctrlX + t * t * p2.x,
+        y: u * u * p0.y + 2 * u * t * ctrlY + t * t * p2.y,
+        pressure: p0.pressure ?? 0.7,
+      });
+    }
+    return out;
+  }
+
+  if (s.shapeType === 'hyperbola' && s.points.length === 3) {
+    const [p0, pMid, p2] = s.points;
+    const midChordX = (p0.x + p2.x) / 2;
+    const midChordY = (p0.y + p2.y) / 2;
+    const ux = (p2.x - p0.x) / 2;
+    const uy = (p2.y - p0.y) / 2;
+    const vx = pMid.x - midChordX;
+    const vy = pMid.y - midChordY;
+    const k = 2.25;
+    const denom = Math.sqrt(1 + k * k) - 1;
+    const steps = 64;
+    const out: BezierPoint[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const u = -1 + (2 * i) / steps;
+      const phi = (Math.sqrt(1 + k * u * (k * u)) - 1) / denom;
+      out.push({
+        x: pMid.x + u * ux - phi * vx,
+        y: pMid.y + u * uy - phi * vy,
+        pressure: p0.pressure ?? 0.7,
+      });
+    }
+    return out;
+  }
+
+  return s.points;
+}
+
+/**
+ * Pixel-accurate Eraser ("Ακριβείας / Pixel"):
+ * Analytically intersects a stroke (including 2-point straight lines, polygons, parametric curves, and freehand curves)
+ * against the eraser circle (center, radius), removing ONLY the exact segment(s) inside the circle
+ * and splitting the stroke into clean independent sub-strokes where needed.
+ */
+export function eraseStrokeByCircle(
+  s: StrokeObject,
+  center: { x: number; y: number },
+  radius: number
+): { modified: boolean; pieces: StrokeObject[] } {
+  if (s.points.length === 0) return { modified: false, pieces: [] };
+
+  const effRadius = Math.max(2, radius + Math.min(4, (s.width || 2) * 0.35));
+  const isParametric =
+    ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) ||
+    ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) ||
+    ((s.shapeType === 'parabola' || s.shapeType === 'arc' || s.shapeType === 'hyperbola') && s.points.length === 3);
+
+  const basePts = isParametric ? tessellateParametricShapeForErase(s) : s.points;
+
+  // Quick bounding-box rejection
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const p of basePts) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+    if (p.cx !== undefined && p.cy !== undefined) {
+      if (p.cx < minX) minX = p.cx;
+      if (p.cy < minY) minY = p.cy;
+      if (p.cx > maxX) maxX = p.cx;
+      if (p.cy > maxY) maxY = p.cy;
+    }
+  }
+  if (
+    center.x < minX - effRadius ||
+    center.x > maxX + effRadius ||
+    center.y < minY - effRadius ||
+    center.y > maxY + effRadius
+  ) {
+    return { modified: false, pieces: [s] };
+  }
+
+  // Single-point dot
+  if (basePts.length === 1) {
+    if (distance(basePts[0], center) <= effRadius) {
+      return { modified: true, pieces: [] };
+    }
+    return { modified: false, pieces: [s] };
+  }
+
+  // Expand any non-collinear quadratic Bezier segment that lies near the eraser circle into fine linear steps
+  const expandedPts: BezierPoint[] = [{ ...basePts[0], cx: undefined, cy: undefined }];
+  for (let i = 1; i < basePts.length; i++) {
+    const pA = basePts[i - 1];
+    const pB = basePts[i];
+    if (pB.cx !== undefined && pB.cy !== undefined) {
+      const midX = (pA.x + pB.x) / 2;
+      const midY = (pA.y + pB.y) / 2;
+      const ctrlDev = Math.hypot(pB.cx - midX, pB.cy - midY);
+      const segMinX = Math.min(pA.x, pB.x, pB.cx) - effRadius;
+      const segMaxX = Math.max(pA.x, pB.x, pB.cx) + effRadius;
+      const segMinY = Math.min(pA.y, pB.y, pB.cy) - effRadius;
+      const segMaxY = Math.max(pA.y, pB.y, pB.cy) + effRadius;
+      const nearCircle =
+        center.x >= segMinX && center.x <= segMaxX && center.y >= segMinY && center.y <= segMaxY;
+
+      if (ctrlDev > 0.5 && nearCircle) {
+        const approxLen = distance(pA, { x: pB.cx, y: pB.cy }) + distance({ x: pB.cx, y: pB.cy }, pB);
+        const subSteps = Math.max(3, Math.min(14, Math.ceil(approxLen / 3)));
+        for (let k = 1; k <= subSteps; k++) {
+          const t = k / subSteps;
+          const u = 1 - t;
+          expandedPts.push({
+            x: u * u * pA.x + 2 * u * t * pB.cx + t * t * pB.x,
+            y: u * u * pA.y + 2 * u * t * pB.cy + t * t * pB.y,
+            pressure: (pA.pressure ?? 0.65) + t * ((pB.pressure ?? 0.65) - (pA.pressure ?? 0.65)),
+            tiltX: pB.tiltX,
+            tiltY: pB.tiltY,
+            twist: pB.twist,
+          });
+        }
+        continue;
+      }
+    }
+    expandedPts.push(pB);
+  }
+
+  let modified = false;
+  const chains: BezierPoint[][] = [];
+  let currentChain: BezierPoint[] = [];
+  const rSq = effRadius * effRadius;
+
+  for (let i = 1; i < expandedPts.length; i++) {
+    const A = expandedPts[i - 1];
+    const B = expandedPts[i];
+    const dx = B.x - A.x;
+    const dy = B.y - A.y;
+    const a = dx * dx + dy * dy;
+    const segLen = Math.sqrt(a);
+
+    if (segLen < 1e-4) {
+      if (distance(A, center) <= effRadius) {
+        modified = true;
+        if (currentChain.length >= 2) {
+          chains.push(currentChain);
+        }
+        currentChain = [];
+      }
+      continue;
+    }
+
+    const fx = A.x - center.x;
+    const fy = A.y - center.y;
+    const b = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - rSq;
+    const disc = b * b - 4 * a * c;
+
+    let intersects = false;
+    let t1 = -1;
+    let t2 = -1;
+
+    if (disc > 0) {
+      const sqrtDisc = Math.sqrt(disc);
+      t1 = (-b - sqrtDisc) / (2 * a);
+      t2 = (-b + sqrtDisc) / (2 * a);
+      if (t2 > 0 && t1 < 1) {
+        intersects = true;
+      }
+    }
+
+    if (!intersects) {
+      if (currentChain.length === 0) {
+        currentChain.push({ ...A, cx: undefined, cy: undefined });
+      }
+      currentChain.push({ ...B });
+    } else {
+      modified = true;
+      const lerpPt = (t: number): BezierPoint => ({
+        x: A.x + t * dx,
+        y: A.y + t * dy,
+        pressure: (A.pressure ?? 0.65) + t * ((B.pressure ?? 0.65) - (A.pressure ?? 0.65)),
+        tiltX: A.tiltX,
+        tiltY: A.tiltY,
+        twist: A.twist,
+      });
+
+      // 1. Portion of segment A -> B before entering the eraser circle (t in [0, t1])
+      if (t1 > 0) {
+        const q1 = lerpPt(t1);
+        if (currentChain.length === 0) {
+          if (t1 * segLen >= 0.6) {
+            chains.push([{ ...A, cx: undefined, cy: undefined }, q1]);
+          }
+        } else {
+          if (t1 * segLen >= 0.25) {
+            currentChain.push(q1);
+          }
+          if (currentChain.length >= 2) {
+            chains.push(currentChain);
+          }
+          currentChain = [];
+        }
+      } else {
+        // Point A itself is inside or on the boundary of the eraser circle
+        if (currentChain.length >= 2) {
+          chains.push(currentChain);
+        }
+        currentChain = [];
+      }
+
+      // 2. Portion of segment A -> B after exiting the eraser circle (t in [t2, 1])
+      if (t2 < 1) {
+        const q2 = lerpPt(t2);
+        if ((1 - t2) * segLen >= 0.25) {
+          currentChain = [q2, { ...B, cx: undefined, cy: undefined }];
+        }
+      }
+    }
+  }
+
+  if (!modified) {
+    return { modified: false, pieces: [s] };
+  }
+
+  if (currentChain.length >= 2) {
+    chains.push(currentChain);
+  }
+
+  // If the original stroke was a closed loop (e.g. rectangle, triangle, circle, closed freehand)
+  // and was cut elsewhere, weld the last chain and the first chain across the original seam!
+  const origFirst = basePts[0];
+  const origLast = basePts[basePts.length - 1];
+  if (basePts.length >= 3 && distance(origFirst, origLast) < 1.5 && chains.length >= 2) {
+    const firstChain = chains[0];
+    const lastChain = chains[chains.length - 1];
+    if (distance(lastChain[lastChain.length - 1], firstChain[0]) < 1.5) {
+      chains[0] = [...lastChain, ...firstChain.slice(1)];
+      chains.pop();
+    }
+  }
+
+  // Filter out microscopic dust chains (< 1.0px total length)
+  const validChains = chains.filter((ch) => {
+    if (ch.length < 2) return false;
+    let len = 0;
+    for (let i = 1; i < ch.length; i++) {
+      len += distance(ch[i - 1], ch[i]);
+      if (len >= 1.0) return true;
+    }
+    return false;
+  });
+
+  if (validChains.length === 0) {
+    return { modified: true, pieces: [] };
+  }
+
+  const wasStraightLine = s.shapeType === 'line' || s.shapeType === 'arrow' || basePts.length === 2;
+
+  const pieces: StrokeObject[] = validChains.map((ch, idx) => {
+    const pieceId =
+      idx === 0
+        ? s.id
+        : `${s.id}-seg${idx}-${Math.random().toString(36).slice(2, 6)}`;
+    const endsAtOriginalEnd = distance(ch[ch.length - 1], origLast) < 1.2;
+    const startsAtOriginalStart = distance(ch[0], origFirst) < 1.2;
+
+    if (wasStraightLine && ch.length === 2) {
+      const p0 = ch[0];
+      const p1 = ch[1];
+      const keepArrowEnd = Boolean(s.arrowEnd && endsAtOriginalEnd);
+      const keepArrowStart = Boolean(s.arrowStart && startsAtOriginalStart);
+      return {
+        ...s,
+        id: pieceId,
+        isShape: true,
+        shapeType: keepArrowEnd && s.shapeType === 'arrow' ? 'arrow' : 'line',
+        arrowEnd: keepArrowEnd,
+        arrowStart: keepArrowStart,
+        fillStyle: 'none',
+        fillColor: undefined,
+        keyNodeIndices: undefined,
+        points: [
+          { ...p0, cx: undefined, cy: undefined },
+          { ...p1, cx: (p0.x + p1.x) / 2, cy: (p0.y + p1.y) / 2 },
+        ],
+      };
+    }
+
+    return {
+      ...s,
+      id: pieceId,
+      isShape: false,
+      shapeType: undefined,
+      arrowEnd: Boolean(s.arrowEnd && endsAtOriginalEnd),
+      arrowStart: Boolean(s.arrowStart && startsAtOriginalStart),
+      fillStyle: 'none',
+      fillColor: undefined,
+      points: ch,
+      keyNodeIndices: computeFreehandKeyNodeIndices(ch),
+    };
+  });
+
+  return { modified: true, pieces };
+}

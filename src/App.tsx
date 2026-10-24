@@ -81,6 +81,7 @@ import {
   computeFreehandKeyNodeIndices,
   deformStrokeAtKeyNode,
   isFreehandLoopClosed,
+  eraseStrokeByCircle,
 } from './utils/geometryAndAlgorithms';
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
@@ -161,7 +162,7 @@ export default function App() {
   // Goodnotes 6 Toolbar State
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
-  const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
+  const [eraserSubType, setEraserSubType] = useState<EraserSubType>('precision');
   const [shapePreset, setShapePreset] = useState<ShapePresetType>('sine');
   const [strokeColor, setStrokeColor] = useState<string>('#111827');
   const [colorSlots, setColorSlots] = useState<string[]>(['#111827', '#dc2626', '#2563eb']);
@@ -252,6 +253,7 @@ export default function App() {
   const holdTimerRef = useRef<number | null>(null);
   const laserStrokesRef = useRef<BezierPoint[][]>([]);
   const laserClearTimerRef = useRef<number | null>(null);
+  const lastEraserPtRef = useRef<{ x: number; y: number } | null>(null);
   const snappedCurrentStrokeRef = useRef<{ points: BezierPoint[]; shapeType: string } | null>(null);
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
   const isDraggingSelectionRef = useRef<{ startX: number; startY: number } | null>(null);
@@ -2829,8 +2831,12 @@ export default function App() {
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
+      setUndoStack((u) => [...u.slice(-24), clonePageFast(activePage)]);
+      setRedoStack([]);
       isDrawingRef.current = true;
-      eraseAtPoint(pt);
+      lastEraserPtRef.current = pt;
+      drawEraserCursorOverlay(pt);
+      eraseAtPoints([pt]);
       return;
     }
 
@@ -2963,32 +2969,83 @@ export default function App() {
     setActiveNodeStrokeId(null);
   };
 
-  const eraseAtPoint = (pt: { x: number; y: number }) => {
+  const getEraserRadius = () =>
+    eraserSubType === 'precision'
+      ? Math.max(4, strokeWidth * 1.6)
+      : Math.max(12, strokeWidth * 2.8);
+
+  const drawEraserCursorOverlay = (pt: { x: number; y: number }) => {
+    const canvas = activeCanvasRef.current;
+    const ctx = activeCtxRef.current;
+    if (!canvas || !ctx) return;
+    const r = getEraserRadius();
+    ctx.save();
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+    ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+    if (eraserSubType === 'precision') {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+      ctx.fill();
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
+      ctx.setLineDash([3, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220, 38, 38, 0.9)';
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.18)';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.75)';
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  const eraseAtPoints = (ptsToErase: { x: number; y: number }[]) => {
+    if (ptsToErase.length === 0) return;
     const lockedLayerIds = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
-    const eraseRadius = Math.max(14, strokeWidth * 3.5);
+    const eraseRadius = getEraserRadius();
 
     updateActivePage((page) => {
       if (eraserSubType === 'stroke' || eraserSubType === 'highlighter-only') {
         const filtered = page.strokes.filter((s) => {
           if (lockedLayerIds.has(s.layerId)) return true;
           if (eraserSubType === 'highlighter-only' && s.tool !== 'highlighter') return true;
-          return !isPointNearStroke(pt, s, eraseRadius);
+          return !ptsToErase.some((pt) => isPointNearStroke(pt, s, eraseRadius));
         });
         if (filtered.length === page.strokes.length) return page;
         return { ...page, strokes: filtered };
       } else {
-        const nextStrokes: StrokeObject[] = [];
-        for (const s of page.strokes) {
-          if (lockedLayerIds.has(s.layerId)) {
-            nextStrokes.push(s);
-            continue;
+        // Pixel / Segment Eraser ('precision'):
+        // Splits straight lines, polygons, parametric curves, and freehand curves at the exact circle intersection!
+        let currentStrokes = page.strokes;
+        let anyModified = false;
+
+        for (const pt of ptsToErase) {
+          const nextStrokes: StrokeObject[] = [];
+          for (const s of currentStrokes) {
+            if (lockedLayerIds.has(s.layerId)) {
+              nextStrokes.push(s);
+              continue;
+            }
+            const res = eraseStrokeByCircle(s, pt, eraseRadius);
+            if (res.modified) {
+              anyModified = true;
+              nextStrokes.push(...res.pieces);
+            } else {
+              nextStrokes.push(s);
+            }
           }
-          const remaining = s.points.filter((p) => distance(pt, p) > eraseRadius);
-          if (remaining.length >= 2) {
-            nextStrokes.push({ ...s, points: remaining });
-          }
+          currentStrokes = nextStrokes;
         }
-        return { ...page, strokes: nextStrokes };
+
+        if (!anyModified) return page;
+        return { ...page, strokes: currentStrokes };
       }
     }, false);
   };
@@ -3531,9 +3588,33 @@ export default function App() {
       return;
     }
 
-    // 4. Eraser
+    // 4. Eraser (supports both Whole-Stroke and Pixel / Segment Splitting along coalesced path!)
     if (activeTool === 'eraser') {
-      eraseAtPoint(latestPt);
+      const samplePts: { x: number; y: number }[] = [];
+      let prevPt = lastEraserPtRef.current || latestPt;
+      const stepSize = Math.max(2.5, getEraserRadius() * 0.45);
+      for (const ce of coalesced) {
+        const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
+        const dist = distance(prevPt, rawPt);
+        if (dist > stepSize) {
+          const steps = Math.min(28, Math.ceil(dist / stepSize));
+          for (let k = 1; k <= steps; k++) {
+            const t = k / steps;
+            samplePts.push({
+              x: prevPt.x + t * (rawPt.x - prevPt.x),
+              y: prevPt.y + t * (rawPt.y - prevPt.y),
+            });
+          }
+        } else {
+          samplePts.push(rawPt);
+        }
+        prevPt = rawPt;
+      }
+      lastEraserPtRef.current = prevPt;
+      drawEraserCursorOverlay(latestPt);
+      if (samplePts.length > 0) {
+        eraseAtPoints(samplePts);
+      }
       return;
     }
 
@@ -3758,6 +3839,12 @@ export default function App() {
         return;
       }
       finalizeLassoSelection([...lassoPolygonRef.current]);
+      return;
+    }
+
+    if (activeTool === 'eraser') {
+      lastEraserPtRef.current = null;
+      clearActiveOverlay();
       return;
     }
 
@@ -5331,22 +5418,56 @@ export default function App() {
                 )}
 
                 {activeTool === 'eraser' && (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {[
-                      { id: 'stroke', label: 'Ολόκληρη Γραμμή (Stroke)' },
-                      { id: 'precision', label: 'Ακριβείας (Pixel)' },
-                      { id: 'highlighter-only', label: 'Μόνο Μαρκαδόρος' },
+                      {
+                        id: 'precision',
+                        label: '✂️ Pixel (Μόνο όπου ακουμπάει / Τμήμα Ευθείας)',
+                      },
+                      {
+                        id: 'stroke',
+                        label: '🧹 Ολόκληρη Γραμμή (Stroke)',
+                      },
+                      {
+                        id: 'highlighter-only',
+                        label: '🖍️ Μόνο Μαρκαδόρος',
+                      },
                     ].map((er) => (
                       <button
                         key={er.id}
                         onClick={() => setEraserSubType(er.id as EraserSubType)}
-                        className={`px-3 py-1 rounded-full font-medium cursor-pointer ${
-                          eraserSubType === er.id ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-700'
+                        className={`px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
+                          eraserSubType === er.id
+                            ? 'bg-[#0066ff] text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
                         {er.label}
                       </button>
                     ))}
+                    <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
+                    <span className="text-[11px] font-semibold text-slate-500">Μέγεθος:</span>
+                    {[
+                      { label: 'Μικρή', w: 2.0 },
+                      { label: 'Μεσαία', w: 4.5 },
+                      { label: 'Μεγάλη', w: 9.0 },
+                    ].map((sz) => {
+                      const activeSz = Math.abs(strokeWidth - sz.w) < 1.1;
+                      return (
+                        <button
+                          key={sz.label}
+                          onClick={() => setStrokeWidth(sz.w)}
+                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                            activeSz
+                              ? 'bg-rose-500 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                          title={`Μέγεθος Σβήστρας (${sz.label})`}
+                        >
+                          {sz.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
