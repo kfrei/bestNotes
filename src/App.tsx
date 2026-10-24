@@ -1097,6 +1097,19 @@ export default function App() {
     return s.points;
   };
 
+  // Spring, Resistor, and 3D Shapes (Cuboid, Cylinder, Sphere, Pyramid) are transformed exclusively via Lasso (no Nodes!)
+  const isShapeWithoutNodes = (s: StrokeObject | undefined | null): boolean => {
+    if (!s || !s.isShape) return false;
+    return (
+      s.shapeType === 'spring' ||
+      s.shapeType === 'resistor' ||
+      s.shapeType === 'cuboid' ||
+      s.shapeType === 'cylinder' ||
+      s.shapeType === 'sphere' ||
+      s.shapeType === 'pyramid'
+    );
+  };
+
   const getStrokeBounds = (s: StrokeObject) => {
     const pts = getStrokeSamplePoints(s);
     let minX = Infinity,
@@ -2264,7 +2277,10 @@ export default function App() {
       // 4. Goodnotes Select / Lasso Transform Bounding Box (Oriented Bounding Box that rotates with the shape + Semicircular Rotation Arrow!)
       if (isCurrentActivePage) {
         const selBounds = getSelectionBounds();
-        if (selBounds && activeTool !== 'direct-node') {
+        const activeNodeTarget = activeNodeStrokeId
+          ? pageObj.strokes.find((s) => s.id === activeNodeStrokeId)
+          : undefined;
+        if (selBounds && (activeTool !== 'direct-node' || isShapeWithoutNodes(activeNodeTarget))) {
           const pad = 8;
           const hw = selBounds.hw + pad;
           const hh = selBounds.hh + pad;
@@ -2446,7 +2462,7 @@ export default function App() {
         //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices, NEVER 500!)
         if (activeTool === 'direct-node' && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
-          if (target) {
+          if (target && !isShapeWithoutNodes(target)) {
             ctx.save();
             if (!target.isShape) {
               const keyIndices =
@@ -4315,7 +4331,7 @@ export default function App() {
       const nodeHitRadius = e.pointerType === 'touch' ? 30 : 22;
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
-        if (target) {
+        if (target && !isShapeWithoutNodes(target)) {
           if (!target.isShape) {
             const keyIndices =
               target.keyNodeIndices && target.keyNodeIndices.length >= 2
@@ -4528,6 +4544,15 @@ export default function App() {
       }
       const hit = activePage.strokes.find((s) => isPointNearStroke(pt, s, 20));
       if (hit) {
+        if (isShapeWithoutNodes(hit)) {
+          const members = hit.groupId
+            ? activePage.strokes.filter((s) => s.groupId === hit.groupId).map((s) => s.id)
+            : [hit.id];
+          setSelectedStrokeIds(members);
+          setActiveNodeStrokeId(null);
+          setActiveTool('lasso');
+          return;
+        }
         // If an older ellipse/circle had >4 points, normalize it to 4 cardinal 90° points immediately!
         if ((hit.shapeType === 'ellipse' || hit.shapeType === 'circle') && hit.points.length > 4) {
           const b = getStrokeBounds(hit);
@@ -6756,6 +6781,18 @@ export default function App() {
       // N / Ν -> Nodes (Κόμβοι)
       if (code === 'KeyN' || key === 'n' || key === 'ν') {
         e.preventDefault();
+        const selCandidate =
+          selectedStrokeIds.length > 0
+            ? activePage.strokes.find((s) => s.id === selectedStrokeIds[0])
+            : activeNodeStrokeId
+            ? activePage.strokes.find((s) => s.id === activeNodeStrokeId)
+            : undefined;
+        if (selCandidate && isShapeWithoutNodes(selCandidate)) {
+          setActiveNodeStrokeId(null);
+          setActiveTool('lasso');
+          showToast('ℹ️ Το ελατήριο, η αντίσταση και τα 3D σχήματα δεν έχουν Nodes (μετασχηματίζονται με το Λάσο).');
+          return;
+        }
         setActiveTool('direct-node');
         setShowToolSubBar(true);
         if (selectedStrokeIds.length > 0 && !activeNodeStrokeId) {
@@ -8481,6 +8518,15 @@ export default function App() {
                       if (activeTool === tool.id && tool.id !== 'eraser' && tool.id !== 'text' && tool.id !== 'shape') {
                         setShowToolSubBar((s) => !s);
                       } else {
+                        if (tool.id === 'direct-node' && selectedStrokeIds.length > 0) {
+                          const selCandidate = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
+                          if (selCandidate && isShapeWithoutNodes(selCandidate)) {
+                            setActiveNodeStrokeId(null);
+                            setActiveTool('lasso');
+                            showToast('ℹ️ Το ελατήριο, η αντίσταση και τα 3D σχήματα δεν έχουν Nodes (μετασχηματίζονται με το Λάσο).');
+                            return;
+                          }
+                        }
                         if (tool.id === 'eraser' && activeTool !== 'eraser') {
                           setEraserSubType('stroke');
                         }
@@ -9412,35 +9458,34 @@ export default function App() {
 
                     {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (() => {
                       const selStroke = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
+                      if (!selStroke || isShapeWithoutNodes(selStroke)) return null;
                       let nodeCountLabel = 4;
-                      if (selStroke) {
-                        if (!selStroke.isShape) {
-                          const kIndices =
-                            selStroke.keyNodeIndices && selStroke.keyNodeIndices.length >= 2
-                              ? selStroke.keyNodeIndices
-                              : computeFreehandKeyNodeIndices(selStroke.points);
-                          nodeCountLabel =
-                            selStroke.points[0]?.twist === 999 && kIndices.length >= 3
-                              ? kIndices.length - 1
-                              : kIndices.length;
-                        } else if (
-                          selStroke.shapeType === 'sine' ||
-                          selStroke.shapeType === 'cosine' ||
-                          selStroke.shapeType === 'line' ||
-                          selStroke.shapeType === 'arrow' ||
-                          selStroke.shapeType === 'double-arrow'
-                        ) {
-                          nodeCountLabel = 2;
-                        } else if (
-                          selStroke.shapeType === 'parabola' ||
-                          selStroke.shapeType === 'hyperbola' ||
-                          selStroke.shapeType === 'arc' ||
-                          selStroke.shapeType === 'triangle'
-                        ) {
-                          nodeCountLabel = 3;
-                        } else {
-                          nodeCountLabel = 4;
-                        }
+                      if (!selStroke.isShape) {
+                        const kIndices =
+                          selStroke.keyNodeIndices && selStroke.keyNodeIndices.length >= 2
+                            ? selStroke.keyNodeIndices
+                            : computeFreehandKeyNodeIndices(selStroke.points);
+                        nodeCountLabel =
+                          selStroke.points[0]?.twist === 999 && kIndices.length >= 3
+                            ? kIndices.length - 1
+                            : kIndices.length;
+                      } else if (
+                        selStroke.shapeType === 'sine' ||
+                        selStroke.shapeType === 'cosine' ||
+                        selStroke.shapeType === 'line' ||
+                        selStroke.shapeType === 'arrow' ||
+                        selStroke.shapeType === 'double-arrow'
+                      ) {
+                        nodeCountLabel = 2;
+                      } else if (
+                        selStroke.shapeType === 'parabola' ||
+                        selStroke.shapeType === 'hyperbola' ||
+                        selStroke.shapeType === 'arc' ||
+                        selStroke.shapeType === 'triangle'
+                      ) {
+                        nodeCountLabel = 3;
+                      } else {
+                        nodeCountLabel = 4;
                       }
                       return (
                         <button
