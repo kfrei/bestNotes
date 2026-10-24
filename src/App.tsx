@@ -9049,36 +9049,182 @@ export default function App() {
                       - { id: 'triangle', label: '△ Τρίγωνο' },
                       To restore the simple shapes to the Shapes button, uncomment/re-insert the entries above and set default shapePreset back to 'auto'.
                     */}
-                    {[
-                      { id: 'cuboid', label: '📦 Παραλληλεπίπεδο / Κύβος 3D' },
-                      { id: 'cylinder', label: '🛢️ Κύλινδρος 3D' },
-                      { id: 'sphere', label: '🌐 Σφαίρα 3D' },
-                      { id: 'pyramid', label: '🔺 Πυραμίδα 3D' },
-                      { id: 'sine', label: '〰️ Ημίτονο (2 Κόμβοι)' },
-                      { id: 'cosine', label: '〰️ Συνημίτονο (2 Κόμβοι)' },
-                      { id: 'parabola', label: '∪ Παραβολή (3 Κόμβοι)' },
-                      { id: 'hyperbola', label: '╰ Υπερβολή (3 Κόμβοι)' },
-                      { id: 'arc', label: '⌒ Τόξο (3 Κόμβοι)' },
-                      { id: 'arrow', label: '➔ Διάνυσμα' },
-                      { id: 'double-arrow', label: '↔ Διπλό Βέλος' },
-                      { id: 'parallelogram', label: '▱ Παραλληλόγραμμο' },
-                      { id: 'axes', label: '📈 Άξονες' },
-                      { id: 'resistor', label: '⚡ Αντιστάτης' },
-                      { id: 'spring', label: '🌀 Ελατήριο' },
-                    ].map((sp) => (
+                    {(
+                      [
+                        {
+                          id: 'cuboid',
+                          title: 'Παραλληλεπίπεδο / Κύβος 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="4" y="7" width="16" height="12" />
+                              <path d="M 4 7 L 11 2.5 L 27 2.5 L 20 7" />
+                              <path d="M 27 2.5 L 27 14.5 L 20 19" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'cylinder',
+                          title: 'Κύλινδρος 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                              <ellipse cx="16" cy="5" rx="9" ry="2.8" />
+                              <ellipse cx="16" cy="17" rx="9" ry="2.8" />
+                              <line x1="7" y1="5" x2="7" y2="17" />
+                              <line x1="25" y1="5" x2="25" y2="17" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'sphere',
+                          title: 'Σφαίρα 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="16" cy="11" r="8.5" />
+                              <path d="M 7.5 11 A 8.5 3.3 0 0 0 24.5 11" />
+                              <path d="M 7.5 11 A 8.5 3.3 0 0 1 24.5 11" strokeDasharray="2 2" strokeOpacity="0.45" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'pyramid',
+                          title: 'Πυραμίδα 3D',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 16 2.5 L 4.5 16 L 16 19.5 L 27.5 16 Z" />
+                              <line x1="16" y1="2.5" x2="16" y2="19.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'sine',
+                          title: 'Ημίτονο (Sine)',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="2" y1="11" x2="32" y2="11" strokeWidth="1.1" strokeDasharray="2 2" strokeOpacity="0.4" />
+                              <path
+                                d="M 2.5 11 C 5.5 1.5, 11.5 1.5, 17 11 C 22.5 20.5, 28.5 20.5, 31.5 11"
+                                strokeWidth="2.2"
+                              />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'cosine',
+                          title: 'Συνημίτονο (Cosine)',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="2" y1="11" x2="32" y2="11" strokeWidth="1.1" strokeDasharray="2 2" strokeOpacity="0.4" />
+                              <path
+                                d="M 2.5 18.5 C 7 18.5, 11.5 3.5, 17 3.5 C 22.5 3.5, 27 18.5, 31.5 18.5"
+                                strokeWidth="2.2"
+                              />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'parabola',
+                          title: 'Παραβολή',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 5 3.5 Q 16 25 27 3.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'hyperbola',
+                          title: 'Υπερβολή',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 5 2.5 L 5 19 L 28 19" strokeWidth="1.1" strokeDasharray="2 2" strokeOpacity="0.4" />
+                              <path d="M 7.5 3 C 8 13.5, 14.5 16.5, 27.5 17" strokeWidth="2.2" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'arc',
+                          title: 'Τόξο',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 4.5 17.5 A 12.5 12.5 0 0 1 27.5 17.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'arrow',
+                          title: 'Διάνυσμα / Βέλος',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="4" y1="11" x2="27" y2="11" />
+                              <polyline points="20,5.5 27,11 20,16.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'double-arrow',
+                          title: 'Διπλό Βέλος',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="5" y1="11" x2="27" y2="11" />
+                              <polyline points="10.5,6 4.5,11 10.5,16" />
+                              <polyline points="21.5,6 27.5,11 21.5,16" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'parallelogram',
+                          title: 'Παραλληλόγραμμο',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="9,4.5 27.5,4.5 23,17.5 4.5,17.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'axes',
+                          title: 'Άξονες Συντεταγμένων',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="6" y1="18.5" x2="6" y2="3" />
+                              <polyline points="3,6.5 6,2.8 9,6.5" />
+                              <line x1="4" y1="16.5" x2="28" y2="16.5" />
+                              <polyline points="24.5,13.5 28.2,16.5 24.5,19.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'resistor',
+                          title: 'Αντιστάτης',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.95" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="2,11 6.5,11 8.5,4.5 12.2,17.5 15.9,4.5 19.6,17.5 23.3,4.5 26.5,17.5 28.5,11 32,11" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'spring',
+                          title: 'Ελατήριο',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 2 11 L 6 11 C 6.5 3.5, 11.5 3.5, 11 11 C 10.5 18.5, 8.5 18.5, 9 11 C 9.5 3.5, 16.5 3.5, 16 11 C 15.5 18.5, 13.5 18.5, 14 11 C 14.5 3.5, 21.5 3.5, 21 11 C 20.5 18.5, 18.5 18.5, 19 11 C 19.5 3.5, 26.5 3.5, 26 11 L 32 11" />
+                            </svg>
+                          ),
+                        },
+                      ] as const
+                    ).map((sp) => (
                       <button
                         key={sp.id}
                         onClick={() => {
                           setShapePreset(sp.id as ShapePresetType);
                           lastCreatedShapeIdsRef.current = [];
                         }}
-                        className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap cursor-pointer ${
+                        title={sp.title}
+                        className={`flex items-center justify-center px-2.5 py-1.5 rounded-xl border transition cursor-pointer ${
                           shapePreset === sp.id
-                            ? 'bg-[#0066ff] text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            ? 'bg-sky-100/90 border-[#0066ff] ring-2 ring-[#0066ff]/30 shadow-xs'
+                            : 'bg-slate-100 border-slate-200/80 hover:bg-slate-200'
                         }`}
                       >
-                        {sp.label}
+                        {sp.icon}
                       </button>
                     ))}
                   </div>
