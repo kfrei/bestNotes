@@ -270,6 +270,8 @@ export default function App() {
     frameAngle?: number;
     sideSignX?: number;
     sideSignY?: number;
+    targetStrokeIds?: string[];
+    targetImageId?: string | null;
   } | null>(null);
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
@@ -670,6 +672,119 @@ export default function App() {
       return false;
     },
     [activeTool, getSelectionBounds]
+  );
+
+  // Finds the top-most unlocked shape, stroke, group, or image at a page point `pt`
+  const findSelectableObjectAtPagePoint = useCallback(
+    (
+      pt: { x: number; y: number },
+      pageObj: NotePage
+    ):
+      | {
+          type: 'stroke';
+          stroke: StrokeObject;
+          memberIds: string[];
+          bounds: { cx: number; cy: number };
+        }
+      | {
+          type: 'image';
+          image: ImageObject;
+          bounds: { cx: number; cy: number };
+        }
+      | null => {
+      const imgList = pageObj.images || [];
+      const strokeList = pageObj.strokes || [];
+      const lockedLayers = new Set(pageObj.layers.filter((l) => l.locked).map((l) => l.id));
+
+      let topHitImg: { img: ImageObject; z: number } | null = null;
+      for (let idx = 0; idx < imgList.length; idx++) {
+        const im = imgList[idx];
+        if (lockedLayers.has(im.layerId)) continue;
+        if (pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height) {
+          const z = im.zOrder ?? idx + 1;
+          if (!topHitImg || z >= topHitImg.z) {
+            topHitImg = { img: im, z };
+          }
+        }
+      }
+
+      let topHitStroke: { stroke: StrokeObject; z: number } | null = null;
+      for (let idx = 0; idx < strokeList.length; idx++) {
+        const s = strokeList[idx];
+        if (lockedLayers.has(s.layerId)) continue;
+        if (isPointNearStroke(pt, s, 22)) {
+          const z = s.zOrder ?? imgList.length + idx + 1;
+          if (!topHitStroke || z >= topHitStroke.z) {
+            topHitStroke = { stroke: s, z };
+          }
+        }
+      }
+
+      if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
+        const tappedStroke = topHitStroke.stroke;
+        const memberStrokes = tappedStroke.groupId
+          ? strokeList.filter((s) => s.groupId === tappedStroke.groupId)
+          : [tappedStroke];
+        const memberIds = memberStrokes.map((s) => s.id);
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (const ms of memberStrokes) {
+          const b = getStrokeBounds(ms);
+          if (b.minX < minX) minX = b.minX;
+          if (b.minY < minY) minY = b.minY;
+          if (b.maxX > maxX) maxX = b.maxX;
+          if (b.maxY > maxY) maxY = b.maxY;
+        }
+        return {
+          type: 'stroke',
+          stroke: tappedStroke,
+          memberIds,
+          bounds: { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 },
+        };
+      }
+
+      if (topHitImg) {
+        const im = topHitImg.img;
+        return {
+          type: 'image',
+          image: im,
+          bounds: { cx: im.x + im.width / 2, cy: im.y + im.height / 2 },
+        };
+      }
+
+      return null;
+    },
+    []
+  );
+
+  // Checks if a 1-finger touch point (clientX, clientY) lands either on an active Lasso selection box/handle
+  // OR directly on any shape, group, stroke, or image on the page so touching it with a finger selects it with the Lasso!
+  const isClientPointOnSelectableOrLasso = useCallback(
+    (clientX: number, clientY: number, targetEl?: EventTarget | null): boolean => {
+      if (isClientPointInLassoSelection(clientX, clientY)) return true;
+      const canvas = targetEl instanceof HTMLCanvasElement ? targetEl : activeCanvasRef.current;
+      if (!canvas) return false;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+
+      const logicalW = canvas.width / CANVAS_DPR;
+      const logicalH = canvas.height / CANVAS_DPR;
+      const ptX = (clientX - rect.left) * (logicalW / rect.width);
+      const ptY = (clientY - rect.top) * (logicalH / rect.height);
+
+      let targetPageObj = activePage;
+      for (const p of activeNotebook.pages) {
+        if (activeCanvasMapRef.current.get(p.id) === canvas) {
+          targetPageObj = p;
+          break;
+        }
+      }
+
+      return findSelectableObjectAtPagePoint({ x: ptX, y: ptY }, targetPageObj) !== null;
+    },
+    [isClientPointInLassoSelection, activePage, activeNotebook.pages, findSelectableObjectAtPagePoint]
   );
 
   const drawStrokeOnContext = (ctx: CanvasRenderingContext2D, s: StrokeObject, isSelected = false) => {
@@ -1998,7 +2113,7 @@ export default function App() {
         performance.now() - lastPenActivityTimeRef.current > 320
       ) {
         const t = directTouches[0] as any;
-        if (!isOutsideCanvas && isClientPointInLassoSelection(t.clientX, t.clientY)) {
+        if (!isOutsideCanvas && isClientPointOnSelectableOrLasso(t.clientX, t.clientY, e.target)) {
           outsidePanDragRef.current = null;
           return;
         }
@@ -2240,7 +2355,7 @@ export default function App() {
       ws.removeEventListener('touchcancel', onTouchEnd);
       ws.removeEventListener('wheel', onWheel);
     };
-  }, [viewMode, pencilOnlyMode, isClientPointInLassoSelection, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, cancelScrollMomentum, startScrollMomentum, handleUndo, handleRedo, showToast]);
+  }, [viewMode, pencilOnlyMode, isClientPointInLassoSelection, isClientPointOnSelectableOrLasso, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, cancelScrollMomentum, startScrollMomentum, handleUndo, handleRedo, showToast]);
 
   const clearActiveOverlay = () => {
     const c = activeCanvasRef.current;
@@ -2474,18 +2589,19 @@ export default function App() {
         clearActiveOverlay();
       }
     } else if (e.pointerType === 'touch') {
-      const isFingerOnSelectedLassoBox = isClientPointInLassoSelection(e.clientX, e.clientY);
-      if (isFingerOnSelectedLassoBox) {
-        outsidePanDragRef.current = null;
-        cancelScrollMomentum();
-      } else {
-        if (pencilOnlyMode) return;
-        if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
-        if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 260) return;
-      }
+      if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
+      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 260) return;
       const nev = e.nativeEvent as PointerEvent;
       if ((nev.width && nev.width > 68) || (nev.height && nev.height > 68)) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
+
+      const isFingerOnObjectOrLasso = isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget);
+      if (isFingerOnObjectOrLasso) {
+        outsidePanDragRef.current = null;
+        cancelScrollMomentum();
+      } else if (pencilOnlyMode) {
+        return;
+      }
     }
 
     // Switch active page immediately if user touches another page in the Word-style vertical stack!
@@ -2524,6 +2640,59 @@ export default function App() {
     }
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = pt;
+
+    // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image -> Automatically select it with Lasso (& allow immediate drag-and-drop)!
+    if (e.pointerType === 'touch' && !(activeTool === 'lasso' && isClientPointInLassoSelection(e.clientX, e.clientY))) {
+      const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
+      if (fingerHit) {
+        if (activeTool !== 'lasso') {
+          setActiveTool('lasso');
+        }
+        setShowToolSubBar(true);
+        setImageCropMode('none');
+        if (fingerHit.type === 'stroke') {
+          setSelectedImageId(null);
+          setSelectedStrokeIds(fingerHit.memberIds);
+          setActiveNodeStrokeId(fingerHit.stroke.id);
+          selectionTransformRef.current = {
+            mode: 'move',
+            startX: pt.x,
+            startY: pt.y,
+            centerX: fingerHit.bounds.cx,
+            centerY: fingerHit.bounds.cy,
+            anchorX: fingerHit.bounds.cx,
+            anchorY: fingerHit.bounds.cy,
+            initialDist: 1,
+            initialAngle: 0,
+            targetStrokeIds: fingerHit.memberIds,
+            targetImageId: null,
+          };
+        } else {
+          setSelectedImageId(fingerHit.image.id);
+          setSelectedStrokeIds([]);
+          setActiveNodeStrokeId(null);
+          selectionTransformRef.current = {
+            mode: 'move',
+            startX: pt.x,
+            startY: pt.y,
+            centerX: fingerHit.bounds.cx,
+            centerY: fingerHit.bounds.cy,
+            anchorX: fingerHit.bounds.cx,
+            anchorY: fingerHit.bounds.cy,
+            initialDist: 1,
+            initialAngle: 0,
+            targetStrokeIds: [],
+            targetImageId: fingerHit.image.id,
+          };
+        }
+        isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+        isDrawingRef.current = true;
+        return;
+      }
+      if (pencilOnlyMode) {
+        return;
+      }
+    }
 
     // 1. Image Crop Mode
     if (imageCropMode !== 'none' && selectedImageId) {
@@ -3249,7 +3418,7 @@ export default function App() {
     }
 
     // 3. Lasso Selection or Transform (Move, 4-Corner Proportional Resize, 360° Rotate)
-    if (activeTool === 'lasso') {
+    if (activeTool === 'lasso' || selectionTransformRef.current) {
       if (selectionTransformRef.current) {
         const tf = selectionTransformRef.current;
 
@@ -3489,12 +3658,16 @@ export default function App() {
         tf.startX = latestPt.x;
         tf.startY = latestPt.y;
 
-        if (selectedImageId) {
+        const targetImgId = tf.targetImageId !== undefined ? tf.targetImageId : selectedImageId;
+        const targetStrokeIdList =
+          tf.targetStrokeIds && tf.targetStrokeIds.length > 0 ? tf.targetStrokeIds : selectedStrokeIds;
+
+        if (targetImgId) {
           updateActivePage(
             (page) => ({
               ...page,
               images: page.images.map((im) =>
-                im.id === selectedImageId ? { ...im, x: im.x + dx, y: im.y + dy } : im
+                im.id === targetImgId ? { ...im, x: im.x + dx, y: im.y + dy } : im
               ),
             }),
             false
@@ -3506,7 +3679,7 @@ export default function App() {
           (page) => ({
             ...page,
             strokes: page.strokes.map((s) => {
-              if (!selectedStrokeIds.includes(s.id)) return s;
+              if (!targetStrokeIdList.includes(s.id)) return s;
               return {
                 ...s,
                 points: s.points.map((p) => ({
@@ -3831,7 +4004,7 @@ export default function App() {
     }
 
     // 2. Finish Lasso Selection
-    if (activeTool === 'lasso') {
+    if (activeTool === 'lasso' || selectionTransformRef.current || isDraggingSelectionRef.current) {
       clearActiveOverlay();
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
         selectionTransformRef.current = null;
