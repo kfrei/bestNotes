@@ -419,8 +419,6 @@ export default function App() {
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
-  const [shiftKeyPressed, setShiftKeyPressed] = useState<boolean>(false);
-  const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
   const shiftKeyPressedRef = useRef<boolean>(false);
   const lassoAdditiveRef = useRef<boolean>(false);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
@@ -4194,7 +4192,7 @@ export default function App() {
     if (selectedTextId) setSelectedTextId(null);
     if (editingTextId) setEditingTextId(null);
 
-    const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current || multiSelectMode);
+    const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current);
 
     // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image:
     //    - When Pencil-Only Mode is ON (`pencilOnlyMode === true`): ALWAYS auto-select with Lasso & allow immediate drag/resize/rotate!
@@ -4796,7 +4794,7 @@ export default function App() {
   const finalizeLassoSelection = (poly: { x: number; y: number }[], eventShiftKey = false) => {
     clearActiveOverlay();
     const isAdditive = Boolean(
-      eventShiftKey || lassoAdditiveRef.current || shiftKeyPressedRef.current || multiSelectMode
+      eventShiftKey || lassoAdditiveRef.current || shiftKeyPressedRef.current
     );
     lassoAdditiveRef.current = false;
     lassoPolygonRef.current = [];
@@ -6660,7 +6658,6 @@ export default function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') {
         shiftKeyPressedRef.current = true;
-        setShiftKeyPressed(true);
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (editingTextId !== null || showMathModal) return;
@@ -6775,13 +6772,11 @@ export default function App() {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Shift' || !e.shiftKey) {
         shiftKeyPressedRef.current = false;
-        setShiftKeyPressed(false);
       }
     };
 
     const onWindowBlur = () => {
       shiftKeyPressedRef.current = false;
-      setShiftKeyPressed(false);
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -8706,26 +8701,6 @@ export default function App() {
                   title="Όλα τα Χρώματα & Στυλ Γραμμής"
                 />
                 <div className="h-4 w-px bg-slate-200 mx-0.5" />
-                <div className="inline-flex items-center gap-2">
-                  <button
-                    onClick={() => toggleFillStyleToSelection(false)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition cursor-pointer ${
-                      fillStyle !== 'none'
-                        ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
-                        : 'bg-slate-100 border-slate-200/90 text-slate-700 hover:bg-slate-200'
-                    }`}
-                    title="Εναλλαγή με 1 κλικ: Γέμισμα (Fill) / Χωρίς Γέμισμα — Συντόμευση: F / Φ"
-                  >
-                    {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
-                  </button>
-                  <button
-                    onClick={() => cycleFillTransparency()}
-                    className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-sky-50 border border-slate-200/90 hover:border-sky-300 text-[11px] font-bold text-slate-600 hover:text-[#0066ff] transition cursor-pointer"
-                    title={`Διαφάνεια Γεμίσματος: ${fillTransparency}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
-                  >
-                    {fillTransparency}%
-                  </button>
-                </div>
                 {(() => {
                   const selIds =
                     selectedStrokeIds.length > 0
@@ -8744,40 +8719,74 @@ export default function App() {
                   const targetStrokes = activePage.strokes.filter(
                     (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
                   );
+                  const effectiveFilled =
+                    targetStrokes.length > 0
+                      ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
+                      : fillStyle !== 'none';
+                  const rawTrans =
+                    targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency;
+                  const effectiveTrans: 25 | 45 | 90 =
+                    rawTrans === 20 || rawTrans === 25
+                      ? 25
+                      : rawTrans === 45 || rawTrans === 50
+                      ? 45
+                      : 90;
                   const effectiveDashed =
                     targetStrokes.length > 0
                       ? targetStrokes.some((s) => s.lineStyle === 'dashed')
                       : lineStyle === 'dashed';
                   return (
-                    <button
-                      onClick={() => {
-                        const nextLineStyle: LineStyleType = effectiveDashed ? 'solid' : 'dashed';
-                        applyLineStyleToSelection(nextLineStyle);
-                      }}
-                      className={`w-[68px] h-[26px] inline-flex items-center justify-center rounded-full border transition cursor-pointer ${
-                        effectiveDashed
-                          ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
-                          : 'bg-slate-100 border-slate-200/90 text-slate-800 hover:bg-slate-200'
-                      }`}
-                      title={
-                        effectiveDashed
-                          ? 'Διακεκομμένη Γραμμή (Κλικ για Συνεχή Γραμμή)'
-                          : 'Συνεχής Γραμμή (Κλικ για Διακεκομμένη Γραμμή)'
-                      }
-                    >
-                      <svg width="46" height="8" viewBox="0 0 46 8" fill="none" className="overflow-visible">
-                        <line
-                          x1="2"
-                          y1="4"
-                          x2="44"
-                          y2="4"
-                          stroke="currentColor"
-                          strokeWidth="3.2"
-                          strokeLinecap="round"
-                          strokeDasharray={effectiveDashed ? '6.5 6' : undefined}
-                        />
-                      </svg>
-                    </button>
+                    <>
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => toggleFillStyleToSelection(false)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition cursor-pointer ${
+                            effectiveFilled
+                              ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
+                              : 'bg-slate-100 border-slate-200/90 text-slate-700 hover:bg-slate-200'
+                          }`}
+                          title="Fill (Γέμισμα / Χωρίς Γέμισμα) — Συντόμευση: F / Φ"
+                        >
+                          {effectiveFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
+                        </button>
+                        <button
+                          onClick={() => cycleFillTransparency()}
+                          className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-sky-50 border border-slate-200/90 hover:border-sky-300 text-[11px] font-bold text-slate-600 hover:text-[#0066ff] transition cursor-pointer"
+                          title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
+                        >
+                          {effectiveTrans}%
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const nextLineStyle: LineStyleType = effectiveDashed ? 'solid' : 'dashed';
+                          applyLineStyleToSelection(nextLineStyle);
+                        }}
+                        className={`w-[68px] h-[26px] inline-flex items-center justify-center rounded-full border transition cursor-pointer ${
+                          effectiveDashed
+                            ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
+                            : 'bg-slate-100 border-slate-200/90 text-slate-800 hover:bg-slate-200'
+                        }`}
+                        title={
+                          effectiveDashed
+                            ? 'Διακεκομμένη Γραμμή (Κλικ για Συνεχή Γραμμή)'
+                            : 'Συνεχής Γραμμή (Κλικ για Διακεκομμένη Γραμμή)'
+                        }
+                      >
+                        <svg width="46" height="8" viewBox="0 0 46 8" fill="none" className="overflow-visible">
+                          <line
+                            x1="2"
+                            y1="4"
+                            x2="44"
+                            y2="4"
+                            stroke="currentColor"
+                            strokeWidth="3.2"
+                            strokeLinecap="round"
+                            strokeDasharray={effectiveDashed ? '6.5 6' : undefined}
+                          />
+                        </svg>
+                      </button>
+                    </>
                   );
                 })()}
               </div>
@@ -9305,63 +9314,8 @@ export default function App() {
                   </div>
                 )}
 
-                {(selectedStrokeIds.length > 0 || activeTool === 'lasso' || activeTool === 'direct-node') && (
+                {(selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso' || activeTool === 'direct-node') && (
                   <div className="flex items-center gap-1.5">
-                    {/* Shift / Multi-Select Toggle Pill (works automatically when holding Shift on keyboard OR by tapping on iPad!) */}
-                    <button
-                      onClick={() => {
-                        setMultiSelectMode((prev) => {
-                          const next = !prev;
-                          showToast(
-                            next
-                              ? '➕ Πολλαπλή Επιλογή (Shift): ΕΝΕΡΓΗ — επίλεξε όσα σχήματα θέλεις με το Λάσο!'
-                              : '➖ Πολλαπλή Επιλογή: Απενεργοποιήθηκε'
-                          );
-                          return next;
-                        });
-                      }}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition cursor-pointer ${
-                        shiftKeyPressed || multiSelectMode
-                          ? 'bg-violet-600 border-violet-600 text-white shadow-xs animate-pulse'
-                          : 'bg-violet-50 hover:bg-violet-100 border-violet-200 text-violet-700'
-                      }`}
-                      title="Κράτα πατημένο το Shift στο πληκτρολόγιο (ή πάτησε εδώ στο iPad) για να επιλέξεις 2ο, 3ο σχήμα με το Λάσο!"
-                    >
-                      <span>⇧ Shift: Πολλαπλή</span>
-                      {selectedStrokeIds.length >= 2 && (
-                        <span className="px-1.5 py-0.2 rounded-full bg-white/25 text-[10px] font-bold">
-                          {selectedStrokeIds.length}
-                        </span>
-                      )}
-                    </button>
-
-                    {/* Prominent Group / Ungroup Button right next to Multi-Select when 2+ shapes are selected! */}
-                    {selectedStrokeIds.length >= 2 && (() => {
-                      const selStrokesList = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
-                      const firstGrp = selStrokesList[0]?.groupId;
-                      const allInSameGroup =
-                        Boolean(firstGrp) && selStrokesList.every((s) => s.groupId === firstGrp);
-                      return !allInSameGroup ? (
-                        <button
-                          onClick={handleGroupSelected}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm ring-2 ring-emerald-300 transition cursor-pointer"
-                          title="Ομαδοποίηση (Group) όλων των επιλεγμένων σχημάτων — Συντόμευση: G"
-                        >
-                          <Group className="w-3.5 h-3.5" />
-                          <span>🔗 Group ({selectedStrokeIds.length})</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handleUngroupSelected}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-xs transition cursor-pointer"
-                          title="Διαχωρισμός ομάδας (Ungroup) — Συντόμευση: G"
-                        >
-                          <Ungroup className="w-3.5 h-3.5" />
-                          <span>🔓 Ungroup ({selectedStrokeIds.length})</span>
-                        </button>
-                      );
-                    })()}
-
                     <button
                       onClick={handleCutSelected}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold cursor-pointer"
@@ -9456,82 +9410,6 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Single 1-Click Shape / Closed-Stroke Fill Toggle Button ("Γέμισμα" <-> "Χωρίς Γέμισμα") + Discreet 20% / 50% / 90% Transparency Cycle */}
-                    {(() => {
-                      const selIds =
-                        selectedStrokeIds.length > 0
-                          ? selectedStrokeIds
-                          : activeNodeStrokeId
-                          ? [activeNodeStrokeId]
-                          : [];
-                      const selSet = new Set(selIds);
-                      const groupIds = new Set(
-                        activePage.strokes
-                          .filter((s) => selSet.has(s.id) && s.groupId)
-                          .map((s) => s.groupId as string)
-                      );
-                      const targetStrokes = activePage.strokes.filter(
-                        (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
-                      );
-                      const isCurrentlyFilled = targetStrokes.some(
-                        (s) => s.fillStyle && s.fillStyle !== 'none'
-                      );
-                      const rawTrans =
-                        targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency;
-                      const effectiveTrans: 25 | 45 | 90 =
-                        rawTrans === 20 || rawTrans === 25
-                          ? 25
-                          : rawTrans === 45 || rawTrans === 50
-                          ? 45
-                          : 90;
-                      return (
-                        <div className="inline-flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              const nextFill: FillStyleType = isCurrentlyFilled ? 'none' : 'solid';
-                              setFillStyle(nextFill);
-                              const canAnyFill = targetStrokes.some(
-                                (s) => s.isShape || isFreehandLoopClosed(s.points, true)
-                              );
-                              if (!canAnyFill && nextFill !== 'none') {
-                                showToast('ℹ️ Η γραμμή πρέπει να είναι κλειστή (να ενώνονται οι άκρες της) για να πάρει γέμισμα!');
-                                return;
-                              }
-                              updateActivePage((page) => ({
-                                ...page,
-                                strokes: page.strokes.map((s) =>
-                                  (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
-                                  (s.isShape || isFreehandLoopClosed(s.points, true))
-                                    ? {
-                                        ...s,
-                                        fillStyle: nextFill,
-                                        fillColor: nextFill !== 'none' ? s.color : undefined,
-                                        fillTransparency: s.fillTransparency ?? fillTransparency,
-                                      }
-                                    : s
-                                ),
-                              }));
-                            }}
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition cursor-pointer ${
-                              isCurrentlyFilled
-                                ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
-                                : 'bg-slate-100 border-slate-200/90 text-slate-700 hover:bg-slate-200'
-                            }`}
-                            title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα (λειτουργεί και σε κλειστά ελεύθερα σχήματα!)"
-                          >
-                            {isCurrentlyFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
-                          </button>
-                          <button
-                            onClick={() => cycleFillTransparency()}
-                            className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-sky-50 border border-slate-200/90 hover:border-sky-300 text-[11px] font-bold text-slate-600 hover:text-[#0066ff] transition cursor-pointer"
-                            title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
-                          >
-                            {effectiveTrans}%
-                          </button>
-                        </div>
-                      );
-                    })()}
-
                     {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (() => {
                       const selStroke = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
                       let nodeCountLabel = 4;
@@ -9597,6 +9475,7 @@ export default function App() {
                       <button
                         onClick={handleGroupSelected}
                         className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold cursor-pointer"
+                        title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
                       >
                         <Group className="w-3.5 h-3.5" />
                         <span>Group ({selectedStrokeIds.length})</span>
@@ -9606,6 +9485,7 @@ export default function App() {
                       <button
                         onClick={handleUngroupSelected}
                         className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 font-medium cursor-pointer"
+                        title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                       >
                         <Ungroup className="w-3.5 h-3.5" />
                         <span>Ungroup</span>
@@ -9631,97 +9511,6 @@ export default function App() {
 
                 {selectedImgObj && (
                   <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={handleCutSelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold cursor-pointer"
-                    >
-                      <Scissors className="w-3.5 h-3.5" />
-                      <span>Cut</span>
-                    </button>
-                    <button
-                      onClick={handleCopySelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 font-semibold cursor-pointer"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy</span>
-                    </button>
-                    <button
-                      onClick={handlePaste}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
-                      title="Επικόλληση (Paste)"
-                    >
-                      <ClipboardPaste className="w-3.5 h-3.5" />
-                      <span>Paste</span>
-                    </button>
-                    <button
-                      onClick={handleDuplicateSelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold cursor-pointer"
-                      title="Άμεση δημιουργία αντιγράφου λίγο πιο κάτω και λίγο πιο δεξιά"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Αντίγραφο</span>
-                    </button>
-
-                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) */}
-                    <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
-                      <button
-                        onClick={() => handleMirrorSelected('horizontal')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                        title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
-                      >
-                        <MirrorHorizontalIcon className="w-3.5 h-3.5" />
-                        <span>↔ Mirror</span>
-                      </button>
-                      <button
-                        onClick={() => handleMirrorSelected('vertical')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                        title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
-                      >
-                        <MirrorVerticalIcon className="w-3.5 h-3.5" />
-                        <span>↕ Mirror</span>
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={handleAddSelectedToShapeLibrary}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
-                      title="Αποθήκευση του επιλεγμένου σχήματος στη Βιβλιοθήκη Σχημάτων"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>(+) Βιβλιοθήκη</span>
-                    </button>
-
-                    {/* Z-Order Controls for Selected Image */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
-                      <button
-                        onClick={() => handleZOrderSelected('to-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
-                        title="Send to Back (Εντελώς πίσω)"
-                      >
-                        ⏬ Πίσω
-                      </button>
-                      <button
-                        onClick={() => handleZOrderSelected('step-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
-                        title="Send Backward (-1 βήμα πίσω)"
-                      >
-                        🔽 -1
-                      </button>
-                      <button
-                        onClick={() => handleZOrderSelected('step-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
-                        title="Bring Forward (+1 βήμα μπροστά)"
-                      >
-                        🔼 +1
-                      </button>
-                      <button
-                        onClick={() => handleZOrderSelected('to-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
-                        title="Bring to Front (Εντελώς μπροστά)"
-                      >
-                        ⏫ Μπροστά
-                      </button>
-                    </div>
                     <button
                       onClick={() => {
                         const cached = imageElementsCacheRef.current.get(selectedImgObj.dataUrl);
