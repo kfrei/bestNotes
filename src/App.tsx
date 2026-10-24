@@ -704,7 +704,7 @@ export default function App() {
       return false;
     }
 
-    if ((s.shapeType === 'parabola' || s.shapeType === 'hyperbola' || s.shapeType === 'arc') && s.points.length === 3) {
+    if ((s.shapeType === 'parabola' || s.shapeType === 'arc') && s.points.length === 3) {
       const [p0, pMid, p2] = s.points;
       const cx = 2 * pMid.x - (p0.x + p2.x) / 2;
       const cy = 2 * pMid.y - (p0.y + p2.y) / 2;
@@ -715,6 +715,31 @@ export default function App() {
         const curPt = {
           x: u * u * p0.x + 2 * u * t * cx + t * t * p2.x,
           y: u * u * p0.y + 2 * u * t * cy + t * t * p2.y,
+        };
+        if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+        prevPt = curPt;
+      }
+      return false;
+    }
+
+    if (s.shapeType === 'hyperbola' && s.points.length === 3) {
+      const [p0, pMid, p2] = s.points;
+      const wHyp = 1.85;
+      const midX = (p0.x + p2.x) / 2;
+      const midY = (p0.y + p2.y) / 2;
+      const ctrlX = midX + ((1 + wHyp) / wHyp) * (pMid.x - midX);
+      const ctrlY = midY + ((1 + wHyp) / wHyp) * (pMid.y - midY);
+      let prevPt: { x: number; y: number } | null = null;
+      for (let i = 0; i <= 32; i++) {
+        const t = i / 32;
+        const u = 1 - t;
+        const b0 = u * u;
+        const b1 = 2 * wHyp * u * t;
+        const b2 = t * t;
+        const denom = b0 + b1 + b2;
+        const curPt = {
+          x: (b0 * p0.x + b1 * ctrlX + b2 * p2.x) / denom,
+          y: (b0 * p0.y + b1 * ctrlY + b2 * p2.y) / denom,
         };
         if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
         prevPt = curPt;
@@ -1362,23 +1387,25 @@ export default function App() {
       ctx.moveTo(p0.x, p0.y);
       ctx.quadraticCurveTo(ctrlX, ctrlY, p2.x, p2.y);
     } else if (s.shapeType === 'hyperbola' && s.points.length === 3) {
-      // 4. Symmetrical 3-Node Hyperbola ('hyperbola')
-      //    Passes 100% through p0 (t=-1), pMid (t=0 vertex), and p2 (t=+1) with hyperbolic asymptotes!
+      // 4. Rectangular / Asymptotic 3-Node Hyperbola ('hyperbola' — y = c/x branch)
+      //    Exact Rational Quadratic Bézier conic (w = 1.85) passing 100% through p0 (t=0), pMid (t=0.5), and p2 (t=1)
+      //    with orthogonal hyperbolic asymptotes (supports concave up, concave down, left, or right)!
       const [p0, pMid, p2] = s.points;
-      const midChordX = (p0.x + p2.x) / 2;
-      const midChordY = (p0.y + p2.y) / 2;
-      const ux = (p2.x - p0.x) / 2;
-      const uy = (p2.y - p0.y) / 2;
-      const vx = pMid.x - midChordX;
-      const vy = pMid.y - midChordY;
-      const k = 2.25;
-      const denom = Math.sqrt(1 + k * k) - 1;
-      const steps = 56;
+      const wHyp = 1.85;
+      const midX = (p0.x + p2.x) / 2;
+      const midY = (p0.y + p2.y) / 2;
+      const ctrlX = midX + ((1 + wHyp) / wHyp) * (pMid.x - midX);
+      const ctrlY = midY + ((1 + wHyp) / wHyp) * (pMid.y - midY);
+      const steps = 64;
       for (let i = 0; i <= steps; i++) {
-        const u = -1 + (2 * i) / steps; // -1 .. +1
-        const phi = (Math.sqrt(1 + k * u * (k * u)) - 1) / denom;
-        const x = pMid.x + u * ux - phi * vx;
-        const y = pMid.y + u * uy - phi * vy;
+        const t = i / steps;
+        const u = 1 - t;
+        const b0 = u * u;
+        const b1 = 2 * wHyp * u * t;
+        const b2 = t * t;
+        const denom = b0 + b1 + b2;
+        const x = (b0 * p0.x + b1 * ctrlX + b2 * p2.x) / denom;
+        const y = (b0 * p0.y + b1 * ctrlY + b2 * p2.y) / denom;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
@@ -6608,7 +6635,7 @@ export default function App() {
                       { id: 'sine', label: '〰️ Ημίτονο (2 Κόμβοι)' },
                       { id: 'cosine', label: '〰️ Συνημίτονο (2 Κόμβοι)' },
                       { id: 'parabola', label: '∪ Παραβολή (3 Κόμβοι)' },
-                      { id: 'hyperbola', label: ')( Υπερβολή (3 Κόμβοι)' },
+                      { id: 'hyperbola', label: '╰ Υπερβολή (3 Κόμβοι)' },
                       { id: 'arc', label: '⌒ Τόξο (3 Κόμβοι)' },
                       { id: 'arrow', label: '➔ Διάνυσμα' },
                       { id: 'double-arrow', label: '↔ Διπλό Βέλος' },

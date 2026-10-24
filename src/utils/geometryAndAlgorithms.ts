@@ -224,7 +224,7 @@ export function recognizeAndSnapShape(
 
   // Forced presets when user picks a specific shape from the Shape toolbar
   if (forcedPreset !== 'auto' && totalLen >= 3) {
-    return buildPresetShape(start, end, minX, minY, maxX, maxY, forcedPreset);
+    return buildPresetShape(start, end, minX, minY, maxX, maxY, forcedPreset, rawPoints);
   }
 
   if (totalLen < 18) return null;
@@ -716,7 +716,8 @@ function buildPresetShape(
   minY: number,
   maxX: number,
   maxY: number,
-  preset: ShapePresetType
+  preset: ShapePresetType,
+  rawPoints: BezierPoint[] = []
 ): { points: BezierPoint[]; shapeType: string } {
   const w = Math.max(40, maxX - minX);
   const h = Math.max(32, maxY - minY);
@@ -762,7 +763,45 @@ function buildPresetShape(
       ],
     };
   }
-  if (preset === 'parabola' || preset === 'hyperbola' || preset === 'arc') {
+  if (preset === 'hyperbola') {
+    // Rectangular / Inverse-Proportional Hyperbola branch (y = c/x style, e.g. isothermal P-V curve):
+    // Respects the exact start/end direction and whether the user drew it with concavity up (κοίλα πάνω) or down (κοίλα κάτω)!
+    const x0 = start.x <= end.x ? minX : minX + w;
+    const x2 = start.x <= end.x ? minX + w : minX;
+    const y0 = start.y <= end.y ? minY : minY + h;
+    const y2 = start.y <= end.y ? minY + h : minY;
+
+    const cornerA = { x: x0, y: y2 };
+    const cornerB = { x: x2, y: y0 };
+    let sumDistA = 0;
+    let sumDistB = 0;
+    const iStart = Math.max(0, Math.floor(rawPoints.length * 0.18));
+    const iEnd = Math.min(rawPoints.length - 1, Math.ceil(rawPoints.length * 0.82));
+    for (let i = iStart; i <= iEnd; i++) {
+      const rp = rawPoints[i];
+      sumDistA += Math.hypot(rp.x - cornerA.x, rp.y - cornerA.y);
+      sumDistB += Math.hypot(rp.x - cornerB.x, rp.y - cornerB.y);
+    }
+    const asymCorner = sumDistA <= sumDistB ? cornerA : cornerB;
+    const midX = (x0 + x2) / 2;
+    const midY = (y0 + y2) / 2;
+    const wHyp = 1.85;
+    const ratio = wHyp / (1 + wHyp);
+
+    return {
+      shapeType: 'hyperbola',
+      points: [
+        { x: x0, y: y0, pressure: 0.7 },
+        {
+          x: midX + ratio * (asymCorner.x - midX),
+          y: midY + ratio * (asymCorner.y - midY),
+          pressure: 0.7,
+        },
+        { x: x2, y: y2, pressure: 0.7 },
+      ],
+    };
+  }
+  if (preset === 'parabola' || preset === 'arc') {
     const isInverted = start.y > minY + h * 0.5 && end.y > minY + h * 0.5;
     const yEnds = isInverted ? minY + h : minY;
     const yVertex = isInverted ? minY : minY + h;
@@ -1772,22 +1811,23 @@ function tessellateParametricShapeForErase(s: StrokeObject): BezierPoint[] {
 
   if (s.shapeType === 'hyperbola' && s.points.length === 3) {
     const [p0, pMid, p2] = s.points;
-    const midChordX = (p0.x + p2.x) / 2;
-    const midChordY = (p0.y + p2.y) / 2;
-    const ux = (p2.x - p0.x) / 2;
-    const uy = (p2.y - p0.y) / 2;
-    const vx = pMid.x - midChordX;
-    const vy = pMid.y - midChordY;
-    const k = 2.25;
-    const denom = Math.sqrt(1 + k * k) - 1;
+    const wHyp = 1.85;
+    const midX = (p0.x + p2.x) / 2;
+    const midY = (p0.y + p2.y) / 2;
+    const ctrlX = midX + ((1 + wHyp) / wHyp) * (pMid.x - midX);
+    const ctrlY = midY + ((1 + wHyp) / wHyp) * (pMid.y - midY);
     const steps = 64;
     const out: BezierPoint[] = [];
     for (let i = 0; i <= steps; i++) {
-      const u = -1 + (2 * i) / steps;
-      const phi = (Math.sqrt(1 + k * u * (k * u)) - 1) / denom;
+      const t = i / steps;
+      const u = 1 - t;
+      const b0 = u * u;
+      const b1 = 2 * wHyp * u * t;
+      const b2 = t * t;
+      const denom = b0 + b1 + b2;
       out.push({
-        x: pMid.x + u * ux - phi * vx,
-        y: pMid.y + u * uy - phi * vy,
+        x: (b0 * p0.x + b1 * ctrlX + b2 * p2.x) / denom,
+        y: (b0 * p0.y + b1 * ctrlY + b2 * p2.y) / denom,
         pressure: p0.pressure ?? 0.7,
       });
     }
