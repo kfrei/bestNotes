@@ -83,6 +83,7 @@ import {
   isFreehandLoopClosed,
   eraseStrokeByCircle,
   computeResistorOrSpringPoints,
+  get3DShapeSubPaths,
 } from './utils/geometryAndAlgorithms';
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
@@ -613,13 +614,33 @@ export default function App() {
     return { minX, minY, maxX, maxY };
   };
 
-  const isPointNearStroke = (pt: { x: number; y: number }, s: StrokeObject, baseTol = 18): boolean => {
-    const tol = s.tool === 'highlighter' ? baseTol + (s.width || 3) * 1.9 : baseTol;
-    if (s.points.some((p) => distance(pt, p) < tol)) return true;
+  const isPointNearSegment = (
+    pt: { x: number; y: number },
+    a: { x: number; y: number },
+    c: { x: number; y: number },
+    tol: number
+  ): boolean => {
+    const vx = c.x - a.x;
+    const vy = c.y - a.y;
+    const lenSq = vx * vx + vy * vy;
+    const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / lenSq)) : 0;
+    const projX = a.x + t * vx;
+    const projY = a.y + t * vy;
+    return Math.hypot(pt.x - projX, pt.y - projY) < tol;
+  };
+
+  const isPointNearStroke = (
+    pt: { x: number; y: number },
+    s: StrokeObject,
+    baseTol = 18,
+    allowInteriorFill = false
+  ): boolean => {
+    const tol = s.tool === 'highlighter' ? baseTol + (s.width || 3) * 1.9 : baseTol + (s.width || 2) * 0.35;
     const b = getStrokeBounds(s);
     if (pt.x < b.minX - tol || pt.x > b.maxX + tol || pt.y < b.minY - tol || pt.y > b.maxY + tol) {
       return false;
     }
+
     if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
       const [p0, p1, p2, p3] = s.points;
       const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
@@ -628,20 +649,30 @@ export default function App() {
       const v1y = (p1.y - p3.y) / 2;
       const v2x = (p2.x - p0.x) / 2;
       const v2y = (p2.y - p0.y) / 2;
-      for (let i = 0; i < 28; i++) {
-        const ang = (i / 28) * Math.PI * 2;
+      let prevPt: { x: number; y: number } | null = null;
+      for (let i = 0; i <= 36; i++) {
+        const ang = (i / 36) * Math.PI * 2;
         const cosT = Math.cos(ang);
         const sinT = Math.sin(ang);
-        const ex = cx + cosT * v1x + sinT * v2x;
-        const ey = cy + cosT * v1y + sinT * v2y;
-        if (distance(pt, { x: ex, y: ey }) < tol) return true;
+        const curPt = {
+          x: cx + cosT * v1x + sinT * v2x,
+          y: cy + cosT * v1y + sinT * v2y,
+        };
+        if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+        prevPt = curPt;
       }
-      // Also allow tapping inside a filled circle/ellipse
-      if (s.fillStyle && s.fillStyle !== 'none' && distance(pt, { x: cx, y: cy }) < Math.hypot(v1x, v1y) * 0.85) {
-        return true;
+      if (allowInteriorFill && s.fillStyle && s.fillStyle !== 'none') {
+        const r1 = Math.hypot(v1x, v1y) || 1;
+        const r2 = Math.hypot(v2x, v2y) || 1;
+        const dx = pt.x - cx;
+        const dy = pt.y - cy;
+        const u1 = (dx * v1x + dy * v1y) / (r1 * r1);
+        const u2 = (dx * v2x + dy * v2y) / (r2 * r2);
+        if (u1 * u1 + u2 * u2 <= 0.95) return true;
       }
       return false;
     }
+
     if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
       const pPeak = s.points[0];
       const pEnd = s.points[1];
@@ -655,69 +686,85 @@ export default function App() {
       const ny = -ux;
       const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
       const halfCycles = Math.max(1, pStart.twist || 2);
-      for (let i = 0; i <= 32; i++) {
-        const t = i / 32;
+      let prevPt: { x: number; y: number } | null = null;
+      for (let i = 0; i <= 40; i++) {
+        const t = i / 40;
         const along = t * spanL;
         const waveOffset =
           s.shapeType === 'sine'
             ? amp * Math.sin(t * halfCycles * Math.PI)
             : -amp * Math.cos(t * halfCycles * Math.PI);
-        const x = pStart.x + along * ux + waveOffset * nx;
-        const y = pStart.y + along * uy + waveOffset * ny;
-        if (distance(pt, { x, y }) < tol) return true;
+        const curPt = {
+          x: pStart.x + along * ux + waveOffset * nx,
+          y: pStart.y + along * uy + waveOffset * ny,
+        };
+        if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+        prevPt = curPt;
       }
       return false;
     }
+
     if ((s.shapeType === 'parabola' || s.shapeType === 'hyperbola' || s.shapeType === 'arc') && s.points.length === 3) {
       const [p0, pMid, p2] = s.points;
       const cx = 2 * pMid.x - (p0.x + p2.x) / 2;
       const cy = 2 * pMid.y - (p0.y + p2.y) / 2;
-      for (let i = 0; i <= 24; i++) {
-        const t = i / 24;
+      let prevPt: { x: number; y: number } | null = null;
+      for (let i = 0; i <= 28; i++) {
+        const t = i / 28;
         const u = 1 - t;
-        const x = u * u * p0.x + 2 * u * t * cx + t * t * p2.x;
-        const y = u * u * p0.y + 2 * u * t * cy + t * t * p2.y;
-        if (distance(pt, { x, y }) < tol) return true;
+        const curPt = {
+          x: u * u * p0.x + 2 * u * t * cx + t * t * p2.x,
+          y: u * u * p0.y + 2 * u * t * cy + t * t * p2.y,
+        };
+        if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+        prevPt = curPt;
       }
       return false;
     }
-    // Check true perpendicular distance to every segment for polygons/lines/strokes
+
+    if (
+      (s.shapeType === 'cuboid' ||
+        s.shapeType === 'cylinder' ||
+        s.shapeType === 'sphere' ||
+        s.shapeType === 'pyramid') &&
+      s.points.length >= 4
+    ) {
+      const subPaths = get3DShapeSubPaths(s);
+      for (const path of subPaths) {
+        for (let i = 1; i < path.length; i++) {
+          if (isPointNearSegment(pt, path[i - 1], path[i], tol)) return true;
+        }
+      }
+      if (allowInteriorFill && s.fillStyle && s.fillStyle !== 'none') {
+        let inside = false;
+        for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
+          const xi = s.points[i].x,
+            yi = s.points[i].y;
+          const xj = s.points[j].x,
+            yj = s.points[j].y;
+          const intersect = yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi + 1e-9) + xi;
+          if (intersect) inside = !inside;
+        }
+        if (inside) return true;
+      }
+      return false;
+    }
+
     if ((s.shapeType === 'resistor' || s.shapeType === 'spring') && s.points.length >= 4) {
       const polyPts = computeResistorOrSpringPoints(s.shapeType, s.points);
       for (let i = 1; i < polyPts.length; i++) {
-        const a = polyPts[i - 1];
-        const c = polyPts[i];
-        const vx = c.x - a.x;
-        const vy = c.y - a.y;
-        const lenSq = vx * vx + vy * vy;
-        const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / lenSq)) : 0;
-        const projX = a.x + t * vx;
-        const projY = a.y + t * vy;
-        if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
+        if (isPointNearSegment(pt, polyPts[i - 1], polyPts[i], tol)) return true;
       }
-    } else {
-      for (let i = 1; i < s.points.length; i++) {
-        const a = s.points[i - 1];
-        const c = s.points[i];
-        const vx = c.x - a.x;
-        const vy = c.y - a.y;
-        const lenSq = vx * vx + vy * vy;
-        const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((pt.x - a.x) * vx + (pt.y - a.y) * vy) / lenSq)) : 0;
-        const projX = a.x + t * vx;
-        const projY = a.y + t * vy;
-        if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
-      }
+      return false;
     }
 
-    // Also allow tapping inside any filled shape, filled closed freehand loop, 3D shape, resistor, or spring
-    const is3DOrPhysicsBoxShape =
-      s.shapeType === 'cuboid' ||
-      s.shapeType === 'cylinder' ||
-      s.shapeType === 'sphere' ||
-      s.shapeType === 'pyramid' ||
-      s.shapeType === 'resistor' ||
-      s.shapeType === 'spring';
-    if (((s.fillStyle && s.fillStyle !== 'none') || is3DOrPhysicsBoxShape) && s.points.length >= 3) {
+    if (s.points.some((p) => distance(pt, p) < tol)) return true;
+    for (let i = 1; i < s.points.length; i++) {
+      if (isPointNearSegment(pt, s.points[i - 1], s.points[i], tol)) return true;
+    }
+
+    // Only allow interior fill hit-testing when explicitly requested (e.g. tap-to-select fallback on a filled shape)
+    if (allowInteriorFill && s.fillStyle && s.fillStyle !== 'none' && s.points.length >= 3) {
       let inside = false;
       for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
         const xi = s.points[i].x,
@@ -891,13 +938,27 @@ export default function App() {
       }
 
       let topHitStroke: { stroke: StrokeObject; z: number } | null = null;
+      // Pass 1: Strictly match actual drawn edges/curves so inner shapes inside larger shapes always win!
       for (let idx = 0; idx < strokeList.length; idx++) {
         const s = strokeList[idx];
         if (lockedLayers.has(s.layerId)) continue;
-        if (isPointNearStroke(pt, s, 22)) {
+        if (isPointNearStroke(pt, s, 22, false)) {
           const z = s.zOrder ?? imgList.length + idx + 1;
           if (!topHitStroke || z >= topHitStroke.z) {
             topHitStroke = { stroke: s, z };
+          }
+        }
+      }
+      // Pass 2: Fallback to interior fill hit-testing only if no drawn curve/edge was directly touched
+      if (!topHitStroke) {
+        for (let idx = 0; idx < strokeList.length; idx++) {
+          const s = strokeList[idx];
+          if (lockedLayers.has(s.layerId)) continue;
+          if (isPointNearStroke(pt, s, 22, true)) {
+            const z = s.zOrder ?? imgList.length + idx + 1;
+            if (!topHitStroke || z >= topHitStroke.z) {
+              topHitStroke = { stroke: s, z };
+            }
           }
         }
       }
@@ -3659,13 +3720,27 @@ export default function App() {
       }
 
       let topHitStroke: { stroke: StrokeObject; z: number } | null = null;
+      // Pass 1: Strictly match actual drawn edges/curves so inner shapes inside larger shapes always win!
       for (let idx = 0; idx < strokeList.length; idx++) {
         const s = strokeList[idx];
         if (lockedLayers.has(s.layerId)) continue;
-        if (isPointNearStroke(pt, s, 18)) {
+        if (isPointNearStroke(pt, s, 18, false)) {
           const z = s.zOrder ?? imgList.length + idx + 1;
           if (!topHitStroke || z >= topHitStroke.z) {
             topHitStroke = { stroke: s, z };
+          }
+        }
+      }
+      // Pass 2: Fallback to interior fill hit-testing only if no drawn curve/edge was directly touched
+      if (!topHitStroke) {
+        for (let idx = 0; idx < strokeList.length; idx++) {
+          const s = strokeList[idx];
+          if (lockedLayers.has(s.layerId)) continue;
+          if (isPointNearStroke(pt, s, 18, true)) {
+            const z = s.zOrder ?? imgList.length + idx + 1;
+            if (!topHitStroke || z >= topHitStroke.z) {
+              topHitStroke = { stroke: s, z };
+            }
           }
         }
       }
@@ -3702,12 +3777,20 @@ export default function App() {
     // Case 2: Drawn Lasso Loop -> Select all shapes/strokes/groups inside or intersected by the loop!
     const directMatched = strokeList.filter((s) => {
       if (lockedLayers.has(s.layerId)) return false;
+      if (
+        s.shapeType === 'cuboid' ||
+        s.shapeType === 'cylinder' ||
+        s.shapeType === 'sphere' ||
+        s.shapeType === 'pyramid'
+      ) {
+        const subPaths = get3DShapeSubPaths(s);
+        if (subPaths.some((path) => path.some((p) => isPointInPolygon(p, poly)))) return true;
+        return poly.some((lp) => isPointNearStroke(lp, s, 12, false));
+      }
       if (s.points.some((p) => isPointInPolygon(p, poly))) return true;
       const samplePts = getStrokeSamplePoints(s);
       if (samplePts.some((p) => isPointInPolygon(p, poly))) return true;
-      const b = getStrokeBounds(s);
-      if (isPointInPolygon({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 }, poly)) return true;
-      return poly.some((lp) => isPointNearStroke(lp, s, 12));
+      return poly.some((lp) => isPointNearStroke(lp, s, 12, false));
     });
 
     const groupIds = new Set(directMatched.map((s) => s.groupId).filter(Boolean));
@@ -4664,7 +4747,7 @@ export default function App() {
           ...page,
           strokes: page.strokes.filter((s) => {
             if (lockedLayers.has(s.layerId)) return true;
-            return !s.points.some((p) => p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY);
+            return !rawPts.some((pt) => isPointNearStroke(pt, s, 14, false));
           }),
         }));
         showToast('🧹 Scribble-to-Erase!');

@@ -1802,6 +1802,92 @@ function tessellateParametricShapeForErase(s: StrokeObject): BezierPoint[] {
 }
 
 /**
+ * Returns the exact drawn polyline sub-paths for 3D shapes ('cuboid', 'cylinder', 'sphere', 'pyramid')
+ * so hit-testing and erasing operate strictly on the visible 3D wireframe curves/edges (never the invisible bounding box).
+ */
+export function get3DShapeSubPaths(s: StrokeObject): BezierPoint[][] {
+  if (
+    (s.shapeType !== 'cuboid' &&
+      s.shapeType !== 'cylinder' &&
+      s.shapeType !== 'sphere' &&
+      s.shapeType !== 'pyramid') ||
+    s.points.length < 4
+  ) {
+    return [];
+  }
+
+  const [p0, p1, p2, p3] = s.points;
+  const pr = p0.pressure ?? 0.7;
+  const bilerp = (u: number, v: number): BezierPoint => ({
+    x: (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x,
+    y: (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y,
+    pressure: pr,
+  });
+
+  const sampleEllipseBilerp = (
+    uc: number,
+    vc: number,
+    ru: number,
+    rv: number,
+    startAng = 0,
+    endAng = Math.PI * 2,
+    steps = 48
+  ): BezierPoint[] => {
+    const pts: BezierPoint[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const ang = startAng + ((endAng - startAng) * i) / steps;
+      pts.push(bilerp(uc + ru * Math.cos(ang), vc + rv * Math.sin(ang)));
+    }
+    return pts;
+  };
+
+  if (s.shapeType === 'sphere') {
+    return [
+      sampleEllipseBilerp(0.5, 0.5, 0.5, 0.5, 0, Math.PI * 2, 48),
+      sampleEllipseBilerp(0.5, 0.5, 0.5, 0.18, 0, Math.PI, 28),
+    ];
+  }
+
+  if (s.shapeType === 'cylinder') {
+    const topLeft = bilerp(0, 0.14);
+    const topRight = bilerp(1, 0.14);
+    const botLeft = bilerp(0, 0.86);
+    const botRight = bilerp(1, 0.86);
+    return [
+      sampleEllipseBilerp(0.5, 0.14, 0.5, 0.14, 0, Math.PI * 2, 40),
+      sampleEllipseBilerp(0.5, 0.86, 0.5, 0.14, 0, Math.PI * 2, 40),
+      [topLeft, botLeft],
+      [topRight, botRight],
+    ];
+  }
+
+  if (s.shapeType === 'cuboid') {
+    const fTL = bilerp(0, 0);
+    const fTR = bilerp(0.74, 0);
+    const fBR = bilerp(0.74, 0.78);
+    const fBL = bilerp(0, 0.78);
+    const bTR = bilerp(1.0, 0.22);
+    const bBR = bilerp(1.0, 1.0);
+    const bBL = bilerp(0.26, 1.0);
+    return [
+      [fTL, fTR, fBR, fBL, fTL],
+      [fTR, bTR, bBR, fBR],
+      [fBL, bBL, bBR],
+    ];
+  }
+
+  // 'pyramid'
+  const pApex = bilerp(0.5, 0);
+  const pLeft = bilerp(0, 0.76);
+  const pFront = bilerp(0.5, 1.0);
+  const pRight = bilerp(1.0, 0.76);
+  return [
+    [pApex, pLeft, pFront, pRight, pApex],
+    [pApex, pFront],
+  ];
+}
+
+/**
  * Pixel-accurate Eraser ("Ακριβείας / Pixel"):
  * Analytically intersects a stroke (including 2-point straight lines, polygons, parametric curves, and freehand curves)
  * against the eraser circle (center, radius), removing ONLY the exact segment(s) inside the circle
@@ -1816,6 +1902,51 @@ export function eraseStrokeByCircle(
 
   const strokeHalfW = s.tool === 'highlighter' ? (s.width || 3) * 1.9 : Math.min(4, (s.width || 2) * 0.5);
   const effRadius = Math.max(2, radius + strokeHalfW);
+
+  // If 3D shape ('cuboid', 'cylinder', 'sphere', 'pyramid'), test against its true drawn 3D sub-paths (never the invisible 4-corner bounding box!)
+  const subPaths3D = get3DShapeSubPaths(s);
+  if (subPaths3D.length > 0) {
+    let hit3D = false;
+    for (const sp of subPaths3D) {
+      for (let i = 1; i < sp.length; i++) {
+        const a = sp[i - 1];
+        const b = sp[i];
+        const vx = b.x - a.x;
+        const vy = b.y - a.y;
+        const lenSq = vx * vx + vy * vy;
+        const t = lenSq > 0.001 ? Math.max(0, Math.min(1, ((center.x - a.x) * vx + (center.y - a.y) * vy) / lenSq)) : 0;
+        const projX = a.x + t * vx;
+        const projY = a.y + t * vy;
+        if (Math.hypot(center.x - projX, center.y - projY) <= effRadius) {
+          hit3D = true;
+          break;
+        }
+      }
+      if (hit3D) break;
+    }
+    if (!hit3D) {
+      return { modified: false, pieces: [s] };
+    }
+    // Convert hit 3D shape into its independent sub-path strokes and erase the touched segment(s)
+    const piecesOut: StrokeObject[] = [];
+    const grpId = s.groupId || `grp-3d-${s.id}`;
+    subPaths3D.forEach((sp, idx) => {
+      const subStroke: StrokeObject = {
+        ...s,
+        id: `${s.id}-3d-${idx}`,
+        isShape: false,
+        shapeType: undefined,
+        fillStyle: 'none',
+        fillColor: undefined,
+        groupId: grpId,
+        points: sp,
+      };
+      const subRes = eraseStrokeByCircle(subStroke, center, radius);
+      piecesOut.push(...subRes.pieces);
+    });
+    return { modified: true, pieces: piecesOut };
+  }
+
   const isParametric =
     ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) ||
     ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) ||
