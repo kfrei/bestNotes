@@ -1901,10 +1901,18 @@ export default function App() {
       const directTouches = getDirectFingerTouches(e.touches);
       const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
-      // Case A: 1 finger touching OUTSIDE the paper canvas (or anywhere when Pencil-Only Mode is ON) -> Scroll pages like Word!
-      if (directTouches.length === 1 && (isOutsideCanvas || pencilOnlyMode)) {
-        if (e.cancelable) e.preventDefault();
-        const t = directTouches[0];
+      // Case A: 1 finger touching OUTSIDE the paper canvas (or 1 finger when Pencil-Only Mode is ON) -> Scroll pages like Word!
+      // IMPORTANT: Never call e.preventDefault() on <canvas> during 1-touch touchstart and ignore palm contacts so Apple Pencil 1st-touch sensitivity is 100% instant!
+      if (
+        directTouches.length === 1 &&
+        (isOutsideCanvas || pencilOnlyMode) &&
+        performance.now() - lastPenActivityTimeRef.current > 320
+      ) {
+        const t = directTouches[0] as any;
+        if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 22) || (t.radiusY && t.radiusY > 22))) {
+          return;
+        }
+        if (isOutsideCanvas && e.cancelable) e.preventDefault();
         outsidePanDragRef.current = {
           active: true,
           startClientX: t.clientX,
@@ -2598,12 +2606,26 @@ export default function App() {
         }
       }
 
-      // Start Lasso trajectory so the Lasso ALWAYS follows the Apple Pencil 1:1 (even over an unselected image or shape!).
+      // Start Lasso trajectory so the Lasso ALWAYS follows the Apple Pencil 1:1 at 0ms (even over an unselected image or shape!).
       // If the user simply taps (< 16px path length), finalizeLassoSelection will select the tapped shape or image on pointerUp!
       selectionTransformRef.current = null;
       isDraggingSelectionRef.current = null;
       lassoPolygonRef.current = [{ x: pt.x, y: pt.y }];
       isDrawingRef.current = true;
+
+      // 0ms First-Contact Bright Green Dot/Ring on active overlay canvas so the pencil responds on the 1st touch!
+      if (aCtx) {
+        aCtx.save();
+        aCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        aCtx.strokeStyle = '#22c55e';
+        aCtx.fillStyle = '#ffffff';
+        aCtx.lineWidth = 2.4;
+        aCtx.beginPath();
+        aCtx.arc(pt.x, pt.y, 5.5, 0, Math.PI * 2);
+        aCtx.fill();
+        aCtx.stroke();
+        aCtx.restore();
+      }
       return;
     }
 
@@ -2810,12 +2832,20 @@ export default function App() {
 
         const poly = lassoPolygonRef.current;
         let pathLen = 0;
+        let maxDistFromStart = 0;
         for (let i = 1; i < poly.length; i++) {
           pathLen += distance(poly[i - 1], poly[i]);
+          const d0 = distance(poly[i], poly[0]);
+          if (d0 > maxDistFromStart) maxDistFromStart = d0;
         }
 
-        // Auto-close Image Lasso Crop when coming within 26px of the start point!
-        if (pathLen >= 48 && poly.length >= 8 && distance(poly[poly.length - 1], poly[0]) <= 26) {
+        // Auto-close Image Lasso Crop ONLY after first leaving the start area (maxDistFromStart >= 65px) and then returning within <= 18px!
+        if (
+          maxDistFromStart >= 65 &&
+          pathLen >= 160 &&
+          poly.length >= 12 &&
+          distance(poly[poly.length - 1], poly[0]) <= 18
+        ) {
           clearActiveOverlay();
           lassoPolygonRef.current = [];
           isDrawingRef.current = false;
@@ -3213,48 +3243,61 @@ export default function App() {
         return;
       }
 
-      // Draw Lasso trajectory directly on overlay canvas (follows Apple Pencil 1:1, NO fill, auto-closes near start point!)
+      // Draw Lasso trajectory directly on overlay canvas (follows Apple Pencil 1:1, bright green #22c55e dashed line, NO fill, auto-closes when returning to start!)
       const poly = lassoPolygonRef.current;
       for (const ce of coalesced) {
         const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
-        if (poly.length === 0 || distance(poly[poly.length - 1], rawPt) >= 1.2) {
+        if (poly.length === 0 || distance(poly[poly.length - 1], rawPt) >= 0.8) {
           poly.push({ x: rawPt.x, y: rawPt.y });
         }
       }
 
       let pathLen = 0;
+      let maxDistFromStart = 0;
       for (let i = 1; i < poly.length; i++) {
         pathLen += distance(poly[i - 1], poly[i]);
+        const d0 = distance(poly[i], poly[0]);
+        if (d0 > maxDistFromStart) maxDistFromStart = d0;
       }
 
-      // Auto-close Lasso as soon as the Apple Pencil comes very close (<= 26px) to the start point!
-      if (pathLen >= 48 && poly.length >= 8 && distance(poly[poly.length - 1], poly[0]) <= 26) {
+      // Auto-close Lasso ONLY after first moving away from the start (maxDistFromStart >= 65px & pathLen >= 160px)
+      // and then returning very close (<= 18px) to the start point!
+      if (
+        maxDistFromStart >= 65 &&
+        pathLen >= 160 &&
+        poly.length >= 12 &&
+        distance(poly[poly.length - 1], poly[0]) <= 18
+      ) {
         finalizeLassoSelection([...poly]);
         return;
       }
 
       const ctx = activeCtxRef.current;
       const c = activeCanvasRef.current;
-      if (ctx && c && poly.length > 1) {
+      if (ctx && c && poly.length >= 1) {
         ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
         ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
         ctx.save();
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 2.0;
+        // Bright Green (#22c55e) dashed Lasso line with NO fill!
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 2.5;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(poly[0].x, poly[0].y);
-        for (let i = 1; i < poly.length; i++) {
-          ctx.lineTo(poly[i].x, poly[i].y);
+        ctx.setLineDash([7, 5]);
+        if (poly.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(poly[0].x, poly[0].y);
+          for (let i = 1; i < poly.length; i++) {
+            ctx.lineTo(poly[i].x, poly[i].y);
+          }
+          ctx.stroke();
         }
-        // NO closePath() chord and NO fill() while drawing the Lasso!
-        ctx.stroke();
 
-        // Draw start-point target ring so the user sees where the Lasso started
+        // Draw bright-green start-point target ring so the user sees where the Lasso started
         ctx.setLineDash([]);
         ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#22c55e';
+        ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.arc(poly[0].x, poly[0].y, 5.5, 0, Math.PI * 2);
         ctx.fill();
@@ -4526,7 +4569,9 @@ export default function App() {
                     }}
                     className={`p-2 rounded-full transition cursor-pointer ${
                       isActive
-                        ? 'bg-[#0066ff] text-white shadow-xs scale-105'
+                        ? tool.id === 'lasso'
+                          ? 'bg-[#22c55e] text-white ring-2 ring-emerald-300 shadow-xs scale-105'
+                          : 'bg-[#0066ff] text-white shadow-xs scale-105'
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                     title={tool.title}
