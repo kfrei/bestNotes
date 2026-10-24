@@ -205,7 +205,7 @@ export default function App() {
   // Goodnotes 6 Toolbar State
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
-  const [eraserSubType, setEraserSubType] = useState<EraserSubType>('precision');
+  const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
   const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [shapePreset, setShapePreset] = useState<ShapePresetType>('sine');
   const [strokeColor, setStrokeColor] = useState<string>('#111827');
@@ -5357,7 +5357,8 @@ export default function App() {
 
       // E / Ε -> Σβήστρα ('eraser')
       if (code === 'KeyE' || key === 'e' || key === 'ε') {
-        switchToTool('eraser', '🧹 Σβήστρα (Πλήκτρο E / Ε)');
+        setEraserSubType('stroke');
+        switchToTool('eraser', '🧹 Σβήστρα Stroke (Πλήκτρο E / Ε)');
         return;
       }
 
@@ -6224,6 +6225,9 @@ export default function App() {
                       if (activeTool === tool.id && tool.id !== 'eraser' && tool.id !== 'text' && tool.id !== 'shape') {
                         setShowToolSubBar((s) => !s);
                       } else {
+                        if (tool.id === 'eraser' && activeTool !== 'eraser') {
+                          setEraserSubType('stroke');
+                        }
                         setActiveTool(tool.id as ToolType);
                         setShowToolSubBar(true);
                         if (tool.id === 'direct-node' && selectedStrokeIds.length > 0 && !activeNodeStrokeId) {
@@ -6791,6 +6795,19 @@ export default function App() {
                       both 'precision' (Pixel) and 'stroke' (Stroke) erasers now naturally erase highlighter strokes too.
                     */}
                     <button
+                      onClick={() => setEraserSubType('stroke')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
+                        eraserSubType === 'stroke'
+                          ? 'bg-[#0066ff] text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                      title="Stroke Σβήστρα (σβήνει ολόκληρη τη γραμμή ή τον μαρκαδόρο με ένα άγγιγμα)"
+                    >
+                      <Eraser className="w-3.5 h-3.5 shrink-0" />
+                      <span>Stroke</span>
+                    </button>
+
+                    <button
                       onClick={() => setEraserSubType('precision')}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
                         eraserSubType === 'precision'
@@ -6813,19 +6830,6 @@ export default function App() {
                         <circle cx="9" cy="9" r="1.6" fill="currentColor" />
                       </svg>
                       <span>Pixel</span>
-                    </button>
-
-                    <button
-                      onClick={() => setEraserSubType('stroke')}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
-                        eraserSubType === 'stroke'
-                          ? 'bg-[#0066ff] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                      title="Stroke Σβήστρα (σβήνει ολόκληρη τη γραμμή ή τον μαρκαδόρο με ένα άγγιγμα)"
-                    >
-                      <Eraser className="w-3.5 h-3.5 shrink-0" />
-                      <span>Stroke</span>
                     </button>
 
                     <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
