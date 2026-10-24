@@ -202,6 +202,20 @@ export default function App() {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
   const [draggingNodeIdx, setDraggingNodeIdx] = useState<{ index: number; isControl: boolean } | null>(null);
+  const [textFontSize, setTextFontSize] = useState<number>(22);
+  const [textBold, setTextBold] = useState<boolean>(false);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const draggingTextRef = useRef<{
+    id: string;
+    pageIdx: number;
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+    wasAlreadySelected: boolean;
+  } | null>(null);
 
   // Image Cropping (Freehand & Magnetic Lasso)
   const [imageCropMode, setImageCropMode] = useState<'none' | 'freehand' | 'magnetic'>('none');
@@ -2102,6 +2116,10 @@ export default function App() {
       }
 
       const directTouches = getDirectFingerTouches(e.touches);
+      if (e.target instanceof HTMLElement && e.target.closest('[data-text-box="true"]')) {
+        outsidePanDragRef.current = null;
+        return;
+      }
       const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
       // Case A: 1 finger touching OUTSIDE the paper canvas (or 1 finger when Pencil-Only Mode is ON) -> Scroll pages like Word!
@@ -2202,8 +2220,11 @@ export default function App() {
         return;
       }
 
-      // If 1-finger drag-and-drop (or resize/rotate) of a Lasso-selected shape/image is active, prevent page scroll!
-      if (isDrawingRef.current && (selectionTransformRef.current || isDraggingSelectionRef.current)) {
+      // If 1-finger drag-and-drop (or resize/rotate) of a Lasso-selected shape/image or Text Box is active, prevent page scroll!
+      if (
+        (isDrawingRef.current && (selectionTransformRef.current || isDraggingSelectionRef.current)) ||
+        draggingTextRef.current
+      ) {
         if (e.cancelable) e.preventDefault();
         outsidePanDragRef.current = null;
         return;
@@ -2596,7 +2617,7 @@ export default function App() {
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
       const isFingerOnObjectOrLasso = isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget);
-      if (isFingerOnObjectOrLasso) {
+      if (isFingerOnObjectOrLasso || activeTool === 'text') {
         outsidePanDragRef.current = null;
         cancelScrollMomentum();
       } else if (pencilOnlyMode) {
@@ -2640,6 +2661,43 @@ export default function App() {
     }
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = pt;
+
+    // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or finish editing an active one)
+    if (activeTool === 'text') {
+      if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+      if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+      if (selectedImageId) setSelectedImageId(null);
+
+      if (editingTextId) {
+        setEditingTextId(null);
+        setSelectedTextId(null);
+        return;
+      }
+
+      const pW = targetPage.orientation === 'landscape' ? 1260 : 920;
+      const pH = targetPage.orientation === 'landscape' ? 920 : 1260;
+      const newTxt: TextObject = {
+        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: Math.max(16, Math.min(pW - 160, Math.round(pt.x))),
+        y: Math.max(16, Math.min(pH - 50, Math.round(pt.y - textFontSize * 0.6))),
+        text: '',
+        color: strokeColor,
+        fontSize: textFontSize,
+        bold: textBold,
+        layerId: activeLayerId,
+      };
+      updateActivePage((page) => ({
+        ...page,
+        texts: [...(page.texts || []), newTxt],
+      }));
+      setSelectedTextId(newTxt.id);
+      setEditingTextId(newTxt.id);
+      setShowToolSubBar(true);
+      return;
+    }
+
+    if (selectedTextId) setSelectedTextId(null);
+    if (editingTextId) setEditingTextId(null);
 
     // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image -> Automatically select it with Lasso (& allow immediate drag-and-drop)!
     if (e.pointerType === 'touch' && !(activeTool === 'lasso' && isClientPointInLassoSelection(e.clientX, e.clientY))) {
@@ -4379,11 +4437,18 @@ export default function App() {
     );
   };
 
-  // Apply Color, Thickness, or Line Style to any selected line, shape, or group of lines (ONLY when in Lasso or Direct-Node selection mode)!
+  // Apply Color, Thickness, or Line Style to any selected line, shape, group of lines, or selected Text Box!
   const applyColorToSelection = useCallback(
     (c: string) => {
       setStrokeColor(c);
       setFillColor(c);
+      const activeTxtId = selectedTextId || editingTextId;
+      if (activeTxtId) {
+        updateActivePage((page) => ({
+          ...page,
+          texts: (page.texts || []).map((t) => (t.id === activeTxtId ? { ...t, color: c } : t)),
+        }));
+      }
       if (activeTool !== 'lasso' && activeTool !== 'direct-node') return;
       const baseIds =
         selectedStrokeIds.length > 0
@@ -4415,7 +4480,7 @@ export default function App() {
         };
       });
     },
-    [activeTool, selectedStrokeIds, activeNodeStrokeId, updateActivePage]
+    [activeTool, selectedStrokeIds, activeNodeStrokeId, selectedTextId, editingTextId, updateActivePage]
   );
 
   const applyWidthToSelection = useCallback(
@@ -5182,6 +5247,7 @@ export default function App() {
                 { id: 'eraser', title: 'Γόμα (Eraser)', icon: Eraser },
                 { id: 'highlighter', title: 'Μαρκαδόρος (Highlighter)', icon: Highlighter },
                 { id: 'shape', title: 'Σχήματα & Φυσική (Shapes)', icon: Shapes },
+                { id: 'text', title: 'Προσθήκη Κειμένου (Text - Bold, Μέγεθος, Χρώμα)', icon: Type },
                 { id: 'lasso', title: 'Επιλογή / Μεγέθυνση / Περιστροφή (Select & Transform)', icon: Lasso },
                 { id: 'direct-node', title: 'Κόμβοι Bezier (4 Κόμβοι σε Κύκλο/Έλλειψη)', icon: MousePointer },
                 { id: 'tape', title: 'Ταινία Απόκρυψης (Tape)', icon: Bandage },
@@ -5193,7 +5259,7 @@ export default function App() {
                   <button
                     key={tool.id}
                     onClick={() => {
-                      if (activeTool === tool.id) {
+                      if (activeTool === tool.id && tool.id !== 'eraser' && tool.id !== 'text' && tool.id !== 'shape') {
                         setShowToolSubBar((s) => !s);
                       } else {
                         setActiveTool(tool.id as ToolType);
@@ -5204,6 +5270,10 @@ export default function App() {
                           setSelectedStrokeIds([]);
                           setActiveNodeStrokeId(null);
                           setSelectedImageId(null);
+                        }
+                        if (tool.id !== 'text') {
+                          setSelectedTextId(null);
+                          setEditingTextId(null);
                         }
                       }
                       setImageCropMode('none');
@@ -5531,14 +5601,147 @@ export default function App() {
             </div>
           )}
 
-          {/* Contextual Sub-Bar (Appears for Shape, Lasso Selection, Direct Node, or Eraser) */}
+          {/* Contextual Sub-Bar (Appears for Shape, Text, Lasso Selection, Direct Node, or Eraser) */}
           {(activeTool === 'shape' ||
+            activeTool === 'text' ||
+            selectedTextId !== null ||
             activeTool === 'direct-node' ||
             selectedStrokeIds.length > 0 ||
             selectedImgObj ||
             activeTool === 'eraser') &&
             showToolSubBar && (
               <div className="flex items-center justify-center px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto">
+                {(activeTool === 'text' || selectedTextId !== null) && (() => {
+                  const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
+                  const currentBold = selTxt ? Boolean(selTxt.bold) : textBold;
+                  const currentSize = selTxt ? selTxt.fontSize : textFontSize;
+                  const currentColor = selTxt ? selTxt.color : strokeColor;
+
+                  const applyBold = (nextB: boolean) => {
+                    setTextBold(nextB);
+                    if (selTxt) {
+                      updateActivePage((page) => ({
+                        ...page,
+                        texts: (page.texts || []).map((t) => (t.id === selTxt.id ? { ...t, bold: nextB } : t)),
+                      }));
+                    }
+                  };
+
+                  const applyFontSize = (nextSize: number) => {
+                    const clamped = Math.max(10, Math.min(72, nextSize));
+                    setTextFontSize(clamped);
+                    if (selTxt) {
+                      updateActivePage((page) => ({
+                        ...page,
+                        texts: (page.texts || []).map((t) =>
+                          t.id === selTxt.id ? { ...t, fontSize: clamped } : t
+                        ),
+                      }));
+                    }
+                  };
+
+                  return (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                        <Type className="w-3.5 h-3.5 text-[#0066ff]" />
+                        <span>Κείμενο:</span>
+                      </span>
+
+                      {/* Bold (B) Toggle */}
+                      <button
+                        onClick={() => applyBold(!currentBold)}
+                        className={`px-3 py-1 rounded-full font-extrabold transition cursor-pointer ${
+                          currentBold
+                            ? 'bg-[#0066ff] text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                        title="Έντονα Γράμματα (Bold)"
+                      >
+                        B Έντονα
+                      </button>
+
+                      <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
+
+                      {/* Font Size Controls */}
+                      <span className="text-[11px] font-semibold text-slate-500">Μέγεθος:</span>
+                      <button
+                        onClick={() => applyFontSize(currentSize - 2)}
+                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                        title="Μικρότερη γραμματοσειρά (-2px)"
+                      >
+                        A-
+                      </button>
+                      {[14, 18, 22, 28, 36, 48].map((sz) => (
+                        <button
+                          key={sz}
+                          onClick={() => applyFontSize(sz)}
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                            currentSize === sz
+                              ? 'bg-[#0066ff] text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                          title={`Μέγεθος γραμματοσειράς ${sz}px`}
+                        >
+                          {sz}px
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => applyFontSize(currentSize + 2)}
+                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                        title="Μεγαλύτερη γραμματοσειρά (+2px)"
+                      >
+                        A+
+                      </button>
+
+                      <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
+
+                      {/* Active Color Indicator (synced with top-right colors) */}
+                      <div
+                        className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-[11px] text-slate-600"
+                        title="Το χρώμα του κειμένου αλλάζει απευθείας από τα χρώματα πάνω δεξιά!"
+                      >
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"
+                          style={{ backgroundColor: currentColor }}
+                        />
+                        <span>Χρώμα (από πάνω δεξιά)</span>
+                      </div>
+
+                      {selTxt && (
+                        <>
+                          <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
+                          <button
+                            onClick={() => {
+                              if (editingTextId === selTxt.id) {
+                                setEditingTextId(null);
+                              } else {
+                                setEditingTextId(selTxt.id);
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
+                          >
+                            {editingTextId === selTxt.id ? '✓ Τέλος' : '✏️ Επεξεργασία'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              updateActivePage((page) => ({
+                                ...page,
+                                texts: (page.texts || []).filter((t) => t.id !== selTxt.id),
+                              }));
+                              setSelectedTextId(null);
+                              setEditingTextId(null);
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold cursor-pointer"
+                            title="Διαγραφή επιλεγμένου κειμένου"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Διαγραφή</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
                 {activeTool === 'shape' && (
                   <div className="flex items-center gap-1.5">
                     {/*
@@ -6565,24 +6768,277 @@ export default function App() {
                       className="absolute inset-0 cursor-crosshair touch-none select-none"
                     />
 
-                    {/* Rendered Text & LaTeX Blocks for this page */}
-                    {(pageObj.texts || []).map((txt) => (
-                      <div
-                        key={txt.id}
-                        style={{ left: txt.x, top: txt.y, color: txt.color, fontSize: txt.fontSize }}
-                        className="absolute px-2 py-1 rounded pointer-events-none"
-                      >
-                        {txt.isMath && txt.latex ? (
-                          <div
-                            dangerouslySetInnerHTML={{
-                              __html: katex.renderToString(txt.latex, { throwOnError: false, displayMode: true }),
-                            }}
-                          />
-                        ) : (
-                          <span className="font-medium">{txt.text}</span>
-                        )}
-                      </div>
-                    ))}
+                    {/* Rendered Interactive Text & LaTeX Blocks for this page */}
+                    {(pageObj.texts || []).map((txt) => {
+                      const txtLayer = pageObj.layers.find((l) => l.id === txt.layerId);
+                      if (txtLayer && !txtLayer.visible) return null;
+                      const isLocked = Boolean(txtLayer?.locked);
+                      const isSelectedTxt = isCurrentActive && selectedTextId === txt.id;
+                      const isEditingTxt = isCurrentActive && editingTextId === txt.id;
+
+                      return (
+                        <div
+                          key={txt.id}
+                          data-text-box="true"
+                          style={{
+                            left: txt.x,
+                            top: txt.y,
+                            color: txt.color,
+                            fontSize: txt.fontSize,
+                            fontWeight: txt.bold ? 700 : 500,
+                            lineHeight: 1.35,
+                            touchAction: 'none',
+                          }}
+                          onPointerDown={(ev) => {
+                            if (isLocked) return;
+                            if ((ev.target as HTMLElement).closest('button') || (ev.target as HTMLElement).tagName === 'TEXTAREA') {
+                              return;
+                            }
+                            ev.stopPropagation();
+                            if (pageIdx !== activePageIndex) {
+                              setActivePageIndex(pageIdx);
+                            }
+                            activeDrawingPageIndexRef.current = pageIdx;
+                            const wasAlreadySelected = selectedTextId === txt.id;
+                            setSelectedTextId(txt.id);
+                            setTextFontSize(txt.fontSize);
+                            setTextBold(Boolean(txt.bold));
+                            setSelectedStrokeIds([]);
+                            setSelectedImageId(null);
+                            setActiveNodeStrokeId(null);
+                            setShowToolSubBar(true);
+
+                            draggingTextRef.current = {
+                              id: txt.id,
+                              pageIdx,
+                              startClientX: ev.clientX,
+                              startClientY: ev.clientY,
+                              origX: txt.x,
+                              origY: txt.y,
+                              moved: false,
+                              wasAlreadySelected,
+                            };
+                            try {
+                              ev.currentTarget.setPointerCapture(ev.pointerId);
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          onPointerMove={(ev) => {
+                            const d = draggingTextRef.current;
+                            if (!d || d.id !== txt.id) return;
+                            ev.stopPropagation();
+                            const dx = (ev.clientX - d.startClientX) / zoomRef.current;
+                            const dy = (ev.clientY - d.startClientY) / zoomRef.current;
+                            if (Math.hypot(dx, dy) > 4) {
+                              d.moved = true;
+                            }
+                            if (!d.moved) return;
+                            const nextX = Math.max(8, Math.min(pW - 60, Math.round(d.origX + dx)));
+                            const nextY = Math.max(8, Math.min(pH - 36, Math.round(d.origY + dy)));
+                            updateActivePage(
+                              (page) => ({
+                                ...page,
+                                texts: (page.texts || []).map((t) =>
+                                  t.id === txt.id ? { ...t, x: nextX, y: nextY } : t
+                                ),
+                              }),
+                              false
+                            );
+                          }}
+                          onPointerUp={(ev) => {
+                            const d = draggingTextRef.current;
+                            if (!d || d.id !== txt.id) return;
+                            ev.stopPropagation();
+                            draggingTextRef.current = null;
+                            try {
+                              if (ev.currentTarget.hasPointerCapture(ev.pointerId)) {
+                                ev.currentTarget.releasePointerCapture(ev.pointerId);
+                              }
+                            } catch {
+                              // ignore
+                            }
+                            if (!d.moved && (d.wasAlreadySelected || activeTool === 'text') && !txt.isMath) {
+                              setEditingTextId(txt.id);
+                            }
+                          }}
+                          onDoubleClick={(ev) => {
+                            if (isLocked || txt.isMath) return;
+                            ev.stopPropagation();
+                            setSelectedTextId(txt.id);
+                            setEditingTextId(txt.id);
+                          }}
+                          className={`absolute px-2 py-1 rounded-lg select-none z-10 transition-shadow ${
+                            isSelectedTxt || isEditingTxt
+                              ? 'ring-2 ring-[#0066ff] bg-white/85 shadow-md cursor-move'
+                              : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
+                          }`}
+                        >
+                          {/* Floating Quick Format Pill above Selected/Editing Text Box */}
+                          {(isSelectedTxt || isEditingTxt) && (
+                            <div
+                              onPointerDown={(ev) => ev.stopPropagation()}
+                              className="absolute -top-9 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30"
+                            >
+                              {!txt.isMath && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    const nextB = !txt.bold;
+                                    setTextBold(nextB);
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).map((t) =>
+                                        t.id === txt.id ? { ...t, bold: nextB } : t
+                                      ),
+                                    }));
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded font-extrabold cursor-pointer ${
+                                    txt.bold ? 'bg-[#0066ff] text-white' : 'hover:bg-white/15 text-slate-200'
+                                  }`}
+                                  title="Bold (Έντονα)"
+                                >
+                                  B
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => {
+                                  const nextSz = Math.max(10, txt.fontSize - 2);
+                                  setTextFontSize(nextSz);
+                                  updateActivePage((page) => ({
+                                    ...page,
+                                    texts: (page.texts || []).map((t) =>
+                                      t.id === txt.id ? { ...t, fontSize: nextSz } : t
+                                    ),
+                                  }));
+                                }}
+                                className="px-1.5 py-0.5 rounded hover:bg-white/15 cursor-pointer"
+                                title="Μικρότερη γραμματοσειρά"
+                              >
+                                A-
+                              </button>
+                              <span className="text-[10px] text-sky-200 px-0.5">{txt.fontSize}px</span>
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => {
+                                  const nextSz = Math.min(72, txt.fontSize + 2);
+                                  setTextFontSize(nextSz);
+                                  updateActivePage((page) => ({
+                                    ...page,
+                                    texts: (page.texts || []).map((t) =>
+                                      t.id === txt.id ? { ...t, fontSize: nextSz } : t
+                                    ),
+                                  }));
+                                }}
+                                className="px-1.5 py-0.5 rounded hover:bg-white/15 cursor-pointer"
+                                title="Μεγαλύτερη γραμματοσειρά"
+                              >
+                                A+
+                              </button>
+                              {!txt.isMath && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => setEditingTextId(isEditingTxt ? null : txt.id)}
+                                  className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 cursor-pointer"
+                                  title={isEditingTxt ? 'Ολοκλήρωση επεξεργασίας' : 'Επεξεργασία κειμένου'}
+                                >
+                                  {isEditingTxt ? '✓' : '✏️'}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => {
+                                  updateActivePage((page) => ({
+                                    ...page,
+                                    texts: (page.texts || []).filter((t) => t.id !== txt.id),
+                                  }));
+                                  setSelectedTextId(null);
+                                  setEditingTextId(null);
+                                }}
+                                className="px-1.5 py-0.5 rounded bg-rose-500/80 hover:bg-rose-600 text-white cursor-pointer"
+                                title="Διαγραφή κειμένου"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          )}
+
+                          {txt.isMath && txt.latex ? (
+                            <div
+                              dangerouslySetInnerHTML={{
+                                __html: katex.renderToString(txt.latex, { throwOnError: false, displayMode: true }),
+                              }}
+                            />
+                          ) : isEditingTxt ? (
+                            <textarea
+                              autoFocus
+                              value={txt.text}
+                              placeholder="Γράψε κείμενο..."
+                              onPointerDown={(ev) => ev.stopPropagation()}
+                              onChange={(ev) => {
+                                const val = ev.target.value;
+                                updateActivePage(
+                                  (page) => ({
+                                    ...page,
+                                    texts: (page.texts || []).map((t) =>
+                                      t.id === txt.id ? { ...t, text: val } : t
+                                    ),
+                                  }),
+                                  false
+                                );
+                              }}
+                              onKeyDown={(ev) => {
+                                if (ev.key === 'Escape' && !ev.nativeEvent.isComposing) {
+                                  ev.currentTarget.blur();
+                                }
+                              }}
+                              onBlur={() => {
+                                setEditingTextId((curr) => (curr === txt.id ? null : curr));
+                                if (!txt.text || txt.text.trim().length === 0) {
+                                  updateActivePage(
+                                    (page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).filter((t) => t.id !== txt.id),
+                                    }),
+                                    false
+                                  );
+                                  setSelectedTextId((curr) => (curr === txt.id ? null : curr));
+                                }
+                              }}
+                              style={{
+                                fieldSizing: 'content',
+                                width: 'auto',
+                                height: 'auto',
+                                minInlineSize: '12ch',
+                                maxInlineSize: '42ch',
+                                minBlockSize: '1.5lh',
+                                maxBlockSize: '14lh',
+                                color: txt.color,
+                                fontSize: txt.fontSize,
+                                fontWeight: txt.bold ? 700 : 500,
+                                lineHeight: 1.35,
+                              } as React.CSSProperties}
+                              className="bg-transparent outline-none resize-none border-0 p-0 m-0 block font-sans"
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                whiteSpace: 'pre-wrap',
+                                fontWeight: txt.bold ? 700 : 500,
+                              }}
+                            >
+                              {txt.text || 'Κείμενο...'}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
 
                     {/* Movable & Rotatable Digital Ruler (shown on active page) */}
                     {isCurrentActive && rulerState.visible && (

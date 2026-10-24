@@ -79,6 +79,7 @@ export interface TextObject {
   isMath?: boolean;
   color: string;
   fontSize: number;
+  bold?: boolean;
   layerId: string;
   groupId?: string;
 }
