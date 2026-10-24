@@ -211,12 +211,14 @@ export default function App() {
   const draggingTextRef = useRef<{
     id: string;
     pageIdx: number;
+    pointerId?: number;
     startClientX: number;
     startClientY: number;
     origX: number;
     origY: number;
     moved: boolean;
     wasAlreadySelected: boolean;
+    startedOnTextarea?: boolean;
   } | null>(null);
 
   // Image Cropping (Freehand & Magnetic Lasso)
@@ -7549,6 +7551,7 @@ export default function App() {
                         <div
                           key={txt.id}
                           data-text-box="true"
+                          data-ui-panel="true"
                           style={{
                             left: txt.x,
                             top: txt.y,
@@ -7557,13 +7560,20 @@ export default function App() {
                             fontWeight: txt.bold ? 700 : 500,
                             lineHeight: 1.35,
                             touchAction: 'none',
+                            WebkitUserSelect: isEditingTxt ? 'text' : 'none',
+                            userSelect: isEditingTxt ? 'text' : 'none',
                           }}
                           onPointerDown={(ev) => {
                             if (isLocked) return;
-                            if ((ev.target as HTMLElement).closest('button') || (ev.target as HTMLElement).tagName === 'TEXTAREA') {
+                            if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+                            if ((ev.target as HTMLElement).closest('button')) {
                               return;
                             }
                             ev.stopPropagation();
+                            const startedOnTextarea = (ev.target as HTMLElement).tagName === 'TEXTAREA';
+                            if (!startedOnTextarea) {
+                              ev.preventDefault();
+                            }
                             if (pageIdx !== activePageIndex) {
                               setActivePageIndex(pageIdx);
                             }
@@ -7580,27 +7590,37 @@ export default function App() {
                             draggingTextRef.current = {
                               id: txt.id,
                               pageIdx,
+                              pointerId: ev.pointerId,
                               startClientX: ev.clientX,
                               startClientY: ev.clientY,
                               origX: txt.x,
                               origY: txt.y,
                               moved: false,
                               wasAlreadySelected,
+                              startedOnTextarea,
                             };
-                            try {
-                              ev.currentTarget.setPointerCapture(ev.pointerId);
-                            } catch {
-                              // ignore
+                            if (!startedOnTextarea) {
+                              try {
+                                ev.currentTarget.setPointerCapture(ev.pointerId);
+                              } catch {
+                                // ignore
+                              }
                             }
                           }}
                           onPointerMove={(ev) => {
                             const d = draggingTextRef.current;
                             if (!d || d.id !== txt.id) return;
+                            if (d.pointerId !== undefined && d.pointerId !== ev.pointerId) return;
                             ev.stopPropagation();
                             const dx = (ev.clientX - d.startClientX) / zoomRef.current;
                             const dy = (ev.clientY - d.startClientY) / zoomRef.current;
-                            if (Math.hypot(dx, dy) > 4) {
+                            if (!d.moved && Math.hypot(dx, dy) > 4) {
                               d.moved = true;
+                              try {
+                                ev.currentTarget.setPointerCapture(ev.pointerId);
+                              } catch {
+                                // ignore
+                              }
                             }
                             if (!d.moved) return;
                             const nextX = Math.max(8, Math.min(pW - 60, Math.round(d.origX + dx)));
@@ -7619,6 +7639,8 @@ export default function App() {
                             const d = draggingTextRef.current;
                             if (!d || d.id !== txt.id) return;
                             ev.stopPropagation();
+                            const didMove = d.moved;
+                            const wasSelected = d.wasAlreadySelected;
                             draggingTextRef.current = null;
                             try {
                               if (ev.currentTarget.hasPointerCapture(ev.pointerId)) {
@@ -7627,8 +7649,13 @@ export default function App() {
                             } catch {
                               // ignore
                             }
-                            if (!d.moved && (d.wasAlreadySelected || activeTool === 'text') && !txt.isMath) {
+                            if (!didMove && (wasSelected || activeTool === 'text') && !txt.isMath) {
                               setEditingTextId(txt.id);
+                            }
+                          }}
+                          onLostPointerCapture={() => {
+                            if (draggingTextRef.current?.id === txt.id) {
+                              draggingTextRef.current = null;
                             }
                           }}
                           onDoubleClick={(ev) => {
@@ -7637,18 +7664,30 @@ export default function App() {
                             setSelectedTextId(txt.id);
                             setEditingTextId(txt.id);
                           }}
-                          className={`absolute px-2 py-1 rounded-lg select-none z-10 transition-shadow ${
+                          className={`absolute px-3 py-1.5 rounded-lg select-none z-10 transition-shadow ${
                             isSelectedTxt || isEditingTxt
-                              ? 'ring-2 ring-[#0066ff] bg-white/85 shadow-md cursor-move'
+                              ? 'ring-2 ring-[#0066ff] bg-white/90 shadow-md cursor-grab active:cursor-grabbing'
                               : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
                           }`}
                         >
-                          {/* Floating Quick Format Pill above Selected/Editing Text Box */}
+                          {/* Floating Quick Format & Drag Pill above Selected/Editing Text Box */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <div
-                              onPointerDown={(ev) => ev.stopPropagation()}
-                              className="absolute -top-9 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30"
+                              onMouseDown={(ev) => ev.preventDefault()}
+                              style={{
+                                touchAction: 'none',
+                                WebkitUserSelect: 'none',
+                                userSelect: 'none',
+                              }}
+                              className="absolute -top-10 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30 cursor-grab active:cursor-grabbing"
                             >
+                              <span
+                                className="px-1 py-0.5 text-sky-300 font-bold select-none"
+                                title="Σύρετε με το δάχτυλο ή το πενάκι για μετακίνηση του παραθύρου κειμένου"
+                              >
+                                ✥ Σύρετε
+                              </span>
+                              <div className="h-3 w-px bg-white/20 mx-0.5" />
                               {!txt.isMath && (
                                 <button
                                   type="button"
@@ -7749,7 +7788,6 @@ export default function App() {
                               autoFocus
                               value={txt.text}
                               placeholder="Γράψε κείμενο..."
-                              onPointerDown={(ev) => ev.stopPropagation()}
                               onChange={(ev) => {
                                 const val = ev.target.value;
                                 updateActivePage(
@@ -7768,6 +7806,9 @@ export default function App() {
                                 }
                               }}
                               onBlur={() => {
+                                if (draggingTextRef.current?.id === txt.id) {
+                                  return;
+                                }
                                 setEditingTextId((curr) => (curr === txt.id ? null : curr));
                                 if (!txt.text || txt.text.trim().length === 0) {
                                   updateActivePage(
@@ -7792,8 +7833,9 @@ export default function App() {
                                 fontSize: txt.fontSize,
                                 fontWeight: txt.bold ? 700 : 500,
                                 lineHeight: 1.35,
+                                touchAction: 'none',
                               } as React.CSSProperties}
-                              className="bg-transparent outline-none resize-none border-0 p-0 m-0 block font-sans"
+                              className="bg-transparent outline-none resize-none border-0 p-0 m-0 block font-sans cursor-grab active:cursor-grabbing"
                             />
                           ) : (
                             <div
