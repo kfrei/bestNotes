@@ -6564,32 +6564,6 @@ export default function App() {
                         {sp.label}
                       </button>
                     ))}
-                    <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                    <button
-                      onClick={() => toggleFillStyleToSelection(false)}
-                      className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap cursor-pointer ${
-                        fillStyle !== 'none'
-                          ? 'bg-[#0066ff] text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                      title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα — Συντόμευση: F / Φ"
-                    >
-                      {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        const nextLineStyle: LineStyleType = lineStyle === 'dashed' ? 'solid' : 'dashed';
-                        applyLineStyleToSelection(nextLineStyle);
-                      }}
-                      className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap cursor-pointer ${
-                        lineStyle === 'dashed'
-                          ? 'bg-[#0066ff] text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                      title="Εναλλαγή με 1 κλικ: Συνεχής Γραμμή (───) / Διακεκομμένη (- - -)"
-                    >
-                      {lineStyle === 'dashed' ? '- - - Διακεκομμένη' : '─── Συνεχής'}
-                    </button>
                   </div>
                 )}
 
