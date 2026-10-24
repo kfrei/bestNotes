@@ -3541,7 +3541,7 @@ export default function App() {
         laserClearTimerRef.current = null;
       }
       renderLaserOverlay();
-    } else if (['pen', 'pencil', 'highlighter'].includes(activeTool)) {
+    } else if (['pen', 'pencil'].includes(activeTool)) {
       drawInitialDot(pt);
     }
   };
@@ -4364,13 +4364,15 @@ export default function App() {
         didMoveSignificantly = true;
       }
 
-      // If not yet snapped and using solid standard pen, draw only the new incremental Bezier segment in 0.02ms!
+      // If not yet snapped and using solid opaque pen/pencil, draw only the new incremental Bezier segment in 0.02ms!
+      // (Highlighter uses single-path renderLiveOverlayStroke below so semi-transparent segments never overlap into dark circles/bands while drawing!)
       if (
         !snappedCurrentStrokeRef.current &&
         lineStyle === 'solid' &&
         !arrowEnd &&
         activeTool !== 'shape' &&
-        activeTool !== 'tape'
+        activeTool !== 'tape' &&
+        activeTool !== 'highlighter'
       ) {
         if (pts.length === 2) {
           drawTwoPointSegment(pts[0], pts[1]);
@@ -4385,7 +4387,8 @@ export default function App() {
       lineStyle !== 'solid' ||
       arrowEnd ||
       activeTool === 'shape' ||
-      activeTool === 'tape'
+      activeTool === 'tape' ||
+      activeTool === 'highlighter'
     ) {
       if (snappedCurrentStrokeRef.current && snappedCurrentStrokeRef.current.shapeType === 'line') {
         const start = currentStrokePtsRef.current[0];
