@@ -470,10 +470,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <button
                   type="button"
                   onClick={() => signOut(auth)}
-                  className="p-2 rounded-full text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                  title="Αποσύνδεση"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition cursor-pointer"
+                  title="Αποσύνδεση (Logout)"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Logout</span>
                 </button>
               </div>
             ) : (

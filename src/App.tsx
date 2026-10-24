@@ -6056,33 +6056,50 @@ export default function App() {
             <SlidersHorizontal className="w-4 h-4" />
           </button>
 
-          {/* Firebase Auth User / Login Button */}
+          {/* Firebase Auth User / Login & Logout to Landing Page */}
           {currentUser ? (
-            <button
-              onClick={async () => {
-                await signOut(auth);
-                showToast('👋 Αποσυνδέθηκες από τον λογαριασμό σου.');
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-rose-500/25 border border-emerald-400/40 text-xs font-semibold text-emerald-100 transition cursor-pointer"
-              title={`Συνδεδεμένος ως ${currentUser.email || currentUser.displayName || 'Χρήστης'} — Πάτησε για Αποσύνδεση`}
-            >
-              <span className="max-w-[90px] truncate hidden sm:inline">
+            <div className="flex items-center gap-1">
+              <span
+                className="px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-[11px] font-semibold text-emerald-200 max-w-[100px] truncate hidden md:inline"
+                title={`Συνδεδεμένος ως ${currentUser.email || currentUser.displayName || 'Χρήστης'}`}
+              >
                 {currentUser.displayName || currentUser.email?.split('@')[0] || 'Account'}
               </span>
-              <LogOut className="w-3.5 h-3.5 text-emerald-300" />
-            </button>
+              <button
+                onClick={async () => {
+                  await signOut(auth);
+                  setViewMode('landing');
+                  showToast('👋 Αποσυνδέθηκες και επέστρεψες στην Αρχική Σελίδα.');
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-xs font-bold text-rose-100 transition cursor-pointer"
+                title="Αποσύνδεση (Logout) & Επιστροφή στην Αρχική Σελίδα (Landing Page)"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-300" />
+                <span>Logout</span>
+              </button>
+            </div>
           ) : (
-            <button
-              onClick={() => {
-                setAuthMode('signin');
-                setShowAuthModal(true);
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#007185] hover:bg-[#005f70] text-xs font-bold text-white transition cursor-pointer shadow-xs"
-              title="Σύνδεση / Εγγραφή με Google ή Email"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Login</span>
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  setAuthMode('signin');
+                  setShowAuthModal(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#007185] hover:bg-[#005f70] text-xs font-bold text-white transition cursor-pointer shadow-xs"
+                title="Σύνδεση / Εγγραφή με Google ή Email"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Login</span>
+              </button>
+              <button
+                onClick={() => setViewMode('landing')}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-rose-500/30 border border-white/15 text-xs font-semibold text-slate-200 transition cursor-pointer"
+                title="Έξοδος στην Αρχική Σελίδα (Landing Page)"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-300" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
           )}
         </div>
       </header>
