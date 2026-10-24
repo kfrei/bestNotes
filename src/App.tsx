@@ -4185,7 +4185,9 @@ export default function App() {
     [activeTool, selectedStrokeIds, activeNodeStrokeId, updateActivePage]
   );
 
-  const handleBeautifySelected = () => {
+  // NOTE: Temporarily disabled from toolbar until final phase ("Στρώσιμο" handwriting beautifier)
+  const _handleBeautifySelected = () => {
+    void Sparkles;
     const targets =
       selectedStrokeIds.length > 0
         ? activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id))
@@ -4198,6 +4200,7 @@ export default function App() {
     }));
     showToast('✨ Τα ελληνικά χειρόγραφα & σύμβολα (=, κλάσματα) στρώθηκαν!');
   };
+  void _handleBeautifySelected;
 
   const handleInsertSamplePhysicsImage = () => {
     const c = document.createElement('canvas');
@@ -4738,14 +4741,17 @@ export default function App() {
                 ✏️ {pencilOnlyMode ? 'Pencil Only' : 'All Touch'}
               </button>
 
-              <button
-                onClick={handleBeautifySelected}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 text-[11px] font-semibold transition cursor-pointer"
-                title="Εγγενές Στρώσιμο Ελληνικού Χειρογράφου & Συμβόλων (=, κλάσματα)"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Στρώσιμο</span>
-              </button>
+              {/*
+                NOTE: "Στρώσιμο" button temporarily hidden until final phase per user request:
+                <button
+                  onClick={_handleBeautifySelected}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 text-[11px] font-semibold transition cursor-pointer"
+                  title="Εγγενές Στρώσιμο Ελληνικού Χειρογράφου & Συμβόλων (=, κλάσματα)"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Στρώσιμο</span>
+                </button>
+              */}
 
               {/* Quick Paste Button (for photos copied outside the app or internal objects) */}
               <button
