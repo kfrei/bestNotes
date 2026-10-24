@@ -172,6 +172,40 @@ const BezierNodesIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-
   </svg>
 );
 
+// CAD / Illustrator-style Horizontal Mirror Icon (Left <-> Right across vertical symmetry axis)
+const MirrorHorizontalIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="12" y1="2.5" x2="12" y2="21.5" strokeDasharray="2.5 2.5" />
+    <path d="M 3 18.5 L 9.2 5.5 L 9.2 18.5 Z" fill="currentColor" fillOpacity="0.2" />
+    <path d="M 21 18.5 L 14.8 5.5 L 14.8 18.5 Z" />
+  </svg>
+);
+
+// CAD / Illustrator-style Vertical Mirror Icon (Up <-> Down across horizontal symmetry axis)
+const MirrorVerticalIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="2.5" y1="12" x2="21.5" y2="12" strokeDasharray="2.5 2.5" />
+    <path d="M 5.5 3 L 18.5 9.2 L 5.5 9.2 Z" fill="currentColor" fillOpacity="0.2" />
+    <path d="M 5.5 21 L 18.5 14.8 L 5.5 14.8 Z" />
+  </svg>
+);
+
 export default function App() {
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
     try {
@@ -2952,6 +2986,168 @@ export default function App() {
     showToast,
   ]);
 
+  // Mirror / Flip Selected Shape, Stroke, Group of Strokes, or Image:
+  // - axis === 'horizontal': Mirror Left <-> Right across the vertical center axis (x' = 2*cx - x)
+  // - axis === 'vertical': Mirror Up <-> Down across the horizontal center axis (y' = 2*cy - y)
+  const handleMirrorSelected = useCallback(
+    (axis: 'horizontal' | 'vertical') => {
+      const baseIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : [];
+      const baseSet = new Set(baseIds);
+      const groupIds = new Set(
+        activePage.strokes
+          .filter((s) => baseSet.has(s.id) && s.groupId)
+          .map((s) => s.groupId as string)
+      );
+      const targetStrokes = activePage.strokes.filter(
+        (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+      );
+      const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+
+      if (selImg) {
+        const flipDataUrl = (srcUrl: string): Promise<string> =>
+          new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const w = Math.max(1, img.naturalWidth || img.width || selImg.width);
+              const h = Math.max(1, img.naturalHeight || img.height || selImg.height);
+              const c = document.createElement('canvas');
+              c.width = w;
+              c.height = h;
+              const ctx = c.getContext('2d');
+              if (!ctx) {
+                resolve(srcUrl);
+                return;
+              }
+              ctx.save();
+              if (axis === 'horizontal') {
+                ctx.translate(w, 0);
+                ctx.scale(-1, 1);
+              } else {
+                ctx.translate(0, h);
+                ctx.scale(1, -1);
+              }
+              ctx.drawImage(img, 0, 0, w, h);
+              ctx.restore();
+              resolve(c.toDataURL('image/png'));
+            };
+            img.onerror = () => resolve(srcUrl);
+            img.src = srcUrl;
+          });
+
+        void (async () => {
+          const flippedUrl = await flipDataUrl(selImg.dataUrl);
+          const flippedOrigUrl = selImg.originalDataUrl
+            ? await flipDataUrl(selImg.originalDataUrl)
+            : flippedUrl;
+          updateActivePage((page) => ({
+            ...page,
+            images: (page.images || []).map((im) =>
+              im.id === selImg.id
+                ? {
+                    ...im,
+                    dataUrl: flippedUrl,
+                    originalDataUrl: flippedOrigUrl,
+                    rotation: im.rotation ? -im.rotation : 0,
+                    clipPolygon: im.clipPolygon?.map((cp) =>
+                      axis === 'horizontal'
+                        ? { x: im.width - cp.x, y: cp.y }
+                        : { x: cp.x, y: im.height - cp.y }
+                    ),
+                  }
+                : im
+            ),
+          }));
+          showToast(
+            axis === 'horizontal'
+              ? '↔️ Mirror Εικόνας Αριστερά ↔ Δεξιά (Κατακόρυφος άξονας)!'
+              : '↕️ Mirror Εικόνας Πάνω ↕ Κάτω (Οριζόντιος άξονας)!'
+          );
+        })();
+        return;
+      }
+
+      if (targetStrokes.length > 0) {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (const s of targetStrokes) {
+          const samplePts = getStrokeSamplePoints(s);
+          for (const p of samplePts) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const targetIdSet = new Set(targetStrokes.map((s) => s.id));
+
+        updateActivePage((page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (!targetIdSet.has(s.id)) return s;
+            const srcPoints =
+              (s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length === 2
+                ? [
+                    s.points[0],
+                    s.points[1],
+                    {
+                      x: s.points[0].x - (s.points[1].x - s.points[0].x) / 3,
+                      y: s.points[1].y,
+                      twist: 2,
+                      pressure: s.points[0].pressure ?? 0.7,
+                    },
+                  ]
+                : s.points;
+
+            return {
+              ...s,
+              rotation: s.rotation !== undefined ? -s.rotation : undefined,
+              points: srcPoints.map((p) =>
+                axis === 'horizontal'
+                  ? {
+                      ...p,
+                      x: 2 * cx - p.x,
+                      cx: p.cx !== undefined ? 2 * cx - p.cx : undefined,
+                    }
+                  : {
+                      ...p,
+                      y: 2 * cy - p.y,
+                      cy: p.cy !== undefined ? 2 * cy - p.cy : undefined,
+                    }
+              ),
+            };
+          }),
+        }));
+
+        showToast(
+          axis === 'horizontal'
+            ? '↔️ Mirror Αριστερά ↔ Δεξιά (Κατακόρυφος άξονας συμμετρίας)!'
+            : '↕️ Mirror Πάνω ↕ Κάτω (Οριζόντιος άξονας συμμετρίας)!'
+        );
+        return;
+      }
+
+      showToast('ℹ️ Επίλεξε πρώτα ένα σχήμα με το Lasso για Mirror!');
+    },
+    [
+      activePage.strokes,
+      activePage.images,
+      selectedStrokeIds,
+      activeNodeStrokeId,
+      selectedImageId,
+      updateActivePage,
+      showToast,
+    ]
+  );
+
   const insertImageDataUrlOnPage = useCallback(
     (dataUrl: string, customToast?: string) => {
       const img = new Image();
@@ -4878,8 +5074,12 @@ export default function App() {
                 targetPt.y = latestPt.y;
                 newPts[0] = targetPt;
               } else if (draggingNodeIdx.index === 1) {
-                // Endpoint handle: strictly horizontal (wider / narrower)
-                const nextEndX = Math.max(pStart.x + 48, latestPt.x);
+                // Endpoint handle: strictly horizontal (wider / narrower), supporting both normal and horizontally mirrored waves
+                const dirSign = newPts[1].x >= pStart.x ? 1 : -1;
+                const nextEndX =
+                  dirSign > 0
+                    ? Math.max(pStart.x + 48, latestPt.x)
+                    : Math.min(pStart.x - 48, latestPt.x);
                 targetPt.x = nextEndX;
                 newPts[1] = targetPt;
                 // Keep the Peak handle's X locked at the crest of the first half-cycle
@@ -8710,6 +8910,27 @@ export default function App() {
                       <Copy className="w-3.5 h-3.5" />
                       <span>Αντίγραφο</span>
                     </button>
+
+                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) */}
+                    <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
+                      <button
+                        onClick={() => handleMirrorSelected('horizontal')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                        title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
+                      >
+                        <MirrorHorizontalIcon className="w-3.5 h-3.5" />
+                        <span>↔ Mirror</span>
+                      </button>
+                      <button
+                        onClick={() => handleMirrorSelected('vertical')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                        title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
+                      >
+                        <MirrorVerticalIcon className="w-3.5 h-3.5" />
+                        <span>↕ Mirror</span>
+                      </button>
+                    </div>
+
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
@@ -8956,6 +9177,27 @@ export default function App() {
                       <Copy className="w-3.5 h-3.5" />
                       <span>Αντίγραφο</span>
                     </button>
+
+                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) */}
+                    <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
+                      <button
+                        onClick={() => handleMirrorSelected('horizontal')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                        title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
+                      >
+                        <MirrorHorizontalIcon className="w-3.5 h-3.5" />
+                        <span>↔ Mirror</span>
+                      </button>
+                      <button
+                        onClick={() => handleMirrorSelected('vertical')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                        title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
+                      >
+                        <MirrorVerticalIcon className="w-3.5 h-3.5" />
+                        <span>↕ Mirror</span>
+                      </button>
+                    </div>
+
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
