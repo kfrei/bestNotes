@@ -51,6 +51,11 @@ import {
   User as UserIcon,
   RefreshCw,
   ExternalLink,
+  Folder,
+  FolderPlus,
+  List,
+  Search,
+  ArrowUpDown,
 } from 'lucide-react';
 import { auth, onAuthStateChanged, signOut, signInToGoogleDrive, type User } from './firebase';
 import { LandingPage, AuthModal } from './components/LandingPage';
@@ -482,6 +487,45 @@ export default function App() {
   });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
   const [driveSyncingAll, setDriveSyncingAll] = useState<boolean>(false);
+
+  // Library ("Σημειώσεις") View Controls: Icons vs List, Sort (Alpha vs Date), Search, Folders
+  const [libraryLayoutMode, setLibraryLayoutMode] = useState<'grid' | 'list'>(() => {
+    try {
+      const saved = localStorage.getItem('bestnotes_lib_layout_v1');
+      if (saved === 'grid' || saved === 'list') return saved;
+    } catch {
+      // ignore
+    }
+    return 'grid';
+  });
+  const [librarySortBy, setLibrarySortBy] = useState<'date' | 'alpha'>(() => {
+    try {
+      const saved = localStorage.getItem('bestnotes_lib_sort_v1');
+      if (saved === 'date' || saved === 'alpha') return saved;
+    } catch {
+      // ignore
+    }
+    return 'date';
+  });
+  const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
+  const [activeLibraryFolder, setActiveLibraryFolder] = useState<string | null>(null);
+  const [customFolders, setCustomFolders] = useState<{ name: string; updatedAt: string }[]>(() => {
+    try {
+      const raw = localStorage.getItem('bestnotes_custom_folders_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [
+      { name: 'Φυσική', updatedAt: new Date().toISOString() },
+      { name: 'Μαθηματικά', updatedAt: new Date().toISOString() },
+    ];
+  });
+  const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
+  const [newFolderNameInput, setNewFolderNameInput] = useState<string>('');
 
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
@@ -6563,10 +6607,11 @@ export default function App() {
           </button>
           <button
             onClick={() => setViewMode(viewMode === 'library' ? 'editor' : 'library')}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
-            title="Πίσω στις Σημειώσεις (Βιβλιοθήκη)"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
+            title="Σημειώσεις & Φάκελοι (Βιβλιοθήκη)"
           >
-            <ChevronLeft className="w-5 h-5 text-sky-300" />
+            <ChevronLeft className="w-4 h-4 text-sky-300" />
+            <span className="text-xs font-semibold hidden sm:inline">Σημειώσεις</span>
           </button>
 
           {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
@@ -6990,269 +7035,754 @@ export default function App() {
         </div>
       </header>
 
-      {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTES GRID) */}
+      {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTES GRID / LIST) */}
       {viewMode === 'library' ? (
         <div className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]">
-          <div className="max-w-5xl mx-auto">
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-              <div>
-                <h1 className="text-2xl font-bold text-[#1b2a4a]">Σημειώσεις (Notes)</h1>
-                <p className="text-sm text-slate-500">
-                  Οι σημειώσεις σου, αρχεία `.goodnotes`, PDF και εικόνες (με ζωντανή μικρογραφία 1ης σελίδας)
-                </p>
-              </div>
-              <div className="flex gap-2.5 flex-wrap">
-                <button
-                  onClick={() => {
-                    pdfImportModeRef.current = 'new-notebook';
-                    fileInputPdfOrDocRef.current?.click();
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-xs cursor-pointer"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Άνοιγμα PDF / JPG / PNG</span>
-                </button>
-                <button
-                  onClick={() => fileInputGoodnotesRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-300 hover:border-sky-500 text-[#1b2a4a] text-sm font-semibold shadow-xs cursor-pointer"
-                >
-                  <Upload className="w-4 h-4 text-sky-600" />
-                  <span>Εισαγωγή .goodnotes</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const newNb: Notebook = {
-                      id: `nb-${Date.now()}`,
-                      title: `Νέα Σημείωση ${notebooks.length + 1}`,
-                      folder: 'Φυσική',
-                      coverColor: '#0284c7',
-                      updatedAt: new Date().toISOString(),
-                      sourceFormat: '.bestnotes',
-                      pages: [
-                        {
-                          id: `p-${Date.now()}`,
-                          title: 'Σελίδα 1',
-                          template: 'grid',
-                          orientation: 'portrait',
-                          layers: [
-                            { id: 'layer-1', name: 'Σχήμα Άσκησης', visible: true, locked: false, opacity: 1 },
-                            { id: 'layer-2', name: 'Πράξεις & Λύση', visible: true, locked: false, opacity: 1 },
-                          ],
-                          strokes: [],
-                          texts: [],
-                          images: [],
-                          tapes: [],
-                        },
-                      ],
-                    };
-                    setNotebooks((prev) => [newNb, ...prev]);
-                    setOpenNotebookIds((prev) => [...prev, newNb.id]);
-                    setActiveNotebookId(newNb.id);
+          <div className="max-w-5xl mx-auto space-y-5">
+            {(() => {
+              // Build unified folder map from customFolders + notebooks
+              const folderMap = new Map<string, { name: string; updatedAt: string; count: number }>();
+              for (const cf of customFolders) {
+                const trimmed = cf.name.trim();
+                if (trimmed) {
+                  folderMap.set(trimmed, { name: trimmed, updatedAt: cf.updatedAt || new Date().toISOString(), count: 0 });
+                }
+              }
+              for (const nb of notebooks) {
+                const fName = (nb.folder || '').trim();
+                if (fName) {
+                  const existing = folderMap.get(fName);
+                  if (existing) {
+                    existing.count += 1;
+                    if (nb.updatedAt > existing.updatedAt) existing.updatedAt = nb.updatedAt;
+                  } else {
+                    folderMap.set(fName, { name: fName, updatedAt: nb.updatedAt || new Date().toISOString(), count: 1 });
+                  }
+                }
+              }
+
+              const query = librarySearchQuery.trim().toLowerCase();
+
+              // Filter & Sort Folders (shown at root level or when searching)
+              const visibleFolders =
+                activeLibraryFolder === null
+                  ? Array.from(folderMap.values())
+                      .filter((f) => !query || f.name.toLowerCase().includes(query))
+                      .sort((a, b) =>
+                        librarySortBy === 'alpha'
+                          ? a.name.localeCompare(b.name, 'el')
+                          : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+                      )
+                  : [];
+
+              // Filter & Sort Notes
+              const visibleNotebooks = notebooks
+                .filter((nb) => {
+                  if (activeLibraryFolder !== null && (nb.folder || '').trim() !== activeLibraryFolder) {
+                    return false;
+                  }
+                  if (query) {
+                    return (
+                      nb.title.toLowerCase().includes(query) ||
+                      (nb.folder || '').toLowerCase().includes(query)
+                    );
+                  }
+                  return true;
+                })
+                .sort((a, b) =>
+                  librarySortBy === 'alpha'
+                    ? a.title.localeCompare(b.title, 'el')
+                    : new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+                );
+
+              const openNotebookDirectly = (nb: Notebook) => {
+                if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
+                setActiveNotebookId(nb.id);
+                setActivePageIndex(0);
+                activeDrawingPageIndexRef.current = 0;
+                panRef.current = { x: 0, y: 0 };
+                setPan({ x: 0, y: 0 });
+                setViewMode('editor');
+              };
+
+              const deleteNotebookById = (nb: Notebook) => {
+                const remaining = notebooks.filter((n) => n.id !== nb.id);
+                if (remaining.length === 0) {
+                  const fallbackNb: Notebook = {
+                    id: `nb-${Date.now()}`,
+                    title: 'Νέα Σημείωση 1',
+                    folder: activeLibraryFolder || 'Φυσική',
+                    coverColor: '#0284c7',
+                    updatedAt: new Date().toISOString(),
+                    sourceFormat: '.bestnotes',
+                    pages: [
+                      {
+                        id: `p-${Date.now()}`,
+                        title: 'Σελίδα 1',
+                        template: 'grid',
+                        orientation: 'portrait',
+                        layers: [
+                          { id: 'layer-1', name: 'Κύριο Επίπεδο', visible: true, locked: false, opacity: 1 },
+                        ],
+                        strokes: [],
+                        texts: [],
+                        images: [],
+                        tapes: [],
+                      },
+                    ],
+                  };
+                  setNotebooks([fallbackNb]);
+                  setOpenNotebookIds([fallbackNb.id]);
+                  setActiveNotebookId(fallbackNb.id);
+                  setActivePageIndex(0);
+                } else {
+                  setNotebooks(remaining);
+                  const nextOpen = openNotebookIds.filter((id) => id !== nb.id);
+                  const finalOpen = nextOpen.length > 0 ? nextOpen : [remaining[0].id];
+                  setOpenNotebookIds(finalOpen);
+                  if (activeNotebookId === nb.id) {
+                    setActiveNotebookId(finalOpen[0]);
                     setActivePageIndex(0);
-                    activeDrawingPageIndexRef.current = 0;
-                    panRef.current = { x: 0, y: 0 };
-                    setPan({ x: 0, y: 0 });
-                    setViewMode('editor');
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Νέα Σημείωση</span>
-                </button>
-              </div>
-            </div>
+                  }
+                }
+                showToast(`🗑️ Διαγράφηκε η σημείωση "${nb.title}".`);
+              };
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-              {notebooks.map((nb) => {
-                const p0 = nb.pages[0];
-                const pW = p0?.orientation === 'landscape' ? 1260 : 920;
-                const pH = p0?.orientation === 'landscape' ? 920 : 1260;
-                return (
-                  <div
-                    key={nb.id}
-                    onClick={() => {
-                      if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
-                      setActiveNotebookId(nb.id);
-                      setActivePageIndex(0);
-                      activeDrawingPageIndexRef.current = 0;
-                      panRef.current = { x: 0, y: 0 };
-                      setPan({ x: 0, y: 0 });
-                      setViewMode('editor');
-                    }}
-                    className="group cursor-pointer flex flex-col items-center"
-                  >
-                    <div
-                      className="w-48 h-64 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border border-slate-300/90 flex flex-col justify-between"
-                      style={{
-                        backgroundColor: p0?.template === 'dark-grid' ? '#0f172a' : '#fffdf7',
-                        backgroundImage:
-                          p0?.template === 'grid' || !p0?.template
-                            ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
-                            : p0?.template === 'ruled'
-                            ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
-                            : undefined,
-                        backgroundSize: '14px 14px',
-                      }}
-                    >
-                      {/* Colored Spine on Left */}
-                      <div
-                        className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
-                        style={{ backgroundColor: nb.coverColor }}
-                      />
+              const deleteFolderByName = (folderName: string) => {
+                const nextCustom = customFolders.filter((f) => f.name.trim() !== folderName);
+                setCustomFolders(nextCustom);
+                try {
+                  localStorage.setItem('bestnotes_custom_folders_v1', JSON.stringify(nextCustom));
+                } catch {
+                  // ignore
+                }
+                // Move any notebooks inside this folder to unassigned ('') so no user work is lost, or remove folder tag
+                setNotebooks((prev) =>
+                  prev.map((nb) => ((nb.folder || '').trim() === folderName ? { ...nb, folder: '' } : nb))
+                );
+                if (activeLibraryFolder === folderName) {
+                  setActiveLibraryFolder(null);
+                }
+                showToast(`🗑️ Διαγράφηκε ο φάκελος "${folderName}".`);
+              };
 
-                      {/* 1st Page PDF / Image Background if present */}
-                      {p0?.backgroundDataUrl && (
-                        <img
-                          src={p0.backgroundDataUrl}
-                          alt={nb.title}
-                          className="absolute inset-0 w-full h-full object-contain pointer-events-none pl-3"
-                        />
-                      )}
+              const handleCreateNewFolder = () => {
+                const trimmed = newFolderNameInput.trim() || `Νέος Φάκελος ${customFolders.length + 1}`;
+                const nextCustom = [
+                  { name: trimmed, updatedAt: new Date().toISOString() },
+                  ...customFolders.filter((f) => f.name.trim() !== trimmed),
+                ];
+                setCustomFolders(nextCustom);
+                try {
+                  localStorage.setItem('bestnotes_custom_folders_v1', JSON.stringify(nextCustom));
+                } catch {
+                  // ignore
+                }
+                setNewFolderNameInput('');
+                setIsCreatingFolder(false);
+                showToast(`📁 Δημιουργήθηκε ο φάκελος "${trimmed}"!`);
+              };
 
-                      {/* 1st Page Live Vector SVG Miniature Thumbnail */}
-                      {p0 && (
-                        <svg
-                          viewBox={`0 0 ${pW} ${pH}`}
-                          preserveAspectRatio="xMidYMid meet"
-                          className="absolute inset-0 w-full h-full pointer-events-none pl-3"
+              return (
+                <>
+                  {/* Top Header Row: Title / Folder Breadcrumb + Create Note / Create Folder / Import Buttons */}
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => setActiveLibraryFolder(null)}
+                          className={`text-2xl font-bold transition cursor-pointer ${
+                            activeLibraryFolder
+                              ? 'text-slate-500 hover:text-[#1b2a4a]'
+                              : 'text-[#1b2a4a]'
+                          }`}
                         >
-                          {(p0.images || []).map((im) => (
-                            <image
-                              key={im.id}
-                              href={im.dataUrl}
-                              x={im.x}
-                              y={im.y}
-                              width={im.width}
-                              height={im.height}
-                            />
-                          ))}
-                          {(p0.strokes || []).map((st) => {
-                            if (!st.points || st.points.length === 0) return null;
-                            if (st.points.length === 1) {
-                              return (
-                                <circle
-                                  key={st.id}
-                                  cx={st.points[0].x}
-                                  cy={st.points[0].y}
-                                  r={Math.max(4, st.width * 1.5)}
-                                  fill={st.color}
-                                />
-                              );
-                            }
-                            const renderPts =
-                              (st.shapeType === 'resistor' || st.shapeType === 'spring') && st.points.length >= 4
-                                ? computeResistorOrSpringPoints(st.shapeType, st.points)
-                                : st.points;
-                            const ptsStr = renderPts.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
-                            return (
-                              <polyline
-                                key={st.id}
-                                fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
-                                fillOpacity={
-                                  st.fillTransparency === 25 || st.fillTransparency === 20
-                                    ? 0.75
-                                    : st.fillTransparency === 45 || st.fillTransparency === 50
-                                    ? 0.55
-                                    : 0.11
-                                }
-                                stroke={st.color}
-                                strokeWidth={Math.max(3.5, st.width * 1.8)}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                opacity={st.opacity ?? 1}
-                                points={ptsStr}
-                              />
-                            );
-                          })}
-                          {(p0.texts || []).map((tx) => (
-                            <text
-                              key={tx.id}
-                              x={tx.x}
-                              y={tx.y + (tx.fontSize || 20)}
-                              fill={tx.color}
-                              fontSize={(tx.fontSize || 20) * 1.2}
-                              fontWeight={tx.bold ? 'bold' : 'normal'}
+                          Σημειώσεις
+                        </button>
+                        {activeLibraryFolder && (
+                          <>
+                            <ChevronRight className="w-5 h-5 text-slate-400" />
+                            <span className="flex items-center gap-1.5 text-2xl font-bold text-[#0066ff]">
+                              <Folder className="w-6 h-6 fill-amber-400 text-amber-500" />
+                              <span>{activeLibraryFolder}</span>
+                            </span>
+                            <button
+                              onClick={() => setActiveLibraryFolder(null)}
+                              className="ml-2 px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-xs font-semibold text-slate-700 transition cursor-pointer"
                             >
-                              {tx.text}
-                            </text>
-                          ))}
-                        </svg>
-                      )}
+                              ← Όλοι οι Φάκελοι
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-500 mt-0.5">
+                        Οργάνωσε τις σημειώσεις και τους φακέλους σου (με ζωντανή προεπισκόπηση 1ης σελίδας)
+                      </p>
+                    </div>
 
-                      {/* Top Row: Format Badge + Delete Note Button */}
-                      <div className="relative z-20 flex items-center justify-between pl-4 pr-2 pt-2">
-                        <span
-                          className="text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs"
-                          style={{ backgroundColor: nb.coverColor }}
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => {
+                          const newNb: Notebook = {
+                            id: `nb-${Date.now()}`,
+                            title: `Νέα Σημείωση ${notebooks.length + 1}`,
+                            folder: activeLibraryFolder || 'Φυσική',
+                            coverColor: '#0284c7',
+                            updatedAt: new Date().toISOString(),
+                            sourceFormat: '.bestnotes',
+                            pages: [
+                              {
+                                id: `p-${Date.now()}`,
+                                title: 'Σελίδα 1',
+                                template: 'grid',
+                                orientation: 'portrait',
+                                layers: [
+                                  { id: 'layer-1', name: 'Σχήμα Άσκησης', visible: true, locked: false, opacity: 1 },
+                                  { id: 'layer-2', name: 'Πράξεις & Λύση', visible: true, locked: false, opacity: 1 },
+                                ],
+                                strokes: [],
+                                texts: [],
+                                images: [],
+                                tapes: [],
+                              },
+                            ],
+                          };
+                          setNotebooks((prev) => [newNb, ...prev]);
+                          setOpenNotebookIds((prev) => [...prev, newNb.id]);
+                          setActiveNotebookId(newNb.id);
+                          setActivePageIndex(0);
+                          activeDrawingPageIndexRef.current = 0;
+                          panRef.current = { x: 0, y: 0 };
+                          setPan({ x: 0, y: 0 });
+                          setViewMode('editor');
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Νέα Σημείωση</span>
+                      </button>
+
+                      <button
+                        onClick={() => setIsCreatingFolder((v) => !v)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
+                      >
+                        <FolderPlus className="w-4 h-4" />
+                        <span>Νέος Φάκελος</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          pdfImportModeRef.current = 'new-notebook';
+                          fileInputPdfOrDocRef.current?.click();
+                        }}
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-xs cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>PDF / Εικόνα</span>
+                      </button>
+
+                      <button
+                        onClick={() => fileInputGoodnotesRef.current?.click()}
+                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-sky-500 text-[#1b2a4a] text-sm font-semibold shadow-xs cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4 text-sky-600" />
+                        <span>.goodnotes</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inline New Folder Creation Bar (when "+ Νέος Φάκελος" is clicked) */}
+                  {isCreatingFolder && (
+                    <div className="flex items-center gap-2 bg-white border border-amber-300 rounded-2xl p-3 shadow-md">
+                      <Folder className="w-5 h-5 fill-amber-400 text-amber-500 shrink-0" />
+                      <input
+                        type="text"
+                        autoFocus
+                        value={newFolderNameInput}
+                        onChange={(e) => setNewFolderNameInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCreateNewFolder();
+                          if (e.key === 'Escape') setIsCreatingFolder(false);
+                        }}
+                        placeholder="Όνομα νέου φακέλου (π.χ. Ηλεκτρομαγνητισμός, Άλγεβρα)..."
+                        className="flex-1 text-sm text-slate-800 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-[#0066ff]"
+                      />
+                      <button
+                        onClick={handleCreateNewFolder}
+                        className="px-4 py-1.5 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs font-bold cursor-pointer"
+                      >
+                        Δημιουργία
+                      </button>
+                      <button
+                        onClick={() => setIsCreatingFolder(false)}
+                        className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Search Field + Sort Toggle (Alphabetical / Date) + View Toggle (Icons / List) */}
+                  <div className="flex items-center justify-between gap-3 flex-wrap bg-white border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-2xs">
+                    {/* Search Input */}
+                    <div className="relative flex-1 min-w-[220px]">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={librarySearchQuery}
+                        onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                        placeholder="Αναζήτηση σε σημειώσεις και φακέλους..."
+                        className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-[#0066ff]"
+                      />
+                      {librarySearchQuery && (
+                        <button
+                          onClick={() => setLibrarySearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                         >
-                          {nb.sourceFormat || '.bestnotes'}
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Right Controls: Sort (Alphabetical vs Date) + View Mode (Icons vs List) */}
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      {/* Sort Selector (Left of View Toggle) */}
+                      <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                        <span className="flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-500">
+                          <ArrowUpDown className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Ταξινόμηση:</span>
                         </span>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const remaining = notebooks.filter((n) => n.id !== nb.id);
-                            if (remaining.length === 0) {
-                              const fallbackNb: Notebook = {
-                                id: `nb-${Date.now()}`,
-                                title: 'Νέα Σημείωση 1',
-                                folder: 'Γενικά',
-                                coverColor: '#0284c7',
-                                updatedAt: new Date().toISOString(),
-                                sourceFormat: '.bestnotes',
-                                pages: [
-                                  {
-                                    id: `p-${Date.now()}`,
-                                    title: 'Σελίδα 1',
-                                    template: 'grid',
-                                    orientation: 'portrait',
-                                    layers: [
-                                      { id: 'layer-1', name: 'Κύριο Επίπεδο', visible: true, locked: false, opacity: 1 },
-                                    ],
-                                    strokes: [],
-                                    texts: [],
-                                    images: [],
-                                    tapes: [],
-                                  },
-                                ],
-                              };
-                              setNotebooks([fallbackNb]);
-                              setOpenNotebookIds([fallbackNb.id]);
-                              setActiveNotebookId(fallbackNb.id);
-                              setActivePageIndex(0);
-                            } else {
-                              setNotebooks(remaining);
-                              const nextOpen = openNotebookIds.filter((id) => id !== nb.id);
-                              const finalOpen = nextOpen.length > 0 ? nextOpen : [remaining[0].id];
-                              setOpenNotebookIds(finalOpen);
-                              if (activeNotebookId === nb.id) {
-                                setActiveNotebookId(finalOpen[0]);
-                                setActivePageIndex(0);
-                              }
+                          onClick={() => {
+                            setLibrarySortBy('alpha');
+                            try {
+                              localStorage.setItem('bestnotes_lib_sort_v1', 'alpha');
+                            } catch {
+                              // ignore
                             }
-                            showToast(`🗑️ Διαγράφηκε η σημείωση "${nb.title}".`);
                           }}
-                          className="p-1.5 rounded-lg bg-white/90 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
-                          title={`Διαγραφή σημείωσης "${nb.title}"`}
+                          className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                            librarySortBy === 'alpha'
+                              ? 'bg-white text-[#0066ff] shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          Αλφαβητικά (Α-Ω)
+                        </button>
+                        <button
+                          onClick={() => {
+                            setLibrarySortBy('date');
+                            try {
+                              localStorage.setItem('bestnotes_lib_sort_v1', 'date');
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                            librarySortBy === 'date'
+                              ? 'bg-white text-[#0066ff] shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Ημερομηνία
                         </button>
                       </div>
 
-                      {/* Bottom Info Strip */}
-                      <div className="relative z-20 pl-4 pr-2.5 py-2 bg-white/92 backdrop-blur-xs border-t border-slate-200/80 text-slate-900">
-                        <p className="text-xs font-bold truncate">{nb.title}</p>
-                        <p className="text-[10px] text-slate-500">
-                          {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • Προεπισκόπηση 1ης σελ.
-                        </p>
+                      {/* View Mode Toggle: Icons (Grid) vs List */}
+                      <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                        <button
+                          onClick={() => {
+                            setLibraryLayoutMode('grid');
+                            try {
+                              localStorage.setItem('bestnotes_lib_layout_v1', 'grid');
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                            libraryLayoutMode === 'grid'
+                              ? 'bg-[#0066ff] text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                          title="Προβολή σε Εικονίδια (Grid)"
+                        >
+                          <LayoutGrid className="w-3.5 h-3.5" />
+                          <span>Εικονίδια</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setLibraryLayoutMode('list');
+                            try {
+                              localStorage.setItem('bestnotes_lib_layout_v1', 'list');
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                            libraryLayoutMode === 'list'
+                              ? 'bg-[#0066ff] text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                          title="Προβολή σε Λίστα (List)"
+                        >
+                          <List className="w-3.5 h-3.5" />
+                          <span>Λίστα</span>
+                        </button>
                       </div>
                     </div>
-                    <span className="mt-2 text-xs font-semibold text-slate-800 text-center max-w-[180px] truncate">
-                      {nb.title}
-                    </span>
                   </div>
-                );
-              })}
-            </div>
+
+                  {/* =================================================================
+                      MODE A: ICONS VIEW (GRID) — Folder Icons & 1st-Page Note Thumbnails
+                     ================================================================= */}
+                  {libraryLayoutMode === 'grid' ? (
+                    <div className="space-y-6">
+                      {/* Folders Section in Grid Mode */}
+                      {visibleFolders.length > 0 && (
+                        <div>
+                          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+                            Φάκελοι ({visibleFolders.length})
+                          </h2>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
+                            {visibleFolders.map((folder) => (
+                              <div
+                                key={folder.name}
+                                onClick={() => setActiveLibraryFolder(folder.name)}
+                                className="group relative bg-white hover:bg-amber-50/40 rounded-2xl p-4 border border-slate-200/90 hover:border-amber-400 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between h-36"
+                              >
+                                <div className="flex items-start justify-between">
+                                  {/* Classic Folder Icon */}
+                                  <div className="w-12 h-12 rounded-2xl bg-amber-100/80 border border-amber-200 flex items-center justify-center text-amber-500 group-hover:scale-105 transition">
+                                    <Folder className="w-7 h-7 fill-amber-400 text-amber-500" />
+                                  </div>
+                                  {/* Direct Open (Pencil Edit) + Red Trash Delete */}
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveLibraryFolder(folder.name);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
+                                      title={`Άνοιγμα φακέλου "${folder.name}"`}
+                                    >
+                                      <Pen className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteFolderByName(folder.name);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
+                                      title={`Διαγραφή φακέλου "${folder.name}"`}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Notes Section in Grid Mode */}
+                      <div>
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+                          Σημειώσεις ({visibleNotebooks.length})
+                        </h2>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+                          {visibleNotebooks.map((nb) => {
+                            const p0 = nb.pages[0];
+                            const pW = p0?.orientation === 'landscape' ? 1260 : 920;
+                            const pH = p0?.orientation === 'landscape' ? 920 : 1260;
+                            return (
+                              <div
+                                key={nb.id}
+                                onClick={() => openNotebookDirectly(nb)}
+                                className="group cursor-pointer flex flex-col items-center"
+                              >
+                                <div
+                                  className="w-48 h-64 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border border-slate-300/90 flex flex-col justify-between"
+                                  style={{
+                                    backgroundColor: p0?.template === 'dark-grid' ? '#0f172a' : '#fffdf7',
+                                    backgroundImage:
+                                      p0?.template === 'grid' || !p0?.template
+                                        ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
+                                        : p0?.template === 'ruled'
+                                        ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
+                                        : undefined,
+                                    backgroundSize: '14px 14px',
+                                  }}
+                                >
+                                  {/* Colored Spine on Left */}
+                                  <div
+                                    className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
+                                    style={{ backgroundColor: nb.coverColor }}
+                                  />
+
+                                  {/* 1st Page PDF / Image Background if present */}
+                                  {p0?.backgroundDataUrl && (
+                                    <img
+                                      src={p0.backgroundDataUrl}
+                                      alt={nb.title}
+                                      className="absolute inset-0 w-full h-full object-contain pointer-events-none pl-3"
+                                    />
+                                  )}
+
+                                  {/* 1st Page Live Vector SVG Miniature Thumbnail */}
+                                  {p0 && (
+                                    <svg
+                                      viewBox={`0 0 ${pW} ${pH}`}
+                                      preserveAspectRatio="xMidYMid meet"
+                                      className="absolute inset-0 w-full h-full pointer-events-none pl-3"
+                                    >
+                                      {(p0.images || []).map((im) => (
+                                        <image
+                                          key={im.id}
+                                          href={im.dataUrl}
+                                          x={im.x}
+                                          y={im.y}
+                                          width={im.width}
+                                          height={im.height}
+                                        />
+                                      ))}
+                                      {(p0.strokes || []).map((st) => {
+                                        if (!st.points || st.points.length === 0) return null;
+                                        if (st.points.length === 1) {
+                                          return (
+                                            <circle
+                                              key={st.id}
+                                              cx={st.points[0].x}
+                                              cy={st.points[0].y}
+                                              r={Math.max(4, st.width * 1.5)}
+                                              fill={st.color}
+                                            />
+                                          );
+                                        }
+                                        const renderPts =
+                                          (st.shapeType === 'resistor' || st.shapeType === 'spring') &&
+                                          st.points.length >= 4
+                                            ? computeResistorOrSpringPoints(st.shapeType, st.points)
+                                            : st.points;
+                                        const ptsStr = renderPts
+                                          .map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`)
+                                          .join(' ');
+                                        return (
+                                          <polyline
+                                            key={st.id}
+                                            fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
+                                            fillOpacity={
+                                              st.fillTransparency === 25 || st.fillTransparency === 20
+                                                ? 0.75
+                                                : st.fillTransparency === 45 || st.fillTransparency === 50
+                                                ? 0.55
+                                                : 0.11
+                                            }
+                                            stroke={st.color}
+                                            strokeWidth={Math.max(3.5, st.width * 1.8)}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            opacity={st.opacity ?? 1}
+                                            points={ptsStr}
+                                          />
+                                        );
+                                      })}
+                                      {(p0.texts || []).map((tx) => (
+                                        <text
+                                          key={tx.id}
+                                          x={tx.x}
+                                          y={tx.y + (tx.fontSize || 20)}
+                                          fill={tx.color}
+                                          fontSize={(tx.fontSize || 20) * 1.2}
+                                          fontWeight={tx.bold ? 'bold' : 'normal'}
+                                        >
+                                          {tx.text}
+                                        </text>
+                                      ))}
+                                    </svg>
+                                  )}
+
+                                  {/* Top Row: Folder Badge + Edit Pencil (Direct Open) + Red Trash Delete */}
+                                  <div className="relative z-20 flex items-center justify-between pl-4 pr-2 pt-2">
+                                    <span
+                                      className="text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[90px]"
+                                      style={{ backgroundColor: nb.coverColor }}
+                                    >
+                                      {nb.folder || nb.sourceFormat || '.bestnotes'}
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openNotebookDirectly(nb);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-white/90 hover:bg-[#0066ff] text-slate-700 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        title={`Άνοιγμα & Επεξεργασία "${nb.title}"`}
+                                      >
+                                        <Pen className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          deleteNotebookById(nb);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-white/90 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        title={`Διαγραφή σημείωσης "${nb.title}"`}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Bottom Info Strip */}
+                                  <div className="relative z-20 pl-4 pr-2.5 py-2 bg-white/92 backdrop-blur-xs border-t border-slate-200/80 text-slate-900">
+                                    <p className="text-xs font-bold truncate">{nb.title}</p>
+                                    <p className="text-[10px] text-slate-500">
+                                      {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • Προεπισκόπηση 1ης σελ.
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="mt-2 text-xs font-semibold text-slate-800 text-center max-w-[180px] truncate">
+                                  {nb.title}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* =================================================================
+                       MODE B: LIST VIEW — Compact Rows with Mini Folder Icon / Note Preview,
+                       Pencil Edit (Direct Open) & Red Trash Delete on the Right
+                       ================================================================= */
+                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
+                      {/* Folders in List Mode */}
+                      {visibleFolders.map((folder) => (
+                        <div
+                          key={`list-folder-${folder.name}`}
+                          onClick={() => setActiveLibraryFolder(folder.name)}
+                          className="flex items-center justify-between px-4 py-3 hover:bg-amber-50/40 transition cursor-pointer gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-9 h-9 rounded-xl bg-amber-100/80 border border-amber-200 flex items-center justify-center shrink-0">
+                              <Folder className="w-5 h-5 fill-amber-400 text-amber-500" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
+                              <p className="text-[11px] text-slate-500">
+                                Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[11px] text-slate-400 hidden sm:inline">
+                              {new Date(folder.updatedAt).toLocaleDateString('el-GR')}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveLibraryFolder(folder.name);
+                              }}
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
+                              title={`Άνοιγμα φακέλου "${folder.name}"`}
+                            >
+                              <Pen className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteFolderByName(folder.name);
+                              }}
+                              className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
+                              title={`Διαγραφή φακέλου "${folder.name}"`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Notes in List Mode */}
+                      {visibleNotebooks.map((nb) => (
+                        <div
+                          key={`list-nb-${nb.id}`}
+                          onClick={() => openNotebookDirectly(nb)}
+                          className="flex items-center justify-between px-4 py-3 hover:bg-sky-50/50 transition cursor-pointer gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div
+                              className="w-9 h-11 rounded-lg border border-slate-300 shadow-2xs flex items-center justify-center shrink-0 relative overflow-hidden bg-[#fffdf7]"
+                            >
+                              <div
+                                className="absolute left-0 top-0 bottom-0 w-1.5"
+                                style={{ backgroundColor: nb.coverColor }}
+                              />
+                              <FileText className="w-4 h-4 text-slate-500 ml-1" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-[#1b2a4a] truncate">{nb.title}</p>
+                                {nb.folder && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-800 shrink-0">
+                                    <Folder className="w-3 h-3 fill-amber-400 text-amber-500" />
+                                    {nb.folder}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500">
+                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} •{' '}
+                                {nb.sourceFormat || '.bestnotes'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[11px] text-slate-400 hidden sm:inline">
+                              {new Date(nb.updatedAt || Date.now()).toLocaleDateString('el-GR')}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openNotebookDirectly(nb);
+                              }}
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
+                              title={`Άνοιγμα & Επεξεργασία "${nb.title}"`}
+                            >
+                              <Pen className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteNotebookById(nb);
+                              }}
+                              className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
+                              title={`Διαγραφή σημείωσης "${nb.title}"`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {visibleFolders.length === 0 && visibleNotebooks.length === 0 && (
+                        <div className="p-8 text-center text-sm text-slate-400">
+                          Δεν βρέθηκαν σημειώσεις ή φάκελοι.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       ) : (
