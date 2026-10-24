@@ -8111,13 +8111,13 @@ export default function App() {
                   title="Όλα τα Χρώματα & Στυλ Γραμμής"
                 />
                 <div className="h-4 w-px bg-slate-200 mx-0.5" />
-                <div className="inline-flex items-center gap-0.5 bg-slate-100/90 p-0.5 rounded-full border border-slate-200/80">
+                <div className="inline-flex items-center gap-2">
                   <button
                     onClick={() => toggleFillStyleToSelection(false)}
-                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition cursor-pointer ${
                       fillStyle !== 'none'
-                        ? 'bg-[#0066ff] text-white shadow-xs'
-                        : 'text-slate-700 hover:bg-slate-200/80'
+                        ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
+                        : 'bg-slate-100 border-slate-200/90 text-slate-700 hover:bg-slate-200'
                     }`}
                     title="Εναλλαγή με 1 κλικ: Γέμισμα (Fill) / Χωρίς Γέμισμα — Συντόμευση: F / Φ"
                   >
@@ -8125,7 +8125,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => cycleFillTransparency()}
-                    className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-slate-600 hover:text-[#0066ff] hover:bg-white transition cursor-pointer"
+                    className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-sky-50 border border-slate-200/90 hover:border-sky-300 text-[11px] font-bold text-slate-600 hover:text-[#0066ff] transition cursor-pointer"
                     title={`Διαφάνεια Γεμίσματος: ${fillTransparency}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
                   >
                     {fillTransparency}%
@@ -8653,7 +8653,7 @@ export default function App() {
                           ? 45
                           : 90;
                       return (
-                        <div className="inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                        <div className="inline-flex items-center gap-2">
                           <button
                             onClick={() => {
                               const nextFill: FillStyleType = isCurrentlyFilled ? 'none' : 'solid';
@@ -8680,10 +8680,10 @@ export default function App() {
                                 ),
                               }));
                             }}
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition cursor-pointer ${
                               isCurrentlyFilled
-                                ? 'bg-[#0066ff] text-white shadow-xs'
-                                : 'text-slate-700 hover:bg-slate-200/80'
+                                ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
+                                : 'bg-slate-100 border-slate-200/90 text-slate-700 hover:bg-slate-200'
                             }`}
                             title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα (λειτουργεί και σε κλειστά ελεύθερα σχήματα!)"
                           >
@@ -8691,7 +8691,7 @@ export default function App() {
                           </button>
                           <button
                             onClick={() => cycleFillTransparency()}
-                            className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-slate-600 hover:text-[#0066ff] hover:bg-white transition cursor-pointer"
+                            className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-sky-50 border border-slate-200/90 hover:border-sky-300 text-[11px] font-bold text-slate-600 hover:text-[#0066ff] transition cursor-pointer"
                             title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
                           >
                             {effectiveTrans}%
