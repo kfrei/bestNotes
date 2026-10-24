@@ -240,9 +240,9 @@ export default function App() {
   const [secondsToNextSync, setSecondsToNextSync] = useState<number>(30);
 
   // Modals
-  const mathDialogRef = useRef<HTMLDialogElement | null>(null);
-  const settingsDialogRef = useRef<HTMLDialogElement | null>(null);
-  const thumbnailsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
+  const [showMathModal, setShowMathModal] = useState<boolean>(false);
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [thumbnailCols, setThumbnailCols] = useState<3 | 4>(3);
   const [mathInput, setMathInput] = useState<string>('I = \\frac{q}{t} \\implies 15 \\cdot t = 90');
   const [mathEquationToSolve, setMathEquationToSolve] = useState<string>('15 * t = 90');
@@ -342,36 +342,17 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isDirty]);
 
-  // Close any open <dialog> modal (Thumbnails, Math/LaTeX, Settings) when clicking/tapping outside its box
+  // Close any open floating popover/panel or modal (Color, Width, Layers, Shape Library, Thumbnails, Math, Settings) when clicking/tapping anywhere outside it
   useEffect(() => {
-    const dialogs = [mathDialogRef.current, settingsDialogRef.current, thumbnailsDialogRef.current].filter(
-      Boolean
-    ) as HTMLDialogElement[];
-    const handlers: Array<{ el: HTMLDialogElement; fn: (e: PointerEvent) => void }> = [];
-
-    for (const dialog of dialogs) {
-      const fn = (event: PointerEvent) => {
-        if (event.target !== dialog) return;
-        const rect = dialog.getBoundingClientRect();
-        const isDialogContent =
-          rect.top <= event.clientY &&
-          event.clientY <= rect.top + rect.height &&
-          rect.left <= event.clientX &&
-          event.clientX <= rect.left + rect.width;
-        if (isDialogContent) return;
-        dialog.close();
-      };
-      dialog.addEventListener('pointerdown', fn);
-      handlers.push({ el: dialog, fn });
-    }
-    return () => {
-      for (const h of handlers) h.el.removeEventListener('pointerdown', h.fn);
-    };
-  }, []);
-
-  // Close any open floating popover/panel (Color, Width, Layers, Shape Library) when clicking/tapping anywhere outside it
-  useEffect(() => {
-    if (!showWidthPopover && !showColorPopover && !showLayersPanel && !showShapeLibraryPanel) {
+    if (
+      !showWidthPopover &&
+      !showColorPopover &&
+      !showLayersPanel &&
+      !showShapeLibraryPanel &&
+      !showThumbnailsModal &&
+      !showMathModal &&
+      !showSettingsModal
+    ) {
       return;
     }
 
@@ -379,7 +360,7 @@ export default function App() {
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
-      // If click/tap is inside any open popover panel, keep it open
+      // If click/tap is inside any open popover or modal panel, keep it open
       if (target.closest('[data-popover-panel]')) {
         return;
       }
@@ -392,14 +373,20 @@ export default function App() {
         if (triggerType !== 'color') setShowColorPopover(false);
         if (triggerType !== 'layers') setShowLayersPanel(false);
         if (triggerType !== 'library') setShowShapeLibraryPanel(false);
+        if (triggerType !== 'thumbnails') setShowThumbnailsModal(false);
+        if (triggerType !== 'math') setShowMathModal(false);
+        if (triggerType !== 'settings') setShowSettingsModal(false);
         return;
       }
 
-      // Clicked anywhere outside -> close all open popovers while preserving the last selected option
+      // Clicked anywhere outside -> close all open popovers/modals while preserving the last selected option
       setShowWidthPopover(false);
       setShowColorPopover(false);
       setShowLayersPanel(false);
       setShowShapeLibraryPanel(false);
+      setShowThumbnailsModal(false);
+      setShowMathModal(false);
+      setShowSettingsModal(false);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -408,6 +395,9 @@ export default function App() {
         setShowColorPopover(false);
         setShowLayersPanel(false);
         setShowShapeLibraryPanel(false);
+        setShowThumbnailsModal(false);
+        setShowMathModal(false);
+        setShowSettingsModal(false);
       }
     };
 
@@ -417,7 +407,15 @@ export default function App() {
       window.removeEventListener('pointerdown', handleOutsidePointerDown, true);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showWidthPopover, showColorPopover, showLayersPanel, showShapeLibraryPanel]);
+  }, [
+    showWidthPopover,
+    showColorPopover,
+    showLayersPanel,
+    showShapeLibraryPanel,
+    showThumbnailsModal,
+    showMathModal,
+    showSettingsModal,
+  ]);
 
   const clonePageFast = useCallback((p: NotePage): NotePage => ({
     ...p,
@@ -5243,7 +5241,7 @@ export default function App() {
         setActivePageIndex(targetInsertIdx);
         activeDrawingPageIndexRef.current = targetInsertIdx;
         applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
-        thumbnailsDialogRef.current?.close();
+        setShowThumbnailsModal(false);
         showToast(`📄 Προστέθηκαν ${importedPages.length} σελίδες (PDF/Εικόνα) — γράψε απευθείας πάνω τους!`);
       }
     } catch {
@@ -5289,7 +5287,8 @@ export default function App() {
           {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
           {viewMode === 'editor' && (
             <button
-              onClick={() => thumbnailsDialogRef.current?.showModal()}
+              data-popover-trigger="thumbnails"
+              onClick={() => setShowThumbnailsModal((v) => !v)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/40 text-xs font-semibold text-indigo-100 transition cursor-pointer"
               title="Προβολή όλων των σελίδων σε Μικρογραφίες (3 ή 4 στήλες με scroll)"
             >
@@ -5436,7 +5435,8 @@ export default function App() {
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={() => thumbnailsDialogRef.current?.showModal()}
+              data-popover-trigger="thumbnails"
+              onClick={() => setShowThumbnailsModal((v) => !v)}
               className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
               title="Πάτησε για Προβολή Μικρογραφιών Σελίδων (Grid View)"
             >
@@ -5485,7 +5485,8 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => settingsDialogRef.current?.showModal()}
+            data-popover-trigger="settings"
+            onClick={() => setShowSettingsModal((v) => !v)}
             className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
             title="Ρυθμίσεις Χαρτιού, Προσανατολισμού (Portrait/Landscape) & Apple Pencil"
           >
@@ -5739,7 +5740,8 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => mathDialogRef.current?.showModal()}
+                data-popover-trigger="math"
+                onClick={() => setShowMathModal((v) => !v)}
                 className="p-2 rounded-full text-purple-600 hover:bg-purple-50 transition cursor-pointer"
                 title="LaTeX & Επίλυση Εξίσωσης (CAS)"
               >
@@ -7572,424 +7574,485 @@ export default function App() {
       {/* =========================================================================
           MULTI-PAGE THUMBNAIL GRID VIEW (3 or 4 Columns × Scrollable Rows for 30+ Pages)
          ========================================================================= */}
-      <dialog
-        ref={thumbnailsDialogRef}
-        {...({ closedby: 'any' } as any)}
-        aria-labelledby="thumbnailsDialogTitle"
-        className="m-auto rounded-2xl bg-[#f4f5f7] text-slate-800 border border-slate-300 p-0 w-[94vw] max-w-5xl max-h-[88vh] shadow-2xl overflow-hidden"
-      >
-        <div className="flex flex-col h-full max-h-[88vh]">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between px-5 py-3.5 bg-[#1b2a4a] text-white shrink-0 flex-wrap gap-2">
-            <div className="flex items-center gap-2.5">
-              <LayoutGrid className="w-5 h-5 text-sky-300" />
-              <div>
-                <h2 id="thumbnailsDialogTitle" className="text-sm sm:text-base font-bold">
-                  Μικρογραφίες Σελίδων — {activeNotebook.title}
-                </h2>
-                <p className="text-[11px] text-slate-300">
-                  Σύνολο: {activeNotebook.pages.length} σελίδες • Πάτησε σε οποιαδήποτε σελίδα για άμεση μετάβαση
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* 3 vs 4 Columns Switcher */}
-              <div className="flex items-center bg-[#263961] rounded-lg p-0.5 text-xs">
-                <button
-                  onClick={() => setThumbnailCols(3)}
-                  className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
-                    thumbnailCols === 3 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  3 Στήλες
-                </button>
-                <button
-                  onClick={() => setThumbnailCols(4)}
-                  className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
-                    thumbnailCols === 4 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  4 Στήλες
-                </button>
+      {showThumbnailsModal && (
+        <div
+          onClick={() => setShowThumbnailsModal(false)}
+          className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div
+            data-ui-panel="true"
+            data-popover-panel="thumbnails"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{ width: '94vw', maxWidth: '1024px', height: '85vh' }}
+            className="rounded-2xl bg-[#f4f5f7] text-slate-800 border border-slate-300 shadow-2xl overflow-hidden flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 bg-[#1b2a4a] text-white shrink-0 flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <LayoutGrid className="w-5 h-5 text-sky-300" />
+                <div>
+                  <h2 id="thumbnailsDialogTitle" className="text-sm sm:text-base font-bold">
+                    Μικρογραφίες Σελίδων — {activeNotebook.title}
+                  </h2>
+                  <p className="text-[11px] text-slate-300">
+                    Σύνολο: {activeNotebook.pages.length} σελίδες • Πάτησε σε οποιαδήποτε σελίδα για άμεση μετάβαση
+                  </p>
+                </div>
               </div>
 
-              <button
-                onClick={() => insertPageAtIndex(activePageIndex + 1)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0066ff] hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
-                title="Προσθήκη νέας σελίδας μετά την τρέχουσα"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Σελίδα (Μετά την #{activePageIndex + 1})</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  pdfImportModeRef.current = 'insert-pages';
-                  fileInputPdfOrDocRef.current?.click();
-                }}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
-                title="Εισαγωγή PDF, JPG ή PNG στο έγγραφο"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>+ PDF / JPG</span>
-              </button>
-
-              <button
-                onClick={() => thumbnailsDialogRef.current?.close()}
-                className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold text-white cursor-pointer"
-              >
-                Κλείσιμο ✕
-              </button>
-            </div>
-          </div>
-
-          {/* Scrollable Thumbnail Grid (e.g. 4 rows × 3 columns or 4 columns for 30+ page documents) */}
-          <div className="flex-1 overflow-y-auto p-5">
-            <div
-              className={`grid gap-5 ${
-                thumbnailCols === 3
-                  ? 'grid-cols-2 sm:grid-cols-3'
-                  : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
-              }`}
-            >
-              {activeNotebook.pages.map((pObj, pIdx) => {
-                const isSelectedPage = pIdx === activePageIndex;
-                const pW = pObj.orientation === 'landscape' ? 1260 : 920;
-                const pH = pObj.orientation === 'landscape' ? 920 : 1260;
-
-                return (
-                  <div
-                    key={pObj.id}
-                    className={`group flex flex-col rounded-xl bg-white border-2 shadow-sm hover:shadow-md transition overflow-hidden ${
-                      isSelectedPage
-                        ? 'border-[#0066ff] ring-2 ring-[#0066ff]/25'
-                        : 'border-slate-200 hover:border-sky-400'
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* 3 vs 4 Columns Switcher */}
+                <div className="flex items-center bg-[#263961] rounded-lg p-0.5 text-xs">
+                  <button
+                    onClick={() => setThumbnailCols(3)}
+                    className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
+                      thumbnailCols === 3 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
                     }`}
                   >
-                    {/* Clickable Miniature Page Preview */}
+                    3 Στήλες
+                  </button>
+                  <button
+                    onClick={() => setThumbnailCols(4)}
+                    className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
+                      thumbnailCols === 4 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    4 Στήλες
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => insertPageAtIndex(activePageIndex + 1)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0066ff] hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+                  title="Προσθήκη νέας σελίδας μετά την τρέχουσα"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Σελίδα (Μετά την #{activePageIndex + 1})</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    pdfImportModeRef.current = 'insert-pages';
+                    fileInputPdfOrDocRef.current?.click();
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                  title="Εισαγωγή PDF, JPG ή PNG στο έγγραφο"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>+ PDF / JPG</span>
+                </button>
+
+                <button
+                  onClick={() => setShowThumbnailsModal(false)}
+                  className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold text-white cursor-pointer"
+                >
+                  Κλείσιμο ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Thumbnail Grid (e.g. 4 rows × 3 columns or 4 columns for 30+ page documents) */}
+            <div
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              className="flex-1 overflow-y-auto p-5"
+            >
+              <div
+                className={`grid gap-5 ${
+                  thumbnailCols === 3
+                    ? 'grid-cols-2 sm:grid-cols-3'
+                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
+                }`}
+              >
+                {activeNotebook.pages.map((pObj, pIdx) => {
+                  const isSelectedPage = pIdx === activePageIndex;
+                  const pW = pObj.orientation === 'landscape' ? 1260 : 920;
+                  const pH = pObj.orientation === 'landscape' ? 920 : 1260;
+
+                  return (
                     <div
-                      onClick={() => {
-                        scrollToPageIndex(pIdx);
-                        thumbnailsDialogRef.current?.close();
-                      }}
-                      className="relative w-full aspect-[3/4] bg-[#fffdf7] overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-100"
+                      key={pObj.id}
+                      className={`group flex flex-col rounded-xl bg-white border-2 shadow-sm hover:shadow-md transition overflow-hidden ${
+                        isSelectedPage
+                          ? 'border-[#0066ff] ring-2 ring-[#0066ff]/25'
+                          : 'border-slate-200 hover:border-sky-400'
+                      }`}
                     >
-                      {/* Page Number Badge */}
+                      {/* Clickable Miniature Page Preview */}
                       <div
-                        className={`absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-full text-xs font-bold shadow ${
-                          isSelectedPage ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
-                        }`}
+                        onClick={() => {
+                          scrollToPageIndex(pIdx);
+                          setShowThumbnailsModal(false);
+                        }}
+                        style={{
+                          aspectRatio: pObj.orientation === 'landscape' ? '4 / 3' : '3 / 4',
+                          minHeight: '200px',
+                          backgroundColor: pObj.template === 'dark-grid' ? '#0f172a' : '#fffdf7',
+                        }}
+                        className="relative w-full overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-100"
                       >
-                        {pIdx + 1}
-                      </div>
-
-                      {isSelectedPage && (
-                        <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow">
-                          Ενεργή
+                        {/* Page Number Badge */}
+                        <div
+                          className={`absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-full text-xs font-bold shadow ${
+                            isSelectedPage ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
+                          }`}
+                        >
+                          {pIdx + 1}
                         </div>
-                      )}
 
-                      {/* PDF / JPG / PNG Background Preview if present */}
-                      {pObj.backgroundDataUrl && (
-                        <img
-                          src={pObj.backgroundDataUrl}
-                          alt={pObj.title}
-                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                        />
-                      )}
+                        {isSelectedPage && (
+                          <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow">
+                            Ενεργή
+                          </div>
+                        )}
 
-                      {/* Miniature Vector SVG Preview of All Handwritten Strokes & Shapes */}
-                      <svg
-                        viewBox={`0 0 ${pW} ${pH}`}
-                        className="absolute inset-0 w-full h-full pointer-events-none"
-                      >
-                        {pObj.strokes.map((st) => {
-                          if (st.points.length < 2) return null;
-                          const ptsStr = st.points.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
-                          return (
-                            <polyline
-                              key={st.id}
-                              fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
-                              fillOpacity={0.25}
-                              stroke={st.color}
-                              strokeWidth={Math.max(3, st.width * 1.6)}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              opacity={st.opacity ?? 1}
-                              points={ptsStr}
+                        {/* PDF / JPG / PNG Background Preview if present */}
+                        {pObj.backgroundDataUrl && (
+                          <img
+                            src={pObj.backgroundDataUrl}
+                            alt={pObj.title}
+                            className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                          />
+                        )}
+
+                        {/* Miniature Vector SVG Preview of Inserted Images, Handwritten Strokes, Shapes & Texts */}
+                        <svg
+                          viewBox={`0 0 ${pW} ${pH}`}
+                          className="absolute inset-0 w-full h-full pointer-events-none"
+                        >
+                          {(pObj.images || []).map((im) => (
+                            <image
+                              key={im.id}
+                              href={im.dataUrl}
+                              x={im.x}
+                              y={im.y}
+                              width={im.width}
+                              height={im.height}
+                              preserveAspectRatio="none"
                             />
-                          );
-                        })}
-                      </svg>
-                    </div>
-
-                    {/* Card Footer: Title + Quick Insert Before / Insert After (in Middle) / Duplicate / Delete */}
-                    <div className="p-2.5 bg-slate-50 flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-800 truncate">{pObj.title}</span>
-                        <span className="text-[10px] text-slate-400 shrink-0">
-                          {pObj.orientation === 'landscape' ? 'Landscape' : 'Portrait'}
-                        </span>
+                          ))}
+                          {pObj.strokes.map((st) => {
+                            if (st.points.length === 0) return null;
+                            if (st.points.length === 1) {
+                              return (
+                                <circle
+                                  key={st.id}
+                                  cx={st.points[0].x}
+                                  cy={st.points[0].y}
+                                  r={Math.max(3, st.width)}
+                                  fill={st.color}
+                                />
+                              );
+                            }
+                            const ptsStr = st.points.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
+                            return (
+                              <polyline
+                                key={st.id}
+                                fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
+                                fillOpacity={0.25}
+                                stroke={st.color}
+                                strokeWidth={Math.max(3, st.width * 1.6)}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                opacity={st.opacity ?? 1}
+                                points={ptsStr}
+                              />
+                            );
+                          })}
+                          {(pObj.texts || []).map((tx) => (
+                            <text
+                              key={tx.id}
+                              x={tx.x}
+                              y={tx.y + (tx.fontSize || 20)}
+                              fill={tx.color}
+                              fontSize={(tx.fontSize || 20) * 1.15}
+                              fontWeight={tx.bold ? 'bold' : 'normal'}
+                            >
+                              {tx.text}
+                            </text>
+                          ))}
+                        </svg>
                       </div>
 
-                      <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-200/80">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            insertPageAtIndex(pIdx);
-                          }}
-                          className="flex-1 py-1 rounded bg-white hover:bg-sky-50 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
-                          title="Προσθήκη σελίδας ΠΡΙΝ από αυτή"
-                        >
-                          + Πριν
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            insertPageAtIndex(pIdx + 1);
-                          }}
-                          className="flex-1 py-1 rounded bg-sky-600 hover:bg-sky-500 text-[10px] font-semibold text-white cursor-pointer"
-                          title="Προσθήκη σελίδας ΜΕΤΑ από αυτή (στη μέση)"
-                        >
-                          + Μετά
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            duplicatePageAtIndex(pIdx);
-                          }}
-                          className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
-                          title="Διπλασιασμός σελίδας"
-                        >
-                          📑
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deletePageAtIndex(pIdx);
-                          }}
-                          className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 cursor-pointer"
-                          title="Διαγραφή αυτής της σελίδας"
-                        >
-                          🗑️
-                        </button>
+                      {/* Card Footer: Title + Quick Insert Before / Insert After (in Middle) / Duplicate / Delete */}
+                      <div className="p-2.5 bg-slate-50 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-800 truncate">{pObj.title}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">
+                            {pObj.orientation === 'landscape' ? 'Landscape' : 'Portrait'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-200/80">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              insertPageAtIndex(pIdx);
+                            }}
+                            className="flex-1 py-1 rounded bg-white hover:bg-sky-50 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
+                            title="Προσθήκη σελίδας ΠΡΙΝ από αυτή"
+                          >
+                            + Πριν
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              insertPageAtIndex(pIdx + 1);
+                            }}
+                            className="flex-1 py-1 rounded bg-sky-600 hover:bg-sky-500 text-[10px] font-semibold text-white cursor-pointer"
+                            title="Προσθήκη σελίδας ΜΕΤΑ από αυτή (στη μέση)"
+                          >
+                            + Μετά
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              duplicatePageAtIndex(pIdx);
+                            }}
+                            className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
+                            title="Διπλασιασμός σελίδας"
+                          >
+                            📑
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deletePageAtIndex(pIdx);
+                            }}
+                            className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 cursor-pointer"
+                            title="Διαγραφή αυτής της σελίδας"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
-      </dialog>
+      )}
 
-      {/* MATH / LATEX CONVERTER & OFFLINE CAS SOLVER DIALOG */}
-      <dialog
-        ref={mathDialogRef}
-        {...({ closedby: 'any' } as any)}
-        aria-labelledby="mathDialogTitle"
-        className="m-auto rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-lg shadow-2xl"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 id="mathDialogTitle" className="text-lg font-bold text-[#1b2a4a] flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-purple-600" />
-              <span>Μετατροπή σε LaTeX & Offline CAS Solver</span>
-            </h2>
-            <button
-              onClick={() => mathDialogRef.current?.close()}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
-            >
-              Κλείσιμο
-            </button>
-          </div>
+      {/* MATH / LATEX CONVERTER & OFFLINE CAS SOLVER MODAL */}
+      {showMathModal && (
+        <div
+          onClick={() => setShowMathModal(false)}
+          className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div
+            data-ui-panel="true"
+            data-popover-panel="math"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-lg shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 id="mathDialogTitle" className="text-lg font-bold text-[#1b2a4a] flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-purple-600" />
+                <span>Μετατροπή σε LaTeX & Offline CAS Solver</span>
+              </h2>
+              <button
+                onClick={() => setShowMathModal(false)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
+              >
+                Κλείσιμο
+              </button>
+            </div>
 
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">
-              Επίλυση Εξίσωσης Φυσικής / Μαθηματικών (100% Εγγενώς & Offline CAS):
-            </label>
-            <div className="flex gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">
+                Επίλυση Εξίσωσης Φυσικής / Μαθηματικών (100% Εγγενώς & Offline CAS):
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={mathEquationToSolve}
+                  onChange={(e) => setMathEquationToSolve(e.target.value)}
+                  placeholder="π.χ. 15 * t = 90 ή 20 * 3600 / 1000"
+                  className="flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm text-slate-900 select-text"
+                />
+                <button
+                  onClick={() => {
+                    const res = solveMathExpressionOffline(mathEquationToSolve);
+                    setMathInput(res.latex);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer"
+                >
+                  🧮 Λύσε
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Κώδικας LaTeX:</label>
               <input
                 type="text"
-                value={mathEquationToSolve}
-                onChange={(e) => setMathEquationToSolve(e.target.value)}
-                placeholder="π.χ. 15 * t = 90 ή 20 * 3600 / 1000"
-                className="flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm text-slate-900 select-text"
+                value={mathInput}
+                onChange={(e) => setMathInput(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono text-sky-700 select-text"
               />
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 overflow-x-auto">
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: katex.renderToString(mathInput || 'I = \\frac{q}{t}', {
+                    throwOnError: false,
+                    displayMode: true,
+                  }),
+                }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => {
-                  const res = solveMathExpressionOffline(mathEquationToSolve);
-                  setMathInput(res.latex);
+                  const newTxt: TextObject = {
+                    id: `math-${Date.now()}`,
+                    x: 160,
+                    y: 220,
+                    text: mathInput,
+                    latex: mathInput,
+                    isMath: true,
+                    color: strokeColor,
+                    fontSize: 20,
+                    layerId: activeLayerId,
+                  };
+                  updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+                  setShowMathModal(false);
                 }}
-                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold cursor-pointer"
               >
-                🧮 Λύσε
+                + Εισαγωγή Εξίσωσης στη Σελίδα
               </button>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Κώδικας LaTeX:</label>
-            <input
-              type="text"
-              value={mathInput}
-              onChange={(e) => setMathInput(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono text-sky-700 select-text"
-            />
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 overflow-x-auto">
-            <div
-              dangerouslySetInnerHTML={{
-                __html: katex.renderToString(mathInput || 'I = \\frac{q}{t}', {
-                  throwOnError: false,
-                  displayMode: true,
-                }),
-              }}
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              onClick={() => {
-                const newTxt: TextObject = {
-                  id: `math-${Date.now()}`,
-                  x: 160,
-                  y: 220,
-                  text: mathInput,
-                  latex: mathInput,
-                  isMath: true,
-                  color: strokeColor,
-                  fontSize: 20,
-                  layerId: activeLayerId,
-                };
-                updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
-                mathDialogRef.current?.close();
-              }}
-              className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold cursor-pointer"
-            >
-              + Εισαγωγή Εξίσωσης στη Σελίδα
-            </button>
           </div>
         </div>
-      </dialog>
+      )}
 
-      {/* SETTINGS DIALOG */}
-      <dialog
-        ref={settingsDialogRef}
-        {...({ closedby: 'any' } as any)}
-        aria-labelledby="settingsDialogTitle"
-        className="m-auto rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-md shadow-2xl"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 id="settingsDialogTitle" className="text-lg font-bold text-[#1b2a4a]">
-              Ρυθμίσεις Σελίδας & Apple Pencil
-            </h2>
-            <button
-              onClick={() => settingsDialogRef.current?.close()}
-              className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
-            >
-              Κλείσιμο
-            </button>
-          </div>
-
-          {/* Page Orientation: Portrait / Landscape + 90° Rotation */}
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">
-              Προσανατολισμός & Περιστροφή Σελίδας:
-            </label>
-            <div className="grid grid-cols-2 gap-2 mb-2">
+      {/* SETTINGS MODAL */}
+      {showSettingsModal && (
+        <div
+          onClick={() => setShowSettingsModal(false)}
+          className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div
+            data-ui-panel="true"
+            data-popover-panel="settings"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-md shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 id="settingsDialogTitle" className="text-lg font-bold text-[#1b2a4a]">
+                Ρυθμίσεις Σελίδας & Apple Pencil
+              </h2>
               <button
-                onClick={() =>
-                  updateActivePage((page) => ({ ...page, orientation: 'portrait' }))
-                }
-                className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
-                  (activePage.orientation || 'portrait') === 'portrait'
-                    ? 'bg-[#0066ff] border-[#0066ff] text-white'
-                    : 'bg-slate-50 border-slate-200 text-slate-700'
-                }`}
+                onClick={() => setShowSettingsModal(false)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
               >
-                📄 Κάθετη (Portrait)
-              </button>
-              <button
-                onClick={() =>
-                  updateActivePage((page) => ({ ...page, orientation: 'landscape' }))
-                }
-                className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
-                  activePage.orientation === 'landscape'
-                    ? 'bg-[#0066ff] border-[#0066ff] text-white'
-                    : 'bg-slate-50 border-slate-200 text-slate-700'
-                }`}
-              >
-                🖼️ Οριζόντια (Landscape)
+                Κλείσιμο
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => handleRotatePage('left')}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Περιστροφή -90° Αριστερά</span>
-              </button>
-              <button
-                onClick={() => handleRotatePage('right')}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-                <span>Περιστροφή +90° Δεξιά</span>
-              </button>
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5">Πρότυπο Χαρτιού (Paper Template):</label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'grid', label: 'Τετραγωνισμένο' },
-                { id: 'ruled', label: 'Γραμμές' },
-                { id: 'dotted', label: 'Τελείες' },
-                { id: 'cornell', label: 'Cornell' },
-                { id: 'blank', label: 'Λευκό' },
-                { id: 'dark-grid', label: 'Σκούρο Grid' },
-              ].map((tpl) => (
+            {/* Page Orientation: Portrait / Landscape + 90° Rotation */}
+            <div>
+              <label className="block text-xs text-slate-500 mb-1.5">
+                Προσανατολισμός & Περιστροφή Σελίδας:
+              </label>
+              <div className="grid grid-cols-2 gap-2 mb-2">
                 <button
-                  key={tpl.id}
-                  onClick={() => updateActivePage((page) => ({ ...page, template: tpl.id as PaperTemplateType }))}
+                  onClick={() =>
+                    updateActivePage((page) => ({ ...page, orientation: 'portrait' }))
+                  }
                   className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
-                    activePage.template === tpl.id
+                    (activePage.orientation || 'portrait') === 'portrait'
                       ? 'bg-[#0066ff] border-[#0066ff] text-white'
                       : 'bg-slate-50 border-slate-200 text-slate-700'
                   }`}
                 >
-                  {tpl.label}
+                  📄 Κάθετη (Portrait)
                 </button>
-              ))}
+                <button
+                  onClick={() =>
+                    updateActivePage((page) => ({ ...page, orientation: 'landscape' }))
+                  }
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
+                    activePage.orientation === 'landscape'
+                      ? 'bg-[#0066ff] border-[#0066ff] text-white'
+                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                  }`}
+                >
+                  🖼️ Οριζόντια (Landscape)
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleRotatePage('left')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Περιστροφή -90° Αριστερά</span>
+                </button>
+                <button
+                  onClick={() => handleRotatePage('right')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Περιστροφή +90° Δεξιά</span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1.5">Πρότυπο Χαρτιού (Paper Template):</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'grid', label: 'Τετραγωνισμένο' },
+                  { id: 'ruled', label: 'Γραμμές' },
+                  { id: 'dotted', label: 'Τελείες' },
+                  { id: 'cornell', label: 'Cornell' },
+                  { id: 'blank', label: 'Λευκό' },
+                  { id: 'dark-grid', label: 'Σκούρο Grid' },
+                ].map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => updateActivePage((page) => ({ ...page, template: tpl.id as PaperTemplateType }))}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
+                      activePage.template === tpl.id
+                        ? 'bg-[#0066ff] border-[#0066ff] text-white'
+                        : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {tpl.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <label className="flex items-center justify-between text-xs font-medium">
+                <span>✨ Hold-to-Snap (Αυτόματο σχήμα σε 0.3s)</span>
+                <input
+                  type="checkbox"
+                  checked={holdToSnapEnabled}
+                  onChange={(e) => setHoldToSnapEnabled(e.target.checked)}
+                />
+              </label>
+              <label className="flex items-center justify-between text-xs font-medium">
+                <span>🧹 Scribble-to-Erase (Μουτζούρωμα για σβήσιμο)</span>
+                <input
+                  type="checkbox"
+                  checked={scribbleToEraseEnabled}
+                  onChange={(e) => setScribbleToEraseEnabled(e.target.checked)}
+                />
+              </label>
             </div>
           </div>
-
-          <div className="space-y-2 pt-2 border-t border-slate-100">
-            <label className="flex items-center justify-between text-xs font-medium">
-              <span>✨ Hold-to-Snap (Αυτόματο σχήμα σε 0.3s)</span>
-              <input
-                type="checkbox"
-                checked={holdToSnapEnabled}
-                onChange={(e) => setHoldToSnapEnabled(e.target.checked)}
-              />
-            </label>
-            <label className="flex items-center justify-between text-xs font-medium">
-              <span>🧹 Scribble-to-Erase (Μουτζούρωμα για σβήσιμο)</span>
-              <input
-                type="checkbox"
-                checked={scribbleToEraseEnabled}
-                onChange={(e) => setScribbleToEraseEnabled(e.target.checked)}
-              />
-            </label>
-          </div>
         </div>
-      </dialog>
+      )}
     </div>
   );
 }
