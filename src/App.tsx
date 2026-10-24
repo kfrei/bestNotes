@@ -219,6 +219,8 @@ export default function App() {
   const activePointerTypeRef = useRef<string | null>(null);
   const lastPenActivityTimeRef = useRef<number>(0);
   const holdTimerRef = useRef<number | null>(null);
+  const laserStrokesRef = useRef<BezierPoint[][]>([]);
+  const laserClearTimerRef = useRef<number | null>(null);
   const snappedCurrentStrokeRef = useRef<{ points: BezierPoint[]; shapeType: string } | null>(null);
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
   const isDraggingSelectionRef = useRef<{ startX: number; startY: number } | null>(null);
@@ -2150,6 +2152,64 @@ export default function App() {
     ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
   };
 
+  // Render Persistent Red Laser Pointer Strokes (stays while drawing + for 2 full seconds after lifting so user can draw multiple circles!)
+  const renderLaserOverlay = () => {
+    const c = activeCanvasRef.current;
+    const ctx = activeCtxRef.current;
+    if (!c || !ctx) return;
+    ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+    ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+
+    const allLaserPaths = [
+      ...laserStrokesRef.current,
+      ...(currentStrokePtsRef.current.length > 0 ? [currentStrokePtsRef.current] : []),
+    ];
+    if (allLaserPaths.length === 0) return;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Outer red laser glow
+    ctx.strokeStyle = '#ef4444';
+    ctx.shadowColor = '#ef4444';
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 5.0;
+    for (const path of allLaserPaths) {
+      if (path.length === 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(path[0].x, path[0].y);
+      if (path.length === 1) {
+        ctx.lineTo(path[0].x + 0.1, path[0].y + 0.1);
+      } else {
+        for (let i = 1; i < path.length; i++) {
+          ctx.lineTo(path[i].x, path[i].y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Inner bright laser core
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#fecaca';
+    ctx.lineWidth = 1.8;
+    for (const path of allLaserPaths) {
+      if (path.length === 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(path[0].x, path[0].y);
+      if (path.length === 1) {
+        ctx.lineTo(path[0].x + 0.1, path[0].y + 0.1);
+      } else {
+        for (let i = 1; i < path.length; i++) {
+          ctx.lineTo(path[i].x, path[i].y);
+        }
+      }
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  };
+
   // Draw live wet ink on the top 2x Retina overlay canvas ONLY (Zero React State, Zero Lag!)
   const renderLiveOverlayStroke = () => {
     const c = activeCanvasRef.current;
@@ -2640,7 +2700,13 @@ export default function App() {
     isDrawingRef.current = true;
     snappedCurrentStrokeRef.current = null;
     currentStrokePtsRef.current = [pt];
-    if (['pen', 'pencil', 'highlighter'].includes(activeTool)) {
+    if (activeTool === 'laser') {
+      if (laserClearTimerRef.current) {
+        window.clearTimeout(laserClearTimerRef.current);
+        laserClearTimerRef.current = null;
+      }
+      renderLaserOverlay();
+    } else if (['pen', 'pencil', 'highlighter'].includes(activeTool)) {
       drawInitialDot(pt);
     }
   };
@@ -3313,31 +3379,20 @@ export default function App() {
       return;
     }
 
-    // 5. Laser Pointer on overlay canvas (0 React renders!)
+    // 5. Laser Pointer on overlay canvas (stays visible while holding pencil + 2s after lifting, never disappears like a tail!)
     if (activeTool === 'laser') {
-      currentStrokePtsRef.current.push(latestPt);
-      if (currentStrokePtsRef.current.length > 28) {
-        currentStrokePtsRef.current.shift();
+      if (laserClearTimerRef.current) {
+        window.clearTimeout(laserClearTimerRef.current);
+        laserClearTimerRef.current = null;
       }
-      const ctx = activeCtxRef.current;
-      const c = activeCanvasRef.current;
-      if (ctx && c && currentStrokePtsRef.current.length > 1) {
-        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-        ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
-        ctx.save();
-        ctx.strokeStyle = '#ef4444';
-        ctx.shadowColor = '#ef4444';
-        ctx.shadowBlur = 12;
-        ctx.lineWidth = 4.5;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(currentStrokePtsRef.current[0].x, currentStrokePtsRef.current[0].y);
-        for (let i = 1; i < currentStrokePtsRef.current.length; i++) {
-          ctx.lineTo(currentStrokePtsRef.current[i].x, currentStrokePtsRef.current[i].y);
+      for (const ce of coalesced) {
+        const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
+        const pts = currentStrokePtsRef.current;
+        if (pts.length === 0 || distance(pts[pts.length - 1], rawPt) >= 1.0) {
+          pts.push(rawPt);
         }
-        ctx.stroke();
-        ctx.restore();
       }
+      renderLaserOverlay();
       return;
     }
 
@@ -3495,8 +3550,22 @@ export default function App() {
     }
 
     if (activeTool === 'laser') {
-      clearActiveOverlay();
-      currentStrokePtsRef.current = [];
+      if (currentStrokePtsRef.current.length > 0) {
+        laserStrokesRef.current.push([...currentStrokePtsRef.current]);
+        currentStrokePtsRef.current = [];
+      }
+      renderLaserOverlay();
+      if (laserClearTimerRef.current) {
+        window.clearTimeout(laserClearTimerRef.current);
+      }
+      // Keep all drawn laser circles/strokes on screen for 2 full seconds (2000ms) after lifting the pencil!
+      laserClearTimerRef.current = window.setTimeout(() => {
+        laserClearTimerRef.current = null;
+        if (!isDrawingRef.current) {
+          laserStrokesRef.current = [];
+          clearActiveOverlay();
+        }
+      }, 2000);
       return;
     }
 
