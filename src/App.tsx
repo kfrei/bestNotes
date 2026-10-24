@@ -3197,25 +3197,9 @@ export default function App() {
           return;
         }
       } else {
-        const isFingerOnObjectOrLasso = isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget);
-        if (isFingerOnObjectOrLasso || activeTool === 'text') {
-          outsidePanDragRef.current = null;
-          cancelScrollMomentum();
-        } else if (
-          selectedStrokeIds.length > 0 ||
-          selectedImageId !== null ||
-          activeNodeStrokeId !== null ||
-          activeTool === 'lasso' ||
-          activeTool === 'direct-node'
-        ) {
-          setSelectedStrokeIds([]);
-          setSelectedImageId(null);
-          setActiveNodeStrokeId(null);
-          setDraggingNodeIdx(null);
-          setImageCropMode('none');
-          setActiveTool('pen');
-          return;
-        }
+        // When Finger Drawing is enabled (!pencilOnlyMode), let the finger act like the pencil for the active tool
+        outsidePanDragRef.current = null;
+        cancelScrollMomentum();
       }
     }
 
@@ -3293,18 +3277,16 @@ export default function App() {
     if (selectedTextId) setSelectedTextId(null);
     if (editingTextId) setEditingTextId(null);
 
-    // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image -> Automatically select it with Lasso (only when Pencil-Only Mode is OFF)
-    //    If touching an active Lasso handle or an active Direct Node handle, let it fall through to the tool handler below.
+    // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image -> Select & drag it ONLY when Lasso ('lasso') or Nodes ('direct-node') is active!
+    //    (When Pen/Pencil/Highlighter/Eraser is active and Finger Drawing is ON, the finger draws/erases instead of selecting!)
     if (
       e.pointerType === 'touch' &&
       !pencilOnlyMode &&
-      !((activeTool === 'lasso' || activeTool === 'direct-node') && isClientPointInLassoSelection(e.clientX, e.clientY))
+      (activeTool === 'lasso' || activeTool === 'direct-node') &&
+      !isClientPointInLassoSelection(e.clientX, e.clientY)
     ) {
       const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
       if (fingerHit) {
-        if (activeTool !== 'lasso') {
-          setActiveTool('lasso');
-        }
         setShowToolSubBar(true);
         setImageCropMode('none');
         if (fingerHit.type === 'stroke') {
@@ -3344,24 +3326,6 @@ export default function App() {
         }
         isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
         isDrawingRef.current = true;
-        return;
-      }
-      if (
-        selectedStrokeIds.length > 0 ||
-        selectedImageId !== null ||
-        activeNodeStrokeId !== null ||
-        activeTool === 'lasso' ||
-        activeTool === 'direct-node'
-      ) {
-        setSelectedStrokeIds([]);
-        setSelectedImageId(null);
-        setActiveNodeStrokeId(null);
-        setDraggingNodeIdx(null);
-        setImageCropMode('none');
-        setActiveTool('pen');
-        return;
-      }
-      if (pencilOnlyMode) {
         return;
       }
     }
