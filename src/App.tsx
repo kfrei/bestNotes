@@ -92,6 +92,8 @@ import {
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
 const SHAPE_LIBRARY_STORAGE_KEY = 'bestnotes_shape_library_v1';
+const UI_SESSION_STORAGE_KEY = 'bestnotes_ui_session_v1';
+const AUTH_FLAG_STORAGE_KEY = 'bestnotes_auth_logged_in';
 const PRESET_COLORS = ['#111827', '#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0284c7', '#eab308'];
 const THICKNESS_PRESETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0];
 const CANVAS_DPR = 2; // 2x Retina HiDPI backing resolution (1840x2520) for razor-sharp, zero-"ζαγρέ" curves
@@ -147,20 +149,89 @@ export default function App() {
     return preloadedData as unknown as Notebook[];
   });
 
-  const [viewMode, setViewMode] = useState<'landing' | 'editor' | 'library'>('landing');
+  const initialSession = (() => {
+    try {
+      const raw = localStorage.getItem(UI_SESSION_STORAGE_KEY);
+      if (raw) {
+        return JSON.parse(raw) as {
+          viewMode?: 'landing' | 'editor' | 'library';
+          openNotebookIds?: string[];
+          activeNotebookId?: string;
+          activePageIndex?: number;
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  })();
+
+  const [viewMode, setViewMode] = useState<'landing' | 'editor' | 'library'>(() => {
+    if (initialSession?.viewMode === 'editor' || initialSession?.viewMode === 'library') {
+      return initialSession.viewMode;
+    }
+    try {
+      if (localStorage.getItem(AUTH_FLAG_STORAGE_KEY) === 'true') {
+        return 'editor';
+      }
+    } catch {
+      // ignore
+    }
+    return initialSession?.viewMode || 'landing';
+  });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const explicitLandingNavRef = useRef<boolean>(false);
+
+  const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(() => {
+    if (Array.isArray(initialSession?.openNotebookIds)) {
+      return initialSession.openNotebookIds;
+    }
+    return ['nb-gn1', 'nb-gn2'];
+  });
+  const [activeNotebookId, setActiveNotebookId] = useState<string>(() => {
+    return initialSession?.activeNotebookId || 'nb-gn1';
+  });
+  const [activePageIndex, setActivePageIndex] = useState<number>(() => {
+    return typeof initialSession?.activePageIndex === 'number' ? initialSession.activePageIndex : 0;
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      try {
+        if (user) {
+          localStorage.setItem(AUTH_FLAG_STORAGE_KEY, 'true');
+          // If user is already logged in on page load/refresh and didn't explicitly navigate to Landing Page, keep them in the app!
+          if (!explicitLandingNavRef.current) {
+            setViewMode((prev) => (prev === 'landing' ? 'editor' : prev));
+          }
+        } else {
+          localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
+        }
+      } catch {
+        // ignore
+      }
     });
     return () => unsubscribe();
   }, []);
-  const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(['nb-gn1', 'nb-gn2']);
-  const [activeNotebookId, setActiveNotebookId] = useState<string>('nb-gn1');
-  const [activePageIndex, setActivePageIndex] = useState<number>(0);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        UI_SESSION_STORAGE_KEY,
+        JSON.stringify({
+          viewMode,
+          openNotebookIds,
+          activeNotebookId,
+          activePageIndex,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [viewMode, openNotebookIds, activeNotebookId, activePageIndex]);
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const zoomRef = useRef<number>(1);
@@ -5795,6 +5866,7 @@ export default function App() {
       <LandingPage
         currentUser={currentUser}
         onEnterApp={() => {
+          explicitLandingNavRef.current = false;
           if (openNotebookIds.length === 0 && notebooks.length > 0) {
             setOpenNotebookIds([notebooks[0].id]);
             setActiveNotebookId(notebooks[0].id);
@@ -5844,7 +5916,10 @@ export default function App() {
         {/* Left Navigation Icons (Landing Page Home, Back to Library, Page Thumbnails Grid, Import .goodnotes, Open PDF/JPG/PNG) */}
         <div className="flex items-center gap-1 pb-1.5">
           <button
-            onClick={() => setViewMode('landing')}
+            onClick={() => {
+              explicitLandingNavRef.current = true;
+              setViewMode('landing');
+            }}
             className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-cyan-300 transition cursor-pointer"
             title="Αρχική Σελίδα Παρουσίασης (Landing Page)"
           >
@@ -6091,6 +6166,12 @@ export default function App() {
               </span>
               <button
                 onClick={async () => {
+                  explicitLandingNavRef.current = true;
+                  try {
+                    localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
+                  } catch {
+                    // ignore
+                  }
                   await signOut(auth);
                   setViewMode('landing');
                   showToast('👋 Αποσυνδέθηκες και επέστρεψες στην Αρχική Σελίδα.');
@@ -6116,7 +6197,10 @@ export default function App() {
                 <span className="hidden sm:inline">Login</span>
               </button>
               <button
-                onClick={() => setViewMode('landing')}
+                onClick={() => {
+                  explicitLandingNavRef.current = true;
+                  setViewMode('landing');
+                }}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-rose-500/30 border border-white/15 text-xs font-semibold text-slate-200 transition cursor-pointer"
                 title="Έξοδος στην Αρχική Σελίδα (Landing Page)"
               >
