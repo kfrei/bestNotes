@@ -265,8 +265,9 @@ export function recognizeAndSnapShape(
     const rx = w / 2;
     const ry = h / 2;
 
-    // Measure how closely rawPoints hug the Bounding Box vs an Inscribed Ellipse
+    // Measure how closely rawPoints hug the Bounding Box vs an Inscribed Ellipse (in identical px/diag units!)
     let rectErrSum = 0;
+    let ellipseDistErrSum = 0;
     let ellipseErrSum = 0;
     for (const p of rawPoints) {
       const distToBoxEdge = Math.min(
@@ -279,15 +280,75 @@ export function recognizeAndSnapShape(
 
       const normEllipseR = Math.hypot((p.x - cx) / Math.max(1, rx), (p.y - cy) / Math.max(1, ry));
       ellipseErrSum += Math.abs(normEllipseR - 1);
+
+      const ang = Math.atan2((p.y - cy) / Math.max(1, ry), (p.x - cx) / Math.max(1, rx));
+      const ex = cx + rx * Math.cos(ang);
+      const ey = cy + ry * Math.sin(ang);
+      ellipseDistErrSum += Math.hypot(p.x - ex, p.y - ey) / diag;
     }
     const rectErr = rectErrSum / rawPoints.length;
+    const ellipseDistErr = ellipseDistErrSum / rawPoints.length;
     const ellipseErr = ellipseErrSum / rawPoints.length;
 
+    // Measure how close the stroke gets to the 4 corners of the bounding box:
+    // - A circle/ellipse stays ~0.146 * diag away from the 4 corners of its bounding box!
+    // - A square/rectangle with obvious corners goes right into the 4 corners (< 0.088 * diag).
+    const boxCorners = [
+      { x: minX, y: minY },
+      { x: maxX, y: minY },
+      { x: maxX, y: maxY },
+      { x: minX, y: maxY },
+    ];
+    let cornerDistSum = 0;
+    for (const bc of boxCorners) {
+      let minD = Infinity;
+      for (const p of rawPoints) {
+        const d = distance(bc, p);
+        if (d < minD) minD = d;
+      }
+      cornerDistSum += minD / diag;
+    }
+    const avgBoxCornerDist = cornerDistSum / 4;
+
+    // Count localized sharp corner bends along the stroke (arm length ~ 0.11 * diag, bend angle >= 56°):
+    // Hand-drawn circles have smooth curvature (0-1 sharp bend at closure), while squares/triangles have distinct sharp corners!
+    const armLen = Math.max(12, diag * 0.11);
+    const sharpPeaks: BezierPoint[] = [];
+    for (let i = 1; i < rawPoints.length - 1; i++) {
+      const curr = rawPoints[i];
+      let prevIdx = i - 1;
+      while (prevIdx > 0 && distance(rawPoints[prevIdx], curr) < armLen) prevIdx--;
+      let nextIdx = i + 1;
+      while (nextIdx < rawPoints.length - 1 && distance(rawPoints[nextIdx], curr) < armLen) nextIdx++;
+
+      const prev = rawPoints[prevIdx];
+      const next = rawPoints[nextIdx];
+      const d1 = distance(prev, curr);
+      const d2 = distance(curr, next);
+      if (d1 < armLen * 0.65 || d2 < armLen * 0.65) continue;
+
+      const v1x = curr.x - prev.x,
+        v1y = curr.y - prev.y;
+      const v2x = next.x - curr.x,
+        v2y = next.y - curr.y;
+      const cosBend = (v1x * v2x + v1y * v2y) / (d1 * d2);
+      // cos(56°) ≈ 0.559 -> sharp local corner bend >= 56°
+      if (cosBend < 0.56) {
+        if (
+          sharpPeaks.length === 0 ||
+          distance(sharpPeaks[sharpPeaks.length - 1], curr) > diag * 0.18
+        ) {
+          sharpPeaks.push(curr);
+        }
+      }
+    }
+    const sharpCornerCount = sharpPeaks.length;
+
     // Simplify polygon and merge nearby vertices + remove nearly-collinear points
-    const rdp = rdpSimplify(rawPoints, diag * 0.068);
+    const rdp = rdpSimplify(rawPoints, diag * 0.072);
     const mergedCorners: BezierPoint[] = [];
     for (const pt of rdp) {
-      if (mergedCorners.length === 0 || distance(mergedCorners[mergedCorners.length - 1], pt) > diag * 0.14) {
+      if (mergedCorners.length === 0 || distance(mergedCorners[mergedCorners.length - 1], pt) > diag * 0.15) {
         mergedCorners.push(pt);
       }
     }
@@ -295,7 +356,7 @@ export function recognizeAndSnapShape(
       mergedCorners.pop();
     }
 
-    // Filter out collinear mid-side vertices (turn angle < 25°)
+    // Filter out collinear mid-side vertices (require a genuinely obvious corner turn angle > 38°, cosTurn < 0.788)
     const trueCorners: BezierPoint[] = [];
     const nC = mergedCorners.length;
     if (nC >= 3) {
@@ -311,15 +372,19 @@ export function recognizeAndSnapShape(
         const m2 = Math.hypot(v2x, v2y);
         if (m1 < 1 || m2 < 1) continue;
         const cosTurn = (v1x * v2x + v1y * v2y) / (m1 * m2);
-        // Keep vertex if turn angle is > ~26 degrees (cosTurn < 0.898)
-        if (cosTurn < 0.898) {
+        if (cosTurn < 0.788) {
           trueCorners.push(curr);
         }
       }
     }
 
-    // A. Triangle (3 distinct corners)
-    if (trueCorners.length === 3 && ellipseErr > 0.105) {
+    // A. Triangle (3 distinct sharp corners and clearly not an ellipse)
+    if (
+      trueCorners.length === 3 &&
+      sharpCornerCount >= 2 &&
+      ellipseErr > 0.15 &&
+      ellipseDistErr > 0.055
+    ) {
       const [p0, p1, p2] = trueCorners;
       return {
         shapeType: 'triangle',
@@ -327,10 +392,15 @@ export function recognizeAndSnapShape(
       };
     }
 
-    // B. Square / Rectangle / Parallelogram (4 distinct corners OR points hug the bounding box closer than an ellipse)
+    // B. Square / Rectangle / Parallelogram:
+    // Require genuinely obvious corners (sharpCornerCount >= 3 AND stroke reaches near the 4 box corners AND hugs box edges closer than ellipse!)
+    // That way, any hand-drawn circle or oval prioritizes snapping to Circle/Ellipse!
     const isBoxLike =
-      (trueCorners.length === 4 && ellipseErr > 0.115) ||
-      (trueCorners.length >= 4 && rectErr < 0.072 && rectErr < ellipseErr * 0.62);
+      sharpCornerCount >= 3 &&
+      avgBoxCornerDist < 0.092 &&
+      rectErr < ellipseDistErr * 0.82 &&
+      ((trueCorners.length === 4 && ellipseErr > 0.165) ||
+        (trueCorners.length >= 4 && rectErr < 0.055));
 
     if (isBoxLike) {
       if (trueCorners.length === 4) {
@@ -374,7 +444,7 @@ export function recognizeAndSnapShape(
     }
 
     // C. Smooth closed loop -> Perfect Circle (equal radius) or Ellipse (4 cardinal 90° nodes)!
-    const isCircle = Math.abs(w - h) < Math.max(w, h) * 0.22;
+    const isCircle = Math.abs(w - h) < Math.max(w, h) * 0.28;
     const finalRx = isCircle ? (w + h) / 4 : rx;
     const finalRy = isCircle ? (w + h) / 4 : ry;
     return {
