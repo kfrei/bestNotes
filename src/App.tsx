@@ -705,13 +705,10 @@ export default function App() {
     return null;
   }, [selectedImageId, selectedStrokeIds, activePage.images, activePage.strokes]);
 
-  // Checks if a screen touch point (clientX, clientY) lands inside or on a handle of the active Lasso selection box,
-  // allowing 1-finger drag-and-drop (and resize/rotate) of selected shapes/images even when Pencil-Only Mode is ON!
+  // Checks if a screen touch point (clientX, clientY) lands inside or on a handle of the active Lasso selection box
+  // OR on an active Direct Node handle, allowing 1-finger drag-and-drop even when Pencil-Only Mode is ON!
   const isClientPointInLassoSelection = useCallback(
     (clientX: number, clientY: number): boolean => {
-      if (activeTool !== 'lasso') return false;
-      const selBounds = getSelectionBounds();
-      if (!selBounds) return false;
       const canvas = activeCanvasRef.current;
       if (!canvas) return false;
       const rect = canvas.getBoundingClientRect();
@@ -721,6 +718,31 @@ export default function App() {
       const logicalH = canvas.height / CANVAS_DPR;
       const ptX = (clientX - rect.left) * (logicalW / rect.width);
       const ptY = (clientY - rect.top) * (logicalH / rect.height);
+
+      if (activeTool === 'direct-node' && activeNodeStrokeId) {
+        const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
+        if (target) {
+          if (!target.isShape) {
+            const keyIndices =
+              target.keyNodeIndices && target.keyNodeIndices.length >= 2
+                ? target.keyNodeIndices
+                : computeFreehandKeyNodeIndices(target.points);
+            for (const kIdx of keyIndices) {
+              const p = target.points[kIdx];
+              if (p && distance({ x: ptX, y: ptY }, p) <= 24) return true;
+            }
+          } else {
+            for (const p of target.points) {
+              if (distance({ x: ptX, y: ptY }, p) <= 24) return true;
+            }
+          }
+        }
+        return false;
+      }
+
+      if (activeTool !== 'lasso') return false;
+      const selBounds = getSelectionBounds();
+      if (!selBounds) return false;
 
       const pad = 8;
       const hw = selBounds.hw + pad;
@@ -738,7 +760,7 @@ export default function App() {
       if (Math.abs(localX) <= hw + 22 && Math.abs(localY) <= hh + 22) return true;
       return false;
     },
-    [activeTool, getSelectionBounds]
+    [activeTool, activeNodeStrokeId, activePage.strokes, getSelectionBounds]
   );
 
   // Finds the top-most unlocked shape, stroke, group, or image at a page point `pt`
@@ -2416,8 +2438,11 @@ export default function App() {
       const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
       // Case A: 1 finger touching OUTSIDE the paper canvas (or 1 finger when Pencil-Only Mode is ON) -> Scroll pages like Word!
-      // IMPORTANT: If a shape or image is selected with the Lasso and the finger touches inside its selection box/handles,
-      // allow 1-finger drag-and-drop instead of scrolling the page!
+      // IMPORTANT:
+      // - If a shape or image is selected with the Lasso (or Nodes) and the finger touches inside its selection box/handles,
+      //   allow 1-finger drag-and-drop instead of scrolling the page!
+      // - If a shape/image is selected with Lasso or Nodes and the user taps OUTSIDE of it with their finger,
+      //   immediately deselect it and switch back to the Pen ('pen')!
       if (
         directTouches.length === 1 &&
         (isOutsideCanvas || pencilOnlyMode) &&
@@ -2427,6 +2452,20 @@ export default function App() {
         if (!isOutsideCanvas && isClientPointOnSelectableOrLasso(t.clientX, t.clientY, e.target)) {
           outsidePanDragRef.current = null;
           return;
+        }
+        if (
+          selectedStrokeIds.length > 0 ||
+          selectedImageId !== null ||
+          activeNodeStrokeId !== null ||
+          activeTool === 'lasso' ||
+          activeTool === 'direct-node'
+        ) {
+          setSelectedStrokeIds([]);
+          setSelectedImageId(null);
+          setActiveNodeStrokeId(null);
+          setDraggingNodeIdx(null);
+          setImageCropMode('none');
+          setActiveTool('pen');
         }
         if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 22) || (t.radiusY && t.radiusY > 22))) {
           return;
@@ -2513,9 +2552,9 @@ export default function App() {
         return;
       }
 
-      // If 1-finger drag-and-drop (or resize/rotate) of a Lasso-selected shape/image or Text Box is active, prevent page scroll!
+      // If 1-finger drag-and-drop (or resize/rotate) of a Lasso-selected shape/image, Node handle, or Text Box is active, prevent page scroll!
       if (
-        (isDrawingRef.current && (selectionTransformRef.current || isDraggingSelectionRef.current)) ||
+        (isDrawingRef.current && (selectionTransformRef.current || isDraggingSelectionRef.current || draggingNodeIdx !== null)) ||
         draggingTextRef.current
       ) {
         if (e.cancelable) e.preventDefault();
@@ -2669,7 +2708,25 @@ export default function App() {
       ws.removeEventListener('touchcancel', onTouchEnd);
       ws.removeEventListener('wheel', onWheel);
     };
-  }, [viewMode, pencilOnlyMode, isClientPointInLassoSelection, isClientPointOnSelectableOrLasso, applyPaperTransformDirect, syncActivePageFromPanY, checkPullToAddPageHold, stopPullToAddPageHold, cancelScrollMomentum, startScrollMomentum, handleUndo, handleRedo, showToast]);
+  }, [
+    viewMode,
+    pencilOnlyMode,
+    activeTool,
+    selectedStrokeIds,
+    selectedImageId,
+    activeNodeStrokeId,
+    isClientPointInLassoSelection,
+    isClientPointOnSelectableOrLasso,
+    applyPaperTransformDirect,
+    syncActivePageFromPanY,
+    checkPullToAddPageHold,
+    stopPullToAddPageHold,
+    cancelScrollMomentum,
+    startScrollMomentum,
+    handleUndo,
+    handleRedo,
+    showToast,
+  ]);
 
   const clearActiveOverlay = () => {
     const c = activeCanvasRef.current;
@@ -2921,8 +2978,25 @@ export default function App() {
       if (isFingerOnObjectOrLasso || activeTool === 'text') {
         outsidePanDragRef.current = null;
         cancelScrollMomentum();
-      } else if (pencilOnlyMode) {
-        return;
+      } else {
+        if (
+          selectedStrokeIds.length > 0 ||
+          selectedImageId !== null ||
+          activeNodeStrokeId !== null ||
+          activeTool === 'lasso' ||
+          activeTool === 'direct-node'
+        ) {
+          setSelectedStrokeIds([]);
+          setSelectedImageId(null);
+          setActiveNodeStrokeId(null);
+          setDraggingNodeIdx(null);
+          setImageCropMode('none');
+          setActiveTool('pen');
+          return;
+        }
+        if (pencilOnlyMode) {
+          return;
+        }
       }
     }
 
@@ -3001,7 +3075,11 @@ export default function App() {
     if (editingTextId) setEditingTextId(null);
 
     // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image -> Automatically select it with Lasso (& allow immediate drag-and-drop)!
-    if (e.pointerType === 'touch' && !(activeTool === 'lasso' && isClientPointInLassoSelection(e.clientX, e.clientY))) {
+    //    If touching an active Lasso handle or an active Direct Node handle, let it fall through to the tool handler below.
+    if (
+      e.pointerType === 'touch' &&
+      !((activeTool === 'lasso' || activeTool === 'direct-node') && isClientPointInLassoSelection(e.clientX, e.clientY))
+    ) {
       const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
       if (fingerHit) {
         if (activeTool !== 'lasso') {
@@ -3046,6 +3124,21 @@ export default function App() {
         }
         isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
         isDrawingRef.current = true;
+        return;
+      }
+      if (
+        selectedStrokeIds.length > 0 ||
+        selectedImageId !== null ||
+        activeNodeStrokeId !== null ||
+        activeTool === 'lasso' ||
+        activeTool === 'direct-node'
+      ) {
+        setSelectedStrokeIds([]);
+        setSelectedImageId(null);
+        setActiveNodeStrokeId(null);
+        setDraggingNodeIdx(null);
+        setImageCropMode('none');
+        setActiveTool('pen');
         return;
       }
       if (pencilOnlyMode) {
@@ -3197,6 +3290,9 @@ export default function App() {
       } else {
         setActiveNodeStrokeId(null);
         setSelectedStrokeIds([]);
+        setSelectedImageId(null);
+        setDraggingNodeIdx(null);
+        setActiveTool('pen');
       }
       return;
     }
@@ -3450,9 +3546,14 @@ export default function App() {
         return;
       }
 
+      const hadSelection =
+        selectedStrokeIds.length > 0 || selectedImageId !== null || activeNodeStrokeId !== null;
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
+      if (hadSelection) {
+        setActiveTool('pen');
+      }
       return;
     }
 
