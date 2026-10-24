@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import katex from 'katex';
 import {
   Pen,
@@ -1927,9 +1927,12 @@ export default function App() {
     });
   }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, getSelectionBounds]);
 
-  useEffect(() => {
-    renderStaticScene();
-  }, [renderStaticScene]);
+  // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
+  useLayoutEffect(() => {
+    if (viewMode === 'editor') {
+      renderStaticScene();
+    }
+  }, [renderStaticScene, viewMode, activeNotebook.id]);
 
   // Sync activeCanvasRef & staticCanvasRef with the current active page in the multi-page stack
   useEffect(() => {
@@ -5798,6 +5801,9 @@ export default function App() {
                 onClick={() => {
                   setActiveNotebookId(nb.id);
                   setActivePageIndex(0);
+                  activeDrawingPageIndexRef.current = 0;
+                  panRef.current = { x: 0, y: 0 };
+                  setPan({ x: 0, y: 0 });
                   setViewMode('editor');
                 }}
                 title={nb.title}
@@ -6023,6 +6029,9 @@ export default function App() {
                     setOpenNotebookIds((prev) => [...prev, newNb.id]);
                     setActiveNotebookId(newNb.id);
                     setActivePageIndex(0);
+                    activeDrawingPageIndexRef.current = 0;
+                    panRef.current = { x: 0, y: 0 };
+                    setPan({ x: 0, y: 0 });
                     setViewMode('editor');
                   }}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
@@ -6041,6 +6050,9 @@ export default function App() {
                     if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
                     setActiveNotebookId(nb.id);
                     setActivePageIndex(0);
+                    activeDrawingPageIndexRef.current = 0;
+                    panRef.current = { x: 0, y: 0 };
+                    setPan({ x: 0, y: 0 });
                     setViewMode('editor');
                   }}
                   className="group cursor-pointer flex flex-col items-center"
