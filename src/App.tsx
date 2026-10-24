@@ -44,6 +44,9 @@ import {
   Copy,
   ClipboardPaste,
   FileText,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import {
   Notebook,
@@ -169,6 +172,8 @@ export default function App() {
   // Layers & Selection
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
+  const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
+  const layerDragStartYRef = useRef<number>(0);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
@@ -897,20 +902,26 @@ export default function App() {
       }
 
       const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
+      // Top of pageObj.layers list (index 0) has the highest layerRank -> rendered ON TOP of layers below it!
+      const layerRankMap = new Map(
+        pageObj.layers.map((l, lIdx) => [l.id, pageObj.layers.length - lIdx])
+      );
       const isCurrentActivePage = pageIdx === activePageIndex;
 
-      // 1-3. Unified Z-Order Rendering for BOTH Images and Strokes/Shapes!
-      // This allows any Shape/Group to be sent behind an Image (-1 / Send to Back) or brought in front of an Image (+1 / Bring to Front).
+      // 1-3. Unified Layer-Order + Z-Order Rendering for BOTH Images and Strokes/Shapes!
+      // Moving a Layer UP in the Layers panel brings all its contents in front of lower Layers,
+      // while within the same Layer items sort by their individual zOrder (-1 / +1 / Πίσω / Μπροστά).
       const imgList = pageObj.images || [];
       const strokeList = pageObj.strokes || [];
       type RenderEntry =
-        | { kind: 'image'; z: number; img: ImageObject }
-        | { kind: 'stroke'; z: number; stroke: StrokeObject };
+        | { kind: 'image'; layerRank: number; z: number; img: ImageObject }
+        | { kind: 'stroke'; layerRank: number; z: number; stroke: StrokeObject };
       const entries: RenderEntry[] = [];
 
       imgList.forEach((imgObj, idx) => {
         entries.push({
           kind: 'image',
+          layerRank: layerRankMap.get(imgObj.layerId) ?? 1,
           z: imgObj.zOrder ?? idx + 1,
           img: imgObj,
         });
@@ -920,12 +931,16 @@ export default function App() {
         const defaultZ = imgList.length + idx + 1 + (s.tool === 'highlighter' ? -0.25 : 0);
         entries.push({
           kind: 'stroke',
+          layerRank: layerRankMap.get(s.layerId) ?? 1,
           z: s.zOrder ?? defaultZ,
           stroke: s,
         });
       });
 
-      entries.sort((a, b) => a.z - b.z);
+      entries.sort((a, b) => {
+        if (a.layerRank !== b.layerRank) return a.layerRank - b.layerRank;
+        return a.z - b.z;
+      });
 
       for (const entry of entries) {
         if (entry.kind === 'image') {
@@ -5623,18 +5638,21 @@ export default function App() {
               </div>
             )}
 
-            {/* Floating Layers Popover */}
+            {/* Floating Layers Popover (Draggable Reordering, Up/Down Move, Lock, Visibility & Red Trash Can Delete!) */}
             {showLayersPanel && (
-              <div className="fixed right-5 top-28 z-40 w-72 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800">
-                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
-                  <span className="text-xs font-bold text-[#1b2a4a]">Layers (Επίπεδα Σελίδας)</span>
+              <div className="fixed right-5 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800">
+                <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-[#1b2a4a]">Layers (Επίπεδα Σελίδας)</span>
+                    <span className="text-[10px] text-slate-400">Σύρε πάνω/κάτω (Πάνω = Μπροστά)</span>
+                  </div>
                   <button
                     onClick={() => {
                       const newId = `layer-${Date.now()}`;
                       updateActivePage((page) => ({
                         ...page,
+                        // Insert new Layer at the TOP so it sits in front of existing layers
                         layers: [
-                          ...page.layers,
                           {
                             id: newId,
                             name: `Layer ${page.layers.length + 1}`,
@@ -5642,35 +5660,176 @@ export default function App() {
                             locked: false,
                             opacity: 1,
                           },
+                          ...page.layers,
                         ],
                       }));
                       setActiveLayerId(newId);
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-[#0066ff] text-white text-[11px] font-semibold cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-white text-[11px] font-semibold cursor-pointer"
                   >
                     + Layer
                   </button>
                 </div>
 
-                <div className="space-y-1.5">
-                  {activePage.layers.map((layer) => {
+                <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
+                  {activePage.layers.map((layer, layerIdx) => {
                     const isCurrent = layer.id === activeLayerId;
-                    const count = activePage.strokes.filter((s) => s.layerId === layer.id).length;
+                    const isBeingDragged = draggingLayerId === layer.id;
+                    const strokeCount = activePage.strokes.filter((s) => s.layerId === layer.id).length;
+                    const imgCount = (activePage.images || []).filter((im) => im.layerId === layer.id).length;
+                    const txtCount = (activePage.texts || []).filter((t) => t.layerId === layer.id).length;
+                    const count = strokeCount + imgCount + txtCount;
+
+                    const moveLayerToIndex = (fromIdx: number, toIdx: number) => {
+                      if (fromIdx === toIdx || toIdx < 0 || toIdx >= activePage.layers.length) return;
+                      updateActivePage((page) => {
+                        const nextLayers = [...page.layers];
+                        const [moved] = nextLayers.splice(fromIdx, 1);
+                        nextLayers.splice(toIdx, 0, moved);
+                        return { ...page, layers: nextLayers };
+                      });
+                    };
+
+                    const handleDeleteLayer = () => {
+                      if (activePage.layers.length <= 1) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          strokes: page.strokes.filter((s) => s.layerId !== layer.id),
+                          images: (page.images || []).filter((im) => im.layerId !== layer.id),
+                          texts: (page.texts || []).filter((t) => t.layerId !== layer.id),
+                        }));
+                        setSelectedStrokeIds([]);
+                        setSelectedImageId(null);
+                        setActiveNodeStrokeId(null);
+                        showToast(`🗑️ Διαγράφηκαν όλα τα αντικείμενα του "${layer.name}"!`);
+                        return;
+                      }
+
+                      const remaining = activePage.layers.filter((l) => l.id !== layer.id);
+                      updateActivePage((page) => ({
+                        ...page,
+                        layers: page.layers.filter((l) => l.id !== layer.id),
+                        strokes: page.strokes.filter((s) => s.layerId !== layer.id),
+                        images: (page.images || []).filter((im) => im.layerId !== layer.id),
+                        texts: (page.texts || []).filter((t) => t.layerId !== layer.id),
+                      }));
+                      if (activeLayerId === layer.id && remaining.length > 0) {
+                        setActiveLayerId(remaining[0].id);
+                      }
+                      setSelectedStrokeIds([]);
+                      setSelectedImageId(null);
+                      setActiveNodeStrokeId(null);
+                      showToast(`🗑️ Διαγράφηκε το "${layer.name}" και όλα όσα περιείχε!`);
+                    };
+
                     return (
                       <div
                         key={layer.id}
+                        draggable
+                        onDragStart={() => setDraggingLayerId(layer.id)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          if (!draggingLayerId || draggingLayerId === layer.id) return;
+                          const fromIdx = activePage.layers.findIndex((l) => l.id === draggingLayerId);
+                          if (fromIdx !== -1 && fromIdx !== layerIdx) {
+                            moveLayerToIndex(fromIdx, layerIdx);
+                          }
+                        }}
+                        onDragEnd={() => setDraggingLayerId(null)}
                         onClick={() => setActiveLayerId(layer.id)}
-                        className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition ${
-                          isCurrent
+                        className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition ${
+                          isBeingDragged
+                            ? 'bg-sky-100 border-[#0066ff] ring-2 ring-[#0066ff] shadow-md scale-[1.01]'
+                            : isCurrent
                             ? 'bg-sky-50 border-[#0066ff] text-[#1b2a4a]'
-                            : 'bg-slate-50 border-slate-200 text-slate-700'
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80'
                         }`}
                       >
-                        <div className="flex flex-col">
-                          <span className="font-semibold">{layer.name}</span>
-                          <span className="text-[10px] text-slate-400">{count} αντικείμενα</span>
+                        {/* Left: Touch/Pencil/Mouse Drag Handle + Layer Name & Item Count */}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div
+                            style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              try {
+                                e.currentTarget.setPointerCapture(e.pointerId);
+                              } catch {
+                                // ignore
+                              }
+                              setDraggingLayerId(layer.id);
+                              layerDragStartYRef.current = e.clientY;
+                            }}
+                            onPointerMove={(e) => {
+                              if (draggingLayerId !== layer.id) return;
+                              e.stopPropagation();
+                              const dy = e.clientY - layerDragStartYRef.current;
+                              const currIdx = activePage.layers.findIndex((l) => l.id === layer.id);
+                              if (currIdx === -1) return;
+                              if (dy <= -34 && currIdx > 0) {
+                                moveLayerToIndex(currIdx, currIdx - 1);
+                                layerDragStartYRef.current = e.clientY;
+                              } else if (dy >= 34 && currIdx < activePage.layers.length - 1) {
+                                moveLayerToIndex(currIdx, currIdx + 1);
+                                layerDragStartYRef.current = e.clientY;
+                              }
+                            }}
+                            onPointerUp={(e) => {
+                              e.stopPropagation();
+                              try {
+                                if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                                  e.currentTarget.releasePointerCapture(e.pointerId);
+                                }
+                              } catch {
+                                // ignore
+                              }
+                              setDraggingLayerId(null);
+                            }}
+                            onPointerCancel={() => setDraggingLayerId(null)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-[#0066ff] hover:bg-slate-200/70 cursor-grab active:cursor-grabbing shrink-0"
+                            title="Σύρε πάνω/κάτω για αλλαγή σειράς του Layer"
+                          >
+                            <GripVertical className="w-4 h-4" />
+                          </div>
+
+                          <div className="flex flex-col truncate">
+                            <span className="font-semibold truncate">{layer.name}</span>
+                            <span className="text-[10px] text-slate-400">{count} αντικείμενα</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
+
+                        {/* Right: Move Up / Move Down + Lock + Eye + Red Delete Trash Can */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveLayerToIndex(layerIdx, layerIdx - 1);
+                            }}
+                            disabled={layerIdx === 0}
+                            className={`p-1 rounded-lg transition cursor-pointer ${
+                              layerIdx === 0
+                                ? 'text-slate-200 cursor-not-allowed'
+                                : 'text-slate-500 hover:text-[#0066ff] hover:bg-slate-200'
+                            }`}
+                            title="Μετακίνηση Layer πιο ΠΑΝΩ (Μπροστά)"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveLayerToIndex(layerIdx, layerIdx + 1);
+                            }}
+                            disabled={layerIdx === activePage.layers.length - 1}
+                            className={`p-1 rounded-lg transition cursor-pointer ${
+                              layerIdx === activePage.layers.length - 1
+                                ? 'text-slate-200 cursor-not-allowed'
+                                : 'text-slate-500 hover:text-[#0066ff] hover:bg-slate-200'
+                            }`}
+                            title="Μετακίνηση Layer πιο ΚΑΤΩ (Πίσω)"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -5680,11 +5839,13 @@ export default function App() {
                               }));
                             }}
                             className={`p-1.5 rounded-lg cursor-pointer ${
-                              layer.locked ? 'bg-rose-100 text-rose-600' : 'text-slate-400 hover:bg-slate-200'
+                              layer.locked ? 'bg-amber-100 text-amber-700' : 'text-slate-400 hover:bg-slate-200'
                             }`}
+                            title={layer.locked ? 'Ξεκλείδωμα Layer' : 'Κλείδωμα Layer'}
                           >
                             {layer.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                           </button>
+
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -5696,8 +5857,20 @@ export default function App() {
                             className={`p-1.5 rounded-lg cursor-pointer ${
                               !layer.visible ? 'text-slate-300' : 'text-[#0066ff] hover:bg-slate-200'
                             }`}
+                            title={layer.visible ? 'Απόκρυψη Layer' : 'Εμφάνιση Layer'}
                           >
                             {layer.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteLayer();
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition cursor-pointer ml-0.5"
+                            title="Διαγραφή Layer (σβήνει το Layer και ό,τι περιέχει!)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
