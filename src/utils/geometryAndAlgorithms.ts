@@ -1586,6 +1586,55 @@ export function deformStrokeAtKeyNode(
   const dy = targetY - pts[centerIdx].y;
   if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) return pts;
 
+  const isWeldedClosed =
+    pts[0]?.twist === 999 &&
+    keyNodeIndices.length >= 3 &&
+    (keyNodePosIdx === 0 || keyNodePosIdx === keyNodeIndices.length - 1);
+
+  if (isWeldedClosed) {
+    // Move BOTH the start segment [0 .. keyNodeIndices[1]] and end segment [keyNodeIndices[last-1] .. n-1] together as 1 unified node!
+    const firstInteriorIdx = Math.min(n - 1, Math.max(1, keyNodeIndices[1]));
+    const lastInteriorIdx = Math.max(0, Math.min(n - 2, keyNodeIndices[keyNodeIndices.length - 2]));
+
+    const cumStart = new Float64Array(firstInteriorIdx + 1);
+    for (let i = 1; i <= firstInteriorIdx; i++) {
+      cumStart[i] = cumStart[i - 1] + distance(pts[i - 1], pts[i]);
+    }
+    const startSpan = Math.max(1e-4, cumStart[firstInteriorIdx]);
+
+    const cumEnd = new Float64Array(n);
+    for (let i = lastInteriorIdx + 1; i < n; i++) {
+      cumEnd[i] = cumEnd[i - 1] + distance(pts[i - 1], pts[i]);
+    }
+    const endSpan = Math.max(1e-4, cumEnd[n - 1] - cumEnd[lastInteriorIdx]);
+
+    const weights = new Float64Array(n);
+    for (let i = 0; i <= firstInteriorIdx; i++) {
+      const v = cumStart[i] / startSpan; // 0 at idx=0 -> 1 at firstInteriorIdx
+      weights[i] = Math.max(weights[i], 0.5 + 0.5 * Math.cos(Math.PI * v));
+    }
+    for (let i = lastInteriorIdx; i < n; i++) {
+      const u = (cumEnd[i] - cumEnd[lastInteriorIdx]) / endSpan; // 0 at lastInteriorIdx -> 1 at n-1
+      weights[i] = Math.max(weights[i], 0.5 - 0.5 * Math.cos(Math.PI * u));
+    }
+    weights[0] = 1.0;
+    weights[n - 1] = 1.0;
+
+    return pts.map((p, i) => {
+      const w = weights[i];
+      const wPrev = i > 0 ? weights[i - 1] : w;
+      const wCtrl = 0.5 * (wPrev + w);
+      if (w === 0 && wCtrl === 0) return p;
+      return {
+        ...p,
+        x: p.x + w * dx,
+        y: p.y + w * dy,
+        cx: p.cx !== undefined ? p.cx + wCtrl * dx : undefined,
+        cy: p.cy !== undefined ? p.cy + wCtrl * dy : undefined,
+      };
+    });
+  }
+
   const leftIdx = keyNodePosIdx > 0 ? Math.max(0, keyNodeIndices[keyNodePosIdx - 1]) : 0;
   const rightIdx =
     keyNodePosIdx < keyNodeIndices.length - 1
@@ -1639,6 +1688,62 @@ export function deformStrokeAtKeyNode(
       cy: p.cy !== undefined ? p.cy + wCtrl * dy : undefined,
     };
   });
+}
+
+/**
+ * Magnetically welds and smoothly blends the two endpoints of a freehand stroke into a single unified vertex
+ * at `(targetX, targetY)`, smoothing the transition near the seam and marking `twist: 999` on `pts[0]` and `pts[n-1]`
+ * so they behave permanently as 1 single node!
+ */
+export function weldFreehandEndpointsSmoothly(
+  pts: BezierPoint[],
+  keyNodeIndices: number[],
+  draggedKeyPosIdx: number,
+  targetX: number,
+  targetY: number
+): BezierPoint[] {
+  if (pts.length < 3) return pts;
+  const deformed = deformStrokeAtKeyNode(pts, keyNodeIndices, draggedKeyPosIdx, targetX, targetY);
+  const n = deformed.length;
+  const res = deformed.map((p) => ({ ...p }));
+
+  // Lock both endpoints to exact targetX, targetY and mark twist = 999 (welded single node)
+  res[0].x = targetX;
+  res[0].y = targetY;
+  res[0].twist = 999;
+  res[n - 1].x = targetX;
+  res[n - 1].y = targetY;
+  res[n - 1].twist = 999;
+
+  // Apply 2 passes of gentle Laplacian smoothing near the seam (points 1..min(5, n-2) and max(1, n-6)..n-2)
+  // so the curve enters and leaves the welded vertex with zero jagged step ("ψιλοτέλεια ένωση")!
+  const seamWindow = Math.min(5, Math.floor((n - 2) / 3));
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i <= seamWindow; i++) {
+      const prev = res[i - 1];
+      const curr = res[i];
+      const next = res[i + 1];
+      curr.x = 0.25 * prev.x + 0.5 * curr.x + 0.25 * next.x;
+      curr.y = 0.25 * prev.y + 0.5 * curr.y + 0.25 * next.y;
+    }
+    for (let i = n - 2; i >= n - 1 - seamWindow && i >= 1; i--) {
+      const prev = res[i - 1];
+      const curr = res[i];
+      const next = res[i + 1];
+      curr.x = 0.25 * prev.x + 0.5 * curr.x + 0.25 * next.x;
+      curr.y = 0.25 * prev.y + 0.5 * curr.y + 0.25 * next.y;
+    }
+  }
+
+  // Recompute smooth midpoint quadratic Bézier control points (cx, cy) near both ends
+  for (let i = 1; i < n; i++) {
+    if (i <= seamWindow + 1 || i >= n - 1 - seamWindow) {
+      res[i].cx = (res[i - 1].x + res[i].x) / 2;
+      res[i].cy = (res[i - 1].y + res[i].y) / 2;
+    }
+  }
+
+  return res;
 }
 
 /**

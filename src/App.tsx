@@ -83,6 +83,7 @@ import {
   solveMathExpressionOffline,
   computeFreehandKeyNodeIndices,
   deformStrokeAtKeyNode,
+  weldFreehandEndpointsSmoothly,
   isFreehandLoopClosed,
   eraseStrokeByCircle,
   computeResistorOrSpringPoints,
@@ -377,6 +378,28 @@ export default function App() {
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
   const [draggingNodeIdx, setDraggingNodeIdx] = useState<{ index: number; isControl: boolean } | null>(null);
+  const [nodeMagnetState, setNodeMagnetState] = useState<{
+    strokeId: string;
+    draggedKeyPosIdx: number;
+    targetX: number;
+    targetY: number;
+    progress: number;
+  } | null>(null);
+  const nodeMagnetTimerRef = useRef<{
+    strokeId: string;
+    draggedKeyPosIdx: number;
+    targetX: number;
+    targetY: number;
+    startTime: number;
+    rafId: number | null;
+  } | null>(null);
+  const cancelNodeMagnetTimer = useCallback(() => {
+    if (nodeMagnetTimerRef.current?.rafId) {
+      window.cancelAnimationFrame(nodeMagnetTimerRef.current.rafId);
+    }
+    nodeMagnetTimerRef.current = null;
+    setNodeMagnetState(null);
+  }, []);
   const [textFontSize, setTextFontSize] = useState<number>(22);
   const [textBold, setTextBold] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -2012,13 +2035,16 @@ export default function App() {
                 target.keyNodeIndices && target.keyNodeIndices.length >= 2
                   ? target.keyNodeIndices
                   : computeFreehandKeyNodeIndices(target.points);
+              const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
               for (let k = 0; k < keyIndices.length; k++) {
+                // If endpoints were magnetically welded into 1 single node, skip the duplicate last endpoint node!
+                if (isWeldedClosed && k === keyIndices.length - 1) continue;
                 const ptIdx = keyIndices[k];
                 const p = target.points[ptIdx];
                 if (!p) continue;
                 const isEndpoint = k === 0 || k === keyIndices.length - 1;
-                ctx.fillStyle = isEndpoint ? '#ffffff' : '#fef08a';
-                ctx.strokeStyle = '#2563eb';
+                ctx.fillStyle = isWeldedClosed && k === 0 ? '#d1fae5' : isEndpoint ? '#ffffff' : '#fef08a';
+                ctx.strokeStyle = isWeldedClosed && k === 0 ? '#059669' : '#2563eb';
                 ctx.lineWidth = 2.4;
                 ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
                 ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
@@ -3590,6 +3616,7 @@ export default function App() {
     //    - Sine/Cosine: strictly 2 nodes (0: Peak [up/down only], 1: Right Endpoint [left/right only])
     //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices)
     if (activeTool === 'direct-node') {
+      cancelNodeMagnetTimer();
       if (activeNodeStrokeId) {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target) {
@@ -3598,7 +3625,9 @@ export default function App() {
               target.keyNodeIndices && target.keyNodeIndices.length >= 2
                 ? target.keyNodeIndices
                 : computeFreehandKeyNodeIndices(target.points);
+            const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
             for (let k = 0; k < keyIndices.length; k++) {
+              if (isWeldedClosed && k === keyIndices.length - 1) continue;
               const p = target.points[keyIndices[k]];
               if (p && distance(pt, p) < 20) {
                 if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
@@ -4216,8 +4245,110 @@ export default function App() {
       return;
     }
 
-    // 2. Direct Node Editing (syncs closing point for polygons, 4 nodes for ellipses, 3 curvature handles for Parabola/Hyperbola/Arc, 2 constrained handles for Sine/Cosine, & smooth Cosine-Hermite deformation for Freehand Key Nodes!)
+    // 2. Direct Node Editing (syncs closing point for polygons, 4 nodes for ellipses, 3 curvature handles for Parabola/Hyperbola/Arc, 2 constrained handles for Sine/Cosine, & smooth Cosine-Hermite deformation + 1s Magnetic Endpoint Fusion for Freehand Key Nodes!)
     if (activeTool === 'direct-node' && activeNodeStrokeId && draggingNodeIdx) {
+      const activeTargetStroke = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
+      let snapTargetPt: { x: number; y: number } | null = null;
+
+      if (activeTargetStroke && !activeTargetStroke.isShape && activeTargetStroke.points.length >= 6) {
+        const keyIndices =
+          activeTargetStroke.keyNodeIndices && activeTargetStroke.keyNodeIndices.length >= 2
+            ? activeTargetStroke.keyNodeIndices
+            : computeFreehandKeyNodeIndices(activeTargetStroke.points);
+        const isAlreadyWelded = activeTargetStroke.points[0]?.twist === 999;
+        const isDraggingEndpoint =
+          draggingNodeIdx.index === 0 || draggingNodeIdx.index === keyIndices.length - 1;
+
+        if (!isAlreadyWelded && keyIndices.length >= 3 && isDraggingEndpoint) {
+          const otherEndPt =
+            draggingNodeIdx.index === 0
+              ? activeTargetStroke.points[activeTargetStroke.points.length - 1]
+              : activeTargetStroke.points[0];
+
+          if (otherEndPt && distance(latestPt, otherEndPt) <= 26) {
+            snapTargetPt = { x: otherEndPt.x, y: otherEndPt.y };
+            if (!nodeMagnetTimerRef.current || nodeMagnetTimerRef.current.strokeId !== activeTargetStroke.id) {
+              cancelNodeMagnetTimer();
+              const timerObj = {
+                strokeId: activeTargetStroke.id,
+                draggedKeyPosIdx: draggingNodeIdx.index,
+                targetX: otherEndPt.x,
+                targetY: otherEndPt.y,
+                startTime: performance.now(),
+                rafId: null as number | null,
+              };
+              nodeMagnetTimerRef.current = timerObj;
+              setNodeMagnetState({
+                strokeId: timerObj.strokeId,
+                draggedKeyPosIdx: timerObj.draggedKeyPosIdx,
+                targetX: timerObj.targetX,
+                targetY: timerObj.targetY,
+                progress: 0,
+              });
+
+              const stepMagnet = (now: number) => {
+                if (nodeMagnetTimerRef.current !== timerObj) return;
+                const elapsed = now - timerObj.startTime;
+                const pct = Math.min(100, (elapsed / 1000) * 100);
+                setNodeMagnetState({
+                  strokeId: timerObj.strokeId,
+                  draggedKeyPosIdx: timerObj.draggedKeyPosIdx,
+                  targetX: timerObj.targetX,
+                  targetY: timerObj.targetY,
+                  progress: pct,
+                });
+
+                if (elapsed >= 1000) {
+                  nodeMagnetTimerRef.current = null;
+                  setNodeMagnetState(null);
+                  setDraggingNodeIdx(null);
+                  isDrawingRef.current = false;
+                  updateActivePage(
+                    (page) => ({
+                      ...page,
+                      strokes: page.strokes.map((s) => {
+                        if (s.id !== timerObj.strokeId) return s;
+                        const sKeys =
+                          s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                            ? s.keyNodeIndices
+                            : computeFreehandKeyNodeIndices(s.points);
+                        const weldedPts = weldFreehandEndpointsSmoothly(
+                          s.points,
+                          sKeys,
+                          timerObj.draggedKeyPosIdx,
+                          timerObj.targetX,
+                          timerObj.targetY
+                        );
+                        return {
+                          ...s,
+                          points: weldedPts,
+                          keyNodeIndices: sKeys,
+                          fillStyle: fillStyle !== 'none' ? fillStyle : s.fillStyle,
+                          fillColor: fillStyle !== 'none' ? s.color : s.fillColor,
+                          fillTransparency: s.fillTransparency ?? fillTransparency,
+                        };
+                      }),
+                    }),
+                    true
+                  );
+                  showToast('🧲 Οι 2 άκρες ενώθηκαν τέλεια σε 1 ενιαίο κόμβο!');
+                  return;
+                }
+                timerObj.rafId = window.requestAnimationFrame(stepMagnet);
+              };
+              timerObj.rafId = window.requestAnimationFrame(stepMagnet);
+            }
+          } else if (otherEndPt && distance(latestPt, otherEndPt) > 28) {
+            if (nodeMagnetTimerRef.current) {
+              cancelNodeMagnetTimer();
+            }
+          }
+        }
+      }
+
+      const targetX = snapTargetPt ? snapTargetPt.x : latestPt.x;
+      const targetY = snapTargetPt ? snapTargetPt.y : latestPt.y;
+
       updateActivePage(
         (page) => ({
           ...page,
@@ -4234,8 +4365,8 @@ export default function App() {
                 s.points,
                 keyIndices,
                 draggingNodeIdx.index,
-                latestPt.x,
-                latestPt.y
+                targetX,
+                targetY
               );
               return { ...s, points: deformedPts, keyNodeIndices: keyIndices };
             }
@@ -7527,7 +7658,10 @@ export default function App() {
                             selStroke.keyNodeIndices && selStroke.keyNodeIndices.length >= 2
                               ? selStroke.keyNodeIndices
                               : computeFreehandKeyNodeIndices(selStroke.points);
-                          nodeCountLabel = kIndices.length;
+                          nodeCountLabel =
+                            selStroke.points[0]?.twist === 999 && kIndices.length >= 3
+                              ? kIndices.length - 1
+                              : kIndices.length;
                         } else if (
                           selStroke.shapeType === 'sine' ||
                           selStroke.shapeType === 'cosine' ||
@@ -8620,6 +8754,56 @@ export default function App() {
                         </div>
                       );
                     })}
+
+                    {/* 1-Second (1000ms) Filling Magnet Indicator when uniting 2 Freehand Endpoints into 1 Node! */}
+                    {isCurrentActive && nodeMagnetState && (
+                      <div
+                        style={{
+                          left: nodeMagnetState.targetX,
+                          top: nodeMagnetState.targetY,
+                        }}
+                        className="absolute z-40 pointer-events-none -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
+                      >
+                        {/* Floating Magnet Badge Filling from 0% to 100% in 1.0s */}
+                        <div className="mb-9 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1b2a4a]/95 text-white text-[11px] font-bold shadow-lg border border-emerald-400/60 whitespace-nowrap">
+                          <Magnet className="w-3.5 h-3.5 text-emerald-400 animate-bounce" />
+                          <div className="w-16 h-2 rounded-full bg-slate-700 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-sky-400 to-emerald-400"
+                              style={{ width: `${Math.round(nodeMagnetState.progress)}%` }}
+                            />
+                          </div>
+                          <span className="text-emerald-300 w-7 text-right">
+                            {Math.round(nodeMagnetState.progress)}%
+                          </span>
+                        </div>
+
+                        {/* Circular Progress Ring around the Target Endpoint Node */}
+                        <svg className="absolute w-11 h-11 -rotate-90" viewBox="0 0 44 44">
+                          <circle
+                            cx="22"
+                            cy="22"
+                            r="18"
+                            fill="rgba(16, 185, 129, 0.14)"
+                            stroke="rgba(148, 163, 184, 0.35)"
+                            strokeWidth="3.5"
+                          />
+                          <circle
+                            cx="22"
+                            cy="22"
+                            r="18"
+                            fill="none"
+                            stroke="#10b981"
+                            strokeWidth="3.8"
+                            strokeLinecap="round"
+                            strokeDasharray={2 * Math.PI * 18}
+                            strokeDashoffset={
+                              2 * Math.PI * 18 * (1 - Math.min(100, nodeMagnetState.progress) / 100)
+                            }
+                          />
+                        </svg>
+                      </div>
+                    )}
 
                     {/* Movable & Rotatable Minimalist A4 Ruler (80% of paper width, soft gray, real A4 1cm tick marks, no text/degrees, top-center rotation handle) */}
                     {isCurrentActive &&
