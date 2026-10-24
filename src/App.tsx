@@ -444,6 +444,24 @@ export default function App() {
   const pullHoldIntervalRef = useRef<number | null>(null);
   const pullSideActiveRef = useRef<'top' | 'bottom' | null>(null);
   const scrollMomentumRafRef = useRef<number | null>(null);
+  // Page buttons (+ Πριν, + Σελίδα Μετά, 📑 Αντίγραφο, 🗑️ Διαγραφή) show prominently for 7s when scrolling, then fade very faintly
+  const [pageControlsVisible, setPageControlsVisible] = useState<boolean>(false);
+  const pageControlsVisibleRef = useRef<boolean>(false);
+  const pageControlsTimerRef = useRef<number | null>(null);
+  const triggerPageControlsVisibility = useCallback(() => {
+    if (!pageControlsVisibleRef.current) {
+      pageControlsVisibleRef.current = true;
+      setPageControlsVisible(true);
+    }
+    if (pageControlsTimerRef.current !== null) {
+      window.clearTimeout(pageControlsTimerRef.current);
+    }
+    pageControlsTimerRef.current = window.setTimeout(() => {
+      pageControlsVisibleRef.current = false;
+      setPageControlsVisible(false);
+      pageControlsTimerRef.current = null;
+    }, 7000);
+  }, []);
   const outsidePanDragRef = useRef<{
     active: boolean;
     startClientX: number;
@@ -2852,18 +2870,22 @@ export default function App() {
   const applyPaperTransformDirect = useCallback(
     (nextZoom: number, _nextPanX: number, nextPanY: number, commitReactState = false) => {
       const clampedZoom = Math.min(3.5, Math.max(0.45, nextZoom));
+      const didScrollVertically = Math.abs(nextPanY - panRef.current.y) > 0.5;
       zoomRef.current = clampedZoom;
       // Strictly lock X to 0 so the page is ALWAYS horizontally centered and only scrolls vertically (up/down)!
       panRef.current = { x: 0, y: nextPanY };
       if (paperTransformElRef.current) {
         paperTransformElRef.current.style.transform = `translate3d(0px, ${nextPanY}px, 0) scale(${clampedZoom})`;
       }
+      if (didScrollVertically) {
+        triggerPageControlsVisibility();
+      }
       if (commitReactState) {
         setZoom(clampedZoom);
         setPan({ x: 0, y: nextPanY });
       }
     },
-    []
+    [triggerPageControlsVisibility]
   );
 
   // Smoothly jump to a specific page in the Word-style vertical document stack
@@ -10253,13 +10275,19 @@ export default function App() {
                     {/* Word/Goodnotes Page Separator Header Badge + Quick Insert/Delete Page Actions */}
                     <div className="absolute -top-7 left-0 right-0 flex items-center justify-between px-1 select-none z-20">
                       <span
-                        className={`text-xs font-bold ${
+                        className={`text-xs font-bold transition-opacity duration-500 ${
                           isCurrentActive ? 'text-[#0066ff]' : 'text-slate-600'
-                        }`}
+                        } ${pageControlsVisible ? 'opacity-100' : 'opacity-30'}`}
                       >
                         Σελίδα {pageIdx + 1} από {activeNotebook.pages.length} — {pageObj.title}
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <div
+                        onPointerEnter={triggerPageControlsVisibility}
+                        onPointerDown={triggerPageControlsVisibility}
+                        className={`flex items-center gap-1.5 transition-opacity duration-500 ${
+                          pageControlsVisible ? 'opacity-100' : 'opacity-15 hover:opacity-100'
+                        }`}
+                      >
                         <button
                           onClick={() => insertPageAtIndex(pageIdx)}
                           className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-sky-50 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
@@ -10293,7 +10321,13 @@ export default function App() {
 
                     {/* Interactive "+ Add Page in the Middle" Pill between consecutive pages */}
                     {pageIdx < activeNotebook.pages.length - 1 && (
-                      <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-center">
+                      <div
+                        onPointerEnter={triggerPageControlsVisibility}
+                        onPointerDown={triggerPageControlsVisibility}
+                        className={`absolute -bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-center transition-opacity duration-500 ${
+                          pageControlsVisible ? 'opacity-100' : 'opacity-15 hover:opacity-100'
+                        }`}
+                      >
                         <button
                           onClick={() => insertPageAtIndex(pageIdx + 1)}
                           className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-white/95 hover:bg-[#0066ff] text-slate-600 hover:text-white border border-slate-300 hover:border-[#0066ff] text-[11px] font-semibold shadow-sm transition cursor-pointer"
