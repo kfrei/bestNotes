@@ -9765,27 +9765,30 @@ export default function App() {
             {/* Keyboard Shortcuts Quick Reference (Greek & English) */}
             <div className="pt-2 border-t border-slate-100">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold text-[#1b2a4a]">⌨️ Συντομεύσεις Πληκτρολογίου (GR / EN):</span>
+                <span className="text-xs font-bold text-[#1b2a4a]">Συντομεύσεις Πληκτρολογίου (GR / EN):</span>
                 <span className="text-[10px] text-slate-400">SHORTCUTS.md</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                 {[
-                  { keys: 'P / Π', label: '✏️ Μολύβι (Pen)' },
-                  { keys: 'E / Ε', label: '🧹 Σβήστρα (Erase)' },
-                  { keys: 'L / Λ', label: '🔴 Κόκκινο Laser' },
-                  { keys: 'F / Φ', label: '🎨 Γέμισμα ↔ Ξεγέμισμα' },
-                  { keys: 'S / Σ', label: '🪢 Επιλογή Λάσο' },
-                  { keys: 'N / Ν', label: '✒️ Κόμβοι (Nodes)' },
-                  { keys: 'H / Η', label: '🖍️ Υπογραμμιστής' },
-                  { keys: 'T / Τ', label: '🔤 Κείμενο (Text)' },
-                  { keys: 'Esc', label: '✖️ Κλείσιμο Παραθύρων' },
+                  { keys: 'P / Π', label: 'Μολύβι (Pen)', icon: <Pen className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'E / Ε', label: 'Σβήστρα (Erase)', icon: <Eraser className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'L / Λ', label: 'Κόκκινο Laser', icon: <Radio className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'F / Φ', label: 'Γέμισμα ↔ Ξεγέμισμα', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'S / Σ', label: 'Επιλογή Λάσο', icon: <Lasso className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'N / Ν', label: 'Κόμβοι (Nodes)', icon: <BezierNodesIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'H / Η', label: 'Υπογραμμιστής', icon: <Highlighter className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'T / Τ', label: 'Κείμενο (Text)', icon: <Type className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'Esc', label: 'Κλείσιμο Παραθύρων', icon: <X className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                 ].map((sc) => (
                   <div
                     key={sc.keys}
-                    className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1"
+                    className="flex items-center justify-between gap-1.5 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1"
                   >
-                    <span className="text-slate-700 font-medium">{sc.label}</span>
-                    <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-[10px] font-bold text-[#0066ff] shadow-2xs">
+                    <span className="flex items-center gap-1.5 text-slate-700 font-medium truncate">
+                      {sc.icon}
+                      <span className="truncate">{sc.label}</span>
+                    </span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-[10px] font-bold text-[#0066ff] shadow-2xs shrink-0">
                       {sc.keys}
                     </kbd>
                   </div>
