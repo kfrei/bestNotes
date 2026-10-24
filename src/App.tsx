@@ -433,6 +433,66 @@ export default function App() {
     showSettingsModal,
   ]);
 
+  // NATIVE iPAD APP VIEWPORT LOCK:
+  // Ensures the top navigation bar & toolbars NEVER scroll away, bounce, or zoom like a webpage
+  // (even when 2-finger pinching outside the canvas or when the iPad virtual keyboard opens).
+  useEffect(() => {
+    const preventNativeBrowserZoom = (e: Event) => {
+      e.preventDefault();
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const nextZoom = Math.min(3.5, Math.max(0.45, zoomRef.current - e.deltaY * 0.008));
+        zoomRef.current = nextZoom;
+        if (paperTransformElRef.current) {
+          paperTransformElRef.current.style.transform = `translate3d(0px, ${panRef.current.y}px, 0) scale(${nextZoom})`;
+        }
+        setZoom(nextZoom);
+      }
+    };
+
+    const handleNavTouchMove = (e: TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (e.touches.length > 1 && target?.closest('[data-sticky-app-nav="true"]')) {
+        if (e.cancelable) e.preventDefault();
+      }
+    };
+
+    const lockWindowScroll = () => {
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.documentElement.scrollTop !== 0) {
+        document.documentElement.scrollTop = 0;
+      }
+      if (document.body.scrollTop !== 0) {
+        document.body.scrollTop = 0;
+      }
+    };
+
+    window.addEventListener('gesturestart', preventNativeBrowserZoom, { passive: false });
+    window.addEventListener('gesturechange', preventNativeBrowserZoom, { passive: false });
+    window.addEventListener('gestureend', preventNativeBrowserZoom, { passive: false });
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('touchmove', handleNavTouchMove, { passive: false });
+    window.addEventListener('scroll', lockWindowScroll, { passive: true });
+    window.visualViewport?.addEventListener('scroll', lockWindowScroll);
+    window.visualViewport?.addEventListener('resize', lockWindowScroll);
+
+    return () => {
+      window.removeEventListener('gesturestart', preventNativeBrowserZoom);
+      window.removeEventListener('gesturechange', preventNativeBrowserZoom);
+      window.removeEventListener('gestureend', preventNativeBrowserZoom);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('touchmove', handleNavTouchMove);
+      window.removeEventListener('scroll', lockWindowScroll);
+      window.visualViewport?.removeEventListener('scroll', lockWindowScroll);
+      window.visualViewport?.removeEventListener('resize', lockWindowScroll);
+    };
+  }, []);
+
   const clonePageFast = useCallback((p: NotePage): NotePage => ({
     ...p,
     layers: [...p.layers],
@@ -5528,7 +5588,7 @@ export default function App() {
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#e4e7ec] text-slate-800 overflow-hidden select-none">
+    <div className="fixed inset-0 flex flex-col w-full h-[100dvh] max-h-[100dvh] bg-[#e4e7ec] text-slate-800 overflow-clip overscroll-none select-none">
       <input
         ref={fileInputGoodnotesRef}
         type="file"
@@ -5548,8 +5608,13 @@ export default function App() {
 
       {/* =========================================================================
           1. AUTHENTIC GOODNOTES 6 TOP NAVY BAR & DOCUMENT TABS (#1B2A4A)
+             Always Sticky / Pinned at the very top like a Native iPad App!
          ========================================================================= */}
-      <header className="flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none">
+      <header
+        data-sticky-app-nav="true"
+        style={{ touchAction: 'manipulation' }}
+        className="sticky top-0 z-40 flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none"
+      >
         {/* Left Navigation Icons (Back to Library, Page Thumbnails Grid, Import .goodnotes, Open PDF/JPG/PNG) */}
         <div className="flex items-center gap-1 pb-1.5">
           <button
@@ -5773,7 +5838,7 @@ export default function App() {
 
       {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTEBOOKS GRID) */}
       {viewMode === 'library' ? (
-        <div className="flex-1 overflow-y-auto p-6 bg-[#f4f5f7]">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]">
           <div className="max-w-5xl mx-auto">
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
               <div>
@@ -5879,9 +5944,13 @@ export default function App() {
         <>
           {/* =========================================================================
               2. AUTHENTIC GOODNOTES 6 LIGHT TOOLBAR (#F4F5F7)
-                 Center: Clean Icon Strip | Right: 3 Stroke Widths (12 Presets) + 3 Color Slots
+                 Always Sticky / Pinned below Header like a Native iPad App!
              ========================================================================= */}
-          <div className="flex items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto">
+          <div
+            data-sticky-app-nav="true"
+            style={{ touchAction: 'manipulation' }}
+            className="sticky top-0 z-30 flex items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto overscroll-contain"
+          >
             {/* Left Quick Status: Pencil Only Mode + Tidy Handwriting + Paste */}
             <div className="flex items-center gap-1.5">
               <button
@@ -6307,7 +6376,11 @@ export default function App() {
             selectedImgObj ||
             activeTool === 'eraser') &&
             showToolSubBar && (
-              <div className="flex items-center justify-center px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto">
+              <div
+                data-sticky-app-nav="true"
+                style={{ touchAction: 'manipulation' }}
+                className="sticky top-0 z-30 flex items-center justify-center px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto overscroll-contain"
+              >
                 {(activeTool === 'text' || selectedTextId !== null) && (() => {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
                   const currentBold = selTxt ? Boolean(selTxt.bold) : textBold;
