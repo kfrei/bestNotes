@@ -2679,9 +2679,9 @@ export default function App() {
         aCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
         aCtx.strokeStyle = '#22c55e';
         aCtx.fillStyle = '#ffffff';
-        aCtx.lineWidth = 2.4;
+        aCtx.lineWidth = 1.8;
         aCtx.beginPath();
-        aCtx.arc(pt.x, pt.y, 5.5, 0, Math.PI * 2);
+        aCtx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
         aCtx.fill();
         aCtx.stroke();
         aCtx.restore();
@@ -3344,12 +3344,12 @@ export default function App() {
         ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
         ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
         ctx.save();
-        // Bright Green (#22c55e) dashed Lasso line with NO fill!
+        // Bright Green (#22c55e) thinner dashed Lasso line with wider, clearly visible gaps ([8, 9]) and NO fill!
         ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 1.65;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.setLineDash([7, 5]);
+        ctx.setLineDash([8, 9]);
         if (poly.length > 1) {
           ctx.beginPath();
           ctx.moveTo(poly[0].x, poly[0].y);
@@ -3363,9 +3363,9 @@ export default function App() {
         ctx.setLineDash([]);
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 2.4;
+        ctx.lineWidth = 1.8;
         ctx.beginPath();
-        ctx.arc(poly[0].x, poly[0].y, 5.5, 0, Math.PI * 2);
+        ctx.arc(poly[0].x, poly[0].y, 4.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         ctx.restore();
