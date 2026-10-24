@@ -419,6 +419,10 @@ export default function App() {
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
+  const [shiftKeyPressed, setShiftKeyPressed] = useState<boolean>(false);
+  const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
+  const shiftKeyPressedRef = useRef<boolean>(false);
+  const lassoAdditiveRef = useRef<boolean>(false);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
   const [draggingNodeIdx, setDraggingNodeIdx] = useState<{ index: number; isControl: boolean } | null>(null);
   const [nodeMagnetState, setNodeMagnetState] = useState<{
@@ -1418,6 +1422,7 @@ export default function App() {
       const rotStemTopY = -hh - 32;
 
       if (Math.hypot(localX, localY - rotStemTopY) <= 24) return true;
+      if (selectedStrokeIds.length >= 2 && Math.abs(localX) <= 78 && Math.abs(localY - (hh + 26)) <= 20) return true;
       if (Math.abs(localX) <= hw + 22 && Math.abs(localY) <= hh + 22) return true;
       return false;
     },
@@ -1594,6 +1599,11 @@ export default function App() {
     ctx.lineWidth = s.width;
     ctx.lineCap = s.tool === 'highlighter' ? 'butt' : 'round';
     ctx.lineJoin = 'round';
+
+    if (isSelected) {
+      ctx.shadowColor = 'rgba(0, 102, 255, 0.75)';
+      ctx.shadowBlur = 11;
+    }
 
     if (s.lineStyle === 'dashed') {
       ctx.setLineDash([s.width * 3.2, s.width * 2.2]);
@@ -2265,6 +2275,43 @@ export default function App() {
           const angle = selBounds.angle || 0;
           const rotStemTopY = -hh - 32;
 
+          // 4a. When 2+ shapes/strokes are selected together, highlight each individual shape with its own cyan dashed sub-frame + #1, #2 badge!
+          const selStrokesList = pageObj.strokes.filter((st) => selectedStrokeIds.includes(st.id));
+          if (selStrokesList.length >= 2) {
+            ctx.save();
+            selStrokesList.forEach((ms, mIdx) => {
+              const sb = getStrokeBounds(ms);
+              const subPad = 5;
+              const sx = sb.minX - subPad;
+              const sy = sb.minY - subPad;
+              const sw = Math.max(12, sb.maxX - sb.minX + subPad * 2);
+              const sh = Math.max(12, sb.maxY - sb.minY + subPad * 2);
+
+              ctx.fillStyle = 'rgba(14, 165, 233, 0.06)';
+              ctx.fillRect(sx, sy, sw, sh);
+              ctx.strokeStyle = '#0ea5e9';
+              ctx.lineWidth = 1.4;
+              ctx.setLineDash([4, 3]);
+              ctx.strokeRect(sx, sy, sw, sh);
+
+              // Numbered Selection Badge (#1, #2, ...) at top-left of each selected shape
+              ctx.setLineDash([]);
+              ctx.fillStyle = '#0284c7';
+              ctx.beginPath();
+              ctx.roundRect(sx - 6, sy - 10, 22, 16, 8);
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1.4;
+              ctx.stroke();
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 10px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(`#${mIdx + 1}`, sx + 5, sy - 2);
+            });
+            ctx.restore();
+          }
+
           ctx.save();
           ctx.translate(bcx, bcy);
           ctx.rotate(angle);
@@ -2354,6 +2401,43 @@ export default function App() {
             ctx.fill();
             ctx.stroke();
           }
+
+          // 4b. Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill right below the Selection Frame!
+          if (selStrokesList.length >= 2) {
+            const firstGrpId = selStrokesList[0]?.groupId;
+            const allSameGroup =
+              Boolean(firstGrpId) && selStrokesList.every((st) => st.groupId === firstGrpId);
+            const pillW = allSameGroup ? 116 : 124;
+            const pillH = 26;
+            const pillY = hh + 26;
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 2;
+            ctx.fillStyle = allSameGroup ? '#334155' : '#059669';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(-pillW / 2, pillY - pillH / 2, pillW, pillH, 13);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11.5px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              allSameGroup
+                ? `🔓 Ungroup (${selStrokesList.length})`
+                : `🔗 Group (${selStrokesList.length})`,
+              0,
+              pillY + 0.5
+            );
+            ctx.restore();
+          }
+
           ctx.restore();
         }
 
@@ -2472,6 +2556,87 @@ export default function App() {
       renderStaticScene();
     }
   }, [renderStaticScene, viewMode, activeNotebook.id]);
+
+  // Smooth Pulsing / Breathing Highlight Animation ("αναβοσβήνουν απαλά και έντονα") on activeCanvasRef for Lasso-selected shapes!
+  useEffect(() => {
+    if (viewMode !== 'editor' || activeTool !== 'lasso' || selectedStrokeIds.length === 0) {
+      return;
+    }
+
+    let rafId: number | null = null;
+    const selIdSet = new Set(selectedStrokeIds);
+
+    const stepPulse = (now: number) => {
+      if (!isDrawingRef.current) {
+        const canvas = activeCanvasRef.current;
+        const ctx = activeCtxRef.current;
+        if (canvas && ctx) {
+          const selStrokes = activePage.strokes.filter((s) => selIdSet.has(s.id));
+          if (selStrokes.length > 0) {
+            const pulse = 0.5 + 0.5 * Math.sin(now * 0.0085); // ~1.35Hz breathing pulse
+            ctx.save();
+            ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+            ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
+
+            // 1. Draw pulsing electric-cyan outer halo + crisp stroke on top for each selected shape
+            for (const s of selStrokes) {
+              drawStrokeOnContext(
+                ctx,
+                {
+                  ...s,
+                  color: '#0ea5e9',
+                  width: (s.width || 3) + 4.5 + 4.5 * pulse,
+                  opacity: 0.14 + 0.36 * pulse,
+                  fillStyle: 'none',
+                  fillColor: undefined,
+                },
+                false
+              );
+              drawStrokeOnContext(ctx, s, false);
+            }
+
+            // 2. When 2+ shapes are selected, animate marching-ants cyan sub-frames around each selected item
+            if (selStrokes.length >= 2) {
+              ctx.save();
+              ctx.strokeStyle = `rgba(2, 132, 199, ${0.45 + 0.5 * pulse})`;
+              ctx.lineWidth = 1.8;
+              ctx.setLineDash([5, 4]);
+              ctx.lineDashOffset = -(now * 0.025);
+              for (const ms of selStrokes) {
+                const sb = getStrokeBounds(ms);
+                const subPad = 5;
+                ctx.strokeRect(
+                  sb.minX - subPad,
+                  sb.minY - subPad,
+                  Math.max(12, sb.maxX - sb.minX + subPad * 2),
+                  Math.max(12, sb.maxY - sb.minY + subPad * 2)
+                );
+              }
+              ctx.restore();
+            }
+
+            ctx.restore();
+          }
+        }
+      }
+      rafId = window.requestAnimationFrame(stepPulse);
+    };
+
+    rafId = window.requestAnimationFrame(stepPulse);
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+      const canvas = activeCanvasRef.current;
+      const ctx = activeCtxRef.current;
+      if (canvas && ctx && !isDrawingRef.current) {
+        ctx.save();
+        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
+        ctx.restore();
+      }
+    };
+  }, [viewMode, activeTool, selectedStrokeIds, activePage.strokes]);
 
   // Sync activeCanvasRef & staticCanvasRef with the current active page in the multi-page stack
   useEffect(() => {
@@ -4029,6 +4194,8 @@ export default function App() {
     if (selectedTextId) setSelectedTextId(null);
     if (editingTextId) setEditingTextId(null);
 
+    const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current || multiSelectMode);
+
     // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image:
     //    - When Pencil-Only Mode is ON (`pencilOnlyMode === true`): ALWAYS auto-select with Lasso & allow immediate drag/resize/rotate!
     //    - When Finger Drawing is ON (`!pencilOnlyMode`): only select/drag when Lasso ('lasso') or Nodes ('direct-node') is active (so Pen draws with finger)!
@@ -4036,7 +4203,7 @@ export default function App() {
       e.pointerType === 'touch' &&
       activeTool !== 'direct-node' &&
       (pencilOnlyMode || activeTool === 'lasso') &&
-      !(activeTool === 'lasso' && isClientPointInLassoSelection(e.clientX, e.clientY))
+      !(activeTool === 'lasso' && !isAdditiveSelect && isClientPointInLassoSelection(e.clientX, e.clientY))
     ) {
       const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
       if (fingerHit) {
@@ -4047,8 +4214,18 @@ export default function App() {
         setImageCropMode('none');
         if (fingerHit.type === 'stroke') {
           setSelectedImageId(null);
-          setSelectedStrokeIds(fingerHit.memberIds);
-          setActiveNodeStrokeId(fingerHit.stroke.id);
+          const nextStrokeIds =
+            isAdditiveSelect && selectedStrokeIds.length > 0
+              ? fingerHit.memberIds.every((id) => selectedStrokeIds.includes(id)) &&
+                selectedStrokeIds.length > fingerHit.memberIds.length
+                ? selectedStrokeIds.filter((id) => !fingerHit.memberIds.includes(id))
+                : Array.from(new Set([...selectedStrokeIds, ...fingerHit.memberIds]))
+              : fingerHit.memberIds;
+          setSelectedStrokeIds(nextStrokeIds);
+          setActiveNodeStrokeId(nextStrokeIds.length === 1 ? nextStrokeIds[0] : null);
+          if (isAdditiveSelect && nextStrokeIds.length >= 2) {
+            showToast(`➕ Επιλέχθηκαν ${nextStrokeIds.length} σχήματα! Πάτησε «Group» (ή G) για ομαδοποίηση.`);
+          }
           selectionTransformRef.current = {
             mode: 'move',
             startX: pt.x,
@@ -4059,7 +4236,7 @@ export default function App() {
             anchorY: fingerHit.bounds.cy,
             initialDist: 1,
             initialAngle: 0,
-            targetStrokeIds: fingerHit.memberIds,
+            targetStrokeIds: nextStrokeIds,
             targetImageId: null,
           };
         } else {
@@ -4385,17 +4562,27 @@ export default function App() {
             false
           );
         }
-        setActiveNodeStrokeId(hit.id);
         const members = hit.groupId
           ? activePage.strokes.filter((s) => s.groupId === hit.groupId).map((s) => s.id)
           : [hit.id];
-        setSelectedStrokeIds(members);
+        if (isAdditiveSelect && selectedStrokeIds.length > 0) {
+          const combined = Array.from(new Set([...selectedStrokeIds, ...members]));
+          setSelectedStrokeIds(combined);
+          setActiveNodeStrokeId(combined.length === 1 ? combined[0] : null);
+          setActiveTool('lasso');
+          showToast(`➕ Επιλέχθηκαν ${combined.length} σχήματα! Πάτησε «Group» (ή G) για ομαδοποίηση.`);
+        } else {
+          setActiveNodeStrokeId(hit.id);
+          setSelectedStrokeIds(members);
+        }
       } else {
-        setActiveNodeStrokeId(null);
-        setSelectedStrokeIds([]);
-        setSelectedImageId(null);
-        setDraggingNodeIdx(null);
-        setActiveTool('pen');
+        if (!isAdditiveSelect) {
+          setActiveNodeStrokeId(null);
+          setSelectedStrokeIds([]);
+          setSelectedImageId(null);
+          setDraggingNodeIdx(null);
+          setActiveTool('pen');
+        }
       }
       return;
     }
@@ -4420,118 +4607,139 @@ export default function App() {
         const localY = -dx * sinA + dy * cosA;
         const rotStemTopY = -hh - 32;
 
-        // A. Check Top Semicircular Rotation Arrow Handle (↻)
-        if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
-          selectionTransformRef.current = {
-            mode: 'rotate',
-            startX: pt.x,
-            startY: pt.y,
-            centerX: bcx,
-            centerY: bcy,
-            anchorX: bcx,
-            anchorY: bcy,
-            initialDist: Math.max(10, distance(pt, { x: bcx, y: bcy })),
-            initialAngle: Math.atan2(pt.y - bcy, pt.x - bcx),
-          };
-          isDrawingRef.current = true;
+        // 0. Check Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill below Selection Frame!
+        if (selectedStrokeIds.length >= 2 && Math.abs(localX) <= 72 && Math.abs(localY - (hh + 26)) <= 16) {
+          const selStrokesList = activePage.strokes.filter((st) => selectedStrokeIds.includes(st.id));
+          const firstGrpId = selStrokesList[0]?.groupId;
+          const allSameGroup =
+            Boolean(firstGrpId) && selStrokesList.every((st) => st.groupId === firstGrpId);
+          if (allSameGroup) {
+            handleUngroupSelected();
+          } else {
+            handleGroupSelected();
+          }
           return;
         }
 
-        // B1. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots)
-        const localCorners = [
-          { lx: -hw, ly: -hh, oppLx: hw, oppLy: hh, sx: -1, sy: -1 },
-          { lx: hw, ly: -hh, oppLx: -hw, oppLy: hh, sx: 1, sy: -1 },
-          { lx: hw, ly: hh, oppLx: -hw, oppLy: -hh, sx: 1, sy: 1 },
-          { lx: -hw, ly: hh, oppLx: hw, oppLy: -hh, sx: -1, sy: 1 },
-        ];
-        for (const c of localCorners) {
-          if (Math.hypot(localX - c.lx, localY - c.ly) < 18) {
-            const oppWorldX = bcx + c.oppLx * cosA - c.oppLy * sinA;
-            const oppWorldY = bcy + c.oppLx * sinA + c.oppLy * cosA;
+        if (!isAdditiveSelect) {
+          // A. Check Top Semicircular Rotation Arrow Handle (↻)
+          if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
+            clearActiveOverlay();
             selectionTransformRef.current = {
-              mode: 'scale',
+              mode: 'rotate',
               startX: pt.x,
               startY: pt.y,
               centerX: bcx,
               centerY: bcy,
-              anchorX: oppWorldX,
-              anchorY: oppWorldY,
-              initialDist: Math.max(12, distance(pt, { x: oppWorldX, y: oppWorldY })),
-              initialAngle: 0,
-              frameAngle: angle,
-              sideSignX: c.sx,
-              sideSignY: c.sy,
+              anchorX: bcx,
+              anchorY: bcy,
+              initialDist: Math.max(10, distance(pt, { x: bcx, y: bcy })),
+              initialAngle: Math.atan2(pt.y - bcy, pt.x - bcx),
             };
             isDrawingRef.current = true;
             return;
           }
-        }
 
-        // B2. Check 4 Mid-Side Aspect-Ratio Stretch Handles (Top, Right, Bottom, Left — Orange #f97316 dots)
-        const localSides: {
-          lx: number;
-          ly: number;
-          oppLx: number;
-          oppLy: number;
-          mode: 'scale-x' | 'scale-y';
-          sx: number;
-          sy: number;
-        }[] = [
-          { lx: 0, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
-          { lx: hw, ly: 0, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
-          { lx: 0, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
-          { lx: -hw, ly: 0, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
-        ];
-        for (const m of localSides) {
-          if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
-            const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
-            const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
-            const rx = pt.x - oppWorldX;
-            const ry = pt.y - oppWorldY;
-            const initialSpan =
-              m.mode === 'scale-x'
-                ? Math.max(16, Math.abs(rx * cosA + ry * sinA))
-                : Math.max(16, Math.abs(-rx * sinA + ry * cosA));
+          // B1. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots)
+          const localCorners = [
+            { lx: -hw, ly: -hh, oppLx: hw, oppLy: hh, sx: -1, sy: -1 },
+            { lx: hw, ly: -hh, oppLx: -hw, oppLy: hh, sx: 1, sy: -1 },
+            { lx: hw, ly: hh, oppLx: -hw, oppLy: -hh, sx: 1, sy: 1 },
+            { lx: -hw, ly: hh, oppLx: hw, oppLy: -hh, sx: -1, sy: 1 },
+          ];
+          for (const c of localCorners) {
+            if (Math.hypot(localX - c.lx, localY - c.ly) < 18) {
+              clearActiveOverlay();
+              const oppWorldX = bcx + c.oppLx * cosA - c.oppLy * sinA;
+              const oppWorldY = bcy + c.oppLx * sinA + c.oppLy * cosA;
+              selectionTransformRef.current = {
+                mode: 'scale',
+                startX: pt.x,
+                startY: pt.y,
+                centerX: bcx,
+                centerY: bcy,
+                anchorX: oppWorldX,
+                anchorY: oppWorldY,
+                initialDist: Math.max(12, distance(pt, { x: oppWorldX, y: oppWorldY })),
+                initialAngle: 0,
+                frameAngle: angle,
+                sideSignX: c.sx,
+                sideSignY: c.sy,
+              };
+              isDrawingRef.current = true;
+              return;
+            }
+          }
+
+          // B2. Check 4 Mid-Side Aspect-Ratio Stretch Handles (Top, Right, Bottom, Left — Orange #f97316 dots)
+          const localSides: {
+            lx: number;
+            ly: number;
+            oppLx: number;
+            oppLy: number;
+            mode: 'scale-x' | 'scale-y';
+            sx: number;
+            sy: number;
+          }[] = [
+            { lx: 0, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
+            { lx: hw, ly: 0, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+            { lx: 0, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
+            { lx: -hw, ly: 0, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+          ];
+          for (const m of localSides) {
+            if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
+              clearActiveOverlay();
+              const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
+              const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
+              const rx = pt.x - oppWorldX;
+              const ry = pt.y - oppWorldY;
+              const initialSpan =
+                m.mode === 'scale-x'
+                  ? Math.max(16, Math.abs(rx * cosA + ry * sinA))
+                  : Math.max(16, Math.abs(-rx * sinA + ry * cosA));
+              selectionTransformRef.current = {
+                mode: m.mode,
+                startX: pt.x,
+                startY: pt.y,
+                centerX: bcx,
+                centerY: bcy,
+                anchorX: oppWorldX,
+                anchorY: oppWorldY,
+                initialDist: initialSpan,
+                initialAngle: 0,
+                frameAngle: angle,
+                sideSignX: m.sx,
+                sideSignY: m.sy,
+              };
+              isDrawingRef.current = true;
+              return;
+            }
+          }
+
+          // C. Check inside rotated selection bounding box -> Move
+          if (Math.abs(localX) <= hw + 6 && Math.abs(localY) <= hh + 6) {
+            clearActiveOverlay();
             selectionTransformRef.current = {
-              mode: m.mode,
+              mode: 'move',
               startX: pt.x,
               startY: pt.y,
               centerX: bcx,
               centerY: bcy,
-              anchorX: oppWorldX,
-              anchorY: oppWorldY,
-              initialDist: initialSpan,
+              anchorX: bcx,
+              anchorY: bcy,
+              initialDist: 1,
               initialAngle: 0,
-              frameAngle: angle,
-              sideSignX: m.sx,
-              sideSignY: m.sy,
             };
+            isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
             isDrawingRef.current = true;
             return;
           }
-        }
-
-        // C. Check inside rotated selection bounding box -> Move
-        if (Math.abs(localX) <= hw + 6 && Math.abs(localY) <= hh + 6) {
-          selectionTransformRef.current = {
-            mode: 'move',
-            startX: pt.x,
-            startY: pt.y,
-            centerX: bcx,
-            centerY: bcy,
-            anchorX: bcx,
-            anchorY: bcy,
-            initialDist: 1,
-            initialAngle: 0,
-          };
-          isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
-          isDrawingRef.current = true;
-          return;
         }
       }
 
       // Start Lasso trajectory so the Lasso ALWAYS follows the Apple Pencil 1:1 at 0ms (even over an unselected image or shape!).
       // If the user simply taps (< 16px path length), finalizeLassoSelection will select the tapped shape or image on pointerUp!
+      lassoAdditiveRef.current = isAdditiveSelect;
       selectionTransformRef.current = null;
       isDraggingSelectionRef.current = null;
       lassoPolygonRef.current = [{ x: pt.x, y: pt.y }];
@@ -4585,8 +4793,12 @@ export default function App() {
   };
 
   // Finalize Lasso Selection (called either automatically when the pencil comes close to the start point, or on pointerUp!)
-  const finalizeLassoSelection = (poly: { x: number; y: number }[]) => {
+  const finalizeLassoSelection = (poly: { x: number; y: number }[], eventShiftKey = false) => {
     clearActiveOverlay();
+    const isAdditive = Boolean(
+      eventShiftKey || lassoAdditiveRef.current || shiftKeyPressedRef.current || multiSelectMode
+    );
+    lassoAdditiveRef.current = false;
     lassoPolygonRef.current = [];
     isDrawingRef.current = false;
     activePointerIdRef.current = null;
@@ -4650,6 +4862,23 @@ export default function App() {
         const members = tappedStroke.groupId
           ? strokeList.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
           : [tappedStroke.id];
+
+        if (isAdditive && selectedStrokeIds.length > 0) {
+          const allAlreadySelected = members.every((id) => selectedStrokeIds.includes(id));
+          const nextIds =
+            allAlreadySelected && selectedStrokeIds.length > members.length
+              ? selectedStrokeIds.filter((id) => !members.includes(id))
+              : Array.from(new Set([...selectedStrokeIds, ...members]));
+          setSelectedStrokeIds(nextIds);
+          setActiveNodeStrokeId(nextIds.length === 1 ? nextIds[0] : null);
+          showToast(
+            allAlreadySelected
+              ? `➖ Αφαιρέθηκε από την επιλογή (${nextIds.length} επιλεγμένα)`
+              : `➕ Επιλέχθηκαν ${nextIds.length} σχήματα! Πάτησε «Group» (ή πλήκτρο G) για ομαδοποίηση.`
+          );
+          return;
+        }
+
         setSelectedStrokeIds(members);
         setActiveNodeStrokeId(tappedStroke.id);
         return;
@@ -4659,6 +4888,10 @@ export default function App() {
         setSelectedImageId(topHitImg.img.id);
         setSelectedStrokeIds([]);
         setActiveNodeStrokeId(null);
+        return;
+      }
+
+      if (isAdditive && selectedStrokeIds.length > 0) {
         return;
       }
 
@@ -4699,8 +4932,17 @@ export default function App() {
 
     if (finalIds.length > 0) {
       setSelectedImageId(null);
-      setSelectedStrokeIds(finalIds);
-      setActiveNodeStrokeId(finalIds.length === 1 ? finalIds[0] : null);
+      const nextIds =
+        isAdditive && selectedStrokeIds.length > 0
+          ? Array.from(new Set([...selectedStrokeIds, ...finalIds]))
+          : finalIds;
+      setSelectedStrokeIds(nextIds);
+      setActiveNodeStrokeId(nextIds.length === 1 ? nextIds[0] : null);
+      if (isAdditive && nextIds.length >= 2) {
+        showToast(
+          `➕ Προστέθηκαν στην επιλογή (${nextIds.length} σχήματα συνολικά)! Πάτησε «Group» (ή G) για ομαδοποίηση.`
+        );
+      }
       return;
     }
 
@@ -4717,9 +4959,11 @@ export default function App() {
       return;
     }
 
-    setSelectedImageId(null);
-    setSelectedStrokeIds([]);
-    setActiveNodeStrokeId(null);
+    if (!isAdditive) {
+      setSelectedImageId(null);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+    }
   };
 
   const getEraserRadius = () => {
@@ -5435,7 +5679,7 @@ export default function App() {
         poly.length >= 12 &&
         distance(poly[poly.length - 1], poly[0]) <= 18
       ) {
-        finalizeLassoSelection([...poly]);
+        finalizeLassoSelection([...poly], e.shiftKey);
         return;
       }
 
@@ -5743,7 +5987,7 @@ export default function App() {
         isDraggingSelectionRef.current = null;
         return;
       }
-      finalizeLassoSelection([...lassoPolygonRef.current]);
+      finalizeLassoSelection([...lassoPolygonRef.current], e.shiftKey);
       return;
     }
 
@@ -6414,6 +6658,10 @@ export default function App() {
     if (viewMode !== 'editor') return;
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        shiftKeyPressedRef.current = true;
+        setShiftKeyPressed(true);
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (editingTextId !== null || showMathModal) return;
 
@@ -6431,6 +6679,20 @@ export default function App() {
 
       const code = e.code;
       const key = e.key.toLowerCase();
+
+      // G / Γ -> Group / Ungroup selected strokes when 2+ strokes are selected!
+      if ((code === 'KeyG' || key === 'g' || key === 'γ') && selectedStrokeIds.length >= 2) {
+        e.preventDefault();
+        const selList = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+        const firstGrp = selList[0]?.groupId;
+        const allInSameGroup = Boolean(firstGrp) && selList.every((s) => s.groupId === firstGrp);
+        if (allInSameGroup) {
+          handleUngroupSelected();
+        } else {
+          handleGroupSelected();
+        }
+        return;
+      }
 
       const switchToTool = (nextTool: ToolType, labelToast: string) => {
         e.preventDefault();
@@ -6510,14 +6772,33 @@ export default function App() {
       }
     };
 
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' || !e.shiftKey) {
+        shiftKeyPressedRef.current = false;
+        setShiftKeyPressed(false);
+      }
+    };
+
+    const onWindowBlur = () => {
+      shiftKeyPressedRef.current = false;
+      setShiftKeyPressed(false);
+    };
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onWindowBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onWindowBlur);
+    };
   }, [
     viewMode,
     editingTextId,
     showMathModal,
     selectedStrokeIds,
     activeNodeStrokeId,
+    activePage.strokes,
     toggleFillStyleToSelection,
     showToast,
   ]);
@@ -8876,8 +9157,63 @@ export default function App() {
                   </div>
                 )}
 
-                {(selectedStrokeIds.length > 0 || activeTool === 'direct-node') && (
+                {(selectedStrokeIds.length > 0 || activeTool === 'lasso' || activeTool === 'direct-node') && (
                   <div className="flex items-center gap-1.5">
+                    {/* Shift / Multi-Select Toggle Pill (works automatically when holding Shift on keyboard OR by tapping on iPad!) */}
+                    <button
+                      onClick={() => {
+                        setMultiSelectMode((prev) => {
+                          const next = !prev;
+                          showToast(
+                            next
+                              ? '➕ Πολλαπλή Επιλογή (Shift): ΕΝΕΡΓΗ — επίλεξε όσα σχήματα θέλεις με το Λάσο!'
+                              : '➖ Πολλαπλή Επιλογή: Απενεργοποιήθηκε'
+                          );
+                          return next;
+                        });
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition cursor-pointer ${
+                        shiftKeyPressed || multiSelectMode
+                          ? 'bg-violet-600 border-violet-600 text-white shadow-xs animate-pulse'
+                          : 'bg-violet-50 hover:bg-violet-100 border-violet-200 text-violet-700'
+                      }`}
+                      title="Κράτα πατημένο το Shift στο πληκτρολόγιο (ή πάτησε εδώ στο iPad) για να επιλέξεις 2ο, 3ο σχήμα με το Λάσο!"
+                    >
+                      <span>⇧ Shift: Πολλαπλή</span>
+                      {selectedStrokeIds.length >= 2 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-white/25 text-[10px] font-bold">
+                          {selectedStrokeIds.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Prominent Group / Ungroup Button right next to Multi-Select when 2+ shapes are selected! */}
+                    {selectedStrokeIds.length >= 2 && (() => {
+                      const selStrokesList = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+                      const firstGrp = selStrokesList[0]?.groupId;
+                      const allInSameGroup =
+                        Boolean(firstGrp) && selStrokesList.every((s) => s.groupId === firstGrp);
+                      return !allInSameGroup ? (
+                        <button
+                          onClick={handleGroupSelected}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm ring-2 ring-emerald-300 transition cursor-pointer"
+                          title="Ομαδοποίηση (Group) όλων των επιλεγμένων σχημάτων — Συντόμευση: G"
+                        >
+                          <Group className="w-3.5 h-3.5" />
+                          <span>🔗 Group ({selectedStrokeIds.length})</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleUngroupSelected}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-slate-700 hover:bg-slate-800 text-white font-semibold shadow-xs transition cursor-pointer"
+                          title="Διαχωρισμός ομάδας (Ungroup) — Συντόμευση: G"
+                        >
+                          <Ungroup className="w-3.5 h-3.5" />
+                          <span>🔓 Ungroup ({selectedStrokeIds.length})</span>
+                        </button>
+                      );
+                    })()}
+
                     <button
                       onClick={handleCutSelected}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold cursor-pointer"
