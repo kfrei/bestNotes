@@ -2116,7 +2116,10 @@ export default function App() {
       }
 
       const directTouches = getDirectFingerTouches(e.touches);
-      if (e.target instanceof HTMLElement && e.target.closest('[data-text-box="true"]')) {
+      if (
+        e.target instanceof Element &&
+        e.target.closest('button, input, textarea, select, a, [data-ui-panel="true"], [data-text-box="true"]')
+      ) {
         outsidePanDragRef.current = null;
         return;
       }
@@ -6301,7 +6304,11 @@ export default function App() {
 
             {/* Floating Saved Shapes Library Popover (Starts empty; stores user-saved shapes/groups/images as miniature thumbnails with scroll!) */}
             {showShapeLibraryPanel && (
-              <div className="fixed right-16 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800">
+              <div
+                data-ui-panel="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                className="fixed right-16 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800"
+              >
                 <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-emerald-800">📚 Βιβλιοθήκη Σχημάτων ({shapeLibrary.length})</span>
@@ -6370,13 +6377,19 @@ export default function App() {
 
             {/* Floating Layers Popover (Draggable Reordering, Up/Down Move, Lock, Visibility & Red Trash Can Delete!) */}
             {showLayersPanel && (
-              <div className="fixed right-5 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800">
+              <div
+                data-ui-panel="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                className="fixed right-5 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800"
+              >
                 <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100">
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-[#1b2a4a]">Layers (Επίπεδα Σελίδας)</span>
                     <span className="text-[10px] text-slate-400">Σύρε πάνω/κάτω (Πάνω = Μπροστά)</span>
                   </div>
                   <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => {
                       const newId = `layer-${Date.now()}`;
                       updateActivePage((page) => ({
@@ -6455,8 +6468,6 @@ export default function App() {
                     return (
                       <div
                         key={layer.id}
-                        draggable
-                        onDragStart={() => setDraggingLayerId(layer.id)}
                         onDragOver={(e) => {
                           e.preventDefault();
                           if (!draggingLayerId || draggingLayerId === layer.id) return;
@@ -6465,7 +6476,6 @@ export default function App() {
                             moveLayerToIndex(fromIdx, layerIdx);
                           }
                         }}
-                        onDragEnd={() => setDraggingLayerId(null)}
                         onClick={() => setActiveLayerId(layer.id)}
                         className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition ${
                           isBeingDragged
@@ -6476,48 +6486,52 @@ export default function App() {
                         }`}
                       >
                         {/* Left: Touch/Pencil/Mouse Drag Handle + Layer Name & Item Count */}
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <div
-                            style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              try {
-                                e.currentTarget.setPointerCapture(e.pointerId);
-                              } catch {
-                                // ignore
-                              }
-                              setDraggingLayerId(layer.id);
+                        <div
+                          draggable
+                          onDragStart={() => setDraggingLayerId(layer.id)}
+                          onDragEnd={() => setDraggingLayerId(null)}
+                          style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            setActiveLayerId(layer.id);
+                            try {
+                              e.currentTarget.setPointerCapture(e.pointerId);
+                            } catch {
+                              // ignore
+                            }
+                            setDraggingLayerId(layer.id);
+                            layerDragStartYRef.current = e.clientY;
+                          }}
+                          onPointerMove={(e) => {
+                            if (draggingLayerId !== layer.id) return;
+                            e.stopPropagation();
+                            const dy = e.clientY - layerDragStartYRef.current;
+                            const currIdx = activePage.layers.findIndex((l) => l.id === layer.id);
+                            if (currIdx === -1) return;
+                            if (dy <= -32 && currIdx > 0) {
+                              moveLayerToIndex(currIdx, currIdx - 1);
                               layerDragStartYRef.current = e.clientY;
-                            }}
-                            onPointerMove={(e) => {
-                              if (draggingLayerId !== layer.id) return;
-                              e.stopPropagation();
-                              const dy = e.clientY - layerDragStartYRef.current;
-                              const currIdx = activePage.layers.findIndex((l) => l.id === layer.id);
-                              if (currIdx === -1) return;
-                              if (dy <= -34 && currIdx > 0) {
-                                moveLayerToIndex(currIdx, currIdx - 1);
-                                layerDragStartYRef.current = e.clientY;
-                              } else if (dy >= 34 && currIdx < activePage.layers.length - 1) {
-                                moveLayerToIndex(currIdx, currIdx + 1);
-                                layerDragStartYRef.current = e.clientY;
+                            } else if (dy >= 32 && currIdx < activePage.layers.length - 1) {
+                              moveLayerToIndex(currIdx, currIdx + 1);
+                              layerDragStartYRef.current = e.clientY;
+                            }
+                          }}
+                          onPointerUp={(e) => {
+                            e.stopPropagation();
+                            try {
+                              if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                                e.currentTarget.releasePointerCapture(e.pointerId);
                               }
-                            }}
-                            onPointerUp={(e) => {
-                              e.stopPropagation();
-                              try {
-                                if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-                                  e.currentTarget.releasePointerCapture(e.pointerId);
-                                }
-                              } catch {
-                                // ignore
-                              }
-                              setDraggingLayerId(null);
-                            }}
-                            onPointerCancel={() => setDraggingLayerId(null)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-[#0066ff] hover:bg-slate-200/70 cursor-grab active:cursor-grabbing shrink-0"
-                            title="Σύρε πάνω/κάτω για αλλαγή σειράς του Layer"
-                          >
+                            } catch {
+                              // ignore
+                            }
+                            setDraggingLayerId(null);
+                          }}
+                          onPointerCancel={() => setDraggingLayerId(null)}
+                          className="flex items-center gap-1.5 min-w-0 flex-1 pr-2 cursor-grab active:cursor-grabbing"
+                          title="Σύρε πάνω/κάτω για αλλαγή σειράς του Layer"
+                        >
+                          <div className="p-1 rounded-lg text-slate-400 hover:text-[#0066ff] hover:bg-slate-200/70 shrink-0">
                             <GripVertical className="w-4 h-4" />
                           </div>
 
@@ -6527,9 +6541,15 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Right: Move Up / Move Down + Lock + Eye + Red Delete Trash Can */}
-                        <div className="flex items-center gap-0.5 shrink-0">
+                        {/* Right: Move Up / Move Down + Lock + Eye + Red Delete Trash Can (isolated from drag handle!) */}
+                        <div
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          className="flex items-center gap-0.5 shrink-0"
+                        >
                           <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
                               moveLayerToIndex(layerIdx, layerIdx - 1);
@@ -6545,6 +6565,8 @@ export default function App() {
                             <ArrowUp className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
                               moveLayerToIndex(layerIdx, layerIdx + 1);
@@ -6561,6 +6583,8 @@ export default function App() {
                           </button>
 
                           <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
                               updateActivePage((page) => ({
@@ -6577,6 +6601,8 @@ export default function App() {
                           </button>
 
                           <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
                               updateActivePage((page) => ({
@@ -6593,6 +6619,8 @@ export default function App() {
                           </button>
 
                           <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteLayer();
