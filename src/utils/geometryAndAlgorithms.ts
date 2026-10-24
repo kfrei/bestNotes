@@ -1510,3 +1510,64 @@ export function deformStrokeAtKeyNode(
     };
   });
 }
+
+/**
+ * Checks whether a freehand stroke forms a closed (or nearly closed) loop where one end touches/approaches the other,
+ * so it can be filled automatically when drawn with Fill ON (without waiting for Hold-to-Snap!) or toggled via Lasso.
+ */
+export function isFreehandLoopClosed(pts: BezierPoint[], lenientForManualToggle = false): boolean {
+  const n = pts.length;
+  if (n < 5) return false;
+
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  let totalLen = 0;
+
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+    if (i > 0) {
+      totalLen += distance(pts[i - 1], p);
+    }
+  }
+
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const diag = Math.hypot(w, h);
+
+  // Must have a meaningful 2D area (not a tiny dot or flat straight line)
+  if (diag < 18 || Math.min(w, h) < 8 || totalLen < Math.max(45, diag * 1.4)) {
+    return false;
+  }
+
+  const directDist = distance(pts[0], pts[n - 1]);
+  const closeThreshold = lenientForManualToggle
+    ? Math.max(68, diag * 0.48, totalLen * 0.22)
+    : Math.max(44, diag * 0.32, totalLen * 0.16);
+
+  if (directDist <= closeThreshold) {
+    return true;
+  }
+
+  // Also check if the ending tail crossed or touched near the starting tail (first 20% vs last 20% of points)
+  const headCount = Math.max(2, Math.floor(n * 0.2));
+  const tailStart = Math.min(n - 2, Math.ceil(n * 0.8));
+  const crossThreshold = lenientForManualToggle
+    ? Math.max(48, diag * 0.35)
+    : Math.max(32, diag * 0.24);
+
+  for (let i = 0; i < headCount; i++) {
+    for (let j = tailStart; j < n; j++) {
+      if (distance(pts[i], pts[j]) <= crossThreshold) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}

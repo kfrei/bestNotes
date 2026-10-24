@@ -77,6 +77,7 @@ import {
   solveMathExpressionOffline,
   computeFreehandKeyNodeIndices,
   deformStrokeAtKeyNode,
+  isFreehandLoopClosed,
 } from './utils/geometryAndAlgorithms';
 
 const STORAGE_KEY = 'bestnotes_notebooks_v1';
@@ -522,6 +523,21 @@ export default function App() {
       const projY = a.y + t * vy;
       if (Math.hypot(pt.x - projX, pt.y - projY) < tol) return true;
     }
+
+    // Also allow tapping inside any filled shape or filled closed freehand loop
+    if (s.fillStyle && s.fillStyle !== 'none' && s.points.length >= 3) {
+      let inside = false;
+      for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
+        const xi = s.points[i].x,
+          yi = s.points[i].y;
+        const xj = s.points[j].x,
+          yj = s.points[j].y;
+        const intersect = yi > pt.y !== yj > pt.y && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi + 1e-9) + xi;
+        if (intersect) inside = !inside;
+      }
+      if (inside) return true;
+    }
+
     return false;
   };
 
@@ -710,13 +726,14 @@ export default function App() {
       }
     }
 
+    // Allow filling both geometric shapes AND closed freehand strokes!
     const canFillShape =
-      s.isShape &&
       s.shapeType !== 'line' &&
       s.shapeType !== 'arrow' &&
       s.fillStyle &&
       s.fillStyle !== 'none' &&
-      s.points.length > 2;
+      s.points.length > 2 &&
+      (s.isShape || isFreehandLoopClosed(s.points, true));
     if (canFillShape) {
       // Always use the stroke's border color (s.color) for the semi-transparent shape fill!
       const shadeColor = s.color || s.fillColor || '#2563eb';
@@ -3754,13 +3771,37 @@ export default function App() {
 
     snappedCurrentStrokeRef.current = null;
 
+    // Check if a freehand stroke drawn with Pen/Pencil forms a closed loop (one end touches/approaches the other)
+    // WITHOUT needing to hold the pencil at the end!
+    const isClosedFreehand = !isShape && isFreehandLoopClosed(finalPts, false);
+    if (
+      isClosedFreehand &&
+      fillStyle !== 'none' &&
+      finalPts.length >= 4 &&
+      distance(finalPts[0], finalPts[finalPts.length - 1]) <= 38
+    ) {
+      const pStart = finalPts[0];
+      const pPrev = finalPts[finalPts.length - 2];
+      finalPts = [
+        ...finalPts,
+        {
+          x: pStart.x,
+          y: pStart.y,
+          cx: (pPrev.x + pStart.x) / 2,
+          cy: (pPrev.y + pStart.y) / 2,
+          pressure: pStart.pressure ?? 0.6,
+        },
+      ];
+    }
+    const canAutoFillStroke = (isShape || isClosedFreehand) && shapeType !== 'line' && shapeType !== 'arrow';
+
     const newStroke: StrokeObject = {
       id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       penType: penSubType,
       color: strokeColor,
-      fillColor: isShape && fillStyle !== 'none' ? strokeColor : undefined,
-      fillStyle: isShape ? fillStyle : 'none',
+      fillColor: canAutoFillStroke && fillStyle !== 'none' ? strokeColor : undefined,
+      fillStyle: canAutoFillStroke ? fillStyle : 'none',
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
@@ -4840,6 +4881,49 @@ export default function App() {
                   className="w-6 h-6 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
                   title="Όλα τα Χρώματα & Στυλ Γραμμής"
                 />
+                <div className="h-4 w-px bg-slate-200 mx-0.5" />
+                <button
+                  onClick={() => {
+                    const nextFill: FillStyleType = fillStyle === 'none' ? 'solid' : 'none';
+                    setFillStyle(nextFill);
+                    if (
+                      (activeTool === 'lasso' || activeTool === 'direct-node') &&
+                      (selectedStrokeIds.length > 0 || activeNodeStrokeId)
+                    ) {
+                      const selIds =
+                        selectedStrokeIds.length > 0
+                          ? selectedStrokeIds
+                          : activeNodeStrokeId
+                          ? [activeNodeStrokeId]
+                          : [];
+                      const selSet = new Set(selIds);
+                      updateActivePage((page) => {
+                        const groupIds = new Set(
+                          page.strokes
+                            .filter((s) => selSet.has(s.id) && s.groupId)
+                            .map((s) => s.groupId as string)
+                        );
+                        return {
+                          ...page,
+                          strokes: page.strokes.map((s) =>
+                            (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
+                            (s.isShape || isFreehandLoopClosed(s.points, true))
+                              ? { ...s, fillStyle: nextFill, fillColor: nextFill !== 'none' ? s.color : undefined }
+                              : s
+                          ),
+                        };
+                      });
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                    fillStyle !== 'none'
+                      ? 'bg-[#0066ff] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                  title="Εναλλαγή με 1 κλικ: Γέμισμα (Fill) / Χωρίς Γέμισμα (και για κλειστά σχήματα με το μολύβι)"
+                >
+                  {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
+                </button>
               </div>
             </div>
           </div>
@@ -5024,17 +5108,17 @@ export default function App() {
                       </button>
                     ))}
                     <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                    {(['none', 'solid', 'hatching'] as FillStyleType[]).map((fs) => (
-                      <button
-                        key={fs}
-                        onClick={() => setFillStyle(fs)}
-                        className={`px-2.5 py-1 rounded-full font-medium whitespace-nowrap cursor-pointer ${
-                          fillStyle === fs ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {fs === 'none' ? 'Χωρίς Γέμισμα' : fs === 'solid' ? '🎨 Fill' : '/// Διαγράμμιση'}
-                      </button>
-                    ))}
+                    <button
+                      onClick={() => setFillStyle((prev) => (prev === 'none' ? 'solid' : 'none'))}
+                      className={`px-2.5 py-1 rounded-full font-semibold whitespace-nowrap cursor-pointer ${
+                        fillStyle !== 'none'
+                          ? 'bg-[#0066ff] text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                      title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα"
+                    >
+                      {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
+                    </button>
                   </div>
                 )}
 
@@ -5125,45 +5209,63 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Shape Fill Style Toggle (Transparent shade matching border color!) */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
-                      {(['none', 'solid', 'hatching'] as FillStyleType[]).map((fs) => (
+                    {/* Single 1-Click Shape / Closed-Stroke Fill Toggle Button ("Γέμισμα" <-> "Χωρίς Γέμισμα") */}
+                    {(() => {
+                      const selIds =
+                        selectedStrokeIds.length > 0
+                          ? selectedStrokeIds
+                          : activeNodeStrokeId
+                          ? [activeNodeStrokeId]
+                          : [];
+                      const selSet = new Set(selIds);
+                      const groupIds = new Set(
+                        activePage.strokes
+                          .filter((s) => selSet.has(s.id) && s.groupId)
+                          .map((s) => s.groupId as string)
+                      );
+                      const targetStrokes = activePage.strokes.filter(
+                        (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+                      );
+                      const isCurrentlyFilled = targetStrokes.some(
+                        (s) => s.fillStyle && s.fillStyle !== 'none'
+                      );
+                      return (
                         <button
-                          key={fs}
                           onClick={() => {
-                            setFillStyle(fs);
-                            const selIds =
-                              selectedStrokeIds.length > 0
-                                ? selectedStrokeIds
-                                : activeNodeStrokeId
-                                ? [activeNodeStrokeId]
-                                : [];
-                            const selSet = new Set(selIds);
-                            updateActivePage((page) => {
-                              const groupIds = new Set(
-                                page.strokes
-                                  .filter((s) => selSet.has(s.id) && s.groupId)
-                                  .map((s) => s.groupId as string)
-                              );
-                              return {
-                                ...page,
-                                strokes: page.strokes.map((s) =>
-                                  selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
-                                    ? { ...s, fillStyle: fs, fillColor: fs !== 'none' ? s.color : undefined }
-                                    : s
-                                ),
-                              };
-                            });
+                            const nextFill: FillStyleType = isCurrentlyFilled ? 'none' : 'solid';
+                            setFillStyle(nextFill);
+                            const canAnyFill = targetStrokes.some(
+                              (s) => s.isShape || isFreehandLoopClosed(s.points, true)
+                            );
+                            if (!canAnyFill && nextFill !== 'none') {
+                              showToast('ℹ️ Η γραμμή πρέπει να είναι κλειστή (να ενώνονται οι άκρες της) για να πάρει γέμισμα!');
+                              return;
+                            }
+                            updateActivePage((page) => ({
+                              ...page,
+                              strokes: page.strokes.map((s) =>
+                                (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
+                                (s.isShape || isFreehandLoopClosed(s.points, true))
+                                  ? {
+                                      ...s,
+                                      fillStyle: nextFill,
+                                      fillColor: nextFill !== 'none' ? s.color : undefined,
+                                    }
+                                  : s
+                              ),
+                            }));
                           }}
-                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold cursor-pointer ${
-                            fillStyle === fs ? 'bg-[#0066ff] text-white' : 'text-slate-700 hover:bg-white'
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                            isCurrentlyFilled
+                              ? 'bg-[#0066ff] text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                           }`}
-                          title="Γέμισμα σχήματος στην απόχρωση του περιγράμματος"
+                          title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα (λειτουργεί και σε κλειστά ελεύθερα σχήματα!)"
                         >
-                          {fs === 'none' ? 'Χωρίς Fill' : fs === 'solid' ? '🎨 Fill' : '///'}
+                          {isCurrentlyFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })()}
 
                     {/* Direct Inline Color Swatches for Selected Line, Shape, or Group of Lines! */}
                     <div
