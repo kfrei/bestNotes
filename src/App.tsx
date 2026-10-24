@@ -2667,40 +2667,24 @@ export default function App() {
       }
       const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
-      // Case A: 1 finger touching OUTSIDE the paper canvas (or 1 finger when Pencil-Only Mode is ON) -> Scroll pages like Word!
+      // Case A: 1 finger touching OUTSIDE the paper canvas OR 1 finger ANYWHERE ON THE PAGE when Pencil-Only Mode is ON -> Scroll pages like Word!
       // IMPORTANT:
-      // - If a shape or image is selected with the Lasso (or Nodes) and the finger touches inside its selection box/handles,
-      //   allow 1-finger drag-and-drop instead of scrolling the page!
-      // - If a shape/image is selected with Lasso or Nodes and the user taps OUTSIDE of it with their finger,
-      //   immediately deselect it and switch back to the Pen ('pen')!
+      // - If a shape or image is ALREADY selected with the Lasso and the finger touches inside its active selection box/handles,
+      //   allow 1-finger drag-and-drop of that selection; otherwise 1 finger on the page scrolls the page!
       if (
         directTouches.length === 1 &&
         (isOutsideCanvas || pencilOnlyMode) &&
-        performance.now() - lastPenActivityTimeRef.current > 320
+        performance.now() - lastPenActivityTimeRef.current > 140
       ) {
         const t = directTouches[0] as any;
-        if (!isOutsideCanvas && isClientPointOnSelectableOrLasso(t.clientX, t.clientY, e.target)) {
+        if (!isOutsideCanvas && isClientPointInLassoSelection(t.clientX, t.clientY)) {
           outsidePanDragRef.current = null;
           return;
         }
-        if (
-          selectedStrokeIds.length > 0 ||
-          selectedImageId !== null ||
-          activeNodeStrokeId !== null ||
-          activeTool === 'lasso' ||
-          activeTool === 'direct-node'
-        ) {
-          setSelectedStrokeIds([]);
-          setSelectedImageId(null);
-          setActiveNodeStrokeId(null);
-          setDraggingNodeIdx(null);
-          setImageCropMode('none');
-          setActiveTool('pen');
-        }
-        if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 22) || (t.radiusY && t.radiusY > 22))) {
+        if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 48) || (t.radiusY && t.radiusY > 48))) {
           return;
         }
-        if (isOutsideCanvas && e.cancelable) e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         outsidePanDragRef.current = {
           active: true,
           startClientX: t.clientX,
@@ -3199,17 +3183,25 @@ export default function App() {
       }
     } else if (e.pointerType === 'touch') {
       if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
-      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 260) return;
+      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 140) return;
       const nev = e.nativeEvent as PointerEvent;
       if ((nev.width && nev.width > 68) || (nev.height && nev.height > 68)) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
-      const isFingerOnObjectOrLasso = isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget);
-      if (isFingerOnObjectOrLasso || activeTool === 'text') {
-        outsidePanDragRef.current = null;
-        cancelScrollMomentum();
+      // When Pencil-Only Mode is ON, 1 finger on the page scrolls the page (unless dragging an active Lasso selection box or tapping in Text mode)
+      if (pencilOnlyMode) {
+        if (isClientPointInLassoSelection(e.clientX, e.clientY) || activeTool === 'text') {
+          outsidePanDragRef.current = null;
+          cancelScrollMomentum();
+        } else {
+          return;
+        }
       } else {
-        if (
+        const isFingerOnObjectOrLasso = isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget);
+        if (isFingerOnObjectOrLasso || activeTool === 'text') {
+          outsidePanDragRef.current = null;
+          cancelScrollMomentum();
+        } else if (
           selectedStrokeIds.length > 0 ||
           selectedImageId !== null ||
           activeNodeStrokeId !== null ||
@@ -3222,9 +3214,6 @@ export default function App() {
           setDraggingNodeIdx(null);
           setImageCropMode('none');
           setActiveTool('pen');
-          return;
-        }
-        if (pencilOnlyMode) {
           return;
         }
       }
@@ -3304,10 +3293,11 @@ export default function App() {
     if (selectedTextId) setSelectedTextId(null);
     if (editingTextId) setEditingTextId(null);
 
-    // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image -> Automatically select it with Lasso (& allow immediate drag-and-drop)!
+    // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image -> Automatically select it with Lasso (only when Pencil-Only Mode is OFF)
     //    If touching an active Lasso handle or an active Direct Node handle, let it fall through to the tool handler below.
     if (
       e.pointerType === 'touch' &&
+      !pencilOnlyMode &&
       !((activeTool === 'lasso' || activeTool === 'direct-node') && isClientPointInLassoSelection(e.clientX, e.clientY))
     ) {
       const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
