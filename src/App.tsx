@@ -48,9 +48,13 @@ import {
   LogIn,
   LogOut,
   Home,
+  User as UserIcon,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
-import { auth, onAuthStateChanged, signOut, type User } from './firebase';
+import { auth, onAuthStateChanged, signOut, signInToGoogleDrive, type User } from './firebase';
 import { LandingPage, AuthModal } from './components/LandingPage';
+import { syncNotebookPdfToGoogleDrive, exportNotebookToPdfBlob } from './utils/googleDrivePdfSync';
 import {
   Notebook,
   NotePage,
@@ -457,10 +461,27 @@ export default function App() {
   const [undoStack, setUndoStack] = useState<NotePage[]>([]);
   const [redoStack, setRedoStack] = useState<NotePage[]>([]);
 
-  // 30s Google Drive Auto-Sync
+  // 30s Google Drive Auto-Sync & Profile Dropdown
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'dirty'>('synced');
   const [secondsToNextSync, setSecondsToNextSync] = useState<number>(30);
+  const [showUserDropdown, setShowUserDropdown] = useState<boolean>(false);
+  const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('bestnotes_drive_token_v1');
+    } catch {
+      return null;
+    }
+  });
+  const [driveEmail, setDriveEmail] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('bestnotes_drive_email_v1');
+    } catch {
+      return null;
+    }
+  });
+  const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
+  const [driveSyncingAll, setDriveSyncingAll] = useState<boolean>(false);
 
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
@@ -548,17 +569,135 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notebooks]);
 
-  // 30-second Google Drive Auto-Sync loop
+  const performDrivePdfSync = useCallback(
+    async (showFeedback = true, overrideToken?: string, overrideNotebook?: Notebook) => {
+      const token = overrideToken ?? driveAccessToken;
+      const targetNb = overrideNotebook ?? activeNotebook;
+      if (!token) {
+        if (showFeedback) {
+          setSyncStatus('syncing');
+          window.setTimeout(() => {
+            setSyncStatus('synced');
+            setIsDirty(false);
+            setSecondsToNextSync(30);
+            showToast('☁️ Αποθηκεύτηκε τοπικά (συνδέσου στο Google Drive από το προφίλ 👤 για PDF Sync στο /BestNotes)');
+          }, 350);
+        }
+        return;
+      }
+
+      setSyncStatus('syncing');
+      try {
+        const res = await syncNotebookPdfToGoogleDrive(token, targetNb);
+        setSyncStatus('synced');
+        setIsDirty(false);
+        setSecondsToNextSync(30);
+        if (res.webViewLink) {
+          setLastDrivePdfLink(res.webViewLink);
+        }
+        if (showFeedback) {
+          showToast(
+            `☁️ Google Drive (/BestNotes${targetNb.folder ? `/${targetNb.folder}` : ''}): Συγχρονίστηκε στο ίδιο όνομα «${res.pdfFileName}»!`
+          );
+        }
+      } catch (err: any) {
+        setSyncStatus('dirty');
+        if (err?.message === 'DRIVE_TOKEN_EXPIRED') {
+          setDriveAccessToken(null);
+          try {
+            localStorage.removeItem('bestnotes_drive_token_v1');
+          } catch {
+            // ignore
+          }
+          if (showFeedback) {
+            showToast('⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login από το προφίλ 👤.');
+          }
+        } else if (showFeedback) {
+          showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
+        }
+      }
+    },
+    [driveAccessToken, activeNotebook, showToast]
+  );
+
+  const performAllNotebooksDrivePdfSync = useCallback(
+    async (overrideToken?: string) => {
+      const token = overrideToken ?? driveAccessToken;
+      if (!token) {
+        showToast('⚠️ Πρώτα κάνε Google Drive Login από το μενού προφίλ 👤!');
+        return;
+      }
+      setDriveSyncingAll(true);
+      setSyncStatus('syncing');
+      try {
+        let syncedCount = 0;
+        let lastLink: string | undefined;
+        for (const nb of notebooks) {
+          const res = await syncNotebookPdfToGoogleDrive(token, nb);
+          syncedCount++;
+          if (nb.id === activeNotebook.id && res.webViewLink) {
+            lastLink = res.webViewLink;
+          }
+        }
+        if (lastLink) setLastDrivePdfLink(lastLink);
+        setSyncStatus('synced');
+        setIsDirty(false);
+        setSecondsToNextSync(30);
+        showToast(`☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & φάκελοι σε PDF στον φάκελο /BestNotes του Google Drive!`);
+      } catch (err: any) {
+        setSyncStatus('dirty');
+        if (err?.message === 'DRIVE_TOKEN_EXPIRED') {
+          setDriveAccessToken(null);
+          try {
+            localStorage.removeItem('bestnotes_drive_token_v1');
+          } catch {
+            // ignore
+          }
+          showToast('⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login.');
+        } else {
+          showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
+        }
+      } finally {
+        setDriveSyncingAll(false);
+      }
+    },
+    [driveAccessToken, notebooks, activeNotebook.id, showToast]
+  );
+
+  const handleDownloadActiveNotebookPdf = useCallback(async () => {
+    try {
+      showToast(`📄 Δημιουργία PDF «${activeNotebook.title}.pdf»...`);
+      const blob = await exportNotebookToPdfBlob(activeNotebook);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeTitle = (activeNotebook.title || 'Σημείωση').replace(/[\\/:*?"<>|]/g, '_').trim();
+      a.href = url;
+      a.download = `${safeTitle}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast(`📥 Κατέβηκε το PDF «${safeTitle}.pdf»!`);
+    } catch (err: any) {
+      showToast(`❌ Σφάλμα εξαγωγής PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
+    }
+  }, [activeNotebook, showToast]);
+
+  // 30-second Google Drive Auto-Sync loop (automatically updates same-name PDF in /BestNotes if Drive is connected)
   useEffect(() => {
     const interval = window.setInterval(() => {
       setSecondsToNextSync((prev) => {
         if (prev <= 1) {
           if (isDirty) {
-            setSyncStatus('syncing');
-            window.setTimeout(() => {
-              setSyncStatus('synced');
-              setIsDirty(false);
-            }, 500);
+            if (driveAccessToken) {
+              void performDrivePdfSync(false);
+            } else {
+              setSyncStatus('syncing');
+              window.setTimeout(() => {
+                setSyncStatus('synced');
+                setIsDirty(false);
+              }, 500);
+            }
           }
           return 30;
         }
@@ -566,9 +705,9 @@ export default function App() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [isDirty]);
+  }, [isDirty, driveAccessToken, performDrivePdfSync]);
 
-  // Close any open floating popover/panel or modal (Color, Width, Layers, Shape Library, Thumbnails, Math, Settings) when clicking/tapping anywhere outside it
+  // Close any open floating popover/panel or modal (Color, Width, Layers, Shape Library, Thumbnails, Math, Settings, User Profile) when clicking/tapping anywhere outside it
   useEffect(() => {
     if (
       !showWidthPopover &&
@@ -577,7 +716,8 @@ export default function App() {
       !showShapeLibraryPanel &&
       !showThumbnailsModal &&
       !showMathModal &&
-      !showSettingsModal
+      !showSettingsModal &&
+      !showUserDropdown
     ) {
       return;
     }
@@ -602,6 +742,7 @@ export default function App() {
         if (triggerType !== 'thumbnails') setShowThumbnailsModal(false);
         if (triggerType !== 'math') setShowMathModal(false);
         if (triggerType !== 'settings') setShowSettingsModal(false);
+        if (triggerType !== 'user') setShowUserDropdown(false);
         return;
       }
 
@@ -613,6 +754,7 @@ export default function App() {
       setShowThumbnailsModal(false);
       setShowMathModal(false);
       setShowSettingsModal(false);
+      setShowUserDropdown(false);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -624,6 +766,7 @@ export default function App() {
         setShowThumbnailsModal(false);
         setShowMathModal(false);
         setShowSettingsModal(false);
+        setShowUserDropdown(false);
       }
     };
 
@@ -641,6 +784,7 @@ export default function App() {
     showThumbnailsModal,
     showMathModal,
     showSettingsModal,
+    showUserDropdown,
   ]);
 
   // NATIVE iPAD APP VIEWPORT LOCK:
@@ -6601,17 +6745,9 @@ export default function App() {
 
           {/* 30s Google Drive Sync Pill */}
           <button
-            onClick={() => {
-              setSyncStatus('syncing');
-              window.setTimeout(() => {
-                setSyncStatus('synced');
-                setIsDirty(false);
-                setSecondsToNextSync(30);
-                showToast('☁️ Συγχρονίστηκε με το Google Drive!');
-              }, 400);
-            }}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] text-[11px] text-sky-200 cursor-pointer"
-            title="Αυτόματος Συγχρονισμός Google Drive κάθε 30s"
+            onClick={() => void performDrivePdfSync(true)}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] text-sky-200 transition cursor-pointer"
+            title="Αυτόματος Συγχρονισμός PDF με Google Drive (/BestNotes) κάθε 30s (Πάτησε για άμεσο συγχρονισμό)"
           >
             <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
             <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
@@ -6626,60 +6762,231 @@ export default function App() {
             <SlidersHorizontal className="w-4 h-4" />
           </button>
 
-          {/* Firebase Auth User / Login & Logout to Landing Page */}
-          {currentUser ? (
-            <div className="flex items-center gap-1">
-              <span
-                className="px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-[11px] font-semibold text-emerald-200 max-w-[100px] truncate hidden md:inline"
-                title={`Συνδεδεμένος ως ${currentUser.email || currentUser.displayName || 'Χρήστης'}`}
+          {/* Classic Person Icon Button & Profile + Google Drive PDF Sync Dropdown */}
+          <div className="relative">
+            <button
+              data-popover-trigger="user"
+              onClick={() => setShowUserDropdown((v) => !v)}
+              className={`relative p-1.5 rounded-lg transition cursor-pointer ${
+                showUserDropdown ? 'bg-[#0066ff] text-white shadow-xs' : 'hover:bg-white/10 text-slate-100'
+              }`}
+              title={
+                currentUser
+                  ? `Λογαριασμός (${currentUser.displayName || currentUser.email || 'Χρήστης'}) & Google Drive Sync`
+                  : 'Λογαριασμός & Google Drive Sync (/BestNotes)'
+              }
+            >
+              <UserIcon className="w-4 h-4" />
+              {(currentUser || driveAccessToken) && (
+                <span
+                  className={`absolute top-1 right-1 w-2 h-2 rounded-full border border-[#1b2a4a] ${
+                    driveAccessToken ? 'bg-emerald-400' : 'bg-sky-400'
+                  }`}
+                />
+              )}
+            </button>
+
+            {showUserDropdown && (
+              <div
+                data-popover-panel="user"
+                className="absolute right-0 top-full mt-2 w-72 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-3.5 z-50 space-y-3"
               >
-                {currentUser.displayName || currentUser.email?.split('@')[0] || 'Account'}
-              </span>
-              <button
-                onClick={async () => {
-                  explicitLandingNavRef.current = true;
-                  try {
-                    localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
-                  } catch {
-                    // ignore
-                  }
-                  await signOut(auth);
-                  setViewMode('landing');
-                  showToast('👋 Αποσυνδέθηκες και επέστρεψες στην Αρχική Σελίδα.');
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-xs font-bold text-rose-100 transition cursor-pointer"
-                title="Αποσύνδεση (Logout) & Επιστροφή στην Αρχική Σελίδα (Landing Page)"
-              >
-                <LogOut className="w-3.5 h-3.5 text-rose-300" />
-                <span>Logout</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => {
-                  setAuthMode('signin');
-                  setShowAuthModal(true);
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#007185] hover:bg-[#005f70] text-xs font-bold text-white transition cursor-pointer shadow-xs"
-                title="Σύνδεση / Εγγραφή με Google ή Email"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Login</span>
-              </button>
-              <button
-                onClick={() => {
-                  explicitLandingNavRef.current = true;
-                  setViewMode('landing');
-                }}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-rose-500/30 border border-white/15 text-xs font-semibold text-slate-200 transition cursor-pointer"
-                title="Έξοδος στην Αρχική Σελίδα (Landing Page)"
-              >
-                <LogOut className="w-3.5 h-3.5 text-rose-300" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
-            </div>
-          )}
+                {/* 1. User Account Info (Name + Email) & Logout */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center shrink-0">
+                      <UserIcon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-[#1b2a4a] truncate">
+                        {currentUser
+                          ? currentUser.displayName || currentUser.email?.split('@')[0] || 'Χρήστης BestNotes'
+                          : 'Επισκέπτης (Guest)'}
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {currentUser?.email || 'Χωρίς σύνδεση λογαριασμού'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {currentUser ? (
+                    <button
+                      onClick={async () => {
+                        setShowUserDropdown(false);
+                        explicitLandingNavRef.current = true;
+                        try {
+                          localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
+                        } catch {
+                          // ignore
+                        }
+                        await signOut(auth);
+                        setViewMode('landing');
+                        showToast('👋 Αποσυνδέθηκες και επέστρεψες στην Αρχική Σελίδα.');
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 transition cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Logout (Αποσύνδεση)</span>
+                    </button>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          setAuthMode('signin');
+                          setShowAuthModal(true);
+                        }}
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#007185] hover:bg-[#005f70] text-xs font-bold text-white transition cursor-pointer"
+                      >
+                        <LogIn className="w-3.5 h-3.5" />
+                        <span>Login</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          explicitLandingNavRef.current = true;
+                          setViewMode('landing');
+                        }}
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 transition cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Logout</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Google Drive Login & /BestNotes Same-Name PDF Sync */}
+                <div className="pt-2.5 border-t border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#1b2a4a] flex items-center gap-1.5">
+                      <Cloud className="w-3.5 h-3.5 text-[#0066ff]" />
+                      <span>Google Drive Sync (/BestNotes)</span>
+                    </span>
+                    {driveAccessToken && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold">
+                        Συνδεδεμένο
+                      </span>
+                    )}
+                  </div>
+
+                  {driveAccessToken ? (
+                    <div className="space-y-2">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px]">
+                        <div className="text-slate-500">Λογαριασμός Google Drive:</div>
+                        <div className="font-semibold text-slate-800 truncate">{driveEmail || 'Google Drive Account'}</div>
+                        <div className="text-[10px] text-sky-700 font-medium mt-0.5 truncate">
+                          📁 BestNotes{activeNotebook.folder ? ` / ${activeNotebook.folder}` : ''} / {activeNotebook.title}.pdf
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => void performDrivePdfSync(true)}
+                        disabled={syncStatus === 'syncing'}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                        <span>
+                          {syncStatus === 'syncing'
+                            ? 'Συγχρονισμός PDF...'
+                            : 'Συγχρονισμός σε PDF (ίδιο όνομα)'}
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => void performAllNotebooksDrivePdfSync()}
+                        disabled={driveSyncingAll || syncStatus === 'syncing'}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 disabled:opacity-50 text-[#1b2a4a] text-[11px] font-semibold transition cursor-pointer"
+                      >
+                        <Cloud className="w-3.5 h-3.5 text-sky-600" />
+                        <span>
+                          {driveSyncingAll
+                            ? 'Συγχρονισμός όλων των φακέλων...'
+                            : 'Συγχρονισμός Όλων των Σημειώσεων & Φακέλων'}
+                        </span>
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => void handleDownloadActiveNotebookPdf()}
+                          className="flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer"
+                        >
+                          <FileText className="w-3 h-3" />
+                          <span>Λήψη PDF</span>
+                        </button>
+                        {lastDrivePdfLink && (
+                          <a
+                            href={lastDrivePdfLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition"
+                            title="Άνοιγμα του συγχρονισμένου PDF στο Google Drive"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>Drive</span>
+                          </a>
+                        )}
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await signInToGoogleDrive();
+                              setDriveAccessToken(res.accessToken);
+                              setDriveEmail(res.email || res.displayName);
+                              localStorage.setItem('bestnotes_drive_token_v1', res.accessToken);
+                              localStorage.setItem('bestnotes_drive_email_v1', res.email || res.displayName);
+                              await performDrivePdfSync(true, res.accessToken);
+                            } catch (err: any) {
+                              showToast(`⚠️ Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
+                            }
+                          }}
+                          className="px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-600 transition cursor-pointer"
+                          title="Αλλαγή ή ανανέωση λογαριασμού Google Drive"
+                        >
+                          Αλλαγή
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Συνδέσου στο Google Drive για να δημιουργηθεί ο φάκελος <b>BestNotes</b> και να συγχρονίζονται αυτόματα οι σημειώσεις και οι φάκελοί σου σε <b>PDF</b> με το ίδιο όνομα.
+                      </p>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await signInToGoogleDrive();
+                            setDriveAccessToken(res.accessToken);
+                            setDriveEmail(res.email || res.displayName);
+                            try {
+                              localStorage.setItem('bestnotes_drive_token_v1', res.accessToken);
+                              localStorage.setItem('bestnotes_drive_email_v1', res.email || res.displayName);
+                            } catch {
+                              // ignore
+                            }
+                            showToast(`✅ Συνδέθηκες στο Google Drive (${res.email})! Συγχρονισμός στο /BestNotes...`);
+                            await performDrivePdfSync(true, res.accessToken);
+                          } catch (err: any) {
+                            showToast(`⚠️ Σφάλμα Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
+                          }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                      >
+                        <Cloud className="w-4 h-4" />
+                        <span>Google Drive Login</span>
+                      </button>
+                      <button
+                        onClick={() => void handleDownloadActiveNotebookPdf()}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Εξαγωγή & Λήψη PDF ({activeNotebook.title}.pdf)</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
