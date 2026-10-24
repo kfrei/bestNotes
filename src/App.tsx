@@ -7174,24 +7174,26 @@ export default function App() {
         style={{ touchAction: 'manipulation' }}
         className="sticky top-0 z-40 flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none"
       >
-        {/* Left Navigation Icons (Landing Page Home, Back to Library, Page Thumbnails Grid) */}
+        {/* Left Navigation Icons (BestNotes Logo -> Landing Page, Home -> Documents/Notes Library, Page Thumbnails Grid) */}
         <div className="flex items-center gap-1 pb-1.5">
           <button
             onClick={() => {
               explicitLandingNavRef.current = true;
               setViewMode('landing');
             }}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-cyan-300 transition cursor-pointer"
-            title="Αρχική Σελίδα Παρουσίασης (Landing Page)"
+            className="flex items-center justify-center p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+            title="Αρχική Σελίδα Παρουσίασης BestNotes (Landing Page)"
           >
-            <Home className="w-4 h-4" />
+            <img src="/icon.svg" alt="BestNotes" className="w-6 h-6 rounded-md shadow-xs shrink-0" />
           </button>
           <button
-            onClick={() => setViewMode(viewMode === 'library' ? 'editor' : 'library')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-white/90 transition cursor-pointer"
-            title="Σημειώσεις & Φάκελοι (Βιβλιοθήκη)"
+            onClick={() => setViewMode('library')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer ${
+              viewMode === 'library' ? 'bg-white/15 text-white' : 'text-white/90'
+            }`}
+            title="Έγγραφα & Σημειώσεις (Βιβλιοθήκη)"
           >
-            <ChevronLeft className="w-4 h-4 text-sky-300" />
+            <Home className="w-4 h-4 text-sky-300" />
             <span className="text-xs font-semibold hidden sm:inline">Σημειώσεις</span>
           </button>
 
