@@ -60,6 +60,7 @@ export interface StrokeObject {
   color: string;
   fillColor?: string;
   fillStyle?: FillStyleType;
+  fillTransparency?: 20 | 50 | 90; // Fill transparency percentage: 90% (very transparent, default), 50% (medium), 20% (almost solid)
   width: number;
   opacity: number;
   lineStyle?: LineStyleType;

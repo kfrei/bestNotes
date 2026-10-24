@@ -284,6 +284,7 @@ export default function App() {
   const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
   const [fillColor, setFillColor] = useState<string>('#fef08a');
   const [fillStyle, setFillStyle] = useState<FillStyleType>('none');
+  const [fillTransparency, setFillTransparency] = useState<20 | 50 | 90>(90);
   const [strokeWidth, setStrokeWidth] = useState<number>(3.0);
   const [widthSlots, setWidthSlots] = useState<number[]>([2.0, 3.5, 6.5]);
   const [activeWidthSlotIdx, setActiveWidthSlotIdx] = useState<number>(1);
@@ -1212,6 +1213,8 @@ export default function App() {
       });
       const isFilled3D = Boolean(s.fillStyle && s.fillStyle !== 'none');
       const shadeColor = s.color || s.fillColor || '#2563eb';
+      const fillTrans3D = s.fillTransparency ?? 90;
+      const alphaScale3D = (fillTrans3D === 20 ? 0.8 : fillTrans3D === 50 ? 0.5 : 0.11) / 0.24;
 
       const traceEllipseBilerp = (
         uc: number,
@@ -1248,7 +1251,7 @@ export default function App() {
           // Front face fill
           ctx.save();
           ctx.fillStyle = shadeColor;
-          ctx.globalAlpha = 0.22;
+          ctx.globalAlpha = Math.min(0.92, 0.22 * alphaScale3D);
           ctx.beginPath();
           ctx.moveTo(fTL.x, fTL.y);
           ctx.lineTo(fTR.x, fTR.y);
@@ -1258,7 +1261,7 @@ export default function App() {
           ctx.fill();
 
           // Top 3D face fill (lighter shade)
-          ctx.globalAlpha = 0.16;
+          ctx.globalAlpha = Math.min(0.92, 0.16 * alphaScale3D);
           ctx.beginPath();
           ctx.moveTo(fTL.x, fTL.y);
           ctx.lineTo(bTL.x, bTL.y);
@@ -1268,7 +1271,7 @@ export default function App() {
           ctx.fill();
 
           // Right 3D face fill (deeper shade)
-          ctx.globalAlpha = 0.36;
+          ctx.globalAlpha = Math.min(0.92, 0.36 * alphaScale3D);
           ctx.beginPath();
           ctx.moveTo(fTR.x, fTR.y);
           ctx.lineTo(bTR.x, bTR.y);
@@ -1312,7 +1315,7 @@ export default function App() {
           ctx.save();
           ctx.fillStyle = shadeColor;
           // Cylinder body fill
-          ctx.globalAlpha = 0.22;
+          ctx.globalAlpha = Math.min(0.92, 0.22 * alphaScale3D);
           ctx.beginPath();
           traceEllipseBilerp(0.5, 0.14, 0.5, 0.14, Math.PI, Math.PI * 2, true);
           ctx.lineTo(botRight.x, botRight.y);
@@ -1322,14 +1325,14 @@ export default function App() {
           ctx.fill();
 
           // Top cap ellipse fill (slightly deeper shade for 3D depth)
-          ctx.globalAlpha = 0.36;
+          ctx.globalAlpha = Math.min(0.92, 0.36 * alphaScale3D);
           ctx.beginPath();
           traceEllipseBilerp(0.5, 0.14, 0.5, 0.14, 0, Math.PI * 2, true);
           ctx.closePath();
           ctx.fill();
 
           // Bottom cap ellipse subtle fill
-          ctx.globalAlpha = 0.28;
+          ctx.globalAlpha = Math.min(0.92, 0.28 * alphaScale3D);
           ctx.beginPath();
           traceEllipseBilerp(0.5, 0.86, 0.5, 0.14, 0, Math.PI * 2, true);
           ctx.closePath();
@@ -1359,14 +1362,14 @@ export default function App() {
         if (isFilled3D) {
           ctx.save();
           ctx.fillStyle = shadeColor;
-          ctx.globalAlpha = 0.24;
+          ctx.globalAlpha = Math.min(0.92, 0.24 * alphaScale3D);
           ctx.beginPath();
           traceEllipseBilerp(0.5, 0.5, 0.5, 0.5, 0, Math.PI * 2, true);
           ctx.closePath();
           ctx.fill();
 
           // Lower hemisphere extra 3D shading below the equatorial belt
-          ctx.globalAlpha = 0.14;
+          ctx.globalAlpha = Math.min(0.92, 0.14 * alphaScale3D);
           ctx.beginPath();
           traceEllipseBilerp(0.5, 0.5, 0.5, 0.18, 0, Math.PI, true);
           traceEllipseBilerp(0.5, 0.5, 0.5, 0.5, Math.PI, 0, false);
@@ -1397,7 +1400,7 @@ export default function App() {
           ctx.save();
           ctx.fillStyle = shadeColor;
           // Left triangular face
-          ctx.globalAlpha = 0.22;
+          ctx.globalAlpha = Math.min(0.92, 0.22 * alphaScale3D);
           ctx.beginPath();
           ctx.moveTo(pApex.x, pApex.y);
           ctx.lineTo(pLeft.x, pLeft.y);
@@ -1406,7 +1409,7 @@ export default function App() {
           ctx.fill();
 
           // Right triangular face (slightly darker for 3D depth)
-          ctx.globalAlpha = 0.38;
+          ctx.globalAlpha = Math.min(0.92, 0.38 * alphaScale3D);
           ctx.beginPath();
           ctx.moveTo(pApex.x, pApex.y);
           ctx.lineTo(pFront.x, pFront.y);
@@ -1560,9 +1563,10 @@ export default function App() {
     if (canFillShape) {
       // Always use the stroke's border color (s.color) for the semi-transparent shape fill!
       const shadeColor = s.color || s.fillColor || '#2563eb';
+      const fillTrans = s.fillTransparency ?? 90;
       ctx.save();
       ctx.fillStyle = shadeColor;
-      ctx.globalAlpha = 0.25;
+      ctx.globalAlpha = fillTrans === 20 ? 0.8 : fillTrans === 50 ? 0.5 : 0.11;
       ctx.fill();
       ctx.restore();
     }
@@ -3182,6 +3186,7 @@ export default function App() {
       color: strokeColor,
       fillColor: isCompletedShape && fillStyle !== 'none' ? strokeColor : undefined,
       fillStyle: isCompletedShape ? fillStyle : 'none',
+      fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
@@ -5007,6 +5012,7 @@ export default function App() {
       color: strokeColor,
       fillColor: canAutoFillStroke && fillStyle !== 'none' ? strokeColor : undefined,
       fillStyle: canAutoFillStroke ? fillStyle : 'none',
+      fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
@@ -5414,6 +5420,7 @@ export default function App() {
                   ...s,
                   fillStyle: nextFill,
                   fillColor: nextFill !== 'none' ? s.color : undefined,
+                  fillTransparency: s.fillTransparency ?? fillTransparency,
                 }
               : s
           ),
@@ -5423,7 +5430,7 @@ export default function App() {
       if (showFeedbackToast) {
         showToast(
           nextFill !== 'none'
-            ? '🎨 Γέμισμα: Ενεργό (Πλήκτρο F / Φ)'
+            ? `🎨 Γέμισμα: Ενεργό (${fillTransparency}% διαφάνεια — Πλήκτρο F / Φ)`
             : '⭕ Χωρίς Γέμισμα (Πλήκτρο F / Φ)'
         );
       }
@@ -5434,10 +5441,63 @@ export default function App() {
       activeNodeStrokeId,
       activePage.strokes,
       fillStyle,
+      fillTransparency,
       updateActivePage,
       showToast,
     ]
   );
+
+  // Cycle Fill Transparency: 20% -> 50% -> 90% (default: 90% very transparent)
+  const cycleFillTransparency = useCallback(() => {
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+        ? lastCreatedShapeIdsRef.current
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const targetStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+
+    const currentTrans: 20 | 50 | 90 =
+      targetStrokes.length > 0
+        ? targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency
+        : fillTransparency;
+    const nextTrans: 20 | 50 | 90 = currentTrans === 20 ? 50 : currentTrans === 50 ? 90 : 20;
+    setFillTransparency(nextTrans);
+
+    if (targetStrokes.length > 0) {
+      updateActivePage((page) => ({
+        ...page,
+        strokes: page.strokes.map((s) =>
+          (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
+          (s.isShape || isFreehandLoopClosed(s.points, true))
+            ? {
+                ...s,
+                fillStyle: s.fillStyle && s.fillStyle !== 'none' ? s.fillStyle : 'solid',
+                fillColor: s.color,
+                fillTransparency: nextTrans,
+              }
+            : s
+        ),
+      }));
+    }
+  }, [
+    activeTool,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    activePage.strokes,
+    fillTransparency,
+    updateActivePage,
+  ]);
 
   // GLOBAL KEYBOARD SHORTCUTS (Works identically in both Greek [Ελληνικά] & English [Αγγλικά] keyboard layouts!)
   // P / Π -> Pencil/Pen ('pen')
@@ -6572,17 +6632,26 @@ export default function App() {
                   title="Όλα τα Χρώματα & Στυλ Γραμμής"
                 />
                 <div className="h-4 w-px bg-slate-200 mx-0.5" />
-                <button
-                  onClick={() => toggleFillStyleToSelection(false)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
-                    fillStyle !== 'none'
-                      ? 'bg-[#0066ff] text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                  title="Εναλλαγή με 1 κλικ: Γέμισμα (Fill) / Χωρίς Γέμισμα — Συντόμευση: F / Φ"
-                >
-                  {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
-                </button>
+                <div className="inline-flex items-center gap-0.5 bg-slate-100/90 p-0.5 rounded-full border border-slate-200/80">
+                  <button
+                    onClick={() => toggleFillStyleToSelection(false)}
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                      fillStyle !== 'none'
+                        ? 'bg-[#0066ff] text-white shadow-xs'
+                        : 'text-slate-700 hover:bg-slate-200/80'
+                    }`}
+                    title="Εναλλαγή με 1 κλικ: Γέμισμα (Fill) / Χωρίς Γέμισμα — Συντόμευση: F / Φ"
+                  >
+                    {fillStyle !== 'none' ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
+                  </button>
+                  <button
+                    onClick={() => cycleFillTransparency()}
+                    className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-slate-600 hover:text-[#0066ff] hover:bg-white transition cursor-pointer"
+                    title={`Διαφάνεια Γεμίσματος: ${fillTransparency}% (Κλικ για εναλλαγή: 20% → 50% → 90%)`}
+                  >
+                    {fillTransparency}%
+                  </button>
+                </div>
                 {(() => {
                   const selIds =
                     selectedStrokeIds.length > 0
@@ -7102,7 +7171,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Single 1-Click Shape / Closed-Stroke Fill Toggle Button ("Γέμισμα" <-> "Χωρίς Γέμισμα") */}
+                    {/* Single 1-Click Shape / Closed-Stroke Fill Toggle Button ("Γέμισμα" <-> "Χωρίς Γέμισμα") + Discreet 20% / 50% / 90% Transparency Cycle */}
                     {(() => {
                       const selIds =
                         selectedStrokeIds.length > 0
@@ -7122,41 +7191,53 @@ export default function App() {
                       const isCurrentlyFilled = targetStrokes.some(
                         (s) => s.fillStyle && s.fillStyle !== 'none'
                       );
+                      const effectiveTrans: 20 | 50 | 90 =
+                        targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency;
                       return (
-                        <button
-                          onClick={() => {
-                            const nextFill: FillStyleType = isCurrentlyFilled ? 'none' : 'solid';
-                            setFillStyle(nextFill);
-                            const canAnyFill = targetStrokes.some(
-                              (s) => s.isShape || isFreehandLoopClosed(s.points, true)
-                            );
-                            if (!canAnyFill && nextFill !== 'none') {
-                              showToast('ℹ️ Η γραμμή πρέπει να είναι κλειστή (να ενώνονται οι άκρες της) για να πάρει γέμισμα!');
-                              return;
-                            }
-                            updateActivePage((page) => ({
-                              ...page,
-                              strokes: page.strokes.map((s) =>
-                                (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
-                                (s.isShape || isFreehandLoopClosed(s.points, true))
-                                  ? {
-                                      ...s,
-                                      fillStyle: nextFill,
-                                      fillColor: nextFill !== 'none' ? s.color : undefined,
-                                    }
-                                  : s
-                              ),
-                            }));
-                          }}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
-                            isCurrentlyFilled
-                              ? 'bg-[#0066ff] text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
-                          }`}
-                          title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα (λειτουργεί και σε κλειστά ελεύθερα σχήματα!)"
-                        >
-                          {isCurrentlyFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
-                        </button>
+                        <div className="inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                          <button
+                            onClick={() => {
+                              const nextFill: FillStyleType = isCurrentlyFilled ? 'none' : 'solid';
+                              setFillStyle(nextFill);
+                              const canAnyFill = targetStrokes.some(
+                                (s) => s.isShape || isFreehandLoopClosed(s.points, true)
+                              );
+                              if (!canAnyFill && nextFill !== 'none') {
+                                showToast('ℹ️ Η γραμμή πρέπει να είναι κλειστή (να ενώνονται οι άκρες της) για να πάρει γέμισμα!');
+                                return;
+                              }
+                              updateActivePage((page) => ({
+                                ...page,
+                                strokes: page.strokes.map((s) =>
+                                  (selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
+                                  (s.isShape || isFreehandLoopClosed(s.points, true))
+                                    ? {
+                                        ...s,
+                                        fillStyle: nextFill,
+                                        fillColor: nextFill !== 'none' ? s.color : undefined,
+                                        fillTransparency: s.fillTransparency ?? fillTransparency,
+                                      }
+                                    : s
+                                ),
+                              }));
+                            }}
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
+                              isCurrentlyFilled
+                                ? 'bg-[#0066ff] text-white shadow-xs'
+                                : 'text-slate-700 hover:bg-slate-200/80'
+                            }`}
+                            title="Εναλλαγή με 1 κλικ: Γέμισμα / Χωρίς Γέμισμα (λειτουργεί και σε κλειστά ελεύθερα σχήματα!)"
+                          >
+                            {isCurrentlyFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
+                          </button>
+                          <button
+                            onClick={() => cycleFillTransparency()}
+                            className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-slate-600 hover:text-[#0066ff] hover:bg-white transition cursor-pointer"
+                            title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για εναλλαγή: 20% → 50% → 90%)`}
+                          >
+                            {effectiveTrans}%
+                          </button>
+                        </div>
                       );
                     })()}
 
@@ -8706,7 +8787,13 @@ export default function App() {
                               <polyline
                                 key={st.id}
                                 fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
-                                fillOpacity={0.25}
+                                fillOpacity={
+                                  st.fillTransparency === 20
+                                    ? 0.8
+                                    : st.fillTransparency === 50
+                                    ? 0.5
+                                    : 0.11
+                                }
                                 stroke={st.color}
                                 strokeWidth={Math.max(3, st.width * 1.6)}
                                 strokeLinecap="round"
