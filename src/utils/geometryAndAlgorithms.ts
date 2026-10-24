@@ -1862,17 +1862,17 @@ export function get3DShapeSubPaths(s: StrokeObject): BezierPoint[][] {
   }
 
   if (s.shapeType === 'cuboid') {
-    const fTL = bilerp(0, 0);
-    const fTR = bilerp(0.74, 0);
-    const fBR = bilerp(0.74, 0.78);
-    const fBL = bilerp(0, 0.78);
-    const bTR = bilerp(1.0, 0.22);
-    const bBR = bilerp(1.0, 1.0);
-    const bBL = bilerp(0.26, 1.0);
+    const fTL = bilerp(0, 0.26);
+    const fTR = bilerp(0.78, 0.26);
+    const fBR = bilerp(0.78, 1.0);
+    const fBL = bilerp(0, 1.0);
+    const bTL = bilerp(0.22, 0);
+    const bTR = bilerp(1.0, 0);
+    const bBR = bilerp(1.0, 0.74);
     return [
       [fTL, fTR, fBR, fBL, fTL],
-      [fTR, bTR, bBR, fBR],
-      [fBL, bBL, bBR],
+      [fTL, bTL, bTR, fTR],
+      [bTR, bBR, fBR],
     ];
   }
 

@@ -1092,17 +1092,17 @@ export default function App() {
       };
 
       if (s.shapeType === 'cuboid') {
-        // 3D Cuboid / Cube matching screenshot:
-        // Front face: u in [0..0.74], v in [0..0.78]
-        // Right slanted face: (0.74, 0) -> (1.0, 0.22) -> (1.0, 1.0) -> (0.74, 0.78)
-        // Bottom slanted face: (0, 0.78) -> (0.74, 0.78) -> (1.0, 1.0) -> (0.26, 1.0)
-        const fTL = bilerp(0, 0);
-        const fTR = bilerp(0.74, 0);
-        const fBR = bilerp(0.74, 0.78);
-        const fBL = bilerp(0, 0.78);
-        const bTR = bilerp(1.0, 0.22);
-        const bBR = bilerp(1.0, 1.0);
-        const bBL = bilerp(0.26, 1.0);
+        // 3D Cuboid / Cube matching textbook -90° orientation (Front face + Top slanted face + Right slanted face):
+        // Front face: u in [0..0.78], v in [0.26..1.0]
+        // Top slanted face: (0, 0.26) -> (0.22, 0) -> (1.0, 0) -> (0.78, 0.26)
+        // Right slanted face: (0.78, 0.26) -> (1.0, 0) -> (1.0, 0.74) -> (0.78, 1.0)
+        const fTL = bilerp(0, 0.26);
+        const fTR = bilerp(0.78, 0.26);
+        const fBR = bilerp(0.78, 1.0);
+        const fBL = bilerp(0, 1.0);
+        const bTL = bilerp(0.22, 0);
+        const bTR = bilerp(1.0, 0);
+        const bBR = bilerp(1.0, 0.74);
 
         if (isFilled3D) {
           // Front face fill
@@ -1117,23 +1117,23 @@ export default function App() {
           ctx.closePath();
           ctx.fill();
 
-          // Right 3D face fill (medium shade)
-          ctx.globalAlpha = 0.34;
+          // Top 3D face fill (lighter shade)
+          ctx.globalAlpha = 0.16;
+          ctx.beginPath();
+          ctx.moveTo(fTL.x, fTL.y);
+          ctx.lineTo(bTL.x, bTL.y);
+          ctx.lineTo(bTR.x, bTR.y);
+          ctx.lineTo(fTR.x, fTR.y);
+          ctx.closePath();
+          ctx.fill();
+
+          // Right 3D face fill (deeper shade)
+          ctx.globalAlpha = 0.36;
           ctx.beginPath();
           ctx.moveTo(fTR.x, fTR.y);
           ctx.lineTo(bTR.x, bTR.y);
           ctx.lineTo(bBR.x, bBR.y);
           ctx.lineTo(fBR.x, fBR.y);
-          ctx.closePath();
-          ctx.fill();
-
-          // Bottom 3D face fill (deeper shade)
-          ctx.globalAlpha = 0.44;
-          ctx.beginPath();
-          ctx.moveTo(fBL.x, fBL.y);
-          ctx.lineTo(fBR.x, fBR.y);
-          ctx.lineTo(bBR.x, bBR.y);
-          ctx.lineTo(bBL.x, bBL.y);
           ctx.closePath();
           ctx.fill();
           ctx.restore();
@@ -1146,15 +1146,15 @@ export default function App() {
         ctx.lineTo(fBR.x, fBR.y);
         ctx.lineTo(fBL.x, fBL.y);
         ctx.closePath();
-        // Right slanted face edges
-        ctx.moveTo(fTR.x, fTR.y);
+        // Top slanted face edges
+        ctx.moveTo(fTL.x, fTL.y);
+        ctx.lineTo(bTL.x, bTL.y);
         ctx.lineTo(bTR.x, bTR.y);
+        ctx.lineTo(fTR.x, fTR.y);
+        // Right slanted face edges
+        ctx.moveTo(bTR.x, bTR.y);
         ctx.lineTo(bBR.x, bBR.y);
         ctx.lineTo(fBR.x, fBR.y);
-        // Bottom slanted face edges
-        ctx.moveTo(fBL.x, fBL.y);
-        ctx.lineTo(bBL.x, bBL.y);
-        ctx.lineTo(bBR.x, bBR.y);
         ctx.stroke();
         ctx.restore();
         return;
