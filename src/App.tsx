@@ -6858,6 +6858,7 @@ export default function App() {
   // S / Σ -> Select / Lasso ('lasso')
   // H / Η -> Highlighter ('highlighter')
   // T / Τ -> Text ('text')
+  // O / Ο -> Objects / Shapes ('shape')
   useEffect(() => {
     if (viewMode !== 'editor') return;
 
@@ -6956,6 +6957,12 @@ export default function App() {
       // T / Τ -> Text (Κείμενο)
       if (code === 'KeyT' || key === 't' || key === 'τ') {
         switchToTool('text', '🔤 Text (Κείμενο) — T / Τ');
+        return;
+      }
+
+      // O / Ο -> Objects (Σχήματα)
+      if (code === 'KeyO' || key === 'o' || key === 'ο') {
+        switchToTool('shape', '📐 Objects (Σχήματα) — O / Ο');
         return;
       }
 
@@ -8671,7 +8678,7 @@ export default function App() {
                 { id: 'pen', title: 'Pen (Μολύβι / Στυλό) — P / Π', icon: Pen },
                 { id: 'eraser', title: 'Erase (Σβήστρα) — E / Ε', icon: Eraser },
                 { id: 'highlighter', title: 'Highlight (Υπογραμμιστής) — H / Η', icon: Highlighter },
-                { id: 'shape', title: 'Shapes (Σχήματα & Φυσική)', icon: Shapes },
+                { id: 'shape', title: 'Objects (Σχήματα) — O / Ο', icon: Shapes },
                 { id: 'text', title: 'Text (Κείμενο) — T / Τ', icon: Type },
                 { id: 'lasso', title: 'Select (Επιλογή Λάσο) — S / Σ', icon: Lasso },
                 { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', icon: BezierNodesIcon },
@@ -11450,6 +11457,7 @@ export default function App() {
                 {[
                   { keys: 'P / Π', label: 'Pen (Μολύβι)', icon: <Pen className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'E / Ε', label: 'Erase (Σβήστρα)', icon: <Eraser className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'O / Ο', label: 'Objects (Σχήματα)', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'L / Λ', label: 'Laser (Κόκκινο Laser)', icon: <Radio className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'F / Φ', label: 'Fill (Γέμισμα)', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
