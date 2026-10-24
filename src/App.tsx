@@ -6393,7 +6393,6 @@ export default function App() {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
                   const currentBold = selTxt ? Boolean(selTxt.bold) : textBold;
                   const currentSize = selTxt ? selTxt.fontSize : textFontSize;
-                  const currentColor = selTxt ? selTxt.color : strokeColor;
 
                   const applyBold = (nextB: boolean) => {
                     setTextBold(nextB);
@@ -6470,20 +6469,6 @@ export default function App() {
                       >
                         A+
                       </button>
-
-                      <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
-
-                      {/* Active Color Indicator (synced with top-right colors) */}
-                      <div
-                        className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-[11px] text-slate-600"
-                        title="Το χρώμα του κειμένου αλλάζει απευθείας από τα χρώματα πάνω δεξιά!"
-                      >
-                        <span
-                          className="w-3.5 h-3.5 rounded-full border border-slate-300 shrink-0"
-                          style={{ backgroundColor: currentColor }}
-                        />
-                        <span>Χρώμα (από πάνω δεξιά)</span>
-                      </div>
 
                       {selTxt && (
                         <>
