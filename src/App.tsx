@@ -2691,12 +2691,18 @@ export default function App() {
 
     // 5. Eraser
     if (activeTool === 'eraser') {
+      if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+      if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+      if (selectedImageId) setSelectedImageId(null);
       isDrawingRef.current = true;
       eraseAtPoint(pt);
       return;
     }
 
-    // 6. Pen / Pencil / Highlighter / Shape / Laser -> Start 0ms Direct Ink!
+    // 6. Pen / Pencil / Highlighter / Shape / Laser -> Deselect any previous shape/image & Start 0ms Direct Ink!
+    if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+    if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+    if (selectedImageId) setSelectedImageId(null);
     isDrawingRef.current = true;
     snappedCurrentStrokeRef.current = null;
     currentStrokePtsRef.current = [pt];
@@ -3936,11 +3942,12 @@ export default function App() {
     );
   };
 
-  // Apply Color, Thickness, or Line Style to any selected line, shape, or group of lines!
+  // Apply Color, Thickness, or Line Style to any selected line, shape, or group of lines (ONLY when in Lasso or Direct-Node selection mode)!
   const applyColorToSelection = useCallback(
     (c: string) => {
       setStrokeColor(c);
       setFillColor(c);
+      if (activeTool !== 'lasso' && activeTool !== 'direct-node') return;
       const baseIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
@@ -3971,12 +3978,13 @@ export default function App() {
         };
       });
     },
-    [selectedStrokeIds, activeNodeStrokeId, updateActivePage]
+    [activeTool, selectedStrokeIds, activeNodeStrokeId, updateActivePage]
   );
 
   const applyWidthToSelection = useCallback(
     (w: number) => {
       setStrokeWidth(w);
+      if (activeTool !== 'lasso' && activeTool !== 'direct-node') return;
       const baseIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
@@ -4000,7 +4008,7 @@ export default function App() {
         };
       });
     },
-    [selectedStrokeIds, activeNodeStrokeId, updateActivePage]
+    [activeTool, selectedStrokeIds, activeNodeStrokeId, updateActivePage]
   );
 
   const applyLineStyleToSelection = useCallback(
@@ -4009,6 +4017,7 @@ export default function App() {
       if (nextArrowEnd !== undefined) {
         setArrowEnd(nextArrowEnd);
       }
+      if (activeTool !== 'lasso' && activeTool !== 'direct-node') return;
       const baseIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
@@ -4034,7 +4043,7 @@ export default function App() {
         };
       });
     },
-    [selectedStrokeIds, activeNodeStrokeId, updateActivePage]
+    [activeTool, selectedStrokeIds, activeNodeStrokeId, updateActivePage]
   );
 
   const handleBeautifySelected = () => {
@@ -4633,6 +4642,11 @@ export default function App() {
                       } else {
                         setActiveTool(tool.id as ToolType);
                         setShowToolSubBar(true);
+                        if (tool.id !== 'lasso' && tool.id !== 'direct-node') {
+                          setSelectedStrokeIds([]);
+                          setActiveNodeStrokeId(null);
+                          setSelectedImageId(null);
+                        }
                       }
                       setImageCropMode('none');
                     }}
