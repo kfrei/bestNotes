@@ -94,7 +94,34 @@ const STORAGE_KEY = 'bestnotes_notebooks_v1';
 const SHAPE_LIBRARY_STORAGE_KEY = 'bestnotes_shape_library_v1';
 const UI_SESSION_STORAGE_KEY = 'bestnotes_ui_session_v1';
 const AUTH_FLAG_STORAGE_KEY = 'bestnotes_auth_logged_in';
-const PRESET_COLORS = ['#111827', '#dc2626', '#2563eb', '#16a34a', '#9333ea', '#ea580c', '#0284c7', '#eab308'];
+const COLOR_SLOTS_STORAGE_KEY = 'bestnotes_color_slots_v1';
+const PRESET_COLORS = [
+  '#111827',
+  '#dc2626',
+  '#2563eb',
+  '#16a34a',
+  '#9333ea',
+  '#ea580c',
+  '#0284c7',
+  '#eab308',
+  '#db2777',
+  '#0d9488',
+  '#4f46e5',
+  '#64748b',
+];
+// 5 Primary Color Memories (indices 0..4) + 5 Most Recent Colors (indices 5..9, revealed on horizontal scroll)
+const DEFAULT_COLOR_SLOTS = [
+  '#111827',
+  '#dc2626',
+  '#2563eb',
+  '#16a34a',
+  '#9333ea',
+  '#ea580c',
+  '#0284c7',
+  '#eab308',
+  '#db2777',
+  '#0d9488',
+];
 const THICKNESS_PRESETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0];
 const CANVAS_DPR = 2; // 2x Retina HiDPI backing resolution (1840x2520) for razor-sharp, zero-"ζαγρέ" curves
 const PAGE_GAP = 44; // Vertical gap (px) between pages in Word-style continuous multi-page scroll
@@ -280,7 +307,39 @@ export default function App() {
   const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [shapePreset, setShapePreset] = useState<ShapePresetType>('sine');
   const [strokeColor, setStrokeColor] = useState<string>('#111827');
-  const [colorSlots, setColorSlots] = useState<string[]>(['#111827', '#dc2626', '#2563eb']);
+  const [colorSlots, setColorSlots] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(COLOR_SLOTS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 10) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_COLOR_SLOTS;
+  });
+  const colorStripRef = useRef<HTMLDivElement | null>(null);
+  const [colorStripPage, setColorStripPage] = useState<0 | 1>(0);
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLOR_SLOTS_STORAGE_KEY, JSON.stringify(colorSlots));
+    } catch {
+      // ignore
+    }
+  }, [colorSlots]);
+  const recordRecentColor = useCallback((c: string) => {
+    setColorSlots((prev) => {
+      const primary5 = prev.slice(0, 5);
+      const recent5 = prev.slice(5, 10);
+      if (primary5.includes(c)) return prev;
+      const nextRecent = [c, ...recent5.filter((rc) => rc !== c)].slice(0, 5);
+      while (nextRecent.length < 5) {
+        nextRecent.push(DEFAULT_COLOR_SLOTS[5 + nextRecent.length] || '#64748b');
+      }
+      return [...primary5, ...nextRecent];
+    });
+  }, []);
   const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
   const [fillColor, setFillColor] = useState<string>('#fef08a');
   const [fillStyle, setFillStyle] = useState<FillStyleType>('none');
@@ -5264,6 +5323,7 @@ export default function App() {
     (c: string) => {
       setStrokeColor(c);
       setFillColor(c);
+      recordRecentColor(c);
       const activeTxtId = selectedTextId || editingTextId;
       if (activeTxtId) {
         updateActivePage((page) => ({
@@ -5303,7 +5363,7 @@ export default function App() {
         };
       });
     },
-    [activeTool, selectedStrokeIds, activeNodeStrokeId, selectedTextId, editingTextId, updateActivePage]
+    [activeTool, selectedStrokeIds, activeNodeStrokeId, selectedTextId, editingTextId, updateActivePage, recordRecentColor]
   );
 
   const applyWidthToSelection = useCallback(
@@ -6607,19 +6667,85 @@ export default function App() {
 
               <div className="h-5 w-px bg-slate-200" />
 
-              {/* 3 Quick Color Slots + Rainbow Picker */}
-              <div className="flex items-center gap-1.5">
-                {colorSlots.map((c, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => applyColorToSelection(c)}
-                    className={`w-6 h-6 rounded-full transition cursor-pointer ${
-                      strokeColor === c ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110' : 'opacity-85 hover:opacity-100'
-                    }`}
-                    style={{ backgroundColor: c }}
-                    title="Αλλαγή χρώματος (και σε επιλεγμένη γραμμή / σχήμα / group)"
-                  />
-                ))}
+              {/* 5 Color Memories + Scroll Left/Right for 5 Most Recent Colors + Rainbow Picker */}
+              <div className="flex items-center gap-1">
+                <div
+                  ref={colorStripRef}
+                  onScroll={(e) => {
+                    const sl = e.currentTarget.scrollLeft;
+                    setColorStripPage(sl > 70 ? 1 : 0);
+                  }}
+                  onWheel={(e) => {
+                    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+                    if (Math.abs(delta) > 2) {
+                      e.preventDefault();
+                      e.currentTarget.scrollBy({ left: delta > 0 ? 156 : -156, behavior: 'smooth' });
+                    }
+                  }}
+                  style={{
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    touchAction: 'pan-x',
+                    WebkitOverflowScrolling: 'touch',
+                  }}
+                  className="w-[152px] overflow-x-auto snap-x snap-mandatory flex items-center scroll-smooth [&::-webkit-scrollbar]:hidden"
+                  title="5 Μνήμες Χρωμάτων — Κάνε scroll δεξιά-αριστερά για τα 5 πιο πρόσφατα χρώματα!"
+                >
+                  {/* Page 1: 5 Primary Color Memories */}
+                  <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
+                    {colorSlots.slice(0, 5).map((c, idx) => (
+                      <button
+                        key={`mem-${idx}`}
+                        onClick={() => applyColorToSelection(c)}
+                        className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
+                          strokeColor === c
+                            ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
+                            : 'opacity-85 hover:opacity-100'
+                        }`}
+                        style={{ backgroundColor: c }}
+                        title={`Μνήμη Χρώματος #${idx + 1} (${c}) — Σύρε αριστερά για τα 5 πρόσφατα`}
+                      />
+                    ))}
+                  </div>
+                  {/* Page 2: 5 Most Recent Colors */}
+                  <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
+                    {colorSlots.slice(5, 10).map((c, idx) => (
+                      <button
+                        key={`rec-${idx}`}
+                        onClick={() => applyColorToSelection(c)}
+                        className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
+                          strokeColor === c
+                            ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
+                            : 'opacity-85 hover:opacity-100'
+                        }`}
+                        style={{ backgroundColor: c }}
+                        title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Σύρε δεξιά για τις 5 βασικές μνήμες`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const nextPage: 0 | 1 = colorStripPage === 0 ? 1 : 0;
+                    setColorStripPage(nextPage);
+                    colorStripRef.current?.scrollTo({
+                      left: nextPage === 1 ? 152 : 0,
+                      behavior: 'smooth',
+                    });
+                  }}
+                  className="flex flex-col items-center justify-center px-1 py-0.5 rounded hover:bg-slate-200/70 text-[9px] font-bold text-slate-500 cursor-pointer leading-none"
+                  title={
+                    colorStripPage === 0
+                      ? 'Προβολή: 5 Μνήμες (Κλικ ή Scroll για τα 5 Πρόσφατα)'
+                      : 'Προβολή: 5 Πρόσφατα (Κλικ ή Scroll για τις 5 Μνήμες)'
+                  }
+                >
+                  <span>{colorStripPage === 0 ? '1/2' : '2/2'}</span>
+                  <span className="flex gap-0.5 mt-0.5">
+                    <span className={`w-1 h-1 rounded-full ${colorStripPage === 0 ? 'bg-[#0066ff]' : 'bg-slate-300'}`} />
+                    <span className={`w-1 h-1 rounded-full ${colorStripPage === 1 ? 'bg-[#0066ff]' : 'bg-slate-300'}`} />
+                  </span>
+                </button>
                 <button
                   data-popover-trigger="color"
                   onClick={() => {
@@ -6628,7 +6754,7 @@ export default function App() {
                     setShowLayersPanel(false);
                     setShowShapeLibraryPanel(false);
                   }}
-                  className="w-6 h-6 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
+                  className="w-6 h-6 shrink-0 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
                   title="Όλα τα Χρώματα & Στυλ Γραμμής"
                 />
                 <div className="h-4 w-px bg-slate-200 mx-0.5" />
@@ -6791,8 +6917,9 @@ export default function App() {
                     key={c}
                     onClick={() => {
                       applyColorToSelection(c);
-                      if (!colorSlots.includes(c)) {
-                        setColorSlots([c, colorSlots[0], colorSlots[1]]);
+                      if (!colorSlots.slice(0, 5).includes(c)) {
+                        setColorStripPage(1);
+                        colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                       }
                     }}
                     className={`w-8 h-8 rounded-full border border-slate-200 mx-auto cursor-pointer transition ${
@@ -6810,8 +6937,9 @@ export default function App() {
                   onChange={(e) => {
                     const c = e.target.value;
                     applyColorToSelection(c);
-                    if (!colorSlots.includes(c)) {
-                      setColorSlots([c, colorSlots[0], colorSlots[1]]);
+                    if (!colorSlots.slice(0, 5).includes(c)) {
+                      setColorStripPage(1);
+                      colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                     }
                   }}
                   className="w-8 h-7 rounded cursor-pointer border border-slate-200"
@@ -7240,32 +7368,6 @@ export default function App() {
                         </div>
                       );
                     })()}
-
-                    {/* Direct Inline Color Swatches for Selected Line, Shape, or Group of Lines! */}
-                    <div
-                      className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200"
-                      title="Αλλαγή χρώματος επιλεγμένης γραμμής, σχήματος ή Group"
-                    >
-                      <span className="text-[10px] font-bold text-slate-500 mr-0.5">Χρώμα:</span>
-                      {PRESET_COLORS.slice(0, 8).map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => applyColorToSelection(c)}
-                          className={`w-4 h-4 rounded-full border border-white/80 shadow-2xs transition cursor-pointer ${
-                            strokeColor === c ? 'ring-2 ring-[#0066ff] scale-110' : 'hover:scale-110'
-                          }`}
-                          style={{ backgroundColor: c }}
-                          title={`Αλλαγή χρώματος σε ${c}`}
-                        />
-                      ))}
-                      <input
-                        type="color"
-                        value={strokeColor}
-                        onChange={(e) => applyColorToSelection(e.target.value)}
-                        className="w-5 h-5 rounded-full cursor-pointer border-0 bg-transparent p-0"
-                        title="Επιλογή οποιουδήποτε χρώματος για την επιλογή"
-                      />
-                    </div>
 
                     {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (() => {
                       const selStroke = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
