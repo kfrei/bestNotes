@@ -6,7 +6,6 @@ import {
   Eraser,
   Shapes,
   Lasso,
-  MousePointer,
   Image as ImageIcon,
   Layers,
   Undo2,
@@ -106,6 +105,33 @@ interface SavedLibraryItem {
   strokes?: StrokeObject[];
   image?: ImageObject;
 }
+
+// Photoshop / Illustrator-style Bezier Curve Nodes Icon:
+// A smooth curved arch with 3 square anchor boxes (at the left endpoint, top apex, and right endpoint)
+const BezierNodesIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    {/* Left & Right Curved Arc Segments connecting the 3 square anchor nodes */}
+    <path d="M 4.1 15.2 Q 5.8 6.4 9.8 5.9" />
+    <path d="M 14.2 5.9 Q 18.2 6.4 19.9 15.2" />
+    {/* Subtle tangent control bar at the top apex */}
+    <line x1="6.2" y1="5.9" x2="9.8" y2="5.9" strokeWidth="1.4" strokeOpacity="0.65" />
+    <line x1="14.2" y1="5.9" x2="17.8" y2="5.9" strokeWidth="1.4" strokeOpacity="0.65" />
+    <circle cx="5.4" cy="5.9" r="1.1" fill="currentColor" stroke="none" />
+    <circle cx="18.6" cy="5.9" r="1.1" fill="currentColor" stroke="none" />
+    {/* 3 Square Anchor Boxes: Left End, Top Peak, Right End */}
+    <rect x="1.5" y="15.2" width="4.4" height="4.4" rx="0.7" />
+    <rect x="9.8" y="3.7" width="4.4" height="4.4" rx="0.7" />
+    <rect x="18.1" y="15.2" width="4.4" height="4.4" rx="0.7" />
+  </svg>
+);
 
 export default function App() {
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
@@ -5365,11 +5391,34 @@ export default function App() {
         switchToTool('text', '🔤 Κείμενο (Πλήκτρο T / Τ)');
         return;
       }
+
+      // N / Ν -> Κόμβοι Bezier ('direct-node')
+      if (code === 'KeyN' || key === 'n' || key === 'ν') {
+        e.preventDefault();
+        setActiveTool('direct-node');
+        setShowToolSubBar(true);
+        if (selectedStrokeIds.length > 0 && !activeNodeStrokeId) {
+          setActiveNodeStrokeId(selectedStrokeIds[0]);
+        }
+        setSelectedTextId(null);
+        setEditingTextId(null);
+        setImageCropMode('none');
+        showToast('✒️ Κόμβοι Bezier (Πλήκτρο N / Ν)');
+        return;
+      }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [viewMode, editingTextId, showMathModal, toggleFillStyleToSelection, showToast]);
+  }, [
+    viewMode,
+    editingTextId,
+    showMathModal,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    toggleFillStyleToSelection,
+    showToast,
+  ]);
 
   // NOTE: Temporarily disabled from toolbar until final phase ("Στρώσιμο" handwriting beautifier)
   const _handleBeautifySelected = () => {
@@ -6162,7 +6211,7 @@ export default function App() {
                 { id: 'shape', title: 'Σχήματα & Φυσική (Shapes)', icon: Shapes },
                 { id: 'text', title: 'Προσθήκη Κειμένου (Text) — Συντόμευση: T / Τ', icon: Type },
                 { id: 'lasso', title: 'Επιλογή Λάσο (Select & Transform) — Συντόμευση: S / Σ', icon: Lasso },
-                { id: 'direct-node', title: 'Κόμβοι Bezier (4 Κόμβοι σε Κύκλο/Έλλειψη)', icon: MousePointer },
+                { id: 'direct-node', title: 'Κόμβοι Καμπύλης & Σχημάτων (Nodes) — Συντόμευση: N / Ν', icon: BezierNodesIcon },
                 { id: 'tape', title: 'Ταινία Απόκρυψης (Tape)', icon: Bandage },
                 { id: 'laser', title: 'Κόκκινο Laser Pointer — Συντόμευση: L / Λ', icon: Radio },
               ].map((tool) => {
@@ -7002,9 +7051,9 @@ export default function App() {
                             setActiveTool('direct-node');
                           }}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 text-white font-semibold cursor-pointer"
-                          title="Επεξεργασία των βασικών Κόμβων (Άκρα & Κορυφές) της γραμμής ή του σχήματος"
+                          title="Επεξεργασία των βασικών Κόμβων (Άκρα & Κορυφές) της γραμμής ή του σχήματος — Συντόμευση: N / Ν"
                         >
-                          <MousePointer className="w-3.5 h-3.5" />
+                          <BezierNodesIcon className="w-3.5 h-3.5" />
                           <span>{nodeCountLabel} Κόμβοι</span>
                         </button>
                       );
@@ -8801,6 +8850,7 @@ export default function App() {
                   { keys: 'L / Λ', label: '🔴 Κόκκινο Laser' },
                   { keys: 'F / Φ', label: '🎨 Γέμισμα ↔ Ξεγέμισμα' },
                   { keys: 'S / Σ', label: '🪢 Επιλογή Λάσο' },
+                  { keys: 'N / Ν', label: '✒️ Κόμβοι (Nodes)' },
                   { keys: 'H / Η', label: '🖍️ Υπογραμμιστής' },
                   { keys: 'T / Τ', label: '🔤 Κείμενο (Text)' },
                   { keys: 'Esc', label: '✖️ Κλείσιμο Παραθύρων' },
