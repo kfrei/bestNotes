@@ -164,6 +164,7 @@ export default function App() {
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>('precision');
+  const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [shapePreset, setShapePreset] = useState<ShapePresetType>('sine');
   const [strokeColor, setStrokeColor] = useState<string>('#111827');
   const [colorSlots, setColorSlots] = useState<string[]>(['#111827', '#dc2626', '#2563eb']);
@@ -612,7 +613,8 @@ export default function App() {
     return { minX, minY, maxX, maxY };
   };
 
-  const isPointNearStroke = (pt: { x: number; y: number }, s: StrokeObject, tol = 18): boolean => {
+  const isPointNearStroke = (pt: { x: number; y: number }, s: StrokeObject, baseTol = 18): boolean => {
+    const tol = s.tool === 'highlighter' ? baseTol + (s.width || 3) * 1.9 : baseTol;
     if (s.points.some((p) => distance(pt, p) < tol)) return true;
     const b = getStrokeBounds(s);
     if (pt.x < b.minX - tol || pt.x > b.maxX + tol || pt.y < b.minY - tol || pt.y > b.maxY + tol) {
@@ -3738,10 +3740,16 @@ export default function App() {
     setActiveNodeStrokeId(null);
   };
 
-  const getEraserRadius = () =>
-    eraserSubType === 'precision'
-      ? Math.max(4, strokeWidth * 1.6)
-      : Math.max(12, strokeWidth * 2.8);
+  const getEraserRadius = () => {
+    if (eraserSize === 'small') {
+      return eraserSubType === 'precision' ? 6 : 10;
+    }
+    if (eraserSize === 'medium') {
+      return eraserSubType === 'precision' ? 18 : 26;
+    }
+    // 'large' — significantly larger eraser radius
+    return eraserSubType === 'precision' ? 46 : 60;
+  };
 
   const drawEraserCursorOverlay = (pt: { x: number; y: number }) => {
     const canvas = activeCanvasRef.current;
@@ -6587,44 +6595,63 @@ export default function App() {
 
                 {activeTool === 'eraser' && (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {[
-                      {
-                        id: 'precision',
-                        label: '✂️ Pixel (Μόνο όπου ακουμπάει / Τμήμα Ευθείας)',
-                      },
-                      {
-                        id: 'stroke',
-                        label: '🧹 Ολόκληρη Γραμμή (Stroke)',
-                      },
-                      {
-                        id: 'highlighter-only',
-                        label: '🖍️ Μόνο Μαρκαδόρος',
-                      },
-                    ].map((er) => (
-                      <button
-                        key={er.id}
-                        onClick={() => setEraserSubType(er.id as EraserSubType)}
-                        className={`px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
-                          eraserSubType === er.id
-                            ? 'bg-[#0066ff] text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        {er.label}
-                      </button>
-                    ))}
+                    {/*
+                      NOTE (Backup / Restore Point):
+                      { id: 'highlighter-only', label: '🖍️ Μόνο Μαρκαδόρος' } removed per user request;
+                      both 'precision' (Pixel) and 'stroke' (Stroke) erasers now naturally erase highlighter strokes too.
+                    */}
+                    <button
+                      onClick={() => setEraserSubType('precision')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
+                        eraserSubType === 'precision'
+                          ? 'bg-[#0066ff] text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                      title="Pixel Σβήστρα (σβήνει ακριβώς το σημείο όπου ακουμπάει, και σε γραμμές και σε μαρκαδόρο)"
+                    >
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 18 18" fill="none">
+                        <circle
+                          cx="9"
+                          cy="9"
+                          r="6.5"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeDasharray="2.2 2"
+                          fill="currentColor"
+                          fillOpacity="0.14"
+                        />
+                        <circle cx="9" cy="9" r="1.6" fill="currentColor" />
+                      </svg>
+                      <span>Pixel</span>
+                    </button>
+
+                    <button
+                      onClick={() => setEraserSubType('stroke')}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-semibold transition cursor-pointer ${
+                        eraserSubType === 'stroke'
+                          ? 'bg-[#0066ff] text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                      title="Stroke Σβήστρα (σβήνει ολόκληρη τη γραμμή ή τον μαρκαδόρο με ένα άγγιγμα)"
+                    >
+                      <Eraser className="w-3.5 h-3.5 shrink-0" />
+                      <span>Stroke</span>
+                    </button>
+
                     <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
                     <span className="text-[11px] font-semibold text-slate-500">Μέγεθος:</span>
-                    {[
-                      { label: 'Μικρή', w: 2.0 },
-                      { label: 'Μεσαία', w: 4.5 },
-                      { label: 'Μεγάλη', w: 9.0 },
-                    ].map((sz) => {
-                      const activeSz = Math.abs(strokeWidth - sz.w) < 1.1;
+                    {(
+                      [
+                        { id: 'small', label: 'Μικρή' },
+                        { id: 'medium', label: 'Μεσαία' },
+                        { id: 'large', label: 'Μεγάλη' },
+                      ] as const
+                    ).map((sz) => {
+                      const activeSz = eraserSize === sz.id;
                       return (
                         <button
-                          key={sz.label}
-                          onClick={() => setStrokeWidth(sz.w)}
+                          key={sz.id}
+                          onClick={() => setEraserSize(sz.id)}
                           className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
                             activeSz
                               ? 'bg-rose-500 text-white shadow-xs'

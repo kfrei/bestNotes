@@ -1814,7 +1814,8 @@ export function eraseStrokeByCircle(
 ): { modified: boolean; pieces: StrokeObject[] } {
   if (s.points.length === 0) return { modified: false, pieces: [] };
 
-  const effRadius = Math.max(2, radius + Math.min(4, (s.width || 2) * 0.35));
+  const strokeHalfW = s.tool === 'highlighter' ? (s.width || 3) * 1.9 : Math.min(4, (s.width || 2) * 0.5);
+  const effRadius = Math.max(2, radius + strokeHalfW);
   const isParametric =
     ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) ||
     ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) ||
