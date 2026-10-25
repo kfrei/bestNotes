@@ -122,6 +122,7 @@ import {
   generateSmartGreekTagsFromImages,
   transcribeHandwrittenStrokesWithGemini,
   transcribeHandwrittenMathWithGemini,
+  splitAndCleanMathLatexLines,
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
   recomputeAutoSmoothHandles,
@@ -14746,14 +14747,12 @@ export default function App() {
         return;
       }
 
-      const cleanLatex = mathRes.latex.trim();
-      const plainText = (mathRes.plainText || cleanLatex).trim();
-      const lineCount = Math.max(
-        1,
-        cleanLatex.includes('\\begin{aligned}')
-          ? cleanLatex.split('\\\\').length
-          : plainText.split(/\r?\n/).filter((l) => l.trim().length > 0).length
-      );
+      const cleanedRows = splitAndCleanMathLatexLines(mathRes.latex);
+      const cleanLatex = cleanedRows.join('\n').trim();
+      const plainText = splitAndCleanMathLatexLines(mathRes.plainText || cleanLatex)
+        .join('\n')
+        .trim();
+      const lineCount = Math.max(1, cleanedRows.length);
       const estimatedSize = Math.round(((maxY - minY) / lineCount) * 0.42);
       const finalFontSize = Math.max(18, Math.min(34, estimatedSize || 22));
       const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
@@ -18489,7 +18488,12 @@ export default function App() {
                           <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
                           <button
                             onClick={() => {
-                              if (editingTextId === selTxt.id) {
+                              if (selTxt.isMath) {
+                                setMathInput(
+                                  splitAndCleanMathLatexLines(selTxt.latex || selTxt.text || '').join('\n')
+                                );
+                                setShowMathModal(true);
+                              } else if (editingTextId === selTxt.id) {
                                 setEditingTextId(null);
                               } else {
                                 setEditingTextId(selTxt.id);
@@ -21290,12 +21294,50 @@ export default function App() {
                               >
                                 A+
                               </button>
+                              {txt.isMath && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    const currentLines = splitAndCleanMathLatexLines(txt.latex || txt.text || '');
+                                    let nextLatex = currentLines.join('\n');
+                                    if (currentLines.length === 1) {
+                                      const line = currentLines[0];
+                                      const arrowMatches = [...line.matchAll(/(\\Rightarrow|\\Leftrightarrow|\\implies)/g)];
+                                      if (arrowMatches.length >= 2) {
+                                        const midMatch = arrowMatches[Math.floor(arrowMatches.length / 2)];
+                                        if (midMatch.index !== undefined) {
+                                          nextLatex = `${line.slice(0, midMatch.index).trim()}\n${line.slice(midMatch.index).trim()}`;
+                                        }
+                                      } else if (arrowMatches.length === 1 && arrowMatches[0].index !== undefined) {
+                                        const idx = arrowMatches[0].index;
+                                        nextLatex = `${line.slice(0, idx).trim()}\n${line.slice(idx).trim()}`;
+                                      }
+                                    } else {
+                                      // Merge back to 1 line if already multi-line
+                                      nextLatex = currentLines.join(' ');
+                                    }
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).map((t) =>
+                                        t.id === txt.id ? { ...t, latex: nextLatex, text: nextLatex } : t
+                                      ),
+                                    }));
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 cursor-pointer"
+                                  title="Εναλλαγή 1 / 2 σειρών εξίσωσης"
+                                >
+                                  ↵ 2 Σειρές
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => {
                                   if (txt.isMath) {
-                                    setMathInput(txt.latex || txt.text || '');
+                                    setMathInput(
+                                      splitAndCleanMathLatexLines(txt.latex || txt.text || '').join('\n')
+                                    );
                                     setShowMathModal(true);
                                   } else {
                                     setEditingTextId(isEditingTxt ? null : txt.id);
@@ -21304,7 +21346,7 @@ export default function App() {
                                 className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 cursor-pointer"
                                 title={
                                   txt.isMath
-                                    ? 'Επεξεργασία εξίσωσης LaTeX'
+                                    ? 'Επεξεργασία εξίσωσης LaTeX (υποστηρίζει πολλαπλές σειρές με Enter)'
                                     : isEditingTxt
                                     ? 'Ολοκλήρωση επεξεργασίας'
                                     : 'Επεξεργασία κειμένου'
@@ -21334,11 +21376,24 @@ export default function App() {
                           {txt.isMath && txt.latex ? (
                             <div
                               style={{ fontSize: `${txt.fontSize}px`, color: txt.color }}
-                              className="[&_.katex-display]:!my-0 [&_.katex-display]:!text-left"
-                              dangerouslySetInnerHTML={{
-                                __html: katex.renderToString(txt.latex, { throwOnError: false, displayMode: true }),
-                              }}
-                            />
+                              className="flex flex-col items-start gap-2 [&_.katex-display]:!my-0 [&_.katex-display]:!text-left"
+                            >
+                              {(() => {
+                                const mathRows = splitAndCleanMathLatexLines(txt.latex);
+                                const rowsToRender = mathRows.length > 0 ? mathRows : [txt.latex];
+                                return rowsToRender.map((rowLatex, rIdx) => (
+                                  <div
+                                    key={rIdx}
+                                    dangerouslySetInnerHTML={{
+                                      __html: katex.renderToString(rowLatex, {
+                                        throwOnError: false,
+                                        displayMode: true,
+                                      }),
+                                    }}
+                                  />
+                                ));
+                              })()}
+                            </div>
                           ) : isEditingTxt ? (
                             <textarea
                               autoFocus
@@ -22033,29 +22088,66 @@ export default function App() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Κώδικας LaTeX:</label>
-              <input
-                type="text"
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs text-slate-500">
+                  Κώδικας LaTeX (πατήστε Enter για νέα σειρά εξίσωσης):
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cleaned = splitAndCleanMathLatexLines(mathInput);
+                    if (cleaned.length === 1) {
+                      // Help user automatically split a long single-line derivation at a middle \Rightarrow or \Leftrightarrow
+                      const line = cleaned[0];
+                      const arrowMatches = [...line.matchAll(/(\\Rightarrow|\\Leftrightarrow|\\implies)/g)];
+                      if (arrowMatches.length >= 2) {
+                        const midMatch = arrowMatches[Math.floor(arrowMatches.length / 2)];
+                        if (midMatch.index !== undefined) {
+                          const part1 = line.slice(0, midMatch.index).trim();
+                          const part2 = line.slice(midMatch.index).trim();
+                          setMathInput(`${part1}\n${part2}`);
+                          return;
+                        }
+                      }
+                    }
+                    setMathInput(cleaned.join('\n'));
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-violet-100 hover:bg-violet-200 text-violet-800 text-[11px] font-bold cursor-pointer transition-colors"
+                  title="Αυτόματος χωρισμός μεγάλης συνεπαγωγής σε 2 σειρές"
+                >
+                  ↵ Χωρισμός σε 2 σειρές
+                </button>
+              </div>
+              <textarea
+                rows={3}
                 value={mathInput}
                 onChange={(e) => setMathInput(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono text-sky-700 select-text"
+                placeholder="Γράψτε μία εξίσωση ανά σειρά (πατήστε Enter για νέα σειρά)..."
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono text-sky-700 select-text resize-y leading-relaxed"
               />
             </div>
 
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 overflow-x-auto">
-              <div
-                dangerouslySetInnerHTML={{
-                  __html: katex.renderToString(mathInput || 'I = \\frac{q}{t}', {
-                    throwOnError: false,
-                    displayMode: true,
-                  }),
-                }}
-              />
+              <div className="flex flex-col items-start gap-2">
+                {splitAndCleanMathLatexLines(mathInput || 'I = \\frac{q}{t}').map((rowLatex, rIdx) => (
+                  <div
+                    key={rIdx}
+                    dangerouslySetInnerHTML={{
+                      __html: katex.renderToString(rowLatex, {
+                        throwOnError: false,
+                        displayMode: true,
+                      }),
+                    }}
+                  />
+                ))}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => {
+                  const cleanedLines = splitAndCleanMathLatexLines(mathInput);
+                  const normalizedLatex = cleanedLines.length > 0 ? cleanedLines.join('\n') : mathInput.trim();
                   const selMathTxt = (activePage.texts || []).find(
                     (t) => t.id === selectedTextId && t.isMath
                   );
@@ -22063,7 +22155,7 @@ export default function App() {
                     updateActivePage((page) => ({
                       ...page,
                       texts: (page.texts || []).map((t) =>
-                        t.id === selMathTxt.id ? { ...t, latex: mathInput, text: mathInput } : t
+                        t.id === selMathTxt.id ? { ...t, latex: normalizedLatex, text: normalizedLatex } : t
                       ),
                     }));
                   } else {
@@ -22071,8 +22163,8 @@ export default function App() {
                       id: `math-${Date.now()}`,
                       x: 160,
                       y: 220,
-                      text: mathInput,
-                      latex: mathInput,
+                      text: normalizedLatex,
+                      latex: normalizedLatex,
                       isMath: true,
                       color: strokeColor,
                       fontSize: 20,

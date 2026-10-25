@@ -3161,6 +3161,36 @@ export async function transcribeHandwrittenStrokesWithGemini(
 }
 
 /**
+ * Splits a single-line or multi-line LaTeX string into clean individual row strings
+ * so each row can be rendered cleanly on its own line in KaTeX without broken `\[6pt]`
+ * or `\begin{aligned}` escaping artifacts.
+ */
+export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
+  if (!rawLatex || !rawLatex.trim()) return [];
+  const stripped = rawLatex
+    .replace(/^\$\$+|\$\$+$/g, '')
+    .replace(/^\\\[|\\\]$/g, '')
+    .replace(/\\begin\{(aligned|align\*?|gathered|gather\*?|split)\}/gi, '\n')
+    .replace(/\\end\{(aligned|align\*?|gathered|gather\*?|split)\}/gi, '\n')
+    // Replace `\\[6pt]`, `\[6pt]`, or `[6pt]` with a clean newline break
+    .replace(/\\*\[\s*\d+(?:\.\d+)?\s*(?:pt|px|em|ex|mm|cm)\s*\]/gi, '\n')
+    // Replace `\\` (LaTeX newline) or `\newline` / `\cr` with a clean newline break
+    .replace(/\\\\+/g, '\n')
+    .replace(/\\(?:newline|cr)\b/g, '\n');
+
+  return stripped
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/\\*\[\s*\d+(?:\.\d+)?\s*(?:pt|px|em|ex|mm|cm)\s*\]/gi, '')
+        .replace(/^\s*&\s*/, '')
+        .replace(/\s*&\s*/g, ' ')
+        .trim()
+    )
+    .filter((line) => line.length > 0);
+}
+
+/**
  * MathOCR via Gemini Flash Vision:
  * Reads Lasso-selected handwritten Physics / Mathematics / Chemistry equations and derivations
  * (simple & compound fractions, implication arrows \Rightarrow, equals =, multiplication \cdot,
@@ -3190,18 +3220,13 @@ export async function transcribeHandwrittenMathWithGemini(
 Διάβασε με απόλυτη ακρίβεια τις χειρόγραφες εξισώσεις, κλάσματα, συνεπαγωγές, σύμβολα και μονάδες μέτρησης που φαίνονται στην εικόνα και μετάτρεψέ τα σε έγκυρο κώδικα KaTeX LaTeX:
 1. Απλά & σύνθετα κλάσματα: χρησιμοποίησε \\frac{αριθμητής}{παρονομαστής} (π.χ. \\frac{\\Delta x}{\\Delta t}, \\frac{5}{1}, \\frac{20}{\\Delta t}, \\frac{20}{5}).
 2. Συνεπαγωγές & βέλη: χρησιμοποίησε \\Rightarrow (για συνεπάγεται), \\Leftrightarrow (ισοδύναμα), \\rightarrow.
-3. Πολλαπλασιασμός & σύμβολα: χρησιμοποίησε \\cdot για την τελεία πολλαπλασιασμού (π.χ. 5 \\cdot \\Delta t = 20), \\Delta για το Δέλτα (π.χ. \\Delta x, \\Delta t), δείκτες/εκθέτες (x_1, v_0, t^2), ρίζες (\\sqrt{...}), διανύσματα (\\vec{F}, \\vec{u}).
+3. Πολλαπλασιασμός & σύμβολα: χρησιμοποίησε \\cdot για την τελεία πολλαπλασιασμού (π.χ. 5 \\cdot \\Delta t = 20), \\Delta για το Δέλτα (π.χ. \\Delta x, \\Delta t), δείκτες/εκθέτες (x_1, v_0, t^2), ρίζες (\\sqrt{...}), διανύσματα (\\vec{F}, \\vec{u}, \\vec{a}).
 4. Κυκλωμένοι αριθμοί ασκήσεων (αν υπάρχουν στην αρχή, π.χ. ①, ②, ③): γράψε τους ως \\text{①}\\; ή \\text{②}\\; ή \\text{③}\\;.
-5. Μονάδες μέτρησης & ελληνικές λέξεις: βάλε τις μονάδες μέτρησης σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 10\\,\\text{m/s}, 5\\,\\text{kg}, 20\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
-6. Πολλές γραμμές (σειρές): αν η χειρόγραφη λύση έχει 2 ή περισσότερες σειρές η μία κάτω από την άλλη, τύλιξέ τες σε:
-\\begin{aligned}
-& πρώτη\\_σειρά \\\\[6pt]
-& δεύτερη\\_σειρά
-\\end{aligned}
-ώστε να στοιχίζονται αριστερά ακριβώς όπως στο τετράδιο. Αν είναι 1 σειρά, γράψε την απευθείας χωρίς aligned.
+5. Μονάδες μέτρησης & ελληνικές λέξεις: βάλε τις μονάδες μέτρησης σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 10\\,\\text{m/s}, 5\\,\\text{kg}, 25\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
+6. Πολλές γραμμές (σειρές): αν το χειρόγραφο έχει 2 ή περισσότερες σειρές (η μία κάτω από την άλλη), βάλε κάθε σειρά ως ξεχωριστό στοιχείο στον πίνακα "lines" (και ένωσέ τες με απλό χαρακτήρα αλλαγής γραμμής "\\n" στο "latex"). ΜΗΝ χρησιμοποιείς ΠΟΤΕ \\[6pt], \\\\[6pt] ή \\begin{aligned}.
 7. ΜΗΝ βάζεις εξωτερικά σύμβολα $$ ή \\[ \\] γύρω από το latex string.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
-{"latex": "...", "plainText": "..."}
+{"lines": ["σειρά 1 σε LaTeX", "σειρά 2 σε LaTeX"], "latex": "σειρά 1\\nσειρά 2", "plainText": "..."}
 χωρίς κανένα άλλο σχόλιο.`,
     },
     {
@@ -3243,19 +3268,24 @@ export async function transcribeHandwrittenMathWithGemini(
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
       const parsed = JSON.parse(rawText);
+      const fromLines = Array.isArray(parsed?.lines)
+        ? parsed.lines
+            .map((l: any) => (typeof l === 'string' ? l.trim() : ''))
+            .filter((l: string) => l.length > 0)
+            .join('\n')
+        : '';
       const rawLatex =
-        typeof parsed?.latex === 'string'
+        fromLines ||
+        (typeof parsed?.latex === 'string'
           ? parsed.latex.trim()
           : typeof parsed?.text === 'string'
           ? parsed.text.trim()
-          : '';
-      const cleanLatex = rawLatex
-        .replace(/^\$\$+|\$\$+$/g, '')
-        .replace(/^\\\[|\\\]$/g, '')
-        .trim();
+          : '');
+      const cleanedRows = splitAndCleanMathLatexLines(rawLatex);
+      const cleanLatex = cleanedRows.join('\n').trim();
       const plainText =
         typeof parsed?.plainText === 'string' && parsed.plainText.trim().length > 0
-          ? parsed.plainText.trim()
+          ? splitAndCleanMathLatexLines(parsed.plainText).join('\n').trim()
           : cleanLatex;
       if (cleanLatex.length > 0) {
         cachedWorkingVisionModel = cleanName;
