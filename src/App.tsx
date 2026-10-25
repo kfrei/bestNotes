@@ -13233,7 +13233,7 @@ export default function App() {
       renderLiveOverlayStroke();
     }
 
-    // Hold-to-Snap (~0.27s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
+    // Hold-to-Snap (~0.37s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
     // IMPORTANT: We anchor a 7.5px radius around holdAnchorPtRef so natural hand micro-tremors or
     // 240Hz pressure/tilt events while holding the pencil pressed on the glass NEVER reset the timer!
     if (
@@ -13260,7 +13260,7 @@ export default function App() {
             snappedCurrentStrokeRef.current = snapped;
             renderLiveOverlayStroke();
           }
-        }, 270);
+        }, 370);
       }
     }
   };
@@ -13488,9 +13488,9 @@ export default function App() {
     } else if (
       holdToSnapEnabled &&
       ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
-      performance.now() - lastHoldMoveTimeRef.current >= 165
+      performance.now() - lastHoldMoveTimeRef.current >= 265
     ) {
-      // Fallback if user paused briefly (>= 0.165s) at the end of a straight line/shape and lifted just before the live timer fired!
+      // Fallback if user paused briefly (>= 0.265s) at the end of a straight line/shape and lifted just before the live timer fired!
       const snapped = recognizeAndSnapShape(rawPts, 'auto');
       if (snapped) {
         finalPts = snapped.points;
