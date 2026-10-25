@@ -8892,6 +8892,29 @@ export default function App() {
         return;
       }
 
+      // C / Ψ -> Crop (Ξάκρισμα — Lasso Crop)
+      if (code === 'KeyC' || key === 'c' || key === 'ψ') {
+        e.preventDefault();
+        setActiveTool('lasso');
+        setShowToolSubBar(true);
+        setSelectedTextId(null);
+        setEditingTextId(null);
+        setActiveNodeStrokeId(null);
+        const targetImgId =
+          selectedImageId ||
+          (activePage.images.length > 0 ? activePage.images[activePage.images.length - 1].id : null);
+        if (targetImgId) {
+          setSelectedImageId(targetImgId);
+          setImageCropMode('freehand');
+          lassoPolygonRef.current = [];
+          showToast('✂️ Crop (Ξάκρισμα) — C / Ψ: Σχεδίασε γύρω από την εικόνα για Lasso Crop!');
+        } else {
+          setImageCropMode('none');
+          showToast('✂️ Crop (Ξάκρισμα) — C / Ψ: Επίλεξε ή επικόλλησε πρώτα μια εικόνα!');
+        }
+        return;
+      }
+
       // H / Η -> Highlight (Υπογραμμιστής)
       if (code === 'KeyH' || key === 'h' || key === 'η') {
         switchToTool('highlighter', '🖍️ Highlight (Υπογραμμιστής) — H / Η');
@@ -8965,6 +8988,7 @@ export default function App() {
     selectedTextId,
     activeNodeStrokeId,
     activePage.strokes,
+    activePage.images,
     updateActivePage,
     toggleFillStyleToSelection,
     handleUndo,
@@ -14115,6 +14139,7 @@ export default function App() {
                   { keys: 'L / Λ', label: 'Laser (Κόκκινο Laser)', icon: <Radio className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'F / Φ', label: 'Fill (Γέμισμα)', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'C / Ψ', label: 'Crop (Ξάκρισμα)', icon: <Scissors className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'N / Ν', label: 'Nodes (Κόμβοι)', icon: <BezierNodesIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'H / Η', label: 'Highlight (Υπογραμμιστής)', icon: <Highlighter className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
                   { keys: 'T / Τ', label: 'Text (Κείμενο)', icon: <Type className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
