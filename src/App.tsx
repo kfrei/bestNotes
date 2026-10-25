@@ -1174,6 +1174,8 @@ export default function App() {
     appliedAngle?: number;
     sideSignX?: number;
     sideSignY?: number;
+    curWidth?: number;
+    curHeight?: number;
     targetStrokeIds?: string[];
     targetImageId?: string | null;
     targetImageIds?: string[];
@@ -7876,6 +7878,7 @@ export default function App() {
     refEdge?: [{ x: number; y: number }, { x: number; y: number }];
     kind?: 'parallel' | 'symmetry';
     symmetryAxis?: [{ x: number; y: number }, { x: number; y: number }];
+    badgeLabel?: string;
     angleArcs?: {
       vertex: { x: number; y: number };
       arm1: { x: number; y: number };
@@ -8266,7 +8269,7 @@ export default function App() {
       return { snappedPt: rawPt, guides: [] };
     }
 
-    // If BOTH incident edges snap simultaneously (e.g. forming a parallelogram, rectangle, or symmetrical trapezoid), snap to their intersection!
+    // If BOTH incident edges snap simultaneously (e.g. forming a parallelogram, rectangle, square, or symmetrical trapezoid), snap to their intersection!
     if (matchedPerNeighbor.length >= 2) {
       const c1 = matchedPerNeighbor[0];
       const c2 = matchedPerNeighbor[1];
@@ -8279,6 +8282,11 @@ export default function App() {
         const iy = c1.anchor.y + t1 * c1.uy;
         if (Math.hypot(ix - rawPt.x, iy - rawPt.y) <= 22) {
           const snappedPt = { x: ix, y: iy };
+          const s1Len = Math.hypot(snappedPt.x - c1.anchor.x, snappedPt.y - c1.anchor.y);
+          const s2Len = Math.hypot(snappedPt.x - c2.anchor.x, snappedPt.y - c2.anchor.y);
+          const isRightAngle = Math.abs(c1.ux * c2.ux + c1.uy * c2.uy) <= 0.12;
+          const isEqualSides = Math.abs(s1Len - s2Len) <= Math.max(12, Math.min(s1Len, s2Len) * 0.08);
+          const oppPt = isClosedLoop && M === 4 ? vertices[(draggedIdx + 2) % 4] : undefined;
           return {
             snappedPt,
             guides: [
@@ -8286,14 +8294,20 @@ export default function App() {
                 anchor: c1.anchor,
                 snapped: snappedPt,
                 refEdge: c1.refEdge,
-                kind: c1.kind,
+                kind: isEqualSides ? 'symmetry' : c1.kind,
+                symmetryAxis: isEqualSides && oppPt ? [oppPt, snappedPt] : undefined,
+                badgeLabel: isEqualSides
+                  ? isRightAngle
+                    ? '□ Τετράγωνο (1:1)'
+                    : '◇ Ρόμβος (1:1)'
+                  : undefined,
                 angleArcs: c1.angleArcs,
               },
               {
                 anchor: c2.anchor,
                 snapped: snappedPt,
                 refEdge: c2.refEdge,
-                kind: c2.kind,
+                kind: isEqualSides ? 'symmetry' : c2.kind,
                 angleArcs: c2.angleArcs,
               },
             ],
@@ -8305,7 +8319,16 @@ export default function App() {
     // Otherwise, project orthogonally onto the strongest snap line
     matchedPerNeighbor.sort((a, b) => a.score - b.score);
     const best = matchedPerNeighbor[0];
-    const projT = (rawPt.x - best.anchor.x) * best.ux + (rawPt.y - best.anchor.y) * best.uy;
+    let projT = (rawPt.x - best.anchor.x) * best.ux + (rawPt.y - best.anchor.y) * best.uy;
+    let isEqualSideSnap = false;
+    if (isClosedLoop && M === 4) {
+      const oppPt = vertices[(draggedIdx + 2) % 4];
+      const perpSideLen = Math.hypot(oppPt.x - best.anchor.x, oppPt.y - best.anchor.y);
+      if (perpSideLen >= 18 && Math.abs(Math.abs(projT) - perpSideLen) <= Math.max(14, perpSideLen * 0.09)) {
+        projT = (projT >= 0 ? 1 : -1) * perpSideLen;
+        isEqualSideSnap = true;
+      }
+    }
     const snappedPt = {
       x: best.anchor.x + projT * best.ux,
       y: best.anchor.y + projT * best.uy,
@@ -8317,7 +8340,9 @@ export default function App() {
           anchor: best.anchor,
           snapped: snappedPt,
           refEdge: best.refEdge,
-          kind: best.kind,
+          kind: isEqualSideSnap ? 'symmetry' : best.kind,
+          symmetryAxis: isEqualSideSnap ? [best.anchor, snappedPt] : undefined,
+          badgeLabel: isEqualSideSnap ? '□ Τετράγωνο (1:1)' : undefined,
           angleArcs: best.angleArcs,
         },
       ],
@@ -8446,7 +8471,7 @@ export default function App() {
         const mx = (g.symmetryAxis[0].x + g.symmetryAxis[1].x) / 2;
         const my = (g.symmetryAxis[0].y + g.symmetryAxis[1].y) / 2;
         aCtx.font = 'bold 11px sans-serif';
-        const label = '⚖️ Συμμετρικό';
+        const label = g.badgeLabel || '⚖️ Συμμετρικό';
         const tw = aCtx.measureText(label).width;
         aCtx.fillStyle = 'rgba(255, 255, 255, 0.94)';
         aCtx.strokeStyle = '#7c3aed';
@@ -9034,6 +9059,101 @@ export default function App() {
         drawRedCenterCrosshair(cl.refCx, cl.refCy, false);
       }
     }
+
+    aCtx.restore();
+  };
+
+  // Draws a crisp 1:1 Equal-Dimensions Visual Guide (Circle ◯ or Square □) when stretching a shape/ellipse/rectangle to 1:1 aspect ratio!
+  const drawOneToOneSnapOverlay = (
+    cx: number,
+    cy: number,
+    halfDim: number,
+    angleRad: number,
+    kind: 'circle' | 'square'
+  ) => {
+    clearActiveOverlay();
+    const aCtx = activeCtxRef.current;
+    if (!aCtx || halfDim < 8) return;
+
+    aCtx.save();
+    aCtx.translate(cx, cy);
+    aCtx.rotate(angleRad);
+
+    // 1. Dashed 1:1 reference outline (Circle or Square)
+    aCtx.strokeStyle = 'rgba(124, 58, 237, 0.85)';
+    aCtx.lineWidth = 1.8;
+    aCtx.setLineDash([6, 4]);
+    aCtx.beginPath();
+    if (kind === 'circle') {
+      aCtx.arc(0, 0, halfDim, 0, Math.PI * 2);
+    } else {
+      aCtx.rect(-halfDim, -halfDim, halfDim * 2, halfDim * 2);
+    }
+    aCtx.stroke();
+
+    // 2. Dashed equal-diameter / equal-side orthogonal axes
+    aCtx.strokeStyle = 'rgba(139, 92, 246, 0.75)';
+    aCtx.lineWidth = 1.5;
+    aCtx.setLineDash([4, 4]);
+    aCtx.beginPath();
+    aCtx.moveTo(-halfDim, 0);
+    aCtx.lineTo(halfDim, 0);
+    aCtx.moveTo(0, -halfDim);
+    aCtx.lineTo(0, halfDim);
+    aCtx.stroke();
+
+    // 3. Double equality ticks ("||") on the horizontal and vertical half-axes
+    aCtx.setLineDash([]);
+    if (halfDim >= 24) {
+      const rMid = halfDim * 0.56;
+      const tickHalf = 5;
+      const drawDoubleTick = (tx: number, ty: number, isHorizAxis: boolean) => {
+        for (const off of [-2.4, 2.4]) {
+          aCtx.strokeStyle = '#ffffff';
+          aCtx.lineWidth = 3.4;
+          aCtx.beginPath();
+          if (isHorizAxis) {
+            aCtx.moveTo(tx + off, ty - tickHalf);
+            aCtx.lineTo(tx + off, ty + tickHalf);
+          } else {
+            aCtx.moveTo(tx - tickHalf, ty + off);
+            aCtx.lineTo(tx + tickHalf, ty + off);
+          }
+          aCtx.stroke();
+
+          aCtx.strokeStyle = '#7c3aed';
+          aCtx.lineWidth = 1.8;
+          aCtx.beginPath();
+          if (isHorizAxis) {
+            aCtx.moveTo(tx + off, ty - tickHalf);
+            aCtx.lineTo(tx + off, ty + tickHalf);
+          } else {
+            aCtx.moveTo(tx - tickHalf, ty + off);
+            aCtx.lineTo(tx + tickHalf, ty + off);
+          }
+          aCtx.stroke();
+        }
+      };
+      drawDoubleTick(rMid, 0, true);
+      drawDoubleTick(-rMid, 0, true);
+      drawDoubleTick(0, rMid, false);
+      drawDoubleTick(0, -rMid, false);
+    }
+
+    // 4. Upright center pill badge: "◯ Κύκλος (1:1)" or "□ Τετράγωνο (1:1)"
+    aCtx.rotate(-angleRad);
+    aCtx.font = 'bold 11px sans-serif';
+    const label = kind === 'circle' ? '◯ Κύκλος (1:1)' : '□ Τετράγωνο (1:1)';
+    const tw = aCtx.measureText(label).width;
+    aCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    aCtx.strokeStyle = '#7c3aed';
+    aCtx.lineWidth = 1.6;
+    aCtx.beginPath();
+    aCtx.roundRect(-tw / 2 - 8, -10, tw + 16, 20, 10);
+    aCtx.fill();
+    aCtx.stroke();
+    aCtx.fillStyle = '#5b21b6';
+    aCtx.fillText(label, -tw / 2, 4);
 
     aCtx.restore();
   };
@@ -9896,10 +10016,10 @@ export default function App() {
               sx: number;
               sy: number;
             }[] = [
-              { lx: -sideOffX, ly: -hh, ax: -sideOffX, ay: -hh - 14, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
-              { lx: hw, ly: -sideOffY, ax: hw + 14, ay: -sideOffY, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
-              { lx: -sideOffX, ly: hh, ax: -sideOffX, ay: hh + 14, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
-              { lx: -hw, ly: -sideOffY, ax: -hw - 14, ay: -sideOffY, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+              { lx: -sideOffX, ly: -hh, ax: -sideOffX, ay: -hh - 14, oppLx: 0, oppLy: selBounds.hh, mode: 'scale-y', sx: 0, sy: -1 },
+              { lx: hw, ly: -sideOffY, ax: hw + 14, ay: -sideOffY, oppLx: -selBounds.hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+              { lx: -sideOffX, ly: hh, ax: -sideOffX, ay: hh + 14, oppLx: 0, oppLy: -selBounds.hh, mode: 'scale-y', sx: 0, sy: 1 },
+              { lx: -hw, ly: -sideOffY, ax: -hw - 14, ay: -sideOffY, oppLx: selBounds.hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
             ];
             for (const sh of imgStretchHandles) {
               if (
@@ -9930,6 +10050,8 @@ export default function App() {
                   frameAngle: angle,
                   sideSignX: sh.sx,
                   sideSignY: sh.sy,
+                  curWidth: selBounds.hw * 2,
+                  curHeight: selBounds.hh * 2,
                   targetImageId: selectedImageId,
                 };
                 isDrawingRef.current = true;
@@ -9946,10 +10068,10 @@ export default function App() {
               sx: number;
               sy: number;
             }[] = [
-              { lx: 0, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
-              { lx: hw, ly: 0, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
-              { lx: 0, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
-              { lx: -hw, ly: 0, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+              { lx: 0, ly: -hh, oppLx: 0, oppLy: selBounds.hh, mode: 'scale-y', sx: 0, sy: -1 },
+              { lx: hw, ly: 0, oppLx: -selBounds.hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+              { lx: 0, ly: hh, oppLx: 0, oppLy: -selBounds.hh, mode: 'scale-y', sx: 0, sy: 1 },
+              { lx: -hw, ly: 0, oppLx: selBounds.hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
             ];
             for (const m of localSides) {
               if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
@@ -9977,6 +10099,8 @@ export default function App() {
                   frameAngle: angle,
                   sideSignX: m.sx,
                   sideSignY: m.sy,
+                  curWidth: selBounds.hw * 2,
+                  curHeight: selBounds.hh * 2,
                 };
                 isDrawingRef.current = true;
                 return;
@@ -11160,11 +11284,68 @@ export default function App() {
       }
 
       let parallelSnapGuides: ParallelSnapGuide[] = [];
+      let ellipseCircleRecenter: { n1Idx: number; n1Pt: { x: number; y: number }; n2Idx: number; n2Pt: { x: number; y: number } } | null = null;
       if (activeTargetStroke && !draggingNodeIdx.isControl && !snapTargetPt) {
         if (activeTargetStroke.isShape) {
           const st = activeTargetStroke.shapeType;
+          if ((st === 'ellipse' || st === 'circle') && activeTargetStroke.points.length === 4) {
+            const idx = draggingNodeIdx.index;
+            const oppIdx = (idx + 2) % 4;
+            const n1Idx = (idx + 1) % 4;
+            const n2Idx = (idx + 3) % 4;
+            const oppPt = activeTargetStroke.points[oppIdx];
+            const n1 = activeTargetStroke.points[n1Idx];
+            const n2 = activeTargetStroke.points[n2Idx];
+            const perpDx = n2.x - n1.x;
+            const perpDy = n2.y - n1.y;
+            const perpDiam = Math.hypot(perpDx, perpDy);
+            if (perpDiam >= 18) {
+              const midPerp = { x: (n1.x + n2.x) / 2, y: (n1.y + n2.y) / 2 };
+              let ux = -perpDy / perpDiam;
+              let uy = perpDx / perpDiam;
+              if ((midPerp.x - oppPt.x) * ux + (midPerp.y - oppPt.y) * uy < 0) {
+                ux = -ux;
+                uy = -uy;
+              }
+              const vx = latestPt.x - oppPt.x;
+              const vy = latestPt.y - oppPt.y;
+              const projAlong = vx * ux + vy * uy;
+              const dPerp = Math.abs(-vx * uy + vy * ux);
+              const snapTol = Math.max(15, Math.min(28, perpDiam * 0.11));
+              if (dPerp <= 20 && Math.abs(projAlong - perpDiam) <= snapTol) {
+                const circlePt = {
+                  x: oppPt.x + perpDiam * ux,
+                  y: oppPt.y + perpDiam * uy,
+                };
+                const newCenter = {
+                  x: oppPt.x + (perpDiam / 2) * ux,
+                  y: oppPt.y + (perpDiam / 2) * uy,
+                };
+                const halfPerpX = perpDx / 2;
+                const halfPerpY = perpDy / 2;
+                snapTargetPt = circlePt;
+                ellipseCircleRecenter = {
+                  n1Idx,
+                  n1Pt: { x: newCenter.x - halfPerpX, y: newCenter.y - halfPerpY },
+                  n2Idx,
+                  n2Pt: { x: newCenter.x + halfPerpX, y: newCenter.y + halfPerpY },
+                };
+                parallelSnapGuides = [
+                  {
+                    anchor: oppPt,
+                    snapped: circlePt,
+                    refEdge: [ellipseCircleRecenter.n1Pt, ellipseCircleRecenter.n2Pt],
+                    kind: 'symmetry',
+                    symmetryAxis: [oppPt, circlePt],
+                    badgeLabel: '◯ Κύκλος (1:1)',
+                  },
+                ];
+              }
+            }
+          }
           const isCurvedSpecial =
             st === 'ellipse' ||
+            st === 'circle' ||
             st === 'parabola' ||
             st === 'hyperbola' ||
             st === 'arc' ||
@@ -11327,6 +11508,18 @@ export default function App() {
               }
             }
             newPts[draggingNodeIdx.index] = targetPt;
+            if (ellipseCircleRecenter && (s.shapeType === 'ellipse' || s.shapeType === 'circle') && newPts.length === 4) {
+              newPts[ellipseCircleRecenter.n1Idx] = {
+                ...newPts[ellipseCircleRecenter.n1Idx],
+                x: ellipseCircleRecenter.n1Pt.x,
+                y: ellipseCircleRecenter.n1Pt.y,
+              };
+              newPts[ellipseCircleRecenter.n2Idx] = {
+                ...newPts[ellipseCircleRecenter.n2Idx],
+                x: ellipseCircleRecenter.n2Pt.x,
+                y: ellipseCircleRecenter.n2Pt.y,
+              };
+            }
             const isClosedPoly =
               (s.shapeType === 'line' &&
                 s.points.length >= 3 &&
@@ -11670,6 +11863,7 @@ export default function App() {
         }
 
         // B2. Aspect-Ratio Stretch (Widen/Narrow or Taller/Shorter) from 4 Mid-Side Handles (Orange #f97316 dots!)
+        //     Includes 1:1 Magnetic Pull & Lock when stretching an Ellipse -> Circle (◯ Κύκλος) or Rectangle -> Square (□ Τετράγωνο)!
         if (tf.mode === 'scale-x' || tf.mode === 'scale-y') {
           const fAngle = tf.frameAngle || 0;
           const cosF = Math.cos(fAngle);
@@ -11677,104 +11871,173 @@ export default function App() {
           const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds);
           const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds);
 
-          let effPtX = latestPt.x;
-          let effPtY = latestPt.y;
-          if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
-            const SNAP_T = 6;
+          const selB = getSelectionBounds();
+          const curW = tf.curWidth ?? (selB ? selB.hw * 2 : 0);
+          const curH = tf.curHeight ?? (selB ? selB.hh * 2 : 0);
+
+          const rawRx = latestPt.x - tf.anchorX;
+          const rawRy = latestPt.y - tf.anchorY;
+          const rawSpan =
+            tf.mode === 'scale-x'
+              ? Math.max(16, Math.abs(rawRx * cosF + rawRy * sinF))
+              : Math.max(16, Math.abs(-rawRx * sinF + rawRy * cosF));
+
+          const curDim = tf.mode === 'scale-x' ? curW : curH;
+          const targetDim = tf.mode === 'scale-x' ? curH : curW;
+          const candDim = curDim * (rawSpan / Math.max(1, tf.initialDist));
+          const snapTol1to1 = Math.max(15, Math.min(30, targetDim * 0.11));
+          const isSnapped1to1 =
+            curW >= 12 && curH >= 12 && Math.abs(candDim - targetDim) <= snapTol1to1;
+
+          let scaleFactor: number;
+
+          if (isSnapped1to1) {
+            scaleFactor = targetDim / Math.max(1, curDim);
+            tf.initialDist = Math.max(8, tf.initialDist * scaleFactor);
             if (tf.mode === 'scale-x') {
-              let bestDiffX = SNAP_T;
-              let snappedX: number | null = null;
-              const candCx = (tf.anchorX + latestPt.x) / 2;
-              for (const ref of refBoxes) {
-                for (const rx of [ref.minX, ref.maxX]) {
-                  const dEdge = Math.abs(latestPt.x - rx);
-                  if (dEdge <= bestDiffX) {
-                    bestDiffX = dEdge;
-                    snappedX = rx;
-                  }
-                }
-                const dCenter = Math.abs(candCx - ref.cx);
-                if (dCenter <= bestDiffX) {
-                  bestDiffX = dCenter;
-                  snappedX = 2 * ref.cx - tf.anchorX;
-                }
-              }
-              if (snappedX !== null) {
-                effPtX = snappedX;
-              }
+              tf.curWidth = targetDim;
+              tf.curHeight = curH;
             } else {
-              let bestDiffY = SNAP_T;
-              let snappedY: number | null = null;
-              const candCy = (tf.anchorY + latestPt.y) / 2;
-              for (const ref of refBoxes) {
-                for (const ry of [ref.minY, ref.maxY]) {
-                  const dEdge = Math.abs(latestPt.y - ry);
-                  if (dEdge <= bestDiffY) {
-                    bestDiffY = dEdge;
-                    snappedY = ry;
+              tf.curWidth = curW;
+              tf.curHeight = targetDim;
+            }
+
+            const sx = tf.sideSignX || 0;
+            const sy = tf.sideSignY || 0;
+            const snapCx =
+              tf.mode === 'scale-x'
+                ? tf.anchorX + sx * (targetDim / 2) * cosF
+                : tf.anchorX - sy * (targetDim / 2) * sinF;
+            const snapCy =
+              tf.mode === 'scale-x'
+                ? tf.anchorY + sx * (targetDim / 2) * sinF
+                : tf.anchorY + sy * (targetDim / 2) * cosF;
+
+            const isCircleLike =
+              selStrokesList.length > 0 &&
+              selStrokesList.every(
+                (s) =>
+                  s.shapeType === 'ellipse' ||
+                  s.shapeType === 'circle' ||
+                  s.shapeType === 'sphere' ||
+                  s.shapeType === 'cylinder'
+              );
+            drawOneToOneSnapOverlay(
+              snapCx,
+              snapCy,
+              targetDim / 2,
+              fAngle,
+              isCircleLike ? 'circle' : 'square'
+            );
+          } else {
+            let effPtX = latestPt.x;
+            let effPtY = latestPt.y;
+            if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
+              const SNAP_T = 6;
+              if (tf.mode === 'scale-x') {
+                let bestDiffX = SNAP_T;
+                let snappedX: number | null = null;
+                const candCx = (tf.anchorX + latestPt.x) / 2;
+                for (const ref of refBoxes) {
+                  for (const rx of [ref.minX, ref.maxX]) {
+                    const dEdge = Math.abs(latestPt.x - rx);
+                    if (dEdge <= bestDiffX) {
+                      bestDiffX = dEdge;
+                      snappedX = rx;
+                    }
+                  }
+                  const dCenter = Math.abs(candCx - ref.cx);
+                  if (dCenter <= bestDiffX) {
+                    bestDiffX = dCenter;
+                    snappedX = 2 * ref.cx - tf.anchorX;
                   }
                 }
-                const dCenter = Math.abs(candCy - ref.cy);
-                if (dCenter <= bestDiffY) {
-                  bestDiffY = dCenter;
-                  snappedY = 2 * ref.cy - tf.anchorY;
+                if (snappedX !== null) {
+                  effPtX = snappedX;
                 }
-              }
-              if (snappedY !== null) {
-                effPtY = snappedY;
+              } else {
+                let bestDiffY = SNAP_T;
+                let snappedY: number | null = null;
+                const candCy = (tf.anchorY + latestPt.y) / 2;
+                for (const ref of refBoxes) {
+                  for (const ry of [ref.minY, ref.maxY]) {
+                    const dEdge = Math.abs(latestPt.y - ry);
+                    if (dEdge <= bestDiffY) {
+                      bestDiffY = dEdge;
+                      snappedY = ry;
+                    }
+                  }
+                  const dCenter = Math.abs(candCy - ref.cy);
+                  if (dCenter <= bestDiffY) {
+                    bestDiffY = dCenter;
+                    snappedY = 2 * ref.cy - tf.anchorY;
+                  }
+                }
+                if (snappedY !== null) {
+                  effPtY = snappedY;
+                }
               }
             }
-          }
 
-          const rx = effPtX - tf.anchorX;
-          const ry = effPtY - tf.anchorY;
-          const currSpan =
-            tf.mode === 'scale-x'
-              ? Math.max(16, Math.abs(rx * cosF + ry * sinF))
-              : Math.max(16, Math.abs(-rx * sinF + ry * cosF));
-          const scaleFactor = Math.max(0.84, Math.min(1.2, currSpan / tf.initialDist));
-          tf.initialDist = currSpan;
+            const rx = effPtX - tf.anchorX;
+            const ry = effPtY - tf.anchorY;
+            const currSpan =
+              tf.mode === 'scale-x'
+                ? Math.max(16, Math.abs(rx * cosF + ry * sinF))
+                : Math.max(16, Math.abs(-rx * sinF + ry * cosF));
+            scaleFactor = Math.max(0.82, Math.min(1.22, currSpan / Math.max(1, tf.initialDist)));
+            tf.initialDist = Math.max(8, tf.initialDist * scaleFactor);
+            if (tf.mode === 'scale-x') {
+              tf.curWidth = curW * scaleFactor;
+              tf.curHeight = curH;
+            } else {
+              tf.curWidth = curW;
+              tf.curHeight = curH * scaleFactor;
+            }
 
-          if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
-            const finalMinX =
-              tf.mode === 'scale-x'
-                ? Math.min(
-                    tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
-                    tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
-                  )
-                : curBox.minX;
-            const finalMaxX =
-              tf.mode === 'scale-x'
-                ? Math.max(
-                    tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
-                    tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
-                  )
-                : curBox.maxX;
-            const finalMinY =
-              tf.mode === 'scale-y'
-                ? Math.min(
-                    tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
-                    tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
-                  )
-                : curBox.minY;
-            const finalMaxY =
-              tf.mode === 'scale-y'
-                ? Math.max(
-                    tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
-                    tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
-                  )
-                : curBox.maxY;
-            drawSmartAlignmentGuidesForBox(
-              {
-                minX: finalMinX,
-                maxX: finalMaxX,
-                minY: finalMinY,
-                maxY: finalMaxY,
-                cx: (finalMinX + finalMaxX) / 2,
-                cy: (finalMinY + finalMaxY) / 2,
-              },
-              refBoxes
-            );
+            if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
+              const finalMinX =
+                tf.mode === 'scale-x'
+                  ? Math.min(
+                      tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+                      tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+                    )
+                  : curBox.minX;
+              const finalMaxX =
+                tf.mode === 'scale-x'
+                  ? Math.max(
+                      tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+                      tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+                    )
+                  : curBox.maxX;
+              const finalMinY =
+                tf.mode === 'scale-y'
+                  ? Math.min(
+                      tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+                      tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+                    )
+                  : curBox.minY;
+              const finalMaxY =
+                tf.mode === 'scale-y'
+                  ? Math.max(
+                      tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+                      tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+                    )
+                  : curBox.maxY;
+              drawSmartAlignmentGuidesForBox(
+                {
+                  minX: finalMinX,
+                  maxX: finalMaxX,
+                  minY: finalMinY,
+                  maxY: finalMaxY,
+                  cx: (finalMinX + finalMaxX) / 2,
+                  cy: (finalMinY + finalMaxY) / 2,
+                },
+                refBoxes
+              );
+            } else {
+              clearActiveOverlay();
+            }
           }
 
           if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
@@ -11868,8 +12131,16 @@ export default function App() {
               }),
               strokes: page.strokes.map((s) => {
                 if (!selectedStrokeIds.includes(s.id)) return s;
+                const nextShapeType =
+                  selectedStrokeIds.length === 1 &&
+                  (s.shapeType === 'ellipse' || s.shapeType === 'circle')
+                    ? isSnapped1to1
+                      ? 'circle'
+                      : 'ellipse'
+                    : s.shapeType;
                 return {
                   ...s,
+                  shapeType: nextShapeType,
                   points: s.points.map((p) => {
                     const sp = stretchPoint(p.x, p.y);
                     const nextPt: BezierPoint = {
