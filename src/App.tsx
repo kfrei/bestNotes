@@ -11338,20 +11338,25 @@ export default function App() {
                                     </span>
                                   </div>
 
-                                  <div className="w-full h-24 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
+                                  <div
+                                    className="w-full h-24 rounded-lg bg-slate-100/60 border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
+                                    style={{
+                                      backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
+                                      backgroundSize: '10px 10px',
+                                    }}
+                                  >
                                     <img
                                       src={item.url}
                                       alt={item.title}
-                                      crossOrigin="anonymous"
                                       loading="lazy"
                                       className="max-w-full max-h-full object-contain pointer-events-none select-none group-hover:scale-105 transition-transform"
                                     />
                                   </div>
 
-                                  <p className="mt-1.5 text-[11px] font-bold text-slate-800 truncate">
+                                  <p className="mt-1.5 text-[10.5px] font-bold text-slate-800 line-clamp-2 leading-tight">
                                     {item.title}
                                   </p>
-                                  <p className="text-[9px] text-slate-500 line-clamp-1">
+                                  <p className="mt-0.5 text-[9px] text-slate-500 line-clamp-1">
                                     {item.chapterTitle}
                                   </p>
                                 </div>
