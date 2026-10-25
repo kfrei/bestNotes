@@ -2318,10 +2318,11 @@ export default function App() {
 
           if (canShareFiles) {
             try {
+              // IMPORTANT: Pass ONLY `files: [pdfFile]` (without `text` or `title`)!
+              // On iOS/iPadOS, mixing `files` + `text` in navigator.share creates a multi-item
+              // payload (PDF + plain-text) which causes Viber's Share Extension filter to hide Viber!
               await nav.share({
                 files: [pdfFile],
-                title: safeTitle,
-                text: `${safeTitle}.pdf — BestNotes`,
               });
               showToast(`✅ Κοινοποιήθηκε το «${fileName}»!`);
               return;
@@ -21933,8 +21934,6 @@ export default function App() {
                   try {
                     await navigator.share({
                       files: [ready.file],
-                      title: ready.title,
-                      text: `${ready.title}.pdf — BestNotes`,
                     });
                     showToast(`✅ Κοινοποιήθηκε το «${ready.file.name}»!`);
                   } catch (err: any) {
