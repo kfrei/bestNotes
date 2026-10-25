@@ -1331,7 +1331,8 @@ export async function removeImageBackground(
 }
 
 /**
- * Photoshop Magnetic Lasso: Computes Sobel Edge Gradient Map and snaps cursor to strongest contour edge.
+ * Photoshop Magnetic Lasso: Computes Multi-Channel (Alpha Silhouette + RGB Color + Luminance)
+ * Sobel Edge Map with Non-Maximum Suppression (NMS) and snaps cursor smoothly along contour ridges.
  */
 export function computeImageSobelEdgeMap(imgElement: HTMLImageElement, width: number, height: number): Float32Array {
   const w = Math.max(1, Math.round(width));
@@ -1345,30 +1346,84 @@ export function computeImageSobelEdgeMap(imgElement: HTMLImageElement, width: nu
 
   ctx.drawImage(imgElement, 0, 0, w, h);
   const data = ctx.getImageData(0, 0, w, h).data;
-  const gray = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+  const n = w * h;
+  const rCh = new Float32Array(n);
+  const gCh = new Float32Array(n);
+  const bCh = new Float32Array(n);
+  const aCh = new Float32Array(n);
+  const lum = new Float32Array(n);
+
+  // Composite RGBA over white paper (255,255,255) AND keep raw alpha channel
+  // so transparent PNG silhouettes and dark/colored strokes both produce strong gradients!
+  for (let i = 0; i < n; i++) {
+    const a = data[i * 4 + 3] / 255;
+    const r = data[i * 4] * a + 255 * (1 - a);
+    const g = data[i * 4 + 1] * a + 255 * (1 - a);
+    const b = data[i * 4 + 2] * a + 255 * (1 - a);
+    rCh[i] = r;
+    gCh[i] = g;
+    bCh[i] = b;
+    aCh[i] = data[i * 4 + 3];
+    lum[i] = 0.299 * r + 0.587 * g + 0.114 * b;
   }
+
+  const rawMag = new Float32Array(n);
+  const gradDirX = new Float32Array(n);
+  const gradDirY = new Float32Array(n);
+
+  const sobelAt = (arr: Float32Array, x: number, y: number) => {
+    const idxTL = (y - 1) * w + (x - 1);
+    const idxTC = (y - 1) * w + x;
+    const idxTR = (y - 1) * w + (x + 1);
+    const idxML = y * w + (x - 1);
+    const idxMR = y * w + (x + 1);
+    const idxBL = (y + 1) * w + (x - 1);
+    const idxBC = (y + 1) * w + x;
+    const idxBR = (y + 1) * w + (x + 1);
+    const gx = -arr[idxTL] + arr[idxTR] - 2 * arr[idxML] + 2 * arr[idxMR] - arr[idxBL] + arr[idxBR];
+    const gy = -arr[idxTL] - 2 * arr[idxTC] - arr[idxTR] + arr[idxBL] + 2 * arr[idxBC] + arr[idxBR];
+    return { gx, gy, mag: Math.hypot(gx, gy) };
+  };
 
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
-      const gx =
-        -gray[(y - 1) * w + (x - 1)] +
-        gray[(y - 1) * w + (x + 1)] -
-        2 * gray[y * w + (x - 1)] +
-        2 * gray[y * w + (x + 1)] -
-        gray[(y + 1) * w + (x - 1)] +
-        gray[(y + 1) * w + (x + 1)];
-      const gy =
-        -gray[(y - 1) * w + (x - 1)] -
-        2 * gray[(y - 1) * w + x] -
-        gray[(y - 1) * w + (x + 1)] +
-        gray[(y + 1) * w + (x - 1)] +
-        2 * gray[(y + 1) * w + x] +
-        gray[(y + 1) * w + (x + 1)];
-      edgeMap[y * w + x] = Math.hypot(gx, gy);
+      const idx = y * w + x;
+      const sLum = sobelAt(lum, x, y);
+      const sAlpha = sobelAt(aCh, x, y);
+      const sR = sobelAt(rCh, x, y);
+      const sG = sobelAt(gCh, x, y);
+      const sB = sobelAt(bCh, x, y);
+
+      const maxColorMag = Math.max(sR.mag, sG.mag, sB.mag);
+      // Prioritize alpha silhouette transitions (2.2x) + color/luminance edges
+      const combinedMag = Math.max(sAlpha.mag * 2.2, sLum.mag, maxColorMag * 0.9);
+      rawMag[idx] = combinedMag;
+
+      const dom = sAlpha.mag * 2.2 >= sLum.mag ? sAlpha : sLum;
+      const len = dom.mag || 1;
+      gradDirX[idx] = dom.gx / len;
+      gradDirY[idx] = dom.gy / len;
     }
   }
+
+  // Non-Maximum Suppression (NMS) with soft 35% shoulder so contour ridges are sharp and 1-2px thin
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const idx = y * w + x;
+      const mag = rawMag[idx];
+      if (mag < 25) continue;
+      const dx = Math.round(gradDirX[idx]);
+      const dy = Math.round(gradDirY[idx]);
+      const m1 = rawMag[(y + dy) * w + (x + dx)];
+      const m2 = rawMag[(y - dy) * w + (x - dx)];
+      if (mag >= m1 && mag >= m2) {
+        edgeMap[idx] = mag * 1.25;
+      } else {
+        edgeMap[idx] = mag * 0.35;
+      }
+    }
+  }
+
   return edgeMap;
 }
 
@@ -1378,7 +1433,9 @@ export function snapMagneticLassoPoint(
   edgeMap: Float32Array,
   w: number,
   h: number,
-  searchRadius = 18
+  searchRadius = 14,
+  prevLocalX?: number,
+  prevLocalY?: number
 ): { x: number; y: number } {
   const cx = Math.round(localX);
   const cy = Math.round(localY);
@@ -1386,23 +1443,49 @@ export function snapMagneticLassoPoint(
   let bestX = localX;
   let bestY = localY;
 
+  const hasPrev = prevLocalX !== undefined && prevLocalY !== undefined;
+  const moveDx = hasPrev ? localX - (prevLocalX as number) : 0;
+  const moveDy = hasPrev ? localY - (prevLocalY as number) : 0;
+  const moveDist = Math.hypot(moveDx, moveDy);
+
   const r = Math.round(searchRadius);
   for (let dy = -r; dy <= r; dy++) {
     for (let dx = -r; dx <= r; dx++) {
-      const dist = Math.hypot(dx, dy);
-      if (dist > searchRadius) continue;
+      const distToCursor = Math.hypot(dx, dy);
+      if (distToCursor > searchRadius) continue;
       const nx = cx + dx;
       const ny = cy + dy;
       if (nx < 1 || nx >= w - 1 || ny < 1 || ny >= h - 1) continue;
       const grad = edgeMap[ny * w + nx];
-      // Weight strong edges while slightly preferring closer pixels
-      const score = grad * (1 - (dist / (searchRadius * 1.4)) * 0.35);
-      if (score > bestScore && grad > 35) {
+      if (grad < 45) continue;
+
+      // Strong Gaussian preference for edges close to the cursor tip
+      const cursorWeight = Math.exp(-(distToCursor * distToCursor) / (2 * (searchRadius * 0.52) ** 2));
+
+      // Continuity weight: prevent erratic sideways jumps away from the previous contour point
+      let continuityWeight = 1.0;
+      if (hasPrev && moveDist > 0.5) {
+        const stepFromPrev = Math.hypot(nx - (prevLocalX as number), ny - (prevLocalY as number));
+        // Penalize points that jump backwards or way farther than the cursor moved
+        const jumpDiff = Math.abs(stepFromPrev - moveDist);
+        continuityWeight = 1 / (1 + (jumpDiff / Math.max(6, searchRadius * 0.6)) ** 2);
+      }
+
+      const score = grad * (0.35 + 0.65 * cursorWeight) * continuityWeight;
+      if (score > bestScore) {
         bestScore = score;
         bestX = nx;
         bestY = ny;
       }
     }
+  }
+
+  // Smoothly blend 80% snapped edge + 20% raw cursor if edge is moderate so hand motion always feels fluid
+  if (bestScore > 0 && bestScore < 140) {
+    return {
+      x: bestX * 0.78 + localX * 0.22,
+      y: bestY * 0.78 + localY * 0.22,
+    };
   }
 
   return { x: bestX, y: bestY };

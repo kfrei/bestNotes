@@ -3931,7 +3931,7 @@ export default function App() {
   );
 
   const applyTightLassoCropToImage = useCallback(
-    (imgObj: ImageObject, poly: { x: number; y: number }[]) => {
+    (imgObj: ImageObject, poly: { x: number; y: number }[], isMagnetic = false) => {
       const relPoly = poly.map((p) => ({
         x: Math.max(0, Math.min(imgObj.width, p.x - imgObj.x)),
         y: Math.max(0, Math.min(imgObj.height, p.y - imgObj.y)),
@@ -4005,7 +4005,127 @@ export default function App() {
           offCtx.restore();
 
           try {
-            const croppedDataUrl = offCanvas.toDataURL('image/png');
+            let finalCanvas = offCanvas;
+            let finalX = imgObj.x + minRelX;
+            let finalY = imgObj.y + minRelY;
+            let finalW = cropW;
+            let finalH = cropH;
+            let finalNatW = natCropW;
+            let finalNatH = natCropH;
+
+            // Magnetic Shrink-Wrap + Outer Paper Background Trim:
+            // 1. In Magnetic mode, flood-fill inward from the clipped boundary to strip any paper-white halo
+            // 2. In both modes, shrink-wrap the bounding box tightly to non-transparent pixels inside the crop!
+            const imgData = offCtx.getImageData(0, 0, natCropW, natCropH);
+            const data = imgData.data;
+
+            if (isMagnetic) {
+              const visited = new Uint8Array(natCropW * natCropH);
+              const queue = new Int32Array(natCropW * natCropH);
+              let qHead = 0;
+              let qTail = 0;
+
+              const isPaperBgPixel = (idx4: number) => {
+                const a = data[idx4 + 3];
+                if (a < 20) return true;
+                const r = data[idx4];
+                const g = data[idx4 + 1];
+                const b = data[idx4 + 2];
+                // Near-white / light paper background
+                return r > 234 && g > 234 && b > 230 && Math.max(r, g, b) - Math.min(r, g, b) < 18;
+              };
+
+              // Seed flood-fill from all transparent or border pixels along the polygon perimeter
+              for (let y = 0; y < natCropH; y++) {
+                for (let x = 0; x < natCropW; x++) {
+                  const pIdx = y * natCropW + x;
+                  const idx4 = pIdx * 4;
+                  const onBorder = x === 0 || y === 0 || x === natCropW - 1 || y === natCropH - 1;
+                  if (data[idx4 + 3] === 0 || (onBorder && isPaperBgPixel(idx4))) {
+                    visited[pIdx] = 1;
+                    queue[qTail++] = pIdx;
+                  }
+                }
+              }
+
+              while (qHead < qTail) {
+                const curr = queue[qHead++];
+                const cx = curr % natCropW;
+                const cy = (curr / natCropW) | 0;
+                const neighbors = [
+                  cx > 0 ? curr - 1 : -1,
+                  cx < natCropW - 1 ? curr + 1 : -1,
+                  cy > 0 ? curr - natCropW : -1,
+                  cy < natCropH - 1 ? curr + natCropW : -1,
+                ];
+                for (let n = 0; n < 4; n++) {
+                  const nbIdx = neighbors[n];
+                  if (nbIdx < 0 || visited[nbIdx]) continue;
+                  const nb4 = nbIdx * 4;
+                  if (isPaperBgPixel(nb4)) {
+                    visited[nbIdx] = 1;
+                    data[nb4 + 3] = 0;
+                    queue[qTail++] = nbIdx;
+                  }
+                }
+              }
+              offCtx.putImageData(imgData, 0, 0);
+            }
+
+            // Find tight non-transparent pixel bounds (alpha > 16)
+            let minPxX = natCropW,
+              minPxY = natCropH,
+              maxPxX = -1,
+              maxPxY = -1;
+            for (let y = 0; y < natCropH; y++) {
+              for (let x = 0; x < natCropW; x++) {
+                if (data[(y * natCropW + x) * 4 + 3] > 16) {
+                  if (x < minPxX) minPxX = x;
+                  if (y < minPxY) minPxY = y;
+                  if (x > maxPxX) maxPxX = x;
+                  if (y > maxPxY) maxPxY = y;
+                }
+              }
+            }
+
+            if (maxPxX >= minPxX && maxPxY >= minPxY) {
+              const padPx = 2;
+              minPxX = Math.max(0, minPxX - padPx);
+              minPxY = Math.max(0, minPxY - padPx);
+              maxPxX = Math.min(natCropW - 1, maxPxX + padPx);
+              maxPxY = Math.min(natCropH - 1, maxPxY + padPx);
+              const tightNatW = Math.max(12, maxPxX - minPxX + 1);
+              const tightNatH = Math.max(12, maxPxY - minPxY + 1);
+
+              if (tightNatW < natCropW || tightNatH < natCropH) {
+                const trimCanvas = document.createElement('canvas');
+                trimCanvas.width = tightNatW;
+                trimCanvas.height = tightNatH;
+                const trimCtx = trimCanvas.getContext('2d');
+                if (trimCtx) {
+                  trimCtx.drawImage(
+                    offCanvas,
+                    minPxX,
+                    minPxY,
+                    tightNatW,
+                    tightNatH,
+                    0,
+                    0,
+                    tightNatW,
+                    tightNatH
+                  );
+                  finalCanvas = trimCanvas;
+                  finalX = imgObj.x + minRelX + minPxX / scaleX;
+                  finalY = imgObj.y + minRelY + minPxY / scaleY;
+                  finalW = Math.max(16, tightNatW / scaleX);
+                  finalH = Math.max(16, tightNatH / scaleY);
+                  finalNatW = tightNatW;
+                  finalNatH = tightNatH;
+                }
+              }
+            }
+
+            const croppedDataUrl = finalCanvas.toDataURL('image/png');
             const preloaded = new Image();
             preloaded.src = croppedDataUrl;
             imageElementsCacheRef.current.set(croppedDataUrl, preloaded);
@@ -4016,12 +4136,12 @@ export default function App() {
                 im.id === imgObj.id
                   ? {
                       ...im,
-                      x: Math.round(imgObj.x + minRelX),
-                      y: Math.round(imgObj.y + minRelY),
-                      width: Math.round(cropW),
-                      height: Math.round(cropH),
-                      naturalWidth: natCropW,
-                      naturalHeight: natCropH,
+                      x: Math.round(finalX),
+                      y: Math.round(finalY),
+                      width: Math.round(finalW),
+                      height: Math.round(finalH),
+                      naturalWidth: finalNatW,
+                      naturalHeight: finalNatH,
                       dataUrl: croppedDataUrl,
                       originalDataUrl: im.originalDataUrl || im.dataUrl,
                       clipPolygon: undefined,
@@ -5803,13 +5923,17 @@ export default function App() {
           let nextX = rawPt.x;
           let nextY = rawPt.y;
           if (imageCropMode === 'magnetic' && edgeMapRef.current && edgeMapRef.current.id === imgObj.id) {
+            const poly = lassoPolygonRef.current;
+            const prevPt = poly.length > 0 ? poly[poly.length - 1] : undefined;
             const snapped = snapMagneticLassoPoint(
               rawPt.x - imgObj.x,
               rawPt.y - imgObj.y,
               edgeMapRef.current.map,
               edgeMapRef.current.w,
               edgeMapRef.current.h,
-              20
+              14,
+              prevPt ? prevPt.x - imgObj.x : undefined,
+              prevPt ? prevPt.y - imgObj.y : undefined
             );
             nextX = imgObj.x + snapped.x;
             nextY = imgObj.y + snapped.y;
@@ -5841,7 +5965,7 @@ export default function App() {
           isDrawingRef.current = false;
           activePointerIdRef.current = null;
           activePointerTypeRef.current = null;
-          applyTightLassoCropToImage(imgObj, poly);
+          applyTightLassoCropToImage(imgObj, poly, imageCropMode === 'magnetic');
           setImageCropMode('none');
           setCropPolygonPts([]);
           showToast(
