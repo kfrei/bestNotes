@@ -926,7 +926,15 @@ export default function App() {
     x: number;
     y: number;
     segIdx?: number;
+    segT?: number;
     freehandIdx?: number;
+    c1x?: number;
+    c1y?: number;
+    c2x?: number;
+    c2y?: number;
+    convertCurveSampleIdx?: number;
+    sampledCurvePoints?: BezierPoint[];
+    sampledBaseKeyIndices?: number[];
   } | null>(null);
   const activeDeleteNodeRef = useRef<{
     strokeId: string;
@@ -2345,6 +2353,16 @@ export default function App() {
       if (p.x > maxX) maxX = p.x;
       if (p.y > maxY) maxY = p.y;
     }
+    for (const p of s.points) {
+      if (p.cx !== undefined) {
+        if (p.cx < minX) minX = p.cx;
+        if (p.cx > maxX) maxX = p.cx;
+      }
+      if (p.cy !== undefined) {
+        if (p.cy < minY) minY = p.cy;
+        if (p.cy > maxY) maxY = p.cy;
+      }
+    }
     return { minX, minY, maxX, maxY };
   };
 
@@ -2375,34 +2393,46 @@ export default function App() {
       return false;
     }
 
-    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
-      const [p0, p1, p2, p3] = s.points;
-      const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
-      const cy = (p0.y + p1.y + p2.y + p3.y) / 4;
-      const v1x = (p1.x - p3.x) / 2;
-      const v1y = (p1.y - p3.y) / 2;
-      const v2x = (p2.x - p0.x) / 2;
-      const v2y = (p2.y - p0.y) / 2;
-      let prevPt: { x: number; y: number } | null = null;
-      for (let i = 0; i <= 36; i++) {
-        const ang = (i / 36) * Math.PI * 2;
-        const cosT = Math.cos(ang);
-        const sinT = Math.sin(ang);
-        const curPt = {
-          x: cx + cosT * v1x + sinT * v2x,
-          y: cy + cosT * v1y + sinT * v2y,
-        };
-        if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
-        prevPt = curPt;
+    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 3) {
+      const pts = s.points;
+      const n = pts.length;
+      const kappa = 0.55228475 * (4 / n);
+      for (let i = 0; i < n; i++) {
+        const pA = pts[i];
+        const pB = pts[(i + 1) % n];
+        const pPrev = pts[(i - 1 + n) % n];
+        const pNext = pts[(i + 2) % n];
+        const cp1x = pA.x + ((pB.x - pPrev.x) / 2) * kappa;
+        const cp1y = pA.y + ((pB.y - pPrev.y) / 2) * kappa;
+        const cp2x = pB.x - ((pNext.x - pA.x) / 2) * kappa;
+        const cp2y = pB.y - ((pNext.y - pA.y) / 2) * kappa;
+        let prevPt = { x: pA.x, y: pA.y };
+        for (let k = 1; k <= 12; k++) {
+          const t = k / 12;
+          const u = 1 - t;
+          const curPt = {
+            x: u * u * u * pA.x + 3 * u * u * t * cp1x + 3 * u * t * t * cp2x + t * t * t * pB.x,
+            y: u * u * u * pA.y + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * pB.y,
+          };
+          if (isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+          prevPt = curPt;
+        }
       }
-      if (allowInteriorFill) {
-        const r1 = Math.hypot(v1x, v1y) || 1;
-        const r2 = Math.hypot(v2x, v2y) || 1;
-        const dx = pt.x - cx;
-        const dy = pt.y - cy;
-        const u1 = (dx * v1x + dy * v1y) / (r1 * r1);
-        const u2 = (dx * v2x + dy * v2y) / (r2 * r2);
-        if (u1 * u1 + u2 * u2 <= 0.95) return true;
+      if (allowInteriorFill && n >= 3) {
+        let cx = 0,
+          cy = 0;
+        for (const p of pts) {
+          cx += p.x;
+          cy += p.y;
+        }
+        cx /= n;
+        cy /= n;
+        let maxR = 1;
+        for (const p of pts) {
+          const r = Math.hypot(p.x - cx, p.y - cy);
+          if (r > maxR) maxR = r;
+        }
+        if (Math.hypot(pt.x - cx, pt.y - cy) <= maxR * 0.92) return true;
       }
       return false;
     }
@@ -2519,7 +2549,23 @@ export default function App() {
 
     if (s.points.some((p) => distance(pt, p) < tol)) return true;
     for (let i = 1; i < s.points.length; i++) {
-      if (isPointNearSegment(pt, s.points[i - 1], s.points[i], tol)) return true;
+      const pA = s.points[i - 1];
+      const pB = s.points[i];
+      if (pB.cx !== undefined && pB.cy !== undefined) {
+        let prevPt: { x: number; y: number } = pA;
+        for (let k = 1; k <= 10; k++) {
+          const t = k / 10;
+          const u = 1 - t;
+          const curPt = {
+            x: u * u * pA.x + 2 * u * t * pB.cx + t * t * pB.x,
+            y: u * u * pA.y + 2 * u * t * pB.cy + t * t * pB.y,
+          };
+          if (isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+          prevPt = curPt;
+        }
+      } else if (isPointNearSegment(pt, pA, pB, tol)) {
+        return true;
+      }
     }
 
     // Allow interior hit-testing when explicitly requested (Pass 2 fallback on closed polygons/shapes or filled strokes)
@@ -3167,16 +3213,17 @@ export default function App() {
     }
 
     ctx.beginPath();
-    // 1. 4-Node Circle / Ellipse (strictly 4 cardinal points every 90°: Top, Right, Bottom, Left)
-    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
+    // 1. Circle / Ellipse (4 cardinal points every 90° by default, or >= 3 smooth cubic spline points when user adds/deletes nodes!)
+    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 3) {
       const pts = s.points;
-      const kappa = 0.55228475;
+      const n = pts.length;
+      const kappa = 0.55228475 * (4 / n);
       ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < n; i++) {
         const pA = pts[i];
-        const pB = pts[(i + 1) % 4];
-        const pPrev = pts[(i + 3) % 4];
-        const pNext = pts[(i + 2) % 4];
+        const pB = pts[(i + 1) % n];
+        const pPrev = pts[(i - 1 + n) % n];
+        const pNext = pts[(i + 2) % n];
         const cp1x = pA.x + ((pB.x - pPrev.x) / 2) * kappa;
         const cp1y = pA.y + ((pB.y - pPrev.y) / 2) * kappa;
         const cp2x = pB.x - ((pNext.x - pA.x) / 2) * kappa;
@@ -6560,15 +6607,111 @@ export default function App() {
     return inside;
   };
 
-  // Compute the sliding "+ Add Node" preview point on the perimeter/line of an active stroke in Nodes ('direct-node') mode
+  // Project a pointer `pt` onto a rendered segment `pA -> pB` (evaluating Quadratic Bézier when `pB.cx/cy` is present, or linear chord otherwise)
+  const projectPointOntoRenderedSegment = (
+    pt: { x: number; y: number },
+    pA: BezierPoint,
+    pB: BezierPoint,
+    tMin = 0,
+    tMax = 1
+  ): {
+    x: number;
+    y: number;
+    d: number;
+    t: number;
+    c1x?: number;
+    c1y?: number;
+    c2x?: number;
+    c2y?: number;
+  } => {
+    if (pB.cx !== undefined && pB.cy !== undefined) {
+      const cx = pB.cx;
+      const cy = pB.cy;
+      let bestT = (tMin + tMax) / 2;
+      let bestD = Infinity;
+      const coarseSteps = 24;
+      for (let s = 0; s <= coarseSteps; s++) {
+        const t = tMin + ((tMax - tMin) * s) / coarseSteps;
+        const u = 1 - t;
+        const bx = u * u * pA.x + 2 * u * t * cx + t * t * pB.x;
+        const by = u * u * pA.y + 2 * u * t * cy + t * t * pB.y;
+        const d = Math.hypot(pt.x - bx, pt.y - by);
+        if (d < bestD) {
+          bestD = d;
+          bestT = t;
+        }
+      }
+      const span = (tMax - tMin) / coarseSteps;
+      const fineMin = Math.max(tMin, bestT - span);
+      const fineMax = Math.min(tMax, bestT + span);
+      for (let s = 0; s <= 8; s++) {
+        const t = fineMin + ((fineMax - fineMin) * s) / 8;
+        const u = 1 - t;
+        const bx = u * u * pA.x + 2 * u * t * cx + t * t * pB.x;
+        const by = u * u * pA.y + 2 * u * t * cy + t * t * pB.y;
+        const d = Math.hypot(pt.x - bx, pt.y - by);
+        if (d < bestD) {
+          bestD = d;
+          bestT = t;
+        }
+      }
+      const u = 1 - bestT;
+      const px = u * u * pA.x + 2 * u * bestT * cx + bestT * bestT * pB.x;
+      const py = u * u * pA.y + 2 * u * bestT * cy + bestT * bestT * pB.y;
+      return {
+        x: px,
+        y: py,
+        d: bestD,
+        t: bestT,
+        c1x: pA.x + bestT * (cx - pA.x),
+        c1y: pA.y + bestT * (cy - pA.y),
+        c2x: cx + bestT * (pB.x - cx),
+        c2y: cy + bestT * (pB.y - cy),
+      };
+    }
+
+    const dx = pB.x - pA.x;
+    const dy = pB.y - pA.y;
+    const lenSq = dx * dx + dy * dy;
+    const t =
+      lenSq > 1e-4
+        ? Math.max(tMin, Math.min(tMax, ((pt.x - pA.x) * dx + (pt.y - pA.y) * dy) / lenSq))
+        : (tMin + tMax) / 2;
+    const px = pA.x + t * dx;
+    const py = pA.y + t * dy;
+    return {
+      x: px,
+      y: py,
+      d: Math.hypot(pt.x - px, pt.y - py),
+      t,
+    };
+  };
+
+  // Compute the sliding "+ Add Node" preview point on the perimeter/line/curve of an active stroke in Nodes ('direct-node') mode
   const computeHoverAddNodePoint = (
     pt: { x: number; y: number },
-    target: StrokeObject
-  ): { strokeId: string; x: number; y: number; segIdx?: number; freehandIdx?: number } | null => {
+    target: StrokeObject,
+    maxDist = 18
+  ): {
+    strokeId: string;
+    x: number;
+    y: number;
+    segIdx?: number;
+    segT?: number;
+    freehandIdx?: number;
+    c1x?: number;
+    c1y?: number;
+    c2x?: number;
+    c2y?: number;
+    convertCurveSampleIdx?: number;
+    sampledCurvePoints?: BezierPoint[];
+    sampledBaseKeyIndices?: number[];
+  } | null => {
     if (!target || isShapeWithoutNodes(target)) return null;
 
+    // 1. Freehand Stroke / Curve (!target.isShape): evaluate continuous Quadratic Bézier & linear segments along the entire curve!
     if (!target.isShape) {
-      if (target.points.length < 3) return null;
+      if (target.points.length < 2) return null;
       const keyIndices =
         target.keyNodeIndices && target.keyNodeIndices.length >= 2
           ? target.keyNodeIndices
@@ -6581,27 +6724,292 @@ export default function App() {
           return null;
         }
       }
-      let bestIdx = -1;
-      let minDist = 18;
-      for (let i = 1; i < target.points.length - 1; i++) {
-        if (keyIndices.includes(i)) continue;
-        const d = distance(pt, target.points[i]);
-        if (d < minDist) {
-          minDist = d;
-          bestIdx = i;
+
+      let bestSeg = -1;
+      let bestDist = maxDist;
+      let bestProjX = pt.x;
+      let bestProjY = pt.y;
+      let bestT = 0.5;
+      let bestC1x: number | undefined;
+      let bestC1y: number | undefined;
+      let bestC2x: number | undefined;
+      let bestC2y: number | undefined;
+
+      for (let i = 0; i < target.points.length - 1; i++) {
+        const proj = projectPointOntoRenderedSegment(pt, target.points[i], target.points[i + 1], 0, 1);
+        if (proj.d < bestDist) {
+          let nearExistingKey = false;
+          for (let k = 0; k < keyIndices.length; k++) {
+            const kp = target.points[keyIndices[k]];
+            if (kp && Math.hypot(proj.x - kp.x, proj.y - kp.y) < 18) {
+              nearExistingKey = true;
+              break;
+            }
+          }
+          if (nearExistingKey) continue;
+          bestDist = proj.d;
+          bestSeg = i;
+          bestProjX = proj.x;
+          bestProjY = proj.y;
+          bestT = proj.t;
+          bestC1x = proj.c1x;
+          bestC1y = proj.c1y;
+          bestC2x = proj.c2x;
+          bestC2y = proj.c2y;
         }
       }
-      if (bestIdx >= 1) {
+
+      if (bestSeg >= 0) {
+        let nearIdx = -1;
+        let nearDist = 4.5;
+        for (let i = Math.max(1, bestSeg - 1); i <= Math.min(target.points.length - 2, bestSeg + 2); i++) {
+          if (keyIndices.includes(i)) continue;
+          const d = Math.hypot(bestProjX - target.points[i].x, bestProjY - target.points[i].y);
+          if (d < nearDist) {
+            nearDist = d;
+            nearIdx = i;
+          }
+        }
         return {
           strokeId: target.id,
-          x: target.points[bestIdx].x,
-          y: target.points[bestIdx].y,
-          freehandIdx: bestIdx,
+          x: bestProjX,
+          y: bestProjY,
+          segIdx: bestSeg,
+          segT: bestT,
+          freehandIdx: nearIdx >= 1 ? nearIdx : undefined,
+          c1x: bestC1x,
+          c1y: bestC1y,
+          c2x: bestC2x,
+          c2y: bestC2y,
         };
       }
       return null;
     }
 
+    // 2. 3-Node Open Curves ('parabola', 'arc', 'hyperbola'): sample the exact mathematical curve!
+    if (
+      (target.shapeType === 'parabola' ||
+        target.shapeType === 'arc' ||
+        target.shapeType === 'hyperbola') &&
+      target.points.length >= 3
+    ) {
+      for (let i = 0; i < 3; i++) {
+        const p = target.points[i];
+        if (p && distance(pt, p) < 22) return null;
+      }
+      const [p0, pMid, p2] = target.points;
+      const N = 64;
+      const rawSamples: { x: number; y: number }[] = [];
+      if (target.shapeType === 'hyperbola') {
+        const wHyp = 1.85;
+        const midX = (p0.x + p2.x) / 2;
+        const midY = (p0.y + p2.y) / 2;
+        const ctrlX = midX + ((1 + wHyp) / wHyp) * (pMid.x - midX);
+        const ctrlY = midY + ((1 + wHyp) / wHyp) * (pMid.y - midY);
+        for (let k = 0; k <= N; k++) {
+          const t = k / N;
+          const u = 1 - t;
+          const b0 = u * u;
+          const b1 = 2 * wHyp * u * t;
+          const b2 = t * t;
+          const denom = b0 + b1 + b2;
+          rawSamples.push({
+            x: (b0 * p0.x + b1 * ctrlX + b2 * p2.x) / denom,
+            y: (b0 * p0.y + b1 * ctrlY + b2 * p2.y) / denom,
+          });
+        }
+      } else {
+        const ctrlX = 2 * pMid.x - (p0.x + p2.x) / 2;
+        const ctrlY = 2 * pMid.y - (p0.y + p2.y) / 2;
+        for (let k = 0; k <= N; k++) {
+          const t = k / N;
+          const u = 1 - t;
+          rawSamples.push({
+            x: u * u * p0.x + 2 * u * t * ctrlX + t * t * p2.x,
+            y: u * u * p0.y + 2 * u * t * ctrlY + t * t * p2.y,
+          });
+        }
+      }
+
+      let bestDist = maxDist;
+      let bestProjX = pt.x;
+      let bestProjY = pt.y;
+      let bestSampleIdx = -1;
+      for (let k = 0; k < N; k++) {
+        const sA = rawSamples[k];
+        const sB = rawSamples[k + 1];
+        const dx = sB.x - sA.x;
+        const dy = sB.y - sA.y;
+        const lenSq = dx * dx + dy * dy;
+        const t = lenSq > 1e-4 ? Math.max(0, Math.min(1, ((pt.x - sA.x) * dx + (pt.y - sA.y) * dy) / lenSq)) : 0.5;
+        const px = sA.x + t * dx;
+        const py = sA.y + t * dy;
+        const d = Math.hypot(pt.x - px, pt.y - py);
+        if (d < bestDist) {
+          if (
+            Math.hypot(px - p0.x, py - p0.y) < 18 ||
+            Math.hypot(px - pMid.x, py - pMid.y) < 18 ||
+            Math.hypot(px - p2.x, py - p2.y) < 18
+          ) {
+            continue;
+          }
+          bestDist = d;
+          bestProjX = px;
+          bestProjY = py;
+          bestSampleIdx = t < 0.5 ? k : k + 1;
+        }
+      }
+
+      if (bestSampleIdx >= 1) {
+        let idx = Math.max(2, Math.min(N - 2, bestSampleIdx));
+        if (idx === 32) idx = bestProjX < pMid.x ? 30 : 34;
+        const sampledPts: BezierPoint[] = rawSamples.map((sp, k) => ({
+          x: k === idx ? bestProjX : sp.x,
+          y: k === idx ? bestProjY : sp.y,
+          cx: k > 0 ? (rawSamples[k - 1].x + (k === idx ? bestProjX : sp.x)) / 2 : undefined,
+          cy: k > 0 ? (rawSamples[k - 1].y + (k === idx ? bestProjY : sp.y)) / 2 : undefined,
+          pressure: 0.7,
+        }));
+        return {
+          strokeId: target.id,
+          x: bestProjX,
+          y: bestProjY,
+          convertCurveSampleIdx: idx,
+          sampledCurvePoints: sampledPts,
+          sampledBaseKeyIndices: [0, 32, N],
+        };
+      }
+      return null;
+    }
+
+    // 3. Sine & Cosine Waves ('sine', 'cosine'): sample the 72 wave points!
+    if ((target.shapeType === 'sine' || target.shapeType === 'cosine') && target.points.length >= 2) {
+      for (let i = 0; i < Math.min(2, target.points.length); i++) {
+        const p = target.points[i];
+        if (p && distance(pt, p) < 22) return null;
+      }
+      const pPeak = target.points[0];
+      const pEnd = target.points[1];
+      const pStart = target.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
+      const dx = pEnd.x - pStart.x;
+      const dy = pEnd.y - pStart.y;
+      const spanL = Math.hypot(dx, dy) || 1;
+      const ux = dx / spanL;
+      const uy = dy / spanL;
+      const nx = uy;
+      const ny = -ux;
+      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
+      const halfCycles = Math.max(1, pStart.twist || 2);
+      const N = 72;
+      const rawSamples: { x: number; y: number }[] = [];
+      for (let k = 0; k <= N; k++) {
+        const t = k / N;
+        const along = t * spanL;
+        const waveOffset =
+          target.shapeType === 'sine'
+            ? amp * Math.sin(t * halfCycles * Math.PI)
+            : -amp * Math.cos(t * halfCycles * Math.PI);
+        rawSamples.push({
+          x: pStart.x + along * ux + waveOffset * nx,
+          y: pStart.y + along * uy + waveOffset * ny,
+        });
+      }
+
+      let bestDist = maxDist;
+      let bestProjX = pt.x;
+      let bestProjY = pt.y;
+      let bestSampleIdx = -1;
+      for (let k = 0; k < N; k++) {
+        const sA = rawSamples[k];
+        const sB = rawSamples[k + 1];
+        const sdx = sB.x - sA.x;
+        const sdy = sB.y - sA.y;
+        const lenSq = sdx * sdx + sdy * sdy;
+        const t =
+          lenSq > 1e-4 ? Math.max(0, Math.min(1, ((pt.x - sA.x) * sdx + (pt.y - sA.y) * sdy) / lenSq)) : 0.5;
+        const px = sA.x + t * sdx;
+        const py = sA.y + t * sdy;
+        const d = Math.hypot(pt.x - px, pt.y - py);
+        if (d < bestDist) {
+          if (Math.hypot(px - pPeak.x, py - pPeak.y) < 18 || Math.hypot(px - pEnd.x, py - pEnd.y) < 18) {
+            continue;
+          }
+          bestDist = d;
+          bestProjX = px;
+          bestProjY = py;
+          bestSampleIdx = t < 0.5 ? k : k + 1;
+        }
+      }
+
+      if (bestSampleIdx >= 1) {
+        const idx = Math.max(2, Math.min(N - 2, bestSampleIdx));
+        const sampledPts: BezierPoint[] = rawSamples.map((sp, k) => ({
+          x: k === idx ? bestProjX : sp.x,
+          y: k === idx ? bestProjY : sp.y,
+          cx: k > 0 ? (rawSamples[k - 1].x + (k === idx ? bestProjX : sp.x)) / 2 : undefined,
+          cy: k > 0 ? (rawSamples[k - 1].y + (k === idx ? bestProjY : sp.y)) / 2 : undefined,
+          pressure: 0.7,
+        }));
+        const baseKeys = computeFreehandKeyNodeIndices(sampledPts);
+        return {
+          strokeId: target.id,
+          x: bestProjX,
+          y: bestProjY,
+          convertCurveSampleIdx: idx,
+          sampledCurvePoints: sampledPts,
+          sampledBaseKeyIndices: baseKeys,
+        };
+      }
+      return null;
+    }
+
+    // 4. Circle / Ellipse ('circle', 'ellipse'): sample each cubic Bézier arc between adjacent perimeter nodes!
+    if ((target.shapeType === 'circle' || target.shapeType === 'ellipse') && target.points.length >= 3) {
+      const pts = target.points;
+      const n = pts.length;
+      for (let i = 0; i < n; i++) {
+        if (distance(pt, pts[i]) < 22) return null;
+      }
+      const kappa = 0.55228475 * (4 / n);
+      let bestSeg = -1;
+      let bestDist = maxDist;
+      let bestProjX = pt.x;
+      let bestProjY = pt.y;
+      for (let i = 0; i < n; i++) {
+        const pA = pts[i];
+        const pB = pts[(i + 1) % n];
+        const pPrev = pts[(i - 1 + n) % n];
+        const pNext = pts[(i + 2) % n];
+        const cp1x = pA.x + ((pB.x - pPrev.x) / 2) * kappa;
+        const cp1y = pA.y + ((pB.y - pPrev.y) / 2) * kappa;
+        const cp2x = pB.x - ((pNext.x - pA.x) / 2) * kappa;
+        const cp2y = pB.y - ((pNext.y - pA.y) / 2) * kappa;
+        for (let k = 2; k <= 22; k++) {
+          const t = k / 24;
+          const u = 1 - t;
+          const bx = u * u * u * pA.x + 3 * u * u * t * cp1x + 3 * u * t * t * cp2x + t * t * t * pB.x;
+          const by = u * u * u * pA.y + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * pB.y;
+          const d = Math.hypot(pt.x - bx, pt.y - by);
+          if (d < bestDist && distance({ x: bx, y: by }, pA) >= 18 && distance({ x: bx, y: by }, pB) >= 18) {
+            bestDist = d;
+            bestSeg = i;
+            bestProjX = bx;
+            bestProjY = by;
+          }
+        }
+      }
+      if (bestSeg >= 0) {
+        return {
+          strokeId: target.id,
+          x: bestProjX,
+          y: bestProjY,
+          segIdx: bestSeg,
+        };
+      }
+      return null;
+    }
+
+    // 5. Editable Polygons & Lines ('rectangle', 'parallelogram', 'triangle', 'line', 'arrow', 'double-arrow') — including curved Quadratic Bézier segments!
     const isEditablePoly =
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
@@ -6624,27 +7032,29 @@ export default function App() {
     }
 
     let bestSeg = -1;
-    let bestDist = 18;
+    let bestDist = maxDist;
     let bestProjX = pt.x;
     let bestProjY = pt.y;
+    let bestT = 0.5;
+    let bestC1x: number | undefined;
+    let bestC1y: number | undefined;
+    let bestC2x: number | undefined;
+    let bestC2y: number | undefined;
+
     for (let i = 0; i < target.points.length - 1; i++) {
       const pA = target.points[i];
       const pB = target.points[i + 1];
-      const dx = pB.x - pA.x;
-      const dy = pB.y - pA.y;
-      const lenSq = dx * dx + dy * dy;
-      const t =
-        lenSq > 1e-4
-          ? Math.max(0.08, Math.min(0.92, ((pt.x - pA.x) * dx + (pt.y - pA.y) * dy) / lenSq))
-          : 0.5;
-      const px = pA.x + t * dx;
-      const py = pA.y + t * dy;
-      const d = Math.hypot(pt.x - px, pt.y - py);
-      if (d < bestDist) {
-        bestDist = d;
+      const proj = projectPointOntoRenderedSegment(pt, pA, pB, 0.06, 0.94);
+      if (proj.d < bestDist && distance(proj, pA) >= 18 && distance(proj, pB) >= 18) {
+        bestDist = proj.d;
         bestSeg = i;
-        bestProjX = px;
-        bestProjY = py;
+        bestProjX = proj.x;
+        bestProjY = proj.y;
+        bestT = proj.t;
+        bestC1x = proj.c1x;
+        bestC1y = proj.c1y;
+        bestC2x = proj.c2x;
+        bestC2y = proj.c2y;
       }
     }
     if (bestSeg >= 0) {
@@ -6653,9 +7063,168 @@ export default function App() {
         x: bestProjX,
         y: bestProjY,
         segIdx: bestSeg,
+        segT: bestT,
+        c1x: bestC1x,
+        c1y: bestC1y,
+        c2x: bestC2x,
+        c2y: bestC2y,
       };
     }
     return null;
+  };
+
+  // Insert a new node into stroke `s` using the curve-aware `hoverPreview` computed by `computeHoverAddNodePoint`
+  const insertNodeAtHoverPreview = (
+    s: StrokeObject,
+    hoverPreview: NonNullable<ReturnType<typeof computeHoverAddNodePoint>>
+  ): { stroke: StrokeObject; newDragIdx: number | null } => {
+    // A. Converting a 3-node curve ('parabola', 'arc', 'hyperbola') or wave ('sine', 'cosine') into a multi-node deformable curve
+    if (
+      hoverPreview.sampledCurvePoints &&
+      hoverPreview.sampledBaseKeyIndices &&
+      typeof hoverPreview.convertCurveSampleIdx === 'number'
+    ) {
+      const nextKeys = Array.from(
+        new Set([...hoverPreview.sampledBaseKeyIndices, hoverPreview.convertCurveSampleIdx])
+      ).sort((a, b) => a - b);
+      return {
+        stroke: {
+          ...s,
+          isShape: false,
+          shapeType: undefined,
+          points: hoverPreview.sampledCurvePoints,
+          keyNodeIndices: nextKeys,
+        },
+        newDragIdx: nextKeys.indexOf(hoverPreview.convertCurveSampleIdx),
+      };
+    }
+
+    // B. Freehand stroke / curve (!s.isShape)
+    if (!s.isShape && s.points.length >= 2) {
+      const kIndices =
+        s.keyNodeIndices && s.keyNodeIndices.length >= 2
+          ? s.keyNodeIndices
+          : computeFreehandKeyNodeIndices(s.points);
+
+      if (typeof hoverPreview.freehandIdx === 'number' && !kIndices.includes(hoverPreview.freehandIdx)) {
+        const nextPts = [...s.points];
+        nextPts[hoverPreview.freehandIdx] = {
+          ...nextPts[hoverPreview.freehandIdx],
+          x: hoverPreview.x,
+          y: hoverPreview.y,
+        };
+        const nextKeys = Array.from(new Set([...kIndices, hoverPreview.freehandIdx])).sort((a, b) => a - b);
+        return {
+          stroke: { ...s, points: nextPts, keyNodeIndices: nextKeys },
+          newDragIdx: nextKeys.indexOf(hoverPreview.freehandIdx),
+        };
+      }
+
+      if (typeof hoverPreview.segIdx === 'number' && hoverPreview.segIdx < s.points.length - 1) {
+        const segIdx = hoverPreview.segIdx;
+        const pA = s.points[segIdx];
+        const pB = s.points[segIdx + 1];
+        const segLen = distance(pA, pB);
+        const nextPts = [...s.points];
+
+        if (segLen > 18) {
+          // Subdivide long/stretched segment into 5 smooth points so C1 Cosine-Hermite deformation around the new node is silky-smooth
+          const tMid = hoverPreview.segT ?? 0.5;
+          const tList = [
+            0.25 * tMid,
+            0.6 * tMid,
+            tMid,
+            tMid + 0.4 * (1 - tMid),
+            tMid + 0.75 * (1 - tMid),
+          ];
+          const evalAt = (t: number) => {
+            if (pB.cx !== undefined && pB.cy !== undefined) {
+              const u = 1 - t;
+              return {
+                x: u * u * pA.x + 2 * u * t * pB.cx + t * t * pB.x,
+                y: u * u * pA.y + 2 * u * t * pB.cy + t * t * pB.y,
+              };
+            }
+            return {
+              x: pA.x + t * (pB.x - pA.x),
+              y: pA.y + t * (pB.y - pA.y),
+            };
+          };
+          const inserted: BezierPoint[] = tList.map((tVal, idx) => {
+            const pos = idx === 2 ? { x: hoverPreview.x, y: hoverPreview.y } : evalAt(tVal);
+            return {
+              x: pos.x,
+              y: pos.y,
+              pressure: 0.7,
+            };
+          });
+          nextPts.splice(segIdx + 1, 0, ...inserted);
+          for (let j = segIdx + 1; j <= segIdx + 6 && j < nextPts.length; j++) {
+            nextPts[j] = {
+              ...nextPts[j],
+              cx: (nextPts[j - 1].x + nextPts[j].x) / 2,
+              cy: (nextPts[j - 1].y + nextPts[j].y) / 2,
+            };
+          }
+          const newKeyPtIdx = segIdx + 3;
+          const shiftedKeys = kIndices.map((k) => (k > segIdx ? k + 5 : k));
+          const nextKeys = Array.from(new Set([...shiftedKeys, newKeyPtIdx])).sort((a, b) => a - b);
+          return {
+            stroke: { ...s, points: nextPts, keyNodeIndices: nextKeys },
+            newDragIdx: nextKeys.indexOf(newKeyPtIdx),
+          };
+        }
+
+        const newPt: BezierPoint = {
+          x: hoverPreview.x,
+          y: hoverPreview.y,
+          cx: hoverPreview.c1x,
+          cy: hoverPreview.c1y,
+          pressure: 0.7,
+        };
+        nextPts.splice(segIdx + 1, 0, newPt);
+        if (hoverPreview.c2x !== undefined && hoverPreview.c2y !== undefined && nextPts[segIdx + 2]) {
+          nextPts[segIdx + 2] = {
+            ...nextPts[segIdx + 2],
+            cx: hoverPreview.c2x,
+            cy: hoverPreview.c2y,
+          };
+        }
+        const newKeyPtIdx = segIdx + 1;
+        const shiftedKeys = kIndices.map((k) => (k > segIdx ? k + 1 : k));
+        const nextKeys = Array.from(new Set([...shiftedKeys, newKeyPtIdx])).sort((a, b) => a - b);
+        return {
+          stroke: { ...s, points: nextPts, keyNodeIndices: nextKeys },
+          newDragIdx: nextKeys.indexOf(newKeyPtIdx),
+        };
+      }
+    }
+
+    // C. Geometric shape (polygon, line, arrow, circle, ellipse)
+    if (s.isShape && typeof hoverPreview.segIdx === 'number' && s.points.length >= 2) {
+      const segIdx = hoverPreview.segIdx;
+      const nextPts = [...s.points];
+      nextPts.splice(segIdx + 1, 0, {
+        x: hoverPreview.x,
+        y: hoverPreview.y,
+        cx: hoverPreview.c1x,
+        cy: hoverPreview.c1y,
+        pressure: 0.7,
+      });
+      if (hoverPreview.c2x !== undefined && hoverPreview.c2y !== undefined && nextPts[segIdx + 2]) {
+        nextPts[segIdx + 2] = {
+          ...nextPts[segIdx + 2],
+          cx: hoverPreview.c2x,
+          cy: hoverPreview.c2y,
+        };
+      }
+      return {
+        stroke: { ...s, points: nextPts },
+        newDragIdx: segIdx + 1,
+      };
+    }
+
+    return { stroke: s, newDragIdx: null };
   };
 
   // Find if the pointer is hovering over an existing node in Nodes ('direct-node') mode
@@ -6847,17 +7416,41 @@ export default function App() {
             const pB = s.points[nextIdx];
             const nextPts = [...s.points];
             const span = Math.max(1, nextIdx - prevIdx);
-            for (let i = prevIdx + 1; i < nextIdx; i++) {
+            for (let i = prevIdx + 1; i <= nextIdx; i++) {
               const t = (i - prevIdx) / span;
+              const nx = i === nextIdx ? pB.x : pA.x + (pB.x - pA.x) * t;
+              const ny = i === nextIdx ? pB.y : pA.y + (pB.y - pA.y) * t;
               nextPts[i] = {
                 ...nextPts[i],
-                x: pA.x + (pB.x - pA.x) * t,
-                y: pA.y + (pB.y - pA.y) * t,
+                x: nx,
+                y: ny,
+                cx: nextPts[i].cx !== undefined ? (nextPts[i - 1].x + nx) / 2 : undefined,
+                cy: nextPts[i].cy !== undefined ? (nextPts[i - 1].y + ny) / 2 : undefined,
               };
             }
             const nextKeys = kList.filter((_, k) => k !== nodeIdx);
             return { ...s, points: nextPts, keyNodeIndices: nextKeys };
           }),
+        }),
+        true
+      );
+      showToast('🗑️ Ο κόμβος διαγράφηκε!');
+      return;
+    }
+
+    if (target.shapeType === 'circle' || target.shapeType === 'ellipse') {
+      if (target.points.length <= 3) {
+        showToast('⚠️ Ο κύκλος/έλλειψη χρειάζεται τουλάχιστον 3 κόμβους!');
+        return;
+      }
+      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+      setRedoStack([]);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) =>
+            s.id === strokeId ? { ...s, points: s.points.filter((_, idx) => idx !== nodeIdx) } : s
+          ),
         }),
         true
       );
@@ -7652,7 +8245,7 @@ export default function App() {
             }
           }
 
-          // When clicking with a mouse on the sliding "+ Add Node" preview box along the line, immediately insert the new node!
+          // When clicking with a mouse on the sliding "+ Add Node" preview box along the line or curve, immediately insert the new node!
           const hoverPreview =
             hoverAddNodePreviewRef.current && hoverAddNodePreviewRef.current.strokeId === target.id
               ? hoverAddNodePreviewRef.current
@@ -7674,28 +8267,9 @@ export default function App() {
                 ...page,
                 strokes: page.strokes.map((s) => {
                   if (s.id !== target.id) return s;
-                  if (!s.isShape && typeof hoverPreview.freehandIdx === 'number' && s.points.length >= 3) {
-                    const kIndices =
-                      s.keyNodeIndices && s.keyNodeIndices.length >= 2
-                        ? s.keyNodeIndices
-                        : computeFreehandKeyNodeIndices(s.points);
-                    const nextKeys = Array.from(new Set([...kIndices, hoverPreview.freehandIdx])).sort(
-                      (a, b) => a - b
-                    );
-                    newDragIdx = nextKeys.indexOf(hoverPreview.freehandIdx);
-                    return { ...s, keyNodeIndices: nextKeys };
-                  }
-                  if (s.isShape && typeof hoverPreview.segIdx === 'number' && s.points.length >= 2) {
-                    const nextPts = [...s.points];
-                    nextPts.splice(hoverPreview.segIdx + 1, 0, {
-                      x: hoverPreview.x,
-                      y: hoverPreview.y,
-                      pressure: 0.7,
-                    });
-                    newDragIdx = hoverPreview.segIdx + 1;
-                    return { ...s, points: nextPts };
-                  }
-                  return s;
+                  const res = insertNodeAtHoverPreview(s, hoverPreview);
+                  newDragIdx = res.newDragIdx;
+                  return res.stroke;
                 }),
               }),
               true
@@ -7748,75 +8322,12 @@ export default function App() {
                     ...page,
                     strokes: page.strokes.map((s) => {
                       if (s.id !== targetId) return s;
-
-                      if (!s.isShape && s.points.length >= 3) {
-                        const kIndices =
-                          s.keyNodeIndices && s.keyNodeIndices.length >= 2
-                            ? s.keyNodeIndices
-                            : computeFreehandKeyNodeIndices(s.points);
-                        let bestIdx = -1;
-                        let minDist = Infinity;
-                        for (let i = 1; i < s.points.length - 1; i++) {
-                          if (kIndices.includes(i)) continue;
-                          const d = distance({ x: pressX, y: pressY }, s.points[i]);
-                          if (d < minDist) {
-                            minDist = d;
-                            bestIdx = i;
-                          }
-                        }
-                        if (bestIdx >= 1) {
-                          const nextKeys = Array.from(new Set([...kIndices, bestIdx])).sort(
-                            (a, b) => a - b
-                          );
-                          newDragIdx = nextKeys.indexOf(bestIdx);
-                          return { ...s, keyNodeIndices: nextKeys };
-                        }
-                        return s;
+                      const longPressPreview = computeHoverAddNodePoint({ x: pressX, y: pressY }, s, 28);
+                      if (longPressPreview) {
+                        const res = insertNodeAtHoverPreview(s, longPressPreview);
+                        newDragIdx = res.newDragIdx;
+                        return res.stroke;
                       }
-
-                      // Geometric shape (polygon / line): split the closest segment and insert a new vertex node!
-                      const isEditablePoly =
-                        s.shapeType === 'rectangle' ||
-                        s.shapeType === 'parallelogram' ||
-                        s.shapeType === 'triangle' ||
-                        s.shapeType === 'line' ||
-                        s.shapeType === 'arrow' ||
-                        s.shapeType === 'double-arrow';
-                      if (isEditablePoly && s.points.length >= 2) {
-                        let bestSeg = 0;
-                        let bestDist = Infinity;
-                        let bestProjX = pressX;
-                        let bestProjY = pressY;
-                        for (let i = 0; i < s.points.length - 1; i++) {
-                          const pA = s.points[i];
-                          const pB = s.points[i + 1];
-                          const dx = pB.x - pA.x;
-                          const dy = pB.y - pA.y;
-                          const lenSq = dx * dx + dy * dy;
-                          const t =
-                            lenSq > 1e-4
-                              ? Math.max(0.1, Math.min(0.9, ((pressX - pA.x) * dx + (pressY - pA.y) * dy) / lenSq))
-                              : 0.5;
-                          const px = pA.x + t * dx;
-                          const py = pA.y + t * dy;
-                          const d = Math.hypot(pressX - px, pressY - py);
-                          if (d < bestDist) {
-                            bestDist = d;
-                            bestSeg = i;
-                            bestProjX = px;
-                            bestProjY = py;
-                          }
-                        }
-                        const nextPts = [...s.points];
-                        nextPts.splice(bestSeg + 1, 0, {
-                          x: bestProjX,
-                          y: bestProjY,
-                          pressure: 0.7,
-                        });
-                        newDragIdx = bestSeg + 1;
-                        return { ...s, points: nextPts };
-                      }
-
                       return s;
                     }),
                   }),
@@ -9014,8 +9525,19 @@ export default function App() {
               targetPt.x = latestPt.x;
               targetPt.y = latestPt.y;
               if (targetPt.cx !== undefined && targetPt.cy !== undefined) {
-                targetPt.cx += dx;
-                targetPt.cy += dy;
+                targetPt.cx += dx * 0.5;
+                targetPt.cy += dy * 0.5;
+              }
+              const nextSegIdx = draggingNodeIdx.index + 1;
+              if (nextSegIdx < newPts.length) {
+                const nextPt = newPts[nextSegIdx];
+                if (nextPt.cx !== undefined && nextPt.cy !== undefined) {
+                  newPts[nextSegIdx] = {
+                    ...nextPt,
+                    cx: nextPt.cx + dx * 0.5,
+                    cy: nextPt.cy + dy * 0.5,
+                  };
+                }
               }
             }
             newPts[draggingNodeIdx.index] = targetPt;
