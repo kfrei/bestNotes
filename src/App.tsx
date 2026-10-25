@@ -3387,7 +3387,28 @@ export default function App() {
               ctx.restore();
             }
 
-            // 4 Side Crop Bars (Top ▬, Right ▮, Bottom ▬, Left ▮ — drag inward to Crop any side of the image!)
+            // Side handle offset so BOTH Orange Stretch Dots (●) and Green Crop Bars (▬/▮) sit side-by-side on every edge!
+            const sideOffX = Math.min(20, Math.max(11, hw * 0.34));
+            const sideOffY = Math.min(20, Math.max(11, hh * 0.34));
+
+            // 1. 4 Orange Stretch Dots (● #f97316 — Widen/Narrow or Taller/Shorter from one side!)
+            const imgStretchDots = [
+              { x: -sideOffX, y: -hh }, // Top stretch
+              { x: hw, y: -sideOffY },  // Right stretch
+              { x: -sideOffX, y: hh },  // Bottom stretch
+              { x: -hw, y: -sideOffY }, // Left stretch
+            ];
+            for (const m of imgStretchDots) {
+              ctx.fillStyle = '#f97316';
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2.2;
+              ctx.beginPath();
+              ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
+
+            // 2. 4 Green Side Crop Bars (Top ▬, Right ▮, Bottom ▬, Left ▮ — drag inward to Crop any side of the image!)
             const sideCropBars: {
               edge: 'top' | 'right' | 'bottom' | 'left';
               cx: number;
@@ -3397,31 +3418,31 @@ export default function App() {
             }[] = [
               {
                 edge: 'top',
-                cx: 0,
+                cx: sideOffX,
                 cy: activeEdge === 'top' ? -imgHalfH + cropInset : -hh,
-                bw: 30,
+                bw: 24,
                 bh: 9,
               },
               {
                 edge: 'right',
                 cx: activeEdge === 'right' ? imgHalfW - cropInset : hw,
-                cy: 0,
+                cy: sideOffY,
                 bw: 9,
-                bh: 30,
+                bh: 24,
               },
               {
                 edge: 'bottom',
-                cx: 0,
+                cx: sideOffX,
                 cy: activeEdge === 'bottom' ? imgHalfH - cropInset : hh,
-                bw: 30,
+                bw: 24,
                 bh: 9,
               },
               {
                 edge: 'left',
                 cx: activeEdge === 'left' ? -imgHalfW + cropInset : -hw,
-                cy: 0,
+                cy: sideOffY,
                 bw: 9,
-                bh: 30,
+                bh: 24,
               },
             ];
 
@@ -3440,11 +3461,11 @@ export default function App() {
               ctx.lineWidth = 1.6;
               ctx.beginPath();
               if (bar.bw > bar.bh) {
-                ctx.moveTo(bar.cx - 7, bar.cy);
-                ctx.lineTo(bar.cx + 7, bar.cy);
+                ctx.moveTo(bar.cx - 6, bar.cy);
+                ctx.lineTo(bar.cx + 6, bar.cy);
               } else {
-                ctx.moveTo(bar.cx, bar.cy - 7);
-                ctx.lineTo(bar.cx, bar.cy + 7);
+                ctx.moveTo(bar.cx, bar.cy - 6);
+                ctx.lineTo(bar.cx, bar.cy + 6);
               }
               ctx.stroke();
             }
@@ -6373,55 +6394,149 @@ export default function App() {
             }
           }
 
-          // B2. Check 4 Mid-Side Aspect-Ratio Stretch Handles (Top, Right, Bottom, Left — Orange #f97316 dots)
-          const localSides: {
-            lx: number;
-            ly: number;
-            oppLx: number;
-            oppLy: number;
-            mode: 'scale-x' | 'scale-y';
-            sx: number;
-            sy: number;
-          }[] = [
-            { lx: 0, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
-            { lx: hw, ly: 0, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
-            { lx: 0, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
-            { lx: -hw, ly: 0, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
-          ];
-          for (const m of localSides) {
-            if (Math.hypot(localX - m.lx, localY - m.ly) < 20) {
-              clearActiveOverlay();
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-              setRedoStack([]);
-              const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
-              const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
-              const rx = pt.x - oppWorldX;
-              const ry = pt.y - oppWorldY;
-              const initialSpan =
-                m.mode === 'scale-x'
-                  ? Math.max(16, Math.abs(rx * cosA + ry * sinA))
-                  : Math.max(16, Math.abs(-rx * sinA + ry * cosA));
-              const cropEdge: 'top' | 'right' | 'bottom' | 'left' =
-                m.sy === -1 ? 'top' : m.sx === 1 ? 'right' : m.sy === 1 ? 'bottom' : 'left';
-              selectionTransformRef.current = {
-                mode: selectedImageId ? 'crop-side' : m.mode,
-                cropEdge: selectedImageId ? cropEdge : undefined,
-                cropInsetPx: 0,
-                startX: pt.x,
-                startY: pt.y,
-                centerX: bcx,
-                centerY: bcy,
-                anchorX: oppWorldX,
-                anchorY: oppWorldY,
-                initialDist: initialSpan,
-                initialAngle: 0,
-                frameAngle: angle,
-                sideSignX: m.sx,
-                sideSignY: m.sy,
-                targetImageId: selectedImageId,
-              };
-              isDrawingRef.current = true;
-              return;
+          // B2. Check 4 Mid-Side Handles:
+          //     - For Selected Images: BOTH Orange Stretch Dots (● at -sideOff) AND Green Side Crop Bars (▬/▮ at +sideOff)!
+          //     - For Selected Shapes/Strokes: 4 Orange Stretch Dots (● at 0)
+          if (selectedImageId) {
+            const sideOffX = Math.min(20, Math.max(11, hw * 0.34));
+            const sideOffY = Math.min(20, Math.max(11, hh * 0.34));
+
+            // 1. Check 4 Green Side Crop Bars (▬/▮ at +sideOff) -> Inward Side Crop ('crop-side')
+            const imgCropHandles: {
+              lx: number;
+              ly: number;
+              oppLx: number;
+              oppLy: number;
+              edge: 'top' | 'right' | 'bottom' | 'left';
+              sx: number;
+              sy: number;
+            }[] = [
+              { lx: sideOffX, ly: -hh, oppLx: 0, oppLy: hh, edge: 'top', sx: 0, sy: -1 },
+              { lx: hw, ly: sideOffY, oppLx: -hw, oppLy: 0, edge: 'right', sx: 1, sy: 0 },
+              { lx: sideOffX, ly: hh, oppLx: 0, oppLy: -hh, edge: 'bottom', sx: 0, sy: 1 },
+              { lx: -hw, ly: sideOffY, oppLx: hw, oppLy: 0, edge: 'left', sx: -1, sy: 0 },
+            ];
+            for (const ch of imgCropHandles) {
+              if (Math.hypot(localX - ch.lx, localY - ch.ly) < 17) {
+                clearActiveOverlay();
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setRedoStack([]);
+                const oppWorldX = bcx + ch.oppLx * cosA - ch.oppLy * sinA;
+                const oppWorldY = bcy + ch.oppLx * sinA + ch.oppLy * cosA;
+                selectionTransformRef.current = {
+                  mode: 'crop-side',
+                  cropEdge: ch.edge,
+                  cropInsetPx: 0,
+                  startX: pt.x,
+                  startY: pt.y,
+                  centerX: bcx,
+                  centerY: bcy,
+                  anchorX: oppWorldX,
+                  anchorY: oppWorldY,
+                  initialDist: 1,
+                  initialAngle: 0,
+                  frameAngle: angle,
+                  sideSignX: ch.sx,
+                  sideSignY: ch.sy,
+                  targetImageId: selectedImageId,
+                };
+                isDrawingRef.current = true;
+                return;
+              }
+            }
+
+            // 2. Check 4 Orange Stretch Dots (● at -sideOff) -> One-Side Stretch / Compress ('scale-x' / 'scale-y')
+            const imgStretchHandles: {
+              lx: number;
+              ly: number;
+              oppLx: number;
+              oppLy: number;
+              mode: 'scale-x' | 'scale-y';
+              sx: number;
+              sy: number;
+            }[] = [
+              { lx: -sideOffX, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
+              { lx: hw, ly: -sideOffY, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+              { lx: -sideOffX, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
+              { lx: -hw, ly: -sideOffY, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+            ];
+            for (const sh of imgStretchHandles) {
+              if (Math.hypot(localX - sh.lx, localY - sh.ly) < 17) {
+                clearActiveOverlay();
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setRedoStack([]);
+                const oppWorldX = bcx + sh.oppLx * cosA - sh.oppLy * sinA;
+                const oppWorldY = bcy + sh.oppLx * sinA + sh.oppLy * cosA;
+                const rx = pt.x - oppWorldX;
+                const ry = pt.y - oppWorldY;
+                const initialSpan =
+                  sh.mode === 'scale-x'
+                    ? Math.max(16, Math.abs(rx * cosA + ry * sinA))
+                    : Math.max(16, Math.abs(-rx * sinA + ry * cosA));
+                selectionTransformRef.current = {
+                  mode: sh.mode,
+                  startX: pt.x,
+                  startY: pt.y,
+                  centerX: bcx,
+                  centerY: bcy,
+                  anchorX: oppWorldX,
+                  anchorY: oppWorldY,
+                  initialDist: initialSpan,
+                  initialAngle: 0,
+                  frameAngle: angle,
+                  sideSignX: sh.sx,
+                  sideSignY: sh.sy,
+                  targetImageId: selectedImageId,
+                };
+                isDrawingRef.current = true;
+                return;
+              }
+            }
+          } else {
+            const localSides: {
+              lx: number;
+              ly: number;
+              oppLx: number;
+              oppLy: number;
+              mode: 'scale-x' | 'scale-y';
+              sx: number;
+              sy: number;
+            }[] = [
+              { lx: 0, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
+              { lx: hw, ly: 0, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+              { lx: 0, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
+              { lx: -hw, ly: 0, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+            ];
+            for (const m of localSides) {
+              if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
+                clearActiveOverlay();
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setRedoStack([]);
+                const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
+                const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
+                const rx = pt.x - oppWorldX;
+                const ry = pt.y - oppWorldY;
+                const initialSpan =
+                  m.mode === 'scale-x'
+                    ? Math.max(16, Math.abs(rx * cosA + ry * sinA))
+                    : Math.max(16, Math.abs(-rx * sinA + ry * cosA));
+                selectionTransformRef.current = {
+                  mode: m.mode,
+                  startX: pt.x,
+                  startY: pt.y,
+                  centerX: bcx,
+                  centerY: bcy,
+                  anchorX: oppWorldX,
+                  anchorY: oppWorldY,
+                  initialDist: initialSpan,
+                  initialAngle: 0,
+                  frameAngle: angle,
+                  sideSignX: m.sx,
+                  sideSignY: m.sy,
+                };
+                isDrawingRef.current = true;
+                return;
+              }
             }
           }
 
