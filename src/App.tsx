@@ -2372,6 +2372,44 @@ export default function App() {
     );
   };
 
+  // Returns true ONLY if the given node can actually be deleted (never on endpoints of an open line/curve or minimum-vertex polygons!)
+  const canDeleteStrokeNode = (s: StrokeObject | undefined | null, nodeIdx: number | undefined): boolean => {
+    if (!s || nodeIdx === undefined || nodeIdx < 0) return false;
+    if (!s.isShape) {
+      const kList =
+        s.keyNodeIndices && s.keyNodeIndices.length >= 2
+          ? s.keyNodeIndices
+          : computeFreehandKeyNodeIndices(s.points);
+      const isWeldedClosed = s.points[0]?.twist === 999 && kList.length >= 3;
+      if (isWeldedClosed) {
+        return kList.length > 4;
+      }
+      // On an open freehand line, endpoints (0 and kList.length - 1) cannot be deleted
+      return kList.length > 2 && nodeIdx > 0 && nodeIdx < kList.length - 1;
+    }
+    if (s.shapeType === 'line' || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') {
+      // On an open line/arrow, endpoints (0 and s.points.length - 1) cannot be deleted
+      return s.points.length > 2 && nodeIdx > 0 && nodeIdx < s.points.length - 1;
+    }
+    if (s.shapeType === 'parabola' || s.shapeType === 'hyperbola' || s.shapeType === 'arc') {
+      // Only the middle curvature node (nodeIdx === 1) can be reset/deleted, never the 2 endpoints!
+      return s.points.length >= 3 && nodeIdx === 1;
+    }
+    if (
+      s.shapeType === 'rectangle' ||
+      s.shapeType === 'parallelogram' ||
+      s.shapeType === 'trapezoid' ||
+      s.shapeType === 'triangle'
+    ) {
+      const uniqueVerts = s.points.length - 1;
+      return uniqueVerts > 3;
+    }
+    if (s.shapeType === 'circle' || s.shapeType === 'ellipse') {
+      return s.points.length > 3;
+    }
+    return false;
+  };
+
   const getStrokeBounds = (s: StrokeObject) => {
     const pts = getStrokeSamplePoints(s);
     let minX = Infinity,
@@ -4366,47 +4404,49 @@ export default function App() {
                 ctx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
                 ctx.fill();
 
-                // 2. Right Button: Red Trash Bin (🗑️)
-                ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
-                ctx.lineWidth = 1.4;
-                ctx.beginPath();
-                ctx.moveTo(liveNodePt.x + 7, liveNodePt.y - 5);
-                ctx.lineTo(bx - 9, by + 5);
-                ctx.stroke();
+                // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
+                if (canDeleteStrokeNode(target, delNode.nodeIdx)) {
+                  ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+                  ctx.lineWidth = 1.4;
+                  ctx.beginPath();
+                  ctx.moveTo(liveNodePt.x + 7, liveNodePt.y - 5);
+                  ctx.lineTo(bx - 9, by + 5);
+                  ctx.stroke();
 
-                ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-                ctx.shadowBlur = 5;
-                ctx.shadowOffsetY = 1.5;
-                ctx.fillStyle = '#ef4444';
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(bx, by, 11.5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
+                  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+                  ctx.shadowBlur = 5;
+                  ctx.shadowOffsetY = 1.5;
+                  ctx.fillStyle = '#ef4444';
+                  ctx.strokeStyle = '#ffffff';
+                  ctx.lineWidth = 2;
+                  ctx.beginPath();
+                  ctx.arc(bx, by, 11.5, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.stroke();
 
-                // White Trash Can icon inside red circle
-                ctx.shadowColor = 'transparent';
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1.5;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.beginPath();
-                ctx.moveTo(bx - 4.8, by - 3.2);
-                ctx.lineTo(bx + 4.8, by - 3.2);
-                ctx.moveTo(bx - 2, by - 3.2);
-                ctx.lineTo(bx - 2, by - 5);
-                ctx.lineTo(bx + 2, by - 5);
-                ctx.lineTo(bx + 2, by - 3.2);
-                ctx.moveTo(bx - 3.6, by - 3.2);
-                ctx.lineTo(bx - 3, by + 4.8);
-                ctx.lineTo(bx + 3, by + 4.8);
-                ctx.lineTo(bx + 3.6, by - 3.2);
-                ctx.moveTo(bx - 1.2, by - 0.8);
-                ctx.lineTo(bx - 1.2, by + 2.8);
-                ctx.moveTo(bx + 1.2, by - 0.8);
-                ctx.lineTo(bx + 1.2, by + 2.8);
-                ctx.stroke();
+                  // White Trash Can icon inside red circle
+                  ctx.shadowColor = 'transparent';
+                  ctx.strokeStyle = '#ffffff';
+                  ctx.lineWidth = 1.5;
+                  ctx.lineCap = 'round';
+                  ctx.lineJoin = 'round';
+                  ctx.beginPath();
+                  ctx.moveTo(bx - 4.8, by - 3.2);
+                  ctx.lineTo(bx + 4.8, by - 3.2);
+                  ctx.moveTo(bx - 2, by - 3.2);
+                  ctx.lineTo(bx - 2, by - 5);
+                  ctx.lineTo(bx + 2, by - 5);
+                  ctx.lineTo(bx + 2, by - 3.2);
+                  ctx.moveTo(bx - 3.6, by - 3.2);
+                  ctx.lineTo(bx - 3, by + 4.8);
+                  ctx.lineTo(bx + 3, by + 4.8);
+                  ctx.lineTo(bx + 3.6, by - 3.2);
+                  ctx.moveTo(bx - 1.2, by - 0.8);
+                  ctx.lineTo(bx - 1.2, by + 2.8);
+                  ctx.moveTo(bx + 1.2, by - 0.8);
+                  ctx.lineTo(bx + 1.2, by + 2.8);
+                  ctx.stroke();
+                }
                 ctx.restore();
               }
             }
@@ -7646,46 +7686,51 @@ export default function App() {
     aCtx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
     aCtx.fill();
 
-    // 2. Right Button: Red Trash Bin (🗑️)
-    aCtx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
-    aCtx.lineWidth = 1.4;
-    aCtx.beginPath();
-    aCtx.moveTo(x + 7, y - 5);
-    aCtx.lineTo(bx - 9, by + 5);
-    aCtx.stroke();
+    // 2. Right Button: Red Trash Bin (🗑️) — ONLY if this node can actually be deleted!
+    const targetStroke = delNode.strokeId
+      ? activePage.strokes.find((s) => s.id === delNode.strokeId)
+      : undefined;
+    if (canDeleteStrokeNode(targetStroke, delNode.nodeIdx)) {
+      aCtx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+      aCtx.lineWidth = 1.4;
+      aCtx.beginPath();
+      aCtx.moveTo(x + 7, y - 5);
+      aCtx.lineTo(bx - 9, by + 5);
+      aCtx.stroke();
 
-    aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-    aCtx.shadowBlur = 5;
-    aCtx.shadowOffsetY = 1.5;
-    aCtx.fillStyle = '#ef4444';
-    aCtx.strokeStyle = '#ffffff';
-    aCtx.lineWidth = 2;
-    aCtx.beginPath();
-    aCtx.arc(bx, by, 11.5, 0, Math.PI * 2);
-    aCtx.fill();
-    aCtx.stroke();
+      aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+      aCtx.shadowBlur = 5;
+      aCtx.shadowOffsetY = 1.5;
+      aCtx.fillStyle = '#ef4444';
+      aCtx.strokeStyle = '#ffffff';
+      aCtx.lineWidth = 2;
+      aCtx.beginPath();
+      aCtx.arc(bx, by, 11.5, 0, Math.PI * 2);
+      aCtx.fill();
+      aCtx.stroke();
 
-    aCtx.shadowColor = 'transparent';
-    aCtx.strokeStyle = '#ffffff';
-    aCtx.lineWidth = 1.5;
-    aCtx.lineCap = 'round';
-    aCtx.lineJoin = 'round';
-    aCtx.beginPath();
-    aCtx.moveTo(bx - 4.8, by - 3.2);
-    aCtx.lineTo(bx + 4.8, by - 3.2);
-    aCtx.moveTo(bx - 2, by - 3.2);
-    aCtx.lineTo(bx - 2, by - 5);
-    aCtx.lineTo(bx + 2, by - 5);
-    aCtx.lineTo(bx + 2, by - 3.2);
-    aCtx.moveTo(bx - 3.6, by - 3.2);
-    aCtx.lineTo(bx - 3, by + 4.8);
-    aCtx.lineTo(bx + 3, by + 4.8);
-    aCtx.lineTo(bx + 3.6, by - 3.2);
-    aCtx.moveTo(bx - 1.2, by - 0.8);
-    aCtx.lineTo(bx - 1.2, by + 2.8);
-    aCtx.moveTo(bx + 1.2, by - 0.8);
-    aCtx.lineTo(bx + 1.2, by + 2.8);
-    aCtx.stroke();
+      aCtx.shadowColor = 'transparent';
+      aCtx.strokeStyle = '#ffffff';
+      aCtx.lineWidth = 1.5;
+      aCtx.lineCap = 'round';
+      aCtx.lineJoin = 'round';
+      aCtx.beginPath();
+      aCtx.moveTo(bx - 4.8, by - 3.2);
+      aCtx.lineTo(bx + 4.8, by - 3.2);
+      aCtx.moveTo(bx - 2, by - 3.2);
+      aCtx.lineTo(bx - 2, by - 5);
+      aCtx.lineTo(bx + 2, by - 5);
+      aCtx.lineTo(bx + 2, by - 3.2);
+      aCtx.moveTo(bx - 3.6, by - 3.2);
+      aCtx.lineTo(bx - 3, by + 4.8);
+      aCtx.lineTo(bx + 3, by + 4.8);
+      aCtx.lineTo(bx + 3.6, by - 3.2);
+      aCtx.moveTo(bx - 1.2, by - 0.8);
+      aCtx.lineTo(bx - 1.2, by + 2.8);
+      aCtx.moveTo(bx + 1.2, by - 0.8);
+      aCtx.lineTo(bx + 1.2, by + 2.8);
+      aCtx.stroke();
+    }
     aCtx.restore();
   };
 
@@ -7814,7 +7859,7 @@ export default function App() {
 
   const handleDeleteSingleNode = (strokeId: string, nodeIdx: number) => {
     const target = activePage.strokes.find((s) => s.id === strokeId);
-    if (!target) return;
+    if (!target || !canDeleteStrokeNode(target, nodeIdx)) return;
 
     if (!target.isShape) {
       const keyIndices =
@@ -8558,10 +8603,12 @@ export default function App() {
       cancelAddNodeLongPress();
       const nodeHitRadius = e.pointerType === 'touch' ? 30 : 22;
       if (activeNodeStrokeId) {
+        const activeTargetStroke = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         // 0a. Check if user clicked/tapped the Red Trash Bin button next to the hovered/active node!
         if (
           activeDeleteNodeRef.current &&
           activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
+          canDeleteStrokeNode(activeTargetStroke, activeDeleteNodeRef.current.nodeIdx) &&
           Math.hypot(pt.x - activeDeleteNodeRef.current.btnX, pt.y - activeDeleteNodeRef.current.btnY) <= 20
         ) {
           const toDel = activeDeleteNodeRef.current;
@@ -9705,13 +9752,14 @@ export default function App() {
           }
 
           const curDel = activeDeleteNodeRef.current;
+          const curCanDel = curDel ? canDeleteStrokeNode(target, curDel.nodeIdx) : false;
           const isNearExistingDelBtn =
             curDel &&
             curDel.strokeId === target.id &&
-            (Math.hypot(hoverPt.x - curDel.btnX, hoverPt.y - curDel.btnY) <= 22 ||
+            ((curCanDel && Math.hypot(hoverPt.x - curDel.btnX, hoverPt.y - curDel.btnY) <= 22) ||
               Math.hypot(hoverPt.x - (curDel.bezierBtnX ?? curDel.x - 26), hoverPt.y - (curDel.bezierBtnY ?? curDel.y - 18)) <= 22 ||
               Math.hypot(hoverPt.x - curDel.x, hoverPt.y - curDel.y) <= 22 ||
-              isPointNearSegment(hoverPt, { x: curDel.x, y: curDel.y }, { x: curDel.btnX, y: curDel.btnY }, 16) ||
+              (curCanDel && isPointNearSegment(hoverPt, { x: curDel.x, y: curDel.y }, { x: curDel.btnX, y: curDel.btnY }, 16)) ||
               isPointNearSegment(
                 hoverPt,
                 { x: curDel.x, y: curDel.y },
