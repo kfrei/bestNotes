@@ -13184,123 +13184,127 @@ export default function App() {
 
         {/* Right: Undo / Redo, Page Switcher, Insert/Delete Page, Drive Sync & Settings */}
         <div className="flex items-center gap-1.5 pb-1.5">
-          {/* Undo / Redo just like Goodnotes top-right */}
-          <button
-            onClick={handleUndo}
-            disabled={undoStack.length === 0}
-            className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
-            title="Undo (ή Tap με 2 δάχτυλα)"
-          >
-            <Undo2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleRedo}
-            disabled={redoStack.length === 0}
-            className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
-            title="Redo (ή Tap με 3 δάχτυλα)"
-          >
-            <Redo2 className="w-4 h-4" />
-          </button>
+          {viewMode === 'editor' && (
+            <>
+              {/* Undo / Redo just like Goodnotes top-right */}
+              <button
+                onClick={handleUndo}
+                disabled={undoStack.length === 0}
+                className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+                title="Undo (ή Tap με 2 δάχτυλα)"
+              >
+                <Undo2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleRedo}
+                disabled={redoStack.length === 0}
+                className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-30 cursor-pointer"
+                title="Redo (ή Tap με 3 δάχτυλα)"
+              >
+                <Redo2 className="w-4 h-4" />
+              </button>
 
-          {/* 2-Finger Pinch Zoom Pill (- / 100% Reset / +) */}
-          <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
-            <button
-              onClick={() => applyPaperTransformDirect(zoomRef.current - 0.15, panRef.current.x, panRef.current.y, true)}
-              className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
-              title="Σμίκρυνση (Zoom Out)"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => applyPaperTransformDirect(1, 0, 0, true)}
-              className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
-              title="Επαναφορά Zoom στο 100% (ή Pinch με 2 δάχτυλα στο χαρτί)"
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <button
-              onClick={() => applyPaperTransformDirect(zoomRef.current + 0.15, panRef.current.x, panRef.current.y, true)}
-              className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
-              title="Μεγέθυνση (Zoom In)"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-          </div>
+              {/* 2-Finger Pinch Zoom Pill (- / 100% Reset / +) */}
+              <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
+                <button
+                  onClick={() => applyPaperTransformDirect(zoomRef.current - 0.15, panRef.current.x, panRef.current.y, true)}
+                  className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
+                  title="Σμίκρυνση (Zoom Out)"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => applyPaperTransformDirect(1, 0, 0, true)}
+                  className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
+                  title="Επαναφορά Zoom στο 100% (ή Pinch με 2 δάχτυλα στο χαρτί)"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  onClick={() => applyPaperTransformDirect(zoomRef.current + 0.15, panRef.current.x, panRef.current.y, true)}
+                  className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
+                  title="Μεγέθυνση (Zoom In)"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-          {/* Rotate Page 90° Left / Right in Top Bar */}
-          <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
-            <button
-              onClick={() => handleRotatePage('left')}
-              className="p-1 text-slate-200 hover:text-white cursor-pointer"
-              title="Περιστροφή Σελίδας 90° Αριστερά (-90°)"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => handleRotatePage('right')}
-              className="p-1 text-slate-200 hover:text-white cursor-pointer"
-              title="Περιστροφή Σελίδας 90° Δεξιά (+90°)"
-            >
-              <RotateCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
+              {/* Rotate Page 90° Left / Right in Top Bar */}
+              <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
+                <button
+                  onClick={() => handleRotatePage('left')}
+                  className="p-1 text-slate-200 hover:text-white cursor-pointer"
+                  title="Περιστροφή Σελίδας 90° Αριστερά (-90°)"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => handleRotatePage('right')}
+                  className="p-1 text-slate-200 hover:text-white cursor-pointer"
+                  title="Περιστροφή Σελίδας 90° Δεξιά (+90°)"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-          {/* Page Indicator (Click to open Thumbnail Grid!) */}
-          <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
-            <button
-              onClick={() => scrollToPageIndex(activePageIndex - 1)}
-              disabled={activePageIndex === 0}
-              className="p-0.5 disabled:opacity-30 cursor-pointer"
-              title="Προηγούμενη Σελίδα"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              data-popover-trigger="thumbnails"
-              onClick={() => setShowThumbnailsModal((v) => !v)}
-              className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
-              title="Πάτησε για Προβολή Μικρογραφιών Σελίδων (Grid View)"
-            >
-              {activePageIndex + 1}/{activeNotebook.pages.length}
-            </button>
-            <button
-              onClick={() => scrollToPageIndex(activePageIndex + 1)}
-              disabled={activePageIndex >= activeNotebook.pages.length - 1}
-              className="p-0.5 disabled:opacity-30 cursor-pointer"
-              title="Επόμενη Σελίδα"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+              {/* Page Indicator (Click to open Thumbnail Grid!) */}
+              <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
+                <button
+                  onClick={() => scrollToPageIndex(activePageIndex - 1)}
+                  disabled={activePageIndex === 0}
+                  className="p-0.5 disabled:opacity-30 cursor-pointer"
+                  title="Προηγούμενη Σελίδα"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  data-popover-trigger="thumbnails"
+                  onClick={() => setShowThumbnailsModal((v) => !v)}
+                  className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
+                  title="Πάτησε για Προβολή Μικρογραφιών Σελίδων (Grid View)"
+                >
+                  {activePageIndex + 1}/{activeNotebook.pages.length}
+                </button>
+                <button
+                  onClick={() => scrollToPageIndex(activePageIndex + 1)}
+                  disabled={activePageIndex >= activeNotebook.pages.length - 1}
+                  className="p-0.5 disabled:opacity-30 cursor-pointer"
+                  title="Επόμενη Σελίδα"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
 
-          {/* 30s Google Drive Sync Pill */}
-          <button
-            onClick={() => void performDrivePdfSync(true)}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] text-sky-200 transition cursor-pointer"
-            title="Αυτόματος Συγχρονισμός PDF με Google Drive (/BestNotes) κάθε 30s (Πάτησε για άμεσο συγχρονισμό)"
-          >
-            <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
-            <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
-          </button>
+              {/* 30s Google Drive Sync Pill */}
+              <button
+                onClick={() => void performDrivePdfSync(true)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] text-sky-200 transition cursor-pointer"
+                title="Αυτόματος Συγχρονισμός PDF με Google Drive (/BestNotes) κάθε 30s (Πάτησε για άμεσο συγχρονισμό)"
+              >
+                <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
+                <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
+              </button>
 
-          {/* Native iPadOS / System Share PDF Button (AirDrop, Viber, Messenger, Goodnotes, Mail, Files) */}
-          <button
-            onClick={() => void handleShareNotebookPdf(activeNotebook)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#0066ff] text-[11px] font-semibold text-sky-100 hover:text-white transition cursor-pointer"
-            title={`Κοινοποίηση PDF «${activeNotebook.title}.pdf» (AirDrop, Viber, Messenger, Goodnotes, Mail, Αρχεία)`}
-          >
-            <Share2 className="w-3.5 h-3.5 text-sky-300" />
-            <span className="hidden sm:inline">Share</span>
-          </button>
+              {/* Native iPadOS / System Share PDF Button (AirDrop, Viber, Messenger, Goodnotes, Mail, Files) */}
+              <button
+                onClick={() => void handleShareNotebookPdf(activeNotebook)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#0066ff] text-[11px] font-semibold text-sky-100 hover:text-white transition cursor-pointer"
+                title={`Κοινοποίηση PDF «${activeNotebook.title}.pdf» (AirDrop, Viber, Messenger, Goodnotes, Mail, Αρχεία)`}
+              >
+                <Share2 className="w-3.5 h-3.5 text-sky-300" />
+                <span className="hidden sm:inline">Share</span>
+              </button>
 
-          <button
-            data-popover-trigger="settings"
-            onClick={() => setShowSettingsModal((v) => !v)}
-            className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
-            title="Ρυθμίσεις Χαρτιού, Προσανατολισμού (Portrait/Landscape) & Apple Pencil"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-          </button>
+              <button
+                data-popover-trigger="settings"
+                onClick={() => setShowSettingsModal((v) => !v)}
+                className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
+                title="Ρυθμίσεις Χαρτιού, Προσανατολισμού (Portrait/Landscape) & Apple Pencil"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+              </button>
+            </>
+          )}
 
           {/* Classic Person Icon Button & Profile + Google Drive PDF Sync Dropdown */}
           <div className="relative">
