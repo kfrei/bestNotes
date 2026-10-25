@@ -6935,6 +6935,56 @@ export default function App() {
       const code = e.code;
       const key = e.key.toLowerCase();
 
+      // Backspace (<-- above Enter) or Delete -> Delete selected strokes/shapes/groups, image, or text box!
+      if (code === 'Backspace' || code === 'Delete' || e.key === 'Backspace' || e.key === 'Delete') {
+        if (selectedImageId !== null) {
+          e.preventDefault();
+          const targetImgId = selectedImageId;
+          updateActivePage((page) => ({
+            ...page,
+            images: (page.images || []).filter((im) => im.id !== targetImgId),
+          }));
+          setSelectedImageId(null);
+          setImageCropMode('none');
+          showToast('🗑️ Διαγράφηκε η επιλεγμένη εικόνα!');
+          return;
+        }
+
+        if (selectedStrokeIds.length > 0 || activeNodeStrokeId !== null) {
+          e.preventDefault();
+          const baseIds = selectedStrokeIds.length > 0 ? selectedStrokeIds : activeNodeStrokeId ? [activeNodeStrokeId] : [];
+          const baseSet = new Set(baseIds);
+          const groupIds = new Set(
+            activePage.strokes
+              .filter((s) => baseSet.has(s.id) && s.groupId)
+              .map((s) => s.groupId as string)
+          );
+          updateActivePage((page) => ({
+            ...page,
+            strokes: page.strokes.filter(
+              (s) => !baseSet.has(s.id) && !(s.groupId && groupIds.has(s.groupId))
+            ),
+          }));
+          setSelectedStrokeIds([]);
+          setActiveNodeStrokeId(null);
+          setDraggingNodeIdx(null);
+          showToast('🗑️ Διαγράφηκε η επιλογή!');
+          return;
+        }
+
+        if (selectedTextId !== null) {
+          e.preventDefault();
+          const targetTxtId = selectedTextId;
+          updateActivePage((page) => ({
+            ...page,
+            texts: (page.texts || []).filter((t) => t.id !== targetTxtId),
+          }));
+          setSelectedTextId(null);
+          showToast('🗑️ Διαγράφηκε το πλαίσιο κειμένου!');
+          return;
+        }
+      }
+
       // G / Γ -> Group / Ungroup selected strokes when 2+ strokes are selected!
       if ((code === 'KeyG' || key === 'g' || key === 'γ') && selectedStrokeIds.length >= 2) {
         e.preventDefault();
@@ -7068,8 +7118,11 @@ export default function App() {
     editingTextId,
     showMathModal,
     selectedStrokeIds,
+    selectedImageId,
+    selectedTextId,
     activeNodeStrokeId,
     activePage.strokes,
+    updateActivePage,
     toggleFillStyleToSelection,
     showToast,
   ]);
