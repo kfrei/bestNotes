@@ -1006,6 +1006,7 @@ export default function App() {
   const [isConvertingHandwriting, setIsConvertingHandwriting] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const lastTextCreatedTimeRef = useRef<number>(0);
   const draggingTextRef = useRef<{
     id: string;
     pageIdx: number;
@@ -9100,35 +9101,49 @@ export default function App() {
       return;
     }
 
-    activePointerIdRef.current = e.pointerId;
-    activePointerTypeRef.current = e.pointerType;
     canvasRectRef.current = e.currentTarget.getBoundingClientRect();
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // Ignore pointer capture errors on rapid consecutive touches
-    }
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = pt;
 
-    // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or finish editing an active one)
+    // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or reposition an empty one / finish editing a filled one)
     if (activeTool === 'text') {
+      e.preventDefault();
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
 
+      const pW = getPageLogicalWidth(targetPage);
+      const pH = getPageLogicalHeight(targetPage);
+      const nextX = Math.max(16, Math.min(pW - 160, Math.round(pt.x)));
+      const nextY = Math.max(16, Math.min(pH - 50, Math.round(pt.y - textFontSize * 0.6)));
+
       if (editingTextId) {
+        const editingObj = (targetPage.texts || []).find((t) => t.id === editingTextId);
+        if (editingObj && (!editingObj.text || editingObj.text.trim().length === 0)) {
+          // If the active text box is still empty, move it directly to the clicked spot and keep it open & focused!
+          lastTextCreatedTimeRef.current = performance.now();
+          updateActivePage(
+            (page) => ({
+              ...page,
+              texts: (page.texts || []).map((t) =>
+                t.id === editingObj.id ? { ...t, x: nextX, y: nextY } : t
+              ),
+            }),
+            false
+          );
+          setSelectedTextId(editingObj.id);
+          setEditingTextId(editingObj.id);
+          return;
+        }
         setEditingTextId(null);
         setSelectedTextId(null);
         return;
       }
 
-      const pW = getPageLogicalWidth(targetPage);
-      const pH = getPageLogicalHeight(targetPage);
       const newTxt: TextObject = {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        x: Math.max(16, Math.min(pW - 160, Math.round(pt.x))),
-        y: Math.max(16, Math.min(pH - 50, Math.round(pt.y - textFontSize * 0.6))),
+        x: nextX,
+        y: nextY,
         text: '',
         color: strokeColor,
         fontSize: textFontSize,
@@ -9136,6 +9151,7 @@ export default function App() {
         fontFamily: textFontFamily,
         layerId: activeLayerId,
       };
+      lastTextCreatedTimeRef.current = performance.now();
       updateActivePage((page) => ({
         ...page,
         texts: [...(page.texts || []), newTxt],
@@ -9144,6 +9160,14 @@ export default function App() {
       setEditingTextId(newTxt.id);
       setShowToolSubBar(true);
       return;
+    }
+
+    activePointerIdRef.current = e.pointerId;
+    activePointerTypeRef.current = e.pointerType;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore pointer capture errors on rapid consecutive touches
     }
 
     if (selectedTextId) setSelectedTextId(null);
@@ -15818,6 +15842,27 @@ export default function App() {
                         if (tool.id !== 'text') {
                           setSelectedTextId(null);
                           setEditingTextId(null);
+                        } else if (!editingTextId) {
+                          const pW = getPageLogicalWidth(activePage);
+                          const pH = getPageLogicalHeight(activePage);
+                          const newTxt: TextObject = {
+                            id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            x: Math.round(pW * 0.25),
+                            y: Math.round(Math.min(pH * 0.25, 220)),
+                            text: '',
+                            color: strokeColor,
+                            fontSize: textFontSize,
+                            bold: textBold,
+                            fontFamily: textFontFamily,
+                            layerId: activeLayerId,
+                          };
+                          lastTextCreatedTimeRef.current = performance.now();
+                          updateActivePage((page) => ({
+                            ...page,
+                            texts: [...(page.texts || []), newTxt],
+                          }));
+                          setSelectedTextId(newTxt.id);
+                          setEditingTextId(newTxt.id);
                         }
                       }
                       setImageCropMode('none');
@@ -18999,6 +19044,11 @@ export default function App() {
                           ) : isEditingTxt ? (
                             <textarea
                               autoFocus
+                              ref={(el) => {
+                                if (el && document.activeElement !== el) {
+                                  window.requestAnimationFrame(() => el.focus());
+                                }
+                              }}
                               value={txt.text}
                               placeholder="Γράψε κείμενο..."
                               onChange={(ev) => {
@@ -19015,11 +19065,17 @@ export default function App() {
                               }}
                               onKeyDown={(ev) => {
                                 if (ev.key === 'Escape' && !ev.nativeEvent.isComposing) {
+                                  lastTextCreatedTimeRef.current = 0;
                                   ev.currentTarget.blur();
                                 }
                               }}
-                              onBlur={() => {
+                              onBlur={(ev) => {
                                 if (draggingTextRef.current?.id === txt.id) {
+                                  return;
+                                }
+                                if (performance.now() - lastTextCreatedTimeRef.current < 450) {
+                                  const targetEl = ev.currentTarget;
+                                  window.requestAnimationFrame(() => targetEl.focus());
                                   return;
                                 }
                                 setEditingTextId((curr) => (curr === txt.id ? null : curr));
