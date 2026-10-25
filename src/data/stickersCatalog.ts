@@ -1,8 +1,9 @@
 export type StickerCategory =
   | 'Όλα'
   | 'Βελάκια'
-  | 'Μηχανική & Οχήματα'
+  | 'Κεραυνοί & Εφέ'
   | 'Σχολικά & Εργαστήριο'
+  | 'Μηχανική & Οχήματα'
   | 'Επαγγέλματα'
   | 'Emoticons'
   | 'Σχήματα & 3D';
@@ -11,7 +12,7 @@ export type StickerColorStyle = 'all' | 'multicolor' | 'duotone' | 'monochrome';
 
 export interface StickerCatalogItem {
   id: string;
-  iconifyId: string; // e.g. 'fluent-emoji:gear', 'ph:car-duotone', 'mdi:cog'
+  iconifyId: string; // e.g. 'custom-svg:curve-left:#dc2626:12', 'fluent-emoji:gear', 'ph:car-duotone'
   title: string;
   category: Exclude<StickerCategory, 'Όλα'>;
   colorStyle: Exclude<StickerColorStyle, 'all'>;
@@ -21,8 +22,9 @@ export interface StickerCatalogItem {
 export const STICKER_CATEGORIES: { id: StickerCategory; label: string }[] = [
   { id: 'Όλα', label: 'Όλα' },
   { id: 'Βελάκια', label: '🏹 Βελάκια' },
+  { id: 'Κεραυνοί & Εφέ', label: '⚡ Κεραυνοί, ! & Πυροτεχνήματα' },
+  { id: 'Σχολικά & Εργαστήριο', label: '✒️ Στυλό, Μολύβια & Σχολικά' },
   { id: 'Μηχανική & Οχήματα', label: '⚙️ Γρανάζια & Αμαξάκια' },
-  { id: 'Σχολικά & Εργαστήριο', label: '🎒 Σχολικά' },
   { id: 'Επαγγέλματα', label: '👨‍🔬 Επαγγέλματα' },
   { id: 'Emoticons', label: '😀 Emoticons' },
   { id: 'Σχήματα & 3D', label: '🧊 3D & Σύμβολα' },
@@ -37,71 +39,199 @@ export const STICKER_COLOR_STYLES: { id: StickerColorStyle; label: string }[] = 
 
 export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   // =========================================================================
-  // 1. ΒΕΛΑΚΙΑ (Arrows & Pointers - 3D, Multicolor, Duotone, Monochrome)
+  // 1. ΒΕΛΑΚΙΑ (Χειρόγραφα Καμπύλα Βέλη σαν της εικόνας, Διαφορετικά Χρώματα & Πάχη!)
   // =========================================================================
   {
-    id: 'arr-3d-right',
-    iconifyId: 'fluent-emoji:right-arrow',
-    title: 'Βέλος Δεξιά 3D',
+    id: 'arr-sketch-left-red-med',
+    iconifyId: 'custom-svg:sketch-curve-left:#dc2626:12',
+    title: 'Καμπύλο Βέλος Αριστερά (Κόκκινο Μαρκαδόρος)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'βελάκι', 'δεξιά', 'κατεύθυνση', 'arrow'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'αριστερά', 'κόκκινο', 'χειρόγραφο', 'arrow'],
   },
   {
-    id: 'arr-3d-upright',
-    iconifyId: 'fluent-emoji-flat:up-right-arrow',
-    title: 'Διαγώνιο Βέλος Πάνω-Δεξιά',
+    id: 'arr-sketch-right-red-med',
+    iconifyId: 'custom-svg:sketch-curve-right:#dc2626:12',
+    title: 'Καμπύλο Βέλος Δεξιά (Κόκκινο Μαρκαδόρος)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'βελάκι', 'διαγώνιο', 'άνυσμα', 'arrow'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'δεξιά', 'κόκκινο', 'χειρόγραφο', 'arrow'],
   },
   {
-    id: 'arr-3d-down',
-    iconifyId: 'fluent-emoji:down-arrow',
-    title: 'Βέλος Κάτω 3D (Βαρύτητα)',
+    id: 'arr-sketch-left-blue-med',
+    iconifyId: 'custom-svg:sketch-curve-left:#0066ff:12',
+    title: 'Καμπύλο Βέλος Αριστερά (Μπλε Μεσαίο)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'βελάκι', 'κάτω', 'βάρος', 'βαρύτητα'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'αριστερά', 'μπλε', 'arrow'],
   },
   {
-    id: 'arr-3d-leftright',
-    iconifyId: 'fluent-emoji:left-right-arrow',
-    title: 'Διπλό Βέλος Οριζόντιο 3D',
+    id: 'arr-sketch-right-blue-med',
+    iconifyId: 'custom-svg:sketch-curve-right:#0066ff:12',
+    title: 'Καμπύλο Βέλος Δεξιά (Μπλε Μεσαίο)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'διπλό', 'ισορροπία', 'μήκος', 'απόσταση'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'δεξιά', 'μπλε', 'arrow'],
   },
   {
-    id: 'arr-3d-updown',
-    iconifyId: 'fluent-emoji:up-down-arrow',
-    title: 'Διπλό Βέλος Κατακόρυφο 3D',
+    id: 'arr-sketch-left-green-thick',
+    iconifyId: 'custom-svg:sketch-curve-left:#16a34a:17',
+    title: 'Καμπύλο Βέλος Αριστερά (Πράσινο Χοντρό)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'διπλό', 'ύψος', 'ταλάντωση', 'κατακόρυφο'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'αριστερά', 'πράσινο', 'χοντρό'],
   },
   {
-    id: 'arr-3d-curve-up',
-    iconifyId: 'fluent-emoji:right-arrow-curving-up',
-    title: 'Καμπύλο Βέλος Πάνω 3D',
+    id: 'arr-sketch-right-green-thick',
+    iconifyId: 'custom-svg:sketch-curve-right:#16a34a:17',
+    title: 'Καμπύλο Βέλος Δεξιά (Πράσινο Χοντρό)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'καμπύλο', 'τροχιά', 'στροφή'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'δεξιά', 'πράσινο', 'χοντρό'],
   },
   {
-    id: 'arr-3d-curve-down',
-    iconifyId: 'fluent-emoji-flat:right-arrow-curving-down',
-    title: 'Καμπύλο Βέλος Κάτω',
+    id: 'arr-sketch-left-orange-thin',
+    iconifyId: 'custom-svg:sketch-curve-left:#ea580c:6',
+    title: 'Καμπύλο Βέλος Αριστερά (Πορτοκαλί Λεπτό)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'καμπύλο', 'βολή', 'πτώση'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'πορτοκαλί', 'λεπτό'],
   },
   {
-    id: 'arr-3d-cycle',
-    iconifyId: 'fluent-emoji:counterclockwise-arrows-button',
-    title: 'Κυκλικά Βέλη Περιστροφής 3D',
+    id: 'arr-sketch-right-purple-thick',
+    iconifyId: 'custom-svg:sketch-curve-right:#7c3aed:16',
+    title: 'Καμπύλο Βέλος Δεξιά (Μωβ Χοντρό)',
     category: 'Βελάκια',
     colorStyle: 'multicolor',
-    tags: ['βέλος', 'κύκλος', 'περιστροφή', 'ροπή', 'κύκλωμα'],
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'μωβ', 'χοντρό'],
+  },
+  {
+    id: 'arr-sketch-left-black-thin',
+    iconifyId: 'custom-svg:sketch-curve-left:#0f172a:6',
+    title: 'Καμπύλο Βέλος Αριστερά (Μαύρο Λεπτό)',
+    category: 'Βελάκια',
+    colorStyle: 'monochrome',
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'μαύρο', 'λεπτό'],
+  },
+  {
+    id: 'arr-sketch-down-red',
+    iconifyId: 'custom-svg:sketch-arch-down-left:#dc2626:12',
+    title: 'Καμπύλο Βέλος Κάτω-Αριστερά (Κόκκινο)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'κάτω', 'κόκκινο'],
+  },
+  {
+    id: 'arr-sketch-down-blue',
+    iconifyId: 'custom-svg:sketch-arch-down-right:#0066ff:12',
+    title: 'Καμπύλο Βέλος Κάτω-Δεξιά (Μπλε)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'βελάκι', 'καμπύλο', 'κάτω', 'μπλε'],
+  },
+  {
+    id: 'arr-sketch-up-green',
+    iconifyId: 'custom-svg:sketch-curve-up:#16a34a:12',
+    title: 'Καμπύλο Βέλος Πάνω (Πράσινο)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'βελάκι', 'πάνω', 'πράσινο'],
+  },
+  {
+    id: 'arr-sketch-down-orange',
+    iconifyId: 'custom-svg:sketch-curve-down:#ea580c:12',
+    title: 'Καμπύλο Βέλος Κάτω (Πορτοκαλί)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'βελάκι', 'κάτω', 'πορτοκαλί'],
+  },
+  {
+    id: 'arr-loop-red',
+    iconifyId: 'custom-svg:sketch-loop-left:#dc2626:11',
+    title: 'Βέλος με Σπείρα / Loop Αριστερά (Κόκκινο)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'σπείρα', 'θηλιά', 'loop', 'κόκκινο'],
+  },
+  {
+    id: 'arr-loop-blue',
+    iconifyId: 'custom-svg:sketch-loop-right:#0066ff:11',
+    title: 'Βέλος με Σπείρα / Loop Δεξιά (Μπλε)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'σπείρα', 'θηλιά', 'loop', 'μπλε'],
+  },
+  {
+    id: 'arr-scurve-purple',
+    iconifyId: 'custom-svg:sketch-scurve:#7c3aed:12',
+    title: 'Κυματοειδές Βέλος S-Curve (Μωβ)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'κύμα', 'καμπύλο', 'μωβ'],
+  },
+  {
+    id: 'arr-dashed-red',
+    iconifyId: 'custom-svg:sketch-dashed-left:#dc2626:10',
+    title: 'Διακεκομμένο Καμπύλο Βέλος Αριστερά (Κόκκινο)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'διακεκομμένο', 'τροχιά', 'κόκκινο'],
+  },
+  {
+    id: 'arr-dashed-blue',
+    iconifyId: 'custom-svg:sketch-dashed-right:#0066ff:10',
+    title: 'Διακεκομμένο Καμπύλο Βέλος Δεξιά (Μπλε)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'διακεκομμένο', 'τροχιά', 'μπλε'],
+  },
+  {
+    id: 'arr-double-curve-teal',
+    iconifyId: 'custom-svg:sketch-double-curve:#0d9488:12',
+    title: 'Διπλό Καμπύλο Βέλος Αμφίδρομο',
+    category: 'Βελάκια',
+    colorStyle: 'duotone',
+    tags: ['βέλος', 'διπλό', 'καμπύλο', 'ισορροπία'],
+  },
+  {
+    id: 'arr-3d-ribbon-red',
+    iconifyId: 'custom-svg:3d-filled-arrow-left:#dc2626:14',
+    title: '3D Γεμάτο Καμπύλο Βέλος Αριστερά (Κόκκινο)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', '3d', 'κόκκινο', 'καμπύλο'],
+  },
+  {
+    id: 'arr-3d-ribbon-blue',
+    iconifyId: 'custom-svg:3d-filled-arrow-right:#0066ff:14',
+    title: '3D Γεμάτο Καμπύλο Βέλος Δεξιά (Μπλε)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', '3d', 'μπλε', 'καμπύλο'],
+  },
+  {
+    id: 'arr-3d-ribbon-green',
+    iconifyId: 'custom-svg:3d-filled-arrow-right:#16a34a:14',
+    title: '3D Γεμάτο Καμπύλο Βέλος Δεξιά (Πράσινο)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', '3d', 'πράσινο', 'καμπύλο'],
+  },
+  {
+    id: 'arr-straight-marker-red',
+    iconifyId: 'custom-svg:sketch-straight-right:#dc2626:14',
+    title: 'Ευθύ Βέλος Μαρκαδόρου (Κόκκινο Χοντρό)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'ευθύ', 'άνυσμα', 'δύναμη', 'κόκκινο'],
+  },
+  {
+    id: 'arr-straight-marker-blue',
+    iconifyId: 'custom-svg:sketch-straight-left:#0066ff:14',
+    title: 'Ευθύ Βέλος Μαρκαδόρου Αριστερά (Μπλε)',
+    category: 'Βελάκια',
+    colorStyle: 'multicolor',
+    tags: ['βέλος', 'ευθύ', 'άνυσμα', 'δύναμη', 'μπλε'],
   },
   {
     id: 'arr-3d-target',
@@ -136,22 +266,6 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
     tags: ['βέλος', 'περιστροφή', 'ροπή', 'γωνιακή'],
   },
   {
-    id: 'arr-duo-bend',
-    iconifyId: 'ph:arrow-arc-right-duotone',
-    title: 'Τοξοειδές Βέλος (Δίχρωμο)',
-    category: 'Βελάκια',
-    colorStyle: 'duotone',
-    tags: ['βέλος', 'τόξο', 'τροχιά', 'γωνία'],
-  },
-  {
-    id: 'arr-duo-target',
-    iconifyId: 'ph:target-duotone',
-    title: 'Στόχος & Βέλος (Δίχρωμο)',
-    category: 'Βελάκια',
-    colorStyle: 'duotone',
-    tags: ['στόχος', 'βέλος', 'κέντρο'],
-  },
-  {
     id: 'arr-mono-axis',
     iconifyId: 'mdi:axis-arrow',
     title: 'Τρισδιάστατοι Άξονες X-Y-Z (Μονόχρωμο)',
@@ -159,29 +273,137 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
     colorStyle: 'monochrome',
     tags: ['άξονες', 'βέλη', '3d', 'συντεταγμένες', 'xyz'],
   },
+
+  // =========================================================================
+  // 1B. ΚΕΡΑΥΝΟΙ, ΘΑΥΜΑΣΤΙΚΑ & ΠΥΡΟΤΕΧΝΗΜΑΤΑ (Lightning, Exclamations, Fireworks)
+  // =========================================================================
   {
-    id: 'arr-mono-rotate3d',
-    iconifyId: 'mdi:rotate-3d-variant',
-    title: 'Βέλη Περιστροφής 3D (Μονόχρωμο)',
-    category: 'Βελάκια',
-    colorStyle: 'monochrome',
-    tags: ['βέλος', 'περιστροφή', '3d', 'ροπή'],
+    id: 'fx-lightning-3d',
+    iconifyId: 'fluent-emoji:high-voltage',
+    title: 'Κεραυνός Υψηλής Τάσης 3D (Κίτρινος)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['κεραυνός', 'ηλεκτρισμός', 'ενέργεια', 'ρεύμα', 'lightning'],
   },
   {
-    id: 'arr-mono-bold-right',
-    iconifyId: 'mdi:arrow-right-bold-outline',
-    title: 'Περίγραμμα Βέλους Δεξιά (Μονόχρωμο)',
-    category: 'Βελάκια',
-    colorStyle: 'monochrome',
-    tags: ['βέλος', 'δεξιά', 'μονόχρωμο', 'διάνυσμα'],
+    id: 'fx-lightning-red-custom',
+    iconifyId: 'custom-svg:lightning-bolt:#dc2626:12',
+    title: 'Κεραυνός Δυναμικός (Κόκκινος/Χρυσός)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['κεραυνός', 'κόκκινος', 'ενέργεια', 'κίνδυνος', 'lightning'],
   },
   {
-    id: 'arr-mono-curved',
-    iconifyId: 'mdi:arrow-u-right-top-bold',
-    title: 'Αναστροφή Τροχιάς U (Μονόχρωμο)',
-    category: 'Βελάκια',
-    colorStyle: 'monochrome',
-    tags: ['βέλος', 'στροφή', 'τροχιά'],
+    id: 'fx-lightning-blue-custom',
+    iconifyId: 'custom-svg:lightning-bolt:#0066ff:12',
+    title: 'Ηλεκτρικός Κεραυνός (Μπλε)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['κεραυνός', 'μπλε', 'ηλεκτρισμός', 'lightning'],
+  },
+  {
+    id: 'fx-excl-red-3d',
+    iconifyId: 'fluent-emoji:red-exclamation-mark',
+    title: 'Θαυμαστικό Κόκκινο 3D (!)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['θαυμαστικό', 'προσοχή', 'σημαντικό', 'sos', '!'],
+  },
+  {
+    id: 'fx-excl-double-3d',
+    iconifyId: 'fluent-emoji:double-exclamation-mark',
+    title: 'Διπλό Θαυμαστικό 3D (!!)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['θαυμαστικό', 'διπλό', 'προσοχή', 'sos', '!!'],
+  },
+  {
+    id: 'fx-excl-triple-custom',
+    iconifyId: 'custom-svg:triple-exclamation:#dc2626:12',
+    title: 'Τριπλό Χειρόγραφο Θαυμαστικό (!!!)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['θαυμαστικό', 'τριπλό', 'sos', 'σημαντικό', '!!!'],
+  },
+  {
+    id: 'fx-excl-quest-3d',
+    iconifyId: 'fluent-emoji:exclamation-question-mark',
+    title: 'Θαυμαστικό & Ερωτηματικό 3D (!?)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['θαυμαστικό', 'ερωτηματικό', 'απορία', '!?'],
+  },
+  {
+    id: 'fx-quest-red-3d',
+    iconifyId: 'fluent-emoji:red-question-mark',
+    title: 'Ερωτηματικό Κόκκινο 3D (?)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['ερωτηματικό', 'ερώτηση', 'απορία', '?'],
+  },
+  {
+    id: 'fx-fireworks-3d',
+    iconifyId: 'fluent-emoji:fireworks',
+    title: 'Πυροτεχνήματα Πολύχρωμα 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['πυροτέχνημα', 'πυροτεχνήματα', 'γιορτή', 'λάμψη', 'fireworks'],
+  },
+  {
+    id: 'fx-sparkler-3d',
+    iconifyId: 'fluent-emoji:sparkler',
+    title: 'Βεγγαλικό / Πυροτέχνημα Σπινθήρων 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['πυροτέχνημα', 'βεγγαλικό', 'σπινθήρας', 'λάμψη'],
+  },
+  {
+    id: 'fx-firework-burst-custom',
+    iconifyId: 'custom-svg:firework-burst:#eab308:12',
+    title: 'Πυροτέχνημα Αστεριών (Starburst)',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['πυροτέχνημα', 'πυροτεχνήματα', 'αστέρια', 'έκρηξη'],
+  },
+  {
+    id: 'fx-collision-3d',
+    iconifyId: 'fluent-emoji:collision',
+    title: 'Έκρηξη Comic Boom / Κρούση 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['έκρηξη', 'κρούση', 'πυροτέχνημα', 'δύναμη', 'boom'],
+  },
+  {
+    id: 'fx-sparkles-3d',
+    iconifyId: 'fluent-emoji:sparkles',
+    title: 'Λάμψεις & Αστεράκια 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['λάμψη', 'αστέρια', 'πυροτέχνημα', 'sparkles'],
+  },
+  {
+    id: 'fx-party-3d',
+    iconifyId: 'fluent-emoji:party-popper',
+    title: 'Κομφετί Γιορτής / Επιτυχίας 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['κομφετί', 'πυροτέχνημα', 'γιορτή', 'μπράβο'],
+  },
+  {
+    id: 'fx-fire-3d',
+    iconifyId: 'fluent-emoji:fire',
+    title: 'Φλόγα / Φωτιά 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['φωτιά', 'φλόγα', 'θερμότητα', 'καύση'],
+  },
+  {
+    id: 'fx-warning-3d',
+    iconifyId: 'fluent-emoji:warning',
+    title: 'Σήμα Προσοχής / Κινδύνου 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['προσοχή', 'θαυμαστικό', 'κίνδυνος', 'sos'],
   },
 
   // =========================================================================
@@ -381,8 +603,64 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
 
   // =========================================================================
-  // 3. ΣΧΟΛΙΚΑ & ΕΡΓΑΣΤΗΡΙΟ (School Supplies & Science Lab)
+  // 3. ΣΧΟΛΙΚΑ & ΕΡΓΑΣΤΗΡΙΟ (Στυλό, Μολύβια, Μαρκαδόροι, Βιβλία, Εργαστήριο)
   // =========================================================================
+  {
+    id: 'sch-3d-pencil',
+    iconifyId: 'fluent-emoji:pencil',
+    title: 'Κλασικό Μολύβι 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['μολύβι', 'στυλό', 'σχολικά', 'γραφή', 'σχέδιο', 'pencil'],
+  },
+  {
+    id: 'sch-3d-pen',
+    iconifyId: 'fluent-emoji:pen',
+    title: 'Στυλό Διαρκείας 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['στυλό', 'μολύβι', 'σχολικά', 'γραφή', 'pen'],
+  },
+  {
+    id: 'sch-3d-fountainpen',
+    iconifyId: 'fluent-emoji:fountain-pen',
+    title: 'Πένα Μελάνης 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['πένα', 'στυλό', 'μολύβι', 'σχολικά', 'γραφή'],
+  },
+  {
+    id: 'sch-custom-pen-red',
+    iconifyId: 'custom-svg:pen-marker:#dc2626:12',
+    title: 'Κόκκινο Στυλό / Μαρκαδόρος Διόρθωσης',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['στυλό', 'κόκκινο', 'μαρκαδόρος', 'μολύβι', 'διόρθωση'],
+  },
+  {
+    id: 'sch-custom-pen-blue',
+    iconifyId: 'custom-svg:pen-marker:#0066ff:12',
+    title: 'Μπλε Στυλό / Μαρκαδόρος Σημειώσεων',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['στυλό', 'μπλε', 'μαρκαδόρος', 'μολύβι', 'σημειώσεις'],
+  },
+  {
+    id: 'sch-3d-crayon',
+    iconifyId: 'fluent-emoji:crayon',
+    title: 'Κραγιόνι / Μαρκαδόρος Ζωγραφικής 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['κραγιόνι', 'μαρκαδόρος', 'στυλό', 'μολύβι', 'χρώμα'],
+  },
+  {
+    id: 'sch-3d-paintbrush',
+    iconifyId: 'fluent-emoji:paintbrush',
+    title: 'Πινέλο Ζωγραφικής 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['πινέλο', 'ζωγραφική', 'στυλό', 'μολύβι', 'τέχνη'],
+  },
   {
     id: 'sch-3d-books',
     iconifyId: 'fluent-emoji:books',
@@ -400,20 +678,36 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
     tags: ['βιβλίο', 'ανοιχτό', 'σχολικά', 'θεωρία'],
   },
   {
+    id: 'sch-3d-notebook',
+    iconifyId: 'fluent-emoji:spiral-notepad',
+    title: 'Σπιράλ Τετράδιο Σημειώσεων 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['τετράδιο', 'σημειωματάριο', 'σχολικά', 'σημειώσεις'],
+  },
+  {
+    id: 'sch-3d-pushpin',
+    iconifyId: 'fluent-emoji:pushpin',
+    title: 'Κόκκινη Πινέζα Σημείωσης 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['πινέζα', 'καρφίτσα', 'σημείωση', 'σχολικά'],
+  },
+  {
+    id: 'sch-3d-paperclip',
+    iconifyId: 'fluent-emoji:linked-paperclips',
+    title: 'Συνδετήρες 3D',
+    category: 'Σχολικά & Εργαστήριο',
+    colorStyle: 'multicolor',
+    tags: ['συνδετήρας', 'σχολικά', 'χαρτιά'],
+  },
+  {
     id: 'sch-3d-backpack',
     iconifyId: 'fluent-emoji:backpack',
     title: 'Σχολική Τσάντα 3D',
     category: 'Σχολικά & Εργαστήριο',
     colorStyle: 'multicolor',
     tags: ['τσάντα', 'σχολείο', 'σχολικά'],
-  },
-  {
-    id: 'sch-3d-pencil',
-    iconifyId: 'fluent-emoji:pencil',
-    title: 'Μολύβι 3D',
-    category: 'Σχολικά & Εργαστήριο',
-    colorStyle: 'multicolor',
-    tags: ['μολύβι', 'σχολικά', 'γραφή', 'σχέδιο'],
   },
   {
     id: 'sch-3d-ruler',
@@ -988,6 +1282,16 @@ const GREEK_TO_ENGLISH_ICON_DICT: Record<string, string> = {
   μεταλλιο: 'medal',
   φωτια: 'fire',
   κεραυνος: 'lightning bolt',
+  κεραυνοι: 'lightning bolt',
+  θαυμαστικο: 'exclamation mark',
+  θαυμαστικα: 'exclamation mark',
+  πυροτεχνημα: 'fireworks',
+  πυροτεχνηματα: 'fireworks',
+  βεγγαλικο: 'sparkler',
+  εκρηξη: 'explosion boom',
+  πενα: 'fountain pen',
+  μαρκαδορος: 'marker pen',
+  πινελο: 'paintbrush',
   καρδια: 'heart',
   εγκεφαλος: 'brain',
   μυαλο: 'brain',
@@ -1033,24 +1337,235 @@ export function translateGreekStickerQueryToEnglish(rawQuery: string): string {
   return mapped.join(' ');
 }
 
+/**
+ * Builds a high-resolution standalone SVG data URL for hand-drawn/marker curved arrows,
+ * lightning bolts, exclamation marks, fireworks, and pens with customizable color & thickness.
+ */
+export function buildCustomStickerSvgDataUrl(
+  shapeKind: string,
+  colorHex: string,
+  strokeWidthNum: number
+): string {
+  const c = colorHex || '#dc2626';
+  const w = Math.max(3, Math.min(26, strokeWidthNum || 12));
+  const wInner = Math.max(2, w * 0.55);
+  let innerSvg = '';
+
+  switch (shapeKind) {
+    case 'sketch-curve-left': {
+      // Exact organic curved arrow pointing left like the user's screenshot!
+      innerSvg = `
+        <path d="M 224 166 Q 134 118 36 140" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 220 163 Q 134 122 40 141" fill="none" stroke="${c}" stroke-width="${wInner}" stroke-opacity="0.7" stroke-linecap="round" />
+        <path d="M 80 100 L 34 140 L 82 172" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-curve-right': {
+      innerSvg = `
+        <path d="M 32 166 Q 122 118 220 140" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 36 163 Q 122 122 216 141" fill="none" stroke="${c}" stroke-width="${wInner}" stroke-opacity="0.7" stroke-linecap="round" />
+        <path d="M 176 100 L 222 140 L 174 172" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-arch-down-left': {
+      innerSvg = `
+        <path d="M 222 92 Q 134 150 36 124" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 82 92 L 34 124 L 78 164" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-arch-down-right': {
+      innerSvg = `
+        <path d="M 34 92 Q 122 150 220 124" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 174 92 L 222 124 L 178 164" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-curve-up': {
+      innerSvg = `
+        <path d="M 154 222 Q 112 132 132 36" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 94 80 L 132 34 L 168 82" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-curve-down': {
+      innerSvg = `
+        <path d="M 104 34 Q 146 124 126 220" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 90 174 L 126 222 L 164 176" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-loop-left': {
+      innerSvg = `
+        <path d="M 226 164 C 170 164, 116 74, 146 74 C 176 74, 150 168, 36 138" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 80 100 L 34 138 L 78 174" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-loop-right': {
+      innerSvg = `
+        <path d="M 30 164 C 86 164, 140 74, 110 74 C 80 74, 106 168, 220 138" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 176 100 L 222 138 L 178 174" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-scurve': {
+      innerSvg = `
+        <path d="M 30 184 C 95 184, 95 72, 165 72 C 195 72, 208 82, 222 92" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 178 62 L 224 94 L 176 126" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-dashed-left': {
+      const dash = `${Math.round(w * 2.1)} ${Math.round(w * 1.55)}`;
+      innerSvg = `
+        <path d="M 224 166 Q 134 118 42 140" fill="none" stroke="${c}" stroke-width="${w}" stroke-dasharray="${dash}" stroke-linecap="round" />
+        <path d="M 80 100 L 34 140 L 82 172" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-dashed-right': {
+      const dash = `${Math.round(w * 2.1)} ${Math.round(w * 1.55)}`;
+      innerSvg = `
+        <path d="M 32 166 Q 122 118 214 140" fill="none" stroke="${c}" stroke-width="${w}" stroke-dasharray="${dash}" stroke-linecap="round" />
+        <path d="M 176 100 L 222 140 L 174 172" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-double-curve': {
+      innerSvg = `
+        <path d="M 36 146 Q 128 96 220 146" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 78 110 L 34 146 L 78 178" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 178 110 L 222 146 L 178 178" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case '3d-filled-arrow-left': {
+      innerSvg = `
+        <path d="M 230 172 Q 146 116 84 134 L 88 102 L 24 146 L 94 180 L 90 152 Q 148 138 230 172 Z" fill="rgba(15,23,42,0.18)" transform="translate(4, 7)" />
+        <path d="M 230 172 Q 146 116 84 134 L 88 102 L 24 146 L 94 180 L 90 152 Q 148 138 230 172 Z" fill="${c}" stroke="#0f172a" stroke-width="4" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case '3d-filled-arrow-right': {
+      innerSvg = `
+        <path d="M 26 172 Q 110 116 172 134 L 168 102 L 232 146 L 162 180 L 166 152 Q 108 138 26 172 Z" fill="rgba(15,23,42,0.18)" transform="translate(4, 7)" />
+        <path d="M 26 172 Q 110 116 172 134 L 168 102 L 232 146 L 162 180 L 166 152 Q 108 138 26 172 Z" fill="${c}" stroke="#0f172a" stroke-width="4" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-straight-right': {
+      innerSvg = `
+        <path d="M 30 132 Q 124 124 220 130" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" />
+        <path d="M 172 92 L 222 130 L 172 168" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'sketch-straight-left': {
+      innerSvg = `
+        <path d="M 226 132 Q 132 124 36 130" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" />
+        <path d="M 84 92 L 34 130 L 84 168" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'lightning-bolt': {
+      innerSvg = `
+        <polygon points="148,20 58,136 122,136 96,236 202,110 134,110" fill="rgba(15,23,42,0.18)" transform="translate(6, 7)" />
+        <polygon points="148,20 58,136 122,136 96,236 202,110 134,110" fill="#facc15" stroke="${c}" stroke-width="${Math.max(5, w * 0.65)}" stroke-linejoin="round" />
+      `;
+      break;
+    }
+    case 'triple-exclamation': {
+      innerSvg = `
+        <path d="M 76 44 L 84 164 M 128 36 L 128 162 M 180 44 L 172 164" fill="none" stroke="${c}" stroke-width="${Math.max(12, w * 1.25)}" stroke-linecap="round" />
+        <circle cx="86" cy="204" r="${Math.max(8, w * 0.75)}" fill="${c}" />
+        <circle cx="128" cy="204" r="${Math.max(8, w * 0.75)}" fill="${c}" />
+        <circle cx="170" cy="204" r="${Math.max(8, w * 0.75)}" fill="${c}" />
+      `;
+      break;
+    }
+    case 'firework-burst': {
+      innerSvg = `
+        <g stroke-linecap="round">
+          <line x1="128" y1="128" x2="128" y2="26" stroke="#ef4444" stroke-width="8" stroke-dasharray="18 10" />
+          <line x1="128" y1="128" x2="200" y2="56" stroke="#f59e0b" stroke-width="8" stroke-dasharray="18 10" />
+          <line x1="128" y1="128" x2="230" y2="128" stroke="#10b981" stroke-width="8" stroke-dasharray="18 10" />
+          <line x1="128" y1="128" x2="200" y2="200" stroke="#0066ff" stroke-width="8" stroke-dasharray="18 10" />
+          <line x1="128" y1="128" x2="128" y2="230" stroke="#8b5cf6" stroke-width="8" stroke-dasharray="18 10" />
+          <line x1="128" y1="128" x2="56" y2="200" stroke="#ec4899" stroke-width="8" stroke-dasharray="18 10" />
+          <line x1="128" y1="128" x2="26" y2="128" stroke="#f59e0b" stroke-width="8" stroke-dasharray="18 10" />
+          <line x1="128" y1="128" x2="56" y2="56" stroke="#0066ff" stroke-width="8" stroke-dasharray="18 10" />
+          <circle cx="128" cy="128" r="16" fill="#facc15" stroke="${c}" stroke-width="4" />
+          <circle cx="128" cy="22" r="7" fill="#ef4444" />
+          <circle cx="204" cy="52" r="7" fill="#f59e0b" />
+          <circle cx="234" cy="128" r="7" fill="#10b981" />
+          <circle cx="204" cy="204" r="7" fill="#0066ff" />
+          <circle cx="128" cy="234" r="7" fill="#8b5cf6" />
+          <circle cx="52" cy="204" r="7" fill="#ec4899" />
+          <circle cx="22" cy="128" r="7" fill="#f59e0b" />
+          <circle cx="52" cy="52" r="7" fill="#0066ff" />
+        </g>
+      `;
+      break;
+    }
+    case 'pen-marker': {
+      innerSvg = `
+        <g transform="rotate(-38 128 128)">
+          <rect x="108" y="42" width="40" height="132" rx="8" fill="${c}" stroke="#0f172a" stroke-width="5" />
+          <rect x="108" y="56" width="40" height="18" fill="#ffffff" fill-opacity="0.35" />
+          <polygon points="108,174 148,174 135,208 121,208" fill="#e2e8f0" stroke="#0f172a" stroke-width="5" stroke-linejoin="round" />
+          <polygon points="121,208 135,208 128,228" fill="${c}" stroke="${c}" stroke-width="3" stroke-linejoin="round" />
+          <path d="M 148 56 L 162 56 L 162 116" fill="none" stroke="#0f172a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+        </g>
+      `;
+      break;
+    }
+    default: {
+      innerSvg = `
+        <path d="M 224 166 Q 134 118 36 140" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 80 100 L 34 140 L 82 172" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" />
+      `;
+    }
+  }
+
+  const fullSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256">${innerSvg}</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fullSvg)}`;
+}
+
 export function getIconifySvgUrl(
   iconifyId: string,
   colorStyle: StickerColorStyle | Exclude<StickerColorStyle, 'all'>,
-  customHexColor = '#1e293b'
+  customHexColor = '#1e293b',
+  overrideCustomColor?: string | null,
+  overrideCustomWidth?: number | null
 ): string {
+  if (iconifyId.startsWith('custom-svg:')) {
+    const parts = iconifyId.split(':');
+    const shapeKind = parts[1] || 'sketch-curve-left';
+    const defaultColor = parts[2] || '#dc2626';
+    const defaultWidth = Number(parts[3]) || 12;
+    return buildCustomStickerSvgDataUrl(
+      shapeKind,
+      overrideCustomColor || defaultColor,
+      overrideCustomWidth || defaultWidth
+    );
+  }
   const [prefix, name] = iconifyId.split(':');
   if (!prefix || !name) return '';
   const baseUrl = `https://api.iconify.design/${prefix}/${name}.svg`;
+  const effectiveMonoColor = overrideCustomColor || customHexColor;
   if (
     colorStyle === 'monochrome' ||
     prefix === 'mdi' ||
     prefix === 'lucide' ||
     prefix === 'tabler'
   ) {
-    return `${baseUrl}?color=${encodeURIComponent(customHexColor)}`;
+    return `${baseUrl}?color=${encodeURIComponent(effectiveMonoColor)}`;
   }
   if (colorStyle === 'duotone' || prefix === 'ph' || prefix === 'solar') {
-    return `${baseUrl}?color=${encodeURIComponent('#0066ff')}`;
+    return `${baseUrl}?color=${encodeURIComponent(overrideCustomColor || '#0066ff')}`;
   }
   return baseUrl;
 }
@@ -1122,6 +1637,27 @@ export async function searchOnlineIconifyStickers(
  * so it works offline, syncs to Firestore, exports to PDF, and supports all Lasso/Crop/Mirror tools.
  */
 export async function rasterizeStickerUrlToPngDataUrl(svgUrl: string): Promise<string> {
+  if (svgUrl.startsWith('data:image/svg+xml')) {
+    return await new Promise<string>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('No 2d context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = svgUrl;
+    });
+  }
+
   const res = await fetch(svgUrl);
   if (!res.ok) throw new Error('Failed to fetch sticker SVG');
   let svgText = await res.text();

@@ -830,6 +830,8 @@ export default function App() {
   const [shapeLibSearchQuery, setShapeLibSearchQuery] = useState<string>('');
   const [stickerCategoryFilter, setStickerCategoryFilter] = useState<StickerCategory>('Όλα');
   const [stickerColorStyleFilter, setStickerColorStyleFilter] = useState<StickerColorStyle>('all');
+  const [stickerCustomColor, setStickerCustomColor] = useState<string | null>(null);
+  const [stickerCustomWidth, setStickerCustomWidth] = useState<number | null>(null);
   const [stickerSearchQuery, setStickerSearchQuery] = useState<string>('');
   const [onlineStickerResults, setOnlineStickerResults] = useState<StickerCatalogItem[]>([]);
   const [isSearchingOnlineStickers, setIsSearchingOnlineStickers] = useState<boolean>(false);
@@ -14323,7 +14325,13 @@ export default function App() {
                     };
 
                     const handleInsertStickerItem = async (stItem: StickerCatalogItem) => {
-                      const svgUrl = getIconifySvgUrl(stItem.iconifyId, stItem.colorStyle, strokeColor || '#1e293b');
+                      const svgUrl = getIconifySvgUrl(
+                        stItem.iconifyId,
+                        stItem.colorStyle,
+                        strokeColor || '#1e293b',
+                        stickerCustomColor,
+                        stickerCustomWidth
+                      );
                       try {
                         showToast(`⏳ Φόρτωση «${stItem.title}»...`);
                         const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(svgUrl);
@@ -14344,7 +14352,13 @@ export default function App() {
                       stItem: StickerCatalogItem
                     ) => {
                       e.stopPropagation();
-                      const svgUrl = getIconifySvgUrl(stItem.iconifyId, stItem.colorStyle, strokeColor || '#1e293b');
+                      const svgUrl = getIconifySvgUrl(
+                        stItem.iconifyId,
+                        stItem.colorStyle,
+                        strokeColor || '#1e293b',
+                        stickerCustomColor,
+                        stickerCustomWidth
+                      );
                       try {
                         const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(svgUrl);
                         const newLibItem: SavedLibraryItem = {
@@ -14405,7 +14419,7 @@ export default function App() {
                         </div>
 
                         {/* Color Style Filter Pills (Όλα | Πολύχρωμα / 3D | Δίχρωμα | Μονόχρωμα) */}
-                        <div className="flex items-center justify-between gap-1 mb-2 pb-2 border-b border-slate-100 shrink-0 flex-wrap">
+                        <div className="flex items-center justify-between gap-1 mb-1.5 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap">
                           <div className="flex items-center gap-1 flex-wrap">
                             {STICKER_COLOR_STYLES.map((cs) => (
                               <button
@@ -14426,6 +14440,74 @@ export default function App() {
                               ? '🔍 Online αναζήτηση...'
                               : `${combinedStickers.length} εικονίδια`}
                           </span>
+                        </div>
+
+                        {/* Interactive Color & Thickness Customizer for Arrows & Sketch Symbols */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9.5px] font-bold text-slate-500">Χρώμα:</span>
+                            <button
+                              type="button"
+                              onClick={() => setStickerCustomColor(null)}
+                              className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border cursor-pointer ${
+                                stickerCustomColor === null
+                                  ? 'bg-slate-800 text-white border-slate-800'
+                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                              }`}
+                              title="Αρχικά χρώματα κάθε βέλους/εικονιδίου"
+                            >
+                              Auto
+                            </button>
+                            {[
+                              { hex: '#dc2626', title: 'Κόκκινο' },
+                              { hex: '#0066ff', title: 'Μπλε' },
+                              { hex: '#16a34a', title: 'Πράσινο' },
+                              { hex: '#ea580c', title: 'Πορτοκαλί' },
+                              { hex: '#7c3aed', title: 'Μωβ' },
+                              { hex: '#db2777', title: 'Ροζ' },
+                              { hex: '#eab308', title: 'Χρυσό' },
+                              { hex: '#0f172a', title: 'Μαύρο' },
+                            ].map((cOpt) => (
+                              <button
+                                key={cOpt.hex}
+                                type="button"
+                                onClick={() => setStickerCustomColor(cOpt.hex)}
+                                style={{ backgroundColor: cOpt.hex }}
+                                className={`w-4 h-4 rounded-full border transition cursor-pointer ${
+                                  stickerCustomColor === cOpt.hex
+                                    ? 'ring-2 ring-offset-1 ring-slate-900 border-white scale-110'
+                                    : 'border-white/80 hover:scale-110 shadow-2xs'
+                                }`}
+                                title={`Χρώμα βελών/συμβόλων: ${cOpt.title}`}
+                              />
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9.5px] font-bold text-slate-500">Πάχος:</span>
+                            {(
+                              [
+                                { w: null, label: 'Auto' },
+                                { w: 6, label: 'Λεπτό' },
+                                { w: 12, label: 'Μεσαίο' },
+                                { w: 18, label: 'Χοντρό' },
+                              ] as const
+                            ).map((wOpt) => (
+                              <button
+                                key={String(wOpt.w)}
+                                type="button"
+                                onClick={() => setStickerCustomWidth(wOpt.w)}
+                                className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border transition cursor-pointer ${
+                                  stickerCustomWidth === wOpt.w
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                                title={`Πάχος γραμμής βελών: ${wOpt.label}`}
+                              >
+                                {wOpt.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Stickers Results Grid */}
@@ -14455,7 +14537,9 @@ export default function App() {
                               const svgUrl = getIconifySvgUrl(
                                 stItem.iconifyId,
                                 stItem.colorStyle,
-                                strokeColor || '#1e293b'
+                                strokeColor || '#1e293b',
+                                stickerCustomColor,
+                                stickerCustomWidth
                               );
                               const badge = styleBadgeMap[stItem.colorStyle];
                               return (
