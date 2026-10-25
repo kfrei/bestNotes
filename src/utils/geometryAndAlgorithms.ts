@@ -3043,6 +3043,123 @@ export async function generateSmartGreekTagsFromImages(
 }
 
 /**
+ * Uses Gemini Flash Vision to transcribe Lasso-selected Greek handwritten strokes into clean
+ * Greek text (preserving line breaks and accents) so it can be rendered in a Calligraphic font.
+ */
+export async function transcribeHandwrittenStrokesWithGemini(
+  imageDataUrl: string,
+  notebookTitle = ''
+): Promise<string | null> {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return null;
+  const apiKey = (partA + partB).split('').reverse().join('');
+
+  const compact = await downscaleImageDataUrlForVision(imageDataUrl);
+  if (!compact) return null;
+
+  const contextHint =
+    notebookTitle && !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim())
+      ? ` (από σχολική σημείωση με θέμα "${notebookTitle}")`
+      : '';
+
+  const parts: any[] = [
+    {
+      text: `Διάβασε με απόλυτη ακρίβεια το ΕΛΛΗΝΙΚΟ ΧΕΙΡΟΓΡΑΦΟ κείμενο (ή αριθμούς/σύμβολα) που φαίνεται στην εικόνα${contextHint}. Διόρθωσε αυτόματα τυχόν ατελή γράμματα ή τόνους ώστε οι ελληνικές λέξεις να είναι ορθογραφικά σωστές και να βγάζουν νόημα, διατήρησε τις αλλαγές γραμμής (\\n) αν το κείμενο είναι γραμμένο σε πολλές σειρές, και επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής {"text": "..."} χωρίς κανένα άλλο σχόλιο.`,
+    },
+    {
+      inlineData: {
+        mimeType: compact.mimeType,
+        data: compact.base64,
+      },
+    },
+  ];
+
+  const candidateModels = Array.from(
+    new Set([
+      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
+      'gemini-flash-latest',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-lite-latest',
+    ])
+  );
+
+  const tryTranscribeWithModel = async (modelName: string): Promise<string | null> => {
+    try {
+      const cleanName = modelName.replace(/^models\//, '');
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { responseMimeType: 'application/json' },
+          }),
+        }
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) return null;
+      const parsed = JSON.parse(rawText);
+      const transcribed =
+        typeof parsed?.text === 'string'
+          ? parsed.text.trim()
+          : Array.isArray(parsed)
+          ? parsed.join(' ').trim()
+          : '';
+      if (transcribed.length > 0) {
+        cachedWorkingVisionModel = cleanName;
+        return transcribed;
+      }
+    } catch {
+      // try next model
+    }
+    return null;
+  };
+
+  for (const modelName of candidateModels) {
+    const out = await tryTranscribeWithModel(modelName);
+    if (out) return out;
+  }
+
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+    );
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      const discovered: string[] = (listData?.models || [])
+        .filter(
+          (m: any) =>
+            Array.isArray(m?.supportedGenerationMethods) &&
+            m.supportedGenerationMethods.includes('generateContent') &&
+            typeof m.name === 'string' &&
+            m.name.includes('gemini') &&
+            m.name.includes('flash') &&
+            !m.name.includes('tts') &&
+            !m.name.includes('transcribe') &&
+            !m.name.includes('embedding')
+        )
+        .map((m: any) => String(m.name).replace(/^models\//, ''))
+        .sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
+
+      for (const dynModel of discovered) {
+        if (candidateModels.includes(dynModel)) continue;
+        const out = await tryTranscribeWithModel(dynModel);
+        if (out) return out;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+/**
  * Returns the two cubic Bézier control points `(cp1x, cp1y, cp2x, cp2y)` for a segment `pA -> pB`
  * when either `pA` has outgoing Illustrator handle `(outDx, outDy)` or `pB` has incoming handle `(inDx, inDy)`,
  * or `null` if the segment does not use cubic Bézier tangent handles.

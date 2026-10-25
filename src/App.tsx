@@ -87,6 +87,7 @@ import {
   PaperTemplateType,
   ImageObject,
   TextObject,
+  TextFontStyle,
   TapeObject,
   A4_SHORT_PX,
   A4_LONG_PX,
@@ -117,6 +118,7 @@ import {
   matchesNotebookSmartSearch,
   normalizeGreekSearchText,
   generateSmartGreekTagsFromImages,
+  transcribeHandwrittenStrokesWithGemini,
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
   recomputeAutoSmoothHandles,
@@ -958,6 +960,8 @@ export default function App() {
   } | null>(null);
   const [textFontSize, setTextFontSize] = useState<number>(22);
   const [textBold, setTextBold] = useState<boolean>(false);
+  const [textFontFamily, setTextFontFamily] = useState<TextFontStyle>('calligraphic');
+  const [isConvertingHandwriting, setIsConvertingHandwriting] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const draggingTextRef = useRef<{
@@ -8336,6 +8340,7 @@ export default function App() {
         color: strokeColor,
         fontSize: textFontSize,
         bold: textBold,
+        fontFamily: textFontFamily,
         layerId: activeLayerId,
       };
       updateActivePage((page) => ({
@@ -12140,6 +12145,158 @@ export default function App() {
     showToast,
   ]);
 
+  const getTextFontCss = (fontFamily?: TextFontStyle): React.CSSProperties => {
+    switch (fontFamily) {
+      case 'calligraphic':
+        // Matches the tall, slightly condensed calligraphic Greek lettering of "Ο Κύκλος του Νερού"
+        return {
+          fontFamily: "'Arima', 'Playpen Sans', cursive",
+          letterSpacing: '-0.015em',
+          fontStretch: 'condensed',
+        };
+      case 'handwritten':
+        return {
+          fontFamily: "'Playpen Sans', 'Mynerve', cursive",
+          letterSpacing: '0em',
+        };
+      case 'marker':
+        return {
+          fontFamily: "'Mynerve', 'Mansalva', cursive",
+          letterSpacing: '0.01em',
+        };
+      case 'sans':
+      default:
+        return {
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+          letterSpacing: '0em',
+        };
+    }
+  };
+
+  // Manual (on-demand) Lasso Handwriting -> Calligraphic Greek Text conversion via Gemini Vision
+  const handleConvertLassoToCalligraphic = useCallback(async () => {
+    if (isConvertingHandwriting) return;
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+    if (selStrokes.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο ελληνικό κείμενο που θέλεις να γίνει καλλιγραφικό!');
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const st of selStrokes) {
+      const b = getStrokeBounds(st);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+    const pad = 32;
+    const rawW = Math.max(48, Math.ceil(maxX - minX));
+    const rawH = Math.max(32, Math.ceil(maxY - minY));
+    const scale = 2;
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = (rawW + pad * 2) * scale;
+    cropCanvas.height = (rawH + pad * 2) * scale;
+    const cropCtx = cropCanvas.getContext('2d');
+    if (!cropCtx) return;
+
+    cropCtx.fillStyle = '#ffffff';
+    cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+    cropCtx.save();
+    cropCtx.scale(scale, scale);
+    cropCtx.translate(-minX + pad, -minY + pad);
+    for (const st of selStrokes) {
+      drawStrokeOnContext(cropCtx, st);
+    }
+    cropCtx.restore();
+
+    const cropDataUrl = cropCanvas.toDataURL('image/png');
+    setIsConvertingHandwriting(true);
+    showToast('✍️ Ο Gemini διαβάζει το ελληνικό χειρόγραφο κείμενο...');
+
+    try {
+      const transcribed = await transcribeHandwrittenStrokesWithGemini(
+        cropDataUrl,
+        activeNotebook?.title || ''
+      );
+      if (!transcribed || !transcribed.trim()) {
+        showToast('⚠️ Δεν αναγνωρίστηκε κείμενο στην επιλογή. Δοκίμασε να επιλέξεις καθαρά τις λέξεις με το Λάσο!');
+        return;
+      }
+
+      const cleanText = transcribed.trim();
+      const lines = cleanText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      const lineCount = Math.max(1, lines.length);
+      const estimatedSize = Math.round(((maxY - minY) / lineCount) * 0.78);
+      const finalFontSize = Math.max(20, Math.min(52, estimatedSize || 28));
+      const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
+      const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
+
+      const newTxt: TextObject = {
+        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: Math.max(12, Math.round(minX)),
+        y: Math.max(12, Math.round(minY - finalFontSize * 0.12)),
+        text: cleanText,
+        color: dominantColor,
+        fontSize: finalFontSize,
+        bold: true,
+        fontFamily: 'calligraphic',
+        layerId: targetLayerId,
+      };
+
+      const removeIdSet = new Set(selStrokes.map((s) => s.id));
+      updateActivePage((page) => ({
+        ...page,
+        strokes: page.strokes.filter((s) => !removeIdSet.has(s.id)),
+        texts: [...(page.texts || []), newTxt],
+      }));
+
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setSelectedTextId(newTxt.id);
+      setTextFontSize(finalFontSize);
+      setTextBold(true);
+      setTextFontFamily('calligraphic');
+      setShowToolSubBar(true);
+      showToast(
+        `✍️ Καλλιγραφικό: "${cleanText.replace(/\s+/g, ' ').slice(0, 38)}${
+          cleanText.length > 38 ? '…' : ''
+        }" (Ctrl+Z για αναίρεση)`
+      );
+    } finally {
+      setIsConvertingHandwriting(false);
+    }
+  }, [
+    isConvertingHandwriting,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    activePage.strokes,
+    activeNotebook?.title,
+    strokeColor,
+    activeLayerId,
+    updateActivePage,
+    showToast,
+  ]);
+
   // NOTE: Temporarily disabled from toolbar until final phase ("Στρώσιμο" handwriting beautifier)
   const _handleBeautifySelected = () => {
     void Sparkles;
@@ -13633,6 +13790,7 @@ export default function App() {
                                           fill={tx.color}
                                           fontSize={(tx.fontSize || 20) * 1.2}
                                           fontWeight={tx.bold ? 'bold' : 'normal'}
+                                          fontFamily={getTextFontCss(tx.fontFamily).fontFamily}
                                         >
                                           {tx.text}
                                         </text>
@@ -14709,6 +14867,9 @@ export default function App() {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
                   const currentBold = selTxt ? Boolean(selTxt.bold) : textBold;
                   const currentSize = selTxt ? selTxt.fontSize : textFontSize;
+                  const currentFontFamily: TextFontStyle = selTxt
+                    ? selTxt.fontFamily || 'sans'
+                    : textFontFamily;
 
                   const applyBold = (nextB: boolean) => {
                     setTextBold(nextB);
@@ -14716,6 +14877,18 @@ export default function App() {
                       updateActivePage((page) => ({
                         ...page,
                         texts: (page.texts || []).map((t) => (t.id === selTxt.id ? { ...t, bold: nextB } : t)),
+                      }));
+                    }
+                  };
+
+                  const applyFontFamily = (nextFont: TextFontStyle) => {
+                    setTextFontFamily(nextFont);
+                    if (selTxt) {
+                      updateActivePage((page) => ({
+                        ...page,
+                        texts: (page.texts || []).map((t) =>
+                          t.id === selTxt.id ? { ...t, fontFamily: nextFont } : t
+                        ),
                       }));
                     }
                   };
@@ -14752,6 +14925,31 @@ export default function App() {
                       >
                         B Έντονα
                       </button>
+
+                      {/* Greek Font Style Selector: Calligraphic (Κύκλος Νερού) / Handwritten / Marker / Printed */}
+                      <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                        {(
+                          [
+                            { id: 'calligraphic', label: '✍️ Καλλιγραφικό' },
+                            { id: 'handwritten', label: '📝 Χειρόγραφο' },
+                            { id: 'marker', label: '✒️ Πένα' },
+                            { id: 'sans', label: '🔤 Τυπωμένο' },
+                          ] as { id: TextFontStyle; label: string }[]
+                        ).map((fOpt) => (
+                          <button
+                            key={fOpt.id}
+                            onClick={() => applyFontFamily(fOpt.id)}
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                              currentFontFamily === fOpt.id
+                                ? 'bg-purple-600 text-white shadow-xs'
+                                : 'text-slate-700 hover:bg-white'
+                            }`}
+                            title={`Γραμματοσειρά: ${fOpt.label}`}
+                          >
+                            {fOpt.label}
+                          </button>
+                        ))}
+                      </div>
 
                       <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
 
@@ -15305,6 +15503,22 @@ export default function App() {
                     >
                       <span>+Βιβλιοθήκη</span>
                     </button>
+
+                    {selectedStrokeIds.length > 0 && (
+                      <button
+                        onClick={() => void handleConvertLassoToCalligraphic()}
+                        disabled={isConvertingHandwriting}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                          isConvertingHandwriting
+                            ? 'bg-purple-300 text-white cursor-wait'
+                            : 'bg-purple-600 hover:bg-purple-700 text-white'
+                        }`}
+                        title="Αναγνώριση ελληνικού χειρογράφου με Gemini AI και μετατροπή σε Καλλιγραφικό Κείμενο (όπως στον Κύκλο του Νερού)"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{isConvertingHandwriting ? 'Αναγνώριση...' : '✍️ Καλλιγραφικό'}</span>
+                      </button>
+                    )}
 
                     {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
@@ -16641,6 +16855,7 @@ export default function App() {
                       const isLocked = Boolean(txtLayer?.locked);
                       const isSelectedTxt = isCurrentActive && selectedTextId === txt.id;
                       const isEditingTxt = isCurrentActive && editingTextId === txt.id;
+                      const fontCss = getTextFontCss(txt.fontFamily);
 
                       return (
                         <div
@@ -16654,6 +16869,7 @@ export default function App() {
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
                             lineHeight: 1.35,
+                            ...fontCss,
                             touchAction: 'none',
                             WebkitUserSelect: isEditingTxt ? 'text' : 'none',
                             userSelect: isEditingTxt ? 'text' : 'none',
@@ -16677,6 +16893,7 @@ export default function App() {
                             setSelectedTextId(txt.id);
                             setTextFontSize(txt.fontSize);
                             setTextBold(Boolean(txt.bold));
+                            setTextFontFamily(txt.fontFamily || 'sans');
                             setSelectedStrokeIds([]);
                             setSelectedImageId(null);
                             setActiveNodeStrokeId(null);
@@ -16773,6 +16990,10 @@ export default function App() {
                                 touchAction: 'none',
                                 WebkitUserSelect: 'none',
                                 userSelect: 'none',
+                                fontFamily:
+                                  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                                fontStretch: 'normal',
+                                letterSpacing: 'normal',
                               }}
                               className="absolute -top-10 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30 cursor-grab active:cursor-grabbing"
                             >
@@ -16783,6 +17004,34 @@ export default function App() {
                                 ✥ Σύρετε
                               </span>
                               <div className="h-3 w-px bg-white/20 mx-0.5" />
+                              {!txt.isMath && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    const order: TextFontStyle[] = ['calligraphic', 'handwritten', 'marker', 'sans'];
+                                    const cur = txt.fontFamily || 'sans';
+                                    const nextFont = order[(order.indexOf(cur) + 1) % order.length];
+                                    setTextFontFamily(nextFont);
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).map((t) =>
+                                        t.id === txt.id ? { ...t, fontFamily: nextFont } : t
+                                      ),
+                                    }));
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-bold cursor-pointer"
+                                  title="Εναλλαγή γραμματοσειράς (Καλλιγραφικό / Χειρόγραφο / Πένα / Τυπωμένο)"
+                                >
+                                  {txt.fontFamily === 'calligraphic'
+                                    ? '✍️ Καλλιγρ.'
+                                    : txt.fontFamily === 'handwritten'
+                                    ? '📝 Χειρόγρ.'
+                                    : txt.fontFamily === 'marker'
+                                    ? '✒️ Πένα'
+                                    : '🔤 Τυπωμ.'}
+                                </button>
+                              )}
                               {!txt.isMath && (
                                 <button
                                   type="button"
@@ -16928,15 +17177,17 @@ export default function App() {
                                 fontSize: txt.fontSize,
                                 fontWeight: txt.bold ? 700 : 500,
                                 lineHeight: 1.35,
+                                ...fontCss,
                                 touchAction: 'none',
                               } as React.CSSProperties}
-                              className="bg-transparent outline-none resize-none border-0 p-0 m-0 block font-sans cursor-grab active:cursor-grabbing"
+                              className="bg-transparent outline-none resize-none border-0 p-0 m-0 block cursor-grab active:cursor-grabbing"
                             />
                           ) : (
                             <div
                               style={{
                                 whiteSpace: 'pre-wrap',
                                 fontWeight: txt.bold ? 700 : 500,
+                                ...fontCss,
                               }}
                             >
                               {txt.text || 'Κείμενο...'}
@@ -17437,6 +17688,7 @@ export default function App() {
                               fill={tx.color}
                               fontSize={(tx.fontSize || 20) * 1.15}
                               fontWeight={tx.bold ? 'bold' : 'normal'}
+                              fontFamily={getTextFontCss(tx.fontFamily).fontFamily}
                             >
                               {tx.text}
                             </text>

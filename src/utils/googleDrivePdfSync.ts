@@ -508,7 +508,15 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
       if (!tx.text) continue;
       ctx.save();
       ctx.fillStyle = tx.color || '#111827';
-      ctx.font = `${tx.bold ? 'bold ' : ''}${tx.fontSize || 20}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      const fontStack =
+        tx.fontFamily === 'calligraphic'
+          ? '"Arima", "Playpen Sans", "Mynerve", cursive, sans-serif'
+          : tx.fontFamily === 'handwritten'
+          ? '"Playpen Sans", "Arima", "Mansalva", cursive, sans-serif'
+          : tx.fontFamily === 'marker'
+          ? '"Mynerve", "Mansalva", "Playpen Sans", cursive, sans-serif'
+          : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = `${tx.bold ? 'bold ' : ''}${tx.fontSize || 20}px ${fontStack}`;
       const lines = tx.text.split('\n');
       lines.forEach((line, idx) => {
         ctx.fillText(line, tx.x, tx.y + (idx + 1) * (tx.fontSize || 20) * 1.25);
