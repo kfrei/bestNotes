@@ -3323,6 +3323,73 @@ export default function App() {
             ctx.restore();
           }
 
+          // Helper to draw small orange double-headed resize arrows (↕ / ↔) next to Orange Stretch Dots
+          const drawOrangeResizeArrow = (ax: number, ay: number, isVertical: boolean) => {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            const halfLen = 5.5;
+            const head = 2.8;
+            const drawPath = () => {
+              ctx.beginPath();
+              if (isVertical) {
+                ctx.moveTo(ax, ay - halfLen);
+                ctx.lineTo(ax, ay + halfLen);
+                ctx.moveTo(ax - head, ay - halfLen + head);
+                ctx.lineTo(ax, ay - halfLen);
+                ctx.lineTo(ax + head, ay - halfLen + head);
+                ctx.moveTo(ax - head, ay + halfLen - head);
+                ctx.lineTo(ax, ay + halfLen);
+                ctx.lineTo(ax + head, ay + halfLen - head);
+              } else {
+                ctx.moveTo(ax - halfLen, ay);
+                ctx.lineTo(ax + halfLen, ay);
+                ctx.moveTo(ax - halfLen + head, ay - head);
+                ctx.lineTo(ax - halfLen, ay);
+                ctx.lineTo(ax - halfLen + head, ay + head);
+                ctx.moveTo(ax + halfLen - head, ay - head);
+                ctx.lineTo(ax + halfLen, ay);
+                ctx.lineTo(ax + halfLen - head, ay + head);
+              }
+            };
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3.8;
+            drawPath();
+            ctx.stroke();
+            ctx.strokeStyle = '#f97316';
+            ctx.lineWidth = 1.9;
+            drawPath();
+            ctx.stroke();
+            ctx.restore();
+          };
+
+          // Helper to draw the classic green Crop symbol (two interlocking L-brackets) outside the frame next to Green Crop Bars
+          const drawGreenCropIcon = (ix: number, iy: number, isActive: boolean) => {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            const drawCropPath = () => {
+              ctx.beginPath();
+              // Bottom-left L bracket
+              ctx.moveTo(ix - 3.0, iy - 5.8);
+              ctx.lineTo(ix - 3.0, iy + 3.0);
+              ctx.lineTo(ix + 5.8, iy + 3.0);
+              // Top-right L bracket
+              ctx.moveTo(ix - 5.8, iy - 3.0);
+              ctx.lineTo(ix + 3.0, iy - 3.0);
+              ctx.lineTo(ix + 3.0, iy + 5.8);
+            };
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3.8;
+            drawCropPath();
+            ctx.stroke();
+            ctx.strokeStyle = isActive ? '#f59e0b' : '#0d9488';
+            ctx.lineWidth = 1.9;
+            drawCropPath();
+            ctx.stroke();
+            ctx.restore();
+          };
+
           if (selectedImageId) {
             // Live Side-Crop Overlay when dragging any of the 4 Side Crop Bars inward!
             const activeTf = selectionTransformRef.current;
@@ -3388,17 +3455,18 @@ export default function App() {
             }
 
             // Side handle offset so BOTH Orange Stretch Dots (●) and Green Crop Bars (▬/▮) sit side-by-side on every edge!
-            const sideOffX = Math.min(20, Math.max(11, hw * 0.34));
-            const sideOffY = Math.min(20, Math.max(11, hh * 0.34));
+            const sideOffX = Math.min(22, Math.max(12, hw * 0.34));
+            const sideOffY = Math.min(22, Math.max(12, hh * 0.34));
 
-            // 1. 4 Orange Stretch Dots (● #f97316 — Widen/Narrow or Taller/Shorter from one side!)
+            // 1. 4 Orange Stretch Dots (● #f97316) + Small Orange Resize Arrows (↕ / ↔) outside the frame
             const imgStretchDots = [
-              { x: -sideOffX, y: -hh }, // Top stretch
-              { x: hw, y: -sideOffY },  // Right stretch
-              { x: -sideOffX, y: hh },  // Bottom stretch
-              { x: -hw, y: -sideOffY }, // Left stretch
+              { x: -sideOffX, y: -hh, ax: -sideOffX, ay: -hh - 14, isVert: true }, // Top stretch
+              { x: hw, y: -sideOffY, ax: hw + 14, ay: -sideOffY, isVert: false },  // Right stretch
+              { x: -sideOffX, y: hh, ax: -sideOffX, ay: hh + 14, isVert: true },   // Bottom stretch
+              { x: -hw, y: -sideOffY, ax: -hw - 14, ay: -sideOffY, isVert: false }, // Left stretch
             ];
             for (const m of imgStretchDots) {
+              drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
               ctx.fillStyle = '#f97316';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.2;
@@ -3408,11 +3476,13 @@ export default function App() {
               ctx.stroke();
             }
 
-            // 2. 4 Green Side Crop Bars (Top ▬, Right ▮, Bottom ▬, Left ▮ — drag inward to Crop any side of the image!)
+            // 2. 4 Green Side Crop Bars (Top ▬, Right ▮, Bottom ▬, Left ▮) + Green Crop Symbol outside the frame!
             const sideCropBars: {
               edge: 'top' | 'right' | 'bottom' | 'left';
               cx: number;
               cy: number;
+              ix: number;
+              iy: number;
               bw: number;
               bh: number;
             }[] = [
@@ -3420,6 +3490,8 @@ export default function App() {
                 edge: 'top',
                 cx: sideOffX,
                 cy: activeEdge === 'top' ? -imgHalfH + cropInset : -hh,
+                ix: sideOffX,
+                iy: (activeEdge === 'top' ? -imgHalfH + cropInset : -hh) - 15,
                 bw: 24,
                 bh: 9,
               },
@@ -3427,6 +3499,8 @@ export default function App() {
                 edge: 'right',
                 cx: activeEdge === 'right' ? imgHalfW - cropInset : hw,
                 cy: sideOffY,
+                ix: (activeEdge === 'right' ? imgHalfW - cropInset : hw) + 15,
+                iy: sideOffY,
                 bw: 9,
                 bh: 24,
               },
@@ -3434,6 +3508,8 @@ export default function App() {
                 edge: 'bottom',
                 cx: sideOffX,
                 cy: activeEdge === 'bottom' ? imgHalfH - cropInset : hh,
+                ix: sideOffX,
+                iy: (activeEdge === 'bottom' ? imgHalfH - cropInset : hh) + 15,
                 bw: 24,
                 bh: 9,
               },
@@ -3441,6 +3517,8 @@ export default function App() {
                 edge: 'left',
                 cx: activeEdge === 'left' ? -imgHalfW + cropInset : -hw,
                 cy: sideOffY,
+                ix: (activeEdge === 'left' ? -imgHalfW + cropInset : -hw) - 15,
+                iy: sideOffY,
                 bw: 9,
                 bh: 24,
               },
@@ -3448,6 +3526,7 @@ export default function App() {
 
             for (const bar of sideCropBars) {
               const isThisActive = activeEdge === bar.edge;
+              drawGreenCropIcon(bar.ix, bar.iy, isThisActive);
               ctx.fillStyle = isThisActive ? '#f59e0b' : '#0d9488';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.0;
@@ -3470,14 +3549,15 @@ export default function App() {
               ctx.stroke();
             }
           } else {
-            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots!)
+            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows!)
             const localSideMidpoints = [
-              { x: 0, y: -hh }, // Top (height stretch)
-              { x: hw, y: 0 },  // Right (width stretch)
-              { x: 0, y: hh },  // Bottom (height stretch)
-              { x: -hw, y: 0 }, // Left (width stretch)
+              { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true }, // Top (height stretch)
+              { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false },  // Right (width stretch)
+              { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true },   // Bottom (height stretch)
+              { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false }, // Left (width stretch)
             ];
             for (const m of localSideMidpoints) {
+              drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
               ctx.fillStyle = '#f97316';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.2;
@@ -6398,26 +6478,28 @@ export default function App() {
           //     - For Selected Images: BOTH Orange Stretch Dots (● at -sideOff) AND Green Side Crop Bars (▬/▮ at +sideOff)!
           //     - For Selected Shapes/Strokes: 4 Orange Stretch Dots (● at 0)
           if (selectedImageId) {
-            const sideOffX = Math.min(20, Math.max(11, hw * 0.34));
-            const sideOffY = Math.min(20, Math.max(11, hh * 0.34));
+            const sideOffX = Math.min(22, Math.max(12, hw * 0.34));
+            const sideOffY = Math.min(22, Math.max(12, hh * 0.34));
 
-            // 1. Check 4 Green Side Crop Bars (▬/▮ at +sideOff) -> Inward Side Crop ('crop-side')
+            // 1. Check 4 Green Side Crop Bars (▬/▮ at +sideOff, or the Green Crop icon right outside it) -> Inward Side Crop ('crop-side')
             const imgCropHandles: {
               lx: number;
               ly: number;
+              ix: number;
+              iy: number;
               oppLx: number;
               oppLy: number;
               edge: 'top' | 'right' | 'bottom' | 'left';
               sx: number;
               sy: number;
             }[] = [
-              { lx: sideOffX, ly: -hh, oppLx: 0, oppLy: hh, edge: 'top', sx: 0, sy: -1 },
-              { lx: hw, ly: sideOffY, oppLx: -hw, oppLy: 0, edge: 'right', sx: 1, sy: 0 },
-              { lx: sideOffX, ly: hh, oppLx: 0, oppLy: -hh, edge: 'bottom', sx: 0, sy: 1 },
-              { lx: -hw, ly: sideOffY, oppLx: hw, oppLy: 0, edge: 'left', sx: -1, sy: 0 },
+              { lx: sideOffX, ly: -hh, ix: sideOffX, iy: -hh - 15, oppLx: 0, oppLy: hh, edge: 'top', sx: 0, sy: -1 },
+              { lx: hw, ly: sideOffY, ix: hw + 15, iy: sideOffY, oppLx: -hw, oppLy: 0, edge: 'right', sx: 1, sy: 0 },
+              { lx: sideOffX, ly: hh, ix: sideOffX, iy: hh + 15, oppLx: 0, oppLy: -hh, edge: 'bottom', sx: 0, sy: 1 },
+              { lx: -hw, ly: sideOffY, ix: -hw - 15, iy: sideOffY, oppLx: hw, oppLy: 0, edge: 'left', sx: -1, sy: 0 },
             ];
             for (const ch of imgCropHandles) {
-              if (Math.hypot(localX - ch.lx, localY - ch.ly) < 17) {
+              if (Math.hypot(localX - ch.lx, localY - ch.ly) < 17 || Math.hypot(localX - ch.ix, localY - ch.iy) < 14) {
                 clearActiveOverlay();
                 setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
                 setRedoStack([]);
@@ -6445,23 +6527,25 @@ export default function App() {
               }
             }
 
-            // 2. Check 4 Orange Stretch Dots (● at -sideOff) -> One-Side Stretch / Compress ('scale-x' / 'scale-y')
+            // 2. Check 4 Orange Stretch Dots (● at -sideOff, or the Orange Resize Arrow outside it) -> One-Side Stretch ('scale-x' / 'scale-y')
             const imgStretchHandles: {
               lx: number;
               ly: number;
+              ax: number;
+              ay: number;
               oppLx: number;
               oppLy: number;
               mode: 'scale-x' | 'scale-y';
               sx: number;
               sy: number;
             }[] = [
-              { lx: -sideOffX, ly: -hh, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
-              { lx: hw, ly: -sideOffY, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
-              { lx: -sideOffX, ly: hh, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
-              { lx: -hw, ly: -sideOffY, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+              { lx: -sideOffX, ly: -hh, ax: -sideOffX, ay: -hh - 14, oppLx: 0, oppLy: hh, mode: 'scale-y', sx: 0, sy: -1 },
+              { lx: hw, ly: -sideOffY, ax: hw + 14, ay: -sideOffY, oppLx: -hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+              { lx: -sideOffX, ly: hh, ax: -sideOffX, ay: hh + 14, oppLx: 0, oppLy: -hh, mode: 'scale-y', sx: 0, sy: 1 },
+              { lx: -hw, ly: -sideOffY, ax: -hw - 14, ay: -sideOffY, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
             ];
             for (const sh of imgStretchHandles) {
-              if (Math.hypot(localX - sh.lx, localY - sh.ly) < 17) {
+              if (Math.hypot(localX - sh.lx, localY - sh.ly) < 17 || Math.hypot(localX - sh.ax, localY - sh.ay) < 14) {
                 clearActiveOverlay();
                 setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
                 setRedoStack([]);
