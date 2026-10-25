@@ -959,6 +959,7 @@ export default function App() {
     nodeMagnetTimerRef.current = null;
     setNodeMagnetState(null);
   }, []);
+  const [isLibraryDropZoneActive, setIsLibraryDropZoneActive] = useState(false);
   const addNodeLongPressRef = useRef<{
     timerId: number;
     startX: number;
@@ -13780,17 +13781,49 @@ export default function App() {
     e.target.value = '';
   };
 
-  // Open / Import PDF (multi-page up to 30+ pages!) or JPG/PNG/WebP to write directly on top of!
-  const handlePdfOrDocFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) return;
-    const files = Array.from(fileList);
-    e.target.value = '';
+  // Open / Import PDF (multi-page up to 30+ pages!) or JPG/PNG/WebP or .bestNotes via File Picker or Drag & Drop!
+  const importFilesAsDocument = async (
+    files: File[],
+    forceNewNotebook = false
+  ): Promise<void> => {
+    if (files.length === 0) return;
+
+    // Check if the first file is a .bestnotes / .goodnotes / .zip archive
+    const firstLower = files[0].name.toLowerCase();
+    if (
+      firstLower.endsWith('.bestnotes') ||
+      firstLower.endsWith('.goodnotes') ||
+      firstLower.endsWith('.zip')
+    ) {
+      try {
+        const importedNb = await importGoodnotesFile(files[0]);
+        setNotebooks((prev) => [importedNb, ...prev]);
+        setOpenNotebookIds((prev) =>
+          prev.includes(importedNb.id) ? prev : [...prev, importedNb.id]
+        );
+        setActiveNotebookId(importedNb.id);
+        setActivePageIndex(0);
+        setViewMode('editor');
+        showToast(`📂 Φορτώθηκε το "${files[0].name}" (${importedNb.pages.length} σελ.)!`);
+      } catch {
+        showToast('⚠️ Σφάλμα ανάγνωσης αρχείου .bestNotes');
+      }
+      return;
+    }
 
     try {
       const importedPages: NotePage[] = [];
       for (const file of files) {
-        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+        const lower = file.name.toLowerCase();
+        const isPdf = lower.endsWith('.pdf') || file.type === 'application/pdf';
+        const isImg =
+          file.type.startsWith('image/') ||
+          lower.endsWith('.jpg') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.webp');
+        if (!isPdf && !isImg) continue;
+
         if (isPdf) {
           setStatusBanner(`⏳ Φόρτωση PDF "${file.name}"...`);
           const pdfPages = await renderPdfFileToPages(file, 'blank', (curr, total) => {
@@ -13806,10 +13839,15 @@ export default function App() {
 
       if (importedPages.length === 0) {
         setStatusBanner(null);
+        showToast('⚠️ Επίλεξε αρχείο .pdf, .jpg, .png ή .bestNotes!');
         return;
       }
 
-      if (pdfImportModeRef.current === 'new-notebook' || viewMode === 'library') {
+      if (
+        forceNewNotebook ||
+        pdfImportModeRef.current === 'new-notebook' ||
+        viewMode === 'library'
+      ) {
         const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|webp)$/i, '');
         const newNb: Notebook = {
           id: `nb-doc-${Date.now()}`,
@@ -13827,7 +13865,9 @@ export default function App() {
         activeDrawingPageIndexRef.current = 0;
         setViewMode('editor');
         applyPaperTransformDirect(zoomRef.current, 0, 0, true);
-        showToast(`📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`);
+        showToast(
+          `📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`
+        );
         if (importedPages.length <= 3) {
           void triggerSmartAutoTagsForNotebook(newNb, [], true);
         }
@@ -13862,7 +13902,9 @@ export default function App() {
         activeDrawingPageIndexRef.current = targetInsertIdx;
         applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
         setShowThumbnailsModal(false);
-        showToast(`📄 Προστέθηκαν ${importedPages.length} σελίδες (PDF/Εικόνα) — γράψε απευθείας πάνω τους!`);
+        showToast(
+          `📄 Προστέθηκαν ${importedPages.length} σελίδες (PDF/Εικόνα) — γράψε απευθείας πάνω τους!`
+        );
         const totalAfterInsert =
           activeNotebook.pages.length - (isCurrentPageEmpty ? 1 : 0) + importedPages.length;
         if (totalAfterInsert <= 3 && (activeNotebook.tags?.length || 0) < 4) {
@@ -13877,6 +13919,14 @@ export default function App() {
     } catch {
       showToast('⚠️ Σφάλμα κατά το άνοιγμα του PDF / Εικόνας');
     }
+  };
+
+  const handlePdfOrDocFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    e.target.value = '';
+    await importFilesAsDocument(files, false);
   };
 
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
@@ -14951,6 +15001,104 @@ export default function App() {
                           Σημειώσεις ({visibleNotebooks.length})
                         </h2>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+                          {/* Symmetrical Faint-Gray Drag & Drop New Document Card right before the first Note! */}
+                          <div
+                            onClick={() => {
+                              pdfImportModeRef.current = 'new-notebook';
+                              fileInputPdfOrDocRef.current?.click();
+                            }}
+                            onDragEnter={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setIsLibraryDropZoneActive(true);
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (!isLibraryDropZoneActive) {
+                                setIsLibraryDropZoneActive(true);
+                              }
+                            }}
+                            onDragLeave={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (
+                                !e.currentTarget.contains(e.relatedTarget as Node | null)
+                              ) {
+                                setIsLibraryDropZoneActive(false);
+                              }
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setIsLibraryDropZoneActive(false);
+                              const droppedFiles = Array.from(e.dataTransfer?.files || []);
+                              if (droppedFiles.length > 0) {
+                                void importFilesAsDocument(droppedFiles, true);
+                              }
+                            }}
+                            title="Σύρε (Drag & Drop) ή πάτα εδώ για προσθήκη νέου .pdf, .jpg, .png"
+                            className="group cursor-pointer flex flex-col items-center"
+                          >
+                            <div
+                              className={`w-48 h-64 rounded-r-2xl rounded-l-md transition-all relative overflow-hidden border-2 border-dashed flex flex-col items-center justify-center px-4 text-center ${
+                                isLibraryDropZoneActive
+                                  ? 'bg-sky-50/90 border-[#0066ff] shadow-lg -translate-y-1 scale-[1.02]'
+                                  : 'bg-slate-200/45 hover:bg-slate-200/75 border-slate-300/90 hover:border-slate-400 shadow-xs group-hover:shadow-md group-hover:-translate-y-1'
+                              }`}
+                            >
+                              {/* Faint Spine on Left to mirror Notebook symmetry */}
+                              <div
+                                className={`absolute left-0 top-0 bottom-0 w-3 transition-colors ${
+                                  isLibraryDropZoneActive
+                                    ? 'bg-[#0066ff]/60'
+                                    : 'bg-slate-300/75 group-hover:bg-slate-400/75'
+                                }`}
+                              />
+
+                              <div
+                                className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 transition ${
+                                  isLibraryDropZoneActive
+                                    ? 'bg-[#0066ff] text-white scale-110 shadow-md'
+                                    : 'bg-white/80 text-slate-400 group-hover:text-slate-600 border border-slate-300/70 shadow-2xs'
+                                }`}
+                              >
+                                <Upload className="w-6 h-6" />
+                              </div>
+
+                              <span
+                                className={`text-sm font-bold tracking-tight ${
+                                  isLibraryDropZoneActive
+                                    ? 'text-[#0066ff]'
+                                    : 'text-slate-500 group-hover:text-slate-700'
+                                }`}
+                              >
+                                Drag &amp; Drop
+                              </span>
+                              <span
+                                className={`mt-1 text-xs font-semibold ${
+                                  isLibraryDropZoneActive
+                                    ? 'text-sky-700'
+                                    : 'text-slate-400 group-hover:text-slate-600'
+                                }`}
+                              >
+                                new .pdf • .jpg • .png
+                              </span>
+                              <span className="mt-3 px-2.5 py-1 rounded-lg bg-white/70 border border-slate-300/60 text-[10px] font-semibold text-slate-400 group-hover:text-slate-600">
+                                + Προσθήκη Εγγράφου
+                              </span>
+                            </div>
+
+                            <div className="mt-2 w-48 px-2.5 py-1.5 rounded-xl bg-slate-100/80 border border-dashed border-slate-300/80 flex flex-col items-center">
+                              <span className="text-xs font-semibold text-slate-500 group-hover:text-slate-700 truncate max-w-full">
+                                Νέο Έγγραφο
+                              </span>
+                              <span className="text-[10px] text-slate-400 truncate max-w-full">
+                                Σύρε αρχείο ή πάτα εδώ
+                              </span>
+                            </div>
+                          </div>
+
                           {visibleNotebooks.map((nb) => {
                             const p0 = nb.pages[0];
                             const pW = getPageLogicalWidth(p0);
