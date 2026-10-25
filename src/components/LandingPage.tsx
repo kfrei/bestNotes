@@ -248,35 +248,6 @@ const DraggableCard: React.FC<{
   );
 };
 
-/* ============================================================================
-   ANIMATED PEN TOOL FOR HAND-DRAWN CIRCLES & SELECTION FRAMES
-   ============================================================================ */
-const AnimatedPenTool: React.FC<{
-  className?: string;
-  color?: string;
-  label?: string;
-}> = ({ className = '', color = '#2563eb', label }) => (
-  <div className={`pointer-events-none select-none z-30 ${className}`}>
-    <svg width="88" height="88" viewBox="0 0 88 88" className="drop-shadow-xl overflow-visible">
-      <g transform="rotate(-38 44 44)">
-        <rect x="38" y="14" width="12" height="54" rx="5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1.5" />
-        <rect x="38" y="48" width="12" height="11" fill={color} />
-        <polygon points="38,68 50,68 44,82" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1" />
-        <polygon points="41.5,76 46.5,76 44,83" fill={color} />
-        <circle cx="44" cy="83" r="4" fill={color} opacity="0.5" />
-      </g>
-    </svg>
-    {label && (
-      <span
-        className="-mt-3 ml-8 inline-block px-2.5 py-0.5 rounded-full text-[9.5px] font-extrabold text-white shadow-md whitespace-nowrap"
-        style={{ backgroundColor: color }}
-      >
-        {label}
-      </span>
-    )}
-  </div>
-);
-
 export const isExplainBoardsBrand =
   typeof window !== 'undefined' &&
   (window.location.hostname.toLowerCase().includes('explainboard') ||
@@ -660,11 +631,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
         @keyframes bnKenBurnsPulse {
           0%, 100% { transform: scale(1) translate(0px, 0px); }
-          50% { transform: scale(1.13) translate(-6px, -4px); }
+          50% { transform: scale(1.28) translate(-10px, -6px); }
         }
         @keyframes bnCrossFadeBreath {
           0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.09); }
+          50% { transform: scale(1.22); }
         }
         @keyframes bnPopupFrameOpen {
           0%, 12% { transform: scale(0.72); opacity: 0; }
@@ -1104,7 +1075,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Main High-Resolution Note Canvas with Stronger Ken-Burns Zoom, Circles & Expanding Selection Frames */}
+                  {/* Main High-Resolution Note Canvas with Strong Zoom & 1 Green Rectangular Selection Frame */}
                   <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-[#fffdf9] shadow-inner">
                     <img
                       src={activeScienceNote.src}
@@ -1113,20 +1084,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       className="w-full max-h-[370px] object-contain mx-auto bn-ken-burns"
                     />
 
-                    {/* 1. Expanding Blue Lasso / Zoom Frame on Top-Right (Πλαίσιο που ανοίγει) */}
-                    <div
-                      className="pointer-events-none absolute top-5 right-6 w-44 h-24 border-2 border-dashed border-[#0066ff] bg-sky-500/10 rounded-xl bn-popup-frame flex items-start justify-between p-1.5"
-                    >
-                      <span className="px-1.5 py-0.5 rounded bg-[#0066ff] text-white text-[8.5px] font-extrabold shadow-xs">
-                        🔍 Zoom &amp; Επιλογή
-                      </span>
-                      <span className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
-                      <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
-                      <span className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
-                      <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
-                    </div>
-
-                    {/* 2. Animated Rectangular Marquee Selection on Bottom-Right (Πλαίσιο που ανοίγει διαγώνια) */}
+                    {/* Single Animated Green Rectangular Marquee Selection on Bottom-Right */}
                     <div
                       className="pointer-events-none absolute bottom-5 right-6 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl bn-rect-marquee flex items-start justify-end p-1.5"
                     >
@@ -1138,34 +1096,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       <span className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
                       <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
                     </div>
-
-                    {/* 3. Hand-drawn SVG Callout Circles (Κυκλώματα) being sketched live */}
-                    <svg
-                      className="pointer-events-none absolute inset-0 w-full h-full"
-                      viewBox="0 0 600 360"
-                    >
-                      <ellipse
-                        cx="165"
-                        cy="235"
-                        rx="85"
-                        ry="46"
-                        fill="none"
-                        stroke={activeScienceNote.subjectColor}
-                        strokeWidth="3"
-                        strokeDasharray="7 4"
-                        className="bn-animate-draw"
-                      />
-                      <ellipse
-                        cx="420"
-                        cy="115"
-                        rx="72"
-                        ry="38"
-                        fill="none"
-                        stroke="#2563eb"
-                        strokeWidth="2.8"
-                        className="bn-animate-draw-delayed"
-                      />
-                    </svg>
                   </div>
 
                   {/* Clean Caption Bar under the Image */}
@@ -1569,15 +1499,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           className={`w-full ${
                             idx === 0 ? 'h-64 sm:h-72' : 'h-56'
                           } object-contain mx-auto transition-transform duration-700 ${
-                            isSpotlight ? 'bn-ken-burns' : 'group-hover/drag:scale-[1.08]'
+                            isSpotlight ? 'bn-ken-burns' : 'group-hover/drag:scale-[1.22]'
                           }`}
                         />
 
-                        {/* Expanding Selection Frame on Spotlight Card */}
+                        {/* Single Green Rectangular Selection Frame on Spotlight Card */}
                         {isSpotlight && (
-                          <div className="pointer-events-none absolute bottom-3 right-3 border-2 border-dashed border-[#0066ff] bg-sky-500/10 rounded-xl px-2.5 py-1.5 bn-popup-frame">
-                            <span className="px-1.5 py-0.5 rounded bg-[#0066ff] text-white text-[9px] font-extrabold">
-                              🔍 Zoom &amp; Επιλογή
+                          <div className="pointer-events-none absolute bottom-3 right-3 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl px-2.5 py-1.5 bn-rect-marquee flex items-start justify-end">
+                            <span className="px-1.5 py-0.5 rounded bg-[#22c55e] text-white text-[9px] font-extrabold">
+                              ⬚ Ορθογώνια Επιλογή
                             </span>
                           </div>
                         )}
@@ -1636,7 +1566,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'
                 } items-center gap-8 lg:gap-12 rounded-3xl bg-[#fffdf9] border border-slate-200/90 p-6 sm:p-10 shadow-xl`}
               >
-                {/* Image Showcase Side (Draggable + Stronger Zoom + Circles & Expanding Selection Frame) */}
+                {/* Image Showcase Side (Draggable + Strong Zoom & 1 Green Rectangular Selection Frame) */}
                 <div className="w-full lg:w-7/12 relative">
                   <DraggableCard
                     resetSignal={dragResetCounter}
@@ -1651,7 +1581,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       className="w-full max-h-[420px] object-contain mx-auto bn-ken-burns"
                     />
 
-                    {/* Expanding Rectangular Selection Frame */}
+                    {/* Single Green Rectangular Selection Frame */}
                     <div
                       className="pointer-events-none absolute bottom-5 right-6 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl bn-rect-marquee flex items-start justify-end p-1.5"
                     >
@@ -1663,31 +1593,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       <span className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
                       <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
                     </div>
-
-                    {/* Hand-drawn Callout Circle */}
-                    <svg
-                      className="pointer-events-none absolute inset-0 w-full h-full"
-                      viewBox="0 0 600 360"
-                    >
-                      <ellipse
-                        cx="175"
-                        cy="220"
-                        rx="82"
-                        ry="45"
-                        fill="none"
-                        stroke={note.subjectColor}
-                        strokeWidth="3"
-                        strokeDasharray="7 4"
-                        className="bn-animate-draw"
-                      />
-                    </svg>
-
-                    {/* Orbiting Apple Pencil */}
-                    <AnimatedPenTool
-                      className="hidden sm:block absolute bottom-6 right-10 bn-animate-pen"
-                      color={note.subjectColor}
-                      label="Apple Pencil"
-                    />
                   </DraggableCard>
                 </div>
 
