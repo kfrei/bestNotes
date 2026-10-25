@@ -1126,6 +1126,30 @@ export default function App() {
   const [libraryTagEditorNbId, setLibraryTagEditorNbId] = useState<string | null>(null);
   const [libraryTagInputDraft, setLibraryTagInputDraft] = useState<string>('');
   const [folderPickerNbId, setFolderPickerNbId] = useState<string | null>(null);
+  const [draggingLibraryNbId, setDraggingLibraryNbId] = useState<string | null>(null);
+  const [dragOverFolderName, setDragOverFolderName] = useState<string | null>(null);
+  const [libraryTouchDrag, setLibraryTouchDrag] = useState<{
+    nbId: string;
+    title: string;
+    coverColor: string;
+    currX: number;
+    currY: number;
+  } | null>(null);
+  const draggingLibraryNbIdRef = useRef<string | null>(null);
+  const dragOverFolderNameRef = useRef<string | null>(null);
+  const lastLibraryDragEndAtRef = useRef<number>(0);
+  const libraryPointerDragRef = useRef<{
+    nbId: string;
+    title: string;
+    coverColor: string;
+    pointerId: number;
+    pointerType: string;
+    startX: number;
+    startY: number;
+    currX: number;
+    currY: number;
+    active: boolean;
+  } | null>(null);
 
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
@@ -1448,6 +1472,133 @@ export default function App() {
     },
     [showToast]
   );
+
+  const startLibraryNotebookPointerDrag = useCallback(
+    (e: React.PointerEvent<HTMLElement>, nb: Notebook) => {
+      if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+      if (renamingNotebookId === nb.id) return;
+      const targetEl = e.target as HTMLElement | null;
+      if (
+        targetEl?.closest(
+          'button, input, a, [data-popover-trigger], [data-popover-panel], [data-no-card-drag]'
+        )
+      ) {
+        return;
+      }
+      libraryPointerDragRef.current = {
+        nbId: nb.id,
+        title: nb.title,
+        coverColor: nb.coverColor,
+        pointerId: e.pointerId,
+        pointerType: e.pointerType,
+        startX: e.clientX,
+        startY: e.clientY,
+        currX: e.clientX,
+        currY: e.clientY,
+        active: false,
+      };
+    },
+    [renamingNotebookId]
+  );
+
+  useEffect(() => {
+    if (viewMode !== 'library') {
+      libraryPointerDragRef.current = null;
+      draggingLibraryNbIdRef.current = null;
+      dragOverFolderNameRef.current = null;
+      setDraggingLibraryNbId(null);
+      setDragOverFolderName(null);
+      setLibraryTouchDrag(null);
+      return;
+    }
+
+    const handleGlobalPointerMove = (ev: PointerEvent) => {
+      const drag = libraryPointerDragRef.current;
+      if (!drag || ev.pointerId !== drag.pointerId) return;
+
+      const dx = ev.clientX - drag.startX;
+      const dy = ev.clientY - drag.startY;
+      const dist = Math.hypot(dx, dy);
+
+      if (!drag.active) {
+        if (dist < 8) return;
+        drag.active = true;
+        draggingLibraryNbIdRef.current = drag.nbId;
+        setDraggingLibraryNbId(drag.nbId);
+        setFolderPickerNbId(null);
+        setLibraryTagEditorNbId(null);
+      }
+
+      ev.preventDefault();
+      drag.currX = ev.clientX;
+      drag.currY = ev.clientY;
+      setLibraryTouchDrag({
+        nbId: drag.nbId,
+        title: drag.title,
+        coverColor: drag.coverColor,
+        currX: ev.clientX,
+        currY: ev.clientY,
+      });
+
+      // Auto-scroll Library container when dragging near top or bottom edges
+      const libScrollEl = document.querySelector('[data-library-scroll-container]') as HTMLElement | null;
+      if (libScrollEl) {
+        const rect = libScrollEl.getBoundingClientRect();
+        if (ev.clientY < rect.top + 70) {
+          libScrollEl.scrollTop -= 10;
+        } else if (ev.clientY > rect.bottom - 70) {
+          libScrollEl.scrollTop += 10;
+        }
+      }
+
+      const hitEl = document.elementFromPoint(ev.clientX, ev.clientY);
+      const folderDropEl = hitEl?.closest('[data-library-folder-drop]') as HTMLElement | null;
+      const targetFolder = folderDropEl?.getAttribute('data-library-folder-drop') || null;
+      if (dragOverFolderNameRef.current !== targetFolder) {
+        dragOverFolderNameRef.current = targetFolder;
+        setDragOverFolderName(targetFolder);
+      }
+    };
+
+    const finishGlobalPointerDrag = (ev: PointerEvent, cancelled: boolean) => {
+      const drag = libraryPointerDragRef.current;
+      if (!drag || ev.pointerId !== drag.pointerId) return;
+      libraryPointerDragRef.current = null;
+
+      if (drag.active) {
+        lastLibraryDragEndAtRef.current = Date.now();
+        let targetFolder = dragOverFolderNameRef.current;
+        if (!cancelled) {
+          const hitEl = document.elementFromPoint(ev.clientX, ev.clientY);
+          const folderDropEl = hitEl?.closest('[data-library-folder-drop]') as HTMLElement | null;
+          targetFolder = folderDropEl?.getAttribute('data-library-folder-drop') || targetFolder;
+        }
+
+        draggingLibraryNbIdRef.current = null;
+        dragOverFolderNameRef.current = null;
+        setDraggingLibraryNbId(null);
+        setDragOverFolderName(null);
+        setLibraryTouchDrag(null);
+
+        if (!cancelled && targetFolder !== null) {
+          const destFolder = targetFolder === '__ROOT__' ? '' : targetFolder;
+          changeNotebookFolder(drag.nbId, destFolder);
+        }
+      }
+    };
+
+    const handleGlobalPointerUp = (ev: PointerEvent) => finishGlobalPointerDrag(ev, false);
+    const handleGlobalPointerCancel = (ev: PointerEvent) => finishGlobalPointerDrag(ev, true);
+
+    window.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointercancel', handleGlobalPointerCancel);
+    return () => {
+      window.removeEventListener('pointermove', handleGlobalPointerMove);
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerCancel);
+    };
+  }, [viewMode, changeNotebookFolder]);
 
   // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
   const deviceIdRef = useRef<string>(
@@ -14934,7 +15085,8 @@ export default function App() {
   // Open / Import PDF (multi-page up to 30+ pages!) or JPG/PNG/WebP or .bestNotes via File Picker or Drag & Drop!
   const importFilesAsDocument = async (
     files: File[],
-    forceNewNotebook = false
+    forceNewNotebook = false,
+    targetFolderOverride?: string
   ): Promise<void> => {
     if (files.length === 0) return;
 
@@ -14947,14 +15099,27 @@ export default function App() {
     ) {
       try {
         const importedNb = await importGoodnotesFile(files[0]);
-        setNotebooks((prev) => [importedNb, ...prev]);
+        const finalFolder =
+          targetFolderOverride !== undefined
+            ? targetFolderOverride
+            : viewMode === 'library' && activeLibraryFolder
+            ? activeLibraryFolder
+            : importedNb.folder || '';
+        const nbWithFolder = { ...importedNb, folder: finalFolder };
+        setNotebooks((prev) => [nbWithFolder, ...prev]);
         setOpenNotebookIds((prev) =>
-          prev.includes(importedNb.id) ? prev : [...prev, importedNb.id]
+          prev.includes(nbWithFolder.id) ? prev : [...prev, nbWithFolder.id]
         );
-        setActiveNotebookId(importedNb.id);
-        setActivePageIndex(0);
-        setViewMode('editor');
-        showToast(`📂 Φορτώθηκε το "${files[0].name}" (${importedNb.pages.length} σελ.)!`);
+        if (targetFolderOverride !== undefined && viewMode === 'library') {
+          showToast(
+            `📁 Το "${files[0].name}" προστέθηκε στον φάκελο «${targetFolderOverride || 'Βιβλιοθήκη'}»!`
+          );
+        } else {
+          setActiveNotebookId(nbWithFolder.id);
+          setActivePageIndex(0);
+          setViewMode('editor');
+          showToast(`📂 Φορτώθηκε το "${files[0].name}" (${nbWithFolder.pages.length} σελ.)!`);
+        }
       } catch {
         showToast('⚠️ Σφάλμα ανάγνωσης αρχείου .bestNotes');
       }
@@ -14999,10 +15164,12 @@ export default function App() {
         viewMode === 'library'
       ) {
         const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|webp)$/i, '');
+        const assignedFolder =
+          targetFolderOverride !== undefined ? targetFolderOverride : activeLibraryFolder || '';
         const newNb: Notebook = {
           id: `nb-doc-${Date.now()}`,
           title: baseTitle,
-          folder: activeLibraryFolder || '',
+          folder: assignedFolder,
           coverColor: '#0284c7',
           updatedAt: new Date().toISOString(),
           sourceFormat: '.bestnotes',
@@ -15010,14 +15177,23 @@ export default function App() {
         };
         setNotebooks((prev) => [newNb, ...prev]);
         setOpenNotebookIds((prev) => (prev.includes(newNb.id) ? prev : [...prev, newNb.id]));
-        setActiveNotebookId(newNb.id);
-        setActivePageIndex(0);
-        activeDrawingPageIndexRef.current = 0;
-        setViewMode('editor');
-        applyPaperTransformDirect(zoomRef.current, 0, 0, true);
-        showToast(
-          `📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`
-        );
+        if (targetFolderOverride !== undefined && viewMode === 'library') {
+          setStatusBanner(null);
+          showToast(
+            `📁 Το "${baseTitle}" (${importedPages.length} σελ.) προστέθηκε στον φάκελο «${
+              targetFolderOverride || 'Βιβλιοθήκη'
+            }»!`
+          );
+        } else {
+          setActiveNotebookId(newNb.id);
+          setActivePageIndex(0);
+          activeDrawingPageIndexRef.current = 0;
+          setViewMode('editor');
+          applyPaperTransformDirect(zoomRef.current, 0, 0, true);
+          showToast(
+            `📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`
+          );
+        }
         if (importedPages.length <= 3) {
           void triggerSmartAutoTagsForNotebook(newNb, [], true);
         }
@@ -15632,7 +15808,10 @@ export default function App() {
 
       {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTES GRID / LIST) */}
       {viewMode === 'library' ? (
-        <div className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]">
+        <div
+          data-library-scroll-container="true"
+          className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]"
+        >
           <div className="max-w-5xl mx-auto space-y-5">
             {(() => {
               // Build unified folder map from customFolders + notebooks
@@ -15695,6 +15874,9 @@ export default function App() {
                   if (activeLibraryFolder !== null && (nb.folder || '').trim() !== activeLibraryFolder) {
                     return false;
                   }
+                  if (activeLibraryFolder === null && !query && (nb.folder || '').trim() !== '') {
+                    return false;
+                  }
                   if (query) {
                     const res = matchesNotebookSmartSearch(nb, query);
                     if (res.matched) {
@@ -15733,6 +15915,7 @@ export default function App() {
               };
 
               const openNotebookDirectly = (nb: Notebook) => {
+                if (Date.now() - lastLibraryDragEndAtRef.current < 350) return;
                 if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
                 setActiveNotebookId(nb.id);
                 setActivePageIndex(0);
@@ -15740,6 +15923,59 @@ export default function App() {
                 panRef.current = { x: 0, y: 0 };
                 setPan({ x: 0, y: 0 });
                 setViewMode('editor');
+              };
+
+              const handleFolderDragOver = (
+                e: React.DragEvent<HTMLElement>,
+                targetFolderKey: string
+              ) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragOverFolderNameRef.current !== targetFolderKey) {
+                  dragOverFolderNameRef.current = targetFolderKey;
+                  setDragOverFolderName(targetFolderKey);
+                }
+              };
+
+              const handleFolderDragLeave = (
+                e: React.DragEvent<HTMLElement>,
+                targetFolderKey: string
+              ) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  if (dragOverFolderNameRef.current === targetFolderKey) {
+                    dragOverFolderNameRef.current = null;
+                    setDragOverFolderName(null);
+                  }
+                }
+              };
+
+              const handleFolderDrop = (
+                e: React.DragEvent<HTMLElement>,
+                targetFolderKey: string
+              ) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragOverFolderNameRef.current = null;
+                setDragOverFolderName(null);
+                const destFolder = targetFolderKey === '__ROOT__' ? '' : targetFolderKey;
+                const draggedNbId =
+                  draggingLibraryNbIdRef.current ||
+                  e.dataTransfer?.getData('text/bestnotes-nb-id') ||
+                  '';
+                if (draggedNbId) {
+                  draggingLibraryNbIdRef.current = null;
+                  setDraggingLibraryNbId(null);
+                  setLibraryTouchDrag(null);
+                  changeNotebookFolder(draggedNbId, destFolder);
+                  return;
+                }
+                const droppedFiles = Array.from(e.dataTransfer?.files || []);
+                if (droppedFiles.length > 0) {
+                  void importFilesAsDocument(droppedFiles, true, destFolder);
+                }
               };
 
               const deleteNotebookById = (nb: Notebook) => {
@@ -15831,9 +16067,24 @@ export default function App() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
+                          data-library-folder-drop={activeLibraryFolder ? '__ROOT__' : undefined}
+                          onDragEnter={(e) => {
+                            if (activeLibraryFolder) handleFolderDragOver(e, '__ROOT__');
+                          }}
+                          onDragOver={(e) => {
+                            if (activeLibraryFolder) handleFolderDragOver(e, '__ROOT__');
+                          }}
+                          onDragLeave={(e) => {
+                            if (activeLibraryFolder) handleFolderDragLeave(e, '__ROOT__');
+                          }}
+                          onDrop={(e) => {
+                            if (activeLibraryFolder) handleFolderDrop(e, '__ROOT__');
+                          }}
                           onClick={() => setActiveLibraryFolder(null)}
-                          className={`text-2xl font-bold transition cursor-pointer ${
-                            activeLibraryFolder
+                          className={`text-2xl font-bold transition cursor-pointer rounded-xl px-1.5 py-0.5 ${
+                            activeLibraryFolder && dragOverFolderName === '__ROOT__'
+                              ? 'bg-sky-100 text-[#0066ff] ring-2 ring-[#0066ff]'
+                              : activeLibraryFolder
                               ? 'text-slate-500 hover:text-[#1b2a4a]'
                               : 'text-[#1b2a4a]'
                           }`}
@@ -15848,16 +16099,29 @@ export default function App() {
                               <span>{activeLibraryFolder}</span>
                             </span>
                             <button
+                              data-library-folder-drop="__ROOT__"
+                              onDragEnter={(e) => handleFolderDragOver(e, '__ROOT__')}
+                              onDragOver={(e) => handleFolderDragOver(e, '__ROOT__')}
+                              onDragLeave={(e) => handleFolderDragLeave(e, '__ROOT__')}
+                              onDrop={(e) => handleFolderDrop(e, '__ROOT__')}
                               onClick={() => setActiveLibraryFolder(null)}
-                              className="ml-2 px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-xs font-semibold text-slate-700 transition cursor-pointer"
+                              className={`ml-2 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                                dragOverFolderName === '__ROOT__'
+                                  ? 'bg-[#0066ff] text-white ring-4 ring-[#0066ff]/25 scale-105 shadow-md'
+                                  : draggingLibraryNbId
+                                  ? 'bg-sky-100 text-[#0066ff] border border-dashed border-[#0066ff]'
+                                  : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                              }`}
                             >
-                              ← Όλοι οι Φάκελοι
+                              {dragOverFolderName === '__ROOT__'
+                                ? '📥 Άφησε για Εξαγωγή στη Βιβλιοθήκη'
+                                : '← Όλοι οι Φάκελοι'}
                             </button>
                           </>
                         )}
                       </div>
                       <p className="text-sm text-slate-500 mt-0.5">
-                        Οργάνωσε τις σημειώσεις και τους φακέλους σου (με ζωντανή προεπισκόπηση 1ης σελίδας)
+                        Οργάνωσε τις σημειώσεις και τους φακέλους σου (σύρε οποιαδήποτε σημείωση μέσα σε φάκελο)
                       </p>
                     </div>
 
@@ -16088,50 +16352,76 @@ export default function App() {
                             Φάκελοι ({visibleFolders.length})
                           </h2>
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-                            {visibleFolders.map((folder) => (
-                              <div
-                                key={folder.name}
-                                onClick={() => setActiveLibraryFolder(folder.name)}
-                                className="group relative bg-white hover:bg-amber-50/40 rounded-2xl p-4 border border-slate-200/90 hover:border-amber-400 shadow-xs hover:shadow-md transition cursor-pointer flex flex-col justify-between h-36"
-                              >
-                                <div className="flex items-start justify-between">
-                                  {/* Classic Folder Icon */}
-                                  <div className="w-12 h-12 rounded-2xl bg-amber-100/80 border border-amber-200 flex items-center justify-center text-amber-500 group-hover:scale-105 transition">
-                                    <Folder className="w-7 h-7 fill-amber-400 text-amber-500" />
-                                  </div>
-                                  {/* Direct Open (Pencil Edit) + Red Trash Delete */}
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActiveLibraryFolder(folder.name);
-                                      }}
-                                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
-                                      title={`Άνοιγμα φακέλου "${folder.name}"`}
+                            {visibleFolders.map((folder) => {
+                              const isDropHover = dragOverFolderName === folder.name;
+                              return (
+                                <div
+                                  key={folder.name}
+                                  data-library-folder-drop={folder.name}
+                                  onDragEnter={(e) => handleFolderDragOver(e, folder.name)}
+                                  onDragOver={(e) => handleFolderDragOver(e, folder.name)}
+                                  onDragLeave={(e) => handleFolderDragLeave(e, folder.name)}
+                                  onDrop={(e) => handleFolderDrop(e, folder.name)}
+                                  onClick={() => setActiveLibraryFolder(folder.name)}
+                                  className={`group relative rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between h-36 ${
+                                    isDropHover
+                                      ? 'bg-amber-50/95 border-2 border-[#0066ff] ring-4 ring-[#0066ff]/20 shadow-xl -translate-y-1 scale-[1.03]'
+                                      : draggingLibraryNbId
+                                      ? 'bg-amber-50/35 border-2 border-dashed border-amber-400 shadow-md hover:border-[#0066ff]'
+                                      : 'bg-white hover:bg-amber-50/40 border border-slate-200/90 hover:border-amber-400 shadow-xs hover:shadow-md'
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between">
+                                    {/* Classic Folder Icon */}
+                                    <div
+                                      className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-amber-500 transition ${
+                                        isDropHover
+                                          ? 'bg-amber-200 border-[#0066ff] scale-110'
+                                          : 'bg-amber-100/80 border-amber-200 group-hover:scale-105'
+                                      }`}
                                     >
-                                      <Pen className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        deleteFolderByName(folder.name);
-                                      }}
-                                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
-                                      title={`Διαγραφή φακέλου "${folder.name}"`}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                      <Folder className="w-7 h-7 fill-amber-400 text-amber-500" />
+                                    </div>
+                                    {/* Direct Open (Pencil Edit) + Red Trash Delete or Drop Badge */}
+                                    {isDropHover ? (
+                                      <span className="px-2.5 py-1 rounded-xl bg-[#0066ff] text-white text-[11px] font-bold shadow-sm">
+                                        📥 Άφησε εδώ
+                                      </span>
+                                    ) : (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveLibraryFolder(folder.name);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
+                                          title={`Άνοιγμα φακέλου "${folder.name}"`}
+                                        >
+                                          <Pen className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteFolderByName(folder.name);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
+                                          title={`Διαγραφή φακέλου "${folder.name}"`}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
 
-                                <div>
-                                  <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
-                                  <p className="text-[11px] text-slate-500">
-                                    {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
-                                  </p>
+                                  <div>
+                                    <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
+                                    <p className="text-[11px] text-slate-500">
+                                      {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -16245,14 +16535,23 @@ export default function App() {
                             const pW = getPageLogicalWidth(p0);
                             const pH = getPageLogicalHeight(p0);
                             const hasDocBg = Boolean(p0?.backgroundDataUrl);
+                            const isDraggingThisNb = draggingLibraryNbId === nb.id;
                             return (
                               <div
                                 key={nb.id}
+                                onPointerDown={(e) => startLibraryNotebookPointerDrag(e, nb)}
                                 onClick={() => openNotebookDirectly(nb)}
-                                className="group cursor-pointer flex flex-col items-center"
+                                title="Πάτα για άνοιγμα ή σύρε (Drag & Drop) μέσα σε φάκελο"
+                                className={`group cursor-grab active:cursor-grabbing flex flex-col items-center select-none transition ${
+                                  isDraggingThisNb ? 'opacity-45 scale-95' : ''
+                                }`}
                               >
                                 <div
-                                  className="w-48 h-64 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border border-slate-300/90 flex flex-col justify-between"
+                                  className={`w-48 h-64 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border flex flex-col justify-between touch-none select-none ${
+                                    isDraggingThisNb
+                                      ? 'border-[#0066ff] ring-2 ring-[#0066ff] ring-dashed'
+                                      : 'border-slate-300/90'
+                                  }`}
                                   style={{
                                     backgroundColor: hasDocBg
                                       ? '#ffffff'
@@ -16280,6 +16579,7 @@ export default function App() {
                                     <img
                                       src={p0.backgroundDataUrl}
                                       alt={nb.title}
+                                      draggable={false}
                                       className="absolute inset-0 w-full h-full object-cover pointer-events-none pl-3"
                                     />
                                   )}
@@ -16627,69 +16927,103 @@ export default function App() {
                        ================================================================= */
                     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
                       {/* Folders in List Mode */}
-                      {visibleFolders.map((folder) => (
-                        <div
-                          key={`list-folder-${folder.name}`}
-                          onClick={() => setActiveLibraryFolder(folder.name)}
-                          className="flex items-center justify-between px-4 py-3 hover:bg-amber-50/40 transition cursor-pointer gap-3"
-                        >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="w-9 h-9 rounded-xl bg-amber-100/80 border border-amber-200 flex items-center justify-center shrink-0">
-                              <Folder className="w-5 h-5 fill-amber-400 text-amber-500" />
+                      {visibleFolders.map((folder) => {
+                        const isDropHover = dragOverFolderName === folder.name;
+                        return (
+                          <div
+                            key={`list-folder-${folder.name}`}
+                            data-library-folder-drop={folder.name}
+                            onDragEnter={(e) => handleFolderDragOver(e, folder.name)}
+                            onDragOver={(e) => handleFolderDragOver(e, folder.name)}
+                            onDragLeave={(e) => handleFolderDragLeave(e, folder.name)}
+                            onDrop={(e) => handleFolderDrop(e, folder.name)}
+                            onClick={() => setActiveLibraryFolder(folder.name)}
+                            className={`flex items-center justify-between px-4 py-3 transition cursor-pointer gap-3 ${
+                              isDropHover
+                                ? 'bg-amber-100/80 ring-2 ring-inset ring-[#0066ff]'
+                                : draggingLibraryNbId
+                                ? 'bg-amber-50/40'
+                                : 'hover:bg-amber-50/40'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div
+                                className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition ${
+                                  isDropHover
+                                    ? 'bg-amber-200 border-[#0066ff] scale-110'
+                                    : 'bg-amber-100/80 border-amber-200'
+                                }`}
+                              >
+                                <Folder className="w-5 h-5 fill-amber-400 text-amber-500" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
+                                <p className="text-[11px] text-slate-500">
+                                  Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
+                                </p>
+                              </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
-                              <p className="text-[11px] text-slate-500">
-                                Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
-                              </p>
-                            </div>
-                          </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[11px] text-slate-400 hidden sm:inline">
-                              {formatLibraryTimestamp(folder.updatedAt)}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveLibraryFolder(folder.name);
-                              }}
-                              className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
-                              title={`Άνοιγμα φακέλου "${folder.name}"`}
-                            >
-                              <Pen className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteFolderByName(folder.name);
-                              }}
-                              className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
-                              title={`Διαγραφή φακέλου "${folder.name}"`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isDropHover ? (
+                                <span className="px-2.5 py-1 rounded-xl bg-[#0066ff] text-white text-[11px] font-bold shadow-xs">
+                                  📥 Άφησε εδώ
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                                    {formatLibraryTimestamp(folder.updatedAt)}
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveLibraryFolder(folder.name);
+                                    }}
+                                    className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
+                                    title={`Άνοιγμα φακέλου "${folder.name}"`}
+                                  >
+                                    <Pen className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteFolderByName(folder.name);
+                                    }}
+                                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
+                                    title={`Διαγραφή φακέλου "${folder.name}"`}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
 
                       {/* Notes in List Mode */}
-                      {visibleNotebooks.map((nb) => (
-                        <div
-                          key={`list-nb-${nb.id}`}
-                          onClick={() => openNotebookDirectly(nb)}
-                          className="flex items-center justify-between px-4 py-3 hover:bg-sky-50/50 transition cursor-pointer gap-3"
-                        >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div
-                              className="w-9 h-11 rounded-lg border border-slate-300 shadow-2xs flex items-center justify-center shrink-0 relative overflow-hidden bg-[#fffdf7]"
-                            >
+                      {visibleNotebooks.map((nb) => {
+                        const isDraggingThisNb = draggingLibraryNbId === nb.id;
+                        return (
+                          <div
+                            key={`list-nb-${nb.id}`}
+                            onPointerDown={(e) => startLibraryNotebookPointerDrag(e, nb)}
+                            onClick={() => openNotebookDirectly(nb)}
+                            title="Πάτα για άνοιγμα ή σύρε (Drag & Drop) μέσα σε φάκελο"
+                            className={`flex items-center justify-between px-4 py-3 hover:bg-sky-50/50 transition cursor-grab active:cursor-grabbing select-none gap-3 ${
+                              isDraggingThisNb ? 'opacity-45 bg-sky-50' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
                               <div
-                                className="absolute left-0 top-0 bottom-0 w-1.5"
-                                style={{ backgroundColor: nb.coverColor }}
-                              />
-                              <FileText className="w-4 h-4 text-slate-500 ml-1" />
-                            </div>
+                                className="w-9 h-11 rounded-lg border border-slate-300 shadow-2xs flex items-center justify-center shrink-0 relative overflow-hidden bg-[#fffdf7] touch-none select-none"
+                              >
+                                <div
+                                  className="absolute left-0 top-0 bottom-0 w-1.5"
+                                  style={{ backgroundColor: nb.coverColor }}
+                                />
+                                <FileText className="w-4 h-4 text-slate-500 ml-1" />
+                              </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 {renamingNotebookId === nb.id && renamingNotebookContext === 'list' ? (
@@ -16820,13 +17154,50 @@ export default function App() {
                             </button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
 
                       {visibleFolders.length === 0 && visibleNotebooks.length === 0 && (
                         <div className="p-8 text-center text-sm text-slate-400">
                           Δεν βρέθηκαν σημειώσεις ή φάκελοι.
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Floating Ghost Card while Dragging a Notebook in Library (Mouse / Touch / Apple Pencil) */}
+                  {libraryTouchDrag && (
+                    <div
+                      style={{
+                        left: libraryTouchDrag.currX,
+                        top: libraryTouchDrag.currY,
+                        pointerEvents: 'none',
+                      }}
+                      className="fixed z-[200] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none"
+                    >
+                      <div className="w-28 h-36 rounded-r-xl rounded-l-md bg-[#fffdf7] border-2 border-[#0066ff] shadow-2xl relative overflow-hidden flex flex-col items-center justify-center px-2 text-center opacity-95 scale-105">
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-2.5"
+                          style={{ backgroundColor: libraryTouchDrag.coverColor }}
+                        />
+                        <FileText className="w-7 h-7 text-[#0066ff] mb-1.5 ml-1" />
+                        <span className="text-[11px] font-bold text-[#1b2a4a] line-clamp-2 ml-1">
+                          {libraryTouchDrag.title}
+                        </span>
+                      </div>
+                      <div
+                        className={`mt-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap ${
+                          dragOverFolderName
+                            ? 'bg-emerald-600 text-white ring-2 ring-white'
+                            : 'bg-[#1b2a4a]/90 text-white'
+                        }`}
+                      >
+                        {dragOverFolderName === '__ROOT__'
+                          ? '📤 Εξαγωγή στη Βιβλιοθήκη'
+                          : dragOverFolderName
+                          ? `📁 Μετακίνηση σε «${dragOverFolderName}»`
+                          : 'Σύρε πάνω σε φάκελο...'}
+                      </div>
                     </div>
                   )}
                 </>
