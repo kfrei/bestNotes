@@ -7734,6 +7734,250 @@ export default function App() {
     aCtx.restore();
   };
 
+  interface ParallelSnapGuide {
+    anchor: { x: number; y: number };
+    snapped: { x: number; y: number };
+    refEdge?: [{ x: number; y: number }, { x: number; y: number }];
+  }
+
+  // Computes magnetic snap when dragging a polygon/polyline vertex node so incident edges easily snap parallel to opposite/other edges (horizontal, vertical, or tilted at any angle)
+  const computeParallelNodeSnap = (
+    rawPt: { x: number; y: number },
+    vertices: { x: number; y: number }[],
+    draggedIdx: number,
+    isClosedLoop: boolean
+  ): { snappedPt: { x: number; y: number }; guides: ParallelSnapGuide[] } => {
+    const M = vertices.length;
+    if (M < 2 || draggedIdx < 0 || draggedIdx >= M) {
+      return { snappedPt: rawPt, guides: [] };
+    }
+
+    const neighborIndices: number[] = [];
+    if (isClosedLoop && M >= 3) {
+      const prevIdx = (draggedIdx - 1 + M) % M;
+      const nextIdx = (draggedIdx + 1) % M;
+      neighborIndices.push(prevIdx);
+      if (nextIdx !== prevIdx) neighborIndices.push(nextIdx);
+    } else {
+      if (draggedIdx > 0) neighborIndices.push(draggedIdx - 1);
+      if (draggedIdx < M - 1) neighborIndices.push(draggedIdx + 1);
+    }
+
+    if (neighborIndices.length === 0) {
+      return { snappedPt: rawPt, guides: [] };
+    }
+
+    // Collect all non-incident edges of the shape (edges that do not touch the dragged vertex)
+    const nonIncidentEdges: {
+      p1: { x: number; y: number };
+      p2: { x: number; y: number };
+      ux: number;
+      uy: number;
+      nx: number;
+      ny: number;
+    }[] = [];
+    const edgeCount = isClosedLoop ? M : M - 1;
+    for (let j = 0; j < edgeCount; j++) {
+      const i1 = j;
+      const i2 = (j + 1) % M;
+      if (i1 === draggedIdx || i2 === draggedIdx) continue;
+      const p1 = vertices[i1];
+      const p2 = vertices[i2];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 12) continue;
+      const ux = dx / len;
+      const uy = dy / len;
+      nonIncidentEdges.push({ p1, p2, ux, uy, nx: -uy, ny: ux });
+    }
+
+    type SnapCandidate = {
+      anchor: { x: number; y: number };
+      ux: number;
+      uy: number;
+      dPerp: number;
+      score: number;
+      refEdge?: [{ x: number; y: number }, { x: number; y: number }];
+    };
+
+    const matchedPerNeighbor: SnapCandidate[] = [];
+
+    for (const nIdx of neighborIndices) {
+      const anchor = vertices[nIdx];
+      const vx = rawPt.x - anchor.x;
+      const vy = rawPt.y - anchor.y;
+      const segLen = Math.hypot(vx, vy);
+      if (segLen < 14) continue;
+
+      let bestForNeighbor: SnapCandidate | null = null;
+
+      // 1. Check parallelism against every non-incident edge of the shape (horizontal, vertical, or diagonal)
+      for (const edge of nonIncidentEdges) {
+        const dPerp = Math.abs(vx * edge.nx + vy * edge.ny);
+        const sinDelta = dPerp / segLen;
+        if (dPerp <= 14 && sinDelta <= 0.15) {
+          const score = dPerp;
+          if (!bestForNeighbor || score < bestForNeighbor.score) {
+            bestForNeighbor = {
+              anchor,
+              ux: edge.ux,
+              uy: edge.uy,
+              dPerp,
+              score,
+              refEdge: [edge.p1, edge.p2],
+            };
+          }
+        }
+      }
+
+      // 2. Also check pure Horizontal (0°) and Vertical (90°) alignment through neighbor if not already covered by a shape edge
+      const cardinalAxes = [
+        { ux: 1, uy: 0, nx: 0, ny: 1 },
+        { ux: 0, uy: 1, nx: -1, ny: 0 },
+      ];
+      for (const ax of cardinalAxes) {
+        const alreadyCovered = nonIncidentEdges.some(
+          (e) => Math.abs(e.ux * ax.ny - e.uy * ax.nx) < 0.02
+        );
+        if (alreadyCovered) continue;
+        const dPerp = Math.abs(vx * ax.nx + vy * ax.ny);
+        const sinDelta = dPerp / segLen;
+        if (dPerp <= 10 && sinDelta <= 0.11) {
+          const score = dPerp + 2.5;
+          if (!bestForNeighbor || score < bestForNeighbor.score) {
+            bestForNeighbor = {
+              anchor,
+              ux: ax.ux,
+              uy: ax.uy,
+              dPerp,
+              score,
+            };
+          }
+        }
+      }
+
+      if (bestForNeighbor) {
+        matchedPerNeighbor.push(bestForNeighbor);
+      }
+    }
+
+    if (matchedPerNeighbor.length === 0) {
+      return { snappedPt: rawPt, guides: [] };
+    }
+
+    // If BOTH incident edges snap simultaneously (e.g. forming a parallelogram or rectangle), snap to their intersection!
+    if (matchedPerNeighbor.length >= 2) {
+      const c1 = matchedPerNeighbor[0];
+      const c2 = matchedPerNeighbor[1];
+      const det = c1.ux * c2.uy - c1.uy * c2.ux;
+      if (Math.abs(det) > 0.2) {
+        const dx = c2.anchor.x - c1.anchor.x;
+        const dy = c2.anchor.y - c1.anchor.y;
+        const t1 = (dx * c2.uy - dy * c2.ux) / det;
+        const ix = c1.anchor.x + t1 * c1.ux;
+        const iy = c1.anchor.y + t1 * c1.uy;
+        if (Math.hypot(ix - rawPt.x, iy - rawPt.y) <= 18) {
+          const snappedPt = { x: ix, y: iy };
+          return {
+            snappedPt,
+            guides: [
+              { anchor: c1.anchor, snapped: snappedPt, refEdge: c1.refEdge },
+              { anchor: c2.anchor, snapped: snappedPt, refEdge: c2.refEdge },
+            ],
+          };
+        }
+      }
+    }
+
+    // Otherwise, project orthogonally onto the strongest parallel snap line
+    matchedPerNeighbor.sort((a, b) => a.score - b.score);
+    const best = matchedPerNeighbor[0];
+    const projT = (rawPt.x - best.anchor.x) * best.ux + (rawPt.y - best.anchor.y) * best.uy;
+    const snappedPt = {
+      x: best.anchor.x + projT * best.ux,
+      y: best.anchor.y + projT * best.uy,
+    };
+    return {
+      snappedPt,
+      guides: [{ anchor: best.anchor, snapped: snappedPt, refEdge: best.refEdge }],
+    };
+  };
+
+  // Draws dashed parallel guide lines & "//" parallel tick marks on the active overlay canvas when a node snaps parallel
+  const drawParallelSnapGuidesOverlay = (guides: ParallelSnapGuide[]) => {
+    const aCtx = activeCtxRef.current;
+    const aCanvas = activeCanvasRef.current;
+    if (!aCtx || !aCanvas) return;
+    aCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+    aCtx.clearRect(0, 0, aCanvas.width / CANVAS_DPR, aCanvas.height / CANVAS_DPR);
+    if (guides.length === 0) return;
+
+    const drawParallelTicksAtMidpoint = (pA: { x: number; y: number }, pB: { x: number; y: number }) => {
+      const dx = pB.x - pA.x;
+      const dy = pB.y - pA.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 24) return;
+      const ux = dx / len;
+      const uy = dy / len;
+      const nx = -uy;
+      const ny = ux;
+      const mx = (pA.x + pB.x) / 2;
+      const my = (pA.y + pB.y) / 2;
+      // Draw two angled "//" parallel tick marks across the midpoint
+      const tx = ux * 3.5 + nx * 6.5;
+      const ty = uy * 3.5 + ny * 6.5;
+      for (const offset of [-3.2, 3.2]) {
+        const cx = mx + ux * offset;
+        const cy = my + uy * offset;
+        aCtx.strokeStyle = '#ffffff';
+        aCtx.lineWidth = 3.6;
+        aCtx.beginPath();
+        aCtx.moveTo(cx - tx, cy - ty);
+        aCtx.lineTo(cx + tx, cy + ty);
+        aCtx.stroke();
+
+        aCtx.strokeStyle = '#059669';
+        aCtx.lineWidth = 2;
+        aCtx.beginPath();
+        aCtx.moveTo(cx - tx, cy - ty);
+        aCtx.lineTo(cx + tx, cy + ty);
+        aCtx.stroke();
+      }
+    };
+
+    const drawExtendedDashedLine = (pA: { x: number; y: number }, pB: { x: number; y: number }, ext: number) => {
+      const dx = pB.x - pA.x;
+      const dy = pB.y - pA.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) return;
+      const ux = dx / len;
+      const uy = dy / len;
+      aCtx.beginPath();
+      aCtx.moveTo(pA.x - ux * ext, pA.y - uy * ext);
+      aCtx.lineTo(pB.x + ux * ext, pB.y + uy * ext);
+      aCtx.stroke();
+    };
+
+    aCtx.save();
+    aCtx.lineCap = 'round';
+    for (const g of guides) {
+      aCtx.strokeStyle = '#10b981';
+      aCtx.lineWidth = 2;
+      aCtx.setLineDash([6, 4]);
+      drawExtendedDashedLine(g.anchor, g.snapped, 24);
+      if (g.refEdge) {
+        drawExtendedDashedLine(g.refEdge[0], g.refEdge[1], 18);
+      }
+      aCtx.setLineDash([]);
+      if (g.refEdge) {
+        drawParallelTicksAtMidpoint(g.anchor, g.snapped);
+        drawParallelTicksAtMidpoint(g.refEdge[0], g.refEdge[1]);
+      }
+    }
+    aCtx.restore();
+  };
+
   // Toggle the Illustrator-style Dashed Bézier Tangent Line (o - - - [□] - - - o) on a specific node!
   const handleToggleNodeBezier = (strokeId: string, nodeIdx: number) => {
     const target = activePage.strokes.find((s) => s.id === strokeId);
@@ -10034,6 +10278,63 @@ export default function App() {
         }
       }
 
+      let parallelSnapGuides: ParallelSnapGuide[] = [];
+      if (activeTargetStroke && !draggingNodeIdx.isControl && !snapTargetPt) {
+        if (activeTargetStroke.isShape) {
+          const st = activeTargetStroke.shapeType;
+          const isCurvedSpecial =
+            st === 'ellipse' ||
+            st === 'parabola' ||
+            st === 'hyperbola' ||
+            st === 'arc' ||
+            st === 'sine' ||
+            st === 'cosine';
+          if (!isCurvedSpecial && activeTargetStroke.points.length >= 2) {
+            const isClosedLoop =
+              st === 'rectangle' ||
+              st === 'parallelogram' ||
+              st === 'trapezoid' ||
+              st === 'triangle' ||
+              st === 'cuboid' ||
+              st === 'cylinder' ||
+              st === 'sphere' ||
+              st === 'pyramid' ||
+              st === 'resistor' ||
+              st === 'spring';
+            const uniqueVertices = isClosedLoop
+              ? activeTargetStroke.points.slice(0, Math.max(1, activeTargetStroke.points.length - 1))
+              : activeTargetStroke.points;
+            const snapRes = computeParallelNodeSnap(
+              latestPt,
+              uniqueVertices,
+              draggingNodeIdx.index,
+              isClosedLoop
+            );
+            snapTargetPt = snapRes.snappedPt;
+            parallelSnapGuides = snapRes.guides;
+          }
+        } else if (activeTargetStroke.points.length >= 2) {
+          const keyIndices =
+            activeTargetStroke.keyNodeIndices && activeTargetStroke.keyNodeIndices.length >= 2
+              ? activeTargetStroke.keyNodeIndices
+              : computeFreehandKeyNodeIndices(activeTargetStroke.points);
+          const isClosedLoop = activeTargetStroke.points[0]?.twist === 999 && keyIndices.length >= 3;
+          const uniqueCount = isClosedLoop ? keyIndices.length - 1 : keyIndices.length;
+          const uniqueVertices = keyIndices
+            .slice(0, uniqueCount)
+            .map((idx) => activeTargetStroke.points[idx])
+            .filter(Boolean);
+          const snapRes = computeParallelNodeSnap(
+            latestPt,
+            uniqueVertices,
+            draggingNodeIdx.index,
+            isClosedLoop
+          );
+          snapTargetPt = snapRes.snappedPt;
+          parallelSnapGuides = snapRes.guides;
+        }
+      }
+
       const targetX = snapTargetPt ? snapTargetPt.x : latestPt.x;
       const targetY = snapTargetPt ? snapTargetPt.y : latestPt.y;
 
@@ -10121,10 +10422,10 @@ export default function App() {
                 targetPt.cy = latestPt.y;
               }
             } else {
-              const dx = latestPt.x - targetPt.x;
-              const dy = latestPt.y - targetPt.y;
-              targetPt.x = latestPt.x;
-              targetPt.y = latestPt.y;
+              const dx = targetX - targetPt.x;
+              const dy = targetY - targetPt.y;
+              targetPt.x = targetX;
+              targetPt.y = targetY;
               if (targetPt.cx !== undefined && targetPt.cy !== undefined) {
                 targetPt.cx += dx * 0.5;
                 targetPt.cy += dy * 0.5;
@@ -10174,6 +10475,7 @@ export default function App() {
         }),
         false
       );
+      drawParallelSnapGuidesOverlay(parallelSnapGuides);
       return;
     }
 
