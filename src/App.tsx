@@ -7868,9 +7868,17 @@ export default function App() {
     anchor: { x: number; y: number };
     snapped: { x: number; y: number };
     refEdge?: [{ x: number; y: number }, { x: number; y: number }];
+    kind?: 'parallel' | 'symmetry';
+    symmetryAxis?: [{ x: number; y: number }, { x: number; y: number }];
+    angleArcs?: {
+      vertex: { x: number; y: number };
+      arm1: { x: number; y: number };
+      arm2: { x: number; y: number };
+    }[];
   }
 
-  // Computes magnetic snap when dragging a polygon/polyline vertex node so incident edges easily snap parallel to opposite/other edges (horizontal, vertical, or tilted at any angle)
+  // Computes magnetic snap when dragging a polygon/polyline vertex node so incident edges easily snap parallel to opposite/other edges
+  // AND snaps trapezoids / triangles into symmetrical (isosceles / equal-angle) shapes!
   const computeParallelNodeSnap = (
     rawPt: { x: number; y: number },
     vertices: { x: number; y: number }[],
@@ -7880,6 +7888,197 @@ export default function App() {
     const M = vertices.length;
     if (M < 2 || draggedIdx < 0 || draggedIdx >= M) {
       return { snappedPt: rawPt, guides: [] };
+    }
+
+    // --- A. SYMMETRICAL TRAPEZOID SNAP (4-vertex closed polygon: equal base angles & equal legs) ---
+    if (isClosedLoop && M === 4) {
+      const n1 = (draggedIdx - 1 + 4) % 4;
+      const opp = (draggedIdx + 2) % 4;
+      const n2 = (draggedIdx + 1) % 4;
+      const configs: [
+        { x: number; y: number },
+        { x: number; y: number },
+        { x: number; y: number }
+      ][] = [
+        [vertices[n1], vertices[opp], vertices[n2]],
+        [vertices[n2], vertices[opp], vertices[n1]],
+      ];
+
+      let bestSymCorner: {
+        dist: number;
+        snappedPt: { x: number; y: number };
+        guides: ParallelSnapGuide[];
+      } | null = null;
+
+      for (const [baseStart, baseEnd, otherCorner] of configs) {
+        const bDx = baseEnd.x - baseStart.x;
+        const bDy = baseEnd.y - baseStart.y;
+        const bLen = Math.hypot(bDx, bDy);
+        const legDx = otherCorner.x - baseEnd.x;
+        const legDy = otherCorner.y - baseEnd.y;
+        const legLen = Math.hypot(legDx, legDy);
+        if (bLen < 18 || legLen < 18) continue;
+
+        const uBaseX = bDx / bLen;
+        const uBaseY = bDy / bLen;
+        const nBaseX = -uBaseY;
+        const nBaseY = uBaseX;
+
+        const pPar = legDx * uBaseX + legDy * uBaseY;
+        const pPerp = legDx * nBaseX + legDy * nBaseY;
+        if (Math.abs(pPerp) < 14 || bLen + 2 * pPar <= 12) continue;
+
+        const symPt = {
+          x: baseStart.x - pPar * uBaseX + pPerp * nBaseX,
+          y: baseStart.y - pPar * uBaseY + pPerp * nBaseY,
+        };
+        const distToSym = Math.hypot(rawPt.x - symPt.x, rawPt.y - symPt.y);
+        if (distToSym <= 22 && (!bestSymCorner || distToSym < bestSymCorner.dist)) {
+          const baseMid = {
+            x: (baseStart.x + baseEnd.x) / 2,
+            y: (baseStart.y + baseEnd.y) / 2,
+          };
+          const topMid = {
+            x: (symPt.x + otherCorner.x) / 2,
+            y: (symPt.y + otherCorner.y) / 2,
+          };
+          bestSymCorner = {
+            dist: distToSym,
+            snappedPt: symPt,
+            guides: [
+              {
+                anchor: otherCorner,
+                snapped: symPt,
+                refEdge: [baseStart, baseEnd],
+                kind: 'parallel',
+              },
+              {
+                anchor: baseStart,
+                snapped: symPt,
+                refEdge: [baseEnd, otherCorner],
+                kind: 'symmetry',
+                symmetryAxis: [baseMid, topMid],
+                angleArcs: [
+                  { vertex: baseStart, arm1: baseEnd, arm2: symPt },
+                  { vertex: baseEnd, arm1: baseStart, arm2: otherCorner },
+                  { vertex: symPt, arm1: baseStart, arm2: otherCorner },
+                  { vertex: otherCorner, arm1: baseEnd, arm2: symPt },
+                ],
+              },
+            ],
+          };
+        }
+      }
+
+      if (bestSymCorner) {
+        return { snappedPt: bestSymCorner.snappedPt, guides: bestSymCorner.guides };
+      }
+    }
+
+    // --- B. SYMMETRICAL TRIANGLE SNAP (3-vertex closed polygon: isosceles / equilateral equal angles) ---
+    if (isClosedLoop && M === 3) {
+      const A = vertices[(draggedIdx + 1) % 3];
+      const B = vertices[(draggedIdx + 2) % 3];
+
+      // 1. Apex dragged onto the perpendicular bisector of base A-B (|DA| = |DB|, equal base angles at A and B)
+      const bDx = B.x - A.x;
+      const bDy = B.y - A.y;
+      const bLen = Math.hypot(bDx, bDy);
+      if (bLen >= 18) {
+        const midAB = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+        const uABx = bDx / bLen;
+        const uABy = bDy / bLen;
+        const nABx = -uABy;
+        const nABy = uABx;
+        const relX = rawPt.x - midAB.x;
+        const relY = rawPt.y - midAB.y;
+        const dFromBisector = Math.abs(relX * uABx + relY * uABy);
+        let hAlongBisector = relX * nABx + relY * nABy;
+        if (Math.abs(hAlongBisector) >= 16 && dFromBisector <= 16) {
+          const equilH = (Math.sqrt(3) / 2) * bLen;
+          if (Math.abs(Math.abs(hAlongBisector) - equilH) <= 14) {
+            hAlongBisector = Math.sign(hAlongBisector) * equilH;
+          }
+          const snappedPt = {
+            x: midAB.x + hAlongBisector * nABx,
+            y: midAB.y + hAlongBisector * nABy,
+          };
+          return {
+            snappedPt,
+            guides: [
+              {
+                anchor: A,
+                snapped: snappedPt,
+                refEdge: [B, snappedPt],
+                kind: 'symmetry',
+                symmetryAxis: [midAB, snappedPt],
+                angleArcs: [
+                  { vertex: A, arm1: B, arm2: snappedPt },
+                  { vertex: B, arm1: A, arm2: snappedPt },
+                ],
+              },
+            ],
+          };
+        }
+      }
+
+      // 2. Base corner dragged to mirror the other leg across the vertical or horizontal symmetry axis through the apex
+      const pairs: [{ x: number; y: number }, { x: number; y: number }][] = [
+        [A, B],
+        [B, A],
+      ];
+      for (const [apex, otherBase] of pairs) {
+        const vx = otherBase.x - apex.x;
+        const vy = otherBase.y - apex.y;
+        const vLen = Math.hypot(vx, vy);
+        if (vLen < 18 || Math.abs(vx) < 14 || Math.abs(vy) < 14) continue;
+
+        // Vertical symmetry axis through apex
+        const symV = { x: apex.x - vx, y: otherBase.y };
+        if (Math.hypot(rawPt.x - symV.x, rawPt.y - symV.y) <= 22) {
+          const baseMid = { x: apex.x, y: otherBase.y };
+          return {
+            snappedPt: symV,
+            guides: [
+              { anchor: otherBase, snapped: symV, kind: 'parallel' },
+              {
+                anchor: apex,
+                snapped: symV,
+                refEdge: [apex, otherBase],
+                kind: 'symmetry',
+                symmetryAxis: [apex, baseMid],
+                angleArcs: [
+                  { vertex: symV, arm1: apex, arm2: otherBase },
+                  { vertex: otherBase, arm1: apex, arm2: symV },
+                ],
+              },
+            ],
+          };
+        }
+
+        // Horizontal symmetry axis through apex
+        const symH = { x: otherBase.x, y: apex.y - vy };
+        if (Math.hypot(rawPt.x - symH.x, rawPt.y - symH.y) <= 22) {
+          const baseMid = { x: otherBase.x, y: apex.y };
+          return {
+            snappedPt: symH,
+            guides: [
+              { anchor: otherBase, snapped: symH, kind: 'parallel' },
+              {
+                anchor: apex,
+                snapped: symH,
+                refEdge: [apex, otherBase],
+                kind: 'symmetry',
+                symmetryAxis: [apex, baseMid],
+                angleArcs: [
+                  { vertex: symH, arm1: apex, arm2: otherBase },
+                  { vertex: otherBase, arm1: apex, arm2: symH },
+                ],
+              },
+            ],
+          };
+        }
+      }
     }
 
     const neighborIndices: number[] = [];
@@ -7929,6 +8128,12 @@ export default function App() {
       dPerp: number;
       score: number;
       refEdge?: [{ x: number; y: number }, { x: number; y: number }];
+      kind?: 'parallel' | 'symmetry';
+      angleArcs?: {
+        vertex: { x: number; y: number };
+        arm1: { x: number; y: number };
+        arm2: { x: number; y: number };
+      }[];
     };
 
     const matchedPerNeighbor: SnapCandidate[] = [];
@@ -7956,12 +8161,70 @@ export default function App() {
               dPerp,
               score,
               refEdge: [edge.p1, edge.p2],
+              kind: 'parallel',
             };
           }
         }
       }
 
-      // 2. Also check pure Horizontal (0°) and Vertical (90°) alignment through neighbor if not already covered by a shape edge
+      // 2. In a 4-vertex polygon (Trapezoid), also check if the dragged leg from `anchor` has the exact SYMMETRICAL angle
+      //    relative to the base `anchor -> opposite` as the opposite leg!
+      if (isClosedLoop && M === 4) {
+        const oppIdx = (draggedIdx + 2) % 4;
+        const otherNeighborIdx = neighborIndices.find((idx) => idx !== nIdx);
+        if (otherNeighborIdx !== undefined) {
+          const baseStart = anchor;
+          const baseEnd = vertices[oppIdx];
+          const otherCorner = vertices[otherNeighborIdx];
+          const bDx = baseEnd.x - baseStart.x;
+          const bDy = baseEnd.y - baseStart.y;
+          const bLen = Math.hypot(bDx, bDy);
+          const legDx = otherCorner.x - baseEnd.x;
+          const legDy = otherCorner.y - baseEnd.y;
+          const legLen = Math.hypot(legDx, legDy);
+          if (bLen >= 18 && legLen >= 18) {
+            const uBaseX = bDx / bLen;
+            const uBaseY = bDy / bLen;
+            const nBaseX = -uBaseY;
+            const nBaseY = uBaseX;
+            const pPar = legDx * uBaseX + legDy * uBaseY;
+            const pPerp = legDx * nBaseX + legDy * nBaseY;
+            if (Math.abs(pPerp) >= 14) {
+              const uSymX = (-pPar * uBaseX + pPerp * nBaseX) / legLen;
+              const uSymY = (-pPar * uBaseY + pPerp * nBaseY) / legLen;
+              const nSymX = -uSymY;
+              const nSymY = uSymX;
+              const dotAlong = vx * uSymX + vy * uSymY;
+              const dPerp = Math.abs(vx * nSymX + vy * nSymY);
+              const sinDelta = dPerp / segLen;
+              if (dotAlong > 14 && dPerp <= 13 && sinDelta <= 0.14) {
+                const score = dPerp + 0.5;
+                if (!bestForNeighbor || score < bestForNeighbor.score) {
+                  const projPt = {
+                    x: anchor.x + dotAlong * uSymX,
+                    y: anchor.y + dotAlong * uSymY,
+                  };
+                  bestForNeighbor = {
+                    anchor,
+                    ux: uSymX,
+                    uy: uSymY,
+                    dPerp,
+                    score,
+                    refEdge: [baseEnd, otherCorner],
+                    kind: 'symmetry',
+                    angleArcs: [
+                      { vertex: baseStart, arm1: baseEnd, arm2: projPt },
+                      { vertex: baseEnd, arm1: baseStart, arm2: otherCorner },
+                    ],
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Also check pure Horizontal (0°) and Vertical (90°) alignment through neighbor if not already covered by a shape edge
       const cardinalAxes = [
         { ux: 1, uy: 0, nx: 0, ny: 1 },
         { ux: 0, uy: 1, nx: -1, ny: 0 },
@@ -7982,6 +8245,7 @@ export default function App() {
               uy: ax.uy,
               dPerp,
               score,
+              kind: 'parallel',
             };
           }
         }
@@ -7996,7 +8260,7 @@ export default function App() {
       return { snappedPt: rawPt, guides: [] };
     }
 
-    // If BOTH incident edges snap simultaneously (e.g. forming a parallelogram or rectangle), snap to their intersection!
+    // If BOTH incident edges snap simultaneously (e.g. forming a parallelogram, rectangle, or symmetrical trapezoid), snap to their intersection!
     if (matchedPerNeighbor.length >= 2) {
       const c1 = matchedPerNeighbor[0];
       const c2 = matchedPerNeighbor[1];
@@ -8007,20 +8271,32 @@ export default function App() {
         const t1 = (dx * c2.uy - dy * c2.ux) / det;
         const ix = c1.anchor.x + t1 * c1.ux;
         const iy = c1.anchor.y + t1 * c1.uy;
-        if (Math.hypot(ix - rawPt.x, iy - rawPt.y) <= 18) {
+        if (Math.hypot(ix - rawPt.x, iy - rawPt.y) <= 22) {
           const snappedPt = { x: ix, y: iy };
           return {
             snappedPt,
             guides: [
-              { anchor: c1.anchor, snapped: snappedPt, refEdge: c1.refEdge },
-              { anchor: c2.anchor, snapped: snappedPt, refEdge: c2.refEdge },
+              {
+                anchor: c1.anchor,
+                snapped: snappedPt,
+                refEdge: c1.refEdge,
+                kind: c1.kind,
+                angleArcs: c1.angleArcs,
+              },
+              {
+                anchor: c2.anchor,
+                snapped: snappedPt,
+                refEdge: c2.refEdge,
+                kind: c2.kind,
+                angleArcs: c2.angleArcs,
+              },
             ],
           };
         }
       }
     }
 
-    // Otherwise, project orthogonally onto the strongest parallel snap line
+    // Otherwise, project orthogonally onto the strongest snap line
     matchedPerNeighbor.sort((a, b) => a.score - b.score);
     const best = matchedPerNeighbor[0];
     const projT = (rawPt.x - best.anchor.x) * best.ux + (rawPt.y - best.anchor.y) * best.uy;
@@ -8030,11 +8306,19 @@ export default function App() {
     };
     return {
       snappedPt,
-      guides: [{ anchor: best.anchor, snapped: snappedPt, refEdge: best.refEdge }],
+      guides: [
+        {
+          anchor: best.anchor,
+          snapped: snappedPt,
+          refEdge: best.refEdge,
+          kind: best.kind,
+          angleArcs: best.angleArcs,
+        },
+      ],
     };
   };
 
-  // Draws dashed parallel guide lines & "//" parallel tick marks on the active overlay canvas when a node snaps parallel
+  // Draws dashed parallel/symmetry guide lines, "//" parallel ticks, equal-angle arcs, & central symmetry axis on the active overlay canvas!
   const drawParallelSnapGuidesOverlay = (guides: ParallelSnapGuide[]) => {
     const aCtx = activeCtxRef.current;
     const aCanvas = activeCanvasRef.current;
@@ -8043,7 +8327,11 @@ export default function App() {
     aCtx.clearRect(0, 0, aCanvas.width / CANVAS_DPR, aCanvas.height / CANVAS_DPR);
     if (guides.length === 0) return;
 
-    const drawParallelTicksAtMidpoint = (pA: { x: number; y: number }, pB: { x: number; y: number }) => {
+    const drawParallelTicksAtMidpoint = (
+      pA: { x: number; y: number },
+      pB: { x: number; y: number },
+      color = '#059669'
+    ) => {
       const dx = pB.x - pA.x;
       const dy = pB.y - pA.y;
       const len = Math.hypot(dx, dy);
@@ -8054,7 +8342,7 @@ export default function App() {
       const ny = ux;
       const mx = (pA.x + pB.x) / 2;
       const my = (pA.y + pB.y) / 2;
-      // Draw two angled "//" parallel tick marks across the midpoint
+      // Draw two angled "//" tick marks across the midpoint
       const tx = ux * 3.5 + nx * 6.5;
       const ty = uy * 3.5 + ny * 6.5;
       for (const offset of [-3.2, 3.2]) {
@@ -8067,13 +8355,45 @@ export default function App() {
         aCtx.lineTo(cx + tx, cy + ty);
         aCtx.stroke();
 
-        aCtx.strokeStyle = '#059669';
+        aCtx.strokeStyle = color;
         aCtx.lineWidth = 2;
         aCtx.beginPath();
         aCtx.moveTo(cx - tx, cy - ty);
         aCtx.lineTo(cx + tx, cy + ty);
         aCtx.stroke();
       }
+    };
+
+    const drawEqualAngleArc = (
+      vertex: { x: number; y: number },
+      arm1: { x: number; y: number },
+      arm2: { x: number; y: number }
+    ) => {
+      const d1 = Math.hypot(arm1.x - vertex.x, arm1.y - vertex.y);
+      const d2 = Math.hypot(arm2.x - vertex.x, arm2.y - vertex.y);
+      if (d1 < 22 || d2 < 22) return;
+      const r = Math.min(22, d1 * 0.28, d2 * 0.28);
+      const a1 = Math.atan2(arm1.y - vertex.y, arm1.x - vertex.x);
+      const a2 = Math.atan2(arm2.y - vertex.y, arm2.x - vertex.x);
+      let diff = a2 - a1;
+      while (diff <= -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      const anticlockwise = diff < 0;
+
+      aCtx.save();
+      aCtx.fillStyle = 'rgba(139, 92, 246, 0.16)';
+      aCtx.beginPath();
+      aCtx.moveTo(vertex.x, vertex.y);
+      aCtx.arc(vertex.x, vertex.y, r, a1, a2, anticlockwise);
+      aCtx.closePath();
+      aCtx.fill();
+
+      aCtx.strokeStyle = '#7c3aed';
+      aCtx.lineWidth = 2.2;
+      aCtx.beginPath();
+      aCtx.arc(vertex.x, vertex.y, r, a1, a2, anticlockwise);
+      aCtx.stroke();
+      aCtx.restore();
     };
 
     const drawExtendedDashedLine = (pA: { x: number; y: number }, pB: { x: number; y: number }, ext: number) => {
@@ -8092,17 +8412,45 @@ export default function App() {
     aCtx.save();
     aCtx.lineCap = 'round';
     for (const g of guides) {
-      aCtx.strokeStyle = '#10b981';
+      const isSym = g.kind === 'symmetry';
+      aCtx.strokeStyle = isSym ? '#7c3aed' : '#10b981';
       aCtx.lineWidth = 2;
       aCtx.setLineDash([6, 4]);
       drawExtendedDashedLine(g.anchor, g.snapped, 24);
       if (g.refEdge) {
         drawExtendedDashedLine(g.refEdge[0], g.refEdge[1], 18);
       }
+      if (g.symmetryAxis) {
+        aCtx.strokeStyle = '#8b5cf6';
+        aCtx.lineWidth = 1.8;
+        aCtx.setLineDash([4, 4]);
+        drawExtendedDashedLine(g.symmetryAxis[0], g.symmetryAxis[1], 22);
+      }
       aCtx.setLineDash([]);
       if (g.refEdge) {
-        drawParallelTicksAtMidpoint(g.anchor, g.snapped);
-        drawParallelTicksAtMidpoint(g.refEdge[0], g.refEdge[1]);
+        drawParallelTicksAtMidpoint(g.anchor, g.snapped, isSym ? '#7c3aed' : '#059669');
+        drawParallelTicksAtMidpoint(g.refEdge[0], g.refEdge[1], isSym ? '#7c3aed' : '#059669');
+      }
+      if (g.angleArcs) {
+        for (const arc of g.angleArcs) {
+          drawEqualAngleArc(arc.vertex, arc.arm1, arc.arm2);
+        }
+      }
+      if (g.symmetryAxis) {
+        const mx = (g.symmetryAxis[0].x + g.symmetryAxis[1].x) / 2;
+        const my = (g.symmetryAxis[0].y + g.symmetryAxis[1].y) / 2;
+        aCtx.font = 'bold 11px sans-serif';
+        const label = '⚖️ Συμμετρικό';
+        const tw = aCtx.measureText(label).width;
+        aCtx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+        aCtx.strokeStyle = '#7c3aed';
+        aCtx.lineWidth = 1.5;
+        aCtx.beginPath();
+        aCtx.roundRect(mx - tw / 2 - 7, my - 10, tw + 14, 20, 10);
+        aCtx.fill();
+        aCtx.stroke();
+        aCtx.fillStyle = '#5b21b6';
+        aCtx.fillText(label, mx - tw / 2, my + 4);
       }
     }
     aCtx.restore();
