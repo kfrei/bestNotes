@@ -12637,16 +12637,6 @@ export default function App() {
 
                 {selectedImgObj && selectedImageIds.length <= 1 && selectedStrokeIds.length === 0 && (
                   <div className="flex items-center gap-1.5">
-                    <span
-                      onClick={() => {
-                        setImageCropMode('none');
-                        showToast('✂️ Σύρε οποιαδήποτε από τις 4 πράσινες μπάρες στις πλευρές της εικόνας προς τα μέσα για Crop!');
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-300 text-teal-800 font-semibold cursor-pointer"
-                      title="Σύρε τις 4 πράσινες μπάρες (πάνω, κάτω, αριστερά, δεξιά) προς τα μέσα για άμεσο Crop πλευρών!"
-                    >
-                      <span>✂️ Μπάρες Πλευρών = Crop</span>
-                    </span>
                     <button
                       onClick={() => {
                         const cached = imageElementsCacheRef.current.get(selectedImgObj.dataUrl);
@@ -12669,7 +12659,7 @@ export default function App() {
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold cursor-pointer"
                       title="Επαναφορά στις πραγματικές αρχικές αναλογίες (Aspect Ratio) της εικόνας"
                     >
-                      <span>📐 1:1 Αναλογίες</span>
+                      <span>1:1</span>
                     </button>
                     <button
                       onClick={async () => {
