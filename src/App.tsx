@@ -11954,6 +11954,7 @@ export default function App() {
 
       const switchToTool = (nextTool: ToolType, labelToast: string) => {
         e.preventDefault();
+        setShowAlignSubBar(false);
         setActiveTool(nextTool);
         setShowToolSubBar(true);
         if (nextTool !== 'lasso' && nextTool !== 'direct-node') {
@@ -11968,6 +11969,30 @@ export default function App() {
         setImageCropMode('none');
         showToast(labelToast);
       };
+
+      // J / Ξ -> Justification / Κεντράρισμα & Στοίχιση ομαδοποιημένων/επιλεγμένων αντικειμένων
+      if (code === 'KeyJ' || key === 'j' || key === 'ξ') {
+        e.preventDefault();
+        const effectiveImgIds =
+          selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+        const totalSelected = selectedStrokeIds.length + effectiveImgIds.length;
+        if (activeTool === 'lasso' && showAlignSubBar && totalSelected >= 2) {
+          handleAlignSelected('center-both');
+          return;
+        }
+        setActiveTool('lasso');
+        setShowAlignSubBar(true);
+        setShowToolSubBar(true);
+        setSelectedTextId(null);
+        setEditingTextId(null);
+        setImageCropMode('none');
+        showToast(
+          totalSelected >= 2
+            ? '🎯 Justification / Κεντράρισμα — J / Ξ (Πάτησε ξανά J για Απόλυτο Κέντρο X+Y)'
+            : '🎯 Justification (Κεντράρισμα & Στοίχιση) — J / Ξ'
+        );
+        return;
+      }
 
       // P / Π -> Pen (Μολύβι / Στυλό) — πάντα γυρνάει σε Χωρίς Γέμισμα ('none')
       if (code === 'KeyP' || key === 'p' || key === 'π') {
@@ -12058,6 +12083,7 @@ export default function App() {
           showToast('ℹ️ Το ελατήριο, η αντίσταση και τα 3D σχήματα δεν έχουν Nodes (μετασχηματίζονται με το Λάσο).');
           return;
         }
+        setShowAlignSubBar(false);
         setActiveTool('direct-node');
         setShowToolSubBar(true);
         if (selectedStrokeIds.length > 0 && !activeNodeStrokeId) {
@@ -12091,16 +12117,20 @@ export default function App() {
     };
   }, [
     viewMode,
+    activeTool,
+    showAlignSubBar,
     editingTextId,
     showMathModal,
     selectedStrokeIds,
     selectedImageId,
+    selectedImageIds,
     selectedTextId,
     activeNodeStrokeId,
     activePage.strokes,
     activePage.images,
     updateActivePage,
     toggleFillStyleToSelection,
+    handleAlignSelected,
     handleUndo,
     handleRedo,
     handleCopySelected,
@@ -14181,7 +14211,7 @@ export default function App() {
                 { id: 'text', title: 'Text (Κείμενο) — T / Τ', icon: Type },
                 { id: 'lasso', title: 'Select (Επιλογή Λάσο) — S / Σ', icon: Lasso },
                 { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', icon: BezierNodesIcon },
-                { id: 'align-objects', title: 'Align (Στοίχιση Αντικειμένων — Κέντρο, Αριστερά, Δεξιά, Πάνω, Κάτω)', icon: AlignObjectsIcon },
+                { id: 'align-objects', title: 'Justification / Κεντράρισμα & Στοίχιση Αντικειμένων — J / Ξ', icon: AlignObjectsIcon },
                 { id: 'tape', title: 'Tape (Ταινία Απόκρυψης)', icon: Bandage },
                 { id: 'laser', title: 'Laser (Κόκκινο Laser) — L / Λ', icon: Radio },
               ].map((tool) => {
@@ -15152,7 +15182,7 @@ export default function App() {
                     <button
                       onClick={() => handleAlignSelected('center-both')}
                       className="flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-2xs transition cursor-pointer"
-                      title="Απόλυτο Κεντράρισμα Οριζόντια & Κατακόρυφα (Dead Center X + Y)"
+                      title="Απόλυτο Κεντράρισμα Οριζόντια & Κατακόρυφα (Dead Center X + Y — J / Ξ)"
                     >
                       <span>🎯 Κέντρο X+Y</span>
                     </button>
