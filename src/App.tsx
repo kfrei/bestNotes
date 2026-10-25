@@ -13034,10 +13034,6 @@ export default function App() {
 
                 {activeTool === 'lasso' && showAlignSubBar && (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
-                      📐 Στοίχιση:
-                    </span>
-
                     {/* Horizontal Alignment: Left / Center X / Right */}
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                       <button
@@ -13126,24 +13122,6 @@ export default function App() {
                     >
                       <span>🎯 Κέντρο X+Y</span>
                     </button>
-
-                    {/* Even Distribution (for 3+ selected objects) */}
-                    <div className="flex items-center gap-1 bg-sky-50 p-0.5 rounded-full border border-sky-200">
-                      <button
-                        onClick={() => handleAlignSelected('distribute-x')}
-                        className="px-2.5 py-0.5 rounded-full hover:bg-white text-[#0066ff] font-semibold transition cursor-pointer"
-                        title="Ισότιμη Κατανομή Οριζόντια (για 3+ επιλεγμένα αντικείμενα)"
-                      >
-                        ↔ Κατανομή X
-                      </button>
-                      <button
-                        onClick={() => handleAlignSelected('distribute-y')}
-                        className="px-2.5 py-0.5 rounded-full hover:bg-white text-[#0066ff] font-semibold transition cursor-pointer"
-                        title="Ισότιμη Κατανομή Κατακόρυφα (για 3+ επιλεγμένα αντικείμενα)"
-                      >
-                        ↕ Κατανομή Y
-                      </button>
-                    </div>
 
                     {/* Quick Group / Ungroup right inside the Align bar */}
                     {(() => {
