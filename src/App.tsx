@@ -357,41 +357,40 @@ const AUTH_FLAG_STORAGE_KEY = 'bestnotes_auth_logged_in';
 const AUTH_UID_STORAGE_KEY = 'bestnotes_auth_uid';
 const COLOR_SLOTS_STORAGE_KEY = 'bestnotes_color_slots_v1';
 
-// Clean 1-Page Blank Notebook & Single Empty "Μαθήματα" Folder (for both Guests and Newly Registered Users)
-const createDefaultBlankNotebooks = (): Notebook[] => [
-  {
-    id: 'nb-blank-1',
-    title: 'Σημείωση 1',
-    folder: '',
-    updatedAt: new Date().toISOString(),
-    coverColor: '#0066ff',
-    pages: [
-      {
-        id: 'page-1',
-        title: 'Σελίδα 1',
-        template: 'grid',
-        orientation: 'portrait',
-        layers: [
-          {
-            id: 'layer-1',
-            name: 'Layer 1',
-            visible: true,
-            locked: false,
-            opacity: 1,
-          },
-        ],
-        strokes: [],
-        images: [],
-        texts: [],
-        tapes: [],
-      },
-    ],
-  },
-];
+// Safe internal fallback object when notebooks array is empty (0 notes)
+const FALLBACK_EMPTY_NOTEBOOK: Notebook = {
+  id: 'nb-empty-fallback',
+  title: 'Σημείωση 1',
+  folder: '',
+  updatedAt: '',
+  coverColor: '#0066ff',
+  pages: [
+    {
+      id: 'page-1',
+      title: 'Σελίδα 1',
+      template: 'grid',
+      orientation: 'portrait',
+      layers: [
+        {
+          id: 'layer-1',
+          name: 'Layer 1',
+          visible: true,
+          locked: false,
+          opacity: 1,
+        },
+      ],
+      strokes: [],
+      images: [],
+      texts: [],
+      tapes: [],
+    },
+  ],
+};
 
-const createDefaultFolders = (): { name: string; updatedAt: string }[] => [
-  { name: 'Μαθήματα', updatedAt: new Date().toISOString() },
-];
+// New users and guests start completely empty: 0 notebooks and 0 folders
+const createDefaultBlankNotebooks = (): Notebook[] => [];
+
+const createDefaultFolders = (): { name: string; updatedAt: string }[] => [];
 const PRESET_COLORS = [
   '#111827',
   '#dc2626',
@@ -533,7 +532,11 @@ export default function App() {
         const saved = localStorage.getItem(`${STORAGE_KEY}_${initialAuthUid}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed)) {
+            return parsed.filter(
+              (n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+            );
+          }
         }
       } catch {
         // ignore
@@ -565,7 +568,7 @@ export default function App() {
       if (initialSession?.viewMode === 'editor' || initialSession?.viewMode === 'library') {
         return initialSession.viewMode;
       }
-      return 'editor';
+      return 'library';
     }
     return 'landing';
   });
@@ -576,12 +579,14 @@ export default function App() {
 
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(() => {
     if (Array.isArray(initialSession?.openNotebookIds) && initialSession.openNotebookIds.length > 0) {
-      return initialSession.openNotebookIds;
+      return initialSession.openNotebookIds.filter((id) => id !== 'nb-blank-1');
     }
-    return ['nb-blank-1'];
+    return [];
   });
   const [activeNotebookId, setActiveNotebookId] = useState<string>(() => {
-    return initialSession?.activeNotebookId || 'nb-blank-1';
+    return initialSession?.activeNotebookId && initialSession.activeNotebookId !== 'nb-blank-1'
+      ? initialSession.activeNotebookId
+      : '';
   });
   const [activePageIndex, setActivePageIndex] = useState<number>(() => {
     return typeof initialSession?.activePageIndex === 'number' ? initialSession.activePageIndex : 0;
@@ -595,14 +600,16 @@ export default function App() {
           localStorage.setItem(AUTH_FLAG_STORAGE_KEY, 'true');
           localStorage.setItem(AUTH_UID_STORAGE_KEY, user.uid);
 
-          // Load this user's saved notebooks (or start with 1 clean blank page if newly registered!)
+          // Load this user's saved notebooks (or start completely empty if newly registered!)
           const savedNbs = localStorage.getItem(`${STORAGE_KEY}_${user.uid}`);
           let loadedNbs: Notebook[] | null = null;
           if (savedNbs) {
             try {
               const parsed = JSON.parse(savedNbs);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                loadedNbs = parsed;
+              if (Array.isArray(parsed)) {
+                loadedNbs = parsed.filter(
+                  (n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+                );
               }
             } catch {
               // ignore
@@ -612,8 +619,8 @@ export default function App() {
           setNotebooks(finalNbs);
 
           // Preserve active notebook & page across Refresh if saved in session storage
-          let restoredActiveId = finalNbs[0].id;
-          let restoredOpenIds = [finalNbs[0].id];
+          let restoredActiveId = finalNbs[0]?.id || '';
+          let restoredOpenIds = finalNbs[0] ? [finalNbs[0].id] : [];
           let restoredPageIdx = 0;
           try {
             const rawSession = localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${user.uid}`);
@@ -640,11 +647,15 @@ export default function App() {
           // Also load from high-capacity IndexedDB (which never suffers from localStorage 5MB limit!)
           void loadNotebooksFromIndexedDB(user.uid).then((idbNbs) => {
             if (!idbNbs || idbNbs.length === 0) return;
+            const cleanIdb = idbNbs.filter(
+              (n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
+            );
+            if (cleanIdb.length === 0) return;
             setNotebooks((prev) => {
               const map = new Map<string, Notebook>();
               for (const n of prev) map.set(n.id, n);
               let changed = false;
-              for (const idbNb of idbNbs) {
+              for (const idbNb of cleanIdb) {
                 const cur = map.get(idbNb.id);
                 if (!cur) {
                   map.set(idbNb.id, idbNb);
@@ -664,7 +675,7 @@ export default function App() {
             });
           });
 
-          // Load this user's saved folders (or start with 1 empty folder "Μαθήματα" if newly registered!)
+          // Load this user's saved folders (or start with 0 folders if newly registered!)
           const savedFolders = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${user.uid}`);
           let loadedFolders: { name: string; updatedAt: string }[] | null = null;
           if (savedFolders) {
@@ -694,16 +705,18 @@ export default function App() {
 
           // If user is already logged in on page load/refresh and didn't explicitly navigate to Landing Page, keep them in the app!
           if (!explicitLandingNavRef.current) {
-            setViewMode((prev) => (prev === 'landing' ? 'editor' : prev));
+            setViewMode((prev) =>
+              prev === 'landing' ? (finalNbs.length > 0 ? 'editor' : 'library') : prev
+            );
           }
         } else {
           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
           localStorage.removeItem(AUTH_UID_STORAGE_KEY);
-          // Guest mode: strictly ephemeral 1 blank page + 1 empty "Μαθήματα" folder
+          // Guest mode: strictly ephemeral empty library (0 notes, 0 folders)
           const freshBlank = createDefaultBlankNotebooks();
           setNotebooks(freshBlank);
-          setOpenNotebookIds([freshBlank[0].id]);
-          setActiveNotebookId(freshBlank[0].id);
+          setOpenNotebookIds([]);
+          setActiveNotebookId('');
           setActivePageIndex(0);
           setCustomFolders(createDefaultFolders());
           setShapeLibrary([]);
@@ -1223,7 +1236,8 @@ export default function App() {
   const fileInputPdfOrDocRef = useRef<HTMLInputElement | null>(null);
   const pdfImportModeRef = useRef<'new-notebook' | 'insert-pages'>('insert-pages');
 
-  const activeNotebook = notebooks.find((n) => n.id === activeNotebookId) || notebooks[0];
+  const activeNotebook =
+    notebooks.find((n) => n.id === activeNotebookId) || notebooks[0] || FALLBACK_EMPTY_NOTEBOOK;
   const activePage =
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
   const pageWidth = getPageLogicalWidth(activePage);
@@ -15394,11 +15408,15 @@ export default function App() {
         currentUser={currentUser}
         onEnterApp={() => {
           explicitLandingNavRef.current = false;
-          if (openNotebookIds.length === 0 && notebooks.length > 0) {
-            setOpenNotebookIds([notebooks[0].id]);
-            setActiveNotebookId(notebooks[0].id);
+          if (notebooks.length > 0) {
+            if (openNotebookIds.length === 0) {
+              setOpenNotebookIds([notebooks[0].id]);
+              setActiveNotebookId(notebooks[0].id);
+            }
+            setViewMode('editor');
+          } else {
+            setViewMode('library');
           }
-          setViewMode('editor');
         }}
         onOpenAuthModal={(initialMode) => {
           setAuthMode(initialMode);
@@ -15474,7 +15492,7 @@ export default function App() {
           </button>
 
           {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
-          {viewMode === 'editor' && (
+          {viewMode === 'editor' && notebooks.length > 0 && (
             <button
               data-popover-trigger="thumbnails"
               onClick={() => setShowThumbnailsModal((v) => !v)}
@@ -15587,7 +15605,7 @@ export default function App() {
 
         {/* Right: Undo / Redo, Page Switcher, Insert/Delete Page, Drive Sync & Settings */}
         <div className="flex items-center gap-1.5 pb-1.5">
-          {viewMode === 'editor' && (
+          {viewMode === 'editor' && notebooks.length > 0 && (
             <>
               {/* Undo / Redo just like Goodnotes top-right */}
               <button
@@ -15937,8 +15955,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* IF IN LIBRARY VIEW (GOODNOTES 6 LIGHT FOLDERS & NOTES GRID / LIST) */}
-      {viewMode === 'library' ? (
+      {/* IF IN LIBRARY VIEW (OR IF USER HAS 0 NOTEBOOKS YET) */}
+      {viewMode === 'library' || notebooks.length === 0 ? (
         <div
           data-library-scroll-container="true"
           className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]"
@@ -16131,33 +16149,11 @@ export default function App() {
                 }
                 const remaining = notebooks.filter((n) => n.id !== nb.id);
                 if (remaining.length === 0) {
-                  const fallbackNb: Notebook = {
-                    id: `nb-${Date.now()}`,
-                    title: 'Σημείωση 1',
-                    folder: activeLibraryFolder || '',
-                    coverColor: '#0284c7',
-                    updatedAt: new Date().toISOString(),
-                    sourceFormat: '.bestnotes',
-                    pages: [
-                      {
-                        id: `p-${Date.now()}`,
-                        title: 'Σελίδα 1',
-                        template: 'grid',
-                        orientation: 'portrait',
-                        layers: [
-                          { id: 'layer-1', name: 'Κύριο Επίπεδο', visible: true, locked: false, opacity: 1 },
-                        ],
-                        strokes: [],
-                        texts: [],
-                        images: [],
-                        tapes: [],
-                      },
-                    ],
-                  };
-                  setNotebooks([fallbackNb]);
-                  setOpenNotebookIds([fallbackNb.id]);
-                  setActiveNotebookId(fallbackNb.id);
+                  setNotebooks([]);
+                  setOpenNotebookIds([]);
+                  setActiveNotebookId('');
                   setActivePageIndex(0);
+                  setViewMode('library');
                 } else {
                   setNotebooks(remaining);
                   const nextOpen = openNotebookIds.filter((id) => id !== nb.id);
