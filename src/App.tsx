@@ -12508,8 +12508,7 @@ export default function App() {
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
                       title="Αποθήκευση του επιλεγμένου σχήματος στη Βιβλιοθήκη Σχημάτων"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>(+) Βιβλιοθήκη</span>
+                      <span>+Βιβλιοθήκη</span>
                     </button>
 
                     {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
