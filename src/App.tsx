@@ -1278,9 +1278,9 @@ export default function App() {
         if (addedList.length > 0) {
           setIsDirty(true);
           setSyncStatus('dirty');
-          showToast(`🏷️ Auto-Tags: ${addedList.map((t) => `#${t}`).join(', ')}`);
+          showToast(`🏷️ Auto-Tags: ${addedList.join(', ')}`);
         } else if (!silent) {
-          showToast(`✅ Τα βασικά #tags υπάρχουν ήδη (${aiTags.map((t) => `#${t}`).join(', ')})!`);
+          showToast(`✅ Τα βασικά tags υπάρχουν ήδη (${aiTags.join(', ')})!`);
         }
       } finally {
         setIsAutoTaggingNbId((prev) => (prev === targetNb.id ? null : prev));
@@ -11547,15 +11547,15 @@ export default function App() {
                                     return (
                                       <span
                                         key={tag}
-                                        onClick={() => setLibrarySearchQuery(`#${tag}`)}
+                                        onClick={() => setLibrarySearchQuery(tag)}
                                         className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer ${
                                           isMatched
                                             ? 'bg-emerald-500 text-white shadow-2xs'
                                             : 'bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200/80'
                                         }`}
-                                        title={`Φιλτράρισμα με #${tag}`}
+                                        title={`Φιλτράρισμα με ${tag}`}
                                       >
-                                        <span>#{tag}</span>
+                                        <span>{tag}</span>
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -11566,7 +11566,7 @@ export default function App() {
                                               ? 'text-white/80 hover:text-white'
                                               : 'text-sky-400 hover:text-rose-600'
                                           } cursor-pointer`}
-                                          title={`Αφαίρεση #${tag}`}
+                                          title={`Αφαίρεση ${tag}`}
                                         >
                                           ×
                                         </button>
@@ -11787,7 +11787,7 @@ export default function App() {
                                       key={tag}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setLibrarySearchQuery(`#${tag}`);
+                                        setLibrarySearchQuery(tag);
                                       }}
                                       className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer ${
                                         isMatched
@@ -11795,7 +11795,7 @@ export default function App() {
                                           : 'bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200/80'
                                       }`}
                                     >
-                                      <span>#{tag}</span>
+                                      <span>{tag}</span>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -13569,9 +13569,9 @@ export default function App() {
                                         setShapeLibSearchQuery(tag);
                                       }}
                                       className="px-1.5 py-0.5 rounded bg-white hover:bg-emerald-100 text-emerald-700 border border-slate-200/90 text-[9px] font-medium transition cursor-pointer"
-                                      title={`Φιλτράρισμα με #${tag}`}
+                                      title={`Φιλτράρισμα με ${tag}`}
                                     >
-                                      #{tag}
+                                      {tag}
                                     </button>
                                   ))}
                                 </div>
