@@ -1,0 +1,132 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// Collection: users
+// Document ID: {userId} (must match authenticated user's UID)
+// Fields:
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of last sync
+//   - customFoldersJson: string (optional, 0..1000000 chars) - serialized custom folders JSON
+//   - shapeLibraryJson: string (optional, 0..1000000 chars) - serialized shape library JSON
+//   - deviceId: string (optional, 0..256 chars) - originating client device identifier
+//
+// Subcollection: users/{userId}/notebooks
+// Document ID: {notebookId} (must match data.id, immutable)
+// Fields:
+//   - id: string (required, 1..256 chars, immutable) - unique notebook identifier matching {notebookId}
+//   - title: string (required, 0..1000 chars) - notebook display title
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of last modification
+//   - dataJson: string (optional, 0..1000000 chars) - serialized notebook content JSON
+//   - deleted: bool (optional) - soft-deletion tombstone flag
+//   - deviceId: string (optional, 0..256 chars) - originating client device identifier
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user owns the resource (for user-owned documents and subcollections)
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Validate required fields exist on the resulting document
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the document contains only the allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate required string field type and length bounds
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // Validate optional string field (if present, must be string and within length bounds)
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() >= minLen &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
+    // Validate optional boolean field (if present, must be bool)
+    function isValidOptionalBool(field) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is bool);
+    }
+
+    // Validate that immutable fields have not been modified during an update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators (Used in BOTH create and update rules)
+    // ===============================================================
+
+    function isValidUserDoc(data) {
+      return data.keys().hasOnly(['customFoldersJson', 'shapeLibraryJson', 'updatedAt', 'deviceId']) &&
+        hasRequiredFields(['updatedAt']) &&
+        validStringLength('updatedAt', 1, 100) &&
+        isValidOptionalString('customFoldersJson', 0, 1000000) &&
+        isValidOptionalString('shapeLibraryJson', 0, 1000000) &&
+        isValidOptionalString('deviceId', 0, 256);
+    }
+
+    function isValidNotebookDoc(data, notebookId) {
+      return data.keys().hasOnly(['id', 'title', 'updatedAt', 'dataJson', 'deleted', 'deviceId']) &&
+        hasRequiredFields(['id', 'title', 'updatedAt']) &&
+        validStringLength('id', 1, 256) &&
+        data.id == notebookId &&
+        validStringLength('title', 0, 1000) &&
+        validStringLength('updatedAt', 1, 100) &&
+        isValidOptionalString('dataJson', 0, 1000000) &&
+        isValidOptionalBool('deleted') &&
+        isValidOptionalString('deviceId', 0, 256);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserDoc(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserDoc(request.resource.data);
+      allow delete: if isOwner(userId);
+
+      match /notebooks/{notebookId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidNotebookDoc(request.resource.data, notebookId);
+        allow update: if isOwner(userId) &&
+          isValidNotebookDoc(request.resource.data, notebookId) &&
+          areImmutableFieldsUnchanged(['id']);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

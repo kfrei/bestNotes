@@ -10,6 +10,14 @@ import {
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  collection,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   projectId: 'bestnotes-2026',
@@ -24,6 +32,7 @@ export const firebaseApp = initializeApp(firebaseConfig);
 export const driveFirebaseApp = initializeApp(firebaseConfig, 'bestnotes-drive-oauth');
 export const auth = getAuth(firebaseApp);
 export const driveAuth = getAuth(driveFirebaseApp);
+export const db = getFirestore(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -56,5 +65,10 @@ export {
   updateProfile,
   signOut,
   onAuthStateChanged,
+  doc,
+  collection,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
   type User,
 };

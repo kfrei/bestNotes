@@ -58,7 +58,18 @@ import {
   ArrowUpDown,
   Share2,
 } from 'lucide-react';
-import { auth, onAuthStateChanged, signOut, signInToGoogleDrive, type User } from './firebase';
+import {
+  auth,
+  db,
+  doc,
+  collection,
+  setDoc,
+  onSnapshot,
+  onAuthStateChanged,
+  signOut,
+  signInToGoogleDrive,
+  type User,
+} from './firebase';
 import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
 import { syncNotebookPdfToGoogleDrive, exportNotebookToPdfBlob } from './utils/googleDrivePdfSync';
 import {
@@ -110,6 +121,41 @@ function normalizeGreekText(str: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ς/g, 'σ');
+}
+
+function getNotebookContentScore(nb: Notebook): number {
+  return (nb.pages || []).reduce(
+    (acc, p) =>
+      acc +
+      (p.strokes?.length || 0) +
+      (p.images?.length || 0) * 5 +
+      (p.texts?.length || 0) * 2 +
+      (p.tapes?.length || 0) * 2 +
+      (p.backgroundDataUrl ? 10 : 0),
+    0
+  );
+}
+
+function serializeNotebookForFirestore(nb: Notebook): string {
+  let raw = JSON.stringify(nb);
+  if (raw.length > 940000) {
+    // Strip only oversized >600KB inline base64 images/backgrounds so document fits Firestore 1MB limit
+    const compactNb: Notebook = {
+      ...nb,
+      pages: (nb.pages || []).map((p) => ({
+        ...p,
+        backgroundDataUrl:
+          p.backgroundDataUrl && p.backgroundDataUrl.length > 600000 ? undefined : p.backgroundDataUrl,
+        images: (p.images || []).map((im) => ({
+          ...im,
+          originalDataUrl:
+            im.originalDataUrl && im.originalDataUrl.length > 350000 ? undefined : im.originalDataUrl,
+        })),
+      })),
+    };
+    raw = JSON.stringify(compactNb);
+  }
+  return raw;
 }
 
 const STORAGE_KEY = 'bestnotes_notebooks_v2';
@@ -822,28 +868,294 @@ export default function App() {
     [showToast]
   );
 
-  // DEBOUNCED LocalStorage Save (runs 2.5s AFTER user stops writing, ONLY for logged-in users — Guests are strictly temporary!)
+  // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
+  const deviceIdRef = useRef<string>(`dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const lastSyncedJsonMapRef = useRef<Map<string, string>>(new Map());
+  const lastSyncedMetaRef = useRef<{ folders: string; shapeLib: string }>({ folders: '', shapeLib: '' });
+  const notebooksRef = useRef<Notebook[]>(notebooks);
+  notebooksRef.current = notebooks;
+
+  // 1. Real-Time Cloud Firestore Listener for Logged-In Users (syncs notebooks, folders & shapeLibrary across Mac Mini & iPad!)
+  useEffect(() => {
+    if (!currentUser) {
+      lastSyncedJsonMapRef.current.clear();
+      return;
+    }
+
+    const uid = currentUser.uid;
+    const nbsColRef = collection(db, 'users', uid, 'notebooks');
+    const userDocRef = doc(db, 'users', uid);
+
+    const pushNotebookToCloud = (nb: Notebook) => {
+      try {
+        const dataJson = serializeNotebookForFirestore(nb);
+        if (dataJson.length > 990000) return;
+        lastSyncedJsonMapRef.current.set(nb.id, dataJson);
+        void setDoc(
+          doc(db, 'users', uid, 'notebooks', nb.id),
+          {
+            id: nb.id,
+            title: (nb.title || 'Σημείωση').slice(0, 900),
+            updatedAt: nb.updatedAt || new Date().toISOString(),
+            dataJson,
+            deleted: false,
+            deviceId: deviceIdRef.current,
+          },
+          { merge: true }
+        );
+      } catch {
+        // ignore
+      }
+    };
+
+    const unsubNotebooks = onSnapshot(
+      nbsColRef,
+      (snapshot) => {
+        if (snapshot.empty) {
+          // Cloud has no notebooks yet for this user -> upload all current local notebooks immediately!
+          for (const localNb of notebooksRef.current) {
+            pushNotebookToCloud(localNb);
+          }
+          return;
+        }
+
+        const remoteMap = new Map<
+          string,
+          { nb?: Notebook; deleted?: boolean; deviceId?: string; dataJson?: string; updatedAt?: string }
+        >();
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (!data || typeof data.id !== 'string') return;
+          if (data.deleted === true) {
+            remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
+            return;
+          }
+          if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
+            try {
+              const parsed = JSON.parse(data.dataJson) as Notebook;
+              if (parsed && parsed.id && Array.isArray(parsed.pages)) {
+                remoteMap.set(parsed.id, {
+                  nb: parsed,
+                  deleted: false,
+                  deviceId: data.deviceId,
+                  dataJson: data.dataJson,
+                  updatedAt: data.updatedAt || parsed.updatedAt,
+                });
+              }
+            } catch {
+              // ignore malformed doc
+            }
+          }
+        });
+
+        const notebooksToPushBack: Notebook[] = [];
+
+        setNotebooks((prevLocal) => {
+          const mergedMap = new Map<string, Notebook>();
+          for (const localNb of prevLocal) {
+            mergedMap.set(localNb.id, localNb);
+          }
+
+          let anyChanged = false;
+
+          // Process remote notebooks
+          for (const [id, rem] of remoteMap.entries()) {
+            const localNb = mergedMap.get(id);
+            if (rem.deleted) {
+              if (localNb) {
+                mergedMap.delete(id);
+                lastSyncedJsonMapRef.current.delete(id);
+                anyChanged = true;
+              }
+              continue;
+            }
+
+            if (!rem.nb || !rem.dataJson) continue;
+
+            if (!localNb) {
+              mergedMap.set(id, rem.nb);
+              lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+              anyChanged = true;
+              continue;
+            }
+
+            // Both local and remote have this notebook ID (e.g. 'nb-blank-1' on Mac Mini and iPad)
+            const localJson = serializeNotebookForFirestore(localNb);
+            if (localJson === rem.dataJson) {
+              lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+              continue;
+            }
+
+            const localScore = getNotebookContentScore(localNb);
+            const remoteScore = getNotebookContentScore(rem.nb);
+
+            // Never let an empty default notebook from a 2nd device overwrite a non-empty notebook!
+            if (localScore > 0 && remoteScore === 0) {
+              notebooksToPushBack.push(localNb);
+              continue;
+            }
+
+            // If remote has content and local is empty, OR if this update came from another device
+            if (
+              (remoteScore > 0 && localScore === 0) ||
+              rem.deviceId !== deviceIdRef.current ||
+              (rem.updatedAt || '') > (localNb.updatedAt || '')
+            ) {
+              mergedMap.set(id, rem.nb);
+              lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+              anyChanged = true;
+            }
+          }
+
+          // Also check if any local notebook with content is missing from Firestore altogether
+          for (const localNb of prevLocal) {
+            if (!remoteMap.has(localNb.id)) {
+              notebooksToPushBack.push(localNb);
+            }
+          }
+
+          if (!anyChanged) return prevLocal;
+          const nextList = Array.from(mergedMap.values());
+          if (nextList.length === 0) {
+            return createDefaultBlankNotebooks();
+          }
+          try {
+            localStorage.setItem(`${STORAGE_KEY}_${uid}`, JSON.stringify(nextList));
+          } catch {
+            // ignore
+          }
+          return nextList;
+        });
+
+        for (const nbToPush of notebooksToPushBack) {
+          pushNotebookToCloud(nbToPush);
+        }
+      },
+      () => {
+        // Ignore transient offline errors
+      }
+    );
+
+    const unsubUserDoc = onSnapshot(
+      userDocRef,
+      (docSnap) => {
+        if (!docSnap.exists()) return;
+        const data = docSnap.data();
+        if (!data || data.deviceId === deviceIdRef.current) return;
+
+        if (
+          typeof data.customFoldersJson === 'string' &&
+          data.customFoldersJson !== lastSyncedMetaRef.current.folders
+        ) {
+          try {
+            const parsedF = JSON.parse(data.customFoldersJson);
+            if (Array.isArray(parsedF)) {
+              lastSyncedMetaRef.current.folders = data.customFoldersJson;
+              setCustomFolders(parsedF);
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (
+          typeof data.shapeLibraryJson === 'string' &&
+          data.shapeLibraryJson !== lastSyncedMetaRef.current.shapeLib
+        ) {
+          try {
+            const parsedL = JSON.parse(data.shapeLibraryJson);
+            if (Array.isArray(parsedL)) {
+              lastSyncedMetaRef.current.shapeLib = data.shapeLibraryJson;
+              setShapeLibrary(parsedL);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      },
+      () => {
+        // Ignore transient offline errors
+      }
+    );
+
+    return () => {
+      unsubNotebooks();
+      unsubUserDoc();
+    };
+  }, [currentUser]);
+
+  // 2. Debounced Save of Notebooks to LocalStorage (500ms) + Cloud Firestore (650ms)
   useEffect(() => {
     if (!currentUser) return;
+    const uid = currentUser.uid;
     const timer = window.setTimeout(() => {
       try {
-        localStorage.setItem(`${STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(notebooks));
+        localStorage.setItem(`${STORAGE_KEY}_${uid}`, JSON.stringify(notebooks));
       } catch {
         // ignore quota
       }
-    }, 2500);
+
+      for (const nb of notebooks) {
+        try {
+          const dataJson = serializeNotebookForFirestore(nb);
+          if (dataJson.length > 990000) continue;
+          if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) continue;
+          lastSyncedJsonMapRef.current.set(nb.id, dataJson);
+          void setDoc(
+            doc(db, 'users', uid, 'notebooks', nb.id),
+            {
+              id: nb.id,
+              title: (nb.title || 'Σημείωση').slice(0, 900),
+              updatedAt: nb.updatedAt || new Date().toISOString(),
+              dataJson,
+              deleted: false,
+              deviceId: deviceIdRef.current,
+            },
+            { merge: true }
+          );
+        } catch {
+          // ignore
+        }
+      }
+    }, 650);
     return () => window.clearTimeout(timer);
   }, [currentUser, notebooks]);
 
-  // Persist customFolders ONLY for logged-in users (Guests are strictly temporary!)
+  // 3. Persist customFolders & shapeLibrary to LocalStorage + Cloud Firestore
   useEffect(() => {
     if (!currentUser) return;
+    const uid = currentUser.uid;
+    const foldersStr = JSON.stringify(customFolders);
+    const shapeLibStr = JSON.stringify(shapeLibrary);
     try {
-      localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(customFolders));
+      localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, foldersStr);
     } catch {
       // ignore quota
     }
-  }, [currentUser, customFolders]);
+    if (
+      foldersStr === lastSyncedMetaRef.current.folders &&
+      shapeLibStr === lastSyncedMetaRef.current.shapeLib
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      lastSyncedMetaRef.current = { folders: foldersStr, shapeLib: shapeLibStr };
+      if (foldersStr.length < 900000 && shapeLibStr.length < 900000) {
+        void setDoc(
+          doc(db, 'users', uid),
+          {
+            customFoldersJson: foldersStr,
+            shapeLibraryJson: shapeLibStr,
+            updatedAt: new Date().toISOString(),
+            deviceId: deviceIdRef.current,
+          },
+          { merge: true }
+        );
+      }
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [currentUser, customFolders, shapeLibrary]);
 
   const performDrivePdfSync = useCallback(
     async (showFeedback = true, overrideToken?: string, overrideNotebook?: Notebook) => {
@@ -8109,6 +8421,20 @@ export default function App() {
               };
 
               const deleteNotebookById = (nb: Notebook) => {
+                if (currentUser) {
+                  lastSyncedJsonMapRef.current.delete(nb.id);
+                  void setDoc(
+                    doc(db, 'users', currentUser.uid, 'notebooks', nb.id),
+                    {
+                      id: nb.id,
+                      title: (nb.title || 'Σημείωση').slice(0, 900),
+                      updatedAt: new Date().toISOString(),
+                      deleted: true,
+                      deviceId: deviceIdRef.current,
+                    },
+                    { merge: true }
+                  );
+                }
                 const remaining = notebooks.filter((n) => n.id !== nb.id);
                 if (remaining.length === 0) {
                   const fallbackNb: Notebook = {
