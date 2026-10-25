@@ -2810,7 +2810,7 @@ async function downscaleImageDataUrlForVision(dataUrl: string): Promise<{ mimeTy
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const maxDim = 480;
+      const maxDim = 720;
       const scale = Math.min(1, maxDim / Math.max(1, img.width, img.height));
       const w = Math.max(1, Math.round(img.width * scale));
       const h = Math.max(1, Math.round(img.height * scale));
@@ -2826,7 +2826,7 @@ async function downscaleImageDataUrlForVision(dataUrl: string): Promise<{ mimeTy
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
-      const jpegUrl = canvas.toDataURL('image/jpeg', 0.78);
+      const jpegUrl = canvas.toDataURL('image/jpeg', 0.82);
       const m = jpegUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
       if (!m) {
         resolve(null);
@@ -2837,6 +2837,71 @@ async function downscaleImageDataUrlForVision(dataUrl: string): Promise<{ mimeTy
     img.onerror = () => resolve(null);
     img.src = dataUrl;
   });
+}
+
+/**
+ * Renders handwritten strokes (`page.strokes`) onto a crisp white offscreen canvas
+ * so Gemini Vision can read handwritten Greek notes, equations, and diagrams!
+ */
+export function renderPageStrokesToSnapshotDataUrl(strokes: StrokeObject[]): string | null {
+  if (!strokes || strokes.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const s of strokes) {
+    for (const pt of s.points || []) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+  const pad = 36;
+  minX -= pad;
+  minY -= pad;
+  maxX += pad;
+  maxY += pad;
+  const rawW = Math.max(160, maxX - minX);
+  const rawH = Math.max(120, maxY - minY);
+  const maxDim = 800;
+  const scale = Math.min(1.5, maxDim / Math.max(rawW, rawH));
+  const w = Math.max(160, Math.round(rawW * scale));
+  const h = Math.max(120, Math.round(rawH * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.translate(-minX, -minY);
+
+  for (const s of strokes) {
+    const pts = s.points || [];
+    if (pts.length === 0) continue;
+    ctx.save();
+    ctx.strokeStyle = s.color || '#0f172a';
+    ctx.lineWidth = Math.max(2, s.width || 3);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = s.opacity ?? (s.tool === 'highlighter' ? 0.35 : 1);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+  return canvas.toDataURL('image/jpeg', 0.85);
 }
 
 let cachedWorkingVisionModel: string | null = null;
@@ -2860,9 +2925,11 @@ export async function generateSmartGreekTagsFromImages(
 
   const parts: any[] = [
     {
-      text: `Δες το περιεχόμενο της σχολικής σημείωσης με τίτλο "${notebookTitle}"${
+      text: `Δες το περιεχόμενο της σχολικής σημείωσης${
+        !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim()) ? ` με τίτλο "${notebookTitle}"` : ''
+      }${
         pageTexts.length > 0 ? ` και κείμενα: "${pageTexts.join(' | ').slice(0, 400)}"` : ''
-      }. Διάβασε το ελληνικό κείμενο και τα σχήματα μέσα στις εικόνες και επέστρεψε ΑΥΣΤΗΡΑ ένα JSON array με τις 4 πιο σημαντικές ελληνικές λέξεις-κλειδιά (tags) στην ονομαστική ενικού (π.χ. ["φωτοσύνθεση", "γλυκόζη", "οξυγόνο", "φως"] ή ["βροχή", "νερό", "εξάτμιση", "υδρατμός"]). Μόνο 3 έως 4 ουσιαστικές ελληνικές λέξεις!`,
+      }. Διάβασε προσεκτικά το ΕΛΛΗΝΙΚΟ ΧΕΙΡΟΓΡΑΦΟ ή τυπωμένο κείμενο, τους τύπους και τα σχήματα μέσα στις εικόνες και επέστρεψε ΑΥΣΤΗΡΑ ένα JSON array με τις 3 έως 4 πιο σημαντικές ελληνικές λέξεις-κλειδιά (tags) στην ονομαστική ενικού (π.χ. ["νεύτωνας", "ισορροπία", "νόμος", "δύναμη"] ή ["φωτοσύνθεση", "γλυκόζη", "οξυγόνο", "φως"]). Μόνο 3 έως 4 ουσιαστικές ελληνικές λέξεις!`,
     },
   ];
 

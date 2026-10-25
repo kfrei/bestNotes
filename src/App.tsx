@@ -117,6 +117,7 @@ import {
   matchesNotebookSmartSearch,
   normalizeGreekSearchText,
   generateSmartGreekTagsFromImages,
+  renderPageStrokesToSnapshotDataUrl,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -1148,6 +1149,8 @@ export default function App() {
 
   const [isAutoTaggingNbId, setIsAutoTaggingNbId] = useState<string | null>(null);
 
+  const autoTaggedSigSetRef = useRef<Set<string>>(new Set());
+
   const triggerSmartAutoTagsForNotebook = useCallback(
     async (targetNb: Notebook, extraImageDataUrls: string[] = [], silent = false) => {
       const collectedUrls: string[] = [...extraImageDataUrls];
@@ -1160,6 +1163,12 @@ export default function App() {
             collectedUrls.push(im.dataUrl);
           }
         }
+        if (p.strokes && p.strokes.length > 0) {
+          const strokeSnap = renderPageStrokesToSnapshotDataUrl(p.strokes);
+          if (strokeSnap) {
+            collectedUrls.push(strokeSnap);
+          }
+        }
       }
       const uniqueUrls = Array.from(new Set(collectedUrls)).slice(0, 4);
       const pageTexts = (targetNb.pages || []).flatMap((p) =>
@@ -1168,14 +1177,14 @@ export default function App() {
 
       if (uniqueUrls.length === 0 && pageTexts.length === 0) {
         if (!silent) {
-          showToast('ℹ️ Η σημείωση δεν περιέχει εικόνες ή κείμενο για αυτόματη εξαγωγή tags!');
+          showToast('ℹ️ Η σημείωση δεν περιέχει χειρόγραφα, εικόνες ή κείμενο για εξαγωγή tags!');
         }
         return;
       }
 
       setIsAutoTaggingNbId(targetNb.id);
       if (!silent) {
-        showToast('✨ Ανάλυση εικόνων & κειμένου για αυτόματη εξαγωγή 4 βασικών #tags...');
+        showToast('✨ Ανάλυση χειρόγραφων, εικόνων & κειμένου για αυτόματη εξαγωγή 4 βασικών #tags...');
       }
       try {
         const aiTags = await generateSmartGreekTagsFromImages(
@@ -1185,7 +1194,7 @@ export default function App() {
         );
         if (aiTags.length === 0) {
           if (!silent) {
-            showToast('ℹ️ Δεν εντοπίστηκαν επιπλέον λέξεις-κλειδιά στην εικόνα.');
+            showToast('ℹ️ Δεν εντοπίστηκαν επιπλέον λέξεις-κλειδιά στη σημείωση.');
           }
           return;
         }
@@ -1223,6 +1232,45 @@ export default function App() {
     },
     [showToast]
   );
+
+  // Automatically extract #tags for untagged notebooks that contain handwritten strokes, images, or text
+  useEffect(() => {
+    const untaggedCandidate = notebooks.find((nb) => {
+      if (nb.tags && nb.tags.length > 0) return false;
+      const strokeCount = (nb.pages || []).reduce((acc, p) => acc + (p.strokes?.length || 0), 0);
+      const imageCount = (nb.pages || []).reduce(
+        (acc, p) => acc + (p.images?.length || 0) + (p.backgroundDataUrl ? 1 : 0),
+        0
+      );
+      const textCount = (nb.pages || []).reduce((acc, p) => acc + (p.texts?.length || 0), 0);
+      if (strokeCount < 3 && imageCount === 0 && textCount === 0) return false;
+      const sig = `${nb.id}:${strokeCount}:${imageCount}:${textCount}`;
+      return !autoTaggedSigSetRef.current.has(sig);
+    });
+    if (!untaggedCandidate) return;
+
+    const strokeCount = (untaggedCandidate.pages || []).reduce(
+      (acc, p) => acc + (p.strokes?.length || 0),
+      0
+    );
+    const imageCount = (untaggedCandidate.pages || []).reduce(
+      (acc, p) => acc + (p.images?.length || 0) + (p.backgroundDataUrl ? 1 : 0),
+      0
+    );
+    const textCount = (untaggedCandidate.pages || []).reduce(
+      (acc, p) => acc + (p.texts?.length || 0),
+      0
+    );
+    const sig = `${untaggedCandidate.id}:${strokeCount}:${imageCount}:${textCount}`;
+
+    const delayMs = viewMode === 'library' ? 600 : 3500;
+    const timer = window.setTimeout(() => {
+      autoTaggedSigSetRef.current.add(sig);
+      void triggerSmartAutoTagsForNotebook(untaggedCandidate, [], true);
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [notebooks, viewMode, triggerSmartAutoTagsForNotebook]);
 
   const changeNotebookFolder = useCallback(
     (nbId: string, nextFolder: string) => {
@@ -11302,13 +11350,13 @@ export default function App() {
                                         setLibraryTagEditorNbId(null);
                                       }}
                                       className="w-full flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold text-emerald-700 disabled:opacity-50 transition cursor-pointer"
-                                      title="Αυτόματη εξαγωγή 3–4 βασικών #tags από τις εικόνες της σημείωσης"
+                                      title="Αυτόματη εξαγωγή 3–4 βασικών #tags από τα χειρόγραφα και τις εικόνες της σημείωσης"
                                     >
                                       <Sparkles className="w-3 h-3" />
                                       <span>
                                         {isAutoTaggingNbId === nb.id
-                                          ? 'Ανάλυση εικόνων...'
-                                          : '✨ Auto-Tags από Εικόνες'}
+                                          ? 'Ανάλυση σημείωσης...'
+                                          : '✨ Auto-Tags (Χειρόγραφα & Εικόνες)'}
                                       </span>
                                     </button>
                                   </div>
