@@ -9845,7 +9845,6 @@ export default function App() {
           setSelectedStrokeIds([]);
           setSelectedImageId(null);
           setDraggingNodeIdx(null);
-          setActiveTool('pen');
         }
       }
       return;
@@ -10348,18 +10347,10 @@ export default function App() {
         return;
       }
 
-      const hadSelection =
-        selectedStrokeIds.length > 0 ||
-        curImgIds.length > 0 ||
-        selectedImageId !== null ||
-        activeNodeStrokeId !== null;
       setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
-      if (hadSelection) {
-        setActiveTool('pen');
-      }
       return;
     }
 
