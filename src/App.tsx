@@ -12513,30 +12513,41 @@ export default function App() {
   const getTextFontCss = (fontFamily?: TextFontStyle): React.CSSProperties => {
     switch (fontFamily) {
       case 'calligraphic':
-        // Slanted Greek calligraphic cursive pen matching "Η μάζα είναι η ποσότητα ύλης που περιέχει ένα σώμα..."
+        // Custom-built ExplainBoardsHand.otf matching the exact notebook lettering of "ΣΗΜΑΝΤΙΚΑ ΣΗΜΕΙΑ: 1 Η μάζα μας λέει..."
         return {
-          fontFamily: "'Alegreya Sans', 'GFS Neohellenic', cursive",
-          fontStyle: 'italic',
-          letterSpacing: '0.005em',
-        };
-      case 'neohellenic':
-        // Greek Font Society (Εταιρεία Ελληνικών Τυπογραφικών Στοιχείων) flowing cursive script
-        return {
-          fontFamily: "'GFS Neohellenic', 'Alegreya Sans', cursive",
-          fontStyle: 'italic',
-          letterSpacing: '0.01em',
-        };
-      case 'handwritten':
-        return {
-          fontFamily: "'Playpen Sans', 'Mynerve', cursive",
-          fontStyle: 'oblique 8deg',
+          fontFamily: "'ExplainBoardsHand', 'Alegreya Sans', cursive",
+          fontStyle: 'normal',
           letterSpacing: '0em',
+          WebkitTextStroke: '0.25px currentColor',
         };
       case 'marker':
+        // Custom-built ExplainBoardsPen.otf: slanted, condensed human ballpoint/rollerball pen Greek handwriting
         return {
-          fontFamily: "'Mynerve', 'Arima', cursive",
+          fontFamily: "'ExplainBoardsPen', 'Mynerve', cursive",
           fontStyle: 'normal',
-          letterSpacing: '0.01em',
+          letterSpacing: '0em',
+          WebkitTextStroke: '0.45px currentColor',
+        };
+      case 'mansalva':
+        // Natural human felt-tip marker Greek handwriting (Mansalva condensed & slanted)
+        return {
+          fontFamily: "'Mansalva', 'ExplainBoardsPen', cursive",
+          fontStyle: 'oblique 6deg',
+          letterSpacing: '-0.015em',
+        };
+      case 'handwritten':
+        // School notebook rounded Greek handwriting (Playpen Sans slanted)
+        return {
+          fontFamily: "'Playpen Sans', 'ExplainBoardsHand', cursive",
+          fontStyle: 'oblique 7deg',
+          letterSpacing: '-0.01em',
+        };
+      case 'neohellenic':
+        // Greek Font Society (GFS Neohellenic Italic / Ysabeau Infant Italic) flowing cursive script
+        return {
+          fontFamily: "'GFS Neohellenic', 'Ysabeau Infant', cursive",
+          fontStyle: 'italic',
+          letterSpacing: '0.005em',
         };
       case 'sans':
       default:
@@ -15278,14 +15289,15 @@ export default function App() {
                         B Έντονα
                       </button>
 
-                      {/* Greek Font Style Selector: Calligraphic / Neohellenic / Handwritten / Marker / Printed */}
+                      {/* Greek Font Style Selector: Custom ExplainBoardsHand / Custom ExplainBoardsPen / Mansalva / Playpen / GFS / Printed */}
                       <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                         {(
                           [
-                            { id: 'calligraphic', label: '✍️ Καλλιγραφικό' },
-                            { id: 'neohellenic', label: '🖋️ Ρέουσα' },
+                            { id: 'calligraphic', label: '✍️ Σημειώσεις (Δική μας)' },
+                            { id: 'marker', label: '✒️ Ανθρώπινη Πένα' },
+                            { id: 'mansalva', label: '🖊️ Μαρκαδόρος' },
                             { id: 'handwritten', label: '📝 Χειρόγραφο' },
-                            { id: 'marker', label: '✒️ Πένα' },
+                            { id: 'neohellenic', label: '🖋️ Ρέουσα' },
                             { id: 'sans', label: '🔤 Τυπωμένο' },
                           ] as { id: TextFontStyle; label: string }[]
                         ).map((fOpt) => (
@@ -17369,8 +17381,10 @@ export default function App() {
                                 userSelect: 'none',
                                 fontFamily:
                                   'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                                fontStyle: 'normal',
                                 fontStretch: 'normal',
                                 letterSpacing: 'normal',
+                                WebkitTextStroke: '0px',
                               }}
                               className="absolute -top-10 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30 cursor-grab active:cursor-grabbing"
                             >
@@ -17388,9 +17402,10 @@ export default function App() {
                                   onClick={() => {
                                     const order: TextFontStyle[] = [
                                       'calligraphic',
-                                      'neohellenic',
-                                      'handwritten',
                                       'marker',
+                                      'mansalva',
+                                      'handwritten',
+                                      'neohellenic',
                                       'sans',
                                     ];
                                     const cur = txt.fontFamily || 'sans';
@@ -17404,16 +17419,18 @@ export default function App() {
                                     }));
                                   }}
                                   className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-bold cursor-pointer"
-                                  title="Εναλλαγή γραμματοσειράς (Καλλιγραφικό / Ρέουσα / Χειρόγραφο / Πένα / Τυπωμένο)"
+                                  title="Εναλλαγή γραμματοσειράς (Σημειώσεις / Ανθρώπινη Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                 >
                                   {txt.fontFamily === 'calligraphic'
-                                    ? '✍️ Καλλιγρ.'
-                                    : txt.fontFamily === 'neohellenic'
-                                    ? '🖋️ Ρέουσα'
-                                    : txt.fontFamily === 'handwritten'
-                                    ? '📝 Χειρόγρ.'
+                                    ? '✍️ Σημειώσεις'
                                     : txt.fontFamily === 'marker'
                                     ? '✒️ Πένα'
+                                    : txt.fontFamily === 'mansalva'
+                                    ? '🖊️ Μαρκαδ.'
+                                    : txt.fontFamily === 'handwritten'
+                                    ? '📝 Χειρόγρ.'
+                                    : txt.fontFamily === 'neohellenic'
+                                    ? '🖋️ Ρέουσα'
                                     : '🔤 Τυπωμ.'}
                                 </button>
                               )}
