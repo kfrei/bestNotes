@@ -3028,7 +3028,7 @@ export default function App() {
   );
 
   // Checks if a 1-finger touch point (clientX, clientY) lands either on an active Lasso selection box/handle
-  // OR directly on any shape, group, stroke, or image on the page so touching it with a finger selects it with the Lasso!
+  // OR directly on any shape, group, stroke, image, or text box on the page!
   const isClientPointOnSelectableOrLasso = useCallback(
     (clientX: number, clientY: number, targetEl?: EventTarget | null): boolean => {
       const currentTxtId = selectedTextId || editingTextId;
@@ -3037,13 +3037,25 @@ export default function App() {
         if (txtDom) {
           const r = txtDom.getBoundingClientRect();
           if (
-            clientX >= r.left - 28 &&
-            clientX <= r.right + 28 &&
-            clientY >= r.top - 28 &&
-            clientY <= r.bottom + 28
+            clientX >= r.left - 34 &&
+            clientX <= r.right + 34 &&
+            clientY >= r.top - 34 &&
+            clientY <= r.bottom + 34
           ) {
             return true;
           }
+        }
+      }
+      const allTxtEls = document.querySelectorAll('[data-text-id]');
+      for (let i = 0; i < allTxtEls.length; i++) {
+        const r = allTxtEls[i].getBoundingClientRect();
+        if (
+          clientX >= r.left - 10 &&
+          clientX <= r.right + 10 &&
+          clientY >= r.top - 10 &&
+          clientY <= r.bottom + 10
+        ) {
+          return true;
         }
       }
       if (isClientPointInLassoSelection(clientX, clientY)) return true;
@@ -6520,13 +6532,43 @@ export default function App() {
     []
   );
 
+  const releaseActiveTextBox = useCallback(() => {
+    const activeId = editingTextId || selectedTextId;
+    if (!activeId) return false;
+    draggingTextRef.current = null;
+    lastTextCreatedTimeRef.current = 0;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setEditingTextId(null);
+    setSelectedTextId(null);
+    updateActivePage(
+      (page) => {
+        const targetTxt = (page.texts || []).find((t) => t.id === activeId);
+        if (
+          targetTxt &&
+          !targetTxt.isMath &&
+          (!targetTxt.text || targetTxt.text.trim().length === 0)
+        ) {
+          return {
+            ...page,
+            texts: (page.texts || []).filter((t) => t.id !== activeId),
+          };
+        }
+        return page;
+      },
+      false
+    );
+    return true;
+  }, [editingTextId, selectedTextId, updateActivePage]);
+
   const resolveTextResizeHandleFromRect = useCallback(
     (
       clientX: number,
       clientY: number,
       rect: DOMRect,
-      outerMargin = 28,
-      innerMargin = 16
+      outerMargin = 32,
+      innerMargin = 10
     ): 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se' | null => {
       if (
         clientX < rect.left - outerMargin ||
@@ -6536,8 +6578,8 @@ export default function App() {
       ) {
         return null;
       }
-      const inX = Math.min(innerMargin, Math.max(10, rect.width * 0.28));
-      const inY = Math.min(innerMargin, Math.max(10, rect.height * 0.28));
+      const inX = Math.min(innerMargin, Math.max(6, rect.width * 0.2));
+      const inY = Math.min(innerMargin, Math.max(6, rect.height * 0.2));
       const nearW = clientX <= rect.left + inX;
       const nearE = clientX >= rect.right - inX;
       const nearN = clientY <= rect.top + inY;
@@ -6570,12 +6612,8 @@ export default function App() {
       d.lastClientX = clientX;
       d.lastClientY = clientY;
 
-      const targetPage = activeNotebook.pages[d.pageIdx] || activePage;
-      const txt = (targetPage.texts || []).find((t) => t.id === d.id);
-      if (!txt) return;
-
-      const pW = d.pW || getPageLogicalWidth(targetPage);
-      const pH = d.pH || getPageLogicalHeight(targetPage);
+      const pW = d.pW || 920;
+      const pH = d.pH || 1260;
       const dx = (clientX - d.startClientX) / zoomRef.current;
       const dy = (clientY - d.startClientY) / zoomRef.current;
 
@@ -6606,32 +6644,32 @@ export default function App() {
           nextH = Math.max(30, Math.round(origH - clampedDy));
         }
 
-        const autoFs = computeMaxFitFontSizeForBox(
-          txt.text,
-          txt.fontFamily,
-          txt.bold,
-          nextW,
-          nextH
-        );
-        setTextFontSize(autoFs);
+        let nextAutoFs: number | null = null;
         updateActivePage(
           (page) => ({
             ...page,
-            texts: (page.texts || []).map((t) =>
-              t.id === txt.id
-                ? {
-                    ...t,
-                    x: nextX,
-                    y: nextY,
-                    boxWidth: nextW,
-                    boxHeight: nextH,
-                    fontSize: autoFs,
-                  }
-                : t
-            ),
+            texts: (page.texts || []).map((t) => {
+              if (t.id !== d.id) return t;
+              const autoFs =
+                t.text && t.text.trim().length > 0
+                  ? computeMaxFitFontSizeForBox(t.text, t.fontFamily, t.bold, nextW, nextH)
+                  : t.fontSize;
+              nextAutoFs = autoFs;
+              return {
+                ...t,
+                x: nextX,
+                y: nextY,
+                boxWidth: nextW,
+                boxHeight: nextH,
+                fontSize: autoFs,
+              };
+            }),
           }),
           false
         );
+        if (nextAutoFs !== null) {
+          setTextFontSize(nextAutoFs);
+        }
         return;
       }
 
@@ -6645,13 +6683,13 @@ export default function App() {
         (page) => ({
           ...page,
           texts: (page.texts || []).map((t) =>
-            t.id === txt.id ? { ...t, x: nextX, y: nextY } : t
+            t.id === d.id ? { ...t, x: nextX, y: nextY } : t
           ),
         }),
         false
       );
     },
-    [activeNotebook.pages, activePage, computeMaxFitFontSizeForBox, updateActivePage]
+    [computeMaxFitFontSizeForBox, updateActivePage]
   );
 
   const finishTextDrag = useCallback(() => {
@@ -6660,11 +6698,13 @@ export default function App() {
     const didMove = d.moved;
     const wasSelected = d.wasAlreadySelected;
     const targetId = d.id;
-    const targetPage = activeNotebook.pages[d.pageIdx] || activePage;
-    const txt = (targetPage.texts || []).find((t) => t.id === targetId);
     draggingTextRef.current = null;
-    if (!didMove && (wasSelected || activeTool === 'text') && txt && !txt.isMath) {
+    if (!didMove && (wasSelected || activeTool === 'text')) {
       setEditingTextId(targetId);
+      const taNow = document.querySelector(
+        `[data-text-id="${targetId}"] textarea`
+      ) as HTMLTextAreaElement | null;
+      taNow?.focus();
       window.requestAnimationFrame(() => {
         const ta = document.querySelector(
           `[data-text-id="${targetId}"] textarea`
@@ -6672,7 +6712,7 @@ export default function App() {
         ta?.focus();
       });
     }
-  }, [activeTool, activeNotebook.pages, activePage]);
+  }, [activeTool]);
 
   useEffect(() => {
     const onWinPointerMove = (ev: PointerEvent) => {
@@ -6747,6 +6787,12 @@ export default function App() {
 
     const onTouchStart = (e: TouchEvent) => {
       cancelScrollMomentum();
+      if (draggingTextRef.current) {
+        if (e.cancelable) e.preventDefault();
+        outsidePanDragRef.current = null;
+        pinchStateRef.current = null;
+        return;
+      }
       const targetEl =
         e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement || null;
 
@@ -6755,6 +6801,13 @@ export default function App() {
         const isOnTextBoxControl =
           targetEl?.closest('[data-text-box="true"]') &&
           !targetEl?.closest('button, input, select, a');
+        if (
+          !(e.target instanceof HTMLCanvasElement) &&
+          !targetEl?.closest('button, input, textarea, select, a, [data-ui-panel="true"], [data-text-box="true"]') &&
+          (selectedTextId !== null || editingTextId !== null)
+        ) {
+          releaseActiveTextBox();
+        }
         if ((e.target instanceof HTMLCanvasElement || isOnTextBoxControl) && e.cancelable) {
           e.preventDefault();
         }
@@ -6780,10 +6833,34 @@ export default function App() {
       }
       const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
+      // If 1 finger touches outside the active text box (either on empty paper or outside the paper, regardless of Pencil-Only Mode),
+      // immediately release/deselect the text box!
+      if (
+        directTouches.length === 1 &&
+        (selectedTextId !== null || editingTextId !== null) &&
+        performance.now() - lastPenActivityTimeRef.current > 140
+      ) {
+        const t = directTouches[0] as any;
+        const currentTxtId = selectedTextId || editingTextId;
+        const txtDom = currentTxtId
+          ? (document.querySelector(`[data-text-id="${currentTxtId}"]`) as HTMLElement | null)
+          : null;
+        const r = txtDom ? txtDom.getBoundingClientRect() : null;
+        const isOnActiveTextBox =
+          r !== null &&
+          t.clientX >= r.left - 34 &&
+          t.clientX <= r.right + 34 &&
+          t.clientY >= r.top - 34 &&
+          t.clientY <= r.bottom + 34;
+        if (!isOnActiveTextBox) {
+          releaseActiveTextBox();
+        }
+      }
+
       // Case A: 1 finger touching OUTSIDE the paper canvas OR 1 finger on EMPTY paper when Pencil-Only Mode is ON -> Scroll pages like Word!
       // IMPORTANT:
-      // - In Pencil-Only Mode, if the 1 finger touches a shape, group, stroke, image, or active Lasso selection box/handle,
-      //   do NOT scroll — let handlePointerDown auto-select it with Lasso, drag it, resize it, or rotate it!
+      // - In Pencil-Only Mode, if the 1 finger touches a shape, group, stroke, image, text box, or active Lasso selection box/handle,
+      //   do NOT scroll — let handlePointerDown / text box handlers select, drag, resize, or rotate it!
       if (
         directTouches.length === 1 &&
         (isOutsideCanvas || pencilOnlyMode) &&
@@ -6797,12 +6874,11 @@ export default function App() {
         if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 48) || (t.radiusY && t.radiusY > 48))) {
           return;
         }
-        // Tapping/dragging with 1 finger on empty paper deselects any active Lasso/Nodes selection while keeping the active tool
+        // Tapping/dragging with 1 finger on empty paper deselects any active Lasso/Nodes/Text selection while keeping the active tool
         if (
-          !isOutsideCanvas &&
-          (selectedStrokeIds.length > 0 ||
-            selectedImageId !== null ||
-            activeNodeStrokeId !== null)
+          selectedStrokeIds.length > 0 ||
+          selectedImageId !== null ||
+          activeNodeStrokeId !== null
         ) {
           setSelectedStrokeIds([]);
           setSelectedImageId(null);
@@ -7072,6 +7148,9 @@ export default function App() {
     selectedStrokeIds,
     selectedImageId,
     activeNodeStrokeId,
+    selectedTextId,
+    editingTextId,
+    releaseActiveTextBox,
     isClientPointInLassoSelection,
     isClientPointOnSelectableOrLasso,
     applyPaperTransformDirect,
@@ -9523,7 +9602,7 @@ export default function App() {
     if (draggingTextRef.current) return;
     const isPen = e.pointerType === 'pen';
 
-    // If a text box is currently selected/editing and the user touches or puts the Pencil within 28px of its border,
+    // If a text box is currently selected/editing and the user touches or puts the Pencil within 32px of its border,
     // treat it as resizing/moving that text box (never drawing a pen stroke or scrolling the page)!
     const currentActiveTxtId = selectedTextId || editingTextId;
     if (currentActiveTxtId && pageIdx === activePageIndex) {
@@ -9534,16 +9613,12 @@ export default function App() {
       const activeTxtObj = (targetPageForTxt.texts || []).find((t) => t.id === currentActiveTxtId);
       if (activeTxtEl && activeTxtObj && !activeTxtObj.isMath) {
         const rect = activeTxtEl.getBoundingClientRect();
-        const edgeHandle = resolveTextResizeHandleFromRect(e.clientX, e.clientY, rect, 28, 18);
+        const edgeHandle = resolveTextResizeHandleFromRect(e.clientX, e.clientY, rect, 32, 10);
         if (edgeHandle) {
           e.preventDefault();
           e.stopPropagation();
           outsidePanDragRef.current = null;
           cancelScrollMomentum();
-          if (editingTextId === activeTxtObj.id) {
-            setEditingTextId(null);
-          }
-          setSelectedTextId(activeTxtObj.id);
           const curBoxW = activeTxtObj.boxWidth || activeTxtEl.offsetWidth || 180;
           const curBoxH = activeTxtObj.boxHeight || activeTxtEl.offsetHeight || 48;
           draggingTextRef.current = {
@@ -9563,6 +9638,7 @@ export default function App() {
             wasAlreadySelected: true,
             startedOnTextarea: false,
           };
+          setSelectedTextId(activeTxtObj.id);
           return;
         }
       }
@@ -9585,21 +9661,31 @@ export default function App() {
         clearActiveOverlay();
       }
     } else if (e.pointerType === 'touch') {
-      if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
       if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 140) return;
       const nev = e.nativeEvent as PointerEvent;
       if ((nev.width && nev.width > 68) || (nev.height && nev.height > 68)) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
+      // Tapping outside an active text box with a finger ALWAYS releases/deselects the text box!
+      const hadActiveTextOnTouch = Boolean(selectedTextId || editingTextId);
+      if (hadActiveTextOnTouch) {
+        releaseActiveTextBox();
+      }
+
+      if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
+
       // When Pencil-Only Mode is ON, 1 finger on a shape/image/Lasso-box selects & transforms it; 1 finger on empty paper scrolls the page
       if (pencilOnlyMode) {
-        if (isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget) || activeTool === 'text') {
+        if (isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget)) {
           outsidePanDragRef.current = null;
           cancelScrollMomentum();
         } else {
           return;
         }
       } else {
+        if (hadActiveTextOnTouch && activeTool === 'text') {
+          return;
+        }
         // When Finger Drawing is enabled (!pencilOnlyMode), let the finger act like the pencil for the active tool
         outsidePanDragRef.current = null;
         cancelScrollMomentum();
@@ -9636,40 +9722,22 @@ export default function App() {
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = pt;
 
-    // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or reposition an empty one / finish editing a filled one)
+    // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or if a text box is currently selected/editing, release it!)
     if (activeTool === 'text') {
       e.preventDefault();
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
 
+      if (editingTextId || selectedTextId) {
+        releaseActiveTextBox();
+        return;
+      }
+
       const pW = getPageLogicalWidth(targetPage);
       const pH = getPageLogicalHeight(targetPage);
       const nextX = Math.max(16, Math.min(pW - 160, Math.round(pt.x)));
       const nextY = Math.max(16, Math.min(pH - 50, Math.round(pt.y - textFontSize * 0.6)));
-
-      if (editingTextId) {
-        const editingObj = (targetPage.texts || []).find((t) => t.id === editingTextId);
-        if (editingObj && (!editingObj.text || editingObj.text.trim().length === 0)) {
-          // If the active text box is still empty, move it directly to the clicked spot and keep it open & focused!
-          lastTextCreatedTimeRef.current = performance.now();
-          updateActivePage(
-            (page) => ({
-              ...page,
-              texts: (page.texts || []).map((t) =>
-                t.id === editingObj.id ? { ...t, x: nextX, y: nextY } : t
-              ),
-            }),
-            false
-          );
-          setSelectedTextId(editingObj.id);
-          setEditingTextId(editingObj.id);
-          return;
-        }
-        setEditingTextId(null);
-        setSelectedTextId(null);
-        return;
-      }
 
       const newTxt: TextObject = {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -9701,8 +9769,9 @@ export default function App() {
       // Ignore pointer capture errors on rapid consecutive touches
     }
 
-    if (selectedTextId) setSelectedTextId(null);
-    if (editingTextId) setEditingTextId(null);
+    if (selectedTextId || editingTextId) {
+      releaseActiveTextBox();
+    }
 
     const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current);
 
@@ -19888,8 +19957,8 @@ export default function App() {
                                 ev.clientX,
                                 ev.clientY,
                                 ev.currentTarget.getBoundingClientRect(),
-                                28,
-                                16
+                                32,
+                                10
                               );
                             }
 
@@ -19902,25 +19971,10 @@ export default function App() {
                             if (!startedOnTextarea) {
                               ev.preventDefault();
                             }
-                            if (resizeHandle && isEditingTxt) {
-                              setEditingTextId(null);
-                            }
-                            if (pageIdx !== activePageIndex) {
-                              setActivePageIndex(pageIdx);
-                            }
-                            activeDrawingPageIndexRef.current = pageIdx;
-                            const wasAlreadySelected = selectedTextId === txt.id;
-                            setSelectedTextId(txt.id);
-                            setTextFontSize(txt.fontSize);
-                            setTextBold(Boolean(txt.bold));
-                            setTextFontFamily(txt.fontFamily || 'sans');
-                            setSelectedStrokeIds([]);
-                            setSelectedImageId(null);
-                            setActiveNodeStrokeId(null);
-                            setShowToolSubBar(true);
 
                             const curBoxW = txt.boxWidth || ev.currentTarget.offsetWidth || 180;
                             const curBoxH = txt.boxHeight || ev.currentTarget.offsetHeight || 48;
+                            const wasAlreadySelected = selectedTextId === txt.id;
 
                             draggingTextRef.current = {
                               id: txt.id,
@@ -19939,6 +19993,20 @@ export default function App() {
                               wasAlreadySelected,
                               startedOnTextarea,
                             };
+
+                            if (pageIdx !== activePageIndex) {
+                              setActivePageIndex(pageIdx);
+                            }
+                            activeDrawingPageIndexRef.current = pageIdx;
+                            setSelectedTextId(txt.id);
+                            setTextFontSize(txt.fontSize);
+                            setTextBold(Boolean(txt.bold));
+                            setTextFontFamily(txt.fontFamily || 'sans');
+                            setSelectedStrokeIds([]);
+                            setSelectedImageId(null);
+                            setActiveNodeStrokeId(null);
+                            setShowToolSubBar(true);
+
                             if (!startedOnTextarea) {
                               try {
                                 ev.currentTarget.setPointerCapture(ev.pointerId);
@@ -19981,25 +20049,14 @@ export default function App() {
                                 t.clientX,
                                 t.clientY,
                                 ev.currentTarget.getBoundingClientRect(),
-                                28,
-                                16
+                                32,
+                                10
                               );
                             }
-                            if (resizeHandle && isEditingTxt) {
-                              setEditingTextId(null);
-                            }
-                            const wasAlreadySelected = selectedTextId === txt.id;
-                            setSelectedTextId(txt.id);
-                            setTextFontSize(txt.fontSize);
-                            setTextBold(Boolean(txt.bold));
-                            setTextFontFamily(txt.fontFamily || 'sans');
-                            setSelectedStrokeIds([]);
-                            setSelectedImageId(null);
-                            setActiveNodeStrokeId(null);
-                            setShowToolSubBar(true);
 
                             const curBoxW = txt.boxWidth || ev.currentTarget.offsetWidth || 180;
                             const curBoxH = txt.boxHeight || ev.currentTarget.offsetHeight || 48;
+                            const wasAlreadySelected = selectedTextId === txt.id;
 
                             draggingTextRef.current = {
                               id: txt.id,
@@ -20017,6 +20074,15 @@ export default function App() {
                               wasAlreadySelected,
                               startedOnTextarea: false,
                             };
+
+                            setSelectedTextId(txt.id);
+                            setTextFontSize(txt.fontSize);
+                            setTextBold(Boolean(txt.bold));
+                            setTextFontFamily(txt.fontFamily || 'sans');
+                            setSelectedStrokeIds([]);
+                            setSelectedImageId(null);
+                            setActiveNodeStrokeId(null);
+                            setShowToolSubBar(true);
                           }}
                           onPointerMove={(ev) => {
                             const d = draggingTextRef.current;
@@ -20050,51 +20116,51 @@ export default function App() {
                               : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
                           }`}
                         >
-                          {/* 8 Finger-Friendly 44px Resize Handles (Left/Right/Top/Bottom Full Edges + 4 Corners) to narrow/expand the box & auto-fit fontSize! */}
+                          {/* 8 Finger-Friendly 32px Resize Handles (26px outside + 6px inside border) so interior stays free & edges/corners grab easily on iPad! */}
                           {(isSelectedTxt || isEditingTxt) && !txt.isMath && (
                             <>
-                              {/* Left Edge Handle (W) — full left edge 44px touch zone */}
-                              <div
-                                data-text-resize="w"
-                                style={{ touchAction: 'none' }}
-                                title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute -left-6 top-2 bottom-2 w-11 flex items-center justify-center cursor-ew-resize z-30 group"
-                              >
-                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
-                              </div>
-                              {/* Right Edge Handle (E) — full right edge 44px touch zone */}
-                              <div
-                                data-text-resize="e"
-                                style={{ touchAction: 'none' }}
-                                title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute -right-6 top-2 bottom-2 w-11 flex items-center justify-center cursor-ew-resize z-30 group"
-                              >
-                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
-                              </div>
-                              {/* Top Edge Handle (N) — full top edge 44px touch zone */}
+                              {/* Top Edge Handle (N) */}
                               <div
                                 data-text-resize="n"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute left-2 right-2 -top-6 h-11 flex items-center justify-center cursor-ns-resize z-30 group"
+                                className="absolute left-3 right-3 -top-[26px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
                               >
                                 <div className="w-8 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
-                              {/* Bottom Edge Handle (S) — full bottom edge 44px touch zone */}
+                              {/* Bottom Edge Handle (S) */}
                               <div
                                 data-text-resize="s"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute left-2 right-2 -bottom-6 h-11 flex items-center justify-center cursor-ns-resize z-30 group"
+                                className="absolute left-3 right-3 -bottom-[26px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
                               >
                                 <div className="w-8 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
-                              {/* 4 Corner Handles (NW, NE, SW, SE) — 44x44px touch zones */}
+                              {/* Left Edge Handle (W) */}
+                              <div
+                                data-text-resize="w"
+                                style={{ touchAction: 'none' }}
+                                title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                className="absolute -left-[26px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
+                              >
+                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
+                              {/* Right Edge Handle (E) */}
+                              <div
+                                data-text-resize="e"
+                                style={{ touchAction: 'none' }}
+                                title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                className="absolute -right-[26px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
+                              >
+                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
+                              {/* 4 Corner Handles (NW, NE, SW, SE) — 32x32px touch zones */}
                               <div
                                 data-text-resize="nw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-6 -top-6 w-11 h-11 flex items-center justify-center cursor-nwse-resize z-40 group"
+                                className="absolute -left-[26px] -top-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
                                 <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
@@ -20102,7 +20168,7 @@ export default function App() {
                                 data-text-resize="ne"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-6 -top-6 w-11 h-11 flex items-center justify-center cursor-nesw-resize z-40 group"
+                                className="absolute -right-[26px] -top-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
                                 <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
@@ -20110,7 +20176,7 @@ export default function App() {
                                 data-text-resize="sw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-6 -bottom-6 w-11 h-11 flex items-center justify-center cursor-nesw-resize z-40 group"
+                                className="absolute -left-[26px] -bottom-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
                                 <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
@@ -20118,7 +20184,7 @@ export default function App() {
                                 data-text-resize="se"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-6 -bottom-6 w-11 h-11 flex items-center justify-center cursor-nwse-resize z-40 group"
+                                className="absolute -right-[26px] -bottom-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
                                 <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
@@ -20141,7 +20207,7 @@ export default function App() {
                                 letterSpacing: 'normal',
                                 WebkitTextStroke: '0px',
                               }}
-                              className="absolute -top-12 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
+                              className="absolute -top-14 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
                             >
                               <span
                                 className="px-1 py-0.5 text-sky-300 font-bold select-none"
@@ -20349,12 +20415,14 @@ export default function App() {
                               }}
                               onKeyDown={(ev) => {
                                 if (ev.key === 'Escape' && !ev.nativeEvent.isComposing) {
-                                  lastTextCreatedTimeRef.current = 0;
-                                  ev.currentTarget.blur();
+                                  releaseActiveTextBox();
                                 }
                               }}
                               onBlur={(ev) => {
-                                if (draggingTextRef.current?.id === txt.id) {
+                                if (
+                                  draggingTextRef.current?.id === txt.id ||
+                                  selectedTextId === txt.id
+                                ) {
                                   return;
                                 }
                                 if (performance.now() - lastTextCreatedTimeRef.current < 450) {
