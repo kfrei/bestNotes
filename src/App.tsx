@@ -14553,7 +14553,7 @@ export default function App() {
     showToast,
   ]);
 
-  // Manual (on-demand) Lasso Handwriting -> Calligraphic Greek Text conversion via Gemini Vision
+  // 1. Manual (on-demand) Lasso Handwriting -> Calligraphic / Greek Text OCR conversion via Gemini Vision
   const handleConvertLassoToCalligraphic = useCallback(async () => {
     if (isConvertingHandwriting) return;
     const baseIds =
@@ -14572,7 +14572,130 @@ export default function App() {
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
     if (selStrokes.length === 0) {
-      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο ελληνικό κείμενο που θέλεις να γίνει καλλιγραφικό!');
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο το χειρόγραφο ελληνικό κείμενο που θέλεις να γίνει Κείμενο OCR!');
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const st of selStrokes) {
+      const b = getStrokeBounds(st);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+    const pad = 32;
+    const rawW = Math.max(48, Math.ceil(maxX - minX));
+    const rawH = Math.max(32, Math.ceil(maxY - minY));
+    const scale = 2;
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = (rawW + pad * 2) * scale;
+    cropCanvas.height = (rawH + pad * 2) * scale;
+    const cropCtx = cropCanvas.getContext('2d');
+    if (!cropCtx) return;
+
+    cropCtx.fillStyle = '#ffffff';
+    cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+    cropCtx.save();
+    cropCtx.scale(scale, scale);
+    cropCtx.translate(-minX + pad, -minY + pad);
+    for (const st of selStrokes) {
+      drawStrokeOnContext(cropCtx, st);
+    }
+    cropCtx.restore();
+
+    const cropDataUrl = cropCanvas.toDataURL('image/png');
+    setIsConvertingHandwriting(true);
+    showToast('✍️ Κείμενο OCR: Αναγνώριση ελληνικού χειρόγραφου κειμένου...');
+
+    try {
+      const transcribed = await transcribeHandwrittenStrokesWithGemini(
+        cropDataUrl,
+        activeNotebook?.title || ''
+      );
+      if (!transcribed || !transcribed.trim()) {
+        showToast('⚠️ Δεν αναγνωρίστηκε κείμενο στην επιλογή. Δοκίμασε να επιλέξεις καθαρά τις λέξεις με το Λάσο!');
+        return;
+      }
+
+      const cleanText = transcribed.trim();
+      const lines = cleanText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      const lineCount = Math.max(1, lines.length);
+      const estimatedSize = Math.round(((maxY - minY) / lineCount) * 0.78);
+      const finalFontSize = Math.max(20, Math.min(52, estimatedSize || 28));
+      const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
+      const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
+      const chosenFont: TextFontStyle = textFontFamily || 'calligraphic';
+
+      const newTxt: TextObject = {
+        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: Math.max(12, Math.round(minX)),
+        y: Math.max(12, Math.round(minY - finalFontSize * 0.12)),
+        text: cleanText,
+        isMath: false,
+        color: dominantColor,
+        fontSize: finalFontSize,
+        bold: true,
+        fontFamily: chosenFont,
+        layerId: targetLayerId,
+      };
+
+      const removeIdSet = new Set(selStrokes.map((s) => s.id));
+      updateActivePage((page) => ({
+        ...page,
+        strokes: page.strokes.filter((s) => !removeIdSet.has(s.id)),
+        texts: [...(page.texts || []), newTxt],
+      }));
+
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setSelectedTextId(newTxt.id);
+      setTextFontFamily(chosenFont);
+      setTextBold(true);
+      setTextFontSize(finalFontSize);
+      setShowToolSubBar(true);
+      showToast('✍️ Κείμενο OCR: Το χειρόγραφο μετατράπηκε σε κείμενο με επιλογή γραμματοσειράς! (Ctrl+Z για αναίρεση)');
+    } finally {
+      setIsConvertingHandwriting(false);
+    }
+  }, [
+    isConvertingHandwriting,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    activePage.strokes,
+    activeNotebook?.title,
+    strokeColor,
+    activeLayerId,
+    textFontFamily,
+    updateActivePage,
+    showToast,
+  ]);
+
+  // 2. Manual (on-demand) Lasso Handwriting -> MathOCR / MathType (KaTeX fractions, ⇒, =, units) via Gemini Vision
+  const handleConvertLassoToMathOCR = useCallback(async () => {
+    if (isConvertingHandwriting) return;
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+    if (selStrokes.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση ή το κλάσμα που θέλεις να γίνει MathOCR!');
       return;
     }
 
@@ -14614,7 +14737,6 @@ export default function App() {
     showToast('🧮 MathOCR: Αναγνώριση εξισώσεων, κλασμάτων, συνεπαγωγών & μονάδων...');
 
     try {
-      void transcribeHandwrittenStrokesWithGemini;
       const mathRes = await transcribeHandwrittenMathWithGemini(
         cropDataUrl,
         activeNotebook?.title || ''
@@ -18235,12 +18357,32 @@ export default function App() {
                         ...page,
                         texts: (page.texts || []).map((t) => {
                           if (t.id !== selTxt.id) return t;
+                          const rawLatex = t.latex || '';
+                          const hasRealMath = /\\frac|\\dfrac|\\sqrt|\\Rightarrow|\\Leftrightarrow|\\rightarrow|\\sum|\\int|[=^_]/.test(
+                            rawLatex
+                          );
+                          const cleanedPlainText = (t.text || rawLatex)
+                            .replace(/\\text\{([^}]*)\}/g, '$1')
+                            .trim();
+                          const nextIsMath = t.isMath && hasRealMath;
                           const nextFs =
                             t.boxWidth && t.boxHeight
-                              ? computeMaxFitFontSizeForBox(t.text, nextFont, t.bold, t.boxWidth, t.boxHeight)
+                              ? computeMaxFitFontSizeForBox(
+                                  cleanedPlainText,
+                                  nextFont,
+                                  t.bold,
+                                  t.boxWidth,
+                                  t.boxHeight
+                                )
                               : t.fontSize;
                           if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                          return { ...t, fontFamily: nextFont, fontSize: nextFs };
+                          return {
+                            ...t,
+                            text: cleanedPlainText || t.text,
+                            isMath: nextIsMath,
+                            fontFamily: nextFont,
+                            fontSize: nextFs,
+                          };
                         }),
                       }));
                     }
@@ -18886,6 +19028,19 @@ export default function App() {
                         </button>
                         <button
                           onClick={() => void handleConvertLassoToCalligraphic()}
+                          disabled={isConvertingHandwriting}
+                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                            isConvertingHandwriting
+                              ? 'bg-violet-300 text-white cursor-wait'
+                              : 'bg-violet-600 hover:bg-violet-700 text-white'
+                          }`}
+                          title="Κείμενο OCR: Μετατροπή χειρόγραφου ελληνικού κειμένου σε κείμενο με επιλογή γραμματοσειράς (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          <span>{isConvertingHandwriting ? 'OCR...' : '✍️ Κείμενο OCR'}</span>
+                        </button>
+                        <button
+                          onClick={() => void handleConvertLassoToMathOCR()}
                           disabled={isConvertingHandwriting}
                           className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
                             isConvertingHandwriting
