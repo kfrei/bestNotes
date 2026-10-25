@@ -15564,15 +15564,6 @@ export default function App() {
                         <Upload className="w-4 h-4 text-sky-600" />
                         <span>.bestNotes</span>
                       </button>
-
-                      <button
-                        onClick={() => void handleShareNotebookPdf(activeNotebook)}
-                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-[#0066ff] border border-sky-200 hover:border-[#0066ff] text-[#0066ff] hover:text-white text-sm font-semibold shadow-xs transition cursor-pointer"
-                        title="Κοινοποίηση σε PDF (AirDrop, Viber, Messenger, Goodnotes, Mail)"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        <span>Share PDF</span>
-                      </button>
                     </div>
                   </div>
 
