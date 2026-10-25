@@ -996,7 +996,9 @@ export default function App() {
   const lassoPolygonRef = useRef<{ x: number; y: number }[]>([]);
   const isDraggingSelectionRef = useRef<{ startX: number; startY: number } | null>(null);
   const selectionTransformRef = useRef<{
-    mode: 'move' | 'scale' | 'scale-x' | 'scale-y' | 'rotate';
+    mode: 'move' | 'scale' | 'scale-x' | 'scale-y' | 'rotate' | 'crop-side';
+    cropEdge?: 'top' | 'right' | 'bottom' | 'left';
+    cropInsetPx?: number;
     startX: number;
     startY: number;
     centerX: number;
@@ -3321,21 +3323,148 @@ export default function App() {
             ctx.restore();
           }
 
-          // 4 Mid-Side Aspect-Ratio Stretch Handles (Top, Right, Bottom, Left — Orange #f97316 dots!)
-          const localSideMidpoints = [
-            { x: 0, y: -hh }, // Top (height stretch)
-            { x: hw, y: 0 },  // Right (width stretch)
-            { x: 0, y: hh },  // Bottom (height stretch)
-            { x: -hw, y: 0 }, // Left (width stretch)
-          ];
-          for (const m of localSideMidpoints) {
-            ctx.fillStyle = '#f97316';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2.2;
-            ctx.beginPath();
-            ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
+          if (selectedImageId) {
+            // Live Side-Crop Overlay when dragging any of the 4 Side Crop Bars inward!
+            const activeTf = selectionTransformRef.current;
+            const isCroppingSide = activeTf?.mode === 'crop-side' && (activeTf.cropInsetPx || 0) > 0;
+            const activeEdge = isCroppingSide ? activeTf?.cropEdge : undefined;
+            const cropInset = isCroppingSide ? activeTf?.cropInsetPx || 0 : 0;
+            const imgHalfW = selBounds.hw;
+            const imgHalfH = selBounds.hh;
+
+            if (isCroppingSide && cropInset > 0) {
+              ctx.save();
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.56)';
+              ctx.strokeStyle = '#f59e0b';
+              ctx.lineWidth = 2.2;
+              ctx.setLineDash([5, 4]);
+              if (activeEdge === 'left') {
+                ctx.fillRect(-imgHalfW, -imgHalfH, cropInset, imgHalfH * 2);
+                ctx.beginPath();
+                ctx.moveTo(-imgHalfW + cropInset, -imgHalfH);
+                ctx.lineTo(-imgHalfW + cropInset, imgHalfH);
+                ctx.stroke();
+              } else if (activeEdge === 'right') {
+                ctx.fillRect(imgHalfW - cropInset, -imgHalfH, cropInset, imgHalfH * 2);
+                ctx.beginPath();
+                ctx.moveTo(imgHalfW - cropInset, -imgHalfH);
+                ctx.lineTo(imgHalfW - cropInset, imgHalfH);
+                ctx.stroke();
+              } else if (activeEdge === 'top') {
+                ctx.fillRect(-imgHalfW, -imgHalfH, imgHalfW * 2, cropInset);
+                ctx.beginPath();
+                ctx.moveTo(-imgHalfW, -imgHalfH + cropInset);
+                ctx.lineTo(imgHalfW, -imgHalfH + cropInset);
+                ctx.stroke();
+              } else if (activeEdge === 'bottom') {
+                ctx.fillRect(-imgHalfW, imgHalfH - cropInset, imgHalfW * 2, cropInset);
+                ctx.beginPath();
+                ctx.moveTo(-imgHalfW, imgHalfH - cropInset);
+                ctx.lineTo(imgHalfW, imgHalfH - cropInset);
+                ctx.stroke();
+              }
+
+              // Floating live crop badge showing remaining width x height
+              const remW = Math.round(
+                imgHalfW * 2 - (activeEdge === 'left' || activeEdge === 'right' ? cropInset : 0)
+              );
+              const remH = Math.round(
+                imgHalfH * 2 - (activeEdge === 'top' || activeEdge === 'bottom' ? cropInset : 0)
+              );
+              ctx.setLineDash([]);
+              ctx.fillStyle = '#d97706';
+              ctx.beginPath();
+              ctx.roundRect(-56, -13, 112, 26, 13);
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1.8;
+              ctx.stroke();
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 11.5px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(`✂️ ${remW}×${remH}px`, 0, 0.5);
+              ctx.restore();
+            }
+
+            // 4 Side Crop Bars (Top ▬, Right ▮, Bottom ▬, Left ▮ — drag inward to Crop any side of the image!)
+            const sideCropBars: {
+              edge: 'top' | 'right' | 'bottom' | 'left';
+              cx: number;
+              cy: number;
+              bw: number;
+              bh: number;
+            }[] = [
+              {
+                edge: 'top',
+                cx: 0,
+                cy: activeEdge === 'top' ? -imgHalfH + cropInset : -hh,
+                bw: 30,
+                bh: 9,
+              },
+              {
+                edge: 'right',
+                cx: activeEdge === 'right' ? imgHalfW - cropInset : hw,
+                cy: 0,
+                bw: 9,
+                bh: 30,
+              },
+              {
+                edge: 'bottom',
+                cx: 0,
+                cy: activeEdge === 'bottom' ? imgHalfH - cropInset : hh,
+                bw: 30,
+                bh: 9,
+              },
+              {
+                edge: 'left',
+                cx: activeEdge === 'left' ? -imgHalfW + cropInset : -hw,
+                cy: 0,
+                bw: 9,
+                bh: 30,
+              },
+            ];
+
+            for (const bar of sideCropBars) {
+              const isThisActive = activeEdge === bar.edge;
+              ctx.fillStyle = isThisActive ? '#f59e0b' : '#0d9488';
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2.0;
+              ctx.beginPath();
+              ctx.roundRect(bar.cx - bar.bw / 2, bar.cy - bar.bh / 2, bar.bw, bar.bh, 4.5);
+              ctx.fill();
+              ctx.stroke();
+
+              // Inner white grip line inside the Crop Bar
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+              ctx.lineWidth = 1.6;
+              ctx.beginPath();
+              if (bar.bw > bar.bh) {
+                ctx.moveTo(bar.cx - 7, bar.cy);
+                ctx.lineTo(bar.cx + 7, bar.cy);
+              } else {
+                ctx.moveTo(bar.cx, bar.cy - 7);
+                ctx.lineTo(bar.cx, bar.cy + 7);
+              }
+              ctx.stroke();
+            }
+          } else {
+            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots!)
+            const localSideMidpoints = [
+              { x: 0, y: -hh }, // Top (height stretch)
+              { x: hw, y: 0 },  // Right (width stretch)
+              { x: 0, y: hh },  // Bottom (height stretch)
+              { x: -hw, y: 0 }, // Left (width stretch)
+            ];
+            for (const m of localSideMidpoints) {
+              ctx.fillStyle = '#f97316';
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2.2;
+              ctx.beginPath();
+              ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
           }
 
           // 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots!)
@@ -4665,6 +4794,143 @@ export default function App() {
       }));
     },
     [updateActivePage]
+  );
+
+  // Crop any of the 4 sides (top, right, bottom, left) of a selected image inward by dragging its Side Crop Bar!
+  const applySideEdgeCropToImage = useCallback(
+    (imgObj: ImageObject, edge: 'top' | 'right' | 'bottom' | 'left', insetPx: number) => {
+      const clampedInset = Math.round(
+        Math.max(
+          0,
+          Math.min(
+            edge === 'left' || edge === 'right' ? imgObj.width - 24 : imgObj.height - 24,
+            insetPx
+          )
+        )
+      );
+      if (clampedInset < 4) return;
+
+      const minRelX = edge === 'left' ? clampedInset : 0;
+      const minRelY = edge === 'top' ? clampedInset : 0;
+      const cropW = Math.max(20, imgObj.width - (edge === 'left' || edge === 'right' ? clampedInset : 0));
+      const cropH = Math.max(20, imgObj.height - (edge === 'top' || edge === 'bottom' ? clampedInset : 0));
+
+      // Compute new world (x, y) accounting for image rotation so the remaining part stays anchored in place!
+      const fAngle = ((imgObj.rotation || 0) * Math.PI) / 180;
+      const cosF = Math.cos(fAngle);
+      const sinF = Math.sin(fAngle);
+      const localShiftX = edge === 'left' ? clampedInset / 2 : edge === 'right' ? -clampedInset / 2 : 0;
+      const localShiftY = edge === 'top' ? clampedInset / 2 : edge === 'bottom' ? -clampedInset / 2 : 0;
+      const oldCx = imgObj.x + imgObj.width / 2;
+      const oldCy = imgObj.y + imgObj.height / 2;
+      const nextCx = oldCx + localShiftX * cosF - localShiftY * sinF;
+      const nextCy = oldCy + localShiftX * sinF + localShiftY * cosF;
+      const nextX = Math.round(nextCx - cropW / 2);
+      const nextY = Math.round(nextCy - cropH / 2);
+
+      const cachedEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
+      if (cachedEl && cachedEl.complete && cachedEl.naturalWidth > 0 && cachedEl.naturalHeight > 0) {
+        const rawScaleX = cachedEl.naturalWidth / Math.max(1, imgObj.width);
+        const rawScaleY = cachedEl.naturalHeight / Math.max(1, imgObj.height);
+        const maxCropScale = Math.min(2.0, 950 / Math.max(1, cropW, cropH));
+        const scaleX = Math.min(rawScaleX, Math.max(1.15, maxCropScale));
+        const scaleY = Math.min(rawScaleY, Math.max(1.15, maxCropScale));
+        const natCropW = Math.max(16, Math.round(cropW * scaleX));
+        const natCropH = Math.max(16, Math.round(cropH * scaleY));
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = natCropW;
+        offCanvas.height = natCropH;
+        const offCtx = offCanvas.getContext('2d');
+        if (offCtx) {
+          offCtx.save();
+          if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
+            offCtx.beginPath();
+            offCtx.moveTo(
+              (imgObj.clipPolygon[0].x - minRelX) * scaleX,
+              (imgObj.clipPolygon[0].y - minRelY) * scaleY
+            );
+            for (let i = 1; i < imgObj.clipPolygon.length; i++) {
+              offCtx.lineTo(
+                (imgObj.clipPolygon[i].x - minRelX) * scaleX,
+                (imgObj.clipPolygon[i].y - minRelY) * scaleY
+              );
+            }
+            offCtx.closePath();
+            offCtx.clip();
+          }
+          offCtx.drawImage(
+            cachedEl,
+            -minRelX * scaleX,
+            -minRelY * scaleY,
+            imgObj.width * scaleX,
+            imgObj.height * scaleY
+          );
+          offCtx.restore();
+
+          try {
+            const croppedDataUrl = encodeCanvasOptimizedDataUrl(offCanvas);
+            const preloaded = new Image();
+            preloaded.src = croppedDataUrl;
+            imageElementsCacheRef.current.set(croppedDataUrl, preloaded);
+
+            updateActivePage(
+              (page) => ({
+                ...page,
+                images: page.images.map((im) =>
+                  im.id === imgObj.id
+                    ? {
+                        ...im,
+                        x: nextX,
+                        y: nextY,
+                        width: Math.round(cropW),
+                        height: Math.round(cropH),
+                        naturalWidth: natCropW,
+                        naturalHeight: natCropH,
+                        dataUrl: croppedDataUrl,
+                        originalDataUrl: im.originalDataUrl || im.dataUrl,
+                        clipPolygon: undefined,
+                      }
+                    : im
+                ),
+              }),
+              false
+            );
+            showToast(`✂️ Κόπηκε η πλευρά (${Math.round(cropW)}×${Math.round(cropH)}px)!`);
+            return;
+          } catch {
+            // Fall through to clipPolygon if canvas is tainted
+          }
+        }
+      }
+
+      const rectPoly = [
+        { x: 0, y: 0 },
+        { x: cropW, y: 0 },
+        { x: cropW, y: cropH },
+        { x: 0, y: cropH },
+      ];
+      updateActivePage(
+        (page) => ({
+          ...page,
+          images: page.images.map((im) =>
+            im.id === imgObj.id
+              ? {
+                  ...im,
+                  x: nextX,
+                  y: nextY,
+                  width: Math.round(cropW),
+                  height: Math.round(cropH),
+                  clipPolygon: rectPoly,
+                }
+              : im
+          ),
+        }),
+        false
+      );
+      showToast(`✂️ Κόπηκε η πλευρά (${Math.round(cropW)}×${Math.round(cropH)}px)!`);
+    },
+    [updateActivePage, showToast]
   );
 
   const pasteFromInternalClipboard = useCallback((): boolean => {
@@ -6123,7 +6389,7 @@ export default function App() {
             { lx: -hw, ly: 0, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
           ];
           for (const m of localSides) {
-            if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
+            if (Math.hypot(localX - m.lx, localY - m.ly) < 20) {
               clearActiveOverlay();
               setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
               setRedoStack([]);
@@ -6135,8 +6401,12 @@ export default function App() {
                 m.mode === 'scale-x'
                   ? Math.max(16, Math.abs(rx * cosA + ry * sinA))
                   : Math.max(16, Math.abs(-rx * sinA + ry * cosA));
+              const cropEdge: 'top' | 'right' | 'bottom' | 'left' =
+                m.sy === -1 ? 'top' : m.sx === 1 ? 'right' : m.sy === 1 ? 'bottom' : 'left';
               selectionTransformRef.current = {
-                mode: m.mode,
+                mode: selectedImageId ? 'crop-side' : m.mode,
+                cropEdge: selectedImageId ? cropEdge : undefined,
+                cropInsetPx: 0,
                 startX: pt.x,
                 startY: pt.y,
                 centerX: bcx,
@@ -6148,6 +6418,7 @@ export default function App() {
                 frameAngle: angle,
                 sideSignX: m.sx,
                 sideSignY: m.sy,
+                targetImageId: selectedImageId,
               };
               isDrawingRef.current = true;
               return;
@@ -6957,6 +7228,36 @@ export default function App() {
           return;
         }
 
+        // B1b. Side-Edge Crop for Selected Image (drag any of the 4 Side Crop Bars inward!)
+        if (tf.mode === 'crop-side' && tf.cropEdge) {
+          const targetId = tf.targetImageId || selectedImageId;
+          const imgObj = targetId ? activePage.images.find((im) => im.id === targetId) : undefined;
+          if (imgObj) {
+            const fAngle = tf.frameAngle || 0;
+            const cosF = Math.cos(fAngle);
+            const sinF = Math.sin(fAngle);
+            const dx = latestPt.x - tf.centerX;
+            const dy = latestPt.y - tf.centerY;
+            const localX = dx * cosF + dy * sinF;
+            const localY = -dx * sinF + dy * cosF;
+            const halfW = imgObj.width / 2;
+            const halfH = imgObj.height / 2;
+            let inset = 0;
+            if (tf.cropEdge === 'left') {
+              inset = Math.max(0, Math.min(imgObj.width - 24, localX - -halfW));
+            } else if (tf.cropEdge === 'right') {
+              inset = Math.max(0, Math.min(imgObj.width - 24, halfW - localX));
+            } else if (tf.cropEdge === 'top') {
+              inset = Math.max(0, Math.min(imgObj.height - 24, localY - -halfH));
+            } else if (tf.cropEdge === 'bottom') {
+              inset = Math.max(0, Math.min(imgObj.height - 24, halfH - localY));
+            }
+            tf.cropInsetPx = inset;
+            renderStaticSceneRef.current();
+          }
+          return;
+        }
+
         // B2. Aspect-Ratio Stretch (Widen/Narrow or Taller/Shorter) from 4 Mid-Side Handles (Orange #f97316 dots!)
         if (tf.mode === 'scale-x' || tf.mode === 'scale-y') {
           const fAngle = tf.frameAngle || 0;
@@ -7431,8 +7732,17 @@ export default function App() {
     if (activeTool === 'lasso' || selectionTransformRef.current || isDraggingSelectionRef.current) {
       clearActiveOverlay();
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
+        const finishedTf = selectionTransformRef.current;
         selectionTransformRef.current = null;
         isDraggingSelectionRef.current = null;
+        if (finishedTf?.mode === 'crop-side' && finishedTf.cropEdge && (finishedTf.cropInsetPx || 0) >= 4) {
+          const targetId = finishedTf.targetImageId || selectedImageId;
+          const imgObj = targetId ? activePage.images.find((im) => im.id === targetId) : undefined;
+          if (imgObj) {
+            applySideEdgeCropToImage(imgObj, finishedTf.cropEdge, finishedTf.cropInsetPx || 0);
+          }
+        }
+        renderStaticSceneRef.current();
         return;
       }
       finalizeLassoSelection([...lassoPolygonRef.current], e.shiftKey);
@@ -11253,6 +11563,16 @@ export default function App() {
 
                 {selectedImgObj && (
                   <div className="flex items-center gap-1.5">
+                    <span
+                      onClick={() => {
+                        setImageCropMode('none');
+                        showToast('✂️ Σύρε οποιαδήποτε από τις 4 πράσινες μπάρες στις πλευρές της εικόνας προς τα μέσα για Crop!');
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-300 text-teal-800 font-semibold cursor-pointer"
+                      title="Σύρε τις 4 πράσινες μπάρες (πάνω, κάτω, αριστερά, δεξιά) προς τα μέσα για άμεσο Crop πλευρών!"
+                    >
+                      <span>✂️ Μπάρες Πλευρών = Crop</span>
+                    </span>
                     <button
                       onClick={() => {
                         const cached = imageElementsCacheRef.current.get(selectedImgObj.dataUrl);
