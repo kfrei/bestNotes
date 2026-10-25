@@ -927,13 +927,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <Layers className="w-3.5 h-3.5 text-pink-200" />
               </div>
 
-              <button
-                type="button"
-                onClick={onEnterApp}
-                className="px-3 py-1 rounded-full bg-[#46c8f5] text-slate-950 font-bold text-[11px] hover:bg-sky-300 transition cursor-pointer"
-              >
-                Άνοιγμα στην Εφαρμογή →
-              </button>
+              <div className="w-8 hidden sm:block" />
             </div>
 
             {/* Sub-bar inside Preview */}
@@ -1647,16 +1641,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setZoomedNote(null);
-                    onEnterApp();
-                  }}
-                  className="px-4 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs font-extrabold transition cursor-pointer"
-                >
-                  Άνοιγμα στην Εφαρμογή →
-                </button>
                 <button
                   type="button"
                   onClick={() => setZoomedNote(null)}
