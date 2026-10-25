@@ -127,9 +127,9 @@ function getNotebookContentScore(nb: Notebook): number {
   return (nb.pages || []).reduce(
     (acc, p) =>
       acc +
-      (p.strokes?.length || 0) +
-      (p.images?.length || 0) * 5 +
-      (p.texts?.length || 0) * 2 +
+      (p.strokes?.length || 0) * 2 +
+      (p.images?.length || 0) * 8 +
+      (p.texts?.length || 0) * 3 +
       (p.tapes?.length || 0) * 2 +
       (p.backgroundDataUrl ? 10 : 0),
     0
@@ -137,25 +137,100 @@ function getNotebookContentScore(nb: Notebook): number {
 }
 
 function serializeNotebookForFirestore(nb: Notebook): string {
-  let raw = JSON.stringify(nb);
-  if (raw.length > 940000) {
-    // Strip only oversized >600KB inline base64 images/backgrounds so document fits Firestore 1MB limit
-    const compactNb: Notebook = {
-      ...nb,
-      pages: (nb.pages || []).map((p) => ({
-        ...p,
-        backgroundDataUrl:
-          p.backgroundDataUrl && p.backgroundDataUrl.length > 600000 ? undefined : p.backgroundDataUrl,
-        images: (p.images || []).map((im) => ({
-          ...im,
-          originalDataUrl:
-            im.originalDataUrl && im.originalDataUrl.length > 350000 ? undefined : im.originalDataUrl,
-        })),
+  // Strip duplicate base64 originalDataUrl when image is already cropped to a data: URL
+  // (keeps external https:// originalDataUrl since it is only ~75 bytes)
+  const cleanNb: Notebook = {
+    ...nb,
+    pages: (nb.pages || []).map((p) => ({
+      ...p,
+      images: (p.images || []).map((im) => ({
+        ...im,
+        originalDataUrl:
+          im.originalDataUrl &&
+          im.originalDataUrl.startsWith('data:') &&
+          im.originalDataUrl !== im.dataUrl
+            ? undefined
+            : im.originalDataUrl,
       })),
-    };
-    raw = JSON.stringify(compactNb);
+    })),
+  };
+  return JSON.stringify(cleanNb);
+}
+
+const FIRESTORE_CHUNK_SIZE = 700000; // 700 KB per Firestore document chunk (well below 1 MB limit)
+
+async function saveNotebookToFirestoreChunked(
+  uid: string,
+  nb: Notebook,
+  dataJson: string,
+  deviceId: string
+): Promise<void> {
+  const updatedAt = nb.updatedAt || new Date().toISOString();
+  const safeTitle = (nb.title || 'Σημείωση').slice(0, 900);
+
+  if (dataJson.length <= FIRESTORE_CHUNK_SIZE) {
+    await setDoc(
+      doc(db, 'users', uid, 'notebooks', nb.id),
+      {
+        id: nb.id,
+        title: safeTitle,
+        updatedAt,
+        dataJson,
+        deleted: false,
+        deviceId,
+      },
+      { merge: true }
+    );
+    return;
   }
-  return raw;
+
+  // Multi-chunk storage for large notebooks (>700 KB, e.g. multiple cropped high-res PNGs)
+  const chunks: string[] = [];
+  for (let i = 0; i < dataJson.length; i += FIRESTORE_CHUNK_SIZE) {
+    chunks.push(dataJson.slice(i, i + FIRESTORE_CHUNK_SIZE));
+  }
+
+  // 1. Write overflow chunks (1..N-1) first so they are already present when main doc updates
+  const extraPromises: Promise<void>[] = [];
+  for (let cIdx = 1; cIdx < chunks.length; cIdx++) {
+    const chunkDocId = `${nb.id}__chunk_${cIdx}`;
+    extraPromises.push(
+      setDoc(
+        doc(db, 'users', uid, 'notebooks', chunkDocId),
+        {
+          id: chunkDocId,
+          title: '__CHUNK__',
+          updatedAt,
+          dataJson: chunks[cIdx],
+          deleted: false,
+          deviceId,
+        },
+        { merge: true }
+      )
+    );
+  }
+  await Promise.all(extraPromises);
+
+  // 2. Write primary document with chunk manifest + chunk 0
+  const manifestJson = JSON.stringify({
+    __chunked: true,
+    chunkCount: chunks.length,
+    totalLength: dataJson.length,
+    chunk0: chunks[0],
+  });
+
+  await setDoc(
+    doc(db, 'users', uid, 'notebooks', nb.id),
+    {
+      id: nb.id,
+      title: safeTitle,
+      updatedAt,
+      dataJson: manifestJson,
+      deleted: false,
+      deviceId,
+    },
+    { merge: true }
+  );
 }
 
 const STORAGE_KEY = 'bestnotes_notebooks_v2';
@@ -871,7 +946,19 @@ export default function App() {
   );
 
   // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
-  const deviceIdRef = useRef<string>(`dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const deviceIdRef = useRef<string>(
+    (() => {
+      try {
+        const existing = localStorage.getItem('bestnotes_device_id_v1');
+        if (existing) return existing;
+        const created = `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        localStorage.setItem('bestnotes_device_id_v1', created);
+        return created;
+      } catch {
+        return `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      }
+    })()
+  );
   const lastSyncedJsonMapRef = useRef<Map<string, string>>(new Map());
   const lastSyncedMetaRef = useRef<{ folders: string; shapeLib: string }>({ folders: '', shapeLib: '' });
   const notebooksRef = useRef<Notebook[]>(notebooks);
@@ -891,20 +978,8 @@ export default function App() {
     const pushNotebookToCloud = (nb: Notebook) => {
       try {
         const dataJson = serializeNotebookForFirestore(nb);
-        if (dataJson.length > 990000) return;
         lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-        void setDoc(
-          doc(db, 'users', uid, 'notebooks', nb.id),
-          {
-            id: nb.id,
-            title: (nb.title || 'Σημείωση').slice(0, 900),
-            updatedAt: nb.updatedAt || new Date().toISOString(),
-            dataJson,
-            deleted: false,
-            deviceId: deviceIdRef.current,
-          },
-          { merge: true }
-        );
+        void saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current);
       } catch {
         // ignore
       }
@@ -921,6 +996,19 @@ export default function App() {
           return;
         }
 
+        // Pass 1: Collect overflow chunk documents (e.g. "${nbId}__chunk_1")
+        const chunkMap = new Map<string, string>();
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (!data || typeof data.id !== 'string') return;
+          if (data.id.includes('__chunk_') || data.title === '__CHUNK__') {
+            if (typeof data.dataJson === 'string') {
+              chunkMap.set(data.id, data.dataJson);
+            }
+          }
+        });
+
+        // Pass 2: Reassemble and parse primary notebook documents
         const remoteMap = new Map<
           string,
           { nb?: Notebook; deleted?: boolean; deviceId?: string; dataJson?: string; updatedAt?: string }
@@ -929,19 +1017,42 @@ export default function App() {
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
+          if (data.id.includes('__chunk_') || data.title === '__CHUNK__') return;
+
           if (data.deleted === true) {
             remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
             return;
           }
           if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
             try {
-              const parsed = JSON.parse(data.dataJson) as Notebook;
+              let fullJson = data.dataJson;
+              if (fullJson.startsWith('{"__chunked":true')) {
+                const manifest = JSON.parse(fullJson) as {
+                  __chunked: boolean;
+                  chunkCount: number;
+                  chunk0: string;
+                };
+                const parts: string[] = [manifest.chunk0 || ''];
+                let missingChunk = false;
+                for (let cIdx = 1; cIdx < manifest.chunkCount; cIdx++) {
+                  const piece = chunkMap.get(`${data.id}__chunk_${cIdx}`);
+                  if (piece === undefined) {
+                    missingChunk = true;
+                    break;
+                  }
+                  parts.push(piece);
+                }
+                if (missingChunk) return; // Wait for the remaining chunk snapshot
+                fullJson = parts.join('');
+              }
+
+              const parsed = JSON.parse(fullJson) as Notebook;
               if (parsed && parsed.id && Array.isArray(parsed.pages)) {
                 remoteMap.set(parsed.id, {
                   nb: parsed,
                   deleted: false,
                   deviceId: data.deviceId,
-                  dataJson: data.dataJson,
+                  dataJson: fullJson,
                   updatedAt: data.updatedAt || parsed.updatedAt,
                 });
               }
@@ -982,7 +1093,7 @@ export default function App() {
               continue;
             }
 
-            // Both local and remote have this notebook ID (e.g. 'nb-blank-1' on Mac Mini and iPad)
+            // Both local and remote have this notebook ID
             const localJson = serializeNotebookForFirestore(localNb);
             if (localJson === rem.dataJson) {
               lastSyncedJsonMapRef.current.set(id, rem.dataJson);
@@ -998,11 +1109,19 @@ export default function App() {
               continue;
             }
 
-            // If remote has content and local is empty, OR if this update came from another device
+            // If local has MORE content and is at least as recent as remote (e.g. a large notebook on Mac Mini
+            // that previously had >990KB content saved in localStorage), push the fuller local version to Cloud!
+            if (localScore > remoteScore && (localNb.updatedAt || '') >= (rem.updatedAt || '')) {
+              notebooksToPushBack.push(localNb);
+              continue;
+            }
+
+            // If remote has content and local is empty, OR if this update came from another device, OR remote is newer
             if (
               (remoteScore > 0 && localScore === 0) ||
               rem.deviceId !== deviceIdRef.current ||
-              (rem.updatedAt || '') > (localNb.updatedAt || '')
+              (rem.updatedAt || '') > (localNb.updatedAt || '') ||
+              remoteScore > localScore
             ) {
               mergedMap.set(id, rem.nb);
               lastSyncedJsonMapRef.current.set(id, rem.dataJson);
@@ -1010,7 +1129,7 @@ export default function App() {
             }
           }
 
-          // Also check if any local notebook with content is missing from Firestore altogether
+          // Also check if any local notebook is missing from Firestore altogether
           for (const localNb of prevLocal) {
             if (!remoteMap.has(localNb.id)) {
               notebooksToPushBack.push(localNb);
@@ -1087,7 +1206,7 @@ export default function App() {
     };
   }, [currentUser]);
 
-  // 2. Debounced Save of Notebooks to LocalStorage (500ms) + Cloud Firestore (650ms)
+  // 2. Fast Real-Time Save of Notebooks to LocalStorage + Cloud Firestore (250ms debounce, with multi-chunk support!)
   useEffect(() => {
     if (!currentUser) return;
     const uid = currentUser.uid;
@@ -1101,26 +1220,14 @@ export default function App() {
       for (const nb of notebooks) {
         try {
           const dataJson = serializeNotebookForFirestore(nb);
-          if (dataJson.length > 990000) continue;
           if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) continue;
           lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-          void setDoc(
-            doc(db, 'users', uid, 'notebooks', nb.id),
-            {
-              id: nb.id,
-              title: (nb.title || 'Σημείωση').slice(0, 900),
-              updatedAt: nb.updatedAt || new Date().toISOString(),
-              dataJson,
-              deleted: false,
-              deviceId: deviceIdRef.current,
-            },
-            { merge: true }
-          );
+          void saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current);
         } catch {
           // ignore
         }
       }
-    }, 650);
+    }, 250);
     return () => window.clearTimeout(timer);
   }, [currentUser, notebooks]);
 
@@ -1155,7 +1262,7 @@ export default function App() {
           { merge: true }
         );
       }
-    }, 800);
+    }, 400);
     return () => window.clearTimeout(timer);
   }, [currentUser, customFolders, shapeLibrary]);
 
@@ -1167,18 +1274,31 @@ export default function App() {
         }
         return;
       }
+
+      // Always force-sync all local notebooks to Cloud Firestore immediately when Cloud Sync is triggered!
+      const uid = currentUser.uid;
+      try {
+        for (const nb of notebooksRef.current) {
+          const dataJson = serializeNotebookForFirestore(nb);
+          lastSyncedJsonMapRef.current.set(nb.id, dataJson);
+          await saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current);
+        }
+      } catch {
+        // ignore
+      }
+
       const token = overrideToken ?? driveAccessToken;
       const targetNb = overrideNotebook ?? activeNotebook;
       if (!token) {
-        if (showFeedback) {
-          setSyncStatus('syncing');
-          window.setTimeout(() => {
-            setSyncStatus('synced');
-            setIsDirty(false);
-            setSecondsToNextSync(30);
-            showToast('☁️ Αποθηκεύτηκε τοπικά (συνδέσου στο Google Drive από το προφίλ 👤 για PDF Sync στο /BestNotes)');
-          }, 350);
-        }
+        setSyncStatus('syncing');
+        window.setTimeout(() => {
+          setSyncStatus('synced');
+          setIsDirty(false);
+          setSecondsToNextSync(30);
+          if (showFeedback) {
+            showToast('☁️ Cloud Sync: Συγχρονίστηκαν όλες οι σημειώσεις σε πραγματικό χρόνο (Mac & iPad)!');
+          }
+        }, 250);
         return;
       }
 
@@ -2665,6 +2785,7 @@ export default function App() {
 
   // RENDER STATIC SCENE ACROSS ALL STACKED PAGES AT 2x RETINA HiDPI (1840x2520)
   // (Only runs when page state changes, NEVER while Apple Pencil is moving!)
+  const renderStaticSceneRef = useRef<() => void>(() => {});
   const renderStaticScene = useCallback(() => {
     activeNotebook.pages.forEach((pageObj, pageIdx) => {
       const canvas = staticCanvasMapRef.current.get(pageObj.id) || (pageIdx === activePageIndex ? staticCanvasRef.current : null);
@@ -2689,8 +2810,8 @@ export default function App() {
           if (pageObj.backgroundDataUrl.startsWith('http')) {
             bgImg.crossOrigin = 'anonymous';
           }
+          bgImg.onload = () => renderStaticSceneRef.current();
           bgImg.src = pageObj.backgroundDataUrl;
-          bgImg.onload = () => renderStaticScene();
           imageElementsCacheRef.current.set(pageObj.backgroundDataUrl, bgImg);
         }
         if (bgImg.complete && bgImg.naturalWidth > 0) {
@@ -2758,8 +2879,8 @@ export default function App() {
             if (imgObj.dataUrl.startsWith('http')) {
               imgEl.crossOrigin = 'anonymous';
             }
+            imgEl.onload = () => renderStaticSceneRef.current();
             imgEl.src = imgObj.dataUrl;
-            imgEl.onload = () => renderStaticScene();
             imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
           }
 
@@ -3148,6 +3269,7 @@ export default function App() {
       }
     });
   }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, getSelectionBounds]);
+  renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
   useLayoutEffect(() => {
@@ -4059,8 +4181,11 @@ export default function App() {
 
       const cachedEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
       if (cachedEl && cachedEl.complete && cachedEl.naturalWidth > 0 && cachedEl.naturalHeight > 0) {
-        const scaleX = cachedEl.naturalWidth / Math.max(1, imgObj.width);
-        const scaleY = cachedEl.naturalHeight / Math.max(1, imgObj.height);
+        const rawScaleX = cachedEl.naturalWidth / Math.max(1, imgObj.width);
+        const rawScaleY = cachedEl.naturalHeight / Math.max(1, imgObj.height);
+        const maxCropScale = Math.min(2.2, 950 / Math.max(1, cropW, cropH));
+        const scaleX = Math.min(rawScaleX, Math.max(1.2, maxCropScale));
+        const scaleY = Math.min(rawScaleY, Math.max(1.2, maxCropScale));
         const natCropW = Math.max(16, Math.round(cropW * scaleX));
         const natCropH = Math.max(16, Math.round(cropH * scaleY));
 
