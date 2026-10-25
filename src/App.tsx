@@ -149,6 +149,21 @@ function normalizeGreekText(str: string): string {
     .replace(/ς/g, 'σ');
 }
 
+function matchesGreekSearchTokens(haystackNorm: string, qNorm: string): boolean {
+  if (!qNorm) return true;
+  const words = haystackNorm.split(/[\s,./()\-–—:;•]+/).filter(Boolean);
+  return qNorm.split(/\s+/).every((tok) => {
+    if (haystackNorm.includes(tok)) return true;
+    if (tok.length >= 4) {
+      const stem = tok.replace(/(ου|ων|εσ|εισ|οσ|ησ|ασ|ον|αν|ην|ο|α|η|ι|ε|υ)$/, '');
+      if (stem.length >= 3) {
+        return words.some((w) => w.startsWith(stem));
+      }
+    }
+    return false;
+  });
+}
+
 function getNotebookContentScore(nb: Notebook): number {
   return (nb.pages || []).reduce(
     (acc, p) =>
@@ -829,7 +844,7 @@ export default function App() {
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
-  const [libraryTab, setLibraryTab] = useState<'educational' | 'stickers' | 'custom'>('educational');
+  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'stickers' | 'custom'>('all');
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>('Όλα');
   const [libraryGradeFilter, setLibraryGradeFilter] = useState<'Όλες' | MindMapGrade>('Όλες');
   const [shapeLibSearchQuery, setShapeLibSearchQuery] = useState<string>('');
@@ -855,8 +870,9 @@ export default function App() {
   }, [showShapeLibraryPanel]);
 
   useEffect(() => {
-    const q = stickerSearchQuery.trim();
-    if (libraryTab !== 'stickers' || q.length < 2) {
+    const rawQ = libraryTab === 'all' ? shapeLibSearchQuery : stickerSearchQuery;
+    const q = rawQ.trim();
+    if ((libraryTab !== 'stickers' && libraryTab !== 'all') || q.length < 2) {
       setOnlineStickerResults([]);
       setIsSearchingOnlineStickers(false);
       return;
@@ -864,7 +880,10 @@ export default function App() {
     let cancelled = false;
     setIsSearchingOnlineStickers(true);
     const timer = window.setTimeout(async () => {
-      const results = await searchOnlineIconifyStickers(q, stickerColorStyleFilter);
+      const results = await searchOnlineIconifyStickers(
+        q,
+        libraryTab === 'all' ? 'all' : stickerColorStyleFilter
+      );
       if (!cancelled) {
         setOnlineStickerResults(results);
         setStickerCacheVersion((v) => v + 1);
@@ -875,7 +894,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [libraryTab, stickerSearchQuery, stickerColorStyleFilter]);
+  }, [libraryTab, shapeLibSearchQuery, stickerSearchQuery, stickerColorStyleFilter]);
   const [shapeLibrary, setShapeLibrary] = useState<SavedLibraryItem[]>(() => {
     if (!initialAuthUid) return [];
     try {
@@ -16177,7 +16196,7 @@ export default function App() {
                 data-popover-panel="library"
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                className="fixed right-4 sm:right-12 top-28 z-40 w-[360px] sm:w-[430px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 flex flex-col max-h-[80vh]"
+                className="fixed right-4 sm:right-12 top-28 z-40 w-[360px] sm:w-[450px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 flex flex-col max-h-[80vh]"
               >
                 <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 shrink-0">
                   <div className="flex flex-col">
@@ -16197,11 +16216,21 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Mode Tabs: Educational Mind Maps (449) vs Stickers & Icons vs User Saved Shapes */}
-                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
+                {/* Mode Tabs: All vs Educational Mind Maps vs Stickers & Icons vs User Saved Shapes */}
+                <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
+                  <button
+                    onClick={() => setLibraryTab('all')}
+                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
+                      libraryTab === 'all'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🌐 Όλα ({MIND_MAPS_CATALOG.length + CURATED_STICKERS_CATALOG.length + shapeLibrary.length})
+                  </button>
                   <button
                     onClick={() => setLibraryTab('educational')}
-                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
                       libraryTab === 'educational'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -16211,17 +16240,17 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => setLibraryTab('stickers')}
-                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
                       libraryTab === 'stickers'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    🎨 Εικονίδια & 3D
+                    🎨 Εικονίδια ({CURATED_STICKERS_CATALOG.length})
                   </button>
                   <button
                     onClick={() => setLibraryTab('custom')}
-                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
                       libraryTab === 'custom'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -16231,7 +16260,421 @@ export default function App() {
                   </button>
                 </div>
 
-                {libraryTab === 'educational' ? (
+                {libraryTab === 'all' ? (
+                  (() => {
+                    const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
+
+                    const matchedLessons = MIND_MAPS_CATALOG.filter((item) => {
+                      if (!qNorm) return true;
+                      const haystack = normalizeGreekText(
+                        `${item.title} ${item.tags.join(' ')} ${item.chapterTitle} ${item.chapter} ${item.description} ${item.subject} ${item.grade} ${item.englishKey}`
+                      );
+                      return matchesGreekSearchTokens(haystack, qNorm);
+                    });
+
+                    const matchedCuratedStickers = CURATED_STICKERS_CATALOG.filter((item) => {
+                      if (!qNorm) return true;
+                      const haystack = normalizeGreekText(
+                        `${item.title} ${item.category} ${item.tags.join(' ')} ${item.iconifyId}`
+                      );
+                      return matchesGreekSearchTokens(haystack, qNorm);
+                    });
+
+                    void stickerCacheVersion;
+                    const seenIconify = new Set(matchedCuratedStickers.map((c) => c.iconifyId));
+                    const extraOnline = qNorm
+                      ? onlineStickerResults.filter((o) => !seenIconify.has(o.iconifyId))
+                      : [];
+                    const matchedStickers = [...matchedCuratedStickers, ...extraOnline].filter(
+                      (s) => !failedStickerIds.has(s.id)
+                    );
+
+                    const matchedCustom = shapeLibrary.filter((item) => {
+                      if (!qNorm) return true;
+                      const haystack = normalizeGreekText(item.title);
+                      return matchesGreekSearchTokens(haystack, qNorm);
+                    });
+
+                    const subjectColors: Record<MindMapSubject, string> = {
+                      Φυσική: 'bg-sky-50 text-sky-700 border-sky-200',
+                      Χημεία: 'bg-amber-50 text-amber-700 border-amber-200',
+                      Βιολογία: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                      Γεωγραφία: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    };
+
+                    const styleBadgeMap: Record<Exclude<StickerColorStyle, 'all'>, { label: string; cls: string }> = {
+                      multicolor: {
+                        label: '🌈 Πολύχρωμο / 3D',
+                        cls: 'bg-amber-50 text-amber-700 border-amber-200',
+                      },
+                      duotone: {
+                        label: '🎨 Δίχρωμο',
+                        cls: 'bg-sky-50 text-[#0066ff] border-sky-200',
+                      },
+                      monochrome: {
+                        label: '✒️ Μονόχρωμο',
+                        cls: 'bg-slate-100 text-slate-700 border-slate-300',
+                      },
+                    };
+
+                    const handleInsertStickerFromAll = async (stItem: StickerCatalogItem) => {
+                      const svgUrl = getIconifySvgUrl(
+                        stItem.iconifyId,
+                        stItem.colorStyle,
+                        strokeColor || '#1e293b',
+                        stickerCustomColor,
+                        stickerCustomWidth
+                      );
+                      try {
+                        showToast(`⏳ Φόρτωση «${stItem.title}»...`);
+                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(
+                          svgUrl,
+                          stItem.iconifyId,
+                          stItem.colorStyle,
+                          strokeColor || '#1e293b',
+                          stickerCustomColor,
+                          stickerCustomWidth
+                        );
+                        insertImageDataUrlOnPage(
+                          pngDataUrl,
+                          `🎨 Προστέθηκε: «${stItem.title}» (${stItem.category})`
+                        );
+                      } catch {
+                        showToast('⚠️ Δεν ήταν δυνατή η φόρτωση αυτού του εικονιδίου.');
+                      }
+                    };
+
+                    const handleSaveStickerFromAll = async (
+                      e: React.MouseEvent,
+                      stItem: StickerCatalogItem
+                    ) => {
+                      e.stopPropagation();
+                      const svgUrl = getIconifySvgUrl(
+                        stItem.iconifyId,
+                        stItem.colorStyle,
+                        strokeColor || '#1e293b',
+                        stickerCustomColor,
+                        stickerCustomWidth
+                      );
+                      try {
+                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(
+                          svgUrl,
+                          stItem.iconifyId,
+                          stItem.colorStyle,
+                          strokeColor || '#1e293b',
+                          stickerCustomColor,
+                          stickerCustomWidth
+                        );
+                        const newLibItem: SavedLibraryItem = {
+                          id: `lib-stk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          title: stItem.title,
+                          createdAt: new Date().toLocaleTimeString('el-GR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }),
+                          strokes: [],
+                          thumbnailDataUrl: pngDataUrl,
+                        };
+                        setShapeLibrary((prev) => [newLibItem, ...prev]);
+                        showToast(`⭐ Αποθηκεύτηκε το «${stItem.title}» στα Δικά μου!`);
+                      } catch {
+                        showToast('⚠️ Δεν ήταν δυνατή η αποθήκευση του εικονιδίου.');
+                      }
+                    };
+
+                    const displayedLessons = qNorm ? matchedLessons : matchedLessons.slice(0, 8);
+                    const displayedStickers = qNorm ? matchedStickers : matchedStickers.slice(0, 12);
+                    const totalFound = matchedLessons.length + matchedStickers.length + matchedCustom.length;
+
+                    return (
+                      <div className="flex flex-col min-h-0 flex-1">
+                        {/* Unified Search Input across Lessons + Stickers + Online Iconify + Custom */}
+                        <div className="relative mb-2 shrink-0">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={shapeLibSearchQuery}
+                            onChange={(e) => {
+                              setShapeLibSearchQuery(e.target.value);
+                              setStickerSearchQuery(e.target.value);
+                            }}
+                            placeholder="Αναζήτηση σε όλα (π.χ. φορτίο, βάρκα, τροφή, κύτταρο, βέλος)..."
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                          />
+                          {shapeLibSearchQuery && (
+                            <button
+                              onClick={() => {
+                                setShapeLibSearchQuery('');
+                                setStickerSearchQuery('');
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              title="Καθαρισμός αναζήτησης"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Live Category Breakdown Bar */}
+                        <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap text-[10px]">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setLibraryTab('educational')}
+                              className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 cursor-pointer"
+                            >
+                              🎓 {matchedLessons.length} μαθήματα
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setLibraryTab('stickers')}
+                              className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200 font-bold hover:bg-sky-100 cursor-pointer"
+                            >
+                              🎨 {matchedStickers.length} εικονίδια
+                              {isSearchingOnlineStickers ? ' (🔍...)' : ''}
+                            </button>
+                            {matchedCustom.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setLibraryTab('custom')}
+                                className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 cursor-pointer"
+                              >
+                                ⭐ {matchedCustom.length} δικά μου
+                              </button>
+                            )}
+                          </div>
+                          <span className="font-bold text-emerald-700 shrink-0">
+                            {totalFound} σύνολο
+                          </span>
+                        </div>
+
+                        {totalFound === 0 && !isSearchingOnlineStickers ? (
+                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <Search className="w-6 h-6 text-slate-400" />
+                            <p className="text-xs font-semibold text-slate-600">
+                              Δεν βρέθηκαν αποτελέσματα για «{shapeLibSearchQuery}»
+                            </p>
+                            <button
+                              onClick={() => {
+                                setShapeLibSearchQuery('');
+                                setStickerSearchQuery('');
+                              }}
+                              className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold cursor-pointer hover:bg-emerald-700"
+                            >
+                              Καθαρισμός Αναζήτησης
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            style={{ WebkitOverflowScrolling: 'touch' }}
+                            className="overflow-y-auto pr-1 space-y-3 max-h-[52vh]"
+                          >
+                            {/* 1. Matching Custom Shapes (if any) */}
+                            {matchedCustom.length > 0 && (
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10.5px] font-bold text-amber-800">
+                                    ⭐ Δικά μου ({matchedCustom.length})
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {matchedCustom.map((item) => (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => handleInsertFromShapeLibrary(item)}
+                                      className="group relative flex flex-col items-center justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
+                                      title={`Εισαγωγή "${item.title}" στη σελίδα`}
+                                    >
+                                      <div className="w-full h-20 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
+                                        <img
+                                          src={item.thumbnailDataUrl}
+                                          alt={item.title}
+                                          className="max-w-full max-h-full object-contain pointer-events-none select-none"
+                                        />
+                                      </div>
+                                      <span className="mt-1 text-[10px] font-semibold text-slate-700 truncate w-full text-center">
+                                        {item.title}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 2. Matching Educational Mind Maps */}
+                            {matchedLessons.length > 0 && (
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10.5px] font-bold text-emerald-800">
+                                    🎓 Μαθήματα & Σχεδιαγράμματα ({matchedLessons.length})
+                                  </span>
+                                  {!qNorm && matchedLessons.length > displayedLessons.length && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setLibraryTab('educational')}
+                                      className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                                    >
+                                      Δες όλα ({matchedLessons.length}) →
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {displayedLessons.map((item) => (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => {
+                                        insertImageDataUrlOnPage(
+                                          item.url,
+                                          `📚 Προστέθηκε: «${item.title}» (${item.subject} ${item.grade})`
+                                        );
+                                      }}
+                                      className="group flex flex-col justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
+                                      title={`${item.title} — ${item.description}\nΚλικ για εισαγωγή στη σελίδα`}
+                                    >
+                                      <div>
+                                        <div className="flex items-center justify-between gap-1 mb-1">
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${subjectColors[item.subject]}`}
+                                          >
+                                            {item.subject}
+                                          </span>
+                                          <span className="text-[9px] font-semibold text-slate-400 truncate">
+                                            {item.grade.replace(' Γυμνασίου', '')} • {item.chapter}
+                                          </span>
+                                        </div>
+
+                                        <div
+                                          className="w-full h-24 rounded-lg bg-slate-100/60 border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
+                                          style={{
+                                            backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
+                                            backgroundSize: '10px 10px',
+                                          }}
+                                        >
+                                          <img
+                                            src={item.url}
+                                            alt={item.title}
+                                            loading="lazy"
+                                            className="max-w-full max-h-full object-contain pointer-events-none select-none group-hover:scale-105 transition-transform"
+                                          />
+                                        </div>
+
+                                        <p className="mt-1.5 text-[10.5px] font-bold text-slate-800 line-clamp-2 leading-tight">
+                                          {item.title}
+                                        </p>
+                                        <p className="mt-0.5 text-[9px] text-slate-500 line-clamp-1">
+                                          {item.chapterTitle}
+                                        </p>
+                                      </div>
+
+                                      <div className="flex flex-wrap gap-1 mt-1.5 pt-1 border-t border-slate-200/60">
+                                        {item.tags.map((tag) => (
+                                          <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setShapeLibSearchQuery(tag);
+                                              setStickerSearchQuery(tag);
+                                            }}
+                                            className="px-1.5 py-0.5 rounded bg-white hover:bg-emerald-100 text-emerald-700 border border-slate-200/90 text-[9px] font-medium transition cursor-pointer"
+                                            title={`Φιλτράρισμα με ${tag}`}
+                                          >
+                                            {tag}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 3. Matching Stickers & 3D Icons */}
+                            {(matchedStickers.length > 0 || isSearchingOnlineStickers) && (
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10.5px] font-bold text-sky-800">
+                                    🎨 Εικονίδια & 3D ({matchedStickers.length})
+                                    {isSearchingOnlineStickers ? ' • 🔍 Online αναζήτηση...' : ''}
+                                  </span>
+                                  {!qNorm && matchedStickers.length > displayedStickers.length && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setLibraryTab('stickers')}
+                                      className="text-[10px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                    >
+                                      Δες όλα ({matchedStickers.length}) →
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {displayedStickers.map((stItem) => {
+                                    const svgUrl = getIconifySvgUrl(
+                                      stItem.iconifyId,
+                                      stItem.colorStyle,
+                                      strokeColor || '#1e293b',
+                                      stickerCustomColor,
+                                      stickerCustomWidth
+                                    );
+                                    const badge = styleBadgeMap[stItem.colorStyle];
+                                    return (
+                                      <div
+                                        key={stItem.id}
+                                        onClick={() => void handleInsertStickerFromAll(stItem)}
+                                        className="group relative flex flex-col items-center justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
+                                        title={`${stItem.title} (${badge.label})\nΚλικ για εισαγωγή στη σελίδα`}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={(e) => void handleSaveStickerFromAll(e, stItem)}
+                                          className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-white/90 hover:bg-amber-400 text-amber-600 hover:text-white border border-amber-200 text-[9px] font-bold shadow-2xs transition cursor-pointer z-10"
+                                          title="Αποθήκευση στα «⭐ Δικά μου»"
+                                        >
+                                          ⭐
+                                        </button>
+
+                                        <div
+                                          className="w-full h-16 rounded-lg bg-white border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
+                                          style={{
+                                            backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
+                                            backgroundSize: '8px 8px',
+                                          }}
+                                        >
+                                          <img
+                                            src={svgUrl}
+                                            alt={stItem.title}
+                                            loading="lazy"
+                                            onError={() =>
+                                              setFailedStickerIds((prev) => {
+                                                const next = new Set(prev);
+                                                next.add(stItem.id);
+                                                return next;
+                                              })
+                                            }
+                                            className="w-12 h-12 object-contain pointer-events-none select-none group-hover:scale-110 transition-transform"
+                                          />
+                                        </div>
+
+                                        <p className="mt-1.5 text-[10px] font-bold text-slate-800 text-center line-clamp-1 w-full">
+                                          {stItem.title}
+                                        </p>
+                                        <span
+                                          className={`mt-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold border ${badge.cls}`}
+                                        >
+                                          {badge.label}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : libraryTab === 'educational' ? (
                   (() => {
                     const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
                     const filteredCatalog = MIND_MAPS_CATALOG.filter((item) => {
@@ -16245,7 +16688,7 @@ export default function App() {
                       const haystack = normalizeGreekText(
                         `${item.title} ${item.tags.join(' ')} ${item.chapterTitle} ${item.chapter} ${item.description} ${item.subject} ${item.grade} ${item.englishKey}`
                       );
-                      return qNorm.split(/\s+/).every((token) => haystack.includes(token));
+                      return matchesGreekSearchTokens(haystack, qNorm);
                     });
 
                     const subjectColors: Record<MindMapSubject, string> = {
@@ -16263,13 +16706,19 @@ export default function App() {
                           <input
                             type="text"
                             value={shapeLibSearchQuery}
-                            onChange={(e) => setShapeLibSearchQuery(e.target.value)}
-                            placeholder="Αναζήτηση (π.χ. κύτταρο, δύναμη, pH, χάρτης)..."
+                            onChange={(e) => {
+                              setShapeLibSearchQuery(e.target.value);
+                              setStickerSearchQuery(e.target.value);
+                            }}
+                            placeholder="Αναζήτηση (π.χ. κύτταρο, δύναμη, φορτίο, τροφή, χάρτης)..."
                             className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
                           />
                           {shapeLibSearchQuery && (
                             <button
-                              onClick={() => setShapeLibSearchQuery('')}
+                              onClick={() => {
+                                setShapeLibSearchQuery('');
+                                setStickerSearchQuery('');
+                              }}
                               className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                               title="Καθαρισμός αναζήτησης"
                             >
@@ -16344,6 +16793,7 @@ export default function App() {
                                 setLibrarySubjectFilter('Όλα');
                                 setLibraryGradeFilter('Όλες');
                                 setShapeLibSearchQuery('');
+                                setStickerSearchQuery('');
                               }}
                               className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold cursor-pointer hover:bg-emerald-700"
                             >
@@ -16410,6 +16860,7 @@ export default function App() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setShapeLibSearchQuery(tag);
+                                        setStickerSearchQuery(tag);
                                       }}
                                       className="px-1.5 py-0.5 rounded bg-white hover:bg-emerald-100 text-emerald-700 border border-slate-200/90 text-[9px] font-medium transition cursor-pointer"
                                       title={`Φιλτράρισμα με ${tag}`}
@@ -16439,7 +16890,7 @@ export default function App() {
                       const haystack = normalizeGreekText(
                         `${item.title} ${item.category} ${item.tags.join(' ')} ${item.iconifyId}`
                       );
-                      return qNorm.split(/\s+/).every((tok) => haystack.includes(tok));
+                      return matchesGreekSearchTokens(haystack, qNorm);
                     });
 
                     void stickerCacheVersion;
@@ -16537,13 +16988,19 @@ export default function App() {
                           <input
                             type="text"
                             value={stickerSearchQuery}
-                            onChange={(e) => setStickerSearchQuery(e.target.value)}
-                            placeholder="Αναζήτηση (π.χ. βελος, γραναζι, αμαξι, δασκαλος, σκυλος)..."
+                            onChange={(e) => {
+                              setStickerSearchQuery(e.target.value);
+                              setShapeLibSearchQuery(e.target.value);
+                            }}
+                            placeholder="Αναζήτηση (π.χ. βέλος, βάρκα, φορτίο, τροφή, γρανάζι)..."
                             className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
                           />
                           {stickerSearchQuery && (
                             <button
-                              onClick={() => setStickerSearchQuery('')}
+                              onClick={() => {
+                                setStickerSearchQuery('');
+                                setShapeLibSearchQuery('');
+                              }}
                               className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                               title="Καθαρισμός αναζήτησης"
                             >
