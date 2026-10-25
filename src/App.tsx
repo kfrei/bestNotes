@@ -14622,9 +14622,17 @@ export default function App() {
         return;
       }
 
-      // S / Σ / ς -> Select (Λάσο)
+      // S / Σ / ς -> 1ο πάτημα: Ελεύθερο Λάσο ('freehand'), επόμενο πάτημα: εναλλαγή Λάσο <-> Ορθογώνια Επιλογή ('rect')
       if (code === 'KeyS' || key === 's' || key === 'σ' || key === 'ς') {
-        switchToTool('lasso', '🪢 Select (Λάσο) — S / Σ');
+        if (activeTool === 'lasso' && !showAlignSubBar && lassoMode === 'freehand') {
+          lassoModeRef.current = 'rect';
+          setLassoMode('rect');
+          switchToTool('lasso', '⬚ Ορθογώνια Επιλογή (Διαγώνια Έλξη) — S / Σ (ξανά S για Λάσο)');
+        } else {
+          lassoModeRef.current = 'freehand';
+          setLassoMode('freehand');
+          switchToTool('lasso', '🪢 Select (Ελεύθερο Λάσο) — S / Σ (ξανά S για Ορθογώνιο)');
+        }
         return;
       }
 
@@ -14719,6 +14727,7 @@ export default function App() {
   }, [
     viewMode,
     activeTool,
+    lassoMode,
     showAlignSubBar,
     editingTextId,
     showMathModal,
