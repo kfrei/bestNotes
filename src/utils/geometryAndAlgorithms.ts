@@ -1245,6 +1245,65 @@ export function beautifyHandwritingStrokes(strokes: StrokeObject[]): StrokeObjec
 }
 
 /**
+ * High-efficiency canvas-to-dataUrl encoder:
+ * - For opaque images (no alpha < 250): uses WebP (0.85) or JPEG (0.85), picking whichever is smaller (typically 10x-20x smaller than PNG).
+ * - For transparent images (alpha < 250): uses WebP (0.86) with alpha if supported by the browser, or gently 15-bit quantized PNG (3x-4x smaller than raw 24-bit PNG).
+ */
+export function encodeCanvasOptimizedDataUrl(canvas: HTMLCanvasElement): string {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  if (!ctx || w === 0 || h === 0) {
+    return canvas.toDataURL('image/png');
+  }
+
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+  let hasTransparency = false;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 250) {
+      hasTransparency = true;
+      break;
+    }
+  }
+
+  if (!hasTransparency) {
+    const jpegUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const webpUrl = canvas.toDataURL('image/webp', 0.85);
+    if (webpUrl.startsWith('data:image/webp') && webpUrl.length < jpegUrl.length) {
+      return webpUrl;
+    }
+    return jpegUrl;
+  }
+
+  // Transparent image: try native alpha WebP first (supported in Chrome/Edge & modern WebKit)
+  const webpUrl = canvas.toDataURL('image/webp', 0.86);
+
+  // Also quantize RGB noise slightly (32 levels/channel = 32,768 colors) so PNG DEFLATE compresses 3x smaller on Safari
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a < 10) {
+      data[i] = 0;
+      data[i + 1] = 0;
+      data[i + 2] = 0;
+      data[i + 3] = 0;
+    } else {
+      data[i] = Math.min(255, (data[i] + 3) & 0xf8);
+      data[i + 1] = Math.min(255, (data[i + 1] + 3) & 0xf8);
+      data[i + 2] = Math.min(255, (data[i + 2] + 3) & 0xf8);
+      data[i + 3] = a > 246 ? 255 : (a + 7) & 0xf0;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  const pngUrl = canvas.toDataURL('image/png');
+
+  if (webpUrl.startsWith('data:image/webp') && webpUrl.length < pngUrl.length) {
+    return webpUrl;
+  }
+  return pngUrl;
+}
+
+/**
  * Photoshop 1-Click Transparent Background (Zero-AI Color-to-Alpha + Flood Fill Magic Wand)
  */
 export async function removeImageBackground(
@@ -1256,22 +1315,38 @@ export async function removeImageBackground(
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      const maxDim = 1350;
+      const scale = Math.min(1, maxDim / Math.max(1, img.width, img.height));
       const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
       const ctx = canvas.getContext('2d');
       if (!ctx) return resolve(dataUrl);
 
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imgData.data;
       const w = canvas.width;
       const h = canvas.height;
 
-      // Sample corner pixel as background reference color (usually white/light grey paper)
-      const bgR = data[0] > 180 ? data[0] : 255;
-      const bgG = data[1] > 180 ? data[1] : 255;
-      const bgB = data[2] > 180 ? data[2] : 255;
+      // Sample 4 corner pixels as background reference color (supports BOTH white paper AND black chalkboard backgrounds!)
+      const corners = [
+        0,
+        (w - 1) * 4,
+        (h - 1) * w * 4,
+        ((h - 1) * w + (w - 1)) * 4,
+      ];
+      let bgR = 255,
+        bgG = 255,
+        bgB = 255;
+      for (const cIdx of corners) {
+        if (data[cIdx + 3] > 128) {
+          bgR = data[cIdx];
+          bgG = data[cIdx + 1];
+          bgB = data[cIdx + 2];
+          break;
+        }
+      }
 
       const colorDist = (idx: number) => {
         const dr = data[idx] - bgR;
@@ -1288,13 +1363,13 @@ export async function removeImageBackground(
           if (d <= lowT) {
             data[i + 3] = 0;
           } else if (d < highT) {
-            // Smooth anti-aliased alpha transition so black diagram lines stay razor-sharp
+            // Smooth anti-aliased alpha transition so diagram lines stay razor-sharp
             const factor = (d - lowT) / (highT - lowT);
             data[i + 3] = Math.round(data[i + 3] * factor);
           }
         }
       } else {
-        // Outer Flood-Fill (Magic Wand from image borders - keeps white insides of shapes opaque!)
+        // Outer Flood-Fill (Magic Wand from image borders - keeps insides of shapes opaque!)
         const visited = new Uint8Array(w * h);
         const queue: number[] = [];
         for (let x = 0; x < w; x++) {
@@ -1323,7 +1398,7 @@ export async function removeImageBackground(
       }
 
       ctx.putImageData(imgData, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
+      resolve(encodeCanvasOptimizedDataUrl(canvas));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;

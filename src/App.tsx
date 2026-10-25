@@ -108,6 +108,7 @@ import {
   eraseStrokeByCircle,
   computeResistorOrSpringPoints,
   get3DShapeSubPaths,
+  encodeCanvasOptimizedDataUrl,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -136,10 +137,10 @@ function getNotebookContentScore(nb: Notebook): number {
   );
 }
 
-function serializeNotebookForFirestore(nb: Notebook): string {
+function cleanNotebookForStorage(nb: Notebook): Notebook {
   // Strip duplicate base64 originalDataUrl when image is already cropped to a data: URL
-  // (keeps external https:// originalDataUrl since it is only ~75 bytes)
-  const cleanNb: Notebook = {
+  // (keeps external https:// or /mind_maps/ originalDataUrl since it is only ~75 bytes)
+  return {
     ...nb,
     pages: (nb.pages || []).map((p) => ({
       ...p,
@@ -154,10 +155,80 @@ function serializeNotebookForFirestore(nb: Notebook): string {
       })),
     })),
   };
-  return JSON.stringify(cleanNb);
 }
 
-const FIRESTORE_CHUNK_SIZE = 700000; // 700 KB per Firestore document chunk (well below 1 MB limit)
+function serializeNotebookForFirestore(nb: Notebook): string {
+  return JSON.stringify(cleanNotebookForStorage(nb));
+}
+
+// IndexedDB High-Capacity Local Storage (supports 50MB+ notebooks where localStorage 5MB quota fails on Refresh)
+const IDB_NAME = 'bestnotes_idb_v1';
+const IDB_STORE = 'notebooks_by_uid';
+
+function openBestNotesIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB unavailable'));
+      return;
+    }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const dbInstance = req.result;
+      if (!dbInstance.objectStoreNames.contains(IDB_STORE)) {
+        dbInstance.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveNotebooksToIndexedDB(uid: string, nbs: Notebook[]): Promise<void> {
+  try {
+    const idb = await openBestNotesIdb();
+    const cleaned = nbs.map(cleanNotebookForStorage);
+    await new Promise<void>((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(cleaned, uid);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function loadNotebooksFromIndexedDB(uid: string): Promise<Notebook[] | null> {
+  try {
+    const idb = await openBestNotesIdb();
+    return await new Promise<Notebook[] | null>((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(uid);
+      req.onsuccess = () => {
+        if (Array.isArray(req.result) && req.result.length > 0) {
+          resolve(req.result as Notebook[]);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
+  void saveNotebooksToIndexedDB(uid, nbs);
+  try {
+    localStorage.setItem(`${STORAGE_KEY}_${uid}`, JSON.stringify(nbs.map(cleanNotebookForStorage)));
+  } catch {
+    // If localStorage 5MB quota is exceeded, IndexedDB above still persists the full notebooks!
+  }
+}
+
+// 380 KB per Firestore chunk (guarantees < 450 KB UTF-8 bytes without double-JSON-escaping, well under 1 MB limit)
+const FIRESTORE_CHUNK_SIZE = 380000;
 
 async function saveNotebookToFirestoreChunked(
   uid: string,
@@ -184,17 +255,18 @@ async function saveNotebookToFirestoreChunked(
     return;
   }
 
-  // Multi-chunk storage for large notebooks (>700 KB, e.g. multiple cropped high-res PNGs)
+  // Multi-chunk storage for large notebooks (>380 KB, e.g. 2-10 MB with multiple cropped high-res images)
+  // Store ALL chunks (0..N-1) as raw strings in __chunk_0 .. __chunk_{N-1} so chunk 0 is NEVER double-escaped in JSON.stringify!
   const chunks: string[] = [];
   for (let i = 0; i < dataJson.length; i += FIRESTORE_CHUNK_SIZE) {
     chunks.push(dataJson.slice(i, i + FIRESTORE_CHUNK_SIZE));
   }
 
-  // 1. Write overflow chunks (1..N-1) first so they are already present when main doc updates
-  const extraPromises: Promise<void>[] = [];
-  for (let cIdx = 1; cIdx < chunks.length; cIdx++) {
+  // 1. Write all chunk documents (0..N-1) first with matching updatedAt version
+  const chunkPromises: Promise<void>[] = [];
+  for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
     const chunkDocId = `${nb.id}__chunk_${cIdx}`;
-    extraPromises.push(
+    chunkPromises.push(
       setDoc(
         doc(db, 'users', uid, 'notebooks', chunkDocId),
         {
@@ -209,14 +281,14 @@ async function saveNotebookToFirestoreChunked(
       )
     );
   }
-  await Promise.all(extraPromises);
+  await Promise.all(chunkPromises);
 
-  // 2. Write primary document with chunk manifest + chunk 0
+  // 2. Write primary document with tiny (<150 byte) chunk manifest
   const manifestJson = JSON.stringify({
     __chunked: true,
     chunkCount: chunks.length,
     totalLength: dataJson.length,
-    chunk0: chunks[0],
+    version: updatedAt,
   });
 
   await setDoc(
@@ -477,9 +549,59 @@ export default function App() {
           }
           const finalNbs = loadedNbs || createDefaultBlankNotebooks();
           setNotebooks(finalNbs);
-          setOpenNotebookIds([finalNbs[0].id]);
-          setActiveNotebookId(finalNbs[0].id);
-          setActivePageIndex(0);
+
+          // Preserve active notebook & page across Refresh if saved in session storage
+          let restoredActiveId = finalNbs[0].id;
+          let restoredOpenIds = [finalNbs[0].id];
+          let restoredPageIdx = 0;
+          try {
+            const rawSession = localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${user.uid}`);
+            if (rawSession) {
+              const sess = JSON.parse(rawSession);
+              if (sess && typeof sess.activeNotebookId === 'string' && finalNbs.some((n) => n.id === sess.activeNotebookId)) {
+                restoredActiveId = sess.activeNotebookId;
+              }
+              if (sess && Array.isArray(sess.openNotebookIds)) {
+                const validOpen = sess.openNotebookIds.filter((id: string) => finalNbs.some((n) => n.id === id));
+                if (validOpen.length > 0) restoredOpenIds = validOpen;
+              }
+              if (sess && typeof sess.activePageIndex === 'number') {
+                restoredPageIdx = Math.max(0, sess.activePageIndex);
+              }
+            }
+          } catch {
+            // ignore
+          }
+          setOpenNotebookIds(restoredOpenIds);
+          setActiveNotebookId(restoredActiveId);
+          setActivePageIndex(restoredPageIdx);
+
+          // Also load from high-capacity IndexedDB (which never suffers from localStorage 5MB limit!)
+          void loadNotebooksFromIndexedDB(user.uid).then((idbNbs) => {
+            if (!idbNbs || idbNbs.length === 0) return;
+            setNotebooks((prev) => {
+              const map = new Map<string, Notebook>();
+              for (const n of prev) map.set(n.id, n);
+              let changed = false;
+              for (const idbNb of idbNbs) {
+                const cur = map.get(idbNb.id);
+                if (!cur) {
+                  map.set(idbNb.id, idbNb);
+                  changed = true;
+                } else {
+                  const idbTime = idbNb.updatedAt || '';
+                  const curTime = cur.updatedAt || '';
+                  const idbScore = getNotebookContentScore(idbNb);
+                  const curScore = getNotebookContentScore(cur);
+                  if (idbTime > curTime || (idbTime === curTime && idbScore > curScore)) {
+                    map.set(idbNb.id, idbNb);
+                    changed = true;
+                  }
+                }
+              }
+              return changed ? Array.from(map.values()) : prev;
+            });
+          });
 
           // Load this user's saved folders (or start with 1 empty folder "Μαθήματα" if newly registered!)
           const savedFolders = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${user.uid}`);
@@ -960,14 +1082,43 @@ export default function App() {
     })()
   );
   const lastSyncedJsonMapRef = useRef<Map<string, string>>(new Map());
+  const lastSeenRemoteJsonMapRef = useRef<Map<string, string>>(new Map());
+  const inFlightSavesMapRef = useRef<Map<string, number>>(new Map());
   const lastSyncedMetaRef = useRef<{ folders: string; shapeLib: string }>({ folders: '', shapeLib: '' });
   const notebooksRef = useRef<Notebook[]>(notebooks);
   notebooksRef.current = notebooks;
+
+  const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string) => {
+    try {
+      const dataJson = explicitJson ?? serializeNotebookForFirestore(nb);
+      lastSyncedJsonMapRef.current.set(nb.id, dataJson);
+      inFlightSavesMapRef.current.set(nb.id, (inFlightSavesMapRef.current.get(nb.id) || 0) + 1);
+      saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current)
+        .then(() => {
+          lastSeenRemoteJsonMapRef.current.set(nb.id, dataJson);
+        })
+        .catch((err) => {
+          console.error('Firestore notebook sync error:', err);
+        })
+        .finally(() => {
+          const count = inFlightSavesMapRef.current.get(nb.id) || 1;
+          if (count <= 1) {
+            inFlightSavesMapRef.current.delete(nb.id);
+          } else {
+            inFlightSavesMapRef.current.set(nb.id, count - 1);
+          }
+        });
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // 1. Real-Time Cloud Firestore Listener for Logged-In Users (syncs notebooks, folders & shapeLibrary across Mac Mini & iPad!)
   useEffect(() => {
     if (!currentUser) {
       lastSyncedJsonMapRef.current.clear();
+      lastSeenRemoteJsonMapRef.current.clear();
+      inFlightSavesMapRef.current.clear();
       return;
     }
 
@@ -975,36 +1126,32 @@ export default function App() {
     const nbsColRef = collection(db, 'users', uid, 'notebooks');
     const userDocRef = doc(db, 'users', uid);
 
-    const pushNotebookToCloud = (nb: Notebook) => {
-      try {
-        const dataJson = serializeNotebookForFirestore(nb);
-        lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-        void saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current);
-      } catch {
-        // ignore
-      }
-    };
-
     const unsubNotebooks = onSnapshot(
       nbsColRef,
       (snapshot) => {
         if (snapshot.empty) {
           // Cloud has no notebooks yet for this user -> upload all current local notebooks immediately!
           for (const localNb of notebooksRef.current) {
-            pushNotebookToCloud(localNb);
+            pushNotebookToCloudTracked(uid, localNb);
           }
           return;
         }
 
-        // Pass 1: Collect overflow chunk documents (e.g. "${nbId}__chunk_1")
-        const chunkMap = new Map<string, string>();
+        // Pass 1: Collect chunk documents ("${nbId}__chunk_0", "${nbId}__chunk_1", ...) with their updatedAt version
+        const chunkMap = new Map<string, { dataJson: string; updatedAt?: string }>();
+        // Track ALL primary document IDs present in Firestore (even if chunks are still in transit!)
+        // so the 2nd device NEVER mistakes an in-transit chunked doc for a "missing" doc and overwrites it!
+        const allRemotePrimaryIds = new Set<string>();
+
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
           if (data.id.includes('__chunk_') || data.title === '__CHUNK__') {
             if (typeof data.dataJson === 'string') {
-              chunkMap.set(data.id, data.dataJson);
+              chunkMap.set(data.id, { dataJson: data.dataJson, updatedAt: data.updatedAt });
             }
+          } else {
+            allRemotePrimaryIds.add(data.id);
           }
         });
 
@@ -1030,19 +1177,28 @@ export default function App() {
                 const manifest = JSON.parse(fullJson) as {
                   __chunked: boolean;
                   chunkCount: number;
-                  chunk0: string;
+                  chunk0?: string;
+                  version?: string;
                 };
-                const parts: string[] = [manifest.chunk0 || ''];
+                const parts: string[] = [];
+                let startIdx = 0;
+                if (typeof manifest.chunk0 === 'string') {
+                  parts.push(manifest.chunk0);
+                  startIdx = 1;
+                }
                 let missingChunk = false;
-                for (let cIdx = 1; cIdx < manifest.chunkCount; cIdx++) {
-                  const piece = chunkMap.get(`${data.id}__chunk_${cIdx}`);
-                  if (piece === undefined) {
+                for (let cIdx = startIdx; cIdx < manifest.chunkCount; cIdx++) {
+                  const chunkEntry = chunkMap.get(`${data.id}__chunk_${cIdx}`);
+                  if (
+                    !chunkEntry ||
+                    (manifest.version && chunkEntry.updatedAt && chunkEntry.updatedAt !== manifest.version)
+                  ) {
                     missingChunk = true;
                     break;
                   }
-                  parts.push(piece);
+                  parts.push(chunkEntry.dataJson);
                 }
-                if (missingChunk) return; // Wait for the remaining chunk snapshot
+                if (missingChunk) return; // Wait for the remaining chunk snapshot (allRemotePrimaryIds still protects this ID!)
                 fullJson = parts.join('');
               }
 
@@ -1079,6 +1235,7 @@ export default function App() {
               if (localNb) {
                 mergedMap.delete(id);
                 lastSyncedJsonMapRef.current.delete(id);
+                lastSeenRemoteJsonMapRef.current.delete(id);
                 anyChanged = true;
               }
               continue;
@@ -1086,9 +1243,15 @@ export default function App() {
 
             if (!rem.nb || !rem.dataJson) continue;
 
+            // If this device is actively uploading a newer version of this notebook right now, never overwrite with an intermediate snapshot!
+            if ((inFlightSavesMapRef.current.get(id) || 0) > 0) {
+              continue;
+            }
+
             if (!localNb) {
               mergedMap.set(id, rem.nb);
               lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
               anyChanged = true;
               continue;
             }
@@ -1097,6 +1260,16 @@ export default function App() {
             const localJson = serializeNotebookForFirestore(localNb);
             if (localJson === rem.dataJson) {
               lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
+              continue;
+            }
+
+            const prevSeenRemoteJson = lastSeenRemoteJsonMapRef.current.get(id);
+            const remoteChangedSinceLastSeen = prevSeenRemoteJson !== rem.dataJson;
+
+            // CRITICAL: If Firestore's document for this notebook HAS NOT CHANGED since we last saw it,
+            // then localNb has NEW local edits made on this device! Never let old remote state overwrite local edits!
+            if (!remoteChangedSinceLastSeen) {
               continue;
             }
 
@@ -1105,33 +1278,33 @@ export default function App() {
 
             // Never let an empty default notebook from a 2nd device overwrite a non-empty notebook!
             if (localScore > 0 && remoteScore === 0) {
+              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
               notebooksToPushBack.push(localNb);
               continue;
             }
 
-            // If local has MORE content and is at least as recent as remote (e.g. a large notebook on Mac Mini
-            // that previously had >990KB content saved in localStorage), push the fuller local version to Cloud!
-            if (localScore > remoteScore && (localNb.updatedAt || '') >= (rem.updatedAt || '')) {
-              notebooksToPushBack.push(localNb);
-              continue;
-            }
-
-            // If remote has content and local is empty, OR if this update came from another device, OR remote is newer
+            // On initial load (when prevSeenRemoteJson is undefined), if local (e.g. from IndexedDB) is strictly newer
+            // and has at least as much content as remote, push local to Cloud instead of overwriting!
             if (
-              (remoteScore > 0 && localScore === 0) ||
-              rem.deviceId !== deviceIdRef.current ||
-              (rem.updatedAt || '') > (localNb.updatedAt || '') ||
-              remoteScore > localScore
+              prevSeenRemoteJson === undefined &&
+              (localNb.updatedAt || '') > (rem.updatedAt || '') &&
+              localScore >= remoteScore
             ) {
-              mergedMap.set(id, rem.nb);
-              lastSyncedJsonMapRef.current.set(id, rem.dataJson);
-              anyChanged = true;
+              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
+              notebooksToPushBack.push(localNb);
+              continue;
             }
+
+            // Otherwise, remote has genuinely changed (e.g. edited on the other device or newer in Cloud) -> adopt remote!
+            mergedMap.set(id, rem.nb);
+            lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+            lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
+            anyChanged = true;
           }
 
-          // Also check if any local notebook is missing from Firestore altogether
+          // Only push local notebooks that genuinely do not exist in Firestore at all (not in allRemotePrimaryIds)
           for (const localNb of prevLocal) {
-            if (!remoteMap.has(localNb.id)) {
+            if (!allRemotePrimaryIds.has(localNb.id) && (inFlightSavesMapRef.current.get(localNb.id) || 0) === 0) {
               notebooksToPushBack.push(localNb);
             }
           }
@@ -1141,16 +1314,12 @@ export default function App() {
           if (nextList.length === 0) {
             return createDefaultBlankNotebooks();
           }
-          try {
-            localStorage.setItem(`${STORAGE_KEY}_${uid}`, JSON.stringify(nextList));
-          } catch {
-            // ignore
-          }
+          saveNotebooksToLocalAndIdb(uid, nextList);
           return nextList;
         });
 
         for (const nbToPush of notebooksToPushBack) {
-          pushNotebookToCloud(nbToPush);
+          pushNotebookToCloudTracked(uid, nbToPush);
         }
       },
       () => {
@@ -1204,32 +1373,29 @@ export default function App() {
       unsubNotebooks();
       unsubUserDoc();
     };
-  }, [currentUser]);
+  }, [currentUser, pushNotebookToCloudTracked]);
 
-  // 2. Fast Real-Time Save of Notebooks to LocalStorage + Cloud Firestore (250ms debounce, with multi-chunk support!)
+  // 2. Fast Real-Time Save of Notebooks to IndexedDB + LocalStorage + Cloud Firestore (250ms debounce, with multi-chunk support!)
   useEffect(() => {
     if (!currentUser) return;
     const uid = currentUser.uid;
+    // Save to IndexedDB immediately so even an instant Refresh never loses a large pasted image!
+    void saveNotebooksToIndexedDB(uid, notebooks);
     const timer = window.setTimeout(() => {
-      try {
-        localStorage.setItem(`${STORAGE_KEY}_${uid}`, JSON.stringify(notebooks));
-      } catch {
-        // ignore quota
-      }
+      saveNotebooksToLocalAndIdb(uid, notebooks);
 
       for (const nb of notebooks) {
         try {
           const dataJson = serializeNotebookForFirestore(nb);
           if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) continue;
-          lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-          void saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current);
+          pushNotebookToCloudTracked(uid, nb, dataJson);
         } catch {
           // ignore
         }
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [currentUser, notebooks]);
+  }, [currentUser, notebooks, pushNotebookToCloudTracked]);
 
   // 3. Persist customFolders & shapeLibrary to LocalStorage + Cloud Firestore
   useEffect(() => {
@@ -1266,6 +1432,70 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [currentUser, customFolders, shapeLibrary]);
 
+  // 4. Automatic Background Optimizer for any legacy unoptimized >300KB PNGs already inside notebooks
+  const checkedLegacyImgIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const nb of notebooks) {
+      for (const p of nb.pages || []) {
+        for (const im of p.images || []) {
+          if (
+            im.dataUrl &&
+            im.dataUrl.startsWith('data:image/png') &&
+            im.dataUrl.length > 300000 &&
+            !checkedLegacyImgIdsRef.current.has(im.id)
+          ) {
+            checkedLegacyImgIdsRef.current.add(im.id);
+            const targetNbId = nb.id;
+            const targetPageId = p.id;
+            const targetImgId = im.id;
+            const srcUrl = im.dataUrl;
+            const imgEl = new Image();
+            imgEl.onload = () => {
+              try {
+                const maxDim = 1350;
+                const scale = Math.min(1, maxDim / Math.max(1, imgEl.naturalWidth || 1, imgEl.naturalHeight || 1));
+                const c = document.createElement('canvas');
+                c.width = Math.max(1, Math.round((imgEl.naturalWidth || 400) * scale));
+                c.height = Math.max(1, Math.round((imgEl.naturalHeight || 400) * scale));
+                const ctx = c.getContext('2d');
+                if (!ctx) return;
+                ctx.drawImage(imgEl, 0, 0, c.width, c.height);
+                const optUrl = encodeCanvasOptimizedDataUrl(c);
+                if (optUrl.length < srcUrl.length * 0.75) {
+                  setNotebooks((prev) =>
+                    prev.map((n) =>
+                      n.id !== targetNbId
+                        ? n
+                        : {
+                            ...n,
+                            updatedAt: new Date().toISOString(),
+                            pages: n.pages.map((pg) =>
+                              pg.id !== targetPageId
+                                ? pg
+                                : {
+                                    ...pg,
+                                    images: (pg.images || []).map((imgItem) =>
+                                      imgItem.id !== targetImgId
+                                        ? imgItem
+                                        : { ...imgItem, dataUrl: optUrl, originalDataUrl: undefined }
+                                    ),
+                                  }
+                            ),
+                          }
+                    )
+                  );
+                }
+              } catch {
+                // ignore
+              }
+            };
+            imgEl.src = srcUrl;
+          }
+        }
+      }
+    }
+  }, [notebooks]);
+
   const performDrivePdfSync = useCallback(
     async (showFeedback = true, overrideToken?: string, overrideNotebook?: Notebook) => {
       if (!currentUser) {
@@ -1280,8 +1510,7 @@ export default function App() {
       try {
         for (const nb of notebooksRef.current) {
           const dataJson = serializeNotebookForFirestore(nb);
-          lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-          await saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current);
+          pushNotebookToCloudTracked(uid, nb, dataJson);
         }
       } catch {
         // ignore
@@ -4114,8 +4343,42 @@ export default function App() {
         img.crossOrigin = 'anonymous';
       }
       img.onload = () => {
-        const natW = Math.max(1, img.naturalWidth || img.width || 360);
-        const natH = Math.max(1, img.naturalHeight || img.height || 260);
+        const rawNatW = Math.max(1, img.naturalWidth || img.width || 360);
+        const rawNatH = Math.max(1, img.naturalHeight || img.height || 260);
+
+        // Automatically compress large clipboard/uploaded data: URLs (e.g. 3-6 MB macOS clipboard PNGs -> ~120 KB WebP/JPEG/Quantized PNG)
+        let finalDataUrl = dataUrl;
+        let natW = rawNatW;
+        let natH = rawNatH;
+        if (dataUrl.startsWith('data:') && (dataUrl.length > 160000 || rawNatW > 1350 || rawNatH > 1350)) {
+          try {
+            const maxDim = 1350;
+            const optScale = Math.min(1, maxDim / Math.max(1, rawNatW, rawNatH));
+            natW = Math.max(1, Math.round(rawNatW * optScale));
+            natH = Math.max(1, Math.round(rawNatH * optScale));
+            const optCanvas = document.createElement('canvas');
+            optCanvas.width = natW;
+            optCanvas.height = natH;
+            const optCtx = optCanvas.getContext('2d');
+            if (optCtx) {
+              optCtx.drawImage(img, 0, 0, natW, natH);
+              const candidateUrl = encodeCanvasOptimizedDataUrl(optCanvas);
+              if (candidateUrl.length < dataUrl.length) {
+                finalDataUrl = candidateUrl;
+              }
+            }
+          } catch {
+            // fallback to original dataUrl
+          }
+        }
+
+        const preloaded = new Image();
+        if (finalDataUrl.startsWith('http')) {
+          preloaded.crossOrigin = 'anonymous';
+        }
+        preloaded.src = finalDataUrl;
+        imageElementsCacheRef.current.set(finalDataUrl, preloaded);
+
         const maxW = 440;
         const maxH = 540;
         let scale = Math.min(1, maxW / natW, maxH / natH);
@@ -4133,8 +4396,8 @@ export default function App() {
           height: h,
           naturalWidth: natW,
           naturalHeight: natH,
-          dataUrl,
-          originalDataUrl: dataUrl,
+          dataUrl: finalDataUrl,
+          originalDataUrl: finalDataUrl,
           layerId: activeLayerId,
         };
         updateActivePage((page) => ({
@@ -4183,9 +4446,9 @@ export default function App() {
       if (cachedEl && cachedEl.complete && cachedEl.naturalWidth > 0 && cachedEl.naturalHeight > 0) {
         const rawScaleX = cachedEl.naturalWidth / Math.max(1, imgObj.width);
         const rawScaleY = cachedEl.naturalHeight / Math.max(1, imgObj.height);
-        const maxCropScale = Math.min(2.2, 950 / Math.max(1, cropW, cropH));
-        const scaleX = Math.min(rawScaleX, Math.max(1.2, maxCropScale));
-        const scaleY = Math.min(rawScaleY, Math.max(1.2, maxCropScale));
+        const maxCropScale = Math.min(2.0, 880 / Math.max(1, cropW, cropH));
+        const scaleX = Math.min(rawScaleX, Math.max(1.15, maxCropScale));
+        const scaleY = Math.min(rawScaleY, Math.max(1.15, maxCropScale));
         const natCropW = Math.max(16, Math.round(cropW * scaleX));
         const natCropH = Math.max(16, Math.round(cropH * scaleY));
 
@@ -4237,8 +4500,8 @@ export default function App() {
             let finalNatW = natCropW;
             let finalNatH = natCropH;
 
-            // Magnetic Shrink-Wrap + Outer Paper Background Trim:
-            // 1. In Magnetic mode, flood-fill inward from the clipped boundary to strip any paper-white halo
+            // Magnetic Shrink-Wrap + Outer Paper/Chalkboard Background Trim:
+            // 1. In Magnetic mode, flood-fill inward from the clipped boundary to strip any paper-white or chalkboard-black halo
             // 2. In both modes, shrink-wrap the bounding box tightly to non-transparent pixels inside the crop!
             const imgData = offCtx.getImageData(0, 0, natCropW, natCropH);
             const data = imgData.data;
@@ -4255,8 +4518,9 @@ export default function App() {
                 const r = data[idx4];
                 const g = data[idx4 + 1];
                 const b = data[idx4 + 2];
-                // Near-white / light paper background
-                return r > 234 && g > 234 && b > 230 && Math.max(r, g, b) - Math.min(r, g, b) < 18;
+                const isLightPaper = r > 234 && g > 234 && b > 230 && Math.max(r, g, b) - Math.min(r, g, b) < 18;
+                const isDarkChalkboard = r < 24 && g < 24 && b < 28 && Math.max(r, g, b) - Math.min(r, g, b) < 14;
+                return isLightPaper || isDarkChalkboard;
               };
 
               // Seed flood-fill from all transparent or border pixels along the polygon perimeter
@@ -4349,7 +4613,7 @@ export default function App() {
               }
             }
 
-            const croppedDataUrl = finalCanvas.toDataURL('image/png');
+            const croppedDataUrl = encodeCanvasOptimizedDataUrl(finalCanvas);
             const preloaded = new Image();
             preloaded.src = croppedDataUrl;
             imageElementsCacheRef.current.set(croppedDataUrl, preloaded);

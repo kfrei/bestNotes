@@ -94,17 +94,19 @@ export async function renderImageFileToPage(
   });
 
   const isLandscape = img.naturalWidth > img.naturalHeight * 1.08;
-  const maxDim = 2000;
+  const maxDim = 1800;
   let finalDataUrl = rawDataUrl;
 
-  if (img.naturalWidth > maxDim || img.naturalHeight > maxDim) {
-    const ratio = Math.min(maxDim / img.naturalWidth, maxDim / img.naturalHeight);
+  if (img.naturalWidth > maxDim || img.naturalHeight > maxDim || rawDataUrl.length > 350000) {
+    const ratio = Math.min(1, maxDim / Math.max(1, img.naturalWidth), maxDim / Math.max(1, img.naturalHeight));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(img.naturalWidth * ratio);
-    canvas.height = Math.round(img.naturalHeight * ratio);
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * ratio));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * ratio));
     const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    finalDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    finalDataUrl = canvas.toDataURL('image/jpeg', 0.86);
   }
 
   return {
