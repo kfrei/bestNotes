@@ -12415,7 +12415,7 @@ export default function App() {
         image: structuredClone(selImg),
       };
       setShapeLibrary((prev) => [newItem, ...prev]);
-      showToast('📚 Η εικόνα αποθηκεύτηκε στη Βιβλιοθήκη Σχημάτων!');
+      showToast('🖼️ Η εικόνα αποθηκεύτηκε στη Συλλογή Εικόνων!');
       return;
     }
 
@@ -12472,7 +12472,7 @@ export default function App() {
     };
 
     setShapeLibrary((prev) => [newItem, ...prev]);
-    showToast('📚 Προστέθηκε στη Βιβλιοθήκη Σχημάτων!');
+    showToast('🖼️ Προστέθηκε στη Συλλογή Εικόνων!');
   };
 
   // Insert a saved Shape / Group / Image from the Library onto the current active page
@@ -12494,7 +12494,7 @@ export default function App() {
       setActiveNodeStrokeId(null);
       setActiveTool('lasso');
       setShowShapeLibraryPanel(false);
-      showToast(`📥 Εισήχθη "${item.title}" από τη Βιβλιοθήκη!`);
+      showToast(`📥 Εισήχθη "${item.title}" από τη Συλλογή Εικόνων!`);
       return;
     }
 
@@ -12542,7 +12542,7 @@ export default function App() {
       setActiveNodeStrokeId(null);
       setActiveTool('lasso');
       setShowShapeLibraryPanel(false);
-      showToast(`📥 Εισήχθη "${item.title}" από τη Βιβλιοθήκη!`);
+      showToast(`📥 Εισήχθη "${item.title}" από τη Συλλογή Εικόνων!`);
     }
   };
 
@@ -12762,10 +12762,10 @@ export default function App() {
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer ${
               viewMode === 'library' ? 'bg-white/15 text-white' : 'text-white/90'
             }`}
-            title="Έγγραφα & Σημειώσεις (Βιβλιοθήκη)"
+            title="Βιβλιοθήκη (Έγγραφα & Σημειώσεις)"
           >
             <Home className="w-4 h-4 text-sky-300" />
-            <span className="text-xs font-semibold hidden sm:inline">Σημειώσεις</span>
+            <span className="text-xs font-semibold hidden sm:inline">Βιβλιοθήκη</span>
           </button>
 
           {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
@@ -13436,7 +13436,7 @@ export default function App() {
                               : 'text-[#1b2a4a]'
                           }`}
                         >
-                          Σημειώσεις
+                          Βιβλιοθήκη
                         </button>
                         {activeLibraryFolder && (
                           <>
@@ -14533,7 +14533,7 @@ export default function App() {
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-emerald-600 hover:bg-emerald-50'
                 }`}
-                title="Βιβλιοθήκη Αποθηκευμένων Σχημάτων & Εικόνων"
+                title="Συλλογή Εικόνων & Σχημάτων"
               >
                 <ImageIcon className="w-4 h-4" />
                 {shapeLibrary.length > 0 && (
@@ -15562,9 +15562,11 @@ export default function App() {
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
-                      title="Αποθήκευση του επιλεγμένου σχήματος στη Βιβλιοθήκη Σχημάτων"
+                      title="Αποθήκευση του επιλεγμένου αντικειμένου στη Συλλογή Εικόνων"
                     >
-                      <span>+Βιβλιοθήκη</span>
+                      <span>+</span>
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>Συλλογή</span>
                     </button>
 
                     {selectedStrokeIds.length > 0 && (
@@ -15877,7 +15879,7 @@ export default function App() {
                 <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 shrink-0">
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-emerald-800">
-                      📚 Βιβλιοθήκη Εικόνων & Σχημάτων
+                      📚 Συλλογή Εικόνων & Σχημάτων
                     </span>
                     <span className="text-[10px] text-slate-400">
                       Πάτα σε οποιαδήποτε διαφανή εικόνα για εισαγωγή στη σελίδα
@@ -15886,7 +15888,7 @@ export default function App() {
                   <button
                     onClick={() => setShowShapeLibraryPanel(false)}
                     className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                    title="Κλείσιμο Βιβλιοθήκης"
+                    title="Κλείσιμο Συλλογής Εικόνων"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -16448,7 +16450,7 @@ export default function App() {
                     <p className="text-xs font-semibold text-slate-600">Τα Δικά μου Σχήματα είναι κενά</p>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
                       Επίλεξε οποιοδήποτε σχήμα, γραμμή ή group με το <b>Lasso</b> και πάτα το κουμπί{' '}
-                      <span className="text-emerald-700 font-bold">«(+) Βιβλιοθήκη»</span> στην πάνω μπάρα για να αποθηκευτεί εδώ!
+                      <span className="text-emerald-700 font-bold">«+ 🖼️ Συλλογή»</span> στην πάνω μπάρα για να αποθηκευτεί εδώ!
                     </p>
                   </div>
                 ) : (
@@ -16467,10 +16469,10 @@ export default function App() {
                           onClick={(e) => {
                             e.stopPropagation();
                             setShapeLibrary((prev) => prev.filter((x) => x.id !== item.id));
-                            showToast('🗑️ Αφαιρέθηκε από τη Βιβλιοθήκη Σχημάτων!');
+                            showToast('🗑️ Αφαιρέθηκε από τη Συλλογή Εικόνων!');
                           }}
                           className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition cursor-pointer z-10"
-                          title="Διαγραφή αυτού του σχήματος από τη Βιβλιοθήκη"
+                          title="Διαγραφή αυτού του σχήματος από τη Συλλογή Εικόνων"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
