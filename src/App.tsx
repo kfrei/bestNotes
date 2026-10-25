@@ -18444,11 +18444,11 @@ export default function App() {
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
-                      title="Αποθήκευση του επιλεγμένου αντικειμένου στη Συλλογή Εικόνων"
+                      title="Προσθήκη του επιλεγμένου αντικειμένου στις αποθηκευμένες εικόνες"
                     >
                       <span>+</span>
                       <ImageIcon className="w-3.5 h-3.5" />
-                      <span>Συλλογή</span>
+                      <span>Προσθήκη</span>
                     </button>
 
                     {selectedStrokeIds.length > 0 && (
