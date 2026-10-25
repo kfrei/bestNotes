@@ -1979,7 +1979,27 @@ export default function App() {
     };
   }, [currentUser, pushNotebookToCloudTracked]);
 
-  // 2. Fast Real-Time Save of Notebooks to IndexedDB + LocalStorage + Cloud Firestore (250ms debounce, with multi-chunk support!)
+  const performCloudFirestoreSyncNow = useCallback(() => {
+    if (!currentUser) return false;
+    const uid = currentUser.uid;
+    let pushedAny = false;
+    for (const nb of notebooksRef.current) {
+      try {
+        const dataJson = serializeNotebookForFirestore(nb);
+        if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) continue;
+        pushNotebookToCloudTracked(uid, nb, dataJson);
+        pushedAny = true;
+      } catch {
+        // ignore
+      }
+    }
+    return pushedAny;
+  }, [currentUser, pushNotebookToCloudTracked]);
+
+  // 2. Fast Local Save (IndexedDB + LocalStorage) on change; Cloud Firestore syncs every 30s (plus on tab hide/close)!
+  const secondsToNextDrivePdfSyncRef = useRef<number>(120);
+  const hasPendingDrivePdfSyncRef = useRef<boolean>(false);
+
   useEffect(() => {
     if (!currentUser) return;
     const uid = currentUser.uid;
@@ -1987,19 +2007,44 @@ export default function App() {
     void saveNotebooksToIndexedDB(uid, notebooks);
     const timer = window.setTimeout(() => {
       saveNotebooksToLocalAndIdb(uid, notebooks);
-
+      let anyUnsynced = false;
       for (const nb of notebooks) {
         try {
           const dataJson = serializeNotebookForFirestore(nb);
-          if (lastSyncedJsonMapRef.current.get(nb.id) === dataJson) continue;
-          pushNotebookToCloudTracked(uid, nb, dataJson);
+          if (lastSyncedJsonMapRef.current.get(nb.id) !== dataJson) {
+            anyUnsynced = true;
+            break;
+          }
         } catch {
           // ignore
         }
       }
+      if (anyUnsynced) {
+        hasPendingDrivePdfSyncRef.current = true;
+        setIsDirty(true);
+        setSyncStatus('dirty');
+      }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [currentUser, notebooks, pushNotebookToCloudTracked]);
+  }, [currentUser, notebooks]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const flushOnHide = () => {
+      if (document.visibilityState === 'hidden') {
+        performCloudFirestoreSyncNow();
+      }
+    };
+    const flushOnPageHide = () => {
+      performCloudFirestoreSyncNow();
+    };
+    document.addEventListener('visibilitychange', flushOnHide);
+    window.addEventListener('pagehide', flushOnPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', flushOnHide);
+      window.removeEventListener('pagehide', flushOnPageHide);
+    };
+  }, [currentUser, performCloudFirestoreSyncNow]);
 
   // 3. Persist customFolders & shapeLibrary to LocalStorage + Cloud Firestore
   useEffect(() => {
@@ -2141,6 +2186,8 @@ export default function App() {
         setSyncStatus('synced');
         setIsDirty(false);
         setSecondsToNextSync(30);
+        secondsToNextDrivePdfSyncRef.current = 120;
+        hasPendingDrivePdfSyncRef.current = false;
         if (res.webViewLink) {
           setLastDrivePdfLink(res.webViewLink);
         }
@@ -2197,6 +2244,8 @@ export default function App() {
         setSyncStatus('synced');
         setIsDirty(false);
         setSecondsToNextSync(30);
+        secondsToNextDrivePdfSyncRef.current = 120;
+        hasPendingDrivePdfSyncRef.current = false;
         showToast(`☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & φάκελοι σε PDF στον φάκελο /BestNotes του Google Drive!`);
       } catch (err: any) {
         setSyncStatus('dirty');
@@ -2308,29 +2357,38 @@ export default function App() {
     [activeNotebook, showToast]
   );
 
-  // 30-second Google Drive Auto-Sync loop (automatically updates same-name PDF in /BestNotes if Drive is connected)
+  // 30-second Cloud Firestore Auto-Sync loop + 2-minute (120s) Google Drive PDF Auto-Sync loop
   useEffect(() => {
     const interval = window.setInterval(() => {
+      // 1) Cloud Firestore Sync every 30 seconds
       setSecondsToNextSync((prev) => {
         if (prev <= 1) {
           if (isDirty) {
-            if (driveAccessToken) {
-              void performDrivePdfSync(false);
-            } else {
-              setSyncStatus('syncing');
-              window.setTimeout(() => {
-                setSyncStatus('synced');
-                setIsDirty(false);
-              }, 500);
-            }
+            setSyncStatus('syncing');
+            performCloudFirestoreSyncNow();
+            window.setTimeout(() => {
+              setSyncStatus('synced');
+              setIsDirty(false);
+            }, 350);
           }
           return 30;
         }
         return prev - 1;
       });
+
+      // 2) Google Drive PDF Sync (/BestNotes) every 2 minutes (120 seconds)
+      if (secondsToNextDrivePdfSyncRef.current <= 1) {
+        secondsToNextDrivePdfSyncRef.current = 120;
+        if (driveAccessToken && hasPendingDrivePdfSyncRef.current) {
+          hasPendingDrivePdfSyncRef.current = false;
+          void performDrivePdfSync(false);
+        }
+      } else {
+        secondsToNextDrivePdfSyncRef.current -= 1;
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isDirty, driveAccessToken, performDrivePdfSync]);
+  }, [isDirty, driveAccessToken, performCloudFirestoreSyncNow, performDrivePdfSync]);
 
   // Close any open floating popover/panel or modal (Color, Width, Layers, Shape Library, Thumbnails, Math, Settings, User Profile) when clicking/tapping anywhere outside it
   useEffect(() => {
@@ -15618,11 +15676,11 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 30s Google Drive Sync Pill */}
+              {/* 30s Cloud Sync & 2min Google Drive PDF Sync Pill */}
               <button
                 onClick={() => void performDrivePdfSync(true)}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] text-sky-200 transition cursor-pointer"
-                title="Αυτόματος Συγχρονισμός PDF με Google Drive (/BestNotes) κάθε 30s (Πάτησε για άμεσο συγχρονισμό)"
+                title="Αυτόματος Συγχρονισμός Cloud κάθε 30s & PDF στο Google Drive (/BestNotes) κάθε 2 λεπτά (Πάτησε για άμεσο συγχρονισμό)"
               >
                 <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
                 <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
