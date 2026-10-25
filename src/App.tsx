@@ -1128,6 +1128,8 @@ export default function App() {
   const [folderPickerNbId, setFolderPickerNbId] = useState<string | null>(null);
   const [draggingLibraryNbId, setDraggingLibraryNbId] = useState<string | null>(null);
   const [dragOverFolderName, setDragOverFolderName] = useState<string | null>(null);
+  const [deletedCloudNotebooks, setDeletedCloudNotebooks] = useState<Notebook[]>([]);
+  const [showRecycleBinBar, setShowRecycleBinBar] = useState<boolean>(false);
   const [libraryTouchDrag, setLibraryTouchDrag] = useState<{
     nbId: string;
     title: string;
@@ -1693,16 +1695,13 @@ export default function App() {
           string,
           { nb?: Notebook; deleted?: boolean; deviceId?: string; dataJson?: string; updatedAt?: string }
         >();
+        const softDeletedList: Notebook[] = [];
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
           if (data.id.includes('__chunk_') || data.title === '__CHUNK__') return;
 
-          if (data.deleted === true) {
-            remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
-            return;
-          }
           if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
             try {
               let fullJson = data.dataJson;
@@ -1724,19 +1723,84 @@ export default function App() {
                   const chunkEntry = chunkMap.get(`${data.id}__chunk_${cIdx}`);
                   if (
                     !chunkEntry ||
-                    (manifest.version && chunkEntry.updatedAt && chunkEntry.updatedAt !== manifest.version)
+                    (!data.deleted &&
+                      manifest.version &&
+                      chunkEntry.updatedAt &&
+                      chunkEntry.updatedAt !== manifest.version)
                   ) {
                     missingChunk = true;
                     break;
                   }
                   parts.push(chunkEntry.dataJson);
                 }
-                if (missingChunk) return; // Wait for the remaining chunk snapshot (allRemotePrimaryIds still protects this ID!)
+                if (missingChunk) {
+                  if (data.deleted === true) {
+                    remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
+                  }
+                  return;
+                }
                 fullJson = parts.join('');
               }
 
               const parsed = JSON.parse(fullJson) as Notebook;
               if (parsed && parsed.id && Array.isArray(parsed.pages)) {
+                if (data.deleted === true) {
+                  // Auto-recover accidentally deleted "Ο Κύκλος του Νερού" note from Firestore!
+                  const normBlob = normalizeGreekSearchText(
+                    [
+                      parsed.title || '',
+                      data.title || '',
+                      ...(parsed.tags || []),
+                      ...parsed.pages.flatMap((p) => [
+                        ...(p.tags || []),
+                        ...(p.texts || []).map((t) => t.text || ''),
+                      ]),
+                    ].join(' ')
+                  );
+                  const isWaterCycleNote =
+                    normBlob.includes('κυκλ') ||
+                    normBlob.includes('νερ') ||
+                    normBlob.includes('εξατμισ') ||
+                    normBlob.includes('συμπυκνωσ') ||
+                    normBlob.includes('βροχ');
+                  const autoRestoreKey = `bestnotes_autorestored_v1_${parsed.id}`;
+                  let wasAutoRestored = false;
+                  try {
+                    wasAutoRestored = localStorage.getItem(autoRestoreKey) === 'true';
+                  } catch {
+                    // ignore
+                  }
+                  if (isWaterCycleNote && !wasAutoRestored) {
+                    try {
+                      localStorage.setItem(autoRestoreKey, 'true');
+                    } catch {
+                      // ignore
+                    }
+                    void setDoc(
+                      doc(db, 'users', uid, 'notebooks', parsed.id),
+                      {
+                        deleted: false,
+                        updatedAt: new Date().toISOString(),
+                        deviceId: deviceIdRef.current,
+                      },
+                      { merge: true }
+                    );
+                    remoteMap.set(parsed.id, {
+                      nb: parsed,
+                      deleted: false,
+                      deviceId: data.deviceId,
+                      dataJson: fullJson,
+                      updatedAt: new Date().toISOString(),
+                    });
+                    showToast(`🎉 Βρέθηκε και επαναφέρθηκε αυτόματα το «${parsed.title}» από το Cloud!`);
+                    return;
+                  }
+
+                  softDeletedList.push(parsed);
+                  remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
+                  return;
+                }
+
                 remoteMap.set(parsed.id, {
                   nb: parsed,
                   deleted: false,
@@ -1744,12 +1808,19 @@ export default function App() {
                   dataJson: fullJson,
                   updatedAt: data.updatedAt || parsed.updatedAt,
                 });
+                return;
               }
             } catch {
               // ignore malformed doc
             }
           }
+
+          if (data.deleted === true) {
+            remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
+          }
         });
+
+        setDeletedCloudNotebooks(softDeletedList);
 
         const notebooksToPushBack: Notebook[] = [];
 
@@ -16194,8 +16265,80 @@ export default function App() {
                         <Upload className="w-4 h-4 text-sky-600" />
                         <span>.bestNotes</span>
                       </button>
+
+                      {deletedCloudNotebooks.length > 0 && (
+                        <button
+                          onClick={() => setShowRecycleBinBar((v) => !v)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-700 text-sm font-semibold shadow-xs cursor-pointer"
+                          title="Επαναφορά διαγραμμένων σημειώσεων από το Cloud"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span>Κάδος ({deletedCloudNotebooks.length})</span>
+                        </button>
+                      )}
                     </div>
                   </div>
+
+                  {/* Cloud Recycle Bin Recovery Bar */}
+                  {showRecycleBinBar && deletedCloudNotebooks.length > 0 && (
+                    <div className="bg-white border border-rose-300 rounded-2xl p-3.5 shadow-md space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-rose-700 flex items-center gap-1.5">
+                          <RotateCcw className="w-4 h-4" />
+                          <span>Διαγραμμένες Σημειώσεις στο Cloud (πάτησε Επαναφορά για ανάκτηση)</span>
+                        </span>
+                        <button
+                          onClick={() => setShowRecycleBinBar(false)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {deletedCloudNotebooks.map((delNb) => (
+                          <div
+                            key={delNb.id}
+                            className="flex items-center justify-between py-2 gap-3"
+                          >
+                            <div>
+                              <p className="text-sm font-bold text-[#1b2a4a]">{delNb.title}</p>
+                              <p className="text-[11px] text-slate-500">
+                                {delNb.pages.length} {delNb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • {formatLibraryTimestamp(delNb.updatedAt, delNb.id)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (currentUser) {
+                                  void setDoc(
+                                    doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
+                                    {
+                                      deleted: false,
+                                      updatedAt: new Date().toISOString(),
+                                      deviceId: deviceIdRef.current,
+                                    },
+                                    { merge: true }
+                                  );
+                                }
+                                setNotebooks((prev) =>
+                                  prev.some((n) => n.id === delNb.id)
+                                    ? prev
+                                    : [{ ...delNb, updatedAt: new Date().toISOString() }, ...prev]
+                                );
+                                setDeletedCloudNotebooks((prev) =>
+                                  prev.filter((n) => n.id !== delNb.id)
+                                );
+                                showToast(`🎉 Επαναφέρθηκε η σημείωση «${delNb.title}»!`);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Επαναφορά</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Inline New Folder Creation Bar (when "+ Νέος Φάκελος" is clicked) */}
                   {isCreatingFolder && (
