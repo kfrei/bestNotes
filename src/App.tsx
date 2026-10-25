@@ -708,6 +708,11 @@ export default function App() {
   });
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderNameInput, setNewFolderNameInput] = useState<string>('');
+  const [renamingNotebookId, setRenamingNotebookId] = useState<string | null>(null);
+  const [renamingNotebookContext, setRenamingNotebookContext] = useState<
+    'tab' | 'grid-strip' | 'grid-below' | 'list' | null
+  >(null);
+  const [renamingTitleDraft, setRenamingTitleDraft] = useState<string>('');
 
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
@@ -783,6 +788,39 @@ export default function App() {
       setStatusBanner((prev) => (prev === msg ? null : prev));
     }, 2600);
   }, []);
+
+  const startRenamingNotebook = useCallback(
+    (nb: Notebook, context: 'tab' | 'grid-strip' | 'grid-below' | 'list') => {
+      setRenamingNotebookId(nb.id);
+      setRenamingNotebookContext(context);
+      setRenamingTitleDraft(nb.title);
+    },
+    []
+  );
+
+  const commitRenamingNotebook = useCallback(
+    (nbId: string, draftTitle: string) => {
+      const trimmed = draftTitle.trim();
+      setRenamingNotebookId(null);
+      setRenamingNotebookContext(null);
+      if (!trimmed) return;
+      let changed = false;
+      setNotebooks((prev) =>
+        prev.map((nb) => {
+          if (nb.id !== nbId) return nb;
+          if (nb.title === trimmed) return nb;
+          changed = true;
+          return { ...nb, title: trimmed, updatedAt: new Date().toISOString() };
+        })
+      );
+      if (changed) {
+        setIsDirty(true);
+        setSyncStatus('dirty');
+        showToast(`✏️ Μετονομάστηκε σε «${trimmed}»!`);
+      }
+    },
+    [showToast]
+  );
 
   // DEBOUNCED LocalStorage Save (runs 2.5s AFTER user stops writing, ONLY for logged-in users — Guests are strictly temporary!)
   useEffect(() => {
@@ -7558,6 +7596,7 @@ export default function App() {
               <div
                 key={nb.id}
                 onClick={() => {
+                  if (isActive) return;
                   setActiveNotebookId(nb.id);
                   setActivePageIndex(0);
                   activeDrawingPageIndexRef.current = 0;
@@ -7565,7 +7604,7 @@ export default function App() {
                   setPan({ x: 0, y: 0 });
                   setViewMode('editor');
                 }}
-                title={nb.title}
+                title={`${nb.title} (Πάτα πάνω στο όνομα για μετονομασία)`}
                 className={`flex-1 min-w-[115px] ${tabMaxWidthClass} flex items-center gap-2 px-3.5 py-1.5 rounded-t-xl text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                   isActive
                     ? 'bg-[#f4f5f7] text-[#1b2a4a] font-semibold shadow-sm'
@@ -7573,7 +7612,49 @@ export default function App() {
                 }`}
               >
                 <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: nb.coverColor }} />
-                <span className="flex-1 min-w-0 truncate text-left">{nb.title}</span>
+                {renamingNotebookId === nb.id && renamingNotebookContext === 'tab' ? (
+                  <input
+                    type="text"
+                    autoFocus
+                    value={renamingTitleDraft}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => setRenamingTitleDraft(e.target.value)}
+                    onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitRenamingNotebook(nb.id, renamingTitleDraft);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setRenamingNotebookId(null);
+                        setRenamingNotebookContext(null);
+                      }
+                    }}
+                    className="flex-1 min-w-[70px] px-1.5 py-0.5 rounded bg-white text-[#1b2a4a] text-xs font-semibold border border-[#0066ff] focus:outline-none"
+                  />
+                ) : (
+                  <span
+                    onClick={(e) => {
+                      if (isActive) {
+                        e.stopPropagation();
+                        startRenamingNotebook(nb, 'tab');
+                      }
+                    }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      startRenamingNotebook(nb, 'tab');
+                    }}
+                    title="Πάτα για μετονομασία σημείωσης"
+                    className={`flex-1 min-w-0 truncate text-left ${
+                      isActive ? 'hover:underline decoration-[#0066ff]/50 cursor-text' : ''
+                    }`}
+                  >
+                    {nb.title}
+                  </span>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -8581,15 +8662,81 @@ export default function App() {
 
                                   {/* Bottom Info Strip */}
                                   <div className="relative z-20 pl-4 pr-2.5 py-2 bg-white/92 backdrop-blur-xs border-t border-slate-200/80 text-slate-900">
-                                    <p className="text-xs font-bold truncate">{nb.title}</p>
+                                    {renamingNotebookId === nb.id && renamingNotebookContext === 'grid-strip' ? (
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        value={renamingTitleDraft}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        onFocus={(e) => e.currentTarget.select()}
+                                        onChange={(e) => setRenamingTitleDraft(e.target.value)}
+                                        onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
+                                        onKeyDown={(e) => {
+                                          e.stopPropagation();
+                                          if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            commitRenamingNotebook(nb.id, renamingTitleDraft);
+                                          } else if (e.key === 'Escape') {
+                                            e.preventDefault();
+                                            setRenamingNotebookId(null);
+                                            setRenamingNotebookContext(null);
+                                          }
+                                        }}
+                                        className="w-full px-1.5 py-0.5 rounded bg-white text-[#1b2a4a] text-xs font-bold border border-[#0066ff] focus:outline-none"
+                                      />
+                                    ) : (
+                                      <p
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          startRenamingNotebook(nb, 'grid-strip');
+                                        }}
+                                        title="Πάτα για μετονομασία σημείωσης"
+                                        className="text-xs font-bold truncate hover:text-[#0066ff] hover:underline cursor-text"
+                                      >
+                                        {nb.title}
+                                      </p>
+                                    )}
                                     <p className="text-[10px] text-slate-500">
                                       {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • .bestNotes
                                     </p>
                                   </div>
                                 </div>
-                                <span className="mt-2 text-xs font-semibold text-slate-800 text-center max-w-[180px] truncate">
-                                  {nb.title}
-                                </span>
+                                {renamingNotebookId === nb.id && renamingNotebookContext === 'grid-below' ? (
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    value={renamingTitleDraft}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onFocus={(e) => e.currentTarget.select()}
+                                    onChange={(e) => setRenamingTitleDraft(e.target.value)}
+                                    onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
+                                    onKeyDown={(e) => {
+                                      e.stopPropagation();
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        commitRenamingNotebook(nb.id, renamingTitleDraft);
+                                      } else if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        setRenamingNotebookId(null);
+                                        setRenamingNotebookContext(null);
+                                      }
+                                    }}
+                                    className="mt-2 w-[170px] px-2 py-0.5 rounded-lg bg-white text-[#1b2a4a] text-xs font-semibold text-center border border-[#0066ff] shadow-xs focus:outline-none"
+                                  />
+                                ) : (
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startRenamingNotebook(nb, 'grid-below');
+                                    }}
+                                    title="Πάτα για μετονομασία σημείωσης"
+                                    className="mt-2 text-xs font-semibold text-slate-800 hover:text-[#0066ff] hover:underline text-center max-w-[180px] truncate cursor-text"
+                                  >
+                                    {nb.title}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}
@@ -8668,7 +8815,41 @@ export default function App() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-bold text-[#1b2a4a] truncate">{nb.title}</p>
+                                {renamingNotebookId === nb.id && renamingNotebookContext === 'list' ? (
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    value={renamingTitleDraft}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onFocus={(e) => e.currentTarget.select()}
+                                    onChange={(e) => setRenamingTitleDraft(e.target.value)}
+                                    onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
+                                    onKeyDown={(e) => {
+                                      e.stopPropagation();
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        commitRenamingNotebook(nb.id, renamingTitleDraft);
+                                      } else if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        setRenamingNotebookId(null);
+                                        setRenamingNotebookContext(null);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 rounded-lg bg-white text-[#1b2a4a] text-sm font-bold border border-[#0066ff] shadow-xs focus:outline-none min-w-[180px]"
+                                  />
+                                ) : (
+                                  <p
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startRenamingNotebook(nb, 'list');
+                                    }}
+                                    title="Πάτα για μετονομασία σημείωσης"
+                                    className="text-sm font-bold text-[#1b2a4a] hover:text-[#0066ff] hover:underline truncate cursor-text"
+                                  >
+                                    {nb.title}
+                                  </p>
+                                )}
                                 {nb.folder && (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-800 shrink-0">
                                     <Folder className="w-3 h-3 fill-amber-400 text-amber-500" />
