@@ -458,6 +458,23 @@ const MirrorVerticalIcon: React.FC<{ className?: string }> = ({ className = 'w-3
   </svg>
 );
 
+// Illustrator / Photoshop Align & Distribute Toolbar Icon (Center alignment guide with two horizontal object bars)
+const AlignObjectsIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="12" y1="2.5" x2="12" y2="21.5" />
+    <rect x="4" y="6" width="16" height="4.2" rx="1" fill="currentColor" fillOpacity="0.2" />
+    <rect x="7" y="13.8" width="10" height="4.2" rx="1" />
+  </svg>
+);
+
 export default function App() {
   // Purge legacy v1 preloaded test notebooks/folders from localStorage once on startup
   const initialAuthUid = (() => {
@@ -818,6 +835,7 @@ export default function App() {
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [showAlignSubBar, setShowAlignSubBar] = useState<boolean>(false);
   useEffect(() => {
     if (selectedImageId === null) {
       setSelectedImageIds((prev) => (prev.length > 0 ? [] : prev));
@@ -4897,6 +4915,226 @@ export default function App() {
       selectedStrokeIds,
       activeNodeStrokeId,
       selectedImageId,
+      updateActivePage,
+      showToast,
+    ]
+  );
+
+  // Illustrator / Photoshop Multi-Object Align & Distribute
+  const handleAlignSelected = useCallback(
+    (
+      mode:
+        | 'left'
+        | 'center-x'
+        | 'right'
+        | 'top'
+        | 'center-y'
+        | 'bottom'
+        | 'center-both'
+        | 'distribute-x'
+        | 'distribute-y'
+    ) => {
+      const effectiveImgIds =
+        selectedImageIds.length > 0
+          ? selectedImageIds
+          : selectedImageId
+          ? [selectedImageId]
+          : [];
+      const selStrokeSet = new Set(selectedStrokeIds);
+      const selImgSet = new Set(effectiveImgIds);
+
+      const selStrokes = activePage.strokes.filter((s) => selStrokeSet.has(s.id));
+      const selImgs = (activePage.images || []).filter((im) => selImgSet.has(im.id));
+
+      // Check if all selected objects belong to a single groupId; if so, align each member individually!
+      const distinctGroupIds = new Set<string>();
+      let hasUngrouped = false;
+      for (const s of selStrokes) {
+        if (s.groupId) distinctGroupIds.add(s.groupId);
+        else hasUngrouped = true;
+      }
+      for (const im of selImgs) {
+        if (im.groupId) distinctGroupIds.add(im.groupId);
+        else hasUngrouped = true;
+      }
+      const treatGroupsAsUnits = distinctGroupIds.size > 1 || (distinctGroupIds.size === 1 && hasUngrouped);
+
+      type AlignUnit = {
+        key: string;
+        strokeIds: string[];
+        imageIds: string[];
+        minX: number;
+        minY: number;
+        maxX: number;
+        maxY: number;
+        cx: number;
+        cy: number;
+      };
+
+      const unitMap = new Map<string, AlignUnit>();
+      const ensureUnit = (key: string): AlignUnit => {
+        let u = unitMap.get(key);
+        if (!u) {
+          u = {
+            key,
+            strokeIds: [],
+            imageIds: [],
+            minX: Infinity,
+            minY: Infinity,
+            maxX: -Infinity,
+            maxY: -Infinity,
+            cx: 0,
+            cy: 0,
+          };
+          unitMap.set(key, u);
+        }
+        return u;
+      };
+
+      for (const s of selStrokes) {
+        const key = treatGroupsAsUnits && s.groupId ? `grp:${s.groupId}` : `st:${s.id}`;
+        const u = ensureUnit(key);
+        u.strokeIds.push(s.id);
+        const pts = getStrokeSamplePoints(s);
+        for (const p of pts) {
+          if (p.x < u.minX) u.minX = p.x;
+          if (p.y < u.minY) u.minY = p.y;
+          if (p.x > u.maxX) u.maxX = p.x;
+          if (p.y > u.maxY) u.maxY = p.y;
+        }
+      }
+
+      for (const im of selImgs) {
+        const key = treatGroupsAsUnits && im.groupId ? `grp:${im.groupId}` : `im:${im.id}`;
+        const u = ensureUnit(key);
+        u.imageIds.push(im.id);
+        if (im.x < u.minX) u.minX = im.x;
+        if (im.y < u.minY) u.minY = im.y;
+        if (im.x + im.width > u.maxX) u.maxX = im.x + im.width;
+        if (im.y + im.height > u.maxY) u.maxY = im.y + im.height;
+      }
+
+      const units = Array.from(unitMap.values()).filter(
+        (u) => Number.isFinite(u.minX) && Number.isFinite(u.minY)
+      );
+      for (const u of units) {
+        u.cx = (u.minX + u.maxX) / 2;
+        u.cy = (u.minY + u.maxY) / 2;
+      }
+
+      if (units.length < 2) {
+        showToast('ℹ️ Επίλεξε τουλάχιστον 2 αντικείμενα (με Λάσο ή Shift+Click) για στοίχιση!');
+        return;
+      }
+
+      if ((mode === 'distribute-x' || mode === 'distribute-y') && units.length < 3) {
+        showToast('ℹ️ Για ισότιμη κατανομή (Distribute) επίλεξε τουλάχιστον 3 αντικείμενα!');
+        return;
+      }
+
+      let overallMinX = Infinity;
+      let overallMinY = Infinity;
+      let overallMaxX = -Infinity;
+      let overallMaxY = -Infinity;
+      for (const u of units) {
+        if (u.minX < overallMinX) overallMinX = u.minX;
+        if (u.minY < overallMinY) overallMinY = u.minY;
+        if (u.maxX > overallMaxX) overallMaxX = u.maxX;
+        if (u.maxY > overallMaxY) overallMaxY = u.maxY;
+      }
+      const overallCx = (overallMinX + overallMaxX) / 2;
+      const overallCy = (overallMinY + overallMaxY) / 2;
+
+      const deltaByStrokeId = new Map<string, { dx: number; dy: number }>();
+      const deltaByImageId = new Map<string, { dx: number; dy: number }>();
+
+      const assignDelta = (u: AlignUnit, dx: number, dy: number) => {
+        for (const sid of u.strokeIds) deltaByStrokeId.set(sid, { dx, dy });
+        for (const iid of u.imageIds) deltaByImageId.set(iid, { dx, dy });
+      };
+
+      if (mode === 'distribute-x') {
+        const sorted = [...units].sort((a, b) => a.cx - b.cx);
+        const firstCx = sorted[0].cx;
+        const lastCx = sorted[sorted.length - 1].cx;
+        const step = (lastCx - firstCx) / (sorted.length - 1);
+        sorted.forEach((u, idx) => {
+          const targetCx = firstCx + idx * step;
+          assignDelta(u, targetCx - u.cx, 0);
+        });
+      } else if (mode === 'distribute-y') {
+        const sorted = [...units].sort((a, b) => a.cy - b.cy);
+        const firstCy = sorted[0].cy;
+        const lastCy = sorted[sorted.length - 1].cy;
+        const step = (lastCy - firstCy) / (sorted.length - 1);
+        sorted.forEach((u, idx) => {
+          const targetCy = firstCy + idx * step;
+          assignDelta(u, 0, targetCy - u.cy);
+        });
+      } else {
+        for (const u of units) {
+          let dx = 0;
+          let dy = 0;
+          if (mode === 'left') dx = overallMinX - u.minX;
+          else if (mode === 'center-x') dx = overallCx - u.cx;
+          else if (mode === 'right') dx = overallMaxX - u.maxX;
+          else if (mode === 'top') dy = overallMinY - u.minY;
+          else if (mode === 'center-y') dy = overallCy - u.cy;
+          else if (mode === 'bottom') dy = overallMaxY - u.maxY;
+          else if (mode === 'center-both') {
+            dx = overallCx - u.cx;
+            dy = overallCy - u.cy;
+          }
+          assignDelta(u, dx, dy);
+        }
+      }
+
+      updateActivePage((page) => ({
+        ...page,
+        strokes: page.strokes.map((s) => {
+          const d = deltaByStrokeId.get(s.id);
+          if (!d || (Math.abs(d.dx) < 0.01 && Math.abs(d.dy) < 0.01)) return s;
+          return {
+            ...s,
+            points: s.points.map((p) => ({
+              ...p,
+              x: p.x + d.dx,
+              y: p.y + d.dy,
+              cx: p.cx !== undefined ? p.cx + d.dx : undefined,
+              cy: p.cy !== undefined ? p.cy + d.dy : undefined,
+            })),
+          };
+        }),
+        images: (page.images || []).map((im) => {
+          const d = deltaByImageId.get(im.id);
+          if (!d || (Math.abs(d.dx) < 0.01 && Math.abs(d.dy) < 0.01)) return im;
+          return {
+            ...im,
+            x: im.x + d.dx,
+            y: im.y + d.dy,
+          };
+        }),
+      }));
+
+      const labelMap: Record<typeof mode, string> = {
+        left: '┣ Στοίχιση Αριστερά',
+        'center-x': '╂ Κεντράρισμα Οριζόντια (X)',
+        right: '┫ Στοίχιση Δεξιά',
+        top: '┳ Στοίχιση Πάνω',
+        'center-y': '╋ Κεντράρισμα Κατακόρυφα (Y)',
+        bottom: '┻ Στοίχιση Κάτω',
+        'center-both': '🎯 Απόλυτο Κεντράρισμα (X & Y)',
+        'distribute-x': '↔ Ισότιμη Κατανομή Οριζόντια',
+        'distribute-y': '↕ Ισότιμη Κατανομή Κατακόρυφα',
+      };
+      showToast(`${labelMap[mode]} (${units.length} αντικείμενα)!`);
+    },
+    [
+      activePage.strokes,
+      activePage.images,
+      selectedStrokeIds,
+      selectedImageId,
+      selectedImageIds,
       updateActivePage,
       showToast,
     ]
@@ -11661,19 +11899,37 @@ export default function App() {
                 { id: 'text', title: 'Text (Κείμενο) — T / Τ', icon: Type },
                 { id: 'lasso', title: 'Select (Επιλογή Λάσο) — S / Σ', icon: Lasso },
                 { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', icon: BezierNodesIcon },
+                { id: 'align-objects', title: 'Align (Στοίχιση Αντικειμένων — Κέντρο, Αριστερά, Δεξιά, Πάνω, Κάτω)', icon: AlignObjectsIcon },
                 { id: 'tape', title: 'Tape (Ταινία Απόκρυψης)', icon: Bandage },
                 { id: 'laser', title: 'Laser (Κόκκινο Laser) — L / Λ', icon: Radio },
               ].map((tool) => {
                 const Icon = tool.icon;
-                const isActive = activeTool === tool.id;
+                const isActive =
+                  tool.id === 'align-objects'
+                    ? activeTool === 'lasso' && showAlignSubBar
+                    : tool.id === 'lasso'
+                    ? activeTool === 'lasso' && !showAlignSubBar
+                    : activeTool === tool.id;
                 return (
                   <button
                     key={tool.id}
                     onClick={() => {
+                      if (tool.id === 'align-objects') {
+                        if (activeTool === 'lasso' && showAlignSubBar) {
+                          setShowToolSubBar((s) => !s);
+                        } else {
+                          setActiveTool('lasso');
+                          setShowAlignSubBar(true);
+                          setShowToolSubBar(true);
+                        }
+                        setImageCropMode('none');
+                        return;
+                      }
+                      setShowAlignSubBar(false);
                       if (tool.id === 'pen') {
                         setFillStyle('none');
                       }
-                      if (activeTool === tool.id && tool.id !== 'eraser' && tool.id !== 'text' && tool.id !== 'shape') {
+                      if (activeTool === tool.id && !showAlignSubBar && tool.id !== 'eraser' && tool.id !== 'text' && tool.id !== 'shape') {
                         setShowToolSubBar((s) => !s);
                       } else {
                         if (tool.id === 'direct-node' && selectedStrokeIds.length > 0) {
@@ -11708,6 +11964,8 @@ export default function App() {
                       isActive
                         ? tool.id === 'lasso'
                           ? 'bg-[#22c55e] text-white ring-2 ring-emerald-300 shadow-xs scale-105'
+                          : tool.id === 'align-objects'
+                          ? 'bg-indigo-600 text-white ring-2 ring-indigo-300 shadow-xs scale-105'
                           : 'bg-[#0066ff] text-white shadow-xs scale-105'
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
@@ -12517,7 +12775,175 @@ export default function App() {
                   </div>
                 )}
 
+                {activeTool === 'lasso' && showAlignSubBar && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                      📐 Στοίχιση:
+                    </span>
+
+                    {/* Horizontal Alignment: Left / Center X / Right */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                      <button
+                        onClick={() => handleAlignSelected('left')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        title="Στοίχιση Όλων Αριστερά (Align Left Edges)"
+                      >
+                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="4" y1="3" x2="4" y2="21" />
+                          <rect x="7" y="6" width="13" height="4" rx="1" fill="currentColor" fillOpacity="0.25" />
+                          <rect x="7" y="14" width="8" height="4" rx="1" />
+                        </svg>
+                        <span>Αριστερά</span>
+                      </button>
+                      <button
+                        onClick={() => handleAlignSelected('center-x')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        title="Κεντράρισμα Οριζόντια (Align Horizontal Centers — X)"
+                      >
+                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="12" y1="3" x2="12" y2="21" />
+                          <rect x="4" y="6" width="16" height="4" rx="1" fill="currentColor" fillOpacity="0.25" />
+                          <rect x="7" y="14" width="10" height="4" rx="1" />
+                        </svg>
+                        <span>Κέντρο X</span>
+                      </button>
+                      <button
+                        onClick={() => handleAlignSelected('right')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        title="Στοίχιση Όλων Δεξιά (Align Right Edges)"
+                      >
+                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="20" y1="3" x2="20" y2="21" />
+                          <rect x="4" y="6" width="13" height="4" rx="1" fill="currentColor" fillOpacity="0.25" />
+                          <rect x="9" y="14" width="8" height="4" rx="1" />
+                        </svg>
+                        <span>Δεξιά</span>
+                      </button>
+                    </div>
+
+                    {/* Vertical Alignment: Top / Center Y / Bottom */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
+                      <button
+                        onClick={() => handleAlignSelected('top')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        title="Στοίχιση Όλων Πάνω (Align Top Edges)"
+                      >
+                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="3" y1="4" x2="21" y2="4" />
+                          <rect x="6" y="7" width="4" height="13" rx="1" fill="currentColor" fillOpacity="0.25" />
+                          <rect x="14" y="7" width="4" height="8" rx="1" />
+                        </svg>
+                        <span>Πάνω</span>
+                      </button>
+                      <button
+                        onClick={() => handleAlignSelected('center-y')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        title="Κεντράρισμα Κατακόρυφα (Align Vertical Centers — Y)"
+                      >
+                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="3" y1="12" x2="21" y2="12" />
+                          <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" fillOpacity="0.25" />
+                          <rect x="14" y="7" width="4" height="10" rx="1" />
+                        </svg>
+                        <span>Κέντρο Y</span>
+                      </button>
+                      <button
+                        onClick={() => handleAlignSelected('bottom')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        title="Στοίχιση Όλων Κάτω (Align Bottom Edges)"
+                      >
+                        <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="3" y1="20" x2="21" y2="20" />
+                          <rect x="6" y="4" width="4" height="13" rx="1" fill="currentColor" fillOpacity="0.25" />
+                          <rect x="14" y="9" width="4" height="8" rx="1" />
+                        </svg>
+                        <span>Κάτω</span>
+                      </button>
+                    </div>
+
+                    {/* Dead Center (Both X and Y at once!) */}
+                    <button
+                      onClick={() => handleAlignSelected('center-both')}
+                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                      title="Απόλυτο Κεντράρισμα Οριζόντια & Κατακόρυφα (Dead Center X + Y)"
+                    >
+                      <span>🎯 Κέντρο X+Y</span>
+                    </button>
+
+                    {/* Even Distribution (for 3+ selected objects) */}
+                    <div className="flex items-center gap-1 bg-sky-50 p-0.5 rounded-full border border-sky-200">
+                      <button
+                        onClick={() => handleAlignSelected('distribute-x')}
+                        className="px-2.5 py-0.5 rounded-full hover:bg-white text-[#0066ff] font-semibold transition cursor-pointer"
+                        title="Ισότιμη Κατανομή Οριζόντια (για 3+ επιλεγμένα αντικείμενα)"
+                      >
+                        ↔ Κατανομή X
+                      </button>
+                      <button
+                        onClick={() => handleAlignSelected('distribute-y')}
+                        className="px-2.5 py-0.5 rounded-full hover:bg-white text-[#0066ff] font-semibold transition cursor-pointer"
+                        title="Ισότιμη Κατανομή Κατακόρυφα (για 3+ επιλεγμένα αντικείμενα)"
+                      >
+                        ↕ Κατανομή Y
+                      </button>
+                    </div>
+
+                    {/* Quick Group / Ungroup right inside the Align bar */}
+                    {(() => {
+                      const effectiveImgIds =
+                        selectedImageIds.length > 0
+                          ? selectedImageIds
+                          : selectedImageId
+                          ? [selectedImageId]
+                          : [];
+                      const totalSelCount = selectedStrokeIds.length + effectiveImgIds.length;
+                      if (totalSelCount === 0) return null;
+                      const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+                      const selImgs = (activePage.images || []).filter((im) =>
+                        effectiveImgIds.includes(im.id)
+                      );
+                      const hasGroupedItem =
+                        selStrokes.some((s) => Boolean(s.groupId)) ||
+                        selImgs.some((im) => Boolean(im.groupId));
+                      const firstGrpId = selStrokes[0]?.groupId || selImgs[0]?.groupId;
+                      const allAlreadyInSameGroup =
+                        totalSelCount >= 2 &&
+                        Boolean(firstGrpId) &&
+                        selStrokes.every((s) => s.groupId === firstGrpId) &&
+                        selImgs.every((im) => im.groupId === firstGrpId);
+
+                      if (hasGroupedItem && allAlreadyInSameGroup) {
+                        return (
+                          <button
+                            onClick={handleUngroupSelected}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer"
+                            title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
+                          >
+                            <Ungroup className="w-3.5 h-3.5" />
+                            <span>Ungroup</span>
+                          </button>
+                        );
+                      }
+
+                      if (totalSelCount >= 2) {
+                        return (
+                          <button
+                            onClick={handleGroupSelected}
+                            className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer"
+                            title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
+                          >
+                            <Group className="w-3.5 h-3.5" />
+                            <span>Group ({totalSelCount})</span>
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                )}
+
                 {activeTool !== 'direct-node' &&
+                  !showAlignSubBar &&
                   (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso') && (
                   <div className="flex items-center gap-1.5">
                     <button
@@ -12704,7 +13130,7 @@ export default function App() {
                   </div>
                 )}
 
-                {selectedImgObj && selectedImageIds.length <= 1 && selectedStrokeIds.length === 0 && (
+                {!showAlignSubBar && selectedImgObj && selectedImageIds.length <= 1 && selectedStrokeIds.length === 0 && (
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => {
