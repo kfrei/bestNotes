@@ -16772,8 +16772,8 @@ export default function App() {
                       <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                         {(
                           [
-                            { id: 'calligraphic', label: '✍️ Σημειώσεις (Δική μας)' },
-                            { id: 'marker', label: '✒️ Ανθρώπινη Πένα' },
+                            { id: 'calligraphic', label: '✍️ Καλλιγραφική' },
+                            { id: 'marker', label: '✒️ Πένα' },
                             { id: 'mansalva', label: '🖊️ Μαρκαδόρος' },
                             { id: 'handwritten', label: '📝 Χειρόγραφο' },
                             { id: 'neohellenic', label: '🖋️ Ρέουσα' },
@@ -19356,10 +19356,10 @@ export default function App() {
                                     }));
                                   }}
                                   className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-bold cursor-pointer"
-                                  title="Εναλλαγή γραμματοσειράς (Σημειώσεις / Ανθρώπινη Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
+                                  title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                 >
                                   {txt.fontFamily === 'calligraphic'
-                                    ? '✍️ Σημειώσεις'
+                                    ? '✍️ Καλλιγραφική'
                                     : txt.fontFamily === 'marker'
                                     ? '✒️ Πένα'
                                     : txt.fontFamily === 'mansalva'
