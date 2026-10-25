@@ -6580,6 +6580,277 @@ export default function App() {
     return null;
   };
 
+  // Illustrator-style Smart Alignment & Magnetic Snap Helpers (Edges -> Red Line, Centers -> Red '+' Crosshair)
+  const getReferenceSnapBoxes = (excludeStrokeIds: string[], excludeImgIds: string[]) => {
+    const visibleLayerIds = new Set(activePage.layers.filter((l) => l.visible).map((l) => l.id));
+    const boxes: {
+      minX: number;
+      maxX: number;
+      minY: number;
+      maxY: number;
+      cx: number;
+      cy: number;
+    }[] = [];
+
+    for (const s of activePage.strokes) {
+      if (excludeStrokeIds.includes(s.id) || !visibleLayerIds.has(s.layerId)) continue;
+      if (s.points.length < 2) continue;
+      const b = getStrokeBounds(s);
+      if (b.maxX - b.minX < 4 && b.maxY - b.minY < 4) continue;
+      boxes.push({
+        minX: b.minX,
+        maxX: b.maxX,
+        minY: b.minY,
+        maxY: b.maxY,
+        cx: (b.minX + b.maxX) / 2,
+        cy: (b.minY + b.maxY) / 2,
+      });
+    }
+
+    const pW = activePage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+    const pH = activePage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+    for (const im of activePage.images || []) {
+      if (excludeImgIds.includes(im.id) || !visibleLayerIds.has(im.layerId)) continue;
+      // Skip full-page imported PDF sheets so we only snap to actual shapes/images on the canvas
+      if (im.width * im.height > pW * pH * 0.72) continue;
+      boxes.push({
+        minX: im.x,
+        maxX: im.x + im.width,
+        minY: im.y,
+        maxY: im.y + im.height,
+        cx: im.x + im.width / 2,
+        cy: im.y + im.height / 2,
+      });
+    }
+
+    return boxes;
+  };
+
+  const getSelectionCombinedBox = (
+    strokeIds: string[],
+    imgIds: string[],
+    offsetX = 0,
+    offsetY = 0
+  ): { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number } | null => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    for (const s of activePage.strokes) {
+      if (!strokeIds.includes(s.id)) continue;
+      const b = getStrokeBounds(s);
+      if (b.minX < minX) minX = b.minX;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+
+    for (const im of activePage.images || []) {
+      if (!imgIds.includes(im.id)) continue;
+      if (im.x < minX) minX = im.x;
+      if (im.x + im.width > maxX) maxX = im.x + im.width;
+      if (im.y < minY) minY = im.y;
+      if (im.y + im.height > maxY) maxY = im.y + im.height;
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+    const finalMinX = minX + offsetX;
+    const finalMaxX = maxX + offsetX;
+    const finalMinY = minY + offsetY;
+    const finalMaxY = maxY + offsetY;
+    return {
+      minX: finalMinX,
+      maxX: finalMaxX,
+      minY: finalMinY,
+      maxY: finalMaxY,
+      cx: (finalMinX + finalMaxX) / 2,
+      cy: (finalMinY + finalMaxY) / 2,
+    };
+  };
+
+  const drawSmartAlignmentGuidesForBox = (
+    selBox: { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number },
+    refBoxes: { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number }[]
+  ) => {
+    clearActiveOverlay();
+    const aCtx = activeCtxRef.current;
+    if (!aCtx || refBoxes.length === 0) return;
+
+    const EPS = 0.9;
+    const vLines: { x: number; y1: number; y2: number }[] = [];
+    const hLines: { y: number; x1: number; x2: number }[] = [];
+    const centerLinks: {
+      axis: 'x' | 'y' | 'both';
+      selCx: number;
+      selCy: number;
+      refCx: number;
+      refCy: number;
+    }[] = [];
+
+    for (const ref of refBoxes) {
+      // 1. Check Center-to-Center alignment (X, Y, or Both -> draws '+' crosshair!)
+      const matchCenterX = Math.abs(selBox.cx - ref.cx) <= EPS;
+      const matchCenterY = Math.abs(selBox.cy - ref.cy) <= EPS;
+      if (matchCenterX && matchCenterY) {
+        centerLinks.push({
+          axis: 'both',
+          selCx: selBox.cx,
+          selCy: selBox.cy,
+          refCx: ref.cx,
+          refCy: ref.cy,
+        });
+      } else if (matchCenterX) {
+        centerLinks.push({
+          axis: 'x',
+          selCx: selBox.cx,
+          selCy: selBox.cy,
+          refCx: ref.cx,
+          refCy: ref.cy,
+        });
+      } else if (matchCenterY) {
+        centerLinks.push({
+          axis: 'y',
+          selCx: selBox.cx,
+          selCy: selBox.cy,
+          refCx: ref.cx,
+          refCy: ref.cy,
+        });
+      }
+
+      // 2. Check Vertical Edge alignments (Left/Right of active vs Left/Right/Center of ref)
+      const selVEdges = [selBox.minX, selBox.maxX];
+      const refVEdges = [ref.minX, ref.maxX];
+      for (const sx of selVEdges) {
+        for (const rx of refVEdges) {
+          if (Math.abs(sx - rx) <= EPS) {
+            vLines.push({
+              x: rx,
+              y1: Math.min(selBox.minY, ref.minY) - 14,
+              y2: Math.max(selBox.maxY, ref.maxY) + 14,
+            });
+          }
+        }
+      }
+
+      // 3. Check Horizontal Edge alignments (Top/Bottom of active vs Top/Bottom/Center of ref)
+      const selHEdges = [selBox.minY, selBox.maxY];
+      const refHEdges = [ref.minY, ref.maxY];
+      for (const sy of selHEdges) {
+        for (const ry of refHEdges) {
+          if (Math.abs(sy - ry) <= EPS) {
+            hLines.push({
+              y: ry,
+              x1: Math.min(selBox.minX, ref.minX) - 14,
+              x2: Math.max(selBox.maxX, ref.maxX) + 14,
+            });
+          }
+        }
+      }
+    }
+
+    if (vLines.length === 0 && hLines.length === 0 && centerLinks.length === 0) return;
+
+    aCtx.save();
+
+    // Draw thin red Edge Alignment lines (with subtle white halo for visibility on dark/grey fills)
+    for (const vl of vLines) {
+      aCtx.setLineDash([]);
+      aCtx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+      aCtx.lineWidth = 2.8;
+      aCtx.beginPath();
+      aCtx.moveTo(vl.x, vl.y1);
+      aCtx.lineTo(vl.x, vl.y2);
+      aCtx.stroke();
+
+      aCtx.strokeStyle = '#ef4444';
+      aCtx.lineWidth = 1.25;
+      aCtx.beginPath();
+      aCtx.moveTo(vl.x, vl.y1);
+      aCtx.lineTo(vl.x, vl.y2);
+      aCtx.stroke();
+    }
+
+    for (const hl of hLines) {
+      aCtx.setLineDash([]);
+      aCtx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+      aCtx.lineWidth = 2.8;
+      aCtx.beginPath();
+      aCtx.moveTo(hl.x1, hl.y);
+      aCtx.lineTo(hl.x2, hl.y);
+      aCtx.stroke();
+
+      aCtx.strokeStyle = '#ef4444';
+      aCtx.lineWidth = 1.25;
+      aCtx.beginPath();
+      aCtx.moveTo(hl.x1, hl.y);
+      aCtx.lineTo(hl.x2, hl.y);
+      aCtx.stroke();
+    }
+
+    // Helper to draw a crisp Illustrator-style red '+' Crosshair (σταυρόνημα) at a center point
+    const drawRedCenterCrosshair = (cx: number, cy: number, isConcentric: boolean) => {
+      const arm = isConcentric ? 11 : 8.5;
+      aCtx.setLineDash([]);
+      // White halo
+      aCtx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      aCtx.lineWidth = 3.2;
+      aCtx.beginPath();
+      aCtx.moveTo(cx - arm, cy);
+      aCtx.lineTo(cx + arm, cy);
+      aCtx.moveTo(cx, cy - arm);
+      aCtx.lineTo(cx, cy + arm);
+      aCtx.stroke();
+
+      // Crisp red '+' crosshair
+      aCtx.strokeStyle = '#ef4444';
+      aCtx.lineWidth = 1.5;
+      aCtx.beginPath();
+      aCtx.moveTo(cx - arm, cy);
+      aCtx.lineTo(cx + arm, cy);
+      aCtx.moveTo(cx, cy - arm);
+      aCtx.lineTo(cx, cy + arm);
+      aCtx.stroke();
+
+      if (isConcentric) {
+        aCtx.beginPath();
+        aCtx.arc(cx, cy, 3.8, 0, Math.PI * 2);
+        aCtx.stroke();
+      }
+    };
+
+    for (const cl of centerLinks) {
+      if (cl.axis === 'x' || cl.axis === 'both') {
+        const yMin = Math.min(cl.selCy, cl.refCy) - 14;
+        const yMax = Math.max(cl.selCy, cl.refCy) + 14;
+        aCtx.setLineDash([4, 3]);
+        aCtx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+        aCtx.lineWidth = 1.15;
+        aCtx.beginPath();
+        aCtx.moveTo(cl.refCx, yMin);
+        aCtx.lineTo(cl.refCx, yMax);
+        aCtx.stroke();
+      }
+      if (cl.axis === 'y' || cl.axis === 'both') {
+        const xMin = Math.min(cl.selCx, cl.refCx) - 14;
+        const xMax = Math.max(cl.selCx, cl.refCx) + 14;
+        aCtx.setLineDash([4, 3]);
+        aCtx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+        aCtx.lineWidth = 1.15;
+        aCtx.beginPath();
+        aCtx.moveTo(xMin, cl.refCy);
+        aCtx.lineTo(xMax, cl.refCy);
+        aCtx.stroke();
+      }
+      drawRedCenterCrosshair(cl.selCx, cl.selCy, cl.axis === 'both');
+      if (Math.hypot(cl.selCx - cl.refCx, cl.selCy - cl.refCy) > 4) {
+        drawRedCenterCrosshair(cl.refCx, cl.refCy, false);
+      }
+    }
+
+    aCtx.restore();
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>, pageIdx = activePageIndex) => {
     const isPen = e.pointerType === 'pen';
 
@@ -8448,8 +8719,80 @@ export default function App() {
 
         // B1. Proportional Resize from 4 Corners (Blue #0066ff dots — preserves exact aspect ratio!)
         if (tf.mode === 'scale') {
-          const currDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
-          const scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
+          const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds);
+          const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds);
+          let currDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
+          let scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
+
+          if (curBox && refBoxes.length > 0 && Math.abs(tf.frameAngle || 0) < 0.05) {
+            const candMinX = tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor;
+            const candMaxX = tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor;
+            const candMinY = tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor;
+            const candMaxY = tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor;
+            const candCx = (candMinX + candMaxX) / 2;
+            const candCy = (candMinY + candMaxY) / 2;
+
+            let bestScaleSnap: number | null = null;
+            let bestDiff = 6;
+            const tryScaleCandidate = (candVal: number, curVal: number, anchorVal: number, targetVal: number) => {
+              const diff = Math.abs(candVal - targetVal);
+              const denom = curVal - anchorVal;
+              if (diff <= bestDiff && Math.abs(denom) > 8) {
+                const reqScale = (targetVal - anchorVal) / denom;
+                if (reqScale >= 0.85 && reqScale <= 1.18) {
+                  bestDiff = diff;
+                  bestScaleSnap = reqScale;
+                }
+              }
+            };
+
+            for (const ref of refBoxes) {
+              for (const rx of [ref.minX, ref.maxX]) {
+                tryScaleCandidate(candMinX, curBox.minX, tf.anchorX, rx);
+                tryScaleCandidate(candMaxX, curBox.maxX, tf.anchorX, rx);
+              }
+              tryScaleCandidate(candCx, curBox.cx, tf.anchorX, ref.cx);
+              for (const ry of [ref.minY, ref.maxY]) {
+                tryScaleCandidate(candMinY, curBox.minY, tf.anchorY, ry);
+                tryScaleCandidate(candMaxY, curBox.maxY, tf.anchorY, ry);
+              }
+              tryScaleCandidate(candCy, curBox.cy, tf.anchorY, ref.cy);
+            }
+
+            if (bestScaleSnap !== null) {
+              scaleFactor = bestScaleSnap;
+              currDist = tf.initialDist * scaleFactor;
+            }
+
+            const finalMinX = Math.min(
+              tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+              tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+            );
+            const finalMaxX = Math.max(
+              tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+              tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+            );
+            const finalMinY = Math.min(
+              tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+              tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+            );
+            const finalMaxY = Math.max(
+              tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+              tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+            );
+            drawSmartAlignmentGuidesForBox(
+              {
+                minX: finalMinX,
+                maxX: finalMaxX,
+                minY: finalMinY,
+                maxY: finalMaxY,
+                cx: (finalMinX + finalMaxX) / 2,
+                cy: (finalMinY + finalMaxY) / 2,
+              },
+              refBoxes
+            );
+          }
+
           tf.initialDist = currDist;
 
           if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
@@ -8566,14 +8909,108 @@ export default function App() {
           const fAngle = tf.frameAngle || 0;
           const cosF = Math.cos(fAngle);
           const sinF = Math.sin(fAngle);
-          const rx = latestPt.x - tf.anchorX;
-          const ry = latestPt.y - tf.anchorY;
+          const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds);
+          const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds);
+
+          let effPtX = latestPt.x;
+          let effPtY = latestPt.y;
+          if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
+            const SNAP_T = 6;
+            if (tf.mode === 'scale-x') {
+              let bestDiffX = SNAP_T;
+              let snappedX: number | null = null;
+              const candCx = (tf.anchorX + latestPt.x) / 2;
+              for (const ref of refBoxes) {
+                for (const rx of [ref.minX, ref.maxX]) {
+                  const dEdge = Math.abs(latestPt.x - rx);
+                  if (dEdge <= bestDiffX) {
+                    bestDiffX = dEdge;
+                    snappedX = rx;
+                  }
+                }
+                const dCenter = Math.abs(candCx - ref.cx);
+                if (dCenter <= bestDiffX) {
+                  bestDiffX = dCenter;
+                  snappedX = 2 * ref.cx - tf.anchorX;
+                }
+              }
+              if (snappedX !== null) {
+                effPtX = snappedX;
+              }
+            } else {
+              let bestDiffY = SNAP_T;
+              let snappedY: number | null = null;
+              const candCy = (tf.anchorY + latestPt.y) / 2;
+              for (const ref of refBoxes) {
+                for (const ry of [ref.minY, ref.maxY]) {
+                  const dEdge = Math.abs(latestPt.y - ry);
+                  if (dEdge <= bestDiffY) {
+                    bestDiffY = dEdge;
+                    snappedY = ry;
+                  }
+                }
+                const dCenter = Math.abs(candCy - ref.cy);
+                if (dCenter <= bestDiffY) {
+                  bestDiffY = dCenter;
+                  snappedY = 2 * ref.cy - tf.anchorY;
+                }
+              }
+              if (snappedY !== null) {
+                effPtY = snappedY;
+              }
+            }
+          }
+
+          const rx = effPtX - tf.anchorX;
+          const ry = effPtY - tf.anchorY;
           const currSpan =
             tf.mode === 'scale-x'
               ? Math.max(16, Math.abs(rx * cosF + ry * sinF))
               : Math.max(16, Math.abs(-rx * sinF + ry * cosF));
           const scaleFactor = Math.max(0.84, Math.min(1.2, currSpan / tf.initialDist));
           tf.initialDist = currSpan;
+
+          if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
+            const finalMinX =
+              tf.mode === 'scale-x'
+                ? Math.min(
+                    tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+                    tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+                  )
+                : curBox.minX;
+            const finalMaxX =
+              tf.mode === 'scale-x'
+                ? Math.max(
+                    tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor,
+                    tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor
+                  )
+                : curBox.maxX;
+            const finalMinY =
+              tf.mode === 'scale-y'
+                ? Math.min(
+                    tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+                    tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+                  )
+                : curBox.minY;
+            const finalMaxY =
+              tf.mode === 'scale-y'
+                ? Math.max(
+                    tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor,
+                    tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor
+                  )
+                : curBox.maxY;
+            drawSmartAlignmentGuidesForBox(
+              {
+                minX: finalMinX,
+                maxX: finalMaxX,
+                minY: finalMinY,
+                maxY: finalMaxY,
+                cx: (finalMinX + finalMaxX) / 2,
+                cy: (finalMinY + finalMaxY) / 2,
+              },
+              refBoxes
+            );
+          }
 
           if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
             const sx = tf.sideSignX || 0;
@@ -8690,12 +9127,7 @@ export default function App() {
           return;
         }
 
-        // C. Move selection (moves ALL selected images AND ALL selected strokes simultaneously!)
-        const dx = latestPt.x - tf.startX;
-        const dy = latestPt.y - tf.startY;
-        tf.startX = latestPt.x;
-        tf.startY = latestPt.y;
-
+        // C. Move selection (moves ALL selected images AND ALL selected strokes simultaneously + Illustrator Magnetic Smart Alignment!)
         const targetImgIdList =
           tf.targetImageIds && tf.targetImageIds.length > 0
             ? tf.targetImageIds
@@ -8704,6 +9136,81 @@ export default function App() {
             : effectiveImgIds;
         const targetStrokeIdList =
           tf.targetStrokeIds && tf.targetStrokeIds.length > 0 ? tf.targetStrokeIds : selectedStrokeIds;
+
+        const rawDx = latestPt.x - tf.startX;
+        const rawDy = latestPt.y - tf.startY;
+        const refBoxes = getReferenceSnapBoxes(targetStrokeIdList, targetImgIdList);
+        const curBox = getSelectionCombinedBox(targetStrokeIdList, targetImgIdList);
+
+        let snapDx = 0;
+        let snapDy = 0;
+        if (curBox && refBoxes.length > 0) {
+          const SNAP_T = 6;
+          const candMinX = curBox.minX + rawDx;
+          const candMaxX = curBox.maxX + rawDx;
+          const candCx = curBox.cx + rawDx;
+          const candMinY = curBox.minY + rawDy;
+          const candMaxY = curBox.maxY + rawDy;
+          const candCy = curBox.cy + rawDy;
+
+          let bestDiffX = SNAP_T;
+          let bestDiffY = SNAP_T;
+
+          for (const ref of refBoxes) {
+            // Center X snap
+            const dCx = Math.abs(candCx - ref.cx);
+            if (dCx <= bestDiffX) {
+              bestDiffX = dCx;
+              snapDx = ref.cx - candCx;
+            }
+            // Left / Right edge snaps
+            for (const sx of [candMinX, candMaxX]) {
+              for (const rx of [ref.minX, ref.maxX]) {
+                const dEdgeX = Math.abs(sx - rx);
+                if (dEdgeX < bestDiffX) {
+                  bestDiffX = dEdgeX;
+                  snapDx = rx - sx;
+                }
+              }
+            }
+
+            // Center Y snap
+            const dCy = Math.abs(candCy - ref.cy);
+            if (dCy <= bestDiffY) {
+              bestDiffY = dCy;
+              snapDy = ref.cy - candCy;
+            }
+            // Top / Bottom edge snaps
+            for (const sy of [candMinY, candMaxY]) {
+              for (const ry of [ref.minY, ref.maxY]) {
+                const dEdgeY = Math.abs(sy - ry);
+                if (dEdgeY < bestDiffY) {
+                  bestDiffY = dEdgeY;
+                  snapDy = ry - sy;
+                }
+              }
+            }
+          }
+        }
+
+        const dx = rawDx + snapDx;
+        const dy = rawDy + snapDy;
+        tf.startX += dx;
+        tf.startY += dy;
+
+        if (curBox && refBoxes.length > 0) {
+          drawSmartAlignmentGuidesForBox(
+            {
+              minX: curBox.minX + dx,
+              maxX: curBox.maxX + dx,
+              minY: curBox.minY + dy,
+              maxY: curBox.maxY + dy,
+              cx: curBox.cx + dx,
+              cy: curBox.cy + dy,
+            },
+            refBoxes
+          );
+        }
 
         updateActivePage(
           (page) => ({
