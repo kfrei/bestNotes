@@ -12663,33 +12663,49 @@ export default function App() {
                     </button>
                     <button
                       onClick={async () => {
-                        const cleanUrl = await removeImageBackground(
-                          selectedImgObj.originalDataUrl || selectedImgObj.dataUrl,
-                          'all-white'
-                        );
+                        if (selectedImgObj.transparentBg && selectedImgObj.originalDataUrl) {
+                          updateActivePage((page) => ({
+                            ...page,
+                            images: page.images.map((im) =>
+                              im.id === selectedImgObj.id
+                                ? { ...im, dataUrl: im.originalDataUrl || im.dataUrl, transparentBg: false }
+                                : im
+                            ),
+                          }));
+                          showToast('↩️ Επαναφέρθηκε το αρχικό φόντο της εικόνας!');
+                          return;
+                        }
+                        const origUrl = selectedImgObj.originalDataUrl || selectedImgObj.dataUrl;
+                        const cleanUrl = await removeImageBackground(origUrl, 'all-white');
                         updateActivePage((page) => ({
                           ...page,
                           images: page.images.map((im) =>
-                            im.id === selectedImgObj.id ? { ...im, dataUrl: cleanUrl, transparentBg: true } : im
+                            im.id === selectedImgObj.id
+                              ? { ...im, dataUrl: cleanUrl, originalDataUrl: origUrl, transparentBg: true }
+                              : im
                           ),
                         }));
                         showToast('🪄 Transparent BG ολοκληρώθηκε!');
                       }}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold cursor-pointer"
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold cursor-pointer transition ${
+                        selectedImgObj.transparentBg
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                      }`}
                     >
                       <Wand2 className="w-3.5 h-3.5" />
                       <span>Transparent BG</span>
                     </button>
                     <button
                       onClick={async () => {
-                        const cleanUrl = await removeImageBackground(
-                          selectedImgObj.originalDataUrl || selectedImgObj.dataUrl,
-                          'outer-flood'
-                        );
+                        const origUrl = selectedImgObj.originalDataUrl || selectedImgObj.dataUrl;
+                        const cleanUrl = await removeImageBackground(origUrl, 'outer-flood');
                         updateActivePage((page) => ({
                           ...page,
                           images: page.images.map((im) =>
-                            im.id === selectedImgObj.id ? { ...im, dataUrl: cleanUrl, transparentBg: true } : im
+                            im.id === selectedImgObj.id
+                              ? { ...im, dataUrl: cleanUrl, originalDataUrl: origUrl, transparentBg: true }
+                              : im
                           ),
                         }));
                         showToast('🪄 Magic Wand ολοκληρώθηκε!');
@@ -12732,6 +12748,7 @@ export default function App() {
                               ? {
                                   ...im,
                                   dataUrl: im.originalDataUrl || im.dataUrl,
+                                  transparentBg: false,
                                   naturalWidth: undefined,
                                   naturalHeight: undefined,
                                   clipPolygon: undefined,
