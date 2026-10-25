@@ -23,6 +23,7 @@ export type ShapePresetType =
   | 'double-arrow'
   | 'rectangle'
   | 'parallelogram'
+  | 'trapezoid'
   | 'ellipse'
   | 'triangle'
   | 'arc'

@@ -2625,6 +2625,7 @@ export default function App() {
     const isClosedPolygonShape =
       s.shapeType === 'rectangle' ||
       s.shapeType === 'parallelogram' ||
+      s.shapeType === 'trapezoid' ||
       s.shapeType === 'triangle' ||
       (s.fillStyle && s.fillStyle !== 'none');
     if (allowInteriorFill && isClosedPolygonShape && s.points.length >= 3) {
@@ -4167,6 +4168,7 @@ export default function App() {
               const isClosedPoly =
                 target.shapeType === 'rectangle' ||
                 target.shapeType === 'parallelogram' ||
+                target.shapeType === 'trapezoid' ||
                 target.shapeType === 'triangle' ||
                 target.shapeType === 'cuboid' ||
                 target.shapeType === 'cylinder' ||
@@ -4227,6 +4229,7 @@ export default function App() {
                 const isClosedShape =
                   target.shapeType === 'rectangle' ||
                   target.shapeType === 'parallelogram' ||
+                  target.shapeType === 'trapezoid' ||
                   target.shapeType === 'triangle';
                 const showIn = bp.inDx !== undefined && bp.inDy !== undefined && (bezNode.nodeIdx > 0 || isClosedShape);
                 const showOut =
@@ -7227,10 +7230,11 @@ export default function App() {
       return null;
     }
 
-    // 5. Editable Polygons & Lines ('rectangle', 'parallelogram', 'triangle', 'line', 'arrow', 'double-arrow') — including curved Quadratic Bézier segments!
+    // 5. Editable Polygons & Lines ('rectangle', 'parallelogram', 'trapezoid', 'triangle', 'line', 'arrow', 'double-arrow') — including curved Quadratic Bézier segments!
     const isEditablePoly =
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
+      target.shapeType === 'trapezoid' ||
       target.shapeType === 'triangle' ||
       target.shapeType === 'line' ||
       target.shapeType === 'arrow' ||
@@ -7240,6 +7244,7 @@ export default function App() {
     const isClosedPoly =
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
+      target.shapeType === 'trapezoid' ||
       target.shapeType === 'triangle';
     const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
     for (let i = 0; i < nodeCount; i++) {
@@ -7426,6 +7431,7 @@ export default function App() {
       const isClosedPoly =
         s.shapeType === 'rectangle' ||
         s.shapeType === 'parallelogram' ||
+        s.shapeType === 'trapezoid' ||
         s.shapeType === 'triangle';
       let nextPts = s.points.map((p) => ({ ...p }));
       if (isLineOrArrow && nextPts.length === 2) {
@@ -7520,6 +7526,7 @@ export default function App() {
     const isClosedPoly =
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
+      target.shapeType === 'trapezoid' ||
       target.shapeType === 'triangle' ||
       target.shapeType === 'cuboid' ||
       target.shapeType === 'cylinder' ||
@@ -7682,6 +7689,7 @@ export default function App() {
         const isClosedPoly =
           target.shapeType === 'rectangle' ||
           target.shapeType === 'parallelogram' ||
+          target.shapeType === 'trapezoid' ||
           target.shapeType === 'triangle';
         updateActivePage(
           (page) => ({
@@ -7765,6 +7773,7 @@ export default function App() {
           const isClosedPoly =
             s.shapeType === 'rectangle' ||
             s.shapeType === 'parallelogram' ||
+            s.shapeType === 'trapezoid' ||
             s.shapeType === 'triangle';
           const nextPts = s.points.map((p, idx) =>
             idx === nodeIdx
@@ -7875,6 +7884,7 @@ export default function App() {
     const isClosedPoly =
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
+      target.shapeType === 'trapezoid' ||
       target.shapeType === 'triangle';
     if (isClosedPoly) {
       const uniqueVerts = target.points.length - 1;
@@ -8657,6 +8667,7 @@ export default function App() {
             const isClosedPoly =
               target.shapeType === 'rectangle' ||
               target.shapeType === 'parallelogram' ||
+              target.shapeType === 'trapezoid' ||
               target.shapeType === 'triangle' ||
               target.shapeType === 'cuboid' ||
               target.shapeType === 'cylinder' ||
@@ -10066,6 +10077,7 @@ export default function App() {
             const isClosedPoly =
               s.shapeType === 'rectangle' ||
               s.shapeType === 'parallelogram' ||
+              s.shapeType === 'trapezoid' ||
               s.shapeType === 'triangle' ||
               s.shapeType === 'cuboid' ||
               s.shapeType === 'cylinder' ||
@@ -14918,6 +14930,15 @@ export default function App() {
                           icon: (
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round">
                               <polygon points="9,4.5 27.5,4.5 23,17.5 4.5,17.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'trapezoid',
+                          title: 'Τραπέζιο',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="9,4.5 23,4.5 27.5,17.5 4.5,17.5" />
                             </svg>
                           ),
                         },

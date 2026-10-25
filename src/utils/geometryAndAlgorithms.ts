@@ -998,6 +998,18 @@ function buildPresetShape(
       ]),
     };
   }
+  if (preset === 'trapezoid') {
+    const inset = Math.min(w * 0.22, 48);
+    return {
+      shapeType: 'trapezoid',
+      points: makePolygonBezier([
+        { x: minX + inset, y: minY },
+        { x: minX + w - inset, y: minY },
+        { x: minX + w, y: minY + h },
+        { x: minX, y: minY + h },
+      ]),
+    };
+  }
   if (preset === 'triangle') {
     return {
       shapeType: 'triangle',
