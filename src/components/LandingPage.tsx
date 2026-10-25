@@ -631,11 +631,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
         @keyframes bnKenBurnsPulse {
           0%, 100% { transform: scale(1) translate(0px, 0px); }
-          50% { transform: scale(1.28) translate(-10px, -6px); }
+          50% { transform: scale(1.48) translate(-12px, -8px); }
         }
         @keyframes bnCrossFadeBreath {
           0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.22); }
+          50% { transform: scale(1.38); }
         }
         @keyframes bnPopupFrameOpen {
           0%, 12% { transform: scale(0.72); opacity: 0; }
@@ -1075,7 +1075,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Main High-Resolution Note Canvas with Strong Zoom & 1 Green Rectangular Selection Frame */}
+                  {/* Main High-Resolution Note Canvas with Deep Zoom */}
                   <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-[#fffdf9] shadow-inner">
                     <img
                       src={activeScienceNote.src}
@@ -1083,19 +1083,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       {...({ fetchpriority: 'high' } as any)}
                       className="w-full max-h-[370px] object-contain mx-auto bn-ken-burns"
                     />
-
-                    {/* Single Animated Green Rectangular Marquee Selection on Bottom-Right */}
-                    <div
-                      className="pointer-events-none absolute bottom-5 right-6 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl bn-rect-marquee flex items-start justify-end p-1.5"
-                    >
-                      <span className="px-1.5 py-0.5 rounded bg-[#22c55e] text-white text-[8.5px] font-extrabold shadow-xs">
-                        ⬚ Ορθογώνια Επιλογή
-                      </span>
-                      <span className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                      <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                      <span className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                      <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                    </div>
                   </div>
 
                   {/* Clean Caption Bar under the Image */}
@@ -1499,18 +1486,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           className={`w-full ${
                             idx === 0 ? 'h-64 sm:h-72' : 'h-56'
                           } object-contain mx-auto transition-transform duration-700 ${
-                            isSpotlight ? 'bn-ken-burns' : 'group-hover/drag:scale-[1.22]'
+                            isSpotlight ? 'bn-ken-burns' : 'group-hover/drag:scale-[1.38]'
                           }`}
                         />
-
-                        {/* Single Green Rectangular Selection Frame on Spotlight Card */}
-                        {isSpotlight && (
-                          <div className="pointer-events-none absolute bottom-3 right-3 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl px-2.5 py-1.5 bn-rect-marquee flex items-start justify-end">
-                            <span className="px-1.5 py-0.5 rounded bg-[#22c55e] text-white text-[9px] font-extrabold">
-                              ⬚ Ορθογώνια Επιλογή
-                            </span>
-                          </div>
-                        )}
                       </div>
 
                       <h3 className="mt-3.5 text-base font-extrabold text-slate-900">
@@ -1566,7 +1544,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'
                 } items-center gap-8 lg:gap-12 rounded-3xl bg-[#fffdf9] border border-slate-200/90 p-6 sm:p-10 shadow-xl`}
               >
-                {/* Image Showcase Side (Draggable + Strong Zoom & 1 Green Rectangular Selection Frame) */}
+                {/* Image Showcase Side (Draggable + Deep Zoom) */}
                 <div className="w-full lg:w-7/12 relative">
                   <DraggableCard
                     resetSignal={dragResetCounter}
@@ -1580,19 +1558,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       loading="lazy"
                       className="w-full max-h-[420px] object-contain mx-auto bn-ken-burns"
                     />
-
-                    {/* Single Green Rectangular Selection Frame */}
-                    <div
-                      className="pointer-events-none absolute bottom-5 right-6 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl bn-rect-marquee flex items-start justify-end p-1.5"
-                    >
-                      <span className="px-1.5 py-0.5 rounded bg-[#22c55e] text-white text-[8.5px] font-extrabold shadow-xs">
-                        ⬚ Ορθογώνια Επιλογή
-                      </span>
-                      <span className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                      <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                      <span className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                      <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
-                    </div>
                   </DraggableCard>
                 </div>
 
