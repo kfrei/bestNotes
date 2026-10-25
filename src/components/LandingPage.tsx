@@ -684,25 +684,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={onEnterApp}
               className="flex items-center gap-2.5 cursor-pointer group"
             >
-              <BestNotesLogoIcon className="w-9 h-9 group-hover:scale-105 transition shrink-0" />
               {isExplainBoardsBrand ? (
-                <span
-                  className="text-[22px] font-extrabold tracking-[-0.03em] inline-flex items-baseline leading-none"
-                  style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
-                >
-                  <span className="text-[#111722]">Explain</span>
-                  <span className="text-[#df1b3f]">Boards</span>
-                </span>
+                <img
+                  src="/explainboards-logo.png"
+                  alt="ExplainBoards"
+                  className="h-9 sm:h-10 w-auto object-contain group-hover:scale-[1.02] transition shrink-0"
+                />
               ) : (
-                <span
-                  className="text-[22px] font-semibold tracking-[-0.03em] text-[#111315] inline-flex items-start leading-none"
-                  style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
-                >
-                  BestNotes
-                  <sup className="text-[7px] font-bold tracking-normal text-[#111315] ml-0.5 mt-0.5">
-                    TM
-                  </sup>
-                </span>
+                <>
+                  <BestNotesLogoIcon className="w-9 h-9 group-hover:scale-105 transition shrink-0" />
+                  <span
+                    className="text-[22px] font-semibold tracking-[-0.03em] text-[#111315] inline-flex items-start leading-none"
+                    style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+                  >
+                    BestNotes
+                    <sup className="text-[7px] font-bold tracking-normal text-[#111315] ml-0.5 mt-0.5">
+                      TM
+                    </sup>
+                  </span>
+                </>
               )}
             </div>
 
