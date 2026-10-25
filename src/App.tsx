@@ -16014,8 +16014,8 @@ export default function App() {
                                     </svg>
                                   )}
 
-                                  {/* Top Row: Folder/.bestNotes Badge (Click to Change/Move Folder!) + Share PDF + Edit Pencil + Red Trash Delete */}
-                                  <div className="relative z-20 flex items-center justify-between pl-4 pr-2 py-1.5 bg-slate-200/75 backdrop-blur-[2px] border-b border-slate-300/70 shadow-2xs">
+                                  {/* Ribbon at ~5/6 of Card Height: Folder/.bestNotes Badge + Larger Share PDF & Red Trash Delete */}
+                                  <div className="absolute left-0 right-0 top-[83%] -translate-y-1/2 z-20 flex items-center justify-between pl-4 pr-2.5 py-1.5 bg-slate-200/75 backdrop-blur-[2px] border-y border-slate-300/70 shadow-2xs">
                                     <div className="relative">
                                       <button
                                         type="button"
@@ -16026,7 +16026,7 @@ export default function App() {
                                             prev === nb.id ? null : nb.id
                                           );
                                         }}
-                                        className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[82px] cursor-pointer hover:opacity-90"
+                                        className="text-[9.5px] tracking-wider px-2.5 py-1 rounded-md text-white font-bold shadow-2xs truncate max-w-[88px] cursor-pointer hover:opacity-90"
                                         style={{ backgroundColor: nb.coverColor }}
                                         title="Πάτα για αλλαγή ή αφαίρεση Φακέλου"
                                       >
@@ -16036,7 +16036,7 @@ export default function App() {
                                         <div
                                           data-popover-panel="lib-folder"
                                           onClick={(e) => e.stopPropagation()}
-                                          className="absolute left-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 space-y-1 text-left"
+                                          className="absolute left-0 bottom-full mb-1.5 w-40 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 space-y-1 text-left"
                                         >
                                           <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
                                             Μετακίνηση σε Φάκελο
@@ -16068,36 +16068,26 @@ export default function App() {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1.5">
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           void handleShareNotebookPdf(nb);
                                         }}
-                                        className="p-1.5 rounded-lg bg-white/90 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        className="p-2 rounded-xl bg-white/95 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
                                         title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
                                       >
-                                        <Share2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          openNotebookDirectly(nb);
-                                        }}
-                                        className="p-1.5 rounded-lg bg-white/90 hover:bg-[#0066ff] text-slate-700 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
-                                        title={`Άνοιγμα & Επεξεργασία "${nb.title}"`}
-                                      >
-                                        <Pen className="w-3.5 h-3.5" />
+                                        <Share2 className="w-[18px] h-[18px]" />
                                       </button>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           deleteNotebookById(nb);
                                         }}
-                                        className="p-1.5 rounded-lg bg-white/90 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        className="p-2 rounded-xl bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
                                         title={`Διαγραφή σημείωσης "${nb.title}"`}
                                       >
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Trash2 className="w-[18px] h-[18px]" />
                                       </button>
                                     </div>
                                   </div>
