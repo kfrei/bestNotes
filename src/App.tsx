@@ -124,6 +124,17 @@ import {
   type MindMapSubject,
   type MindMapGrade,
 } from './data/mindMapsCatalog';
+import {
+  CURATED_STICKERS_CATALOG,
+  STICKER_CATEGORIES,
+  STICKER_COLOR_STYLES,
+  getIconifySvgUrl,
+  searchOnlineIconifyStickers,
+  rasterizeStickerUrlToPngDataUrl,
+  type StickerCategory,
+  type StickerColorStyle,
+  type StickerCatalogItem,
+} from './data/stickersCatalog';
 
 function normalizeGreekText(str: string): string {
   return str
@@ -813,10 +824,37 @@ export default function App() {
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
-  const [libraryTab, setLibraryTab] = useState<'educational' | 'custom'>('educational');
+  const [libraryTab, setLibraryTab] = useState<'educational' | 'stickers' | 'custom'>('educational');
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>('Όλα');
   const [libraryGradeFilter, setLibraryGradeFilter] = useState<'Όλες' | MindMapGrade>('Όλες');
   const [shapeLibSearchQuery, setShapeLibSearchQuery] = useState<string>('');
+  const [stickerCategoryFilter, setStickerCategoryFilter] = useState<StickerCategory>('Όλα');
+  const [stickerColorStyleFilter, setStickerColorStyleFilter] = useState<StickerColorStyle>('all');
+  const [stickerSearchQuery, setStickerSearchQuery] = useState<string>('');
+  const [onlineStickerResults, setOnlineStickerResults] = useState<StickerCatalogItem[]>([]);
+  const [isSearchingOnlineStickers, setIsSearchingOnlineStickers] = useState<boolean>(false);
+
+  useEffect(() => {
+    const q = stickerSearchQuery.trim();
+    if (libraryTab !== 'stickers' || q.length < 2) {
+      setOnlineStickerResults([]);
+      setIsSearchingOnlineStickers(false);
+      return;
+    }
+    let cancelled = false;
+    setIsSearchingOnlineStickers(true);
+    const timer = window.setTimeout(async () => {
+      const results = await searchOnlineIconifyStickers(q, stickerColorStyleFilter);
+      if (!cancelled) {
+        setOnlineStickerResults(results);
+        setIsSearchingOnlineStickers(false);
+      }
+    }, 320);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [libraryTab, stickerSearchQuery, stickerColorStyleFilter]);
   const [shapeLibrary, setShapeLibrary] = useState<SavedLibraryItem[]>(() => {
     if (!initialAuthUid) return [];
     try {
@@ -13316,11 +13354,11 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Mode Tabs: Educational Mind Maps (449) vs User Saved Shapes */}
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
+                {/* Mode Tabs: Educational Mind Maps (449) vs Stickers & Icons vs User Saved Shapes */}
+                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
                   <button
                     onClick={() => setLibraryTab('educational')}
-                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
                       libraryTab === 'educational'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -13329,8 +13367,18 @@ export default function App() {
                     🎓 Μαθήματα ({MIND_MAPS_CATALOG.length})
                   </button>
                   <button
+                    onClick={() => setLibraryTab('stickers')}
+                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
+                      libraryTab === 'stickers'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🎨 Εικονίδια & 3D
+                  </button>
+                  <button
                     onClick={() => setLibraryTab('custom')}
-                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold transition cursor-pointer ${
                       libraryTab === 'custom'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -13529,6 +13577,225 @@ export default function App() {
                                 </div>
                               </div>
                             ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : libraryTab === 'stickers' ? (
+                  (() => {
+                    const qNorm = normalizeGreekText(stickerSearchQuery.trim());
+                    const filteredCurated = CURATED_STICKERS_CATALOG.filter((item) => {
+                      if (stickerCategoryFilter !== 'Όλα' && item.category !== stickerCategoryFilter) {
+                        return false;
+                      }
+                      if (stickerColorStyleFilter !== 'all' && item.colorStyle !== stickerColorStyleFilter) {
+                        return false;
+                      }
+                      if (!qNorm) return true;
+                      const haystack = normalizeGreekText(
+                        `${item.title} ${item.category} ${item.tags.join(' ')} ${item.iconifyId}`
+                      );
+                      return qNorm.split(/\s+/).every((tok) => haystack.includes(tok));
+                    });
+
+                    const seenIconify = new Set(filteredCurated.map((c) => c.iconifyId));
+                    const extraOnline = onlineStickerResults.filter((o) => !seenIconify.has(o.iconifyId));
+                    const combinedStickers = [...filteredCurated, ...extraOnline];
+
+                    const styleBadgeMap: Record<Exclude<StickerColorStyle, 'all'>, { label: string; cls: string }> = {
+                      multicolor: {
+                        label: '🌈 Πολύχρωμο / 3D',
+                        cls: 'bg-amber-50 text-amber-700 border-amber-200',
+                      },
+                      duotone: {
+                        label: '🎨 Δίχρωμο',
+                        cls: 'bg-sky-50 text-[#0066ff] border-sky-200',
+                      },
+                      monochrome: {
+                        label: '✒️ Μονόχρωμο',
+                        cls: 'bg-slate-100 text-slate-700 border-slate-300',
+                      },
+                    };
+
+                    const handleInsertStickerItem = async (stItem: StickerCatalogItem) => {
+                      const svgUrl = getIconifySvgUrl(stItem.iconifyId, stItem.colorStyle, strokeColor || '#1e293b');
+                      try {
+                        showToast(`⏳ Φόρτωση «${stItem.title}»...`);
+                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(svgUrl);
+                        insertImageDataUrlOnPage(
+                          pngDataUrl,
+                          `🎨 Προστέθηκε: «${stItem.title}» (${stItem.category})`
+                        );
+                      } catch {
+                        insertImageDataUrlOnPage(
+                          svgUrl,
+                          `🎨 Προστέθηκε: «${stItem.title}» (${stItem.category})`
+                        );
+                      }
+                    };
+
+                    const handleSaveStickerToMyLibrary = async (
+                      e: React.MouseEvent,
+                      stItem: StickerCatalogItem
+                    ) => {
+                      e.stopPropagation();
+                      const svgUrl = getIconifySvgUrl(stItem.iconifyId, stItem.colorStyle, strokeColor || '#1e293b');
+                      try {
+                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(svgUrl);
+                        const newLibItem: SavedLibraryItem = {
+                          id: `lib-stk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          title: stItem.title,
+                          createdAt: new Date().toLocaleTimeString('el-GR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }),
+                          strokes: [],
+                          thumbnailDataUrl: pngDataUrl,
+                        };
+                        setShapeLibrary((prev) => [newLibItem, ...prev]);
+                        showToast(`⭐ Αποθηκεύτηκε το «${stItem.title}» στα Δικά μου!`);
+                      } catch {
+                        showToast('⚠️ Δεν ήταν δυνατή η αποθήκευση του εικονιδίου.');
+                      }
+                    };
+
+                    return (
+                      <div className="flex flex-col min-h-0 flex-1">
+                        {/* Search Input (Greek & English + Live 200k Iconify Search) */}
+                        <div className="relative mb-2 shrink-0">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={stickerSearchQuery}
+                            onChange={(e) => setStickerSearchQuery(e.target.value)}
+                            placeholder="Αναζήτηση (π.χ. βελος, γραναζι, αμαξι, δασκαλος, σκυλος)..."
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                          />
+                          {stickerSearchQuery && (
+                            <button
+                              onClick={() => setStickerSearchQuery('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              title="Καθαρισμός αναζήτησης"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Category Filter Pills (Βελάκια, Γρανάζια & Αμαξάκια, Σχολικά, Επαγγέλματα, Emoticons, 3D) */}
+                        <div className="flex items-center gap-1 flex-wrap mb-1.5 shrink-0">
+                          {STICKER_CATEGORIES.map((cat) => (
+                            <button
+                              key={cat.id}
+                              onClick={() => setStickerCategoryFilter(cat.id)}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                stickerCategoryFilter === cat.id
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {cat.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Color Style Filter Pills (Όλα | Πολύχρωμα / 3D | Δίχρωμα | Μονόχρωμα) */}
+                        <div className="flex items-center justify-between gap-1 mb-2 pb-2 border-b border-slate-100 shrink-0 flex-wrap">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {STICKER_COLOR_STYLES.map((cs) => (
+                              <button
+                                key={cs.id}
+                                onClick={() => setStickerColorStyleFilter(cs.id)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition cursor-pointer ${
+                                  stickerColorStyleFilter === cs.id
+                                    ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                {cs.label}
+                              </button>
+                            ))}
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-700 shrink-0">
+                            {isSearchingOnlineStickers
+                              ? '🔍 Online αναζήτηση...'
+                              : `${combinedStickers.length} εικονίδια`}
+                          </span>
+                        </div>
+
+                        {/* Stickers Results Grid */}
+                        {combinedStickers.length === 0 ? (
+                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <Search className="w-6 h-6 text-slate-400" />
+                            <p className="text-xs font-semibold text-slate-600">
+                              Δεν βρέθηκαν εικονίδια με αυτά τα φίλτρα
+                            </p>
+                            <button
+                              onClick={() => {
+                                setStickerCategoryFilter('Όλα');
+                                setStickerColorStyleFilter('all');
+                                setStickerSearchQuery('');
+                              }}
+                              className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold cursor-pointer hover:bg-emerald-700"
+                            >
+                              Επαναφορά Φίλτρων
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            style={{ WebkitOverflowScrolling: 'touch' }}
+                            className="overflow-y-auto pr-1 grid grid-cols-3 gap-2 max-h-[46vh]"
+                          >
+                            {combinedStickers.map((stItem) => {
+                              const svgUrl = getIconifySvgUrl(
+                                stItem.iconifyId,
+                                stItem.colorStyle,
+                                strokeColor || '#1e293b'
+                              );
+                              const badge = styleBadgeMap[stItem.colorStyle];
+                              return (
+                                <div
+                                  key={stItem.id}
+                                  onClick={() => void handleInsertStickerItem(stItem)}
+                                  className="group relative flex flex-col items-center justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
+                                  title={`${stItem.title} (${badge.label})\nΚλικ για εισαγωγή στη σελίδα`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={(e) => void handleSaveStickerToMyLibrary(e, stItem)}
+                                    className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-white/90 hover:bg-amber-400 text-amber-600 hover:text-white border border-amber-200 text-[9px] font-bold shadow-2xs transition cursor-pointer z-10"
+                                    title="Αποθήκευση στα «⭐ Δικά μου»"
+                                  >
+                                    ⭐
+                                  </button>
+
+                                  <div
+                                    className="w-full h-16 rounded-lg bg-white border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5"
+                                    style={{
+                                      backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)',
+                                      backgroundSize: '8px 8px',
+                                    }}
+                                  >
+                                    <img
+                                      src={svgUrl}
+                                      alt={stItem.title}
+                                      loading="lazy"
+                                      className="w-12 h-12 object-contain pointer-events-none select-none group-hover:scale-110 transition-transform"
+                                    />
+                                  </div>
+
+                                  <p className="mt-1.5 text-[10px] font-bold text-slate-800 text-center line-clamp-1 w-full">
+                                    {stItem.title}
+                                  </p>
+                                  <span
+                                    className={`mt-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold border ${badge.cls}`}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
