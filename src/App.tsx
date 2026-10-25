@@ -6741,7 +6741,7 @@ export default function App() {
       lassoPolygonRef.current = [];
       const imgObj = activePage.images.find((im) => im.id === selectedImageId);
       if (imgObj) {
-        applyTightLassoCropToImage(imgObj, poly);
+        applyTightLassoCropToImage(imgObj, poly, imageCropMode === 'magnetic');
         showToast(
           imageCropMode === 'magnetic'
             ? '🧲 Magnetic Lasso Crop ολοκληρώθηκε!'
