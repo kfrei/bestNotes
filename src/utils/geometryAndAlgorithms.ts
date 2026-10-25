@@ -2839,9 +2839,14 @@ async function downscaleImageDataUrlForVision(dataUrl: string): Promise<{ mimeTy
   });
 }
 
+let cachedWorkingVisionModel: string | null = null;
+
 /**
  * Uses Gemini Flash Vision (free tier on project bestnotes-2026) to inspect up to 4 images/texts
  * on a notebook page and return 3-4 clean Greek keyword tags in nominative singular.
+ * Includes automatic evergreen model resolution ('gemini-flash-latest', 'gemini-3.8-flash',
+ * 'gemini-3.5-flash', 'gemini-flash-lite-latest') plus live /v1beta/models auto-discovery
+ * so future model upgrades (3.8 -> 4.0 -> 5.0) work automatically without code changes.
  */
 export async function generateSmartGreekTagsFromImages(
   notebookTitle: string,
@@ -2851,8 +2856,7 @@ export async function generateSmartGreekTagsFromImages(
   const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
   const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
   if (!partA || !partB) return [];
-  const apiKey =
-    partA.split('').reverse().join('') + partB.split('').reverse().join('');
+  const apiKey = (partA + partB).split('').reverse().join('');
 
   const parts: any[] = [
     {
@@ -2874,10 +2878,21 @@ export async function generateSmartGreekTagsFromImages(
     }
   }
 
-  for (const modelName of ['gemini-3.8-flash', 'gemini-flash-latest']) {
+  const candidateModels = Array.from(
+    new Set([
+      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
+      'gemini-flash-latest',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-lite-latest',
+    ])
+  );
+
+  const tryGenerateWithModel = async (modelName: string): Promise<string[] | null> => {
     try {
+      const cleanName = modelName.replace(/^models\//, '');
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2887,21 +2902,64 @@ export async function generateSmartGreekTagsFromImages(
           }),
         }
       );
-      if (!res.ok) continue;
+      if (!res.ok) return null;
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) continue;
+      if (!rawText) return null;
       const parsed = JSON.parse(rawText);
       if (Array.isArray(parsed)) {
-        return parsed
+        const tags = parsed
           .map((t) => String(t || '').replace(/^#+/, '').trim().toLowerCase())
           .filter((t) => t.length >= 2)
           .slice(0, 4);
+        if (tags.length > 0) {
+          cachedWorkingVisionModel = cleanName;
+          return tags;
+        }
       }
     } catch {
-      // try fallback model
+      // try next model
     }
+    return null;
+  };
+
+  for (const modelName of candidateModels) {
+    const tags = await tryGenerateWithModel(modelName);
+    if (tags && tags.length > 0) return tags;
   }
+
+  // Automatic Future-Proof Discovery: query /v1beta/models dynamically if all known aliases/versions rotated
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+    );
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      const discovered: string[] = (listData?.models || [])
+        .filter(
+          (m: any) =>
+            Array.isArray(m?.supportedGenerationMethods) &&
+            m.supportedGenerationMethods.includes('generateContent') &&
+            typeof m.name === 'string' &&
+            m.name.includes('gemini') &&
+            m.name.includes('flash') &&
+            !m.name.includes('tts') &&
+            !m.name.includes('transcribe') &&
+            !m.name.includes('embedding')
+        )
+        .map((m: any) => String(m.name).replace(/^models\//, ''))
+        .sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
+
+      for (const dynModel of discovered) {
+        if (candidateModels.includes(dynModel)) continue;
+        const tags = await tryGenerateWithModel(dynModel);
+        if (tags && tags.length > 0) return tags;
+      }
+    }
+  } catch {
+    // ignore discovery error
+  }
+
   return [];
 }
 
