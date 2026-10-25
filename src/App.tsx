@@ -919,6 +919,13 @@ export default function App() {
       addNodeLongPressRef.current = null;
     }
   }, []);
+  const hoverAddNodePreviewRef = useRef<{
+    strokeId: string;
+    x: number;
+    y: number;
+    segIdx?: number;
+    freehandIdx?: number;
+  } | null>(null);
   const [textFontSize, setTextFontSize] = useState<number>(22);
   const [textBold, setTextBold] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -6475,6 +6482,104 @@ export default function App() {
     return inside;
   };
 
+  // Compute the sliding "+ Add Node" preview point on the perimeter/line of an active stroke in Nodes ('direct-node') mode
+  const computeHoverAddNodePoint = (
+    pt: { x: number; y: number },
+    target: StrokeObject
+  ): { strokeId: string; x: number; y: number; segIdx?: number; freehandIdx?: number } | null => {
+    if (!target || isShapeWithoutNodes(target)) return null;
+
+    if (!target.isShape) {
+      if (target.points.length < 3) return null;
+      const keyIndices =
+        target.keyNodeIndices && target.keyNodeIndices.length >= 2
+          ? target.keyNodeIndices
+          : computeFreehandKeyNodeIndices(target.points);
+      const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
+      for (let k = 0; k < keyIndices.length; k++) {
+        if (isWeldedClosed && k === keyIndices.length - 1) continue;
+        const p = target.points[keyIndices[k]];
+        if (p && distance(pt, p) < 22) {
+          return null;
+        }
+      }
+      let bestIdx = -1;
+      let minDist = 18;
+      for (let i = 1; i < target.points.length - 1; i++) {
+        if (keyIndices.includes(i)) continue;
+        const d = distance(pt, target.points[i]);
+        if (d < minDist) {
+          minDist = d;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx >= 1) {
+        return {
+          strokeId: target.id,
+          x: target.points[bestIdx].x,
+          y: target.points[bestIdx].y,
+          freehandIdx: bestIdx,
+        };
+      }
+      return null;
+    }
+
+    const isEditablePoly =
+      target.shapeType === 'rectangle' ||
+      target.shapeType === 'parallelogram' ||
+      target.shapeType === 'triangle' ||
+      target.shapeType === 'line' ||
+      target.shapeType === 'arrow' ||
+      target.shapeType === 'double-arrow';
+    if (!isEditablePoly || target.points.length < 2) return null;
+
+    const isClosedPoly =
+      target.shapeType === 'rectangle' ||
+      target.shapeType === 'parallelogram' ||
+      target.shapeType === 'triangle';
+    const nodeCount = isClosedPoly ? Math.max(1, target.points.length - 1) : target.points.length;
+    for (let i = 0; i < nodeCount; i++) {
+      const p = target.points[i];
+      if (p && distance(pt, p) < 22) {
+        return null;
+      }
+    }
+
+    let bestSeg = -1;
+    let bestDist = 18;
+    let bestProjX = pt.x;
+    let bestProjY = pt.y;
+    for (let i = 0; i < target.points.length - 1; i++) {
+      const pA = target.points[i];
+      const pB = target.points[i + 1];
+      const dx = pB.x - pA.x;
+      const dy = pB.y - pA.y;
+      const lenSq = dx * dx + dy * dy;
+      const t =
+        lenSq > 1e-4
+          ? Math.max(0.08, Math.min(0.92, ((pt.x - pA.x) * dx + (pt.y - pA.y) * dy) / lenSq))
+          : 0.5;
+      const px = pA.x + t * dx;
+      const py = pA.y + t * dy;
+      const d = Math.hypot(pt.x - px, pt.y - py);
+      if (d < bestDist) {
+        bestDist = d;
+        bestSeg = i;
+        bestProjX = px;
+        bestProjY = py;
+      }
+    }
+    if (bestSeg >= 0) {
+      return {
+        strokeId: target.id,
+        x: bestProjX,
+        y: bestProjY,
+        segIdx: bestSeg,
+      };
+    }
+    return null;
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>, pageIdx = activePageIndex) => {
     const isPen = e.pointerType === 'pen';
 
@@ -6799,6 +6904,10 @@ export default function App() {
               }
             }
             if (bestK >= 0) {
+              if (hoverAddNodePreviewRef.current) {
+                hoverAddNodePreviewRef.current = null;
+                clearActiveOverlay();
+              }
               if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
                 updateActivePage(
                   (page) => ({
@@ -6853,10 +6962,70 @@ export default function App() {
               }
             }
             if (bestIdx >= 0) {
+              if (hoverAddNodePreviewRef.current) {
+                hoverAddNodePreviewRef.current = null;
+                clearActiveOverlay();
+              }
               setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
               setRedoStack([]);
               setDraggingNodeIdx({ index: bestIdx, isControl: false });
               isDrawingRef.current = true;
+              return;
+            }
+          }
+
+          // When clicking with a mouse on the sliding "+ Add Node" preview box along the line, immediately insert the new node!
+          const hoverPreview =
+            hoverAddNodePreviewRef.current && hoverAddNodePreviewRef.current.strokeId === target.id
+              ? hoverAddNodePreviewRef.current
+              : e.pointerType === 'mouse'
+              ? computeHoverAddNodePoint(pt, target)
+              : null;
+          if (
+            e.pointerType === 'mouse' &&
+            hoverPreview &&
+            Math.hypot(pt.x - hoverPreview.x, pt.y - hoverPreview.y) <= 22
+          ) {
+            hoverAddNodePreviewRef.current = null;
+            clearActiveOverlay();
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setRedoStack([]);
+            let newDragIdx: number | null = null;
+            updateActivePage(
+              (page) => ({
+                ...page,
+                strokes: page.strokes.map((s) => {
+                  if (s.id !== target.id) return s;
+                  if (!s.isShape && typeof hoverPreview.freehandIdx === 'number' && s.points.length >= 3) {
+                    const kIndices =
+                      s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                        ? s.keyNodeIndices
+                        : computeFreehandKeyNodeIndices(s.points);
+                    const nextKeys = Array.from(new Set([...kIndices, hoverPreview.freehandIdx])).sort(
+                      (a, b) => a - b
+                    );
+                    newDragIdx = nextKeys.indexOf(hoverPreview.freehandIdx);
+                    return { ...s, keyNodeIndices: nextKeys };
+                  }
+                  if (s.isShape && typeof hoverPreview.segIdx === 'number' && s.points.length >= 2) {
+                    const nextPts = [...s.points];
+                    nextPts.splice(hoverPreview.segIdx + 1, 0, {
+                      x: hoverPreview.x,
+                      y: hoverPreview.y,
+                      pressure: 0.7,
+                    });
+                    newDragIdx = hoverPreview.segIdx + 1;
+                    return { ...s, points: nextPts };
+                  }
+                  return s;
+                }),
+              }),
+              true
+            );
+            if (newDragIdx !== null) {
+              setDraggingNodeIdx({ index: newDragIdx, isControl: false });
+              isDrawingRef.current = true;
+              showToast('➕ Προστέθηκε νέος κόμβος (Node)!');
               return;
             }
           }
@@ -7818,7 +7987,57 @@ export default function App() {
         cancelAddNodeLongPress();
       }
     }
-    if (!isDrawingRef.current) return;
+    if (!isDrawingRef.current) {
+      if (activeTool === 'direct-node' && activeNodeStrokeId && e.pointerType !== 'touch') {
+        const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
+        const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+        const preview = target ? computeHoverAddNodePoint(hoverPt, target) : null;
+        if (preview) {
+          hoverAddNodePreviewRef.current = preview;
+          e.currentTarget.style.cursor = 'pointer';
+          clearActiveOverlay();
+          const aCtx = activeCtxRef.current;
+          if (aCtx) {
+            const boxSize = 15;
+            const half = boxSize / 2;
+            aCtx.save();
+            aCtx.shadowColor = 'rgba(15, 23, 42, 0.14)';
+            aCtx.shadowBlur = 4;
+            aCtx.shadowOffsetY = 1;
+            aCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            aCtx.strokeStyle = '#94a3b8';
+            aCtx.lineWidth = 1.6;
+            aCtx.beginPath();
+            aCtx.rect(preview.x - half, preview.y - half, boxSize, boxSize);
+            aCtx.fill();
+            aCtx.stroke();
+
+            // Draw the "+" sign inside the faint white box
+            aCtx.shadowColor = 'transparent';
+            aCtx.strokeStyle = '#475569';
+            aCtx.lineWidth = 1.7;
+            aCtx.lineCap = 'round';
+            const arm = 3.6;
+            aCtx.beginPath();
+            aCtx.moveTo(preview.x - arm, preview.y);
+            aCtx.lineTo(preview.x + arm, preview.y);
+            aCtx.moveTo(preview.x, preview.y - arm);
+            aCtx.lineTo(preview.x, preview.y + arm);
+            aCtx.stroke();
+            aCtx.restore();
+          }
+        } else if (hoverAddNodePreviewRef.current) {
+          hoverAddNodePreviewRef.current = null;
+          e.currentTarget.style.cursor = '';
+          clearActiveOverlay();
+        }
+      } else if (hoverAddNodePreviewRef.current) {
+        hoverAddNodePreviewRef.current = null;
+        e.currentTarget.style.cursor = '';
+        clearActiveOverlay();
+      }
+      return;
+    }
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
     if (e.pointerType === 'pen') {
@@ -14272,6 +14491,13 @@ export default function App() {
                       onPointerMove={handlePointerMove}
                       onPointerUp={handlePointerUp}
                       onPointerCancel={handlePointerUp}
+                      onPointerLeave={(e) => {
+                        if (hoverAddNodePreviewRef.current) {
+                          hoverAddNodePreviewRef.current = null;
+                          e.currentTarget.style.cursor = '';
+                          clearActiveOverlay();
+                        }
+                      }}
                       onContextMenu={(e) => e.preventDefault()}
                       style={{
                         width: pW,
