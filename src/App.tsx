@@ -18600,11 +18600,6 @@ export default function App() {
 
                   return (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                        <Type className="w-3.5 h-3.5 text-[#0066ff]" />
-                        <span>Κείμενο:</span>
-                      </span>
-
                       {/* Bold (B) Toggle */}
                       <button
                         onClick={() => applyBold(!currentBold)}
@@ -18657,7 +18652,7 @@ export default function App() {
                       >
                         A-
                       </button>
-                      {[14, 18, 22, 28, 36, 48].map((sz) => (
+                      {[14, 22, 28, 36].map((sz) => (
                         <button
                           key={sz}
                           onClick={() => applyFontSize(sz)}
@@ -18682,23 +18677,6 @@ export default function App() {
                       {selTxt && (
                         <>
                           <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
-                          <button
-                            onClick={() => {
-                              if (selTxt.isMath) {
-                                setMathInput(
-                                  splitAndCleanMathLatexLines(selTxt.latex || selTxt.text || '').join('\n')
-                                );
-                                setShowMathModal(true);
-                              } else if (editingTextId === selTxt.id) {
-                                setEditingTextId(null);
-                              } else {
-                                setEditingTextId(selTxt.id);
-                              }
-                            }}
-                            className="px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
-                          >
-                            {editingTextId === selTxt.id ? '✓ Τέλος' : '✏️ Επεξεργασία'}
-                          </button>
                           <button
                             onClick={() => {
                               updateActivePage((page) => ({
@@ -19187,25 +19165,27 @@ export default function App() {
                       <span>Αντίγραφο</span>
                     </button>
 
-                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) */}
-                    <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
-                      <button
-                        onClick={() => handleMirrorSelected('horizontal')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                        title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
-                      >
-                        <MirrorHorizontalIcon className="w-4 h-4" />
-                        <span>Mirror</span>
-                      </button>
-                      <button
-                        onClick={() => handleMirrorSelected('vertical')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                        title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
-                      >
-                        <MirrorVerticalIcon className="w-4 h-4" />
-                        <span>Mirror</span>
-                      </button>
-                    </div>
+                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) — hidden when in text/math mode */}
+                    {activeTool !== 'text' && selectedTextId === null && editingTextId === null && (
+                      <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
+                        <button
+                          onClick={() => handleMirrorSelected('horizontal')}
+                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                          title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
+                        >
+                          <MirrorHorizontalIcon className="w-4 h-4" />
+                          <span>Mirror</span>
+                        </button>
+                        <button
+                          onClick={() => handleMirrorSelected('vertical')}
+                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                          title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
+                        >
+                          <MirrorVerticalIcon className="w-4 h-4" />
+                          <span>Mirror</span>
+                        </button>
+                      </div>
+                    )}
 
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
