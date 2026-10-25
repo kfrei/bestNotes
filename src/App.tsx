@@ -15231,7 +15231,7 @@ export default function App() {
                                   )}
 
                                   {/* Top Row: Folder/.bestNotes Badge (Click to Change/Move Folder!) + Share PDF + Edit Pencil + Red Trash Delete */}
-                                  <div className="relative z-20 flex items-center justify-between pl-4 pr-2 pt-2">
+                                  <div className="relative z-20 flex items-center justify-between pl-4 pr-2 py-1.5 bg-slate-200/75 backdrop-blur-[2px] border-b border-slate-300/70 shadow-2xs">
                                     <div className="relative">
                                       <button
                                         type="button"
