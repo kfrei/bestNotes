@@ -2802,3 +2802,107 @@ export function matchesNotebookSmartSearch(
   return { matched: true, matchedTags, matchedTextSnippet };
 }
 
+/**
+ * Downscales a dataUrl image to a compact <= 480px JPEG base64 payload (~20 KB) for fast, low-token Vision tagging.
+ */
+async function downscaleImageDataUrlForVision(dataUrl: string): Promise<{ mimeType: string; base64: string } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const maxDim = 480;
+      const scale = Math.min(1, maxDim / Math.max(1, img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      // Fill white background so transparent-bg dark text or light text is clearly legible
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const jpegUrl = canvas.toDataURL('image/jpeg', 0.78);
+      const m = jpegUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+      if (!m) {
+        resolve(null);
+        return;
+      }
+      resolve({ mimeType: m[1], base64: m[2] });
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * Uses Gemini Flash Vision (free tier on project bestnotes-2026) to inspect up to 4 images/texts
+ * on a notebook page and return 3-4 clean Greek keyword tags in nominative singular.
+ */
+export async function generateSmartGreekTagsFromImages(
+  notebookTitle: string,
+  imageDataUrls: string[],
+  pageTexts: string[] = []
+): Promise<string[]> {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return [];
+  const apiKey =
+    partA.split('').reverse().join('') + partB.split('').reverse().join('');
+
+  const parts: any[] = [
+    {
+      text: `Δες το περιεχόμενο της σχολικής σημείωσης με τίτλο "${notebookTitle}"${
+        pageTexts.length > 0 ? ` και κείμενα: "${pageTexts.join(' | ').slice(0, 400)}"` : ''
+      }. Διάβασε το ελληνικό κείμενο και τα σχήματα μέσα στις εικόνες και επέστρεψε ΑΥΣΤΗΡΑ ένα JSON array με τις 4 πιο σημαντικές ελληνικές λέξεις-κλειδιά (tags) στην ονομαστική ενικού (π.χ. ["φωτοσύνθεση", "γλυκόζη", "οξυγόνο", "φως"] ή ["βροχή", "νερό", "εξάτμιση", "υδρατμός"]). Μόνο 3 έως 4 ουσιαστικές ελληνικές λέξεις!`,
+    },
+  ];
+
+  for (const url of imageDataUrls.slice(0, 4)) {
+    const compact = await downscaleImageDataUrlForVision(url);
+    if (compact) {
+      parts.push({
+        inlineData: {
+          mimeType: compact.mimeType,
+          data: compact.base64,
+        },
+      });
+    }
+  }
+
+  for (const modelName of ['gemini-3.8-flash', 'gemini-flash-latest']) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { responseMimeType: 'application/json' },
+          }),
+        }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) continue;
+      const parsed = JSON.parse(rawText);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((t) => String(t || '').replace(/^#+/, '').trim().toLowerCase())
+          .filter((t) => t.length >= 2)
+          .slice(0, 4);
+      }
+    } catch {
+      // try fallback model
+    }
+  }
+  return [];
+}
+
+

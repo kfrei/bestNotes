@@ -116,6 +116,7 @@ import {
   matchesGreekSmartQuery,
   matchesNotebookSmartSearch,
   normalizeGreekSearchText,
+  generateSmartGreekTagsFromImages,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -1134,6 +1135,84 @@ export default function App() {
       setSyncStatus('dirty');
     },
     []
+  );
+
+  const [isAutoTaggingNbId, setIsAutoTaggingNbId] = useState<string | null>(null);
+
+  const triggerSmartAutoTagsForNotebook = useCallback(
+    async (targetNb: Notebook, extraImageDataUrls: string[] = [], silent = false) => {
+      const collectedUrls: string[] = [...extraImageDataUrls];
+      for (const p of targetNb.pages || []) {
+        if (p.backgroundDataUrl && p.backgroundDataUrl.startsWith('data:image/')) {
+          collectedUrls.push(p.backgroundDataUrl);
+        }
+        for (const im of p.images || []) {
+          if (im.dataUrl && im.dataUrl.startsWith('data:image/')) {
+            collectedUrls.push(im.dataUrl);
+          }
+        }
+      }
+      const uniqueUrls = Array.from(new Set(collectedUrls)).slice(0, 4);
+      const pageTexts = (targetNb.pages || []).flatMap((p) =>
+        (p.texts || []).map((t) => t.text).filter(Boolean)
+      );
+
+      if (uniqueUrls.length === 0 && pageTexts.length === 0) {
+        if (!silent) {
+          showToast('ℹ️ Η σημείωση δεν περιέχει εικόνες ή κείμενο για αυτόματη εξαγωγή tags!');
+        }
+        return;
+      }
+
+      setIsAutoTaggingNbId(targetNb.id);
+      if (!silent) {
+        showToast('✨ Ανάλυση εικόνων & κειμένου για αυτόματη εξαγωγή 4 βασικών #tags...');
+      }
+      try {
+        const aiTags = await generateSmartGreekTagsFromImages(
+          targetNb.title,
+          uniqueUrls,
+          pageTexts
+        );
+        if (aiTags.length === 0) {
+          if (!silent) {
+            showToast('ℹ️ Δεν εντοπίστηκαν επιπλέον λέξεις-κλειδιά στην εικόνα.');
+          }
+          return;
+        }
+
+        const addedList: string[] = [];
+        setNotebooks((prev) =>
+          prev.map((nb) => {
+            if (nb.id !== targetNb.id) return nb;
+            const existing = nb.tags || [];
+            const existingNorm = new Set(existing.map((e) => normalizeGreekSearchText(e)));
+            const merged = [...existing];
+            for (const nt of aiTags) {
+              const norm = normalizeGreekSearchText(nt);
+              if (norm && !existingNorm.has(norm) && merged.length < 6) {
+                existingNorm.add(norm);
+                merged.push(nt);
+                addedList.push(nt);
+              }
+            }
+            if (merged.length === existing.length) return nb;
+            return { ...nb, tags: merged, updatedAt: new Date().toISOString() };
+          })
+        );
+
+        if (addedList.length > 0) {
+          setIsDirty(true);
+          setSyncStatus('dirty');
+          showToast(`🏷️ Auto-Tags: ${addedList.map((t) => `#${t}`).join(', ')}`);
+        } else if (!silent) {
+          showToast(`✅ Τα βασικά #tags υπάρχουν ήδη (${aiTags.map((t) => `#${t}`).join(', ')})!`);
+        }
+      } finally {
+        setIsAutoTaggingNbId((prev) => (prev === targetNb.id ? null : prev));
+      }
+    },
+    [showToast]
   );
 
   const changeNotebookFolder = useCallback(
@@ -4749,10 +4828,15 @@ export default function App() {
         setSelectedStrokeIds([]);
         setActiveTool('lasso');
         showToast(customToast || `📥 Επικολλήθηκε εικόνα (${natW}×${natH}px) με ακριβείς αναλογίες!`);
+
+        // Automatically extract 3–4 core Greek #tags in the background when pasting/inserting an image if notebook has < 4 tags
+        if ((activeNotebook.tags?.length || 0) < 4) {
+          void triggerSmartAutoTagsForNotebook(activeNotebook, [finalDataUrl], true);
+        }
       };
       img.src = dataUrl;
     },
-    [activeLayerId, updateActivePage, showToast]
+    [activeLayerId, activeNotebook, updateActivePage, showToast, triggerSmartAutoTagsForNotebook]
   );
 
   const applyTightLassoCropToImage = useCallback(
@@ -4978,6 +5062,9 @@ export default function App() {
                   : im
               ),
             }));
+            if ((activeNotebook.tags?.length || 0) < 4) {
+              void triggerSmartAutoTagsForNotebook(activeNotebook, [croppedDataUrl], true);
+            }
             return;
           } catch {
             // Fall through to tight bounding-box clipPolygon if canvas is tainted
@@ -5001,7 +5088,7 @@ export default function App() {
         ),
       }));
     },
-    [updateActivePage]
+    [activeNotebook, triggerSmartAutoTagsForNotebook, updateActivePage]
   );
 
   // Crop any of the 4 sides (top, right, bottom, left) of a selected image inward by dragging its Side Crop Bar!
@@ -9314,6 +9401,7 @@ export default function App() {
         setViewMode('editor');
         applyPaperTransformDirect(zoomRef.current, 0, 0, true);
         showToast(`📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`);
+        void triggerSmartAutoTagsForNotebook(newNb, [], true);
       } else {
         // Insert into current notebook right after activePageIndex (or replace current page if completely blank)
         const isCurrentPageEmpty =
@@ -9346,6 +9434,14 @@ export default function App() {
         applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
         setShowThumbnailsModal(false);
         showToast(`📄 Προστέθηκαν ${importedPages.length} σελίδες (PDF/Εικόνα) — γράψε απευθείας πάνω τους!`);
+        if ((activeNotebook.tags?.length || 0) < 4) {
+          const bgUrls = importedPages
+            .map((p) => p.backgroundDataUrl)
+            .filter((u): u is string => Boolean(u && u.startsWith('data:image/')));
+          if (bgUrls.length > 0) {
+            void triggerSmartAutoTagsForNotebook(activeNotebook, bgUrls, true);
+          }
+        }
       }
     } catch {
       showToast('⚠️ Σφάλμα κατά το άνοιγμα του PDF / Εικόνας');
@@ -9675,7 +9771,16 @@ export default function App() {
                     <Tag className="w-3.5 h-3.5 text-[#0066ff]" />
                     <span>Λέξεις-Κλειδιά (Tags)</span>
                   </span>
-                  <span className="text-[10px] text-slate-400">Για έξυπνη αναζήτηση</span>
+                  <button
+                    type="button"
+                    disabled={isAutoTaggingNbId === activeNotebook.id}
+                    onClick={() => void triggerSmartAutoTagsForNotebook(activeNotebook, [], false)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold text-emerald-700 disabled:opacity-50 transition cursor-pointer"
+                    title="Αυτόματη εξαγωγή 3–4 βασικών #tags από τις εικόνες & το κείμενο της σημείωσης"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>{isAutoTaggingNbId === activeNotebook.id ? 'Ανάλυση...' : 'Auto-Tags'}</span>
+                  </button>
                 </div>
 
                 {/* Current Tags List */}
@@ -10907,6 +11012,23 @@ export default function App() {
                                         OK
                                       </button>
                                     </div>
+                                    <button
+                                      type="button"
+                                      disabled={isAutoTaggingNbId === nb.id}
+                                      onClick={() => {
+                                        void triggerSmartAutoTagsForNotebook(nb, [], false);
+                                        setLibraryTagEditorNbId(null);
+                                      }}
+                                      className="w-full flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold text-emerald-700 disabled:opacity-50 transition cursor-pointer"
+                                      title="Αυτόματη εξαγωγή 3–4 βασικών #tags από τις εικόνες της σημείωσης"
+                                    >
+                                      <Sparkles className="w-3 h-3" />
+                                      <span>
+                                        {isAutoTaggingNbId === nb.id
+                                          ? 'Ανάλυση εικόνων...'
+                                          : '✨ Auto-Tags από Εικόνες'}
+                                      </span>
+                                    </button>
                                   </div>
                                 )}
                               </div>
