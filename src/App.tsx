@@ -967,6 +967,7 @@ export default function App() {
   const [tagInputDraft, setTagInputDraft] = useState<string>('');
   const [libraryTagEditorNbId, setLibraryTagEditorNbId] = useState<string | null>(null);
   const [libraryTagInputDraft, setLibraryTagInputDraft] = useState<string>('');
+  const [folderPickerNbId, setFolderPickerNbId] = useState<string | null>(null);
 
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
@@ -1133,6 +1134,28 @@ export default function App() {
       setSyncStatus('dirty');
     },
     []
+  );
+
+  const changeNotebookFolder = useCallback(
+    (nbId: string, nextFolder: string) => {
+      const cleanFolder = nextFolder.trim();
+      setNotebooks((prev) =>
+        prev.map((nb) =>
+          nb.id === nbId
+            ? { ...nb, folder: cleanFolder, updatedAt: new Date().toISOString() }
+            : nb
+        )
+      );
+      setFolderPickerNbId(null);
+      setIsDirty(true);
+      setSyncStatus('dirty');
+      showToast(
+        cleanFolder
+          ? `📁 Μετακινήθηκε στον φάκελο «${cleanFolder}»!`
+          : '📁 Αφαιρέθηκε ο φάκελος από τη σημείωση!'
+      );
+    },
+    [showToast]
   );
 
   // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
@@ -1808,7 +1831,8 @@ export default function App() {
       !showSettingsModal &&
       !showUserDropdown &&
       !showTagsPopover &&
-      !libraryTagEditorNbId
+      !libraryTagEditorNbId &&
+      !folderPickerNbId
     ) {
       return;
     }
@@ -1836,6 +1860,7 @@ export default function App() {
         if (triggerType !== 'user') setShowUserDropdown(false);
         if (triggerType !== 'tags') setShowTagsPopover(false);
         if (triggerType !== 'lib-tags') setLibraryTagEditorNbId(null);
+        if (triggerType !== 'lib-folder') setFolderPickerNbId(null);
         return;
       }
 
@@ -1850,6 +1875,7 @@ export default function App() {
       setShowUserDropdown(false);
       setShowTagsPopover(false);
       setLibraryTagEditorNbId(null);
+      setFolderPickerNbId(null);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1864,6 +1890,7 @@ export default function App() {
         setShowUserDropdown(false);
         setShowTagsPopover(false);
         setLibraryTagEditorNbId(null);
+        setFolderPickerNbId(null);
       }
     };
 
@@ -1884,6 +1911,7 @@ export default function App() {
     showUserDropdown,
     showTagsPopover,
     libraryTagEditorNbId,
+    folderPickerNbId,
   ]);
 
   // NATIVE iPAD APP VIEWPORT LOCK:
@@ -9272,7 +9300,7 @@ export default function App() {
         const newNb: Notebook = {
           id: `nb-doc-${Date.now()}`,
           title: baseTitle,
-          folder: 'Έγγραφα & PDF',
+          folder: activeLibraryFolder || '',
           coverColor: '#0284c7',
           updatedAt: new Date().toISOString(),
           sourceFormat: '.bestnotes',
@@ -10078,7 +10106,7 @@ export default function App() {
                   const fallbackNb: Notebook = {
                     id: `nb-${Date.now()}`,
                     title: 'Νέα Σημείωση 1',
-                    folder: activeLibraryFolder || 'Φυσική',
+                    folder: activeLibraryFolder || '',
                     coverColor: '#0284c7',
                     updatedAt: new Date().toISOString(),
                     sourceFormat: '.bestnotes',
@@ -10183,7 +10211,7 @@ export default function App() {
                           const newNb: Notebook = {
                             id: `nb-${Date.now()}`,
                             title: `Νέα Σημείωση ${notebooks.length + 1}`,
-                            folder: activeLibraryFolder || 'Φυσική',
+                            folder: activeLibraryFolder || '',
                             coverColor: '#0284c7',
                             updatedAt: new Date().toISOString(),
                             sourceFormat: '.bestnotes',
@@ -10608,20 +10636,60 @@ export default function App() {
                                     </svg>
                                   )}
 
-                                  {/* Top Row: Folder/.bestNotes Badge + Share PDF + Edit Pencil (Direct Open) + Red Trash Delete */}
+                                  {/* Top Row: Folder/.bestNotes Badge (Click to Change/Move Folder!) + Share PDF + Edit Pencil + Red Trash Delete */}
                                   <div className="relative z-20 flex items-center justify-between pl-4 pr-2 pt-2">
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        void handleShareNotebookPdf(nb);
-                                      }}
-                                      className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[78px] cursor-pointer hover:opacity-90"
-                                      style={{ backgroundColor: nb.coverColor }}
-                                      title={`Κοινοποίηση «${nb.title}.pdf» (AirDrop, Viber, Messenger, Goodnotes)`}
-                                    >
-                                      {nb.folder || '.bestNotes'}
-                                    </button>
+                                    <div className="relative">
+                                      <button
+                                        type="button"
+                                        data-popover-trigger="lib-folder"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setFolderPickerNbId((prev) =>
+                                            prev === nb.id ? null : nb.id
+                                          );
+                                        }}
+                                        className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[82px] cursor-pointer hover:opacity-90"
+                                        style={{ backgroundColor: nb.coverColor }}
+                                        title="Πάτα για αλλαγή ή αφαίρεση Φακέλου"
+                                      >
+                                        {nb.folder || '.bestNotes'}
+                                      </button>
+                                      {folderPickerNbId === nb.id && (
+                                        <div
+                                          data-popover-panel="lib-folder"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="absolute left-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 space-y-1 text-left"
+                                        >
+                                          <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                            Μετακίνηση σε Φάκελο
+                                          </div>
+                                          <button
+                                            onClick={() => changeNotebookFolder(nb.id, '')}
+                                            className={`w-full text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                                              !nb.folder
+                                                ? 'bg-sky-50 text-[#0066ff]'
+                                                : 'text-slate-600 hover:bg-slate-100'
+                                            }`}
+                                          >
+                                            Χωρίς Φάκελο (.bestNotes)
+                                          </button>
+                                          {Array.from(folderMap.keys()).map((fName) => (
+                                            <button
+                                              key={fName}
+                                              onClick={() => changeNotebookFolder(nb.id, fName)}
+                                              className={`w-full flex items-center gap-1.5 text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                                                nb.folder === fName
+                                                  ? 'bg-amber-50 text-amber-800'
+                                                  : 'text-slate-700 hover:bg-slate-100'
+                                              }`}
+                                            >
+                                              <Folder className="w-3 h-3 fill-amber-400 text-amber-500 shrink-0" />
+                                              <span className="truncate">{fName}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
                                     <div className="flex items-center gap-1">
                                       <button
                                         onClick={(e) => {
