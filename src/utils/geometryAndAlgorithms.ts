@@ -3161,6 +3161,152 @@ export async function transcribeHandwrittenStrokesWithGemini(
 }
 
 /**
+ * MathOCR via Gemini Flash Vision:
+ * Reads Lasso-selected handwritten Physics / Mathematics / Chemistry equations and derivations
+ * (simple & compound fractions, implication arrows \Rightarrow, equals =, multiplication \cdot,
+ * deltas \Delta, subscripts/superscripts, roots, circled numbers, and units of measurement like s, m/s, kg, N)
+ * and returns KaTeX-ready LaTeX + plain text fallback.
+ */
+export async function transcribeHandwrittenMathWithGemini(
+  imageDataUrl: string,
+  notebookTitle = ''
+): Promise<{ latex: string; plainText: string } | null> {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return null;
+  const apiKey = (partA + partB).split('').reverse().join('');
+
+  const compact = await downscaleImageDataUrlForVision(imageDataUrl);
+  if (!compact) return null;
+
+  const contextHint =
+    notebookTitle && !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim())
+      ? ` (από σχολική σημείωση με θέμα "${notebookTitle}")`
+      : '';
+
+  const parts: any[] = [
+    {
+      text: `Είσαι εξειδικευμένο σύστημα MathOCR για ελληνικές σημειώσεις Φυσικής, Μαθηματικών και Χημείας${contextHint}.
+Διάβασε με απόλυτη ακρίβεια τις χειρόγραφες εξισώσεις, κλάσματα, συνεπαγωγές, σύμβολα και μονάδες μέτρησης που φαίνονται στην εικόνα και μετάτρεψέ τα σε έγκυρο κώδικα KaTeX LaTeX:
+1. Απλά & σύνθετα κλάσματα: χρησιμοποίησε \\frac{αριθμητής}{παρονομαστής} (π.χ. \\frac{\\Delta x}{\\Delta t}, \\frac{5}{1}, \\frac{20}{\\Delta t}, \\frac{20}{5}).
+2. Συνεπαγωγές & βέλη: χρησιμοποίησε \\Rightarrow (για συνεπάγεται), \\Leftrightarrow (ισοδύναμα), \\rightarrow.
+3. Πολλαπλασιασμός & σύμβολα: χρησιμοποίησε \\cdot για την τελεία πολλαπλασιασμού (π.χ. 5 \\cdot \\Delta t = 20), \\Delta για το Δέλτα (π.χ. \\Delta x, \\Delta t), δείκτες/εκθέτες (x_1, v_0, t^2), ρίζες (\\sqrt{...}), διανύσματα (\\vec{F}, \\vec{u}).
+4. Κυκλωμένοι αριθμοί ασκήσεων (αν υπάρχουν στην αρχή, π.χ. ①, ②, ③): γράψε τους ως \\text{①}\\; ή \\text{②}\\; ή \\text{③}\\;.
+5. Μονάδες μέτρησης & ελληνικές λέξεις: βάλε τις μονάδες μέτρησης σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 10\\,\\text{m/s}, 5\\,\\text{kg}, 20\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
+6. Πολλές γραμμές (σειρές): αν η χειρόγραφη λύση έχει 2 ή περισσότερες σειρές η μία κάτω από την άλλη, τύλιξέ τες σε:
+\\begin{aligned}
+& πρώτη\\_σειρά \\\\[6pt]
+& δεύτερη\\_σειρά
+\\end{aligned}
+ώστε να στοιχίζονται αριστερά ακριβώς όπως στο τετράδιο. Αν είναι 1 σειρά, γράψε την απευθείας χωρίς aligned.
+7. ΜΗΝ βάζεις εξωτερικά σύμβολα $$ ή \\[ \\] γύρω από το latex string.
+Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
+{"latex": "...", "plainText": "..."}
+χωρίς κανένα άλλο σχόλιο.`,
+    },
+    {
+      inlineData: {
+        mimeType: compact.mimeType,
+        data: compact.base64,
+      },
+    },
+  ];
+
+  const candidateModels = Array.from(
+    new Set([
+      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
+      'gemini-flash-latest',
+      'gemini-3.8-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-lite-latest',
+    ])
+  );
+
+  const tryMathWithModel = async (
+    modelName: string
+  ): Promise<{ latex: string; plainText: string } | null> => {
+    try {
+      const cleanName = modelName.replace(/^models\//, '');
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { responseMimeType: 'application/json' },
+          }),
+        }
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) return null;
+      const parsed = JSON.parse(rawText);
+      const rawLatex =
+        typeof parsed?.latex === 'string'
+          ? parsed.latex.trim()
+          : typeof parsed?.text === 'string'
+          ? parsed.text.trim()
+          : '';
+      const cleanLatex = rawLatex
+        .replace(/^\$\$+|\$\$+$/g, '')
+        .replace(/^\\\[|\\\]$/g, '')
+        .trim();
+      const plainText =
+        typeof parsed?.plainText === 'string' && parsed.plainText.trim().length > 0
+          ? parsed.plainText.trim()
+          : cleanLatex;
+      if (cleanLatex.length > 0) {
+        cachedWorkingVisionModel = cleanName;
+        return { latex: cleanLatex, plainText };
+      }
+    } catch {
+      // try next model
+    }
+    return null;
+  };
+
+  for (const modelName of candidateModels) {
+    const out = await tryMathWithModel(modelName);
+    if (out) return out;
+  }
+
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+    );
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      const discovered: string[] = (listData?.models || [])
+        .filter(
+          (m: any) =>
+            Array.isArray(m?.supportedGenerationMethods) &&
+            m.supportedGenerationMethods.includes('generateContent') &&
+            typeof m.name === 'string' &&
+            m.name.includes('gemini') &&
+            m.name.includes('flash') &&
+            !m.name.includes('tts') &&
+            !m.name.includes('transcribe') &&
+            !m.name.includes('embedding')
+        )
+        .map((m: any) => String(m.name).replace(/^models\//, ''))
+        .sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
+
+      for (const dynModel of discovered) {
+        if (candidateModels.includes(dynModel)) continue;
+        const out = await tryMathWithModel(dynModel);
+        if (out) return out;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+/**
  * Returns the two cubic Bézier control points `(cp1x, cp1y, cp2x, cp2y)` for a segment `pA -> pB`
  * when either `pA` has outgoing Illustrator handle `(outDx, outDy)` or `pB` has incoming handle `(inDx, inDy)`,
  * or `null` if the segment does not use cubic Bézier tangent handles.

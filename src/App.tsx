@@ -121,6 +121,7 @@ import {
   normalizeGreekSearchText,
   generateSmartGreekTagsFromImages,
   transcribeHandwrittenStrokesWithGemini,
+  transcribeHandwrittenMathWithGemini,
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
   recomputeAutoSmoothHandles,
@@ -6946,6 +6947,20 @@ export default function App() {
             ...page,
             texts: (page.texts || []).map((t) => {
               if (t.id !== d.id) return t;
+              if (t.isMath) {
+                const ratio =
+                  d.resizeHandle && (d.resizeHandle.includes('n') || d.resizeHandle.includes('s'))
+                    ? nextH / Math.max(24, origH)
+                    : nextW / Math.max(48, origW);
+                const mathFs = Math.max(10, Math.min(72, Math.round(t.fontSize * Math.pow(ratio, 0.35))));
+                nextAutoFs = mathFs;
+                return {
+                  ...t,
+                  x: nextX,
+                  y: nextY,
+                  fontSize: mathFs,
+                };
+              }
               const autoFs =
                 t.text && t.text.trim().length > 0
                   ? computeMaxFitFontSizeForBox(t.text, t.fontFamily, t.bold, nextW, nextH)
@@ -9907,7 +9922,7 @@ export default function App() {
       ) as HTMLElement | null;
       const targetPageForTxt = activeNotebook.pages[pageIdx] || activePage;
       const activeTxtObj = (targetPageForTxt.texts || []).find((t) => t.id === currentActiveTxtId);
-      if (activeTxtEl && activeTxtObj && !activeTxtObj.isMath) {
+      if (activeTxtEl && activeTxtObj) {
         const rect = activeTxtEl.getBoundingClientRect();
         const edgeHandle = resolveTextResizeHandleFromRect(e.clientX, e.clientY, rect, 32, 10);
         if (edgeHandle) {
@@ -14517,35 +14532,42 @@ export default function App() {
 
     const cropDataUrl = cropCanvas.toDataURL('image/png');
     setIsConvertingHandwriting(true);
-    showToast('✍️ Ο Gemini διαβάζει το ελληνικό χειρόγραφο κείμενο...');
+    showToast('🧮 MathOCR: Αναγνώριση εξισώσεων, κλασμάτων, συνεπαγωγών & μονάδων...');
 
     try {
-      const transcribed = await transcribeHandwrittenStrokesWithGemini(
+      void transcribeHandwrittenStrokesWithGemini;
+      const mathRes = await transcribeHandwrittenMathWithGemini(
         cropDataUrl,
         activeNotebook?.title || ''
       );
-      if (!transcribed || !transcribed.trim()) {
-        showToast('⚠️ Δεν αναγνωρίστηκε κείμενο στην επιλογή. Δοκίμασε να επιλέξεις καθαρά τις λέξεις με το Λάσο!');
+      if (!mathRes || !mathRes.latex.trim()) {
+        showToast('⚠️ Δεν αναγνωρίστηκε εξίσωση στην επιλογή. Επίλεξε καθαρά τις εξισώσεις με το Λάσο!');
         return;
       }
 
-      const cleanText = transcribed.trim();
-      const lines = cleanText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      const lineCount = Math.max(1, lines.length);
-      const estimatedSize = Math.round(((maxY - minY) / lineCount) * 0.78);
-      const finalFontSize = Math.max(20, Math.min(52, estimatedSize || 28));
+      const cleanLatex = mathRes.latex.trim();
+      const plainText = (mathRes.plainText || cleanLatex).trim();
+      const lineCount = Math.max(
+        1,
+        cleanLatex.includes('\\begin{aligned}')
+          ? cleanLatex.split('\\\\').length
+          : plainText.split(/\r?\n/).filter((l) => l.trim().length > 0).length
+      );
+      const estimatedSize = Math.round(((maxY - minY) / lineCount) * 0.42);
+      const finalFontSize = Math.max(18, Math.min(34, estimatedSize || 22));
       const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
       const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
 
       const newTxt: TextObject = {
-        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `math-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         x: Math.max(12, Math.round(minX)),
-        y: Math.max(12, Math.round(minY - finalFontSize * 0.12)),
-        text: cleanText,
+        y: Math.max(12, Math.round(minY)),
+        text: plainText,
+        latex: cleanLatex,
+        isMath: true,
         color: dominantColor,
         fontSize: finalFontSize,
-        bold: true,
-        fontFamily: 'calligraphic',
+        bold: false,
         layerId: targetLayerId,
       };
 
@@ -14560,14 +14582,8 @@ export default function App() {
       setActiveNodeStrokeId(null);
       setSelectedTextId(newTxt.id);
       setTextFontSize(finalFontSize);
-      setTextBold(true);
-      setTextFontFamily('calligraphic');
       setShowToolSubBar(true);
-      showToast(
-        `✍️ Καλλιγραφικό: "${cleanText.replace(/\s+/g, ' ').slice(0, 38)}${
-          cleanText.length > 38 ? '…' : ''
-        }" (Ctrl+Z για αναίρεση)`
-      );
+      showToast('🧮 MathOCR: Οι εξισώσεις & τα κλάσματα μετατράπηκαν σε μαθηματική μορφή! (Ctrl+Z για αναίρεση)');
     } finally {
       setIsConvertingHandwriting(false);
     }
@@ -18720,10 +18736,10 @@ export default function App() {
                               ? 'bg-purple-300 text-white cursor-wait'
                               : 'bg-purple-600 hover:bg-purple-700 text-white'
                           }`}
-                          title="Αναγνώριση ελληνικού χειρογράφου με Gemini AI και μετατροπή σε Καλλιγραφικό Κείμενο (όπως στον Κύκλο του Νερού)"
+                          title="MathOCR: Αναγνώριση χειρόγραφων εξισώσεων, κλασμάτων, συνεπαγωγών (⇒), ίσον (=) και μονάδων μέτρησης"
                         >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>{isConvertingHandwriting ? 'Αναγνώριση...' : '✍️ Καλλιγραφικό'}</span>
+                          <Calculator className="w-3.5 h-3.5" />
+                          <span>{isConvertingHandwriting ? 'MathOCR...' : '∑ MathOCR'}</span>
                         </button>
                       </>
                     )}
@@ -20573,7 +20589,6 @@ export default function App() {
                             if (
                               !resizeHandle &&
                               (isSelectedTxt || isEditingTxt) &&
-                              !txt.isMath &&
                               !targetEl?.closest('[data-text-drag]')
                             ) {
                               resizeHandle = resolveTextResizeHandleFromRect(
@@ -20665,7 +20680,6 @@ export default function App() {
                             if (
                               !resizeHandle &&
                               (isSelectedTxt || isEditingTxt) &&
-                              !txt.isMath &&
                               !targetEl?.closest('[data-text-drag]')
                             ) {
                               resizeHandle = resolveTextResizeHandleFromRect(
@@ -20740,7 +20754,7 @@ export default function App() {
                           }`}
                         >
                           {/* 8 Finger-Friendly 32px Resize Handles (26px outside + 6px inside border) so interior stays free & edges/corners grab easily on iPad! */}
-                          {(isSelectedTxt || isEditingTxt) && !txt.isMath && (
+                          {(isSelectedTxt || isEditingTxt) && (
                             <>
                               {/* Top Edge Handle (N) */}
                               <div
@@ -20965,17 +20979,28 @@ export default function App() {
                               >
                                 A+
                               </button>
-                              {!txt.isMath && (
-                                <button
-                                  type="button"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => setEditingTextId(isEditingTxt ? null : txt.id)}
-                                  className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 cursor-pointer"
-                                  title={isEditingTxt ? 'Ολοκλήρωση επεξεργασίας' : 'Επεξεργασία κειμένου'}
-                                >
-                                  {isEditingTxt ? '✓' : '✏️'}
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => {
+                                  if (txt.isMath) {
+                                    setMathInput(txt.latex || txt.text || '');
+                                    setShowMathModal(true);
+                                  } else {
+                                    setEditingTextId(isEditingTxt ? null : txt.id);
+                                  }
+                                }}
+                                className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 cursor-pointer"
+                                title={
+                                  txt.isMath
+                                    ? 'Επεξεργασία εξίσωσης LaTeX'
+                                    : isEditingTxt
+                                    ? 'Ολοκλήρωση επεξεργασίας'
+                                    : 'Επεξεργασία κειμένου'
+                                }
+                              >
+                                {isEditingTxt ? '✓' : '✏️'}
+                              </button>
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
@@ -20997,6 +21022,8 @@ export default function App() {
 
                           {txt.isMath && txt.latex ? (
                             <div
+                              style={{ fontSize: `${txt.fontSize}px`, color: txt.color }}
+                              className="[&_.katex-display]:!my-0 [&_.katex-display]:!text-left"
                               dangerouslySetInnerHTML={{
                                 __html: katex.renderToString(txt.latex, { throwOnError: false, displayMode: true }),
                               }}
@@ -21718,23 +21745,37 @@ export default function App() {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => {
-                  const newTxt: TextObject = {
-                    id: `math-${Date.now()}`,
-                    x: 160,
-                    y: 220,
-                    text: mathInput,
-                    latex: mathInput,
-                    isMath: true,
-                    color: strokeColor,
-                    fontSize: 20,
-                    layerId: activeLayerId,
-                  };
-                  updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+                  const selMathTxt = (activePage.texts || []).find(
+                    (t) => t.id === selectedTextId && t.isMath
+                  );
+                  if (selMathTxt) {
+                    updateActivePage((page) => ({
+                      ...page,
+                      texts: (page.texts || []).map((t) =>
+                        t.id === selMathTxt.id ? { ...t, latex: mathInput, text: mathInput } : t
+                      ),
+                    }));
+                  } else {
+                    const newTxt: TextObject = {
+                      id: `math-${Date.now()}`,
+                      x: 160,
+                      y: 220,
+                      text: mathInput,
+                      latex: mathInput,
+                      isMath: true,
+                      color: strokeColor,
+                      fontSize: 20,
+                      layerId: activeLayerId,
+                    };
+                    updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+                  }
                   setShowMathModal(false);
                 }}
                 className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold cursor-pointer"
               >
-                + Εισαγωγή Εξίσωσης στη Σελίδα
+                {(activePage.texts || []).some((t) => t.id === selectedTextId && t.isMath)
+                  ? '✓ Ενημέρωση Εξίσωσης'
+                  : '+ Εισαγωγή Εξίσωσης στη Σελίδα'}
               </button>
             </div>
           </div>
