@@ -249,78 +249,8 @@ const DraggableCard: React.FC<{
 };
 
 /* ============================================================================
-   REALISTIC APPLE PENCIL + FLUORESCENT HIGHLIGHTER ANIMATION
+   ANIMATED PEN TOOL FOR HAND-DRAWN CIRCLES & SELECTION FRAMES
    ============================================================================ */
-const ApplePencilHighlighterOverlay: React.FC<{
-  color?: string;
-  topPercent?: string;
-  leftPercent?: string;
-  widthPercent?: string;
-  delaySec?: number;
-  label?: string;
-}> = ({
-  color = '#fde047',
-  topPercent = '14%',
-  leftPercent = '18%',
-  widthPercent = '64%',
-  delaySec = 0,
-  label = 'Apple Pencil • Φωσφορούχος',
-}) => (
-  <div
-    className="pointer-events-none absolute z-30"
-    style={{
-      top: topPercent,
-      left: leftPercent,
-      width: widthPercent,
-      height: '34px',
-    }}
-  >
-    {/* Translucent Fluorescent Marker Stroke sweeping left-to-right */}
-    <div
-      className="h-6 sm:h-7 rounded-md mix-blend-multiply bn-fluorescent-bar"
-      style={{
-        backgroundColor: color,
-        animationDelay: `${delaySec}s`,
-        boxShadow: `0 0 18px ${color}`,
-      }}
-    />
-
-    {/* Realistic Angled Apple Pencil Pro / 2nd Gen following the highlight tip */}
-    <div
-      className="absolute -top-14 left-0 bn-pencil-glide"
-      style={{
-        animationDelay: `${delaySec}s`,
-      }}
-    >
-      <svg width="96" height="96" viewBox="0 0 96 96" className="drop-shadow-2xl overflow-visible">
-        <g transform="rotate(34 24 76)">
-          {/* Apple Pencil Matte White Body */}
-          <rect x="18" y="4" width="13" height="58" rx="6" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1.6" />
-          {/* Subtle Metallic Magnetic Flat Side Highlight */}
-          <rect x="21" y="10" width="3" height="44" rx="1.5" fill="#f1f5f9" />
-          {/* Fluorescent Color Ring Indicator */}
-          <rect x="18" y="50" width="13" height="8" fill={color} stroke="#0f172a" strokeWidth="0.6" />
-          {/* Tapered Cone */}
-          <polygon points="18,62 31,62 24.5,78" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.2" />
-          {/* Chisel / Precision Fluorescent Tip */}
-          <polygon points="21.5,71 27.5,71 24.5,81" fill={color} stroke="#ca8a04" strokeWidth="0.8" />
-          {/* Glowing Neon Ink Halo at Contact Point */}
-          <circle cx="24.5" cy="81" r="6" fill={color} opacity="0.65" />
-          <circle cx="24.5" cy="81" r="3" fill="#ffffff" opacity="0.9" />
-        </g>
-      </svg>
-      {label && (
-        <span
-          className="-mt-5 ml-9 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9.5px] font-extrabold text-slate-950 shadow-md border border-slate-900/15 whitespace-nowrap"
-          style={{ backgroundColor: color }}
-        >
-          ✏️ {label}
-        </span>
-      )}
-    </div>
-  </div>
-);
-
 const AnimatedPenTool: React.FC<{
   className?: string;
   color?: string;
@@ -710,23 +640,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       style={{ touchAction: 'pan-y' }}
       className="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-white text-slate-900 select-none"
     >
-      {/* Keyframe animations: Fade In/Out, Smooth Ken-Burns Zoom, Fluorescent Highlighter Sweep, Apple Pencil Glide & Scroll Entry/Exit */}
+      {/* Keyframe animations: Stronger Ken-Burns Zoom, Hand-drawn Circles & Expanding Selection Frames */}
       <style>{`
         @keyframes bnDrawStroke {
-          0% { stroke-dashoffset: 680; opacity: 0.2; }
+          0% { stroke-dashoffset: 680; opacity: 0.25; }
           45%, 85% { stroke-dashoffset: 0; opacity: 1; }
-          100% { stroke-dashoffset: 680; opacity: 0.2; }
-        }
-        @keyframes bnFluorescentSweep {
-          0%, 8% { transform: scaleX(0); opacity: 0.15; }
-          45%, 82% { transform: scaleX(1); opacity: 0.82; }
-          95%, 100% { transform: scaleX(0); opacity: 0.1; }
-        }
-        @keyframes bnPencilGlideAcross {
-          0%, 8% { transform: translate(0px, 0px) rotate(0deg) scale(0.96); opacity: 0; }
-          14% { opacity: 1; }
-          45%, 78% { transform: translate(235px, -4px) rotate(-5deg) scale(1.04); opacity: 1; }
-          92%, 100% { transform: translate(250px, -14px) rotate(6deg) scale(0.92); opacity: 0; }
+          100% { stroke-dashoffset: 680; opacity: 0.25; }
         }
         @keyframes bnPenMoveOrbit {
           0% { transform: translate(0px, 0px) rotate(0deg); }
@@ -736,16 +655,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           100% { transform: translate(0px, 0px) rotate(0deg); }
         }
         @keyframes bnTabFadeZoomIn {
-          0% { opacity: 0; transform: scale(0.94) translateY(10px); }
+          0% { opacity: 0; transform: scale(0.93) translateY(10px); }
           100% { opacity: 1; transform: scale(1) translateY(0px); }
         }
         @keyframes bnKenBurnsPulse {
           0%, 100% { transform: scale(1) translate(0px, 0px); }
-          50% { transform: scale(1.045) translate(-4px, -3px); }
+          50% { transform: scale(1.13) translate(-6px, -4px); }
         }
         @keyframes bnCrossFadeBreath {
-          0%, 100% { opacity: 0.92; transform: scale(0.985); }
-          50% { opacity: 1; transform: scale(1.03); }
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.09); }
+        }
+        @keyframes bnPopupFrameOpen {
+          0%, 12% { transform: scale(0.72); opacity: 0; }
+          28%, 80% { transform: scale(1); opacity: 1; }
+          94%, 100% { transform: scale(0.85); opacity: 0; }
         }
         @keyframes bnFloatSlow {
           0%, 100% { transform: translateY(0px); }
@@ -761,36 +685,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
         @keyframes bnLassoPulse {
           0%, 100% { transform: rotate(0deg) scale(1); }
-          50% { transform: rotate(-1.5deg) scale(1.035); }
+          50% { transform: rotate(-1.5deg) scale(1.045); }
         }
         @keyframes bnRectMarqueeSweep {
-          0%, 10% { width: 24px; height: 18px; opacity: 0; }
+          0%, 10% { width: 28px; height: 22px; opacity: 0; }
           20% { opacity: 1; }
-          55%, 85% { width: 190px; height: 112px; opacity: 1; }
-          96%, 100% { width: 190px; height: 112px; opacity: 0; }
+          55%, 85% { width: 210px; height: 124px; opacity: 1; }
+          96%, 100% { width: 210px; height: 124px; opacity: 0; }
         }
         .bn-animate-draw {
           stroke-dasharray: 680;
-          animation: bnDrawStroke 4.6s ease-in-out infinite;
+          animation: bnDrawStroke 4.2s ease-in-out infinite;
         }
-        .bn-fluorescent-bar {
-          transform-origin: left center;
-          animation: bnFluorescentSweep 4.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-        }
-        .bn-pencil-glide {
-          animation: bnPencilGlideAcross 4.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        .bn-animate-draw-delayed {
+          stroke-dasharray: 680;
+          animation: bnDrawStroke 4.2s ease-in-out 1.8s infinite;
         }
         .bn-animate-pen {
           animation: bnPenMoveOrbit 4.4s ease-in-out infinite;
         }
         .bn-tab-stage {
-          animation: bnTabFadeZoomIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+          animation: bnTabFadeZoomIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
         .bn-ken-burns {
-          animation: bnKenBurnsPulse 7.5s ease-in-out infinite;
+          animation: bnKenBurnsPulse 6.2s ease-in-out infinite;
         }
         .bn-fade-zoom-cycle {
-          animation: bnCrossFadeBreath 5.2s ease-in-out infinite;
+          animation: bnCrossFadeBreath 4.8s ease-in-out infinite;
+        }
+        .bn-popup-frame {
+          transform-origin: center center;
+          animation: bnPopupFrameOpen 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
         }
         .bn-animate-float {
           animation: bnFloatSlow 4.6s ease-in-out infinite;
@@ -806,40 +731,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           animation: bnLassoPulse 3.8s ease-in-out infinite;
         }
         .bn-rect-marquee {
-          animation: bnRectMarqueeSweep 4.8s ease-in-out infinite;
+          animation: bnRectMarqueeSweep 4.6s ease-in-out infinite;
         }
-
-        /* Modern Web Guidance: CSS Scroll-Driven Entry & Exit Effects with Feature Detection */
-        @media (prefers-reduced-motion: no-preference) {
-          @supports ((animation-timeline: view()) and (animation-range: entry)) {
-            @keyframes bnScrollEntry {
-              from {
-                opacity: 0;
-                transform: scale(0.9) translateY(36px);
-              }
-              to {
-                opacity: 1;
-                transform: scale(1) translateY(0px);
-              }
-            }
-            @keyframes bnScrollExit {
-              from {
-                opacity: 1;
-                transform: scale(1);
-              }
-              to {
-                opacity: 0.25;
-                transform: scale(0.95);
-              }
-            }
-            .bn-scroll-reveal {
-              animation:
-                bnScrollEntry auto linear backwards,
-                bnScrollExit auto linear forwards;
-              animation-timeline: view();
-              animation-range: entry 5% 90%, exit 10% 95%;
-            }
-          }
+        .bn-scroll-reveal {
+          opacity: 1;
         }
       `}</style>
 
@@ -1209,7 +1104,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Main High-Resolution Note Canvas with Ken-Burns Subtle Zoom, Fluorescent Highlighter & Rectangular Lasso */}
+                  {/* Main High-Resolution Note Canvas with Stronger Ken-Burns Zoom, Circles & Expanding Selection Frames */}
                   <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-[#fffdf9] shadow-inner">
                     <img
                       src={activeScienceNote.src}
@@ -1218,27 +1113,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       className="w-full max-h-[370px] object-contain mx-auto bn-ken-burns"
                     />
 
-                    {/* 1. Primary Fluorescent Highlighter + Apple Pencil sweeping across the top title/concept */}
-                    <ApplePencilHighlighterOverlay
-                      color={activeScienceNote.highlightColor}
-                      topPercent="12%"
-                      leftPercent="16%"
-                      widthPercent="62%"
-                      delaySec={0}
-                      label="Apple Pencil • Φωσφορούχος"
-                    />
+                    {/* 1. Expanding Blue Lasso / Zoom Frame on Top-Right (Πλαίσιο που ανοίγει) */}
+                    <div
+                      className="pointer-events-none absolute top-5 right-6 w-44 h-24 border-2 border-dashed border-[#0066ff] bg-sky-500/10 rounded-xl bn-popup-frame flex items-start justify-between p-1.5"
+                    >
+                      <span className="px-1.5 py-0.5 rounded bg-[#0066ff] text-white text-[8.5px] font-extrabold shadow-xs">
+                        🔍 Zoom &amp; Επιλογή
+                      </span>
+                      <span className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
+                      <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
+                      <span className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
+                      <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#0066ff] border border-white" />
+                    </div>
 
-                    {/* 2. Second Delayed Fluorescent Highlighter Stroke on Key Equation / Diagram */}
-                    <ApplePencilHighlighterOverlay
-                      color="#fde047"
-                      topPercent="54%"
-                      leftPercent="22%"
-                      widthPercent="52%"
-                      delaySec={2.1}
-                      label="Υπογράμμιση Εξίσωσης"
-                    />
-
-                    {/* 3. Animated Rectangular Marquee Selection (Our New Tool!) */}
+                    {/* 2. Animated Rectangular Marquee Selection on Bottom-Right (Πλαίσιο που ανοίγει διαγώνια) */}
                     <div
                       className="pointer-events-none absolute bottom-5 right-6 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl bn-rect-marquee flex items-start justify-end p-1.5"
                     >
@@ -1251,7 +1139,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
                     </div>
 
-                    {/* 4. Hand-drawn SVG Red/Blue Callout Circle being sketched live */}
+                    {/* 3. Hand-drawn SVG Callout Circles (Κυκλώματα) being sketched live */}
                     <svg
                       className="pointer-events-none absolute inset-0 w-full h-full"
                       viewBox="0 0 600 360"
@@ -1267,19 +1155,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         strokeDasharray="7 4"
                         className="bn-animate-draw"
                       />
+                      <ellipse
+                        cx="420"
+                        cy="115"
+                        rx="72"
+                        ry="38"
+                        fill="none"
+                        stroke="#2563eb"
+                        strokeWidth="2.8"
+                        className="bn-animate-draw-delayed"
+                      />
                     </svg>
                   </div>
 
-                  {/* Highlighted Live Caption Bar under the Image */}
+                  {/* Clean Caption Bar under the Image */}
                   <div className="mt-3.5 flex items-center justify-between gap-3 bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 text-xs flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="px-2 py-0.5 rounded font-extrabold text-slate-950 text-[11px]"
-                        style={{ backgroundColor: activeScienceNote.highlightColor }}
-                      >
-                        🖍️ {activeScienceNote.highlightText}
-                      </span>
-                    </div>
+                    <span className="font-extrabold text-slate-900 text-[11px]">
+                      ✨ {activeScienceNote.highlightText}
+                    </span>
                     <span className="text-[11px] font-bold text-slate-600">
                       {activeScienceNote.secondaryHighlightText}
                     </span>
@@ -1676,20 +1569,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           className={`w-full ${
                             idx === 0 ? 'h-64 sm:h-72' : 'h-56'
                           } object-contain mx-auto transition-transform duration-700 ${
-                            isSpotlight ? 'scale-[1.035]' : 'group-hover/drag:scale-[1.03]'
+                            isSpotlight ? 'bn-ken-burns' : 'group-hover/drag:scale-[1.08]'
                           }`}
                         />
 
-                        {/* Animated Fluorescent Highlighter + Apple Pencil on active spotlight card */}
+                        {/* Expanding Selection Frame on Spotlight Card */}
                         {isSpotlight && (
-                          <ApplePencilHighlighterOverlay
-                            color={note.highlightColor}
-                            topPercent="18%"
-                            leftPercent="14%"
-                            widthPercent="64%"
-                            delaySec={0}
-                            label="Apple Pencil"
-                          />
+                          <div className="pointer-events-none absolute bottom-3 right-3 border-2 border-dashed border-[#0066ff] bg-sky-500/10 rounded-xl px-2.5 py-1.5 bn-popup-frame">
+                            <span className="px-1.5 py-0.5 rounded bg-[#0066ff] text-white text-[9px] font-extrabold">
+                              🔍 Zoom &amp; Επιλογή
+                            </span>
+                          </div>
                         )}
                       </div>
 
@@ -1702,11 +1592,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <span
-                        className="px-2.5 py-0.5 rounded-md text-[10.5px] font-extrabold text-slate-950 truncate"
-                        style={{ backgroundColor: note.highlightColor }}
-                      >
-                        🖍️ {note.highlightText}
+                      <span className="px-2.5 py-0.5 rounded-md bg-slate-100 text-[10.5px] font-extrabold text-slate-800 truncate">
+                        ✨ {note.highlightText}
                       </span>
                       <button
                         type="button"
@@ -1728,8 +1615,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* ===================================================================
             5. FULL-PAGE ALTERNATING GOODNOTES SHOWCASE SECTIONS (All 5 Images
-               Large & Detailed Down the Page with Fade/Zoom, Apple Pencil &
-               Fluorescent Highlighter!)
+               Large & Detailed Down the Page with Zoom, Circles & Expanding Frames)
            =================================================================== */}
         <section className="mt-24 max-w-6xl mx-auto space-y-20">
           <div className="text-center max-w-3xl mx-auto">
@@ -1746,11 +1632,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             return (
               <div
                 key={note.id}
-                className={`bn-scroll-reveal flex flex-col ${
+                className={`flex flex-col ${
                   isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'
                 } items-center gap-8 lg:gap-12 rounded-3xl bg-[#fffdf9] border border-slate-200/90 p-6 sm:p-10 shadow-xl`}
               >
-                {/* Image Showcase Side (Draggable + Zoomable + Live Apple Pencil Fluorescent Highlight) */}
+                {/* Image Showcase Side (Draggable + Stronger Zoom + Circles & Expanding Selection Frame) */}
                 <div className="w-full lg:w-7/12 relative">
                   <DraggableCard
                     resetSignal={dragResetCounter}
@@ -1765,17 +1651,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       className="w-full max-h-[420px] object-contain mx-auto bn-ken-burns"
                     />
 
-                    {/* Live Apple Pencil Fluorescent Highlighter gliding over the image */}
-                    <ApplePencilHighlighterOverlay
-                      color={note.highlightColor}
-                      topPercent="16%"
-                      leftPercent="15%"
-                      widthPercent="62%"
-                      delaySec={index * 0.4}
-                      label="Φωσφορούχος Μαρκαδόρος"
-                    />
+                    {/* Expanding Rectangular Selection Frame */}
+                    <div
+                      className="pointer-events-none absolute bottom-5 right-6 border-2 border-dashed border-[#22c55e] bg-emerald-500/10 rounded-xl bn-rect-marquee flex items-start justify-end p-1.5"
+                    >
+                      <span className="px-1.5 py-0.5 rounded bg-[#22c55e] text-white text-[8.5px] font-extrabold shadow-xs">
+                        ⬚ Ορθογώνια Επιλογή
+                      </span>
+                      <span className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
+                      <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
+                      <span className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
+                      <span className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-[#22c55e] border border-white" />
+                    </div>
 
-                    {/* Second Orbiting Apple Pencil */}
+                    {/* Hand-drawn Callout Circle */}
+                    <svg
+                      className="pointer-events-none absolute inset-0 w-full h-full"
+                      viewBox="0 0 600 360"
+                    >
+                      <ellipse
+                        cx="175"
+                        cy="220"
+                        rx="82"
+                        ry="45"
+                        fill="none"
+                        stroke={note.subjectColor}
+                        strokeWidth="3"
+                        strokeDasharray="7 4"
+                        className="bn-animate-draw"
+                      />
+                    </svg>
+
+                    {/* Orbiting Apple Pencil */}
                     <AnimatedPenTool
                       className="hidden sm:block absolute bottom-6 right-10 bn-animate-pen"
                       color={note.subjectColor}
@@ -1806,19 +1713,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     {note.description}
                   </p>
 
-                  {/* Animated Highlight Callout Box */}
+                  {/* Clean Callout Box */}
                   <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
                     <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">
-                      Ζωντανή Υπογράμμιση με Φωσφορούχο:
+                      Βασικές Έννοιες &amp; Εξισώσεις:
                     </div>
-                    <div className="relative inline-block">
-                      <span className="relative z-10 text-xs sm:text-sm font-extrabold text-slate-950 px-1.5 py-0.5">
-                        {note.highlightText}
-                      </span>
-                      <span
-                        className="absolute inset-0 rounded-md bn-fluorescent-bar -z-0"
-                        style={{ backgroundColor: note.highlightColor }}
-                      />
+                    <div className="text-xs sm:text-sm font-extrabold text-slate-950">
+                      ✨ {note.highlightText}
                     </div>
                     <div className="text-xs font-semibold text-slate-600">
                       ✓ {note.secondaryHighlightText}
@@ -1902,14 +1803,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 src={zoomedNote.src}
                 alt={zoomedNote.title}
                 className="max-h-[75vh] w-auto object-contain mx-auto bn-ken-burns"
-              />
-              <ApplePencilHighlighterOverlay
-                color={zoomedNote.highlightColor}
-                topPercent="15%"
-                leftPercent="18%"
-                widthPercent="60%"
-                delaySec={0}
-                label="Apple Pencil • Φωσφορούχος"
               />
             </div>
           </div>
