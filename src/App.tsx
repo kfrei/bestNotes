@@ -57,6 +57,7 @@ import {
   Search,
   ArrowUpDown,
   Share2,
+  Tag,
 } from 'lucide-react';
 import {
   auth,
@@ -112,6 +113,9 @@ import {
   computeResistorOrSpringPoints,
   get3DShapeSubPaths,
   encodeCanvasOptimizedDataUrl,
+  matchesGreekSmartQuery,
+  matchesNotebookSmartSearch,
+  normalizeGreekSearchText,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -959,6 +963,10 @@ export default function App() {
     'tab' | 'grid-strip' | 'grid-below' | 'list' | null
   >(null);
   const [renamingTitleDraft, setRenamingTitleDraft] = useState<string>('');
+  const [showTagsPopover, setShowTagsPopover] = useState<boolean>(false);
+  const [tagInputDraft, setTagInputDraft] = useState<string>('');
+  const [libraryTagEditorNbId, setLibraryTagEditorNbId] = useState<string | null>(null);
+  const [libraryTagInputDraft, setLibraryTagInputDraft] = useState<string>('');
 
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
@@ -1070,6 +1078,61 @@ export default function App() {
       }
     },
     [showToast]
+  );
+
+  const addTagsToNotebook = useCallback(
+    (nbId: string, rawTagsInput: string) => {
+      const cleanedInput = rawTagsInput.trim();
+      if (!cleanedInput) return;
+      const newTags = (cleanedInput.includes(',') || cleanedInput.includes('#')
+        ? cleanedInput.split(/[,;#]+/)
+        : cleanedInput.split(/[\s,;#]+/)
+      )
+        .map((t) => t.replace(/^#+/, '').trim())
+        .filter((t) => t.length >= 2);
+      if (newTags.length === 0) return;
+
+      let addedCount = 0;
+      setNotebooks((prev) =>
+        prev.map((nb) => {
+          if (nb.id !== nbId) return nb;
+          const existing = nb.tags || [];
+          const existingNorm = new Set(existing.map((e) => normalizeGreekSearchText(e)));
+          const merged = [...existing];
+          for (const nt of newTags) {
+            const norm = normalizeGreekSearchText(nt);
+            if (norm && !existingNorm.has(norm)) {
+              existingNorm.add(norm);
+              merged.push(nt);
+              addedCount++;
+            }
+          }
+          if (merged.length === existing.length) return nb;
+          return { ...nb, tags: merged, updatedAt: new Date().toISOString() };
+        })
+      );
+      if (addedCount > 0) {
+        setIsDirty(true);
+        setSyncStatus('dirty');
+        showToast(`🏷️ Προστέθηκαν ${addedCount} tag(s) στη σημείωση!`);
+      }
+    },
+    [showToast]
+  );
+
+  const removeTagFromNotebook = useCallback(
+    (nbId: string, tagToRemove: string) => {
+      setNotebooks((prev) =>
+        prev.map((nb) => {
+          if (nb.id !== nbId) return nb;
+          const nextTags = (nb.tags || []).filter((t) => t !== tagToRemove);
+          return { ...nb, tags: nextTags, updatedAt: new Date().toISOString() };
+        })
+      );
+      setIsDirty(true);
+      setSyncStatus('dirty');
+    },
+    []
   );
 
   // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
@@ -1743,7 +1806,9 @@ export default function App() {
       !showThumbnailsModal &&
       !showMathModal &&
       !showSettingsModal &&
-      !showUserDropdown
+      !showUserDropdown &&
+      !showTagsPopover &&
+      !libraryTagEditorNbId
     ) {
       return;
     }
@@ -1769,6 +1834,8 @@ export default function App() {
         if (triggerType !== 'math') setShowMathModal(false);
         if (triggerType !== 'settings') setShowSettingsModal(false);
         if (triggerType !== 'user') setShowUserDropdown(false);
+        if (triggerType !== 'tags') setShowTagsPopover(false);
+        if (triggerType !== 'lib-tags') setLibraryTagEditorNbId(null);
         return;
       }
 
@@ -1781,6 +1848,8 @@ export default function App() {
       setShowMathModal(false);
       setShowSettingsModal(false);
       setShowUserDropdown(false);
+      setShowTagsPopover(false);
+      setLibraryTagEditorNbId(null);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1793,6 +1862,8 @@ export default function App() {
         setShowMathModal(false);
         setShowSettingsModal(false);
         setShowUserDropdown(false);
+        setShowTagsPopover(false);
+        setLibraryTagEditorNbId(null);
       }
     };
 
@@ -1811,6 +1882,8 @@ export default function App() {
     showMathModal,
     showSettingsModal,
     showUserDropdown,
+    showTagsPopover,
+    libraryTagEditorNbId,
   ]);
 
   // NATIVE iPAD APP VIEWPORT LOCK:
@@ -9505,6 +9578,100 @@ export default function App() {
             </button>
           </div>
 
+          {/* Notebook Tags Button & Popover (for Smart Search keywords like #βροχή, #νερό) */}
+          <div className="relative">
+            <button
+              data-popover-trigger="tags"
+              onClick={() => setShowTagsPopover((v) => !v)}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                showTagsPopover
+                  ? 'bg-[#0066ff] text-white shadow-xs'
+                  : (activeNotebook.tags?.length || 0) > 0
+                  ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30'
+                  : 'bg-[#263961] hover:bg-[#31487a] text-sky-200'
+              }`}
+              title={`Tags Αναζήτησης για «${activeNotebook.title}» (π.χ. #βροχή, #νερό, #εξάτμιση)`}
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Tags</span>
+              {(activeNotebook.tags?.length || 0) > 0 && (
+                <span className="px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold">
+                  {activeNotebook.tags?.length}
+                </span>
+              )}
+            </button>
+
+            {showTagsPopover && (
+              <div
+                data-popover-panel="tags"
+                className="absolute right-0 top-full mt-2 w-72 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-3.5 z-50 space-y-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-[#0066ff]" />
+                    <span>Λέξεις-Κλειδιά (Tags)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Για έξυπνη αναζήτηση</span>
+                </div>
+
+                {/* Current Tags List */}
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto py-0.5">
+                  {(activeNotebook.tags || []).length === 0 ? (
+                    <span className="text-[11px] text-slate-400 italic">
+                      Δεν υπάρχουν tags ακόμα (π.χ. βροχή, νερό, εξάτμιση)...
+                    </span>
+                  ) : (
+                    (activeNotebook.tags || []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-[11px] font-semibold text-[#0066ff]"
+                      >
+                        <span>#{tag}</span>
+                        <button
+                          onClick={() => removeTagFromNotebook(activeNotebook.id, tag)}
+                          className="text-sky-400 hover:text-rose-600 cursor-pointer"
+                          title={`Αφαίρεση #${tag}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+
+                {/* Add New Tags Input */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={tagInputDraft}
+                    onChange={(e) => setTagInputDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter' && tagInputDraft.trim()) {
+                        e.preventDefault();
+                        addTagsToNotebook(activeNotebook.id, tagInputDraft);
+                        setTagInputDraft('');
+                      }
+                    }}
+                    placeholder="π.χ. βροχή, νερό, εξάτμιση..."
+                    className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-[#0066ff]"
+                  />
+                  <button
+                    onClick={() => {
+                      if (tagInputDraft.trim()) {
+                        addTagsToNotebook(activeNotebook.id, tagInputDraft);
+                        setTagInputDraft('');
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs font-bold cursor-pointer shrink-0"
+                  >
+                    + Tag
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 30s Google Drive Sync Pill */}
           <button
             onClick={() => void performDrivePdfSync(true)}
@@ -9788,13 +9955,27 @@ export default function App() {
                 }
               }
 
-              const query = librarySearchQuery.trim().toLowerCase();
+              const query = librarySearchQuery.trim();
+
+              // Collect all unique tags across notebooks (filtered by active folder if inside one)
+              const allLibraryTags = Array.from(
+                new Set(
+                  notebooks
+                    .filter((nb) => activeLibraryFolder === null || (nb.folder || '').trim() === activeLibraryFolder)
+                    .flatMap((nb) => [
+                      ...(nb.tags || []),
+                      ...nb.pages.flatMap((p) => p.tags || []),
+                    ])
+                    .map((t) => t.trim())
+                    .filter(Boolean)
+                )
+              );
 
               // Filter & Sort Folders (shown at root level or when searching)
               const visibleFolders =
                 activeLibraryFolder === null
                   ? Array.from(folderMap.values())
-                      .filter((f) => !query || f.name.toLowerCase().includes(query))
+                      .filter((f) => !query || matchesGreekSmartQuery(f.name, query))
                       .sort((a, b) =>
                         librarySortBy === 'alpha'
                           ? a.name.localeCompare(b.name, 'el')
@@ -9802,17 +9983,26 @@ export default function App() {
                       )
                   : [];
 
-              // Filter & Sort Notes
+              const searchMatchMap = new Map<
+                string,
+                { matchedTags: string[]; matchedTextSnippet?: string }
+              >();
+
+              // Filter & Sort Notes (Greek Smart Search: accent/case/inflection-insensitive across title, folder, #tags & page texts)
               const visibleNotebooks = notebooks
                 .filter((nb) => {
                   if (activeLibraryFolder !== null && (nb.folder || '').trim() !== activeLibraryFolder) {
                     return false;
                   }
                   if (query) {
-                    return (
-                      nb.title.toLowerCase().includes(query) ||
-                      (nb.folder || '').toLowerCase().includes(query)
-                    );
+                    const res = matchesNotebookSmartSearch(nb, query);
+                    if (res.matched) {
+                      searchMatchMap.set(nb.id, {
+                        matchedTags: res.matchedTags,
+                        matchedTextSnippet: res.matchedTextSnippet,
+                      });
+                    }
+                    return res.matched;
                   }
                   return true;
                 })
@@ -10064,113 +10254,145 @@ export default function App() {
                   )}
 
                   {/* Search Field + Sort Toggle (Alphabetical / Date) + View Toggle (Icons / List) */}
-                  <div className="flex items-center justify-between gap-3 flex-wrap bg-white border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-2xs">
-                    {/* Search Input */}
-                    <div className="relative flex-1 min-w-[220px]">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={librarySearchQuery}
-                        onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                        placeholder="Αναζήτηση σε σημειώσεις και φακέλους..."
-                        className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-[#0066ff]"
-                      />
-                      {librarySearchQuery && (
-                        <button
-                          onClick={() => setLibrarySearchQuery('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                  <div className="bg-white border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      {/* Search Input */}
+                      <div className="relative flex-1 min-w-[220px]">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={librarySearchQuery}
+                          onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                          placeholder="Αναζήτηση σε σημειώσεις, φακέλους, #tags και κείμενα (π.χ. βροχη, νερο)..."
+                          className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-[#0066ff]"
+                        />
+                        {librarySearchQuery && (
+                          <button
+                            onClick={() => setLibrarySearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Right Controls: Sort (Alphabetical vs Date) + View Mode (Icons vs List) */}
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        {/* Sort Selector (Left of View Toggle) */}
+                        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                          <span className="flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-500">
+                            <ArrowUpDown className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Ταξινόμηση:</span>
+                          </span>
+                          <button
+                            onClick={() => {
+                              setLibrarySortBy('alpha');
+                              try {
+                                localStorage.setItem('bestnotes_lib_sort_v1', 'alpha');
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              librarySortBy === 'alpha'
+                                ? 'bg-white text-[#0066ff] shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Αλφαβητικά (Α-Ω)
+                          </button>
+                          <button
+                            onClick={() => {
+                              setLibrarySortBy('date');
+                              try {
+                                localStorage.setItem('bestnotes_lib_sort_v1', 'date');
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              librarySortBy === 'date'
+                                ? 'bg-white text-[#0066ff] shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Ημερομηνία
+                          </button>
+                        </div>
+
+                        {/* View Mode Toggle: Icons (Grid) vs List */}
+                        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                          <button
+                            onClick={() => {
+                              setLibraryLayoutMode('grid');
+                              try {
+                                localStorage.setItem('bestnotes_lib_layout_v1', 'grid');
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              libraryLayoutMode === 'grid'
+                                ? 'bg-[#0066ff] text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                            title="Προβολή σε Εικονίδια (Grid)"
+                          >
+                            <LayoutGrid className="w-3.5 h-3.5" />
+                            <span>Εικονίδια</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setLibraryLayoutMode('list');
+                              try {
+                                localStorage.setItem('bestnotes_lib_layout_v1', 'list');
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              libraryLayoutMode === 'list'
+                                ? 'bg-[#0066ff] text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                            title="Προβολή σε Λίστα (List)"
+                          >
+                            <List className="w-3.5 h-3.5" />
+                            <span>Λίστα</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Right Controls: Sort (Alphabetical vs Date) + View Mode (Icons vs List) */}
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      {/* Sort Selector (Left of View Toggle) */}
-                      <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
-                        <span className="flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-500">
-                          <ArrowUpDown className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Ταξινόμηση:</span>
+                    {/* Quick Tag Filter Pills Bar (shown when notebooks have tags) */}
+                    {allLibraryTags.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-slate-100">
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 mr-1">
+                          <Tag className="w-3 h-3" />
+                          <span>Tags:</span>
                         </span>
-                        <button
-                          onClick={() => {
-                            setLibrarySortBy('alpha');
-                            try {
-                              localStorage.setItem('bestnotes_lib_sort_v1', 'alpha');
-                            } catch {
-                              // ignore
-                            }
-                          }}
-                          className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                            librarySortBy === 'alpha'
-                              ? 'bg-white text-[#0066ff] shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          Αλφαβητικά (Α-Ω)
-                        </button>
-                        <button
-                          onClick={() => {
-                            setLibrarySortBy('date');
-                            try {
-                              localStorage.setItem('bestnotes_lib_sort_v1', 'date');
-                            } catch {
-                              // ignore
-                            }
-                          }}
-                          className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                            librarySortBy === 'date'
-                              ? 'bg-white text-[#0066ff] shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          Ημερομηνία
-                        </button>
+                        {allLibraryTags.map((tag) => {
+                          const isSelectedTag =
+                            normalizeGreekSearchText(librarySearchQuery.replace(/^#+/, '')) ===
+                            normalizeGreekSearchText(tag);
+                          return (
+                            <button
+                              key={tag}
+                              onClick={() =>
+                                setLibrarySearchQuery(isSelectedTag ? '' : `#${tag}`)
+                              }
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                                isSelectedTag
+                                  ? 'bg-[#0066ff] text-white shadow-2xs'
+                                  : 'bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200/80'
+                              }`}
+                            >
+                              #{tag}
+                            </button>
+                          );
+                        })}
                       </div>
-
-                      {/* View Mode Toggle: Icons (Grid) vs List */}
-                      <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
-                        <button
-                          onClick={() => {
-                            setLibraryLayoutMode('grid');
-                            try {
-                              localStorage.setItem('bestnotes_lib_layout_v1', 'grid');
-                            } catch {
-                              // ignore
-                            }
-                          }}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                            libraryLayoutMode === 'grid'
-                              ? 'bg-[#0066ff] text-white shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                          title="Προβολή σε Εικονίδια (Grid)"
-                        >
-                          <LayoutGrid className="w-3.5 h-3.5" />
-                          <span>Εικονίδια</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setLibraryLayoutMode('list');
-                            try {
-                              localStorage.setItem('bestnotes_lib_layout_v1', 'list');
-                            } catch {
-                              // ignore
-                            }
-                          }}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
-                            libraryLayoutMode === 'list'
-                              ? 'bg-[#0066ff] text-white shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                          title="Προβολή σε Λίστα (List)"
-                        >
-                          <List className="w-3.5 h-3.5" />
-                          <span>Λίστα</span>
-                        </button>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* =================================================================
@@ -10475,6 +10697,114 @@ export default function App() {
                                     {nb.title}
                                   </span>
                                 )}
+
+                                {/* Tags & "+ Tag" inline control under each Notebook in Grid View */}
+                                <div
+                                  className="mt-1 flex items-center justify-center gap-1 flex-wrap max-w-[195px]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {(nb.tags || []).slice(0, 4).map((tag) => {
+                                    const isMatched = searchMatchMap
+                                      .get(nb.id)
+                                      ?.matchedTags.includes(tag);
+                                    return (
+                                      <span
+                                        key={tag}
+                                        onClick={() => setLibrarySearchQuery(`#${tag}`)}
+                                        className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer ${
+                                          isMatched
+                                            ? 'bg-emerald-500 text-white shadow-2xs'
+                                            : 'bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200/80'
+                                        }`}
+                                        title={`Φιλτράρισμα με #${tag}`}
+                                      >
+                                        <span>#{tag}</span>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeTagFromNotebook(nb.id, tag);
+                                          }}
+                                          className={`ml-0.5 ${
+                                            isMatched
+                                              ? 'text-white/80 hover:text-white'
+                                              : 'text-sky-400 hover:text-rose-600'
+                                          } cursor-pointer`}
+                                          title={`Αφαίρεση #${tag}`}
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    );
+                                  })}
+                                  {(nb.tags || []).length > 4 && (
+                                    <span className="text-[10px] text-slate-400 font-semibold">
+                                      +{(nb.tags || []).length - 4}
+                                    </span>
+                                  )}
+                                  <button
+                                    data-popover-trigger="lib-tags"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setLibraryTagEditorNbId((prev) =>
+                                        prev === nb.id ? null : nb.id
+                                      );
+                                      setLibraryTagInputDraft('');
+                                    }}
+                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-[#0066ff] text-slate-600 hover:text-white text-[10px] font-semibold transition cursor-pointer"
+                                    title="Προσθήκη λέξεων-κλειδιών (Tags) για αναζήτηση"
+                                  >
+                                    <Tag className="w-2.5 h-2.5" />
+                                    <span>+Tag</span>
+                                  </button>
+                                </div>
+
+                                {searchMatchMap.get(nb.id)?.matchedTextSnippet && (
+                                  <span className="mt-0.5 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md max-w-[190px] truncate">
+                                    🔍 «{searchMatchMap.get(nb.id)?.matchedTextSnippet}»
+                                  </span>
+                                )}
+
+                                {libraryTagEditorNbId === nb.id && (
+                                  <div
+                                    data-popover-panel="lib-tags"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="mt-1.5 w-48 bg-white border border-sky-300 rounded-xl p-2 shadow-lg space-y-1.5 z-30"
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        value={libraryTagInputDraft}
+                                        onChange={(e) => setLibraryTagInputDraft(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          e.stopPropagation();
+                                          if (e.key === 'Enter' && libraryTagInputDraft.trim()) {
+                                            e.preventDefault();
+                                            addTagsToNotebook(nb.id, libraryTagInputDraft);
+                                            setLibraryTagInputDraft('');
+                                            setLibraryTagEditorNbId(null);
+                                          } else if (e.key === 'Escape') {
+                                            setLibraryTagEditorNbId(null);
+                                          }
+                                        }}
+                                        placeholder="π.χ. βροχή, νερό..."
+                                        className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-800 focus:outline-none focus:border-[#0066ff]"
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          if (libraryTagInputDraft.trim()) {
+                                            addTagsToNotebook(nb.id, libraryTagInputDraft);
+                                            setLibraryTagInputDraft('');
+                                            setLibraryTagEditorNbId(null);
+                                          }
+                                        }}
+                                        className="px-2 py-1 rounded-lg bg-[#0066ff] text-white text-[10px] font-bold cursor-pointer"
+                                      >
+                                        OK
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -10552,7 +10882,7 @@ export default function App() {
                               <FileText className="w-4 h-4 text-slate-500 ml-1" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 {renamingNotebookId === nb.id && renamingNotebookContext === 'list' ? (
                                   <input
                                     type="text"
@@ -10594,6 +10924,50 @@ export default function App() {
                                     {nb.folder}
                                   </span>
                                 )}
+                                {(nb.tags || []).map((tag) => {
+                                  const isMatched = searchMatchMap
+                                    .get(nb.id)
+                                    ?.matchedTags.includes(tag);
+                                  return (
+                                    <span
+                                      key={tag}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLibrarySearchQuery(`#${tag}`);
+                                      }}
+                                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer ${
+                                        isMatched
+                                          ? 'bg-emerald-500 text-white shadow-2xs'
+                                          : 'bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200/80'
+                                      }`}
+                                    >
+                                      <span>#{tag}</span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeTagFromNotebook(nb.id, tag);
+                                        }}
+                                        className="ml-0.5 text-sky-400 hover:text-rose-600 cursor-pointer"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  );
+                                })}
+                                <button
+                                  data-popover-trigger="lib-tags"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLibraryTagEditorNbId((prev) =>
+                                      prev === nb.id ? null : nb.id
+                                    );
+                                    setLibraryTagInputDraft('');
+                                  }}
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-[#0066ff] text-slate-600 hover:text-white text-[10px] font-semibold transition cursor-pointer"
+                                >
+                                  <Tag className="w-2.5 h-2.5" />
+                                  <span>+Tag</span>
+                                </button>
                               </div>
                               <p className="text-[11px] text-slate-500">
                                 {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • .bestNotes

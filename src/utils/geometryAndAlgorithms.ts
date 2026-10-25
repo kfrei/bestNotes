@@ -1,4 +1,4 @@
-import { BezierPoint, StrokeObject, ShapePresetType } from '../types/note';
+import { BezierPoint, StrokeObject, ShapePresetType, Notebook } from '../types/note';
 
 export function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
@@ -2623,3 +2623,182 @@ export function eraseStrokeByCircle(
 
   return { modified: true, pieces };
 }
+
+/**
+ * Strips Greek diacritics/accents (τόνους, διαλυτικά) and normalizes final sigma (ς -> σ).
+ */
+export function normalizeGreekSearchText(input: string): string {
+  return (input || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/ς/g, 'σ')
+    .trim();
+}
+
+/**
+ * Computes the inflection-insensitive Greek stem of a single normalized word
+ * so e.g. "νερο", "νερου", "νερα" -> "νερ" and "βροχη", "βροχησ", "βροχεσ" -> "βροχ".
+ */
+export function stemGreekWord(rawWord: string): string {
+  const w = normalizeGreekSearchText(rawWord).replace(/[^a-zα-ω0-9]/g, '');
+  if (w.length <= 3) return w;
+
+  // Ordered longest-first common Greek inflectional suffixes
+  const suffixes = [
+    'ιουσ',
+    'ιων',
+    'ιου',
+    'ουδ',
+    'ματ',
+    'αδων',
+    'ηδων',
+    'εων',
+    'ουσ',
+    'ων',
+    'ου',
+    'οι',
+    'εσ',
+    'ησ',
+    'ασ',
+    'οσ',
+    'ια',
+    'εισ',
+    'ησε',
+    'ησα',
+    'α',
+    'ο',
+    'η',
+    'ε',
+    'υ',
+    'ι',
+    'ω',
+  ];
+
+  for (const suf of suffixes) {
+    if (w.endsWith(suf) && w.length - suf.length >= 3) {
+      return w.slice(0, w.length - suf.length);
+    }
+  }
+  return w;
+}
+
+/**
+ * Checks whether a single normalized query token matches a candidate text string
+ * using both accent-insensitive substring matching and Greek inflectional stem matching.
+ */
+export function matchesSingleGreekToken(candidateText: string, rawToken: string): boolean {
+  const normCandidate = normalizeGreekSearchText(candidateText);
+  const normToken = normalizeGreekSearchText(rawToken).replace(/^#+/, '');
+  if (!normToken) return true;
+  if (!normCandidate) return false;
+
+  // 1. Direct accent-insensitive substring match (great while typing partial words)
+  if (normCandidate.includes(normToken)) return true;
+
+  // 2. Word-level Greek stem match (e.g. query "νερο" -> stem "νερ" matches "Νερού" -> stem "νερ")
+  const tokenStem = stemGreekWord(normToken);
+  if (tokenStem.length < 3) return false;
+
+  const candidateWords = normCandidate.split(/[^a-zα-ω0-9]+/).filter(Boolean);
+  for (const cw of candidateWords) {
+    if (cw.includes(tokenStem)) return true;
+    const cwStem = stemGreekWord(cw);
+    if (cwStem.length >= 3 && (cwStem.startsWith(tokenStem) || tokenStem.startsWith(cwStem))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Smart Greek query matcher for folders or simple titles.
+ * - Comma-separated groups ("βροχη, νερο") act as OR.
+ * - Space-separated words within a group ("κυκλος νερο") act as AND.
+ */
+export function matchesGreekSmartQuery(candidateText: string, rawQuery: string): boolean {
+  const q = rawQuery.trim();
+  if (!q) return true;
+  const orGroups = q
+    .split(',')
+    .map((g) => g.trim())
+    .filter(Boolean);
+  if (orGroups.length === 0) return true;
+
+  return orGroups.some((group) => {
+    const andTokens = group
+      .split(/\s+/)
+      .map((t) => t.replace(/^#+/, '').trim())
+      .filter(Boolean);
+    return andTokens.every((tok) => matchesSingleGreekToken(candidateText, tok));
+  });
+}
+
+/**
+ * Searches across a Notebook's title, folder, tags, page titles, page tags, and typed page texts/LaTeX.
+ * Returns whether it matches and a list of matched tags/snippets to highlight in the UI.
+ */
+export function matchesNotebookSmartSearch(
+  nb: Notebook,
+  rawQuery: string
+): { matched: boolean; matchedTags: string[]; matchedTextSnippet?: string } {
+  const q = rawQuery.trim();
+  if (!q) return { matched: true, matchedTags: [] };
+
+  const allTags = Array.from(
+    new Set([
+      ...(nb.tags || []),
+      ...nb.pages.flatMap((p) => p.tags || []),
+    ])
+  );
+  const pageTitles = nb.pages.map((p) => p.title || '');
+  const pageTexts = nb.pages.flatMap((p) =>
+    (p.texts || []).flatMap((t) => [t.text || '', t.latex || ''])
+  );
+
+  const combinedCorpus = [
+    nb.title || '',
+    nb.folder || '',
+    ...allTags,
+    ...pageTitles,
+    ...pageTexts,
+  ].join(' ');
+
+  const orGroups = q
+    .split(',')
+    .map((g) => g.trim())
+    .filter(Boolean);
+  if (orGroups.length === 0) return { matched: true, matchedTags: [] };
+
+  const matched = orGroups.some((group) => {
+    const andTokens = group
+      .split(/\s+/)
+      .map((t) => t.replace(/^#+/, '').trim())
+      .filter(Boolean);
+    return andTokens.every((tok) => matchesSingleGreekToken(combinedCorpus, tok));
+  });
+
+  if (!matched) {
+    return { matched: false, matchedTags: [] };
+  }
+
+  const allQueryTokens = q
+    .split(/[\s,]+/)
+    .map((t) => t.replace(/^#+/, '').trim())
+    .filter(Boolean);
+
+  const matchedTags = allTags.filter((tag) =>
+    allQueryTokens.some((tok) => matchesSingleGreekToken(tag, tok))
+  );
+
+  let matchedTextSnippet: string | undefined;
+  for (const txt of pageTexts) {
+    if (txt && allQueryTokens.some((tok) => matchesSingleGreekToken(txt, tok))) {
+      matchedTextSnippet = txt.length > 48 ? txt.slice(0, 48) + '…' : txt;
+      break;
+    }
+  }
+
+  return { matched: true, matchedTags, matchedTextSnippet };
+}
+

@@ -131,6 +131,7 @@ export interface LayerItem {
 export interface NotePage {
   id: string;
   title: string;
+  tags?: string[];
   template: PaperTemplateType;
   orientation?: 'portrait' | 'landscape';
   rotation?: number; // 0, 90, 180, 270
@@ -147,6 +148,7 @@ export interface Notebook {
   id: string;
   title: string;
   folder: string;
+  tags?: string[];
   coverColor: string;
   updatedAt: string;
   sourceFormat?: '.goodnotes' | '.bestnotes' | '.bestNotes';
