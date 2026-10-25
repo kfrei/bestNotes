@@ -8700,7 +8700,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Page Indicator (Click to open Thumbnail Grid!), Insert Page in Middle (+), Delete Page (🗑️) */}
+          {/* Page Indicator (Click to open Thumbnail Grid!) */}
           <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
             <button
               onClick={() => scrollToPageIndex(activePageIndex - 1)}
@@ -8725,20 +8725,6 @@ export default function App() {
               title="Επόμενη Σελίδα"
             >
               <ChevronRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => insertNewPageRelative('after-current')}
-              className="ml-1 p-0.5 text-emerald-300 hover:text-white cursor-pointer"
-              title="Προσθήκη Νέας Σελίδας ακριβώς μετά την τρέχουσα (στη μέση ή στο τέλος)"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => deletePageAtIndex(activePageIndex)}
-              className="ml-1 p-0.5 text-rose-300 hover:text-rose-100 cursor-pointer"
-              title="Διαγραφή τρέχουσας σελίδας"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
 
