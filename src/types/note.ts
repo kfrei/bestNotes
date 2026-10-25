@@ -82,7 +82,7 @@ export interface StrokeObject {
   zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
 }
 
-export type TextFontStyle = 'sans' | 'calligraphic' | 'handwritten' | 'marker';
+export type TextFontStyle = 'sans' | 'calligraphic' | 'neohellenic' | 'handwritten' | 'marker';
 
 export interface TextObject {
   id: string;

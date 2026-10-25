@@ -12513,26 +12513,36 @@ export default function App() {
   const getTextFontCss = (fontFamily?: TextFontStyle): React.CSSProperties => {
     switch (fontFamily) {
       case 'calligraphic':
-        // Matches the tall, slightly condensed calligraphic Greek lettering of "Ο Κύκλος του Νερού"
+        // Slanted Greek calligraphic cursive pen matching "Η μάζα είναι η ποσότητα ύλης που περιέχει ένα σώμα..."
         return {
-          fontFamily: "'Arima', 'Playpen Sans', cursive",
-          letterSpacing: '-0.015em',
-          fontStretch: 'condensed',
+          fontFamily: "'Alegreya Sans', 'GFS Neohellenic', cursive",
+          fontStyle: 'italic',
+          letterSpacing: '0.005em',
+        };
+      case 'neohellenic':
+        // Greek Font Society (Εταιρεία Ελληνικών Τυπογραφικών Στοιχείων) flowing cursive script
+        return {
+          fontFamily: "'GFS Neohellenic', 'Alegreya Sans', cursive",
+          fontStyle: 'italic',
+          letterSpacing: '0.01em',
         };
       case 'handwritten':
         return {
           fontFamily: "'Playpen Sans', 'Mynerve', cursive",
+          fontStyle: 'oblique 8deg',
           letterSpacing: '0em',
         };
       case 'marker':
         return {
-          fontFamily: "'Mynerve', 'Mansalva', cursive",
+          fontFamily: "'Mynerve', 'Arima', cursive",
+          fontStyle: 'normal',
           letterSpacing: '0.01em',
         };
       case 'sans':
       default:
         return {
           fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+          fontStyle: 'normal',
           letterSpacing: '0em',
         };
     }
@@ -14151,19 +14161,32 @@ export default function App() {
                                           />
                                         );
                                       })}
-                                      {(p0.texts || []).map((tx) => (
-                                        <text
-                                          key={tx.id}
-                                          x={tx.x}
-                                          y={tx.y + (tx.fontSize || 20)}
-                                          fill={tx.color}
-                                          fontSize={(tx.fontSize || 20) * 1.2}
-                                          fontWeight={tx.bold ? 'bold' : 'normal'}
-                                          fontFamily={getTextFontCss(tx.fontFamily).fontFamily}
-                                        >
-                                          {tx.text}
-                                        </text>
-                                      ))}
+                                      {(p0.texts || []).map((tx) => {
+                                        const fCss = getTextFontCss(tx.fontFamily);
+                                        const fSize = (tx.fontSize || 20) * 1.2;
+                                        return (
+                                          <text
+                                            key={tx.id}
+                                            x={tx.x}
+                                            y={tx.y + fSize}
+                                            fill={tx.color}
+                                            fontSize={fSize}
+                                            fontWeight={tx.bold ? 'bold' : 'normal'}
+                                            fontStyle={fCss.fontStyle}
+                                            fontFamily={fCss.fontFamily}
+                                          >
+                                            {(tx.text || '').split('\n').map((line, lIdx) => (
+                                              <tspan
+                                                key={lIdx}
+                                                x={tx.x}
+                                                dy={lIdx === 0 ? 0 : fSize * 1.3}
+                                              >
+                                                {line}
+                                              </tspan>
+                                            ))}
+                                          </text>
+                                        );
+                                      })}
                                     </svg>
                                   )}
 
@@ -15255,11 +15278,12 @@ export default function App() {
                         B Έντονα
                       </button>
 
-                      {/* Greek Font Style Selector: Calligraphic (Κύκλος Νερού) / Handwritten / Marker / Printed */}
+                      {/* Greek Font Style Selector: Calligraphic / Neohellenic / Handwritten / Marker / Printed */}
                       <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                         {(
                           [
                             { id: 'calligraphic', label: '✍️ Καλλιγραφικό' },
+                            { id: 'neohellenic', label: '🖋️ Ρέουσα' },
                             { id: 'handwritten', label: '📝 Χειρόγραφο' },
                             { id: 'marker', label: '✒️ Πένα' },
                             { id: 'sans', label: '🔤 Τυπωμένο' },
@@ -15268,6 +15292,7 @@ export default function App() {
                           <button
                             key={fOpt.id}
                             onClick={() => applyFontFamily(fOpt.id)}
+                            style={getTextFontCss(fOpt.id)}
                             className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
                               currentFontFamily === fOpt.id
                                 ? 'bg-purple-600 text-white shadow-xs'
@@ -17361,7 +17386,13 @@ export default function App() {
                                   type="button"
                                   onMouseDown={(ev) => ev.preventDefault()}
                                   onClick={() => {
-                                    const order: TextFontStyle[] = ['calligraphic', 'handwritten', 'marker', 'sans'];
+                                    const order: TextFontStyle[] = [
+                                      'calligraphic',
+                                      'neohellenic',
+                                      'handwritten',
+                                      'marker',
+                                      'sans',
+                                    ];
                                     const cur = txt.fontFamily || 'sans';
                                     const nextFont = order[(order.indexOf(cur) + 1) % order.length];
                                     setTextFontFamily(nextFont);
@@ -17373,10 +17404,12 @@ export default function App() {
                                     }));
                                   }}
                                   className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-bold cursor-pointer"
-                                  title="Εναλλαγή γραμματοσειράς (Καλλιγραφικό / Χειρόγραφο / Πένα / Τυπωμένο)"
+                                  title="Εναλλαγή γραμματοσειράς (Καλλιγραφικό / Ρέουσα / Χειρόγραφο / Πένα / Τυπωμένο)"
                                 >
                                   {txt.fontFamily === 'calligraphic'
                                     ? '✍️ Καλλιγρ.'
+                                    : txt.fontFamily === 'neohellenic'
+                                    ? '🖋️ Ρέουσα'
                                     : txt.fontFamily === 'handwritten'
                                     ? '📝 Χειρόγρ.'
                                     : txt.fontFamily === 'marker'
@@ -18032,19 +18065,32 @@ export default function App() {
                               />
                             );
                           })}
-                          {(pObj.texts || []).map((tx) => (
-                            <text
-                              key={tx.id}
-                              x={tx.x}
-                              y={tx.y + (tx.fontSize || 20)}
-                              fill={tx.color}
-                              fontSize={(tx.fontSize || 20) * 1.15}
-                              fontWeight={tx.bold ? 'bold' : 'normal'}
-                              fontFamily={getTextFontCss(tx.fontFamily).fontFamily}
-                            >
-                              {tx.text}
-                            </text>
-                          ))}
+                          {(pObj.texts || []).map((tx) => {
+                            const fCss = getTextFontCss(tx.fontFamily);
+                            const fSize = (tx.fontSize || 20) * 1.15;
+                            return (
+                              <text
+                                key={tx.id}
+                                x={tx.x}
+                                y={tx.y + fSize}
+                                fill={tx.color}
+                                fontSize={fSize}
+                                fontWeight={tx.bold ? 'bold' : 'normal'}
+                                fontStyle={fCss.fontStyle}
+                                fontFamily={fCss.fontFamily}
+                              >
+                                {(tx.text || '').split('\n').map((line, lIdx) => (
+                                  <tspan
+                                    key={lIdx}
+                                    x={tx.x}
+                                    dy={lIdx === 0 ? 0 : fSize * 1.3}
+                                  >
+                                    {line}
+                                  </tspan>
+                                ))}
+                              </text>
+                            );
+                          })}
                         </svg>
                       </div>
 
