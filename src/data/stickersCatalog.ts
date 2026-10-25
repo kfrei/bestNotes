@@ -343,7 +343,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'fx-fireworks-3d',
-    iconifyId: 'fluent-emoji:fireworks',
+    iconifyId: 'custom-svg:fireworks-3d-gold-magenta:#ec4899:12',
     title: 'Πυροτεχνήματα Πολύχρωμα 3D',
     category: 'Κεραυνοί & Εφέ',
     colorStyle: 'multicolor',
@@ -351,11 +351,27 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'fx-sparkler-3d',
-    iconifyId: 'fluent-emoji:sparkler',
+    iconifyId: 'custom-svg:sparkler-3d-transparent:#f59e0b:12',
     title: 'Βεγγαλικό / Πυροτέχνημα Σπινθήρων 3D',
     category: 'Κεραυνοί & Εφέ',
     colorStyle: 'multicolor',
-    tags: ['πυροτέχνημα', 'βεγγαλικό', 'σπινθήρας', 'λάμψη'],
+    tags: ['πυροτέχνημα', 'βεγγαλικό', 'σπινθήρας', 'λάμψη', 'sparkler'],
+  },
+  {
+    id: 'fx-fireworks-trio-3d',
+    iconifyId: 'custom-svg:fireworks-trio-celebration:#8b5cf6:12',
+    title: 'Τριπλά Πυροτεχνήματα Γιορτής 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['πυροτέχνημα', 'πυροτεχνήματα', 'γιορτή', 'έκρηξη', 'fireworks'],
+  },
+  {
+    id: 'fx-firework-galaxy-3d',
+    iconifyId: 'custom-svg:firework-ring-galaxy:#06b6d4:12',
+    title: 'Πυροτέχνημα Χρυσάνθεμο & Αστέρια 3D',
+    category: 'Κεραυνοί & Εφέ',
+    colorStyle: 'multicolor',
+    tags: ['πυροτέχνημα', 'πυροτεχνήματα', 'αστέρια', 'λάμψη', 'fireworks'],
   },
   {
     id: 'fx-firework-burst-custom',
@@ -767,7 +783,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'sch-3d-atom',
-    iconifyId: 'fluent-emoji:atom-symbol',
+    iconifyId: 'custom-svg:atom-3d-transparent:#0066ff:12',
     title: 'Σύμβολο Ατόμου 3D (Φυσική & Χημεία)',
     category: 'Σχολικά & Εργαστήριο',
     colorStyle: 'multicolor',
@@ -1103,7 +1119,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'emo-3d-check',
-    iconifyId: 'fluent-emoji:check-mark-button',
+    iconifyId: 'custom-svg:check-3d-transparent:#16a34a:14',
     title: 'Σωστό / Check 3D',
     category: 'Emoticons',
     colorStyle: 'multicolor',
@@ -1163,7 +1179,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'shp-3d-chart-up',
-    iconifyId: 'fluent-emoji:chart-increasing',
+    iconifyId: 'custom-svg:chart-up-3d-transparent:#10b981:12',
     title: 'Αύξουσα Γραφική Παράσταση 3D',
     category: 'Σχήματα & 3D',
     colorStyle: 'multicolor',
@@ -1171,7 +1187,7 @@ export const CURATED_STICKERS_CATALOG: StickerCatalogItem[] = [
   },
   {
     id: 'shp-3d-barchart',
-    iconifyId: 'fluent-emoji:bar-chart',
+    iconifyId: 'custom-svg:barchart-3d-transparent:#0066ff:12',
     title: 'Ραβδόγραμμα Στατιστικής 3D',
     category: 'Σχήματα & 3D',
     colorStyle: 'multicolor',
@@ -1486,6 +1502,189 @@ export function buildCustomStickerSvgDataUrl(
       `;
       break;
     }
+    case 'fireworks-3d-gold-magenta': {
+      // Rich 3D multicolor firework burst with arched trails, glowing star flares, and zero background box!
+      innerSvg = `
+        <g stroke-linecap="round" fill="none">
+          <!-- Outer arched glowing trails -->
+          <path d="M 128 132 Q 128 66 128 18" stroke="#facc15" stroke-width="8" />
+          <path d="M 128 132 Q 168 78 210 38" stroke="#ec4899" stroke-width="8" />
+          <path d="M 128 132 Q 186 112 238 118" stroke="#06b6d4" stroke-width="8" />
+          <path d="M 128 132 Q 178 164 216 208" stroke="#f97316" stroke-width="8" />
+          <path d="M 128 132 Q 134 186 128 238" stroke="#a855f7" stroke-width="8" />
+          <path d="M 128 132 Q 78 164 40 208" stroke="#10b981" stroke-width="8" />
+          <path d="M 128 132 Q 70 112 18 118" stroke="#f43f5e" stroke-width="8" />
+          <path d="M 128 132 Q 88 78 46 38" stroke="#3b82f6" stroke-width="8" />
+
+          <!-- Secondary inner burst rays (dashed sparkles) -->
+          <line x1="128" y1="132" x2="164" y2="34" stroke="#fde047" stroke-width="6" stroke-dasharray="12 10" />
+          <line x1="128" y1="132" x2="226" y2="76" stroke="#f472b6" stroke-width="6" stroke-dasharray="12 10" />
+          <line x1="128" y1="132" x2="228" y2="164" stroke="#38bdf8" stroke-width="6" stroke-dasharray="12 10" />
+          <line x1="128" y1="132" x2="168" y2="226" stroke="#fb923c" stroke-width="6" stroke-dasharray="12 10" />
+          <line x1="128" y1="132" x2="88" y2="226" stroke="#c084fc" stroke-width="6" stroke-dasharray="12 10" />
+          <line x1="128" y1="132" x2="28" y2="164" stroke="#34d399" stroke-width="6" stroke-dasharray="12 10" />
+          <line x1="128" y1="132" x2="30" y2="76" stroke="#fb7185" stroke-width="6" stroke-dasharray="12 10" />
+          <line x1="128" y1="132" x2="92" y2="34" stroke="#60a5fa" stroke-width="6" stroke-dasharray="12 10" />
+        </g>
+        <!-- Glowing 4-point star tips & colorful spark beads -->
+        <polygon points="128,6 133,16 143,20 133,24 128,34 123,24 113,20 123,16" fill="#facc15" />
+        <polygon points="212,26 216,35 225,39 216,43 212,52 208,43 199,39 208,35" fill="#ec4899" />
+        <polygon points="44,26 48,35 57,39 48,43 44,52 40,43 31,39 40,35" fill="#3b82f6" />
+        <polygon points="240,106 244,115 253,119 244,123 240,132 236,123 227,119 236,115" fill="#06b6d4" />
+        <polygon points="16,106 20,115 29,119 20,123 16,132 12,123 3,119 12,115" fill="#f43f5e" />
+        <circle cx="218" cy="210" r="8" fill="#f97316" />
+        <circle cx="38" cy="210" r="8" fill="#10b981" />
+        <circle cx="128" cy="240" r="8" fill="#a855f7" />
+        <!-- Bright 3D core -->
+        <circle cx="128" cy="132" r="24" fill="#f59e0b" fill-opacity="0.32" />
+        <circle cx="128" cy="132" r="14" fill="#fde047" stroke="${c}" stroke-width="4" />
+      `;
+      break;
+    }
+    case 'sparkler-3d-transparent': {
+      // Handheld 3D Sparkler (Βεγγαλικό) with blazing golden/amber/pink sparks on 100% transparent background!
+      innerSvg = `
+        <!-- Metallic handheld sparkler rod at bottom-left -->
+        <line x1="36" y1="228" x2="136" y2="128" stroke="#64748b" stroke-width="10" stroke-linecap="round" />
+        <line x1="78" y1="186" x2="136" y2="128" stroke="#f97316" stroke-width="14" stroke-linecap="round" />
+        <!-- Radiant sparkler rays from (142, 118) -->
+        <g stroke-linecap="round">
+          <line x1="142" y1="118" x2="142" y2="18" stroke="#facc15" stroke-width="8" />
+          <line x1="142" y1="118" x2="218" y2="42" stroke="#f59e0b" stroke-width="8" />
+          <line x1="142" y1="118" x2="242" y2="118" stroke="#fde047" stroke-width="8" />
+          <line x1="142" y1="118" x2="216" y2="192" stroke="#fb923c" stroke-width="8" />
+          <line x1="142" y1="118" x2="142" y2="216" stroke="#facc15" stroke-width="8" />
+          <line x1="142" y1="118" x2="66" y2="42" stroke="#fbbf24" stroke-width="8" />
+          <line x1="142" y1="118" x2="44" y2="118" stroke="#f59e0b" stroke-width="8" />
+
+          <!-- Diagonal secondary golden/pink sparks -->
+          <line x1="142" y1="118" x2="182" y2="28" stroke="#ec4899" stroke-width="6" stroke-dasharray="14 10" />
+          <line x1="142" y1="118" x2="232" y2="78" stroke="#f43f5e" stroke-width="6" stroke-dasharray="14 10" />
+          <line x1="142" y1="118" x2="232" y2="158" stroke="#ec4899" stroke-width="6" stroke-dasharray="14 10" />
+          <line x1="142" y1="118" x2="182" y2="206" stroke="#f97316" stroke-width="6" stroke-dasharray="14 10" />
+          <line x1="142" y1="118" x2="102" y2="28" stroke="#f97316" stroke-width="6" stroke-dasharray="14 10" />
+          <line x1="142" y1="118" x2="54" y2="78" stroke="#ec4899" stroke-width="6" stroke-dasharray="14 10" />
+        </g>
+        <!-- 4-point star sparkles around the sparkler -->
+        <polygon points="142,8 148,26 166,32 148,38 142,56 136,38 118,32 136,26" fill="#fef08a" stroke="#f59e0b" stroke-width="2" />
+        <polygon points="224,30 228,40 238,44 228,48 224,58 220,48 210,44 220,40" fill="#facc15" />
+        <polygon points="60,30 64,40 74,44 64,48 60,58 56,48 46,44 56,40" fill="#ec4899" />
+        <polygon points="236,118 240,128 250,132 240,136 236,146 232,136 222,132 232,128" fill="#fb923c" />
+        <!-- Blazing core -->
+        <circle cx="142" cy="118" r="28" fill="#fbbf24" fill-opacity="0.38" />
+        <polygon points="142,84 152,108 176,118 152,128 142,152 132,128 108,118 132,108" fill="#ffffff" stroke="#f59e0b" stroke-width="4" />
+      `;
+      break;
+    }
+    case 'fireworks-trio-celebration': {
+      // Cluster of 3 colorful 3D fireworks (Magenta/Gold top-left, Cyan/Blue right, Emerald/Amber bottom) — 100% transparent!
+      innerSvg = `
+        <!-- Firework 1: Top-Left (Magenta & Gold, center 86,86) -->
+        <g stroke-linecap="round">
+          <line x1="86" y1="86" x2="86" y2="20" stroke="#ec4899" stroke-width="7" stroke-dasharray="14 8" />
+          <line x1="86" y1="86" x2="134" y2="38" stroke="#facc15" stroke-width="7" stroke-dasharray="14 8" />
+          <line x1="86" y1="86" x2="152" y2="86" stroke="#ec4899" stroke-width="7" stroke-dasharray="14 8" />
+          <line x1="86" y1="86" x2="134" y2="134" stroke="#facc15" stroke-width="7" stroke-dasharray="14 8" />
+          <line x1="86" y1="86" x2="86" y2="152" stroke="#ec4899" stroke-width="7" stroke-dasharray="14 8" />
+          <line x1="86" y1="86" x2="38" y2="134" stroke="#facc15" stroke-width="7" stroke-dasharray="14 8" />
+          <line x1="86" y1="86" x2="20" y2="86" stroke="#ec4899" stroke-width="7" stroke-dasharray="14 8" />
+          <line x1="86" y1="86" x2="38" y2="38" stroke="#facc15" stroke-width="7" stroke-dasharray="14 8" />
+          <circle cx="86" cy="86" r="12" fill="#fde047" stroke="#ec4899" stroke-width="4" />
+        </g>
+        <!-- Firework 2: Middle-Right (Cyan & Royal Blue, center 186,108) -->
+        <g stroke-linecap="round">
+          <line x1="186" y1="108" x2="186" y2="52" stroke="#06b6d4" stroke-width="6" stroke-dasharray="12 7" />
+          <line x1="186" y1="108" x2="226" y2="68" stroke="#3b82f6" stroke-width="6" stroke-dasharray="12 7" />
+          <line x1="186" y1="108" x2="242" y2="108" stroke="#06b6d4" stroke-width="6" stroke-dasharray="12 7" />
+          <line x1="186" y1="108" x2="226" y2="148" stroke="#3b82f6" stroke-width="6" stroke-dasharray="12 7" />
+          <line x1="186" y1="108" x2="186" y2="164" stroke="#06b6d4" stroke-width="6" stroke-dasharray="12 7" />
+          <line x1="186" y1="108" x2="146" y2="148" stroke="#3b82f6" stroke-width="6" stroke-dasharray="12 7" />
+          <line x1="186" y1="108" x2="130" y2="108" stroke="#06b6d4" stroke-width="6" stroke-dasharray="12 7" />
+          <line x1="186" y1="108" x2="146" y2="68" stroke="#3b82f6" stroke-width="6" stroke-dasharray="12 7" />
+          <circle cx="186" cy="108" r="10" fill="#38bdf8" stroke="#1d4ed8" stroke-width="3.5" />
+        </g>
+        <!-- Firework 3: Bottom-Center (Violet, Emerald & Orange, center 124,190) -->
+        <g stroke-linecap="round">
+          <line x1="124" y1="190" x2="124" y2="140" stroke="#8b5cf6" stroke-width="6" stroke-dasharray="11 7" />
+          <line x1="124" y1="190" x2="160" y2="154" stroke="#10b981" stroke-width="6" stroke-dasharray="11 7" />
+          <line x1="124" y1="190" x2="174" y2="190" stroke="#f97316" stroke-width="6" stroke-dasharray="11 7" />
+          <line x1="124" y1="190" x2="160" y2="226" stroke="#8b5cf6" stroke-width="6" stroke-dasharray="11 7" />
+          <line x1="124" y1="190" x2="124" y2="240" stroke="#10b981" stroke-width="6" stroke-dasharray="11 7" />
+          <line x1="124" y1="190" x2="88" y2="226" stroke="#f97316" stroke-width="6" stroke-dasharray="11 7" />
+          <line x1="124" y1="190" x2="74" y2="190" stroke="#8b5cf6" stroke-width="6" stroke-dasharray="11 7" />
+          <line x1="124" y1="190" x2="88" y2="154" stroke="#10b981" stroke-width="6" stroke-dasharray="11 7" />
+          <circle cx="124" cy="190" r="10" fill="#facc15" stroke="#8b5cf6" stroke-width="3.5" />
+        </g>
+      `;
+      break;
+    }
+    case 'firework-ring-galaxy': {
+      // Concentric Chrysanthemum Ring Firework with 4-point star sparkles — 100% transparent!
+      innerSvg = `
+        <circle cx="128" cy="128" r="96" fill="none" stroke="#facc15" stroke-width="7" stroke-dasharray="4 22" stroke-linecap="round" />
+        <circle cx="128" cy="128" r="68" fill="none" stroke="#ec4899" stroke-width="8" stroke-dasharray="6 18" stroke-linecap="round" />
+        <circle cx="128" cy="128" r="40" fill="none" stroke="#06b6d4" stroke-width="8" stroke-dasharray="5 14" stroke-linecap="round" />
+        <g stroke-linecap="round">
+          <line x1="128" y1="18" x2="128" y2="54" stroke="#ef4444" stroke-width="7" />
+          <line x1="128" y1="202" x2="128" y2="238" stroke="#8b5cf6" stroke-width="7" />
+          <line x1="18" y1="128" x2="54" y2="128" stroke="#f59e0b" stroke-width="7" />
+          <line x1="202" y1="128" x2="238" y2="128" stroke="#10b981" stroke-width="7" />
+          <line x1="50" y1="50" x2="76" y2="76" stroke="#3b82f6" stroke-width="7" />
+          <line x1="180" y1="180" x2="206" y2="206" stroke="#ec4899" stroke-width="7" />
+          <line x1="206" y1="50" x2="180" y2="76" stroke="#facc15" stroke-width="7" />
+          <line x1="76" y1="180" x2="50" y2="206" stroke="#06b6d4" stroke-width="7" />
+        </g>
+        <polygon points="128,94 136,120 162,128 136,136 128,162 120,136 94,128 120,120" fill="#fde047" stroke="#f59e0b" stroke-width="3" />
+      `;
+      break;
+    }
+    case 'atom-3d-transparent': {
+      // 3D Atom with 3 intersecting elliptical orbits, electrons, and nucleus — 100% transparent!
+      innerSvg = `
+        <g fill="none" stroke-width="7">
+          <ellipse cx="128" cy="128" rx="104" ry="38" stroke="#0066ff" />
+          <ellipse cx="128" cy="128" rx="104" ry="38" stroke="#8b5cf6" transform="rotate(60 128 128)" />
+          <ellipse cx="128" cy="128" rx="104" ry="38" stroke="#06b6d4" transform="rotate(-60 128 128)" />
+        </g>
+        <circle cx="232" cy="128" r="10" fill="#0066ff" stroke="#ffffff" stroke-width="3" />
+        <circle cx="76" cy="38" r="10" fill="#8b5cf6" stroke="#ffffff" stroke-width="3" />
+        <circle cx="76" cy="218" r="10" fill="#06b6d4" stroke="#ffffff" stroke-width="3" />
+        <circle cx="122" cy="124" r="16" fill="#ef4444" />
+        <circle cx="136" cy="132" r="14" fill="#3b82f6" />
+        <circle cx="128" cy="118" r="12" fill="#facc15" />
+      `;
+      break;
+    }
+    case 'check-3d-transparent': {
+      // Glossy 3D Checkmark without any background box — 100% transparent!
+      innerSvg = `
+        <path d="M 42 138 L 102 198 L 218 64" fill="none" stroke="rgba(15,23,42,0.18)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" transform="translate(5, 8)" />
+        <path d="M 42 138 L 102 198 L 218 64" fill="none" stroke="#16a34a" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 42 138 L 102 198 L 218 64" fill="none" stroke="#4ade80" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" transform="translate(-2, -3)" />
+      `;
+      break;
+    }
+    case 'chart-up-3d-transparent': {
+      // 3D Rising Trend Line Chart without white card background — 100% transparent!
+      innerSvg = `
+        <path d="M 32 36 L 32 220 L 228 220" fill="none" stroke="#334155" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 52 184 L 104 132 L 146 156 L 214 64" fill="none" stroke="#10b981" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 174 62 L 216 62 L 216 104" fill="none" stroke="#10b981" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="104" cy="132" r="9" fill="#0066ff" stroke="#ffffff" stroke-width="3" />
+        <circle cx="146" cy="156" r="9" fill="#f59e0b" stroke="#ffffff" stroke-width="3" />
+      `;
+      break;
+    }
+    case 'barchart-3d-transparent': {
+      // 3D Multicolor Bar Chart without white card background — 100% transparent!
+      innerSvg = `
+        <rect x="44" y="132" width="36" height="84" rx="6" fill="#3b82f6" stroke="#1e3a8a" stroke-width="4" />
+        <rect x="108" y="84" width="36" height="132" rx="6" fill="#10b981" stroke="#065f46" stroke-width="4" />
+        <rect x="172" y="44" width="36" height="172" rx="6" fill="#f59e0b" stroke="#78350f" stroke-width="4" />
+        <line x1="24" y1="218" x2="232" y2="218" stroke="#334155" stroke-width="10" stroke-linecap="round" />
+      `;
+      break;
+    }
     case 'firework-burst': {
       innerSvg = `
         <g stroke-linecap="round">
@@ -1598,8 +1797,29 @@ export async function searchOnlineIconifyStickers(
     if (!res.ok) return [];
     const data = await res.json();
     const icons: string[] = Array.isArray(data?.icons) ? data.icons : [];
+    const NON_TRANSPARENT_EMOJI_NAMES = new Set([
+      'fireworks',
+      'sparkler',
+      'night-with-stars',
+      'milky-way',
+      'bridge-at-night',
+      'sunrise-over-mountains',
+      'sunrise',
+      'sunset',
+      'cityscape',
+      'cityscape-at-dusk',
+      'shooting-star',
+    ]);
     return icons
       .filter((ic) => {
+        const [, icName = ''] = ic.split(':');
+        if (
+          NON_TRANSPARENT_EMOJI_NAMES.has(icName) ||
+          icName.endsWith('-button') ||
+          icName.startsWith('squared-')
+        ) {
+          return false;
+        }
         if (colorStyle === 'duotone') {
           return ic.includes('duotone') || ic.startsWith('icon-park-twotone:');
         }
@@ -1633,6 +1853,25 @@ export async function searchOnlineIconifyStickers(
 }
 
 /**
+ * Strips any full-bleed square or rounded-square tile background `<rect>` or `<path>`
+ * from an emoji/icon SVG so that every inserted sticker has a 100% transparent background.
+ */
+function stripSvgBackgroundTile(svgText: string): string {
+  // Remove full-bleed 28x28 / 30x30 / 32x32 rounded-square background <path> in 32x32 emoji sets
+  // (e.g., d="M26.296 1.96H5.656c-2.03 0-3.68 1.65-3.68 3.68v20.64...")
+  let cleaned = svgText.replace(
+    /<path\b[^>]*\bd=["']M2[5678]\.[0-9]+\s+[123]\.[0-9]+H[23456]\.[0-9]+c-[0-9.\s-]+v2[0-9]\.[0-9]+[^>]*\/>/gi,
+    ''
+  );
+  // Also remove any top-level background <rect> covering >= 80% of the viewBox
+  cleaned = cleaned.replace(
+    /<rect\b[^>]*\bwidth=["'](2[6-9]|3[0-2]|100%)["'][^>]*\bheight=["'](2[6-9]|3[0-2]|100%)["'][^>]*\/>/gi,
+    ''
+  );
+  return cleaned;
+}
+
+/**
  * Fetches an SVG from Iconify and rasterizes it onto a crisp 512x512 transparent PNG data URL
  * so it works offline, syncs to Firestore, exports to PDF, and supports all Lasso/Crop/Mirror tools.
  */
@@ -1660,7 +1899,7 @@ export async function rasterizeStickerUrlToPngDataUrl(svgUrl: string): Promise<s
 
   const res = await fetch(svgUrl);
   if (!res.ok) throw new Error('Failed to fetch sticker SVG');
-  let svgText = await res.text();
+  let svgText = stripSvgBackgroundTile(await res.text());
   if (!svgText.includes('width=')) {
     svgText = svgText.replace('<svg ', '<svg width="512" height="512" ');
   }
