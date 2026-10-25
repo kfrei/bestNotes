@@ -98,6 +98,19 @@ import {
   computeResistorOrSpringPoints,
   get3DShapeSubPaths,
 } from './utils/geometryAndAlgorithms';
+import {
+  MIND_MAPS_CATALOG,
+  type MindMapSubject,
+  type MindMapGrade,
+} from './data/mindMapsCatalog';
+
+function normalizeGreekText(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ς/g, 'σ');
+}
 
 const STORAGE_KEY = 'bestnotes_notebooks_v2';
 const CUSTOM_FOLDERS_STORAGE_KEY = 'bestnotes_custom_folders_v2';
@@ -531,6 +544,10 @@ export default function App() {
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
+  const [libraryTab, setLibraryTab] = useState<'educational' | 'custom'>('educational');
+  const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>('Όλα');
+  const [libraryGradeFilter, setLibraryGradeFilter] = useState<'Όλες' | MindMapGrade>('Όλες');
+  const [shapeLibSearchQuery, setShapeLibSearchQuery] = useState<string>('');
   const [shapeLibrary, setShapeLibrary] = useState<SavedLibraryItem[]>(() => {
     if (!initialAuthUid) return [];
     try {
@@ -2286,6 +2303,9 @@ export default function App() {
         let bgImg = imageElementsCacheRef.current.get(pageObj.backgroundDataUrl);
         if (!bgImg) {
           bgImg = new Image();
+          if (pageObj.backgroundDataUrl.startsWith('http')) {
+            bgImg.crossOrigin = 'anonymous';
+          }
           bgImg.src = pageObj.backgroundDataUrl;
           bgImg.onload = () => renderStaticScene();
           imageElementsCacheRef.current.set(pageObj.backgroundDataUrl, bgImg);
@@ -2352,6 +2372,9 @@ export default function App() {
           let imgEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
           if (!imgEl) {
             imgEl = new Image();
+            if (imgObj.dataUrl.startsWith('http')) {
+              imgEl.crossOrigin = 'anonymous';
+            }
             imgEl.src = imgObj.dataUrl;
             imgEl.onload = () => renderStaticScene();
             imageElementsCacheRef.current.set(imgObj.dataUrl, imgEl);
@@ -3374,6 +3397,9 @@ export default function App() {
         const flipDataUrl = (srcUrl: string): Promise<string> =>
           new Promise((resolve) => {
             const img = new Image();
+            if (srcUrl.startsWith('http')) {
+              img.crossOrigin = 'anonymous';
+            }
             img.onload = () => {
               const w = Math.max(1, img.naturalWidth || img.width || selImg.width);
               const h = Math.max(1, img.naturalHeight || img.height || selImg.height);
@@ -3513,6 +3539,9 @@ export default function App() {
   const insertImageDataUrlOnPage = useCallback(
     (dataUrl: string, customToast?: string) => {
       const img = new Image();
+      if (dataUrl.startsWith('http')) {
+        img.crossOrigin = 'anonymous';
+      }
       img.onload = () => {
         const natW = Math.max(1, img.naturalWidth || img.width || 360);
         const natH = Math.max(1, img.naturalHeight || img.height || 260);
@@ -9894,18 +9923,22 @@ export default function App() {
               </div>
             )}
 
-            {/* Floating Saved Shapes Library Popover (Starts empty; stores user-saved shapes/groups/images as miniature thumbnails with scroll!) */}
+            {/* Floating Rich Educational & Custom Shapes Library Popover */}
             {showShapeLibraryPanel && (
               <div
                 data-ui-panel="true"
                 data-popover-panel="library"
                 onPointerDown={(e) => e.stopPropagation()}
-                className="fixed right-16 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800"
+                className="fixed right-4 sm:right-12 top-28 z-40 w-[360px] sm:w-[430px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 flex flex-col max-h-[80vh]"
               >
-                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
+                <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 shrink-0">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-emerald-800">📚 Βιβλιοθήκη Σχημάτων ({shapeLibrary.length})</span>
-                    <span className="text-[10px] text-slate-400">Πάτα σε μια μικρογραφία για εισαγωγή στη σελίδα</span>
+                    <span className="text-xs font-bold text-emerald-800">
+                      📚 Βιβλιοθήκη Εικόνων & Σχημάτων
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      Πάτα σε οποιαδήποτε διαφανή εικόνα για εισαγωγή στη σελίδα
+                    </span>
                   </div>
                   <button
                     onClick={() => setShowShapeLibraryPanel(false)}
@@ -9916,10 +9949,223 @@ export default function App() {
                   </button>
                 </div>
 
-                {shapeLibrary.length === 0 ? (
+                {/* Mode Tabs: Educational Mind Maps (449) vs User Saved Shapes */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
+                  <button
+                    onClick={() => setLibraryTab('educational')}
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                      libraryTab === 'educational'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🎓 Μαθήματα ({MIND_MAPS_CATALOG.length})
+                  </button>
+                  <button
+                    onClick={() => setLibraryTab('custom')}
+                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                      libraryTab === 'custom'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    ⭐ Δικά μου ({shapeLibrary.length})
+                  </button>
+                </div>
+
+                {libraryTab === 'educational' ? (
+                  (() => {
+                    const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
+                    const filteredCatalog = MIND_MAPS_CATALOG.filter((item) => {
+                      if (librarySubjectFilter !== 'Όλα' && item.subject !== librarySubjectFilter) {
+                        return false;
+                      }
+                      if (libraryGradeFilter !== 'Όλες' && item.grade !== libraryGradeFilter) {
+                        return false;
+                      }
+                      if (!qNorm) return true;
+                      const haystack = normalizeGreekText(
+                        `${item.title} ${item.tags.join(' ')} ${item.chapterTitle} ${item.chapter} ${item.description} ${item.subject} ${item.grade} ${item.englishKey}`
+                      );
+                      return qNorm.split(/\s+/).every((token) => haystack.includes(token));
+                    });
+
+                    const subjectColors: Record<MindMapSubject, string> = {
+                      Φυσική: 'bg-sky-50 text-sky-700 border-sky-200',
+                      Χημεία: 'bg-amber-50 text-amber-700 border-amber-200',
+                      Βιολογία: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                      Γεωγραφία: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                    };
+
+                    return (
+                      <div className="flex flex-col min-h-0 flex-1">
+                        {/* Search Input */}
+                        <div className="relative mb-2 shrink-0">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={shapeLibSearchQuery}
+                            onChange={(e) => setShapeLibSearchQuery(e.target.value)}
+                            placeholder="Αναζήτηση (π.χ. κύτταρο, δύναμη, pH, χάρτης)..."
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                          />
+                          {shapeLibSearchQuery && (
+                            <button
+                              onClick={() => setShapeLibSearchQuery('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              title="Καθαρισμός αναζήτησης"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Subject Filter Pills */}
+                        <div className="flex items-center gap-1 flex-wrap mb-1.5 shrink-0">
+                          {(
+                            [
+                              { id: 'Όλα', label: 'Όλα' },
+                              { id: 'Φυσική', label: '⚛️ Φυσική' },
+                              { id: 'Χημεία', label: '🧪 Χημεία' },
+                              { id: 'Βιολογία', label: '🧬 Βιολογία' },
+                              { id: 'Γεωγραφία', label: '🌍 Γεωγραφία' },
+                            ] as const
+                          ).map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => setLibrarySubjectFilter(s.id)}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                librarySubjectFilter === s.id
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Grade Filter Pills */}
+                        <div className="flex items-center justify-between gap-1 mb-2 pb-2 border-b border-slate-100 shrink-0">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {(
+                              [
+                                { id: 'Όλες', label: 'Όλες οι Τάξεις' },
+                                { id: "Α' Γυμνασίου", label: "Α' Γυμν." },
+                                { id: "Β' Γυμνασίου", label: "Β' Γυμν." },
+                                { id: "Γ' Γυμνασίου", label: "Γ' Γυμν." },
+                              ] as const
+                            ).map((g) => (
+                              <button
+                                key={g.id}
+                                onClick={() => setLibraryGradeFilter(g.id)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition cursor-pointer ${
+                                  libraryGradeFilter === g.id
+                                    ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                {g.label}
+                              </button>
+                            ))}
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-700 shrink-0">
+                            {filteredCatalog.length} εικόνες
+                          </span>
+                        </div>
+
+                        {/* Results Grid */}
+                        {filteredCatalog.length === 0 ? (
+                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <Search className="w-6 h-6 text-slate-400" />
+                            <p className="text-xs font-semibold text-slate-600">
+                              Δεν βρέθηκαν εικόνες με αυτά τα φίλτρα
+                            </p>
+                            <button
+                              onClick={() => {
+                                setLibrarySubjectFilter('Όλα');
+                                setLibraryGradeFilter('Όλες');
+                                setShapeLibSearchQuery('');
+                              }}
+                              className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold cursor-pointer hover:bg-emerald-700"
+                            >
+                              Επαναφορά Φίλτρων
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            style={{ WebkitOverflowScrolling: 'touch' }}
+                            className="overflow-y-auto pr-1 grid grid-cols-2 gap-2 max-h-[46vh]"
+                          >
+                            {filteredCatalog.map((item) => (
+                              <div
+                                key={item.id}
+                                onClick={() => {
+                                  insertImageDataUrlOnPage(
+                                    item.url,
+                                    `📚 Προστέθηκε: «${item.title}» (${item.subject} ${item.grade})`
+                                  );
+                                }}
+                                className="group flex flex-col justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
+                                title={`${item.title} — ${item.description}\nΚλικ για εισαγωγή στη σελίδα`}
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between gap-1 mb-1">
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${subjectColors[item.subject]}`}
+                                    >
+                                      {item.subject}
+                                    </span>
+                                    <span className="text-[9px] font-semibold text-slate-400 truncate">
+                                      {item.grade.replace(' Γυμνασίου', '')} • {item.chapter}
+                                    </span>
+                                  </div>
+
+                                  <div className="w-full h-24 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
+                                    <img
+                                      src={item.url}
+                                      alt={item.title}
+                                      crossOrigin="anonymous"
+                                      loading="lazy"
+                                      className="max-w-full max-h-full object-contain pointer-events-none select-none group-hover:scale-105 transition-transform"
+                                    />
+                                  </div>
+
+                                  <p className="mt-1.5 text-[11px] font-bold text-slate-800 truncate">
+                                    {item.title}
+                                  </p>
+                                  <p className="text-[9px] text-slate-500 line-clamp-1">
+                                    {item.chapterTitle}
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1 mt-1.5 pt-1 border-t border-slate-200/60">
+                                  {item.tags.map((tag) => (
+                                    <button
+                                      key={tag}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShapeLibSearchQuery(tag);
+                                      }}
+                                      className="px-1.5 py-0.5 rounded bg-white hover:bg-emerald-100 text-emerald-700 border border-slate-200/90 text-[9px] font-medium transition cursor-pointer"
+                                      title={`Φιλτράρισμα με #${tag}`}
+                                    >
+                                      #{tag}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : shapeLibrary.length === 0 ? (
                   <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                     <ImageIcon className="w-7 h-7 text-emerald-400" />
-                    <p className="text-xs font-semibold text-slate-600">Η Βιβλιοθήκη Σχημάτων είναι κενή</p>
+                    <p className="text-xs font-semibold text-slate-600">Τα Δικά μου Σχήματα είναι κενά</p>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
                       Επίλεξε οποιοδήποτε σχήμα, γραμμή ή group με το <b>Lasso</b> και πάτα το κουμπί{' '}
                       <span className="text-emerald-700 font-bold">«(+) Βιβλιοθήκη»</span> στην πάνω μπάρα για να αποθηκευτεί εδώ!
