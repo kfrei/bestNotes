@@ -1014,10 +1014,14 @@ export default function App() {
     pointerId?: number;
     startClientX: number;
     startClientY: number;
+    lastClientX?: number;
+    lastClientY?: number;
     origX: number;
     origY: number;
     origW?: number;
     origH?: number;
+    pW?: number;
+    pH?: number;
     resizeHandle?: 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
     moved: boolean;
     wasAlreadySelected: boolean;
@@ -3027,6 +3031,21 @@ export default function App() {
   // OR directly on any shape, group, stroke, or image on the page so touching it with a finger selects it with the Lasso!
   const isClientPointOnSelectableOrLasso = useCallback(
     (clientX: number, clientY: number, targetEl?: EventTarget | null): boolean => {
+      const currentTxtId = selectedTextId || editingTextId;
+      if (currentTxtId) {
+        const txtDom = document.querySelector(`[data-text-id="${currentTxtId}"]`) as HTMLElement | null;
+        if (txtDom) {
+          const r = txtDom.getBoundingClientRect();
+          if (
+            clientX >= r.left - 28 &&
+            clientX <= r.right + 28 &&
+            clientY >= r.top - 28 &&
+            clientY <= r.bottom + 28
+          ) {
+            return true;
+          }
+        }
+      }
       if (isClientPointInLassoSelection(clientX, clientY)) return true;
       const canvas = targetEl instanceof HTMLCanvasElement ? targetEl : activeCanvasRef.current;
       if (!canvas) return false;
@@ -3075,6 +3094,8 @@ export default function App() {
       activePage,
       activeNotebook.pages,
       findSelectableObjectAtPagePoint,
+      selectedTextId,
+      editingTextId,
     ]
   );
 
@@ -6375,6 +6396,325 @@ export default function App() {
     showToast,
   ]);
 
+  const getTextFontCss = (fontFamily?: TextFontStyle): React.CSSProperties => {
+    switch (fontFamily) {
+      case 'calligraphic':
+        return {
+          fontFamily: "'ExplainBoardsHand', 'Alegreya Sans', cursive",
+          fontStyle: 'normal',
+          letterSpacing: '0em',
+          WebkitTextStroke: '0.25px currentColor',
+        };
+      case 'marker':
+        return {
+          fontFamily: "'ExplainBoardsPen', 'Mynerve', cursive",
+          fontStyle: 'normal',
+          letterSpacing: '0em',
+          WebkitTextStroke: '0.45px currentColor',
+        };
+      case 'mansalva':
+        return {
+          fontFamily: "'Mansalva', 'ExplainBoardsPen', cursive",
+          fontStyle: 'oblique 6deg',
+          letterSpacing: '-0.015em',
+        };
+      case 'handwritten':
+        return {
+          fontFamily: "'Playpen Sans', 'ExplainBoardsHand', cursive",
+          fontStyle: 'oblique 7deg',
+          letterSpacing: '-0.01em',
+        };
+      case 'neohellenic':
+        return {
+          fontFamily: "'GFS Neohellenic', 'Ysabeau Infant', cursive",
+          fontStyle: 'italic',
+          letterSpacing: '0.005em',
+        };
+      case 'sans':
+      default:
+        return {
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+          fontStyle: 'normal',
+          letterSpacing: '0em',
+        };
+    }
+  };
+
+  // Computes the maximum font size (8px..96px) so that the entire text fits inside (boxW, boxH)
+  // both horizontally (wrapping words into lines of width <= availW without clipping a word) and vertically (all wrapped lines <= availH).
+  const computeMaxFitFontSizeForBox = useCallback(
+    (
+      rawText: string,
+      fontFamily: TextFontStyle | undefined,
+      bold: boolean | undefined,
+      boxW: number,
+      boxH: number
+    ): number => {
+      if (!textMeasureCtxRef.current) {
+        const c = document.createElement('canvas');
+        textMeasureCtxRef.current = c.getContext('2d');
+      }
+      const ctx = textMeasureCtxRef.current;
+      const availW = Math.max(24, boxW - 28);
+      const availH = Math.max(14, boxH - 16);
+      const sampleText = rawText && rawText.trim().length > 0 ? rawText : 'Αβγ';
+      if (!ctx) {
+        return Math.max(8, Math.min(96, Math.round(availH / 1.38)));
+      }
+
+      const css = getTextFontCss(fontFamily);
+      const stylePrefix =
+        css.fontStyle && css.fontStyle !== 'normal' ? `${css.fontStyle} ` : '';
+      const weightPrefix = bold ? '700 ' : '500 ';
+      const familyStr = String(css.fontFamily || 'sans-serif');
+      const paragraphs = sampleText.split(/\r?\n/);
+
+      const fitsAtSize = (sz: number): boolean => {
+        ctx.font = `${stylePrefix}${weightPrefix}${sz}px ${familyStr}`;
+        const spaceW = ctx.measureText(' ').width * 1.03;
+        let totalLines = 0;
+
+        for (const para of paragraphs) {
+          const words = para.split(/\s+/).filter(Boolean);
+          if (words.length === 0) {
+            totalLines += 1;
+            continue;
+          }
+          let lineW = 0;
+          let linesInPara = 1;
+          for (const word of words) {
+            const wordW = ctx.measureText(word).width * 1.03;
+            if (wordW > availW) {
+              return false;
+            }
+            if (lineW === 0) {
+              lineW = wordW;
+            } else if (lineW + spaceW + wordW <= availW) {
+              lineW += spaceW + wordW;
+            } else {
+              linesInPara += 1;
+              lineW = wordW;
+            }
+          }
+          totalLines += linesInPara;
+        }
+
+        const totalH = totalLines * (sz * 1.35);
+        return totalH <= availH;
+      };
+
+      let low = 8;
+      let high = 96;
+      let best = 8;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (fitsAtSize(mid)) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      return best;
+    },
+    []
+  );
+
+  const resolveTextResizeHandleFromRect = useCallback(
+    (
+      clientX: number,
+      clientY: number,
+      rect: DOMRect,
+      outerMargin = 28,
+      innerMargin = 16
+    ): 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se' | null => {
+      if (
+        clientX < rect.left - outerMargin ||
+        clientX > rect.right + outerMargin ||
+        clientY < rect.top - outerMargin ||
+        clientY > rect.bottom + outerMargin
+      ) {
+        return null;
+      }
+      const inX = Math.min(innerMargin, Math.max(10, rect.width * 0.28));
+      const inY = Math.min(innerMargin, Math.max(10, rect.height * 0.28));
+      const nearW = clientX <= rect.left + inX;
+      const nearE = clientX >= rect.right - inX;
+      const nearN = clientY <= rect.top + inY;
+      const nearS = clientY >= rect.bottom - inY;
+      if (nearN && nearW) return 'nw';
+      if (nearN && nearE) return 'ne';
+      if (nearS && nearW) return 'sw';
+      if (nearS && nearE) return 'se';
+      if (nearW) return 'w';
+      if (nearE) return 'e';
+      if (nearN) return 'n';
+      if (nearS) return 's';
+      return null;
+    },
+    []
+  );
+
+  const applyTextDragMove = useCallback(
+    (clientX: number, clientY: number) => {
+      const d = draggingTextRef.current;
+      if (!d) return;
+      if (
+        d.lastClientX !== undefined &&
+        d.lastClientY !== undefined &&
+        Math.abs(clientX - d.lastClientX) < 0.2 &&
+        Math.abs(clientY - d.lastClientY) < 0.2
+      ) {
+        return;
+      }
+      d.lastClientX = clientX;
+      d.lastClientY = clientY;
+
+      const targetPage = activeNotebook.pages[d.pageIdx] || activePage;
+      const txt = (targetPage.texts || []).find((t) => t.id === d.id);
+      if (!txt) return;
+
+      const pW = d.pW || getPageLogicalWidth(targetPage);
+      const pH = d.pH || getPageLogicalHeight(targetPage);
+      const dx = (clientX - d.startClientX) / zoomRef.current;
+      const dy = (clientY - d.startClientY) / zoomRef.current;
+
+      if (d.resizeHandle) {
+        const origW = d.origW || 180;
+        const origH = d.origH || 48;
+        let nextX = d.origX;
+        let nextY = d.origY;
+        let nextW = origW;
+        let nextH = origH;
+
+        if (d.resizeHandle.includes('e')) {
+          nextW = Math.max(64, Math.min(pW - d.origX - 8, Math.round(origW + dx)));
+        }
+        if (d.resizeHandle.includes('w')) {
+          const maxLeftShift = d.origX - 8;
+          const clampedDx = Math.max(-maxLeftShift, Math.min(origW - 64, dx));
+          nextX = Math.round(d.origX + clampedDx);
+          nextW = Math.max(64, Math.round(origW - clampedDx));
+        }
+        if (d.resizeHandle.includes('s')) {
+          nextH = Math.max(30, Math.min(pH - d.origY - 8, Math.round(origH + dy)));
+        }
+        if (d.resizeHandle.includes('n')) {
+          const maxTopShift = d.origY - 8;
+          const clampedDy = Math.max(-maxTopShift, Math.min(origH - 30, dy));
+          nextY = Math.round(d.origY + clampedDy);
+          nextH = Math.max(30, Math.round(origH - clampedDy));
+        }
+
+        const autoFs = computeMaxFitFontSizeForBox(
+          txt.text,
+          txt.fontFamily,
+          txt.bold,
+          nextW,
+          nextH
+        );
+        setTextFontSize(autoFs);
+        updateActivePage(
+          (page) => ({
+            ...page,
+            texts: (page.texts || []).map((t) =>
+              t.id === txt.id
+                ? {
+                    ...t,
+                    x: nextX,
+                    y: nextY,
+                    boxWidth: nextW,
+                    boxHeight: nextH,
+                    fontSize: autoFs,
+                  }
+                : t
+            ),
+          }),
+          false
+        );
+        return;
+      }
+
+      if (!d.moved && Math.hypot(dx, dy) > 4) {
+        d.moved = true;
+      }
+      if (!d.moved) return;
+      const nextX = Math.max(8, Math.min(pW - 60, Math.round(d.origX + dx)));
+      const nextY = Math.max(8, Math.min(pH - 36, Math.round(d.origY + dy)));
+      updateActivePage(
+        (page) => ({
+          ...page,
+          texts: (page.texts || []).map((t) =>
+            t.id === txt.id ? { ...t, x: nextX, y: nextY } : t
+          ),
+        }),
+        false
+      );
+    },
+    [activeNotebook.pages, activePage, computeMaxFitFontSizeForBox, updateActivePage]
+  );
+
+  const finishTextDrag = useCallback(() => {
+    const d = draggingTextRef.current;
+    if (!d) return;
+    const didMove = d.moved;
+    const wasSelected = d.wasAlreadySelected;
+    const targetId = d.id;
+    const targetPage = activeNotebook.pages[d.pageIdx] || activePage;
+    const txt = (targetPage.texts || []).find((t) => t.id === targetId);
+    draggingTextRef.current = null;
+    if (!didMove && (wasSelected || activeTool === 'text') && txt && !txt.isMath) {
+      setEditingTextId(targetId);
+      window.requestAnimationFrame(() => {
+        const ta = document.querySelector(
+          `[data-text-id="${targetId}"] textarea`
+        ) as HTMLTextAreaElement | null;
+        ta?.focus();
+      });
+    }
+  }, [activeTool, activeNotebook.pages, activePage]);
+
+  useEffect(() => {
+    const onWinPointerMove = (ev: PointerEvent) => {
+      const d = draggingTextRef.current;
+      if (!d) return;
+      if (d.pointerId !== undefined && ev.pointerId !== d.pointerId) return;
+      applyTextDragMove(ev.clientX, ev.clientY);
+    };
+    const onWinPointerUp = (ev: PointerEvent) => {
+      const d = draggingTextRef.current;
+      if (!d) return;
+      if (d.pointerId !== undefined && ev.pointerId !== d.pointerId) return;
+      finishTextDrag();
+    };
+    const onWinTouchMove = (ev: TouchEvent) => {
+      if (!draggingTextRef.current || ev.touches.length === 0) return;
+      if (ev.cancelable) ev.preventDefault();
+      const t = ev.touches[0];
+      applyTextDragMove(t.clientX, t.clientY);
+    };
+    const onWinTouchEnd = (ev: TouchEvent) => {
+      if (!draggingTextRef.current) return;
+      if (ev.touches.length === 0) {
+        finishTextDrag();
+      }
+    };
+    window.addEventListener('pointermove', onWinPointerMove, { passive: true });
+    window.addEventListener('pointerup', onWinPointerUp);
+    window.addEventListener('pointercancel', onWinPointerUp);
+    window.addEventListener('touchmove', onWinTouchMove, { passive: false });
+    window.addEventListener('touchend', onWinTouchEnd);
+    window.addEventListener('touchcancel', onWinTouchEnd);
+    return () => {
+      window.removeEventListener('pointermove', onWinPointerMove);
+      window.removeEventListener('pointerup', onWinPointerUp);
+      window.removeEventListener('pointercancel', onWinPointerUp);
+      window.removeEventListener('touchmove', onWinTouchMove);
+      window.removeEventListener('touchend', onWinTouchEnd);
+      window.removeEventListener('touchcancel', onWinTouchEnd);
+    };
+  }, [applyTextDragMove, finishTextDrag]);
+
   // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 1-FINGER OUTSIDE-PAGE SCROLL + WORD-STYLE CONTINUOUS MULTI-PAGE SCROLL
   useEffect(() => {
     const ws = workspaceRef.current;
@@ -6407,10 +6747,15 @@ export default function App() {
 
     const onTouchStart = (e: TouchEvent) => {
       cancelScrollMomentum();
+      const targetEl =
+        e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement || null;
 
       // Only block touch gestures if the Apple Pencil is physically touching the glass right now
       if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
-        if (e.target instanceof HTMLCanvasElement && e.cancelable) {
+        const isOnTextBoxControl =
+          targetEl?.closest('[data-text-box="true"]') &&
+          !targetEl?.closest('button, input, select, a');
+        if ((e.target instanceof HTMLCanvasElement || isOnTextBoxControl) && e.cancelable) {
           e.preventDefault();
         }
         outsidePanDragRef.current = null;
@@ -6420,9 +6765,16 @@ export default function App() {
 
       const directTouches = getDirectFingerTouches(e.touches);
       if (
-        e.target instanceof Element &&
-        e.target.closest('button, input, textarea, select, a, [data-ui-panel="true"], [data-text-box="true"]')
+        targetEl &&
+        targetEl.closest('button, input, textarea, select, a, [data-ui-panel="true"], [data-text-box="true"]')
       ) {
+        if (
+          targetEl.closest('[data-text-box="true"]') &&
+          !targetEl.closest('button, input, select, a') &&
+          e.cancelable
+        ) {
+          e.preventDefault();
+        }
         outsidePanDragRef.current = null;
         return;
       }
@@ -6445,23 +6797,18 @@ export default function App() {
         if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 48) || (t.radiusY && t.radiusY > 48))) {
           return;
         }
-        // Tapping/dragging with 1 finger on empty paper deselects any active Lasso/Nodes selection and returns to Pen
+        // Tapping/dragging with 1 finger on empty paper deselects any active Lasso/Nodes selection while keeping the active tool
         if (
           !isOutsideCanvas &&
           (selectedStrokeIds.length > 0 ||
             selectedImageId !== null ||
-            activeNodeStrokeId !== null ||
-            activeTool === 'lasso' ||
-            activeTool === 'direct-node')
+            activeNodeStrokeId !== null)
         ) {
           setSelectedStrokeIds([]);
           setSelectedImageId(null);
           setActiveNodeStrokeId(null);
           setDraggingNodeIdx(null);
           setImageCropMode('none');
-          if (activeTool === 'lasso' || activeTool === 'direct-node') {
-            setActiveTool('pen');
-          }
         }
         if (e.cancelable) e.preventDefault();
         outsidePanDragRef.current = {
@@ -6536,9 +6883,19 @@ export default function App() {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      const targetEl =
+        e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement || null;
       if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
-        if (e.target instanceof HTMLCanvasElement && e.cancelable) {
+        if (
+          (e.target instanceof HTMLCanvasElement ||
+            targetEl?.closest('[data-text-box="true"]') ||
+            draggingTextRef.current) &&
+          e.cancelable
+        ) {
           e.preventDefault();
+        }
+        if (draggingTextRef.current && e.touches.length > 0) {
+          applyTextDragMove(e.touches[0].clientX, e.touches[0].clientY);
         }
         outsidePanDragRef.current = null;
         pinchStateRef.current = null;
@@ -6551,6 +6908,9 @@ export default function App() {
         draggingTextRef.current
       ) {
         if (e.cancelable) e.preventDefault();
+        if (draggingTextRef.current && e.touches.length > 0) {
+          applyTextDragMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
         outsidePanDragRef.current = null;
         return;
       }
@@ -6715,6 +7075,7 @@ export default function App() {
     isClientPointInLassoSelection,
     isClientPointOnSelectableOrLasso,
     applyPaperTransformDirect,
+    applyTextDragMove,
     syncActivePageFromPanY,
     checkPullToAddPageHold,
     stopPullToAddPageHold,
@@ -9159,7 +9520,53 @@ export default function App() {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>, pageIdx = activePageIndex) => {
+    if (draggingTextRef.current) return;
     const isPen = e.pointerType === 'pen';
+
+    // If a text box is currently selected/editing and the user touches or puts the Pencil within 28px of its border,
+    // treat it as resizing/moving that text box (never drawing a pen stroke or scrolling the page)!
+    const currentActiveTxtId = selectedTextId || editingTextId;
+    if (currentActiveTxtId && pageIdx === activePageIndex) {
+      const activeTxtEl = document.querySelector(
+        `[data-text-id="${currentActiveTxtId}"]`
+      ) as HTMLElement | null;
+      const targetPageForTxt = activeNotebook.pages[pageIdx] || activePage;
+      const activeTxtObj = (targetPageForTxt.texts || []).find((t) => t.id === currentActiveTxtId);
+      if (activeTxtEl && activeTxtObj && !activeTxtObj.isMath) {
+        const rect = activeTxtEl.getBoundingClientRect();
+        const edgeHandle = resolveTextResizeHandleFromRect(e.clientX, e.clientY, rect, 28, 18);
+        if (edgeHandle) {
+          e.preventDefault();
+          e.stopPropagation();
+          outsidePanDragRef.current = null;
+          cancelScrollMomentum();
+          if (editingTextId === activeTxtObj.id) {
+            setEditingTextId(null);
+          }
+          setSelectedTextId(activeTxtObj.id);
+          const curBoxW = activeTxtObj.boxWidth || activeTxtEl.offsetWidth || 180;
+          const curBoxH = activeTxtObj.boxHeight || activeTxtEl.offsetHeight || 48;
+          draggingTextRef.current = {
+            id: activeTxtObj.id,
+            pageIdx,
+            pointerId: e.pointerId,
+            startClientX: e.clientX,
+            startClientY: e.clientY,
+            origX: activeTxtObj.x,
+            origY: activeTxtObj.y,
+            origW: curBoxW,
+            origH: curBoxH,
+            pW: getPageLogicalWidth(targetPageForTxt),
+            pH: getPageLogicalHeight(targetPageForTxt),
+            resizeHandle: edgeHandle,
+            moved: true,
+            wasAlreadySelected: true,
+            startedOnTextarea: false,
+          };
+          return;
+        }
+      }
+    }
 
     if (isPen) {
       // APPLE PENCIL HARDWARE PRIORITY:
@@ -10703,6 +11110,7 @@ export default function App() {
       }
       return;
     }
+    if (draggingTextRef.current || activeTool === 'text') return;
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
     if (e.pointerType === 'pen') {
@@ -13685,135 +14093,6 @@ export default function App() {
     handleDuplicateSelected,
     showToast,
   ]);
-
-  const getTextFontCss = (fontFamily?: TextFontStyle): React.CSSProperties => {
-    switch (fontFamily) {
-      case 'calligraphic':
-        // Custom-built ExplainBoardsHand.otf matching the exact notebook lettering of "ΣΗΜΑΝΤΙΚΑ ΣΗΜΕΙΑ: 1 Η μάζα μας λέει..."
-        return {
-          fontFamily: "'ExplainBoardsHand', 'Alegreya Sans', cursive",
-          fontStyle: 'normal',
-          letterSpacing: '0em',
-          WebkitTextStroke: '0.25px currentColor',
-        };
-      case 'marker':
-        // Custom-built ExplainBoardsPen.otf: slanted, condensed human ballpoint/rollerball pen Greek handwriting
-        return {
-          fontFamily: "'ExplainBoardsPen', 'Mynerve', cursive",
-          fontStyle: 'normal',
-          letterSpacing: '0em',
-          WebkitTextStroke: '0.45px currentColor',
-        };
-      case 'mansalva':
-        // Natural human felt-tip marker Greek handwriting (Mansalva condensed & slanted)
-        return {
-          fontFamily: "'Mansalva', 'ExplainBoardsPen', cursive",
-          fontStyle: 'oblique 6deg',
-          letterSpacing: '-0.015em',
-        };
-      case 'handwritten':
-        // School notebook rounded Greek handwriting (Playpen Sans slanted)
-        return {
-          fontFamily: "'Playpen Sans', 'ExplainBoardsHand', cursive",
-          fontStyle: 'oblique 7deg',
-          letterSpacing: '-0.01em',
-        };
-      case 'neohellenic':
-        // Greek Font Society (GFS Neohellenic Italic / Ysabeau Infant Italic) flowing cursive script
-        return {
-          fontFamily: "'GFS Neohellenic', 'Ysabeau Infant', cursive",
-          fontStyle: 'italic',
-          letterSpacing: '0.005em',
-        };
-      case 'sans':
-      default:
-        return {
-          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-          fontStyle: 'normal',
-          letterSpacing: '0em',
-        };
-    }
-  };
-
-  // Computes the maximum font size (8px..96px) so that the entire text fits inside (boxW, boxH)
-  // both horizontally (wrapping words into lines of width <= availW without clipping a word) and vertically (all wrapped lines <= availH).
-  const computeMaxFitFontSizeForBox = useCallback(
-    (
-      rawText: string,
-      fontFamily: TextFontStyle | undefined,
-      bold: boolean | undefined,
-      boxW: number,
-      boxH: number
-    ): number => {
-      if (!textMeasureCtxRef.current) {
-        const c = document.createElement('canvas');
-        textMeasureCtxRef.current = c.getContext('2d');
-      }
-      const ctx = textMeasureCtxRef.current;
-      const availW = Math.max(24, boxW - 28);
-      const availH = Math.max(14, boxH - 16);
-      const sampleText = rawText && rawText.trim().length > 0 ? rawText : 'Αβγ';
-      if (!ctx) {
-        return Math.max(8, Math.min(96, Math.round(availH / 1.38)));
-      }
-
-      const css = getTextFontCss(fontFamily);
-      const stylePrefix =
-        css.fontStyle && css.fontStyle !== 'normal' ? `${css.fontStyle} ` : '';
-      const weightPrefix = bold ? '700 ' : '500 ';
-      const familyStr = String(css.fontFamily || 'sans-serif');
-      const paragraphs = sampleText.split(/\r?\n/);
-
-      const fitsAtSize = (sz: number): boolean => {
-        ctx.font = `${stylePrefix}${weightPrefix}${sz}px ${familyStr}`;
-        const spaceW = ctx.measureText(' ').width * 1.03;
-        let totalLines = 0;
-
-        for (const para of paragraphs) {
-          const words = para.split(/\s+/).filter(Boolean);
-          if (words.length === 0) {
-            totalLines += 1;
-            continue;
-          }
-          let lineW = 0;
-          let linesInPara = 1;
-          for (const word of words) {
-            const wordW = ctx.measureText(word).width * 1.03;
-            if (wordW > availW) {
-              return false;
-            }
-            if (lineW === 0) {
-              lineW = wordW;
-            } else if (lineW + spaceW + wordW <= availW) {
-              lineW += spaceW + wordW;
-            } else {
-              linesInPara += 1;
-              lineW = wordW;
-            }
-          }
-          totalLines += linesInPara;
-        }
-
-        const totalH = totalLines * (sz * 1.35);
-        return totalH <= availH;
-      };
-
-      let low = 8;
-      let high = 96;
-      let best = 8;
-      while (low <= high) {
-        const mid = (low + high) >> 1;
-        if (fitsAtSize(mid)) {
-          best = mid;
-          low = mid + 1;
-        } else {
-          high = mid - 1;
-        }
-      }
-      return best;
-    },
-    []
-  );
 
   // Manual (on-demand) Lasso Handwriting -> Calligraphic Greek Text conversion via Gemini Vision
   const handleConvertLassoToCalligraphic = useCallback(async () => {
@@ -19556,6 +19835,7 @@ export default function App() {
                       return (
                         <div
                           key={txt.id}
+                          data-text-id={txt.id}
                           data-text-box="true"
                           data-ui-panel="true"
                           style={{
@@ -19569,20 +19849,26 @@ export default function App() {
                             lineHeight: 1.35,
                             ...fontCss,
                             touchAction: 'none',
+                            WebkitTouchCallout: 'none',
                             WebkitUserSelect: isEditingTxt ? 'text' : 'none',
                             userSelect: isEditingTxt ? 'text' : 'none',
                           }}
                           onPointerDown={(ev) => {
                             if (isLocked) return;
                             if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-                            if ((ev.target as HTMLElement).closest('button')) {
+                            const targetEl =
+                              ev.target instanceof Element
+                                ? ev.target
+                                : (ev.target as Node | null)?.parentElement || null;
+                            if (targetEl?.closest('button')) {
                               return;
                             }
                             ev.stopPropagation();
-                            const resizeEl = (ev.target as HTMLElement).closest(
-                              '[data-text-resize]'
-                            ) as HTMLElement | null;
-                            const resizeHandle = resizeEl?.getAttribute('data-text-resize') as
+                            outsidePanDragRef.current = null;
+                            cancelScrollMomentum();
+
+                            const resizeEl = targetEl?.closest('[data-text-resize]') as HTMLElement | null;
+                            let resizeHandle = resizeEl?.getAttribute('data-text-resize') as
                               | 'n'
                               | 's'
                               | 'e'
@@ -19592,10 +19878,32 @@ export default function App() {
                               | 'sw'
                               | 'se'
                               | null;
+                            if (
+                              !resizeHandle &&
+                              (isSelectedTxt || isEditingTxt) &&
+                              !txt.isMath &&
+                              !targetEl?.closest('[data-text-drag]')
+                            ) {
+                              resizeHandle = resolveTextResizeHandleFromRect(
+                                ev.clientX,
+                                ev.clientY,
+                                ev.currentTarget.getBoundingClientRect(),
+                                28,
+                                16
+                              );
+                            }
+
+                            const isTouchOrPen =
+                              ev.pointerType === 'touch' || ev.pointerType === 'pen';
                             const startedOnTextarea =
-                              !resizeHandle && (ev.target as HTMLElement).tagName === 'TEXTAREA';
+                              !resizeHandle &&
+                              !isTouchOrPen &&
+                              targetEl?.tagName === 'TEXTAREA';
                             if (!startedOnTextarea) {
                               ev.preventDefault();
+                            }
+                            if (resizeHandle && isEditingTxt) {
+                              setEditingTextId(null);
                             }
                             if (pageIdx !== activePageIndex) {
                               setActivePageIndex(pageIdx);
@@ -19624,6 +19932,8 @@ export default function App() {
                               origY: txt.y,
                               origW: curBoxW,
                               origH: curBoxH,
+                              pW,
+                              pH,
                               resizeHandle: resizeHandle || undefined,
                               moved: Boolean(resizeHandle),
                               wasAlreadySelected,
@@ -19637,98 +19947,88 @@ export default function App() {
                               }
                             }
                           }}
+                          onTouchStart={(ev) => {
+                            if (isLocked || ev.touches.length !== 1) return;
+                            const targetEl =
+                              ev.target instanceof Element
+                                ? ev.target
+                                : (ev.target as Node | null)?.parentElement || null;
+                            if (targetEl?.closest('button')) return;
+                            ev.stopPropagation();
+                            outsidePanDragRef.current = null;
+                            cancelScrollMomentum();
+                            if (draggingTextRef.current?.id === txt.id) return;
+
+                            const t = ev.touches[0];
+                            const resizeEl = targetEl?.closest('[data-text-resize]') as HTMLElement | null;
+                            let resizeHandle = resizeEl?.getAttribute('data-text-resize') as
+                              | 'n'
+                              | 's'
+                              | 'e'
+                              | 'w'
+                              | 'nw'
+                              | 'ne'
+                              | 'sw'
+                              | 'se'
+                              | null;
+                            if (
+                              !resizeHandle &&
+                              (isSelectedTxt || isEditingTxt) &&
+                              !txt.isMath &&
+                              !targetEl?.closest('[data-text-drag]')
+                            ) {
+                              resizeHandle = resolveTextResizeHandleFromRect(
+                                t.clientX,
+                                t.clientY,
+                                ev.currentTarget.getBoundingClientRect(),
+                                28,
+                                16
+                              );
+                            }
+                            if (resizeHandle && isEditingTxt) {
+                              setEditingTextId(null);
+                            }
+                            const wasAlreadySelected = selectedTextId === txt.id;
+                            setSelectedTextId(txt.id);
+                            setTextFontSize(txt.fontSize);
+                            setTextBold(Boolean(txt.bold));
+                            setTextFontFamily(txt.fontFamily || 'sans');
+                            setSelectedStrokeIds([]);
+                            setSelectedImageId(null);
+                            setActiveNodeStrokeId(null);
+                            setShowToolSubBar(true);
+
+                            const curBoxW = txt.boxWidth || ev.currentTarget.offsetWidth || 180;
+                            const curBoxH = txt.boxHeight || ev.currentTarget.offsetHeight || 48;
+
+                            draggingTextRef.current = {
+                              id: txt.id,
+                              pageIdx,
+                              startClientX: t.clientX,
+                              startClientY: t.clientY,
+                              origX: txt.x,
+                              origY: txt.y,
+                              origW: curBoxW,
+                              origH: curBoxH,
+                              pW,
+                              pH,
+                              resizeHandle: resizeHandle || undefined,
+                              moved: Boolean(resizeHandle),
+                              wasAlreadySelected,
+                              startedOnTextarea: false,
+                            };
+                          }}
                           onPointerMove={(ev) => {
                             const d = draggingTextRef.current;
                             if (!d || d.id !== txt.id) return;
                             if (d.pointerId !== undefined && d.pointerId !== ev.pointerId) return;
                             ev.stopPropagation();
-                            const dx = (ev.clientX - d.startClientX) / zoomRef.current;
-                            const dy = (ev.clientY - d.startClientY) / zoomRef.current;
-
-                            if (d.resizeHandle) {
-                              const origW = d.origW || 180;
-                              const origH = d.origH || 48;
-                              let nextX = d.origX;
-                              let nextY = d.origY;
-                              let nextW = origW;
-                              let nextH = origH;
-
-                              if (d.resizeHandle.includes('e')) {
-                                nextW = Math.max(64, Math.min(pW - d.origX - 8, Math.round(origW + dx)));
-                              }
-                              if (d.resizeHandle.includes('w')) {
-                                const maxLeftShift = d.origX - 8;
-                                const clampedDx = Math.max(-maxLeftShift, Math.min(origW - 64, dx));
-                                nextX = Math.round(d.origX + clampedDx);
-                                nextW = Math.max(64, Math.round(origW - clampedDx));
-                              }
-                              if (d.resizeHandle.includes('s')) {
-                                nextH = Math.max(30, Math.min(pH - d.origY - 8, Math.round(origH + dy)));
-                              }
-                              if (d.resizeHandle.includes('n')) {
-                                const maxTopShift = d.origY - 8;
-                                const clampedDy = Math.max(-maxTopShift, Math.min(origH - 30, dy));
-                                nextY = Math.round(d.origY + clampedDy);
-                                nextH = Math.max(30, Math.round(origH - clampedDy));
-                              }
-
-                              const autoFs = computeMaxFitFontSizeForBox(
-                                txt.text,
-                                txt.fontFamily,
-                                txt.bold,
-                                nextW,
-                                nextH
-                              );
-                              setTextFontSize(autoFs);
-                              updateActivePage(
-                                (page) => ({
-                                  ...page,
-                                  texts: (page.texts || []).map((t) =>
-                                    t.id === txt.id
-                                      ? {
-                                          ...t,
-                                          x: nextX,
-                                          y: nextY,
-                                          boxWidth: nextW,
-                                          boxHeight: nextH,
-                                          fontSize: autoFs,
-                                        }
-                                      : t
-                                  ),
-                                }),
-                                false
-                              );
-                              return;
-                            }
-
-                            if (!d.moved && Math.hypot(dx, dy) > 4) {
-                              d.moved = true;
-                              try {
-                                ev.currentTarget.setPointerCapture(ev.pointerId);
-                              } catch {
-                                // ignore
-                              }
-                            }
-                            if (!d.moved) return;
-                            const nextX = Math.max(8, Math.min(pW - 60, Math.round(d.origX + dx)));
-                            const nextY = Math.max(8, Math.min(pH - 36, Math.round(d.origY + dy)));
-                            updateActivePage(
-                              (page) => ({
-                                ...page,
-                                texts: (page.texts || []).map((t) =>
-                                  t.id === txt.id ? { ...t, x: nextX, y: nextY } : t
-                                ),
-                              }),
-                              false
-                            );
+                            applyTextDragMove(ev.clientX, ev.clientY);
                           }}
                           onPointerUp={(ev) => {
                             const d = draggingTextRef.current;
                             if (!d || d.id !== txt.id) return;
                             ev.stopPropagation();
-                            const didMove = d.moved;
-                            const wasSelected = d.wasAlreadySelected;
-                            draggingTextRef.current = null;
                             try {
                               if (ev.currentTarget.hasPointerCapture(ev.pointerId)) {
                                 ev.currentTarget.releasePointerCapture(ev.pointerId);
@@ -19736,14 +20036,7 @@ export default function App() {
                             } catch {
                               // ignore
                             }
-                            if (!didMove && (wasSelected || activeTool === 'text') && !txt.isMath) {
-                              setEditingTextId(txt.id);
-                            }
-                          }}
-                          onLostPointerCapture={() => {
-                            if (draggingTextRef.current?.id === txt.id) {
-                              draggingTextRef.current = null;
-                            }
+                            finishTextDrag();
                           }}
                           onDoubleClick={(ev) => {
                             if (isLocked || txt.isMath) return;
@@ -19757,60 +20050,85 @@ export default function App() {
                               : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
                           }`}
                         >
-                          {/* 8 Resize Handles (Left/Right/Top/Bottom + 4 Corners) to narrow/expand the box & auto-fit fontSize! */}
+                          {/* 8 Finger-Friendly 44px Resize Handles (Left/Right/Top/Bottom Full Edges + 4 Corners) to narrow/expand the box & auto-fit fontSize! */}
                           {(isSelectedTxt || isEditingTxt) && !txt.isMath && (
                             <>
-                              {/* Left Edge Handle (W) */}
+                              {/* Left Edge Handle (W) — full left edge 44px touch zone */}
                               <div
                                 data-text-resize="w"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-6 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ew-resize z-30 hover:scale-110 transition-transform"
-                              />
-                              {/* Right Edge Handle (E) */}
+                                className="absolute -left-6 top-2 bottom-2 w-11 flex items-center justify-center cursor-ew-resize z-30 group"
+                              >
+                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
+                              {/* Right Edge Handle (E) — full right edge 44px touch zone */}
                               <div
                                 data-text-resize="e"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute -right-2 top-1/2 -translate-y-1/2 w-3 h-6 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ew-resize z-30 hover:scale-110 transition-transform"
-                              />
-                              {/* Top Edge Handle (N) */}
+                                className="absolute -right-6 top-2 bottom-2 w-11 flex items-center justify-center cursor-ew-resize z-30 group"
+                              >
+                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
+                              {/* Top Edge Handle (N) — full top edge 44px touch zone */}
                               <div
                                 data-text-resize="n"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute left-1/2 -top-2 -translate-x-1/2 w-6 h-3 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ns-resize z-30 hover:scale-110 transition-transform"
-                              />
-                              {/* Bottom Edge Handle (S) */}
+                                className="absolute left-2 right-2 -top-6 h-11 flex items-center justify-center cursor-ns-resize z-30 group"
+                              >
+                                <div className="w-8 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
+                              {/* Bottom Edge Handle (S) — full bottom edge 44px touch zone */}
                               <div
                                 data-text-resize="s"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute left-1/2 -bottom-2 -translate-x-1/2 w-6 h-3 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ns-resize z-30 hover:scale-110 transition-transform"
-                              />
-                              {/* 4 Corner Handles (NW, NE, SW, SE) */}
+                                className="absolute left-2 right-2 -bottom-6 h-11 flex items-center justify-center cursor-ns-resize z-30 group"
+                              >
+                                <div className="w-8 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
+                              {/* 4 Corner Handles (NW, NE, SW, SE) — 44x44px touch zones */}
                               <div
                                 data-text-resize="nw"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-2 -top-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nwse-resize z-30 hover:scale-110 transition-transform"
-                              />
+                                className="absolute -left-6 -top-6 w-11 h-11 flex items-center justify-center cursor-nwse-resize z-40 group"
+                              >
+                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
                               <div
                                 data-text-resize="ne"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-2 -top-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nesw-resize z-30 hover:scale-110 transition-transform"
-                              />
+                                className="absolute -right-6 -top-6 w-11 h-11 flex items-center justify-center cursor-nesw-resize z-40 group"
+                              >
+                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
                               <div
                                 data-text-resize="sw"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-2 -bottom-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nesw-resize z-30 hover:scale-110 transition-transform"
-                              />
+                                className="absolute -left-6 -bottom-6 w-11 h-11 flex items-center justify-center cursor-nesw-resize z-40 group"
+                              >
+                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
                               <div
                                 data-text-resize="se"
+                                style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-2 -bottom-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nwse-resize z-30 hover:scale-110 transition-transform"
-                              />
+                                className="absolute -right-6 -bottom-6 w-11 h-11 flex items-center justify-center cursor-nwse-resize z-40 group"
+                              >
+                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                              </div>
                             </>
                           )}
 
                           {/* Floating Quick Format & Drag Pill above Selected/Editing Text Box */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <div
+                              data-text-drag="true"
                               onMouseDown={(ev) => ev.preventDefault()}
                               style={{
                                 touchAction: 'none',
@@ -19823,7 +20141,7 @@ export default function App() {
                                 letterSpacing: 'normal',
                                 WebkitTextStroke: '0px',
                               }}
-                              className="absolute -top-11 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30 cursor-grab active:cursor-grabbing"
+                              className="absolute -top-12 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
                             >
                               <span
                                 className="px-1 py-0.5 text-sky-300 font-bold select-none"
@@ -19997,6 +20315,7 @@ export default function App() {
                           ) : isEditingTxt ? (
                             <textarea
                               autoFocus
+                              {...({ writingsuggestions: 'false' } as any)}
                               ref={(el) => {
                                 if (el && document.activeElement !== el) {
                                   window.requestAnimationFrame(() => el.focus());
@@ -20078,6 +20397,11 @@ export default function App() {
                                 lineHeight: 1.35,
                                 ...fontCss,
                                 touchAction: 'none',
+                                pointerEvents:
+                                  draggingTextRef.current?.id === txt.id ||
+                                  (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+                                    ? 'none'
+                                    : 'auto',
                               } as React.CSSProperties}
                               className="bg-transparent outline-none resize-none border-0 p-0 m-0 block cursor-grab active:cursor-grabbing"
                             />
