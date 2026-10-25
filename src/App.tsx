@@ -816,6 +816,14 @@ export default function App() {
   const layerDragStartYRef = useRef<number>(0);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (selectedImageId === null) {
+      setSelectedImageIds((prev) => (prev.length > 0 ? [] : prev));
+    } else {
+      setSelectedImageIds((prev) => (prev.includes(selectedImageId) ? prev : [selectedImageId]));
+    }
+  }, [selectedImageId]);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
   const shiftKeyPressedRef = useRef<boolean>(false);
   const lassoAdditiveRef = useRef<boolean>(false);
@@ -1023,6 +1031,7 @@ export default function App() {
     sideSignY?: number;
     targetStrokeIds?: string[];
     targetImageId?: string | null;
+    targetImageIds?: string[];
   } | null>(null);
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
@@ -2107,6 +2116,7 @@ export default function App() {
     const validTxtIds = new Set((prevPage.texts || []).map((t) => t.id));
     setSelectedStrokeIds((prev) => prev.filter((id) => validStrokeIds.has(id)));
     setActiveNodeStrokeId((prev) => (prev && validStrokeIds.has(prev) ? prev : null));
+    setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
     setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
     setImageCropMode('none');
@@ -2127,6 +2137,7 @@ export default function App() {
     const validTxtIds = new Set((nextPage.texts || []).map((t) => t.id));
     setSelectedStrokeIds((prev) => prev.filter((id) => validStrokeIds.has(id)));
     setActiveNodeStrokeId((prev) => (prev && validStrokeIds.has(prev) ? prev : null));
+    setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
     setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
     setImageCropMode('none');
@@ -2263,7 +2274,7 @@ export default function App() {
         if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
         prevPt = curPt;
       }
-      if (allowInteriorFill && s.fillStyle && s.fillStyle !== 'none') {
+      if (allowInteriorFill) {
         const r1 = Math.hypot(v1x, v1y) || 1;
         const r2 = Math.hypot(v2x, v2y) || 1;
         const dx = pt.x - cx;
@@ -2362,7 +2373,7 @@ export default function App() {
           if (isPointNearSegment(pt, path[i - 1], path[i], tol)) return true;
         }
       }
-      if (allowInteriorFill && s.fillStyle && s.fillStyle !== 'none') {
+      if (allowInteriorFill) {
         let inside = false;
         for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
           const xi = s.points[i].x,
@@ -2390,8 +2401,13 @@ export default function App() {
       if (isPointNearSegment(pt, s.points[i - 1], s.points[i], tol)) return true;
     }
 
-    // Only allow interior fill hit-testing when explicitly requested (e.g. tap-to-select fallback on a filled shape)
-    if (allowInteriorFill && s.fillStyle && s.fillStyle !== 'none' && s.points.length >= 3) {
+    // Allow interior hit-testing when explicitly requested (Pass 2 fallback on closed polygons/shapes or filled strokes)
+    const isClosedPolygonShape =
+      s.shapeType === 'rectangle' ||
+      s.shapeType === 'parallelogram' ||
+      s.shapeType === 'triangle' ||
+      (s.fillStyle && s.fillStyle !== 'none');
+    if (allowInteriorFill && isClosedPolygonShape && s.points.length >= 3) {
       let inside = false;
       for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
         const xi = s.points[i].x,
@@ -2408,8 +2424,12 @@ export default function App() {
   };
 
   const getSelectionBounds = useCallback(() => {
-    if (selectedImageId) {
-      const im = activePage.images?.find((i) => i.id === selectedImageId);
+    const effectiveImgIds =
+      selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+
+    // 1. Single Image Only -> preserve exact oriented bounding box & crop handles
+    if (effectiveImgIds.length === 1 && selectedStrokeIds.length === 0) {
+      const im = activePage.images?.find((i) => i.id === effectiveImgIds[0]);
       if (im) {
         const cx = im.x + im.width / 2;
         const cy = im.y + im.height / 2;
@@ -2429,10 +2449,56 @@ export default function App() {
         };
       }
     }
+
+    // 2. Multi-Image OR Mixed Image + Stroke Selection -> unified bounding box across ALL selected images & strokes!
+    if (effectiveImgIds.length > 0) {
+      const selImgs = (activePage.images || []).filter((i) => effectiveImgIds.includes(i.id));
+      const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+      if (selImgs.length > 0 || selStrokes.length > 0) {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (const im of selImgs) {
+          if (im.x < minX) minX = im.x;
+          if (im.y < minY) minY = im.y;
+          if (im.x + im.width > maxX) maxX = im.x + im.width;
+          if (im.y + im.height > maxY) maxY = im.y + im.height;
+        }
+        for (const s of selStrokes) {
+          const samplePts = getStrokeSamplePoints(s);
+          for (const p of samplePts) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+        if (minX < Infinity) {
+          const cx = (minX + maxX) / 2;
+          const cy = (minY + maxY) / 2;
+          const hw = Math.max(8, (maxX - minX) / 2);
+          const hh = Math.max(8, (maxY - minY) / 2);
+          return {
+            minX,
+            minY,
+            maxX,
+            maxY,
+            cx,
+            cy,
+            hw,
+            hh,
+            angle: 0,
+          };
+        }
+      }
+    }
+
+    // 3. Strokes Only Selection
     if (selectedStrokeIds.length > 0) {
       const sel = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
       if (sel.length > 0) {
-        const angle = sel[0].rotation || 0;
+        const angle = sel.length === 1 ? sel[0].rotation || 0 : 0;
         const cosA = Math.cos(angle);
         const sinA = Math.sin(angle);
         let minU = Infinity,
@@ -2470,7 +2536,7 @@ export default function App() {
       }
     }
     return null;
-  }, [selectedImageId, selectedStrokeIds, activePage.images, activePage.strokes]);
+  }, [selectedImageId, selectedImageIds, selectedStrokeIds, activePage.images, activePage.strokes]);
 
   // Checks if a screen touch point (clientX, clientY) lands inside or on a handle of the active Lasso selection box
   // OR on an active Direct Node handle, allowing 1-finger drag-and-drop even when Pencil-Only Mode is ON!
@@ -2524,11 +2590,16 @@ export default function App() {
       const rotStemTopY = -hh - 32;
 
       if (Math.hypot(localX, localY - rotStemTopY) <= 24) return true;
-      if (selectedStrokeIds.length >= 2 && Math.abs(localX) <= 78 && Math.abs(localY - (hh + 26)) <= 20) return true;
+      if (
+        selectedStrokeIds.length + selectedImageIds.length >= 2 &&
+        Math.abs(localX) <= 78 &&
+        Math.abs(localY - (hh + 26)) <= 20
+      )
+        return true;
       if (Math.abs(localX) <= hw + 22 && Math.abs(localY) <= hh + 22) return true;
       return false;
     },
-    [activeTool, activeNodeStrokeId, activePage.strokes, getSelectionBounds]
+    [activeTool, activeNodeStrokeId, activePage.strokes, selectedStrokeIds.length, selectedImageIds.length, getSelectionBounds]
   );
 
   // Finds the top-most unlocked shape, stroke, group, or image at a page point `pt`
@@ -3388,12 +3459,24 @@ export default function App() {
           const angle = selBounds.angle || 0;
           const rotStemTopY = -hh - 32;
 
-          // 4a. When 2+ shapes/strokes are selected together, highlight each individual shape with its own cyan dashed sub-frame + #1, #2 badge!
+          // 4a. When 2+ shapes/strokes/images are selected together, highlight each individual object with its own cyan dashed sub-frame + #1, #2 badge!
+          const effectiveImgIds =
+            selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
           const selStrokesList = pageObj.strokes.filter((st) => selectedStrokeIds.includes(st.id));
-          if (selStrokesList.length >= 2) {
+          const selImagesList = (pageObj.images || []).filter((im) => effectiveImgIds.includes(im.id));
+          const totalSelObjects = selStrokesList.length + selImagesList.length;
+          if (totalSelObjects >= 2) {
             ctx.save();
-            selStrokesList.forEach((ms, mIdx) => {
-              const sb = getStrokeBounds(ms);
+            const subBoxItems: { minX: number; minY: number; maxX: number; maxY: number }[] = [
+              ...selImagesList.map((im) => ({
+                minX: im.x,
+                minY: im.y,
+                maxX: im.x + im.width,
+                maxY: im.y + im.height,
+              })),
+              ...selStrokesList.map((ms) => getStrokeBounds(ms)),
+            ];
+            subBoxItems.forEach((sb, mIdx) => {
               const subPad = 5;
               const sx = sb.minX - subPad;
               const sy = sb.minY - subPad;
@@ -3407,7 +3490,7 @@ export default function App() {
               ctx.setLineDash([4, 3]);
               ctx.strokeRect(sx, sy, sw, sh);
 
-              // Numbered Selection Badge (#1, #2, ...) at top-left of each selected shape
+              // Numbered Selection Badge (#1, #2, ...) at top-left of each selected object
               ctx.setLineDash([]);
               ctx.fillStyle = '#0284c7';
               ctx.beginPath();
@@ -3570,7 +3653,7 @@ export default function App() {
             ctx.restore();
           };
 
-          if (selectedImageId) {
+          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
             // Live Side-Crop Overlay when dragging any of the 4 Side Crop Bars inward!
             const activeTf = selectionTransformRef.current;
             const isCroppingSide = activeTf?.mode === 'crop-side' && (activeTf.cropInsetPx || 0) > 0;
@@ -3772,10 +3855,12 @@ export default function App() {
           }
 
           // 4b. Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill right below the Selection Frame!
-          if (selStrokesList.length >= 2) {
-            const firstGrpId = selStrokesList[0]?.groupId;
+          if (totalSelObjects >= 2) {
+            const firstGrpId = selStrokesList[0]?.groupId || selImagesList[0]?.groupId;
             const allSameGroup =
-              Boolean(firstGrpId) && selStrokesList.every((st) => st.groupId === firstGrpId);
+              Boolean(firstGrpId) &&
+              selStrokesList.every((st) => st.groupId === firstGrpId) &&
+              selImagesList.every((im) => im.groupId === firstGrpId);
             const pillW = allSameGroup ? 116 : 124;
             const pillH = 26;
             const pillY = hh + 26;
@@ -3799,8 +3884,8 @@ export default function App() {
             ctx.textBaseline = 'middle';
             ctx.fillText(
               allSameGroup
-                ? `🔓 Ungroup (${selStrokesList.length})`
-                : `🔗 Group (${selStrokesList.length})`,
+                ? `🔓 Ungroup (${totalSelObjects})`
+                : `🔗 Group (${totalSelObjects})`,
               0,
               pillY + 0.5
             );
@@ -3917,7 +4002,7 @@ export default function App() {
         ctx.restore();
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, getSelectionBounds]);
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
@@ -4512,7 +4597,7 @@ export default function App() {
     showToast,
   ]);
 
-  // Instant 1-Tap Duplicate ("Αντίγραφο"): clones the selected shape/group or image slightly lower and slightly to the right (+28px, +28px)!
+  // Instant 1-Tap Duplicate ("Αντίγραφο"): clones the selected shapes/groups and/or images slightly lower and slightly to the right (+28px, +28px)!
   const handleDuplicateSelected = useCallback(() => {
     const baseIds =
       selectedStrokeIds.length > 0
@@ -4520,39 +4605,35 @@ export default function App() {
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
         : [];
+    const effectiveImgIds =
+      selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
     const baseSet = new Set(baseIds);
-    const groupIds = new Set(
-      activePage.strokes
-        .filter((s) => baseSet.has(s.id) && s.groupId)
-        .map((s) => s.groupId as string)
-    );
+    const imgSet = new Set(effectiveImgIds);
+    const groupIds = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const im of activePage.images || []) {
+      if (imgSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
+    }
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
-    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+    const selImgs = (activePage.images || []).filter(
+      (im) => imgSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
+    );
 
-    if (selImg) {
-      const dupImg: ImageObject = {
-        ...structuredClone(selImg),
+    if (selImgs.length > 0 || selStrokes.length > 0) {
+      const hadGroup = selStrokes.some((s) => s.groupId) || selImgs.some((im) => im.groupId);
+      const newGroupId = hadGroup ? `grp-${Date.now()}` : undefined;
+      const duplicatedImgs: ImageObject[] = selImgs.map((im) => ({
+        ...structuredClone(im),
         id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        x: selImg.x + 28,
-        y: selImg.y + 28,
-      };
-      updateActivePage((page) => ({
-        ...page,
-        images: [...(page.images || []), { ...dupImg, zOrder: getNextPageZOrder(page) }],
+        groupId: im.groupId ? newGroupId : undefined,
+        x: im.x + 28,
+        y: im.y + 28,
       }));
-      setSelectedImageId(dupImg.id);
-      setSelectedStrokeIds([]);
-      setActiveNodeStrokeId(null);
-      setActiveTool('lasso');
-      showToast('📑 Δημιουργήθηκε αντίγραφο εικόνας!');
-      return;
-    }
-
-    if (selStrokes.length > 0) {
-      const newGroupId = selStrokes.some((s) => s.groupId) ? `grp-${Date.now()}` : undefined;
-      const duplicated = selStrokes.map((s) => ({
+      const duplicatedStrokes: StrokeObject[] = selStrokes.map((s) => ({
         ...structuredClone(s),
         id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         groupId: s.groupId ? newGroupId : undefined,
@@ -4564,19 +4645,35 @@ export default function App() {
           cy: p.cy !== undefined ? p.cy + 28 : undefined,
         })),
       }));
+
       updateActivePage((page) => {
         const baseZ = getNextPageZOrder(page);
         return {
           ...page,
-          strokes: [...page.strokes, ...duplicated.map((s, idx) => ({ ...s, zOrder: baseZ + idx }))],
+          images: [
+            ...(page.images || []),
+            ...duplicatedImgs.map((im, idx) => ({ ...im, zOrder: baseZ + idx })),
+          ],
+          strokes: [
+            ...page.strokes,
+            ...duplicatedStrokes.map((s, idx) => ({
+              ...s,
+              zOrder: baseZ + duplicatedImgs.length + idx,
+            })),
+          ],
         };
       });
-      const dupIds = duplicated.map((s) => s.id);
-      setSelectedStrokeIds(dupIds);
-      setActiveNodeStrokeId(dupIds.length === 1 ? dupIds[0] : null);
-      setSelectedImageId(null);
+
+      const dupStrokeIds = duplicatedStrokes.map((s) => s.id);
+      const dupImgIds = duplicatedImgs.map((im) => im.id);
+      setSelectedStrokeIds(dupStrokeIds);
+      setSelectedImageIds(dupImgIds);
+      setSelectedImageId(dupImgIds[0] || null);
+      setActiveNodeStrokeId(
+        dupStrokeIds.length === 1 && dupImgIds.length === 0 ? dupStrokeIds[0] : null
+      );
       setActiveTool('lasso');
-      showToast('📑 Δημιουργήθηκε αντίγραφο σχήματος!');
+      showToast('📑 Δημιουργήθηκε αντίγραφο της επιλογής!');
       return;
     }
 
@@ -4587,6 +4684,7 @@ export default function App() {
     selectedStrokeIds,
     activeNodeStrokeId,
     selectedImageId,
+    selectedImageIds,
     updateActivePage,
     showToast,
   ]);
@@ -6187,18 +6285,43 @@ export default function App() {
         setShowToolSubBar(true);
         setImageCropMode('none');
         if (fingerHit.type === 'stroke') {
-          setSelectedImageId(null);
+          const grpId = fingerHit.stroke.groupId;
+          const memberImgIds = grpId
+            ? (targetPage.images || []).filter((im) => im.groupId === grpId).map((im) => im.id)
+            : [];
+          const curImgIds =
+            selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+          const hasExistingSel = selectedStrokeIds.length > 0 || curImgIds.length > 0;
+          const allAlreadySelected =
+            fingerHit.memberIds.every((id) => selectedStrokeIds.includes(id)) &&
+            memberImgIds.every((id) => curImgIds.includes(id));
+
           const nextStrokeIds =
-            isAdditiveSelect && selectedStrokeIds.length > 0
-              ? fingerHit.memberIds.every((id) => selectedStrokeIds.includes(id)) &&
-                selectedStrokeIds.length > fingerHit.memberIds.length
+            isAdditiveSelect && hasExistingSel
+              ? allAlreadySelected &&
+                selectedStrokeIds.length + curImgIds.length > fingerHit.memberIds.length + memberImgIds.length
                 ? selectedStrokeIds.filter((id) => !fingerHit.memberIds.includes(id))
                 : Array.from(new Set([...selectedStrokeIds, ...fingerHit.memberIds]))
               : fingerHit.memberIds;
+
+          const nextImgIds =
+            isAdditiveSelect && hasExistingSel
+              ? allAlreadySelected &&
+                selectedStrokeIds.length + curImgIds.length > fingerHit.memberIds.length + memberImgIds.length
+                ? curImgIds.filter((id) => !memberImgIds.includes(id))
+                : Array.from(new Set([...curImgIds, ...memberImgIds]))
+              : memberImgIds;
+
           setSelectedStrokeIds(nextStrokeIds);
-          setActiveNodeStrokeId(nextStrokeIds.length === 1 ? nextStrokeIds[0] : null);
-          if (isAdditiveSelect && nextStrokeIds.length >= 2) {
-            showToast(`➕ Επιλέχθηκαν ${nextStrokeIds.length} σχήματα! Πάτησε «Group» (ή G) για ομαδοποίηση.`);
+          setSelectedImageIds(nextImgIds);
+          setSelectedImageId(nextImgIds[0] || null);
+          setActiveNodeStrokeId(
+            nextStrokeIds.length === 1 && nextImgIds.length === 0 ? nextStrokeIds[0] : null
+          );
+          if (isAdditiveSelect && nextStrokeIds.length + nextImgIds.length >= 2) {
+            showToast(
+              `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
+            );
           }
           selectionTransformRef.current = {
             mode: 'move',
@@ -6211,12 +6334,49 @@ export default function App() {
             initialDist: 1,
             initialAngle: 0,
             targetStrokeIds: nextStrokeIds,
-            targetImageId: null,
+            targetImageId: nextImgIds[0] || null,
+            targetImageIds: nextImgIds,
           };
         } else {
-          setSelectedImageId(fingerHit.image.id);
-          setSelectedStrokeIds([]);
+          const grpId = fingerHit.image.groupId;
+          const memberImgIds = grpId
+            ? (targetPage.images || []).filter((im) => im.groupId === grpId).map((im) => im.id)
+            : [fingerHit.image.id];
+          const memberStrokeIds = grpId
+            ? targetPage.strokes.filter((s) => s.groupId === grpId).map((s) => s.id)
+            : [];
+          const curImgIds =
+            selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+          const hasExistingSel = selectedStrokeIds.length > 0 || curImgIds.length > 0;
+          const allAlreadySelected =
+            memberImgIds.every((id) => curImgIds.includes(id)) &&
+            memberStrokeIds.every((id) => selectedStrokeIds.includes(id));
+
+          const nextImgIds =
+            isAdditiveSelect && hasExistingSel
+              ? allAlreadySelected &&
+                selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length
+                ? curImgIds.filter((id) => !memberImgIds.includes(id))
+                : Array.from(new Set([...curImgIds, ...memberImgIds]))
+              : memberImgIds;
+
+          const nextStrokeIds =
+            isAdditiveSelect && hasExistingSel
+              ? allAlreadySelected &&
+                selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length
+                ? selectedStrokeIds.filter((id) => !memberStrokeIds.includes(id))
+                : Array.from(new Set([...selectedStrokeIds, ...memberStrokeIds]))
+              : memberStrokeIds;
+
+          setSelectedImageIds(nextImgIds);
+          setSelectedImageId(nextImgIds[0] || null);
+          setSelectedStrokeIds(nextStrokeIds);
           setActiveNodeStrokeId(null);
+          if (isAdditiveSelect && nextStrokeIds.length + nextImgIds.length >= 2) {
+            showToast(
+              `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
+            );
+          }
           selectionTransformRef.current = {
             mode: 'move',
             startX: pt.x,
@@ -6227,8 +6387,9 @@ export default function App() {
             anchorY: fingerHit.bounds.cy,
             initialDist: 1,
             initialAngle: 0,
-            targetStrokeIds: [],
-            targetImageId: fingerHit.image.id,
+            targetStrokeIds: nextStrokeIds,
+            targetImageId: nextImgIds[0] || null,
+            targetImageIds: nextImgIds,
           };
         }
         setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
@@ -6598,12 +6759,19 @@ export default function App() {
         const localY = -dx * sinA + dy * cosA;
         const rotStemTopY = -hh - 32;
 
+        const effectiveImgIds =
+          selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+        const selStrokesList = activePage.strokes.filter((st) => selectedStrokeIds.includes(st.id));
+        const selImagesList = (activePage.images || []).filter((im) => effectiveImgIds.includes(im.id));
+        const totalSelCount = selStrokesList.length + selImagesList.length;
+
         // 0. Check Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill below Selection Frame!
-        if (selectedStrokeIds.length >= 2 && Math.abs(localX) <= 72 && Math.abs(localY - (hh + 26)) <= 16) {
-          const selStrokesList = activePage.strokes.filter((st) => selectedStrokeIds.includes(st.id));
-          const firstGrpId = selStrokesList[0]?.groupId;
+        if (totalSelCount >= 2 && Math.abs(localX) <= 72 && Math.abs(localY - (hh + 26)) <= 16) {
+          const firstGrpId = selStrokesList[0]?.groupId || selImagesList[0]?.groupId;
           const allSameGroup =
-            Boolean(firstGrpId) && selStrokesList.every((st) => st.groupId === firstGrpId);
+            Boolean(firstGrpId) &&
+            selStrokesList.every((st) => st.groupId === firstGrpId) &&
+            selImagesList.every((im) => im.groupId === firstGrpId);
           if (allSameGroup) {
             handleUngroupSelected();
           } else {
@@ -6671,7 +6839,7 @@ export default function App() {
           // B2. Check 4 Mid-Side Handles:
           //     - For Selected Images: BOTH Orange Stretch Dots (● at -sideOff) AND Green Side Crop Bars (▬/▮ at +sideOff)!
           //     - For Selected Shapes/Strokes: 4 Orange Stretch Dots (● at 0)
-          if (selectedImageId) {
+          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
             const sideOffX = Math.min(22, Math.max(12, hw * 0.34));
             const sideOffY = Math.min(22, Math.max(12, hh * 0.34));
 
@@ -6966,47 +7134,110 @@ export default function App() {
         }
       }
 
+      const curImgIds =
+        selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+      const hasExistingSel = selectedStrokeIds.length > 0 || curImgIds.length > 0;
+
       if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
         const tappedStroke = topHitStroke.stroke;
-        setSelectedImageId(null);
-        const members = tappedStroke.groupId
-          ? strokeList.filter((s) => s.groupId === tappedStroke.groupId).map((s) => s.id)
+        const grpId = tappedStroke.groupId;
+        const memberStrokeIds = grpId
+          ? strokeList.filter((s) => s.groupId === grpId).map((s) => s.id)
           : [tappedStroke.id];
+        const memberImgIds = grpId
+          ? imgList.filter((im) => im.groupId === grpId).map((im) => im.id)
+          : [];
 
-        if (isAdditive && selectedStrokeIds.length > 0) {
-          const allAlreadySelected = members.every((id) => selectedStrokeIds.includes(id));
-          const nextIds =
-            allAlreadySelected && selectedStrokeIds.length > members.length
-              ? selectedStrokeIds.filter((id) => !members.includes(id))
-              : Array.from(new Set([...selectedStrokeIds, ...members]));
-          setSelectedStrokeIds(nextIds);
-          setActiveNodeStrokeId(nextIds.length === 1 ? nextIds[0] : null);
+        if (isAdditive && hasExistingSel) {
+          const allAlreadySelected =
+            memberStrokeIds.every((id) => selectedStrokeIds.includes(id)) &&
+            memberImgIds.every((id) => curImgIds.includes(id));
+          const canRemove =
+            allAlreadySelected &&
+            selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length;
+          const nextStrokeIds = canRemove
+            ? selectedStrokeIds.filter((id) => !memberStrokeIds.includes(id))
+            : Array.from(new Set([...selectedStrokeIds, ...memberStrokeIds]));
+          const nextImgIds = canRemove
+            ? curImgIds.filter((id) => !memberImgIds.includes(id))
+            : Array.from(new Set([...curImgIds, ...memberImgIds]));
+
+          setSelectedStrokeIds(nextStrokeIds);
+          setSelectedImageIds(nextImgIds);
+          setSelectedImageId(nextImgIds[0] || null);
+          setActiveNodeStrokeId(
+            nextStrokeIds.length === 1 && nextImgIds.length === 0 ? nextStrokeIds[0] : null
+          );
+          const totalCount = nextStrokeIds.length + nextImgIds.length;
           showToast(
-            allAlreadySelected
-              ? `➖ Αφαιρέθηκε από την επιλογή (${nextIds.length} επιλεγμένα)`
-              : `➕ Επιλέχθηκαν ${nextIds.length} σχήματα! Πάτησε «Group» (ή πλήκτρο G) για ομαδοποίηση.`
+            canRemove
+              ? `➖ Αφαιρέθηκε από την επιλογή (${totalCount} επιλεγμένα)`
+              : `➕ Επιλέχθηκαν ${totalCount} αντικείμενα! Πάτησε «Group» (ή πλήκτρο G) για ομαδοποίηση.`
           );
           return;
         }
 
-        setSelectedStrokeIds(members);
-        setActiveNodeStrokeId(tappedStroke.id);
+        setSelectedStrokeIds(memberStrokeIds);
+        setSelectedImageIds(memberImgIds);
+        setSelectedImageId(memberImgIds[0] || null);
+        setActiveNodeStrokeId(memberImgIds.length === 0 ? tappedStroke.id : null);
         return;
       }
 
       if (topHitImg) {
-        setSelectedImageId(topHitImg.img.id);
-        setSelectedStrokeIds([]);
+        const tappedImg = topHitImg.img;
+        const grpId = tappedImg.groupId;
+        const memberImgIds = grpId
+          ? imgList.filter((im) => im.groupId === grpId).map((im) => im.id)
+          : [tappedImg.id];
+        const memberStrokeIds = grpId
+          ? strokeList.filter((s) => s.groupId === grpId).map((s) => s.id)
+          : [];
+
+        if (isAdditive && hasExistingSel) {
+          const allAlreadySelected =
+            memberImgIds.every((id) => curImgIds.includes(id)) &&
+            memberStrokeIds.every((id) => selectedStrokeIds.includes(id));
+          const canRemove =
+            allAlreadySelected &&
+            selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length;
+          const nextImgIds = canRemove
+            ? curImgIds.filter((id) => !memberImgIds.includes(id))
+            : Array.from(new Set([...curImgIds, ...memberImgIds]));
+          const nextStrokeIds = canRemove
+            ? selectedStrokeIds.filter((id) => !memberStrokeIds.includes(id))
+            : Array.from(new Set([...selectedStrokeIds, ...memberStrokeIds]));
+
+          setSelectedImageIds(nextImgIds);
+          setSelectedImageId(nextImgIds[0] || null);
+          setSelectedStrokeIds(nextStrokeIds);
+          setActiveNodeStrokeId(null);
+          const totalCount = nextStrokeIds.length + nextImgIds.length;
+          showToast(
+            canRemove
+              ? `➖ Αφαιρέθηκε από την επιλογή (${totalCount} επιλεγμένα)`
+              : `➕ Επιλέχθηκαν ${totalCount} αντικείμενα! Πάτησε «Group» (ή πλήκτρο G) για ομαδοποίηση.`
+          );
+          return;
+        }
+
+        setSelectedImageIds(memberImgIds);
+        setSelectedImageId(memberImgIds[0] || null);
+        setSelectedStrokeIds(memberStrokeIds);
         setActiveNodeStrokeId(null);
         return;
       }
 
-      if (isAdditive && selectedStrokeIds.length > 0) {
+      if (isAdditive && hasExistingSel) {
         return;
       }
 
       const hadSelection =
-        selectedStrokeIds.length > 0 || selectedImageId !== null || activeNodeStrokeId !== null;
+        selectedStrokeIds.length > 0 ||
+        curImgIds.length > 0 ||
+        selectedImageId !== null ||
+        activeNodeStrokeId !== null;
+      setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
@@ -7016,8 +7247,27 @@ export default function App() {
       return;
     }
 
-    // Case 2: Drawn Lasso Loop -> Select all shapes/strokes/groups inside or intersected by the loop!
-    const directMatched = strokeList.filter((s) => {
+    // Case 2: Drawn Lasso Loop -> Select ALL shapes/strokes/groups AND ALL images inside or intersected by the loop!
+    // Build a densely interpolated polygon perimeter (including closing segment back to poly[0]) so fast strokes never skip over objects
+    const densePoly: { x: number; y: number }[] = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      densePoly.push(a);
+      const segLen = distance(a, b);
+      if (segLen > 10) {
+        const steps = Math.min(24, Math.ceil(segLen / 10));
+        for (let k = 1; k < steps; k++) {
+          const t = k / steps;
+          densePoly.push({
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+          });
+        }
+      }
+    }
+
+    const directMatchedStrokes = strokeList.filter((s) => {
       if (lockedLayers.has(s.layerId)) return false;
       if (
         s.shapeType === 'cuboid' ||
@@ -7027,49 +7277,117 @@ export default function App() {
       ) {
         const subPaths = get3DShapeSubPaths(s);
         if (subPaths.some((path) => path.some((p) => isPointInPolygon(p, poly)))) return true;
-        return poly.some((lp) => isPointNearStroke(lp, s, 12, false));
+        return densePoly.some((lp) => isPointNearStroke(lp, s, 14, true));
       }
       if (s.points.some((p) => isPointInPolygon(p, poly))) return true;
+      for (let i = 1; i < s.points.length; i++) {
+        const midPt = {
+          x: (s.points[i - 1].x + s.points[i].x) / 2,
+          y: (s.points[i - 1].y + s.points[i].y) / 2,
+        };
+        if (isPointInPolygon(midPt, poly)) return true;
+      }
       const samplePts = getStrokeSamplePoints(s);
       if (samplePts.some((p) => isPointInPolygon(p, poly))) return true;
-      return poly.some((lp) => isPointNearStroke(lp, s, 12, false));
+      const sb = getStrokeBounds(s);
+      if (isPointInPolygon({ x: (sb.minX + sb.maxX) / 2, y: (sb.minY + sb.maxY) / 2 }, poly)) return true;
+      return densePoly.some((lp) => isPointNearStroke(lp, s, 14, true));
     });
 
-    const groupIds = new Set(directMatched.map((s) => s.groupId).filter(Boolean));
-    const finalIds = strokeList
-      .filter((s) => directMatched.some((m) => m.id === s.id) || (s.groupId && groupIds.has(s.groupId)))
+    // Match ALL images whose center, corners, edge midpoints, or interior grid points are inside the Lasso loop,
+    // OR whose edges/interior are crossed by the Lasso loop!
+    const directMatchedImgs = imgList.filter((im) => {
+      if (lockedLayers.has(im.layerId)) return false;
+      const gridRatios = [0, 0.2, 0.5, 0.8, 1];
+      for (const u of gridRatios) {
+        for (const v of gridRatios) {
+          if (isPointInPolygon({ x: im.x + im.width * u, y: im.y + im.height * v }, poly)) {
+            return true;
+          }
+        }
+      }
+      // Also check if the Lasso perimeter crosses any of the 4 edges of the image
+      const c0 = { x: im.x, y: im.y };
+      const c1 = { x: im.x + im.width, y: im.y };
+      const c2 = { x: im.x + im.width, y: im.y + im.height };
+      const c3 = { x: im.x, y: im.y + im.height };
+      if (
+        densePoly.some(
+          (lp) =>
+            isPointNearSegment(lp, c0, c1, 12) ||
+            isPointNearSegment(lp, c1, c2, 12) ||
+            isPointNearSegment(lp, c2, c3, 12) ||
+            isPointNearSegment(lp, c3, c0, 12)
+        )
+      ) {
+        return true;
+      }
+      // If the Lasso path passes inside a non-full-page image (or when no strokes were matched), select it too!
+      const isFullPageSheet = im.width * im.height > pageWidth * pageHeight * 0.65;
+      if (!isFullPageSheet || directMatchedStrokes.length === 0) {
+        if (
+          densePoly.some(
+            (lp) => lp.x >= im.x && lp.x <= im.x + im.width && lp.y >= im.y && lp.y <= im.y + im.height
+          )
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    const groupIds = new Set<string>();
+    for (const s of directMatchedStrokes) {
+      if (s.groupId) groupIds.add(s.groupId);
+    }
+    for (const im of directMatchedImgs) {
+      if (im.groupId) groupIds.add(im.groupId);
+    }
+
+    const finalStrokeIds = strokeList
+      .filter(
+        (s) =>
+          directMatchedStrokes.some((m) => m.id === s.id) || (s.groupId && groupIds.has(s.groupId))
+      )
       .map((s) => s.id);
 
-    if (finalIds.length > 0) {
-      setSelectedImageId(null);
-      const nextIds =
+    const finalImgIds = imgList
+      .filter(
+        (im) =>
+          directMatchedImgs.some((m) => m.id === im.id) || (im.groupId && groupIds.has(im.groupId))
+      )
+      .map((im) => im.id);
+
+    const curImgIds =
+      selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+
+    if (finalStrokeIds.length > 0 || finalImgIds.length > 0) {
+      const nextStrokeIds =
         isAdditive && selectedStrokeIds.length > 0
-          ? Array.from(new Set([...selectedStrokeIds, ...finalIds]))
-          : finalIds;
-      setSelectedStrokeIds(nextIds);
-      setActiveNodeStrokeId(nextIds.length === 1 ? nextIds[0] : null);
-      if (isAdditive && nextIds.length >= 2) {
+          ? Array.from(new Set([...selectedStrokeIds, ...finalStrokeIds]))
+          : finalStrokeIds;
+      const nextImgIds =
+        isAdditive && curImgIds.length > 0
+          ? Array.from(new Set([...curImgIds, ...finalImgIds]))
+          : finalImgIds;
+
+      setSelectedStrokeIds(nextStrokeIds);
+      setSelectedImageIds(nextImgIds);
+      setSelectedImageId(nextImgIds[0] || null);
+      setActiveNodeStrokeId(
+        nextStrokeIds.length === 1 && nextImgIds.length === 0 ? nextStrokeIds[0] : null
+      );
+      const totalSelected = nextStrokeIds.length + nextImgIds.length;
+      if (totalSelected >= 2) {
         showToast(
-          `➕ Προστέθηκαν στην επιλογή (${nextIds.length} σχήματα συνολικά)! Πάτησε «Group» (ή G) για ομαδοποίηση.`
+          `✅ Επιλέχθηκαν ${totalSelected} αντικείμενα! Σύρε για μετακίνηση ή πάτησε «Group» (G).`
         );
       }
       return;
     }
 
-    // If no shapes/strokes were inside the loop, check if an Image's center is inside the lasso loop
-    const matchedImg = imgList.find(
-      (im) =>
-        !lockedLayers.has(im.layerId) &&
-        isPointInPolygon({ x: im.x + im.width / 2, y: im.y + im.height / 2 }, poly)
-    );
-    if (matchedImg) {
-      setSelectedImageId(matchedImg.id);
-      setSelectedStrokeIds([]);
-      setActiveNodeStrokeId(null);
-      return;
-    }
-
     if (!isAdditive) {
+      setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
@@ -7485,6 +7803,16 @@ export default function App() {
     if (activeTool === 'lasso' || selectionTransformRef.current) {
       if (selectionTransformRef.current) {
         const tf = selectionTransformRef.current;
+        const effectiveImgIds =
+          tf.targetImageIds && tf.targetImageIds.length > 0
+            ? tf.targetImageIds
+            : selectedImageIds.length > 0
+            ? selectedImageIds
+            : selectedImageId
+            ? [selectedImageId]
+            : [];
+        const selImagesList = (activePage.images || []).filter((im) => effectiveImgIds.includes(im.id));
+        const selStrokesList = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
 
         // A. 360° Rotation around selection center (with ±6° Magnetic Snap to exact 0° / 90° / 180° / 270° / 360°)
         if (tf.mode === 'rotate') {
@@ -7509,7 +7837,7 @@ export default function App() {
           const cosA = Math.cos(dAngle);
           const sinA = Math.sin(dAngle);
 
-          if (selectedImageId) {
+          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
             const normDeg = ((snappedTotalDeg % 360) + 360) % 360;
             updateActivePage(
               (page) => ({
@@ -7523,9 +7851,26 @@ export default function App() {
             return;
           }
 
+          const dAngleDeg = (dAngle * 180) / Math.PI;
           updateActivePage(
             (page) => ({
               ...page,
+              images: (page.images || []).map((im) => {
+                if (!effectiveImgIds.includes(im.id)) return im;
+                const oldCx = im.x + im.width / 2;
+                const oldCy = im.y + im.height / 2;
+                const rx = oldCx - tf.centerX;
+                const ry = oldCy - tf.centerY;
+                const nextCx = tf.centerX + rx * cosA - ry * sinA;
+                const nextCy = tf.centerY + rx * sinA + ry * cosA;
+                const nextDeg = (((im.rotation || 0) + dAngleDeg) % 360 + 360) % 360;
+                return {
+                  ...im,
+                  x: nextCx - im.width / 2,
+                  y: nextCy - im.height / 2,
+                  rotation: Math.round(nextDeg),
+                };
+              }),
               strokes: page.strokes.map((s) => {
                 if (!selectedStrokeIds.includes(s.id)) return s;
                 const nextRot = (s.rotation || 0) + dAngle;
@@ -7564,7 +7909,7 @@ export default function App() {
           const scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
           tf.initialDist = currDist;
 
-          if (selectedImageId) {
+          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
             const fAngle = tf.frameAngle || 0;
             const cosF = Math.cos(fAngle);
             const sinF = Math.sin(fAngle);
@@ -7608,6 +7953,22 @@ export default function App() {
           updateActivePage(
             (page) => ({
               ...page,
+              images: (page.images || []).map((im) => {
+                if (!effectiveImgIds.includes(im.id)) return im;
+                const minSide = Math.max(1, Math.min(im.width, im.height));
+                const clampedScale = Math.max(24 / minSide, scaleFactor);
+                return {
+                  ...im,
+                  x: tf.anchorX + (im.x - tf.anchorX) * clampedScale,
+                  y: tf.anchorY + (im.y - tf.anchorY) * clampedScale,
+                  width: im.width * clampedScale,
+                  height: im.height * clampedScale,
+                  clipPolygon: im.clipPolygon?.map((cp) => ({
+                    x: cp.x * clampedScale,
+                    y: cp.y * clampedScale,
+                  })),
+                };
+              }),
               strokes: page.strokes.map((s) => {
                 if (!selectedStrokeIds.includes(s.id)) return s;
                 return {
@@ -7671,7 +8032,7 @@ export default function App() {
           const scaleFactor = Math.max(0.84, Math.min(1.2, currSpan / tf.initialDist));
           tf.initialDist = currSpan;
 
-          if (selectedImageId) {
+          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
             const sx = tf.sideSignX || 0;
             const sy = tf.sideSignY || 0;
             updateActivePage(
@@ -7723,7 +8084,7 @@ export default function App() {
             return;
           }
 
-          // Stretch selected Shapes / Strokes / Groups along local X ('scale-x') or local Y ('scale-y') axis!
+          // Stretch selected Shapes / Strokes / Images / Groups along local X ('scale-x') or local Y ('scale-y') axis!
           const stretchPoint = (px: number, py: number) => {
             const dx = px - tf.anchorX;
             const dy = py - tf.anchorY;
@@ -7738,6 +8099,28 @@ export default function App() {
           updateActivePage(
             (page) => ({
               ...page,
+              images: (page.images || []).map((im) => {
+                if (!effectiveImgIds.includes(im.id)) return im;
+                const p0 = stretchPoint(im.x, im.y);
+                const p1 = stretchPoint(im.x + im.width, im.y + im.height);
+                const newX = Math.min(p0.x, p1.x);
+                const newY = Math.min(p0.y, p1.y);
+                const newW = Math.max(24, Math.abs(p1.x - p0.x));
+                const newH = Math.max(24, Math.abs(p1.y - p0.y));
+                const sxRatio = newW / Math.max(1, im.width);
+                const syRatio = newH / Math.max(1, im.height);
+                return {
+                  ...im,
+                  x: newX,
+                  y: newY,
+                  width: newW,
+                  height: newH,
+                  clipPolygon: im.clipPolygon?.map((cp) => ({
+                    x: cp.x * sxRatio,
+                    y: cp.y * syRatio,
+                  })),
+                };
+              }),
               strokes: page.strokes.map((s) => {
                 if (!selectedStrokeIds.includes(s.id)) return s;
                 return {
@@ -7764,32 +8147,27 @@ export default function App() {
           return;
         }
 
-        // C. Move selection
+        // C. Move selection (moves ALL selected images AND ALL selected strokes simultaneously!)
         const dx = latestPt.x - tf.startX;
         const dy = latestPt.y - tf.startY;
         tf.startX = latestPt.x;
         tf.startY = latestPt.y;
 
-        const targetImgId = tf.targetImageId !== undefined ? tf.targetImageId : selectedImageId;
+        const targetImgIdList =
+          tf.targetImageIds && tf.targetImageIds.length > 0
+            ? tf.targetImageIds
+            : tf.targetImageId
+            ? [tf.targetImageId]
+            : effectiveImgIds;
         const targetStrokeIdList =
           tf.targetStrokeIds && tf.targetStrokeIds.length > 0 ? tf.targetStrokeIds : selectedStrokeIds;
-
-        if (targetImgId) {
-          updateActivePage(
-            (page) => ({
-              ...page,
-              images: page.images.map((im) =>
-                im.id === targetImgId ? { ...im, x: im.x + dx, y: im.y + dy } : im
-              ),
-            }),
-            false
-          );
-          return;
-        }
 
         updateActivePage(
           (page) => ({
             ...page,
+            images: (page.images || []).map((im) =>
+              targetImgIdList.includes(im.id) ? { ...im, x: im.x + dx, y: im.y + dy } : im
+            ),
             strokes: page.strokes.map((s) => {
               if (!targetStrokeIdList.includes(s.id)) return s;
               return {
@@ -8343,20 +8721,46 @@ export default function App() {
   };
 
   const handleGroupSelected = () => {
-    if (selectedStrokeIds.length < 2) return;
+    const effectiveImgIds =
+      selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+    const totalCount = selectedStrokeIds.length + effectiveImgIds.length;
+    if (totalCount < 2) return;
     const newGroupId = `grp-${Date.now()}`;
     updateActivePage((page) => ({
       ...page,
-      strokes: page.strokes.map((s) => (selectedStrokeIds.includes(s.id) ? { ...s, groupId: newGroupId } : s)),
+      strokes: page.strokes.map((s) =>
+        selectedStrokeIds.includes(s.id) ? { ...s, groupId: newGroupId } : s
+      ),
+      images: (page.images || []).map((im) =>
+        effectiveImgIds.includes(im.id) ? { ...im, groupId: newGroupId } : im
+      ),
     }));
-    showToast(`🔗 Group (${selectedStrokeIds.length} αντικείμενα)`);
+    showToast(`🔗 Group (${totalCount} αντικείμενα)`);
   };
 
   const handleUngroupSelected = () => {
-    if (selectedStrokeIds.length === 0) return;
+    const effectiveImgIds =
+      selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+    if (selectedStrokeIds.length === 0 && effectiveImgIds.length === 0) return;
+    const grpSet = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (selectedStrokeIds.includes(s.id) && s.groupId) grpSet.add(s.groupId);
+    }
+    for (const im of activePage.images || []) {
+      if (effectiveImgIds.includes(im.id) && im.groupId) grpSet.add(im.groupId);
+    }
     updateActivePage((page) => ({
       ...page,
-      strokes: page.strokes.map((s) => (selectedStrokeIds.includes(s.id) ? { ...s, groupId: undefined } : s)),
+      strokes: page.strokes.map((s) =>
+        selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
+          ? { ...s, groupId: undefined }
+          : s
+      ),
+      images: (page.images || []).map((im) =>
+        effectiveImgIds.includes(im.id) || (im.groupId && grpSet.has(im.groupId))
+          ? { ...im, groupId: undefined }
+          : im
+      ),
     }));
     showToast('🔓 Ungroup ολοκληρώθηκε!');
   };
@@ -8905,39 +9309,43 @@ export default function App() {
 
       if (e.altKey) return;
 
-      // Backspace (<-- above Enter) or Delete -> Delete selected strokes/shapes/groups, image, or text box!
+      // Backspace (<-- above Enter) or Delete -> Delete selected strokes/shapes/groups, images, or text box!
       if (code === 'Backspace' || code === 'Delete' || e.key === 'Backspace' || e.key === 'Delete') {
-        if (selectedImageId !== null) {
-          e.preventDefault();
-          const targetImgId = selectedImageId;
-          updateActivePage((page) => ({
-            ...page,
-            images: (page.images || []).filter((im) => im.id !== targetImgId),
-          }));
-          setSelectedImageId(null);
-          setImageCropMode('none');
-          showToast('🗑️ Διαγράφηκε η επιλεγμένη εικόνα!');
-          return;
-        }
+        const effectiveImgIds =
+          selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+        const baseIds =
+          selectedStrokeIds.length > 0
+            ? selectedStrokeIds
+            : activeNodeStrokeId
+            ? [activeNodeStrokeId]
+            : [];
 
-        if (selectedStrokeIds.length > 0 || activeNodeStrokeId !== null) {
+        if (effectiveImgIds.length > 0 || baseIds.length > 0) {
           e.preventDefault();
-          const baseIds = selectedStrokeIds.length > 0 ? selectedStrokeIds : activeNodeStrokeId ? [activeNodeStrokeId] : [];
+          const imgSet = new Set(effectiveImgIds);
           const baseSet = new Set(baseIds);
-          const groupIds = new Set(
-            activePage.strokes
-              .filter((s) => baseSet.has(s.id) && s.groupId)
-              .map((s) => s.groupId as string)
-          );
+          const groupIds = new Set<string>();
+          for (const s of activePage.strokes) {
+            if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+          }
+          for (const im of activePage.images || []) {
+            if (imgSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
+          }
           updateActivePage((page) => ({
             ...page,
+            images: (page.images || []).filter(
+              (im) => !imgSet.has(im.id) && !(im.groupId && groupIds.has(im.groupId))
+            ),
             strokes: page.strokes.filter(
               (s) => !baseSet.has(s.id) && !(s.groupId && groupIds.has(s.groupId))
             ),
           }));
+          setSelectedImageIds([]);
+          setSelectedImageId(null);
           setSelectedStrokeIds([]);
           setActiveNodeStrokeId(null);
           setDraggingNodeIdx(null);
+          setImageCropMode('none');
           showToast('🗑️ Διαγράφηκε η επιλογή!');
           return;
         }
@@ -8955,12 +9363,19 @@ export default function App() {
         }
       }
 
-      // G / Γ -> Group / Ungroup selected strokes when 2+ strokes are selected!
-      if ((code === 'KeyG' || key === 'g' || key === 'γ') && selectedStrokeIds.length >= 2) {
+      // G / Γ -> Group / Ungroup selected strokes/images when 2+ objects are selected!
+      if (
+        (code === 'KeyG' || key === 'g' || key === 'γ') &&
+        selectedStrokeIds.length + selectedImageIds.length >= 2
+      ) {
         e.preventDefault();
-        const selList = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
-        const firstGrp = selList[0]?.groupId;
-        const allInSameGroup = Boolean(firstGrp) && selList.every((s) => s.groupId === firstGrp);
+        const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+        const selImgs = (activePage.images || []).filter((im) => selectedImageIds.includes(im.id));
+        const firstGrp = selStrokes[0]?.groupId || selImgs[0]?.groupId;
+        const allInSameGroup =
+          Boolean(firstGrp) &&
+          selStrokes.every((s) => s.groupId === firstGrp) &&
+          selImgs.every((im) => im.groupId === firstGrp);
         if (allInSameGroup) {
           handleUngroupSelected();
         } else {
@@ -9738,109 +10153,6 @@ export default function App() {
             </button>
           </div>
 
-          {/* Notebook Tags Button & Popover (for Smart Search keywords like #βροχή, #νερό) */}
-          <div className="relative">
-            <button
-              data-popover-trigger="tags"
-              onClick={() => setShowTagsPopover((v) => !v)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                showTagsPopover
-                  ? 'bg-[#0066ff] text-white shadow-xs'
-                  : (activeNotebook.tags?.length || 0) > 0
-                  ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30'
-                  : 'bg-[#263961] hover:bg-[#31487a] text-sky-200'
-              }`}
-              title={`Tags Αναζήτησης για «${activeNotebook.title}» (π.χ. #βροχή, #νερό, #εξάτμιση)`}
-            >
-              <Tag className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Tags</span>
-              {(activeNotebook.tags?.length || 0) > 0 && (
-                <span className="px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold">
-                  {activeNotebook.tags?.length}
-                </span>
-              )}
-            </button>
-
-            {showTagsPopover && (
-              <div
-                data-popover-panel="tags"
-                className="absolute right-0 top-full mt-2 w-72 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-3.5 z-50 space-y-2.5"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-[#0066ff]" />
-                    <span>Λέξεις-Κλειδιά (Tags)</span>
-                  </span>
-                  <button
-                    type="button"
-                    disabled={isAutoTaggingNbId === activeNotebook.id}
-                    onClick={() => void triggerSmartAutoTagsForNotebook(activeNotebook, [], false)}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold text-emerald-700 disabled:opacity-50 transition cursor-pointer"
-                    title="Αυτόματη εξαγωγή 3–4 βασικών #tags από τις εικόνες & το κείμενο της σημείωσης"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>{isAutoTaggingNbId === activeNotebook.id ? 'Ανάλυση...' : 'Auto-Tags'}</span>
-                  </button>
-                </div>
-
-                {/* Current Tags List */}
-                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto py-0.5">
-                  {(activeNotebook.tags || []).length === 0 ? (
-                    <span className="text-[11px] text-slate-400 italic">
-                      Δεν υπάρχουν tags ακόμα (π.χ. βροχή, νερό, εξάτμιση)...
-                    </span>
-                  ) : (
-                    (activeNotebook.tags || []).map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-[11px] font-semibold text-[#0066ff]"
-                      >
-                        <span>#{tag}</span>
-                        <button
-                          onClick={() => removeTagFromNotebook(activeNotebook.id, tag)}
-                          className="text-sky-400 hover:text-rose-600 cursor-pointer"
-                          title={`Αφαίρεση #${tag}`}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))
-                  )}
-                </div>
-
-                {/* Add New Tags Input */}
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={tagInputDraft}
-                    onChange={(e) => setTagInputDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === 'Enter' && tagInputDraft.trim()) {
-                        e.preventDefault();
-                        addTagsToNotebook(activeNotebook.id, tagInputDraft);
-                        setTagInputDraft('');
-                      }
-                    }}
-                    placeholder="π.χ. βροχή, νερό, εξάτμιση..."
-                    className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-[#0066ff]"
-                  />
-                  <button
-                    onClick={() => {
-                      if (tagInputDraft.trim()) {
-                        addTagsToNotebook(activeNotebook.id, tagInputDraft);
-                        setTagInputDraft('');
-                      }
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs font-bold cursor-pointer shrink-0"
-                  >
-                    + Tag
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* 30s Google Drive Sync Pill */}
           <button
             onClick={() => void performDrivePdfSync(true)}
@@ -10532,36 +10844,6 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-
-                    {/* Quick Tag Filter Pills Bar (shown when notebooks have tags) */}
-                    {allLibraryTags.length > 0 && (
-                      <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-slate-100">
-                        <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 mr-1">
-                          <Tag className="w-3 h-3" />
-                          <span>Tags:</span>
-                        </span>
-                        {allLibraryTags.map((tag) => {
-                          const isSelectedTag =
-                            normalizeGreekSearchText(librarySearchQuery.replace(/^#+/, '')) ===
-                            normalizeGreekSearchText(tag);
-                          return (
-                            <button
-                              key={tag}
-                              onClick={() =>
-                                setLibrarySearchQuery(isSelectedTag ? '' : `#${tag}`)
-                              }
-                              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
-                                isSelectedTag
-                                  ? 'bg-[#0066ff] text-white shadow-2xs'
-                                  : 'bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200/80'
-                              }`}
-                            >
-                              #{tag}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
 
                   {/* =================================================================
@@ -12263,16 +12545,29 @@ export default function App() {
                     </div>
 
                     {(() => {
-                      if (selectedStrokeIds.length === 0) return null;
+                      const effectiveImgIds =
+                        selectedImageIds.length > 0
+                          ? selectedImageIds
+                          : selectedImageId
+                          ? [selectedImageId]
+                          : [];
+                      const totalSelCount = selectedStrokeIds.length + effectiveImgIds.length;
+                      if (totalSelCount === 0) return null;
                       const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
-                      const hasGroupedStroke = selStrokes.some((s) => Boolean(s.groupId));
-                      const firstGrpId = selStrokes[0]?.groupId;
+                      const selImgs = (activePage.images || []).filter((im) =>
+                        effectiveImgIds.includes(im.id)
+                      );
+                      const hasGroupedItem =
+                        selStrokes.some((s) => Boolean(s.groupId)) ||
+                        selImgs.some((im) => Boolean(im.groupId));
+                      const firstGrpId = selStrokes[0]?.groupId || selImgs[0]?.groupId;
                       const allAlreadyInSameGroup =
-                        selStrokes.length >= 2 &&
+                        totalSelCount >= 2 &&
                         Boolean(firstGrpId) &&
-                        selStrokes.every((s) => s.groupId === firstGrpId);
+                        selStrokes.every((s) => s.groupId === firstGrpId) &&
+                        selImgs.every((im) => im.groupId === firstGrpId);
 
-                      if (hasGroupedStroke && allAlreadyInSameGroup) {
+                      if (hasGroupedItem && allAlreadyInSameGroup) {
                         return (
                           <button
                             onClick={handleUngroupSelected}
@@ -12285,7 +12580,7 @@ export default function App() {
                         );
                       }
 
-                      if (selectedStrokeIds.length >= 2) {
+                      if (totalSelCount >= 2) {
                         return (
                           <button
                             onClick={handleGroupSelected}
@@ -12293,12 +12588,12 @@ export default function App() {
                             title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
                           >
                             <Group className="w-3.5 h-3.5" />
-                            <span>Group ({selectedStrokeIds.length})</span>
+                            <span>Group ({totalSelCount})</span>
                           </button>
                         );
                       }
 
-                      if (hasGroupedStroke) {
+                      if (hasGroupedItem) {
                         return (
                           <button
                             onClick={handleUngroupSelected}
@@ -12313,14 +12608,23 @@ export default function App() {
 
                       return null;
                     })()}
-                    {selectedStrokeIds.length > 0 && (
+                    {(selectedStrokeIds.length > 0 || selectedImageIds.length > 1) && (
                       <button
                         onClick={() => {
+                          const effectiveImgIds =
+                            selectedImageIds.length > 0
+                              ? selectedImageIds
+                              : selectedImageId
+                              ? [selectedImageId]
+                              : [];
                           updateActivePage((page) => ({
                             ...page,
                             strokes: page.strokes.filter((s) => !selectedStrokeIds.includes(s.id)),
+                            images: (page.images || []).filter((im) => !effectiveImgIds.includes(im.id)),
                           }));
                           setSelectedStrokeIds([]);
+                          setSelectedImageIds([]);
+                          setSelectedImageId(null);
                         }}
                         className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-medium cursor-pointer"
                       >
@@ -12331,7 +12635,7 @@ export default function App() {
                   </div>
                 )}
 
-                {selectedImgObj && (
+                {selectedImgObj && selectedImageIds.length <= 1 && selectedStrokeIds.length === 0 && (
                   <div className="flex items-center gap-1.5">
                     <span
                       onClick={() => {
