@@ -928,6 +928,14 @@ export default function App() {
     segIdx?: number;
     freehandIdx?: number;
   } | null>(null);
+  const activeDeleteNodeRef = useRef<{
+    strokeId: string;
+    nodeIdx: number;
+    x: number;
+    y: number;
+    btnX: number;
+    btnY: number;
+  } | null>(null);
   const [textFontSize, setTextFontSize] = useState<number>(22);
   const [textBold, setTextBold] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -4096,6 +4104,74 @@ export default function App() {
                 }
               }
             }
+
+            // If a node is focused/clicked (e.g. with Apple Pencil or mouse), draw the red Trash Bin button right next to it!
+            const delNode = activeDeleteNodeRef.current;
+            if (delNode && delNode.strokeId === target.id) {
+              let liveNodePt: { x: number; y: number } | undefined;
+              if (!target.isShape) {
+                const kIndices =
+                  target.keyNodeIndices && target.keyNodeIndices.length >= 2
+                    ? target.keyNodeIndices
+                    : computeFreehandKeyNodeIndices(target.points);
+                const ptIdx = kIndices[delNode.nodeIdx];
+                if (ptIdx !== undefined) liveNodePt = target.points[ptIdx];
+              } else {
+                liveNodePt = target.points[delNode.nodeIdx];
+              }
+              if (liveNodePt) {
+                const bx = liveNodePt.x + 26;
+                const by = liveNodePt.y - 18;
+                delNode.x = liveNodePt.x;
+                delNode.y = liveNodePt.y;
+                delNode.btnX = bx;
+                delNode.btnY = by;
+
+                ctx.save();
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+                ctx.lineWidth = 1.4;
+                ctx.beginPath();
+                ctx.moveTo(liveNodePt.x + 7, liveNodePt.y - 5);
+                ctx.lineTo(bx - 9, by + 5);
+                ctx.stroke();
+
+                ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetY = 1.5;
+                ctx.fillStyle = '#ef4444';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(bx, by, 11.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // White Trash Can icon inside red circle
+                ctx.shadowColor = 'transparent';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                ctx.moveTo(bx - 4.8, by - 3.2);
+                ctx.lineTo(bx + 4.8, by - 3.2);
+                ctx.moveTo(bx - 2, by - 3.2);
+                ctx.lineTo(bx - 2, by - 5);
+                ctx.lineTo(bx + 2, by - 5);
+                ctx.lineTo(bx + 2, by - 3.2);
+                ctx.moveTo(bx - 3.6, by - 3.2);
+                ctx.lineTo(bx - 3, by + 4.8);
+                ctx.lineTo(bx + 3, by + 4.8);
+                ctx.lineTo(bx + 3.6, by - 3.2);
+                ctx.moveTo(bx - 1.2, by - 0.8);
+                ctx.lineTo(bx - 1.2, by + 2.8);
+                ctx.moveTo(bx + 1.2, by - 0.8);
+                ctx.lineTo(bx + 1.2, by + 2.8);
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+
             ctx.restore();
           }
         }
@@ -6582,6 +6658,296 @@ export default function App() {
     return null;
   };
 
+  // Find if the pointer is hovering over an existing node in Nodes ('direct-node') mode
+  const findHoveredNodeOnStroke = (
+    pt: { x: number; y: number },
+    target: StrokeObject,
+    hitRadius = 22
+  ): { strokeId: string; nodeIdx: number; x: number; y: number; btnX: number; btnY: number } | null => {
+    if (!target || isShapeWithoutNodes(target)) return null;
+
+    if (!target.isShape) {
+      const keyIndices =
+        target.keyNodeIndices && target.keyNodeIndices.length >= 2
+          ? target.keyNodeIndices
+          : computeFreehandKeyNodeIndices(target.points);
+      const isWeldedClosed = target.points[0]?.twist === 999 && keyIndices.length >= 3;
+      let bestK = -1;
+      let bestDist = hitRadius;
+      for (let k = 0; k < keyIndices.length; k++) {
+        if (isWeldedClosed && k === keyIndices.length - 1) continue;
+        const p = target.points[keyIndices[k]];
+        if (p) {
+          const d = distance(pt, p);
+          if (d < bestDist) {
+            bestDist = d;
+            bestK = k;
+          }
+        }
+      }
+      if (bestK >= 0) {
+        const p = target.points[keyIndices[bestK]];
+        return {
+          strokeId: target.id,
+          nodeIdx: bestK,
+          x: p.x,
+          y: p.y,
+          btnX: p.x + 26,
+          btnY: p.y - 18,
+        };
+      }
+      return null;
+    }
+
+    const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
+    const isThreePtCurve =
+      target.shapeType === 'parabola' ||
+      target.shapeType === 'hyperbola' ||
+      target.shapeType === 'arc';
+    const isClosedPoly =
+      target.shapeType === 'rectangle' ||
+      target.shapeType === 'parallelogram' ||
+      target.shapeType === 'triangle' ||
+      target.shapeType === 'cuboid' ||
+      target.shapeType === 'cylinder' ||
+      target.shapeType === 'sphere' ||
+      target.shapeType === 'pyramid' ||
+      target.shapeType === 'resistor' ||
+      target.shapeType === 'spring';
+    const nodeCount = isWave
+      ? Math.min(2, target.points.length)
+      : isThreePtCurve
+      ? Math.min(3, target.points.length)
+      : isClosedPoly
+      ? Math.max(1, target.points.length - 1)
+      : target.points.length;
+
+    let bestIdx = -1;
+    let bestDist = hitRadius;
+    for (let i = 0; i < nodeCount; i++) {
+      const p = target.points[i];
+      if (p) {
+        const d = distance(pt, p);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
+      }
+    }
+    if (bestIdx >= 0) {
+      const p = target.points[bestIdx];
+      return {
+        strokeId: target.id,
+        nodeIdx: bestIdx,
+        x: p.x,
+        y: p.y,
+        btnX: p.x + 26,
+        btnY: p.y - 18,
+      };
+    }
+    return null;
+  };
+
+  const drawRedNodeTrashOverlay = (delNode: {
+    x: number;
+    y: number;
+    btnX: number;
+    btnY: number;
+  }) => {
+    clearActiveOverlay();
+    const aCtx = activeCtxRef.current;
+    if (!aCtx) return;
+    const { x, y, btnX: bx, btnY: by } = delNode;
+    aCtx.save();
+    aCtx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+    aCtx.lineWidth = 1.4;
+    aCtx.beginPath();
+    aCtx.moveTo(x + 7, y - 5);
+    aCtx.lineTo(bx - 9, by + 5);
+    aCtx.stroke();
+
+    aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+    aCtx.shadowBlur = 5;
+    aCtx.shadowOffsetY = 1.5;
+    aCtx.fillStyle = '#ef4444';
+    aCtx.strokeStyle = '#ffffff';
+    aCtx.lineWidth = 2;
+    aCtx.beginPath();
+    aCtx.arc(bx, by, 11.5, 0, Math.PI * 2);
+    aCtx.fill();
+    aCtx.stroke();
+
+    aCtx.shadowColor = 'transparent';
+    aCtx.strokeStyle = '#ffffff';
+    aCtx.lineWidth = 1.5;
+    aCtx.lineCap = 'round';
+    aCtx.lineJoin = 'round';
+    aCtx.beginPath();
+    aCtx.moveTo(bx - 4.8, by - 3.2);
+    aCtx.lineTo(bx + 4.8, by - 3.2);
+    aCtx.moveTo(bx - 2, by - 3.2);
+    aCtx.lineTo(bx - 2, by - 5);
+    aCtx.lineTo(bx + 2, by - 5);
+    aCtx.lineTo(bx + 2, by - 3.2);
+    aCtx.moveTo(bx - 3.6, by - 3.2);
+    aCtx.lineTo(bx - 3, by + 4.8);
+    aCtx.lineTo(bx + 3, by + 4.8);
+    aCtx.lineTo(bx + 3.6, by - 3.2);
+    aCtx.moveTo(bx - 1.2, by - 0.8);
+    aCtx.lineTo(bx - 1.2, by + 2.8);
+    aCtx.moveTo(bx + 1.2, by - 0.8);
+    aCtx.lineTo(bx + 1.2, by + 2.8);
+    aCtx.stroke();
+    aCtx.restore();
+  };
+
+  const handleDeleteSingleNode = (strokeId: string, nodeIdx: number) => {
+    const target = activePage.strokes.find((s) => s.id === strokeId);
+    if (!target) return;
+
+    if (!target.isShape) {
+      const keyIndices =
+        target.keyNodeIndices && target.keyNodeIndices.length >= 2
+          ? target.keyNodeIndices
+          : computeFreehandKeyNodeIndices(target.points);
+      if (keyIndices.length <= 2) {
+        showToast('⚠️ Η γραμμή χρειάζεται τουλάχιστον 2 κόμβους!');
+        return;
+      }
+      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+      setRedoStack([]);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.id !== strokeId) return s;
+            const kList =
+              s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                ? [...s.keyNodeIndices]
+                : computeFreehandKeyNodeIndices(s.points);
+            if (kList.length <= 2) return s;
+
+            if (nodeIdx === 0) {
+              const cutIdx = kList[1];
+              const nextPts = s.points.slice(cutIdx);
+              const nextKeys = kList.slice(1).map((idx) => idx - cutIdx);
+              return { ...s, points: nextPts, keyNodeIndices: nextKeys };
+            }
+            if (nodeIdx === kList.length - 1) {
+              const cutIdx = kList[kList.length - 2];
+              const nextPts = s.points.slice(0, cutIdx + 1);
+              const nextKeys = kList.slice(0, -1);
+              return { ...s, points: nextPts, keyNodeIndices: nextKeys };
+            }
+
+            // Interior node: smoothly straighten between kList[nodeIdx - 1] and kList[nodeIdx + 1] and remove kList[nodeIdx]
+            const prevIdx = kList[nodeIdx - 1];
+            const nextIdx = kList[nodeIdx + 1];
+            const pA = s.points[prevIdx];
+            const pB = s.points[nextIdx];
+            const nextPts = [...s.points];
+            const span = Math.max(1, nextIdx - prevIdx);
+            for (let i = prevIdx + 1; i < nextIdx; i++) {
+              const t = (i - prevIdx) / span;
+              nextPts[i] = {
+                ...nextPts[i],
+                x: pA.x + (pB.x - pA.x) * t,
+                y: pA.y + (pB.y - pA.y) * t,
+              };
+            }
+            const nextKeys = kList.filter((_, k) => k !== nodeIdx);
+            return { ...s, points: nextPts, keyNodeIndices: nextKeys };
+          }),
+        }),
+        true
+      );
+      showToast('🗑️ Ο κόμβος διαγράφηκε!');
+      return;
+    }
+
+    const isClosedPoly =
+      target.shapeType === 'rectangle' ||
+      target.shapeType === 'parallelogram' ||
+      target.shapeType === 'triangle';
+    if (isClosedPoly) {
+      const uniqueVerts = target.points.length - 1;
+      if (uniqueVerts <= 3) {
+        showToast('⚠️ Ένα κλειστό πολύγωνο χρειάζεται τουλάχιστον 3 κόμβους!');
+        return;
+      }
+      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+      setRedoStack([]);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.id !== strokeId) return s;
+            const ring = s.points.slice(0, -1).filter((_, idx) => idx !== nodeIdx);
+            ring.push({ ...ring[0] });
+            return { ...s, points: ring };
+          }),
+        }),
+        true
+      );
+      showToast('🗑️ Ο κόμβος διαγράφηκε!');
+      return;
+    }
+
+    const isOpenPoly =
+      target.shapeType === 'line' ||
+      target.shapeType === 'arrow' ||
+      target.shapeType === 'double-arrow';
+    if (isOpenPoly) {
+      if (target.points.length <= 2) {
+        showToast('⚠️ Η γραμμή χρειάζεται τουλάχιστον 2 κόμβους!');
+        return;
+      }
+      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+      setRedoStack([]);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.id !== strokeId) return s;
+            return { ...s, points: s.points.filter((_, idx) => idx !== nodeIdx) };
+          }),
+        }),
+        true
+      );
+      showToast('🗑️ Ο κόμβος διαγράφηκε!');
+      return;
+    }
+
+    const isThreePtCurve =
+      target.shapeType === 'parabola' ||
+      target.shapeType === 'hyperbola' ||
+      target.shapeType === 'arc';
+    if (isThreePtCurve && nodeIdx === 1 && target.points.length >= 3) {
+      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+      setRedoStack([]);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.id !== strokeId) return s;
+            const nextPts = [...s.points];
+            nextPts[1] = {
+              ...nextPts[1],
+              x: (nextPts[0].x + nextPts[2].x) / 2,
+              y: (nextPts[0].y + nextPts[2].y) / 2,
+            };
+            return { ...s, points: nextPts };
+          }),
+        }),
+        true
+      );
+      showToast('🗑️ Ο μεσαίος κόμβος καμπυλότητας επανήλθε στην ευθεία!');
+      return;
+    }
+
+    showToast('⚠️ Αυτός ο κόμβος είναι βασικός για το συγκεκριμένο σχήμα.');
+  };
+
   // Illustrator-style Smart Alignment & Magnetic Snap Helpers (Edges -> Red Line, Centers -> Red '+' Crosshair)
   const getReferenceSnapBoxes = (excludeStrokeIds: string[], excludeImgIds: string[]) => {
     const visibleLayerIds = new Set(activePage.layers.filter((l) => l.visible).map((l) => l.id));
@@ -7155,6 +7521,21 @@ export default function App() {
       cancelAddNodeLongPress();
       const nodeHitRadius = e.pointerType === 'touch' ? 30 : 22;
       if (activeNodeStrokeId) {
+        // 0. Check if user clicked/tapped the Red Trash Bin button next to the hovered/active node!
+        if (
+          activeDeleteNodeRef.current &&
+          activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
+          Math.hypot(pt.x - activeDeleteNodeRef.current.btnX, pt.y - activeDeleteNodeRef.current.btnY) <= 20
+        ) {
+          const toDel = activeDeleteNodeRef.current;
+          activeDeleteNodeRef.current = null;
+          hoverAddNodePreviewRef.current = null;
+          clearActiveOverlay();
+          handleDeleteSingleNode(toDel.strokeId, toDel.nodeIdx);
+          renderStaticSceneRef.current();
+          return;
+        }
+
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target && !isShapeWithoutNodes(target)) {
           if (!target.isShape) {
@@ -7180,6 +7561,18 @@ export default function App() {
               if (hoverAddNodePreviewRef.current) {
                 hoverAddNodePreviewRef.current = null;
                 clearActiveOverlay();
+              }
+              const hitPt = target.points[keyIndices[bestK]];
+              if (hitPt) {
+                activeDeleteNodeRef.current = {
+                  strokeId: target.id,
+                  nodeIdx: bestK,
+                  x: hitPt.x,
+                  y: hitPt.y,
+                  btnX: hitPt.x + 26,
+                  btnY: hitPt.y - 18,
+                };
+                renderStaticSceneRef.current();
               }
               if (!target.keyNodeIndices || target.keyNodeIndices.length < 2) {
                 updateActivePage(
@@ -7238,6 +7631,18 @@ export default function App() {
               if (hoverAddNodePreviewRef.current) {
                 hoverAddNodePreviewRef.current = null;
                 clearActiveOverlay();
+              }
+              const hitPt = target.points[bestIdx];
+              if (hitPt) {
+                activeDeleteNodeRef.current = {
+                  strokeId: target.id,
+                  nodeIdx: bestIdx,
+                  x: hitPt.x,
+                  y: hitPt.y,
+                  btnX: hitPt.x + 26,
+                  btnY: hitPt.y - 18,
+                };
+                renderStaticSceneRef.current();
               }
               setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
               setRedoStack([]);
@@ -8264,6 +8669,27 @@ export default function App() {
       if (activeTool === 'direct-node' && activeNodeStrokeId && e.pointerType !== 'touch') {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+
+        // 1. Check if cursor is hovering over an existing node OR over its adjacent Red Trash Bin button
+        if (target) {
+          const curDel = activeDeleteNodeRef.current;
+          const isNearExistingDelBtn =
+            curDel &&
+            curDel.strokeId === target.id &&
+            (Math.hypot(hoverPt.x - curDel.btnX, hoverPt.y - curDel.btnY) <= 22 ||
+              Math.hypot(hoverPt.x - curDel.x, hoverPt.y - curDel.y) <= 22 ||
+              isPointNearSegment(hoverPt, { x: curDel.x, y: curDel.y }, { x: curDel.btnX, y: curDel.btnY }, 16));
+
+          const hoveredNode = isNearExistingDelBtn ? curDel : findHoveredNodeOnStroke(hoverPt, target, 20);
+          if (hoveredNode) {
+            hoverAddNodePreviewRef.current = null;
+            activeDeleteNodeRef.current = hoveredNode;
+            e.currentTarget.style.cursor = 'pointer';
+            drawRedNodeTrashOverlay(hoveredNode);
+            return;
+          }
+        }
+
         const preview = target ? computeHoverAddNodePoint(hoverPt, target) : null;
         if (preview) {
           hoverAddNodePreviewRef.current = preview;
@@ -8301,6 +8727,9 @@ export default function App() {
           }
         } else if (hoverAddNodePreviewRef.current) {
           hoverAddNodePreviewRef.current = null;
+          e.currentTarget.style.cursor = '';
+          clearActiveOverlay();
+        } else {
           e.currentTarget.style.cursor = '';
           clearActiveOverlay();
         }
