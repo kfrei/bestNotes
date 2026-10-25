@@ -94,6 +94,8 @@ export interface TextObject {
   id: string;
   x: number;
   y: number;
+  boxWidth?: number;
+  boxHeight?: number;
   text: string;
   latex?: string;
   isMath?: boolean;

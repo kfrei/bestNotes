@@ -1007,6 +1007,7 @@ export default function App() {
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const lastTextCreatedTimeRef = useRef<number>(0);
+  const textMeasureCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const draggingTextRef = useRef<{
     id: string;
     pageIdx: number;
@@ -1015,6 +1016,9 @@ export default function App() {
     startClientY: number;
     origX: number;
     origY: number;
+    origW?: number;
+    origH?: number;
+    resizeHandle?: 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
     moved: boolean;
     wasAlreadySelected: boolean;
     startedOnTextarea?: boolean;
@@ -13442,6 +13446,86 @@ export default function App() {
     }
   };
 
+  // Computes the maximum font size (8px..96px) so that the entire text fits inside (boxW, boxH)
+  // both horizontally (wrapping words into lines of width <= availW without clipping a word) and vertically (all wrapped lines <= availH).
+  const computeMaxFitFontSizeForBox = useCallback(
+    (
+      rawText: string,
+      fontFamily: TextFontStyle | undefined,
+      bold: boolean | undefined,
+      boxW: number,
+      boxH: number
+    ): number => {
+      if (!textMeasureCtxRef.current) {
+        const c = document.createElement('canvas');
+        textMeasureCtxRef.current = c.getContext('2d');
+      }
+      const ctx = textMeasureCtxRef.current;
+      const availW = Math.max(24, boxW - 28);
+      const availH = Math.max(14, boxH - 16);
+      const sampleText = rawText && rawText.trim().length > 0 ? rawText : 'Αβγ';
+      if (!ctx) {
+        return Math.max(8, Math.min(96, Math.round(availH / 1.38)));
+      }
+
+      const css = getTextFontCss(fontFamily);
+      const stylePrefix =
+        css.fontStyle && css.fontStyle !== 'normal' ? `${css.fontStyle} ` : '';
+      const weightPrefix = bold ? '700 ' : '500 ';
+      const familyStr = String(css.fontFamily || 'sans-serif');
+      const paragraphs = sampleText.split(/\r?\n/);
+
+      const fitsAtSize = (sz: number): boolean => {
+        ctx.font = `${stylePrefix}${weightPrefix}${sz}px ${familyStr}`;
+        const spaceW = ctx.measureText(' ').width * 1.03;
+        let totalLines = 0;
+
+        for (const para of paragraphs) {
+          const words = para.split(/\s+/).filter(Boolean);
+          if (words.length === 0) {
+            totalLines += 1;
+            continue;
+          }
+          let lineW = 0;
+          let linesInPara = 1;
+          for (const word of words) {
+            const wordW = ctx.measureText(word).width * 1.03;
+            if (wordW > availW) {
+              return false;
+            }
+            if (lineW === 0) {
+              lineW = wordW;
+            } else if (lineW + spaceW + wordW <= availW) {
+              lineW += spaceW + wordW;
+            } else {
+              linesInPara += 1;
+              lineW = wordW;
+            }
+          }
+          totalLines += linesInPara;
+        }
+
+        const totalH = totalLines * (sz * 1.35);
+        return totalH <= availH;
+      };
+
+      let low = 8;
+      let high = 96;
+      let best = 8;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (fitsAtSize(mid)) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      return best;
+    },
+    []
+  );
+
   // Manual (on-demand) Lasso Handwriting -> Calligraphic Greek Text conversion via Gemini Vision
   const handleConvertLassoToCalligraphic = useCallback(async () => {
     if (isConvertingHandwriting) return;
@@ -16718,7 +16802,15 @@ export default function App() {
                     if (selTxt) {
                       updateActivePage((page) => ({
                         ...page,
-                        texts: (page.texts || []).map((t) => (t.id === selTxt.id ? { ...t, bold: nextB } : t)),
+                        texts: (page.texts || []).map((t) => {
+                          if (t.id !== selTxt.id) return t;
+                          const nextFs =
+                            t.boxWidth && t.boxHeight
+                              ? computeMaxFitFontSizeForBox(t.text, t.fontFamily, nextB, t.boxWidth, t.boxHeight)
+                              : t.fontSize;
+                          if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                          return { ...t, bold: nextB, fontSize: nextFs };
+                        }),
                       }));
                     }
                   };
@@ -16728,21 +16820,29 @@ export default function App() {
                     if (selTxt) {
                       updateActivePage((page) => ({
                         ...page,
-                        texts: (page.texts || []).map((t) =>
-                          t.id === selTxt.id ? { ...t, fontFamily: nextFont } : t
-                        ),
+                        texts: (page.texts || []).map((t) => {
+                          if (t.id !== selTxt.id) return t;
+                          const nextFs =
+                            t.boxWidth && t.boxHeight
+                              ? computeMaxFitFontSizeForBox(t.text, nextFont, t.bold, t.boxWidth, t.boxHeight)
+                              : t.fontSize;
+                          if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                          return { ...t, fontFamily: nextFont, fontSize: nextFs };
+                        }),
                       }));
                     }
                   };
 
                   const applyFontSize = (nextSize: number) => {
-                    const clamped = Math.max(10, Math.min(72, nextSize));
+                    const clamped = Math.max(8, Math.min(96, nextSize));
                     setTextFontSize(clamped);
                     if (selTxt) {
                       updateActivePage((page) => ({
                         ...page,
                         texts: (page.texts || []).map((t) =>
-                          t.id === selTxt.id ? { ...t, fontSize: clamped } : t
+                          t.id === selTxt.id
+                            ? { ...t, fontSize: clamped, boxWidth: undefined, boxHeight: undefined }
+                            : t
                         ),
                       }));
                     }
@@ -19191,6 +19291,8 @@ export default function App() {
                           style={{
                             left: txt.x,
                             top: txt.y,
+                            width: txt.boxWidth ? `${txt.boxWidth}px` : undefined,
+                            height: txt.boxHeight ? `${txt.boxHeight}px` : undefined,
                             color: txt.color,
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
@@ -19207,7 +19309,21 @@ export default function App() {
                               return;
                             }
                             ev.stopPropagation();
-                            const startedOnTextarea = (ev.target as HTMLElement).tagName === 'TEXTAREA';
+                            const resizeEl = (ev.target as HTMLElement).closest(
+                              '[data-text-resize]'
+                            ) as HTMLElement | null;
+                            const resizeHandle = resizeEl?.getAttribute('data-text-resize') as
+                              | 'n'
+                              | 's'
+                              | 'e'
+                              | 'w'
+                              | 'nw'
+                              | 'ne'
+                              | 'sw'
+                              | 'se'
+                              | null;
+                            const startedOnTextarea =
+                              !resizeHandle && (ev.target as HTMLElement).tagName === 'TEXTAREA';
                             if (!startedOnTextarea) {
                               ev.preventDefault();
                             }
@@ -19225,6 +19341,9 @@ export default function App() {
                             setActiveNodeStrokeId(null);
                             setShowToolSubBar(true);
 
+                            const curBoxW = txt.boxWidth || ev.currentTarget.offsetWidth || 180;
+                            const curBoxH = txt.boxHeight || ev.currentTarget.offsetHeight || 48;
+
                             draggingTextRef.current = {
                               id: txt.id,
                               pageIdx,
@@ -19233,7 +19352,10 @@ export default function App() {
                               startClientY: ev.clientY,
                               origX: txt.x,
                               origY: txt.y,
-                              moved: false,
+                              origW: curBoxW,
+                              origH: curBoxH,
+                              resizeHandle: resizeHandle || undefined,
+                              moved: Boolean(resizeHandle),
                               wasAlreadySelected,
                               startedOnTextarea,
                             };
@@ -19252,6 +19374,63 @@ export default function App() {
                             ev.stopPropagation();
                             const dx = (ev.clientX - d.startClientX) / zoomRef.current;
                             const dy = (ev.clientY - d.startClientY) / zoomRef.current;
+
+                            if (d.resizeHandle) {
+                              const origW = d.origW || 180;
+                              const origH = d.origH || 48;
+                              let nextX = d.origX;
+                              let nextY = d.origY;
+                              let nextW = origW;
+                              let nextH = origH;
+
+                              if (d.resizeHandle.includes('e')) {
+                                nextW = Math.max(64, Math.min(pW - d.origX - 8, Math.round(origW + dx)));
+                              }
+                              if (d.resizeHandle.includes('w')) {
+                                const maxLeftShift = d.origX - 8;
+                                const clampedDx = Math.max(-maxLeftShift, Math.min(origW - 64, dx));
+                                nextX = Math.round(d.origX + clampedDx);
+                                nextW = Math.max(64, Math.round(origW - clampedDx));
+                              }
+                              if (d.resizeHandle.includes('s')) {
+                                nextH = Math.max(30, Math.min(pH - d.origY - 8, Math.round(origH + dy)));
+                              }
+                              if (d.resizeHandle.includes('n')) {
+                                const maxTopShift = d.origY - 8;
+                                const clampedDy = Math.max(-maxTopShift, Math.min(origH - 30, dy));
+                                nextY = Math.round(d.origY + clampedDy);
+                                nextH = Math.max(30, Math.round(origH - clampedDy));
+                              }
+
+                              const autoFs = computeMaxFitFontSizeForBox(
+                                txt.text,
+                                txt.fontFamily,
+                                txt.bold,
+                                nextW,
+                                nextH
+                              );
+                              setTextFontSize(autoFs);
+                              updateActivePage(
+                                (page) => ({
+                                  ...page,
+                                  texts: (page.texts || []).map((t) =>
+                                    t.id === txt.id
+                                      ? {
+                                          ...t,
+                                          x: nextX,
+                                          y: nextY,
+                                          boxWidth: nextW,
+                                          boxHeight: nextH,
+                                          fontSize: autoFs,
+                                        }
+                                      : t
+                                  ),
+                                }),
+                                false
+                              );
+                              return;
+                            }
+
                             if (!d.moved && Math.hypot(dx, dy) > 4) {
                               d.moved = true;
                               try {
@@ -19308,6 +19487,57 @@ export default function App() {
                               : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
                           }`}
                         >
+                          {/* 8 Resize Handles (Left/Right/Top/Bottom + 4 Corners) to narrow/expand the box & auto-fit fontSize! */}
+                          {(isSelectedTxt || isEditingTxt) && !txt.isMath && (
+                            <>
+                              {/* Left Edge Handle (W) */}
+                              <div
+                                data-text-resize="w"
+                                title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                className="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-6 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ew-resize z-30 hover:scale-110 transition-transform"
+                              />
+                              {/* Right Edge Handle (E) */}
+                              <div
+                                data-text-resize="e"
+                                title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                className="absolute -right-2 top-1/2 -translate-y-1/2 w-3 h-6 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ew-resize z-30 hover:scale-110 transition-transform"
+                              />
+                              {/* Top Edge Handle (N) */}
+                              <div
+                                data-text-resize="n"
+                                title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                className="absolute left-1/2 -top-2 -translate-x-1/2 w-6 h-3 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ns-resize z-30 hover:scale-110 transition-transform"
+                              />
+                              {/* Bottom Edge Handle (S) */}
+                              <div
+                                data-text-resize="s"
+                                title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                className="absolute left-1/2 -bottom-2 -translate-x-1/2 w-6 h-3 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-ns-resize z-30 hover:scale-110 transition-transform"
+                              />
+                              {/* 4 Corner Handles (NW, NE, SW, SE) */}
+                              <div
+                                data-text-resize="nw"
+                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                className="absolute -left-2 -top-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nwse-resize z-30 hover:scale-110 transition-transform"
+                              />
+                              <div
+                                data-text-resize="ne"
+                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                className="absolute -right-2 -top-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nesw-resize z-30 hover:scale-110 transition-transform"
+                              />
+                              <div
+                                data-text-resize="sw"
+                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                className="absolute -left-2 -bottom-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nesw-resize z-30 hover:scale-110 transition-transform"
+                              />
+                              <div
+                                data-text-resize="se"
+                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                className="absolute -right-2 -bottom-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-xs cursor-nwse-resize z-30 hover:scale-110 transition-transform"
+                              />
+                            </>
+                          )}
+
                           {/* Floating Quick Format & Drag Pill above Selected/Editing Text Box */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <div
@@ -19323,7 +19553,7 @@ export default function App() {
                                 letterSpacing: 'normal',
                                 WebkitTextStroke: '0px',
                               }}
-                              className="absolute -top-10 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30 cursor-grab active:cursor-grabbing"
+                              className="absolute -top-11 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-30 cursor-grab active:cursor-grabbing"
                             >
                               <span
                                 className="px-1 py-0.5 text-sky-300 font-bold select-none"
@@ -19350,9 +19580,21 @@ export default function App() {
                                     setTextFontFamily(nextFont);
                                     updateActivePage((page) => ({
                                       ...page,
-                                      texts: (page.texts || []).map((t) =>
-                                        t.id === txt.id ? { ...t, fontFamily: nextFont } : t
-                                      ),
+                                      texts: (page.texts || []).map((t) => {
+                                        if (t.id !== txt.id) return t;
+                                        const nextFs =
+                                          t.boxWidth && t.boxHeight
+                                            ? computeMaxFitFontSizeForBox(
+                                                t.text,
+                                                nextFont,
+                                                t.bold,
+                                                t.boxWidth,
+                                                t.boxHeight
+                                              )
+                                            : t.fontSize;
+                                        if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                                        return { ...t, fontFamily: nextFont, fontSize: nextFs };
+                                      }),
                                     }));
                                   }}
                                   className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-bold cursor-pointer"
@@ -19380,9 +19622,21 @@ export default function App() {
                                     setTextBold(nextB);
                                     updateActivePage((page) => ({
                                       ...page,
-                                      texts: (page.texts || []).map((t) =>
-                                        t.id === txt.id ? { ...t, bold: nextB } : t
-                                      ),
+                                      texts: (page.texts || []).map((t) => {
+                                        if (t.id !== txt.id) return t;
+                                        const nextFs =
+                                          t.boxWidth && t.boxHeight
+                                            ? computeMaxFitFontSizeForBox(
+                                                t.text,
+                                                t.fontFamily,
+                                                nextB,
+                                                t.boxWidth,
+                                                t.boxHeight
+                                              )
+                                            : t.fontSize;
+                                        if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                                        return { ...t, bold: nextB, fontSize: nextFs };
+                                      }),
                                     }));
                                   }}
                                   className={`px-1.5 py-0.5 rounded font-extrabold cursor-pointer ${
@@ -19397,12 +19651,14 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => {
-                                  const nextSz = Math.max(10, txt.fontSize - 2);
+                                  const nextSz = Math.max(8, txt.fontSize - 2);
                                   setTextFontSize(nextSz);
                                   updateActivePage((page) => ({
                                     ...page,
                                     texts: (page.texts || []).map((t) =>
-                                      t.id === txt.id ? { ...t, fontSize: nextSz } : t
+                                      t.id === txt.id
+                                        ? { ...t, fontSize: nextSz, boxWidth: undefined, boxHeight: undefined }
+                                        : t
                                     ),
                                   }));
                                 }}
@@ -19416,12 +19672,14 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => {
-                                  const nextSz = Math.min(72, txt.fontSize + 2);
+                                  const nextSz = Math.min(96, txt.fontSize + 2);
                                   setTextFontSize(nextSz);
                                   updateActivePage((page) => ({
                                     ...page,
                                     texts: (page.texts || []).map((t) =>
-                                      t.id === txt.id ? { ...t, fontSize: nextSz } : t
+                                      t.id === txt.id
+                                        ? { ...t, fontSize: nextSz, boxWidth: undefined, boxHeight: undefined }
+                                        : t
                                     ),
                                   }));
                                 }}
@@ -19481,9 +19739,21 @@ export default function App() {
                                 updateActivePage(
                                   (page) => ({
                                     ...page,
-                                    texts: (page.texts || []).map((t) =>
-                                      t.id === txt.id ? { ...t, text: val } : t
-                                    ),
+                                    texts: (page.texts || []).map((t) => {
+                                      if (t.id !== txt.id) return t;
+                                      const nextFs =
+                                        t.boxWidth && t.boxHeight
+                                          ? computeMaxFitFontSizeForBox(
+                                              val,
+                                              t.fontFamily,
+                                              t.bold,
+                                              t.boxWidth,
+                                              t.boxHeight
+                                            )
+                                          : t.fontSize;
+                                      if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                                      return { ...t, text: val, fontSize: nextFs };
+                                    }),
                                   }),
                                   false
                                 );
@@ -19516,13 +19786,22 @@ export default function App() {
                                 }
                               }}
                               style={{
-                                fieldSizing: 'content',
-                                width: 'auto',
-                                height: 'auto',
-                                minInlineSize: '12ch',
-                                maxInlineSize: '42ch',
-                                minBlockSize: '1.5lh',
-                                maxBlockSize: '14lh',
+                                ...(txt.boxWidth && txt.boxHeight
+                                  ? {
+                                      width: '100%',
+                                      height: '100%',
+                                      overflow: 'hidden',
+                                      overflowWrap: 'break-word',
+                                    }
+                                  : {
+                                      fieldSizing: 'content',
+                                      width: 'auto',
+                                      height: 'auto',
+                                      minInlineSize: '12ch',
+                                      maxInlineSize: '42ch',
+                                      minBlockSize: '1.5lh',
+                                      maxBlockSize: '14lh',
+                                    }),
                                 color: txt.color,
                                 fontSize: txt.fontSize,
                                 fontWeight: txt.bold ? 700 : 500,
@@ -19535,6 +19814,10 @@ export default function App() {
                           ) : (
                             <div
                               style={{
+                                width: txt.boxWidth ? '100%' : undefined,
+                                height: txt.boxHeight ? '100%' : undefined,
+                                overflow: txt.boxWidth ? 'hidden' : undefined,
+                                overflowWrap: 'break-word',
                                 whiteSpace: 'pre-wrap',
                                 fontWeight: txt.bold ? 700 : 500,
                                 ...fontCss,

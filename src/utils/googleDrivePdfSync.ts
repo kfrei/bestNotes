@@ -519,7 +519,7 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
       ctx.fillStyle = tx.color || '#111827';
       const fontStack =
         tx.fontFamily === 'calligraphic'
-          ? '"ExplainBoardsPen", "Mynerve", "Arima", cursive, sans-serif'
+          ? '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
           : tx.fontFamily === 'neohellenic'
           ? 'italic "GFS Neohellenic", "Arima", cursive, serif'
           : tx.fontFamily === 'handwritten'
@@ -527,12 +527,37 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
           : tx.fontFamily === 'mansalva'
           ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
           : tx.fontFamily === 'marker'
-          ? '"ExplainBoardsHand", "Mynerve", "Mansalva", cursive, sans-serif'
+          ? '"ExplainBoardsPen", "Mynerve", "Mansalva", cursive, sans-serif'
           : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.font = `${tx.bold ? 'bold ' : ''}${tx.fontSize || 20}px ${fontStack}`;
-      const lines = tx.text.split('\n');
-      lines.forEach((line, idx) => {
-        ctx.fillText(line, tx.x, tx.y + (idx + 1) * (tx.fontSize || 20) * 1.25);
+      const fSize = tx.fontSize || 20;
+      ctx.font = `${tx.bold ? 'bold ' : ''}${fSize}px ${fontStack}`;
+      const rawParas = tx.text.split(/\r?\n/);
+      const wrappedLines: string[] = [];
+      const maxLineW = tx.boxWidth ? Math.max(24, tx.boxWidth - 24) : 0;
+      for (const para of rawParas) {
+        if (!maxLineW) {
+          wrappedLines.push(para);
+          continue;
+        }
+        const words = para.split(/\s+/).filter(Boolean);
+        if (words.length === 0) {
+          wrappedLines.push('');
+          continue;
+        }
+        let currentLine = words[0];
+        for (let wIdx = 1; wIdx < words.length; wIdx++) {
+          const candidate = `${currentLine} ${words[wIdx]}`;
+          if (ctx.measureText(candidate).width <= maxLineW) {
+            currentLine = candidate;
+          } else {
+            wrappedLines.push(currentLine);
+            currentLine = words[wIdx];
+          }
+        }
+        wrappedLines.push(currentLine);
+      }
+      wrappedLines.forEach((line, idx) => {
+        ctx.fillText(line, tx.x + 12, tx.y + 6 + (idx + 0.85) * fSize * 1.35);
       });
       ctx.restore();
     }
