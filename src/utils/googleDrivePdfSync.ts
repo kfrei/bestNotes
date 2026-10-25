@@ -1,11 +1,11 @@
-import { Notebook, NotePage, StrokeObject } from '../types/note';
+import { Notebook, NotePage, StrokeObject, A4_SHORT_PX, A4_LONG_PX, A4_GRID_STEP_PX } from '../types/note';
 import {
   computeResistorOrSpringPoints,
   distance,
   isFreehandLoopClosed,
 } from './geometryAndAlgorithms';
 
-const PDF_SCALE = 1.5; // 1380x1890 Portrait / 1890x1380 Landscape high-clarity PDF page render
+const PDF_SCALE = 1.5; // High-clarity A4 PDF page render
 
 function loadImageElement(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -35,9 +35,9 @@ function drawPaperTemplateForPdf(
   ctx.strokeStyle =
     template === 'dark-grid' ? 'rgba(148, 163, 184, 0.16)' : 'rgba(71, 85, 105, 0.14)';
   ctx.lineWidth = 1;
+  const step = A4_GRID_STEP_PX;
 
   if (template === 'grid' || template === 'dark-grid') {
-    const step = 32;
     ctx.beginPath();
     for (let x = step; x < w; x += step) {
       ctx.moveTo(x, 0);
@@ -49,25 +49,24 @@ function drawPaperTemplateForPdf(
     }
     ctx.stroke();
   } else if (template === 'ruled' || template === 'cornell') {
-    const step = 36;
+    const lineStep = 29; // Divides 1334 (46*29) cleanly
     ctx.beginPath();
-    for (let y = 96; y < h - 40; y += step) {
-      ctx.moveTo(40, y);
-      ctx.lineTo(w - 40, y);
+    for (let y = lineStep * 3; y < h - lineStep; y += lineStep) {
+      ctx.moveTo(step * 2, y);
+      ctx.lineTo(w - step * 2, y);
     }
     ctx.stroke();
     if (template === 'cornell') {
       ctx.strokeStyle = 'rgba(220, 38, 38, 0.35)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(220, 70);
-      ctx.lineTo(220, h - 160);
-      ctx.moveTo(40, h - 160);
-      ctx.lineTo(w - 40, h - 160);
+      ctx.moveTo(step * 10, lineStep * 2);
+      ctx.lineTo(step * 10, h - lineStep * 5);
+      ctx.moveTo(step * 2, h - lineStep * 5);
+      ctx.lineTo(w - step * 2, h - lineStep * 5);
       ctx.stroke();
     }
   } else if (template === 'dotted') {
-    const step = 32;
     ctx.fillStyle = 'rgba(120, 130, 145, 0.45)';
     for (let x = step; x < w; x += step) {
       for (let y = step; y < h; y += step) {
@@ -463,8 +462,8 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
 
   for (const page of notebook.pages) {
     const isLandscape = page.orientation === 'landscape';
-    const logicalW = isLandscape ? 1260 : 920;
-    const logicalH = isLandscape ? 920 : 1260;
+    const logicalW = isLandscape ? A4_LONG_PX : A4_SHORT_PX;
+    const logicalH = isLandscape ? A4_SHORT_PX : A4_LONG_PX;
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(logicalW * PDF_SCALE);
     canvas.height = Math.round(logicalH * PDF_SCALE);

@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import { NotePage, PaperTemplateType } from '../types/note';
+import { NotePage, PaperTemplateType, A4_SHORT_PX, A4_LONG_PX } from '../types/note';
 
 // Configure PDF.js worker for Vite bundle
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -27,8 +27,8 @@ export async function renderPdfFileToPages(
     const pdfPage = await pdfDoc.getPage(i);
     const unscaledViewport = pdfPage.getViewport({ scale: 1 });
     const isLandscape = unscaledViewport.width > unscaledViewport.height * 1.05;
-    const targetLogicalW = isLandscape ? 1260 : 920;
-    const targetLogicalH = isLandscape ? 920 : 1260;
+    const targetLogicalW = isLandscape ? A4_LONG_PX : A4_SHORT_PX;
+    const targetLogicalH = isLandscape ? A4_SHORT_PX : A4_LONG_PX;
 
     // Render at ~1.75x Retina resolution for crisp text without exhausting localStorage/RAM on 30+ page PDFs
     const scale = Math.min(

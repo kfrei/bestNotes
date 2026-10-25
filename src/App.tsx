@@ -87,6 +87,9 @@ import {
   ImageObject,
   TextObject,
   TapeObject,
+  A4_SHORT_PX,
+  A4_LONG_PX,
+  A4_GRID_STEP_PX,
 } from './types/note';
 import { importGoodnotesFile } from './utils/goodnotesParser';
 import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
@@ -1024,8 +1027,8 @@ export default function App() {
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId) || notebooks[0];
   const activePage =
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
-  const pageWidth = activePage.orientation === 'landscape' ? 1260 : 920;
-  const pageHeight = activePage.orientation === 'landscape' ? 920 : 1260;
+  const pageWidth = activePage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+  const pageHeight = activePage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
 
   const showToast = useCallback((msg: string) => {
     setStatusBanner(msg);
@@ -2965,7 +2968,7 @@ export default function App() {
     ctx.fillRect(0, 0, width, height);
 
     const gridColor = template === 'dark-grid' ? 'rgba(148, 163, 184, 0.16)' : 'rgba(180, 190, 205, 0.35)';
-    const step = 24;
+    const step = A4_GRID_STEP_PX;
 
     if (template === 'grid' || template === 'dark-grid') {
       ctx.strokeStyle = gridColor;
@@ -2981,10 +2984,11 @@ export default function App() {
       }
       ctx.stroke();
     } else if (template === 'ruled' || template === 'cornell') {
+      const lineStep = 29; // Divides 1334 (46*29) cleanly
       ctx.strokeStyle = gridColor;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (let y = 72; y < height; y += 32) {
+      for (let y = lineStep * 3; y < height; y += lineStep) {
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
       }
@@ -2993,10 +2997,10 @@ export default function App() {
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(220, 72);
-        ctx.lineTo(220, height - 140);
-        ctx.moveTo(0, height - 140);
-        ctx.lineTo(width, height - 140);
+        ctx.moveTo(step * 10, lineStep * 3);
+        ctx.lineTo(step * 10, height - lineStep * 5);
+        ctx.moveTo(0, height - lineStep * 5);
+        ctx.lineTo(width, height - lineStep * 5);
         ctx.stroke();
       }
     } else if (template === 'dotted') {
@@ -3022,8 +3026,8 @@ export default function App() {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const pWidth = pageObj.orientation === 'landscape' ? 1260 : 920;
-      const pHeight = pageObj.orientation === 'landscape' ? 920 : 1260;
+      const pWidth = pageObj.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+      const pHeight = pageObj.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
@@ -3612,7 +3616,7 @@ export default function App() {
       let y = 0;
       for (let i = 0; i < targetIdx && i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        y += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+        y += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
       }
       return y;
     },
@@ -3620,7 +3624,7 @@ export default function App() {
   );
 
   const totalDocumentHeight = activeNotebook.pages.reduce(
-    (acc, p, idx) => acc + (p.orientation === 'landscape' ? 920 : 1260) + (idx > 0 ? PAGE_GAP : 0),
+    (acc, p, idx) => acc + (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + (idx > 0 ? PAGE_GAP : 0),
     0
   );
 
@@ -3666,7 +3670,7 @@ export default function App() {
       let bestIdx = 0;
       for (let i = 0; i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        const pH = p.orientation === 'landscape' ? 920 : 1260;
+        const pH = p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
         if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
           bestIdx = i;
           break;
@@ -3706,7 +3710,7 @@ export default function App() {
       let newTopY = 0;
       for (let i = 0; i < clampedIdx && i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+        newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
       }
 
       setNotebooks((prev) =>
@@ -3757,7 +3761,7 @@ export default function App() {
       let newTopY = 0;
       for (let i = 0; i < insertIdx && i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+        newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
       }
       setNotebooks((prev) =>
         prev.map((nb) => {
@@ -3795,7 +3799,7 @@ export default function App() {
       const remainingPages = activeNotebook.pages.filter((_, i) => i !== targetIdx);
       for (let i = 0; i < nextIdx && i < remainingPages.length; i++) {
         const p = remainingPages[i];
-        newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+        newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
       }
 
       setNotebooks((prev) =>
@@ -3930,8 +3934,8 @@ export default function App() {
   // Rotate Page 90° Left or Right (rotates page orientation + all strokes, images, texts, tapes)
   const handleRotatePage = useCallback(
     (direction: 'left' | 'right') => {
-      const oldW = activePage.orientation === 'landscape' ? 1260 : 920;
-      const oldH = activePage.orientation === 'landscape' ? 920 : 1260;
+      const oldW = activePage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+      const oldH = activePage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
       const nextOrientation: 'portrait' | 'landscape' =
         activePage.orientation === 'landscape' ? 'portrait' : 'landscape';
 
@@ -5578,8 +5582,8 @@ export default function App() {
         return;
       }
 
-      const pW = targetPage.orientation === 'landscape' ? 1260 : 920;
-      const pH = targetPage.orientation === 'landscape' ? 920 : 1260;
+      const pW = targetPage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+      const pH = targetPage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
       const newTxt: TextObject = {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         x: Math.max(16, Math.min(pW - 160, Math.round(pt.x))),
@@ -8676,7 +8680,7 @@ export default function App() {
         let newTopY = 0;
         for (let i = 0; i < targetInsertIdx && i < activeNotebook.pages.length; i++) {
           const p = activeNotebook.pages[i];
-          newTopY += (p.orientation === 'landscape' ? 920 : 1260) + PAGE_GAP;
+          newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
         }
 
         setNotebooks((prev) =>
@@ -9728,8 +9732,8 @@ export default function App() {
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
                           {visibleNotebooks.map((nb) => {
                             const p0 = nb.pages[0];
-                            const pW = p0?.orientation === 'landscape' ? 1260 : 920;
-                            const pH = p0?.orientation === 'landscape' ? 920 : 1260;
+                            const pW = p0?.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+                            const pH = p0?.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
                             return (
                               <div
                                 key={nb.id}
@@ -11985,8 +11989,8 @@ export default function App() {
 
               {/* Render All Pages Vertically (Word / Goodnotes Continuous Scroll) */}
               {activeNotebook.pages.map((pageObj, pageIdx) => {
-                const pW = pageObj.orientation === 'landscape' ? 1260 : 920;
-                const pH = pageObj.orientation === 'landscape' ? 920 : 1260;
+                const pW = pageObj.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+                const pH = pageObj.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
                 const isCurrentActive = pageIdx === activePageIndex;
 
                 return (
@@ -12809,8 +12813,8 @@ export default function App() {
               >
                 {activeNotebook.pages.map((pObj, pIdx) => {
                   const isSelectedPage = pIdx === activePageIndex;
-                  const pW = pObj.orientation === 'landscape' ? 1260 : 920;
-                  const pH = pObj.orientation === 'landscape' ? 920 : 1260;
+                  const pW = pObj.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+                  const pH = pObj.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
 
                   return (
                     <div

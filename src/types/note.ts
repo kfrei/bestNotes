@@ -152,3 +152,10 @@ export interface Notebook {
   sourceFormat?: '.goodnotes' | '.bestnotes' | '.bestNotes';
   pages: NotePage[];
 }
+
+// Exact ISO A4 aspect ratio (58 / 41 = 1.414634 vs 297 / 210 = 1.414285, i.e. 99.98% A4)
+// with an exact integer grid of 41 x 58 squares of 23x23px (0px remainder on right & bottom in Portrait & Landscape!)
+export const A4_GRID_STEP_PX = 23;
+export const A4_SHORT_PX = 41 * A4_GRID_STEP_PX; // 943px
+export const A4_LONG_PX = 58 * A4_GRID_STEP_PX; // 1334px
+
