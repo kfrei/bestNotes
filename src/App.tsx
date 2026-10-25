@@ -11343,6 +11343,16 @@ export default function App() {
               }
             }
           }
+          const hasBezierCurvedHandles = activeTargetStroke.points.some(
+            (p) =>
+              Boolean(p.smooth) ||
+              p.inDx !== undefined ||
+              p.inDy !== undefined ||
+              p.outDx !== undefined ||
+              p.outDy !== undefined ||
+              p.cx !== undefined ||
+              p.cy !== undefined
+          );
           const isCurvedSpecial =
             st === 'ellipse' ||
             st === 'circle' ||
@@ -11351,7 +11361,7 @@ export default function App() {
             st === 'arc' ||
             st === 'sine' ||
             st === 'cosine';
-          if (!isCurvedSpecial && activeTargetStroke.points.length >= 2) {
+          if (!isCurvedSpecial && !hasBezierCurvedHandles && activeTargetStroke.points.length >= 2) {
             const isClosedLoop =
               (st === 'line' &&
                 activeTargetStroke.points.length >= 3 &&
@@ -11369,34 +11379,21 @@ export default function App() {
             const uniqueVertices = isClosedLoop
               ? activeTargetStroke.points.slice(0, Math.max(1, activeTargetStroke.points.length - 1))
               : activeTargetStroke.points;
-            const snapRes = computeParallelNodeSnap(
-              latestPt,
-              uniqueVertices,
-              draggingNodeIdx.index,
-              isClosedLoop
-            );
-            snapTargetPt = snapRes.snappedPt;
-            parallelSnapGuides = snapRes.guides;
+            // Only snap canonical geometric shapes (Triangles = 3, Quadrilaterals/Parallelograms/Trapezoids = 4, or 2-point straight lines)
+            const isCanonicalStraightGeometry =
+              (isClosedLoop && uniqueVertices.length >= 3 && uniqueVertices.length <= 4) ||
+              (!isClosedLoop && uniqueVertices.length === 2);
+            if (isCanonicalStraightGeometry) {
+              const snapRes = computeParallelNodeSnap(
+                latestPt,
+                uniqueVertices,
+                draggingNodeIdx.index,
+                isClosedLoop
+              );
+              snapTargetPt = snapRes.snappedPt;
+              parallelSnapGuides = snapRes.guides;
+            }
           }
-        } else if (activeTargetStroke.points.length >= 2) {
-          const keyIndices =
-            activeTargetStroke.keyNodeIndices && activeTargetStroke.keyNodeIndices.length >= 2
-              ? activeTargetStroke.keyNodeIndices
-              : computeFreehandKeyNodeIndices(activeTargetStroke.points);
-          const isClosedLoop = activeTargetStroke.points[0]?.twist === 999 && keyIndices.length >= 3;
-          const uniqueCount = isClosedLoop ? keyIndices.length - 1 : keyIndices.length;
-          const uniqueVertices = keyIndices
-            .slice(0, uniqueCount)
-            .map((idx) => activeTargetStroke.points[idx])
-            .filter(Boolean);
-          const snapRes = computeParallelNodeSnap(
-            latestPt,
-            uniqueVertices,
-            draggingNodeIdx.index,
-            isClosedLoop
-          );
-          snapTargetPt = snapRes.snappedPt;
-          parallelSnapGuides = snapRes.guides;
         }
       }
 
@@ -11882,12 +11879,42 @@ export default function App() {
               ? Math.max(16, Math.abs(rawRx * cosF + rawRy * sinF))
               : Math.max(16, Math.abs(-rawRx * sinF + rawRy * cosF));
 
+          const canSnap1to1Shape =
+            selStrokesList.length === 1 &&
+            selImagesList.length === 0 &&
+            selStrokesList[0].isShape &&
+            ((selStrokesList[0].shapeType === 'ellipse' ||
+              selStrokesList[0].shapeType === 'circle') ||
+              ((selStrokesList[0].shapeType === 'rectangle' ||
+                selStrokesList[0].shapeType === 'parallelogram' ||
+                selStrokesList[0].shapeType === 'trapezoid' ||
+                selStrokesList[0].shapeType === 'cuboid' ||
+                selStrokesList[0].shapeType === 'cylinder' ||
+                selStrokesList[0].shapeType === 'sphere' ||
+                selStrokesList[0].shapeType === 'pyramid' ||
+                (selStrokesList[0].shapeType === 'line' &&
+                  selStrokesList[0].points.length === 5 &&
+                  selStrokesList[0].points[0]?.twist === 999)) &&
+                !selStrokesList[0].points.some(
+                  (p) =>
+                    Boolean(p.smooth) ||
+                    p.inDx !== undefined ||
+                    p.inDy !== undefined ||
+                    p.outDx !== undefined ||
+                    p.outDy !== undefined ||
+                    p.cx !== undefined ||
+                    p.cy !== undefined
+                )));
+
           const curDim = tf.mode === 'scale-x' ? curW : curH;
           const targetDim = tf.mode === 'scale-x' ? curH : curW;
           const candDim = curDim * (rawSpan / Math.max(1, tf.initialDist));
           const snapTol1to1 = Math.max(15, Math.min(30, targetDim * 0.11));
           const isSnapped1to1 =
-            curW >= 12 && curH >= 12 && Math.abs(candDim - targetDim) <= snapTol1to1;
+            canSnap1to1Shape &&
+            curW >= 12 &&
+            curH >= 12 &&
+            Math.abs(candDim - targetDim) <= snapTol1to1;
 
           let scaleFactor: number;
 
