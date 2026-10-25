@@ -398,8 +398,9 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     }
   }
 
+  const isClosedSplineOrFreehand = s.points[0]?.twist === 999 || isFreehandLoopClosed(s.points, true);
   const canFillShape =
-    s.shapeType !== 'line' &&
+    (s.shapeType !== 'line' || isClosedSplineOrFreehand) &&
     s.shapeType !== 'arrow' &&
     s.shapeType !== 'double-arrow' &&
     s.shapeType !== 'resistor' &&
@@ -409,7 +410,7 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     s.fillStyle &&
     s.fillStyle !== 'none' &&
     s.points.length > 2 &&
-    (s.isShape || isFreehandLoopClosed(s.points, true));
+    (s.isShape || isClosedSplineOrFreehand);
 
   if (canFillShape) {
     const shadeColor = s.color || s.fillColor || '#2563eb';

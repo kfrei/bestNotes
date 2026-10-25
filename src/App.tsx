@@ -124,6 +124,8 @@ import {
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
   recomputeAutoSmoothHandles,
+  reverseBezierPointsExact,
+  convertOpenStrokeToBezierSplinePoints,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -942,6 +944,9 @@ export default function App() {
   const nodeMagnetTimerRef = useRef<{
     strokeId: string;
     draggedKeyPosIdx: number;
+    draggedEndSide: 'start' | 'end';
+    targetStrokeId: string;
+    targetEndSide: 'start' | 'end';
     targetX: number;
     targetY: number;
     startTime: number;
@@ -2414,6 +2419,10 @@ export default function App() {
       return kList.length > 2 && nodeIdx > 0 && nodeIdx < kList.length - 1;
     }
     if (s.shapeType === 'line' || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') {
+      if (s.shapeType === 'line' && s.points[0]?.twist === 999 && s.points.length >= 3) {
+        const uniqueVerts = s.points.length - 1;
+        return uniqueVerts > 3;
+      }
       // On an open line/arrow, endpoints (0 and s.points.length - 1) cannot be deleted
       return s.points.length > 2 && nodeIdx > 0 && nodeIdx < s.points.length - 1;
     }
@@ -2710,6 +2719,7 @@ export default function App() {
       s.shapeType === 'parallelogram' ||
       s.shapeType === 'trapezoid' ||
       s.shapeType === 'triangle' ||
+      s.points[0]?.twist === 999 ||
       (s.fillStyle && s.fillStyle !== 'none');
     if (allowInteriorFill && isClosedPolygonShape && s.points.length >= 3) {
       let inside = false;
@@ -3451,9 +3461,10 @@ export default function App() {
       }
     }
 
-    // Allow filling both geometric shapes AND closed freehand strokes!
+    // Allow filling both geometric shapes AND closed freehand/spline strokes!
+    const isClosedSplineOrFreehand = s.points[0]?.twist === 999 || isFreehandLoopClosed(s.points, true);
     const canFillShape =
-      s.shapeType !== 'line' &&
+      (s.shapeType !== 'line' || isClosedSplineOrFreehand) &&
       s.shapeType !== 'arrow' &&
       s.shapeType !== 'double-arrow' &&
       s.shapeType !== 'resistor' &&
@@ -3463,7 +3474,7 @@ export default function App() {
       s.fillStyle &&
       s.fillStyle !== 'none' &&
       s.points.length > 2 &&
-      (s.isShape || isFreehandLoopClosed(s.points, true));
+      (s.isShape || isClosedSplineOrFreehand);
     if (canFillShape) {
       // Always use the stroke's border color (s.color) for the semi-transparent shape fill!
       const shadeColor = s.color || s.fillColor || '#2563eb';
@@ -4251,6 +4262,49 @@ export default function App() {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
           if (target && !isShapeWithoutNodes(target)) {
             ctx.save();
+            // Highlight open endpoints of OTHER open strokes on the same page so the user can easily see where to drag & magnetically weld!
+            const targetIsOpen =
+              (!target.isShape && target.points[0]?.twist !== 999) ||
+              (target.isShape &&
+                (target.shapeType === 'line' ||
+                  target.shapeType === 'arrow' ||
+                  target.shapeType === 'double-arrow' ||
+                  target.shapeType === 'parabola' ||
+                  target.shapeType === 'hyperbola' ||
+                  target.shapeType === 'arc') &&
+                target.points[0]?.twist !== 999);
+            if (targetIsOpen) {
+              for (const other of pageObj.strokes) {
+                if (other.id === target.id || other.points.length < 2) continue;
+                const otherIsOpen =
+                  (!other.isShape && other.points[0]?.twist !== 999) ||
+                  (other.isShape &&
+                    (other.shapeType === 'line' ||
+                      other.shapeType === 'arrow' ||
+                      other.shapeType === 'double-arrow' ||
+                      other.shapeType === 'parabola' ||
+                      other.shapeType === 'hyperbola' ||
+                      other.shapeType === 'arc') &&
+                    other.points[0]?.twist !== 999);
+                if (!otherIsOpen) continue;
+                const pStart = other.points[0];
+                const pEnd = other.points[other.points.length - 1];
+                for (const ep of [pStart, pEnd]) {
+                  if (!ep) continue;
+                  ctx.save();
+                  ctx.fillStyle = 'rgba(209, 250, 229, 0.85)';
+                  ctx.strokeStyle = '#10b981';
+                  ctx.lineWidth = 2;
+                  ctx.setLineDash([3, 2]);
+                  ctx.beginPath();
+                  ctx.arc(ep.x, ep.y, 7.5, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.stroke();
+                  ctx.restore();
+                }
+              }
+            }
+
             if (!target.isShape) {
               const keyIndices =
                 target.keyNodeIndices && target.keyNodeIndices.length >= 2
@@ -4276,7 +4330,12 @@ export default function App() {
                 target.shapeType === 'parabola' ||
                 target.shapeType === 'hyperbola' ||
                 target.shapeType === 'arc';
+              const isWeldedSplineClosed =
+                target.shapeType === 'line' &&
+                target.points.length >= 3 &&
+                target.points[0]?.twist === 999;
               const isClosedPoly =
+                isWeldedSplineClosed ||
                 target.shapeType === 'rectangle' ||
                 target.shapeType === 'parallelogram' ||
                 target.shapeType === 'trapezoid' ||
@@ -4310,8 +4369,15 @@ export default function App() {
 
               for (let i = 0; i < nodeCount; i++) {
                 const p = target.points[i];
-                ctx.fillStyle = isWave && i === 0 ? '#fef08a' : isThreePtCurve && i === 1 ? '#fef08a' : '#ffffff';
-                ctx.strokeStyle = '#2563eb';
+                ctx.fillStyle =
+                  isWeldedSplineClosed && i === 0
+                    ? '#d1fae5'
+                    : isWave && i === 0
+                    ? '#fef08a'
+                    : isThreePtCurve && i === 1
+                    ? '#fef08a'
+                    : '#ffffff';
+                ctx.strokeStyle = isWeldedSplineClosed && i === 0 ? '#059669' : '#2563eb';
                 ctx.lineWidth = 2.4;
                 ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
                 ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
@@ -4338,6 +4404,9 @@ export default function App() {
               const bp = target.points[bezNode.nodeIdx];
               if (bp && ((bp.inDx !== undefined && bp.inDy !== undefined) || (bp.outDx !== undefined && bp.outDy !== undefined))) {
                 const isClosedShape =
+                  (target.shapeType === 'line' &&
+                    target.points.length >= 3 &&
+                    target.points[0]?.twist === 999) ||
                   target.shapeType === 'rectangle' ||
                   target.shapeType === 'parallelogram' ||
                   target.shapeType === 'trapezoid' ||
@@ -7641,6 +7710,9 @@ export default function App() {
       target.shapeType === 'hyperbola' ||
       target.shapeType === 'arc';
     const isClosedPoly =
+      (target.shapeType === 'line' &&
+        target.points.length >= 3 &&
+        target.points[0]?.twist === 999) ||
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
       target.shapeType === 'trapezoid' ||
@@ -8053,6 +8125,9 @@ export default function App() {
         setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
         setRedoStack([]);
         const isClosedPoly =
+          (target.shapeType === 'line' &&
+            target.points.length >= 3 &&
+            target.points[0]?.twist === 999) ||
           target.shapeType === 'rectangle' ||
           target.shapeType === 'parallelogram' ||
           target.shapeType === 'trapezoid' ||
@@ -8067,7 +8142,7 @@ export default function App() {
                   ? {
                       ...p,
                       smooth: false,
-                      twist: undefined,
+                      twist: p.twist === 999 ? 999 : undefined,
                       inDx: undefined,
                       inDy: undefined,
                       outDx: undefined,
@@ -8095,21 +8170,18 @@ export default function App() {
 
           // If freehand stroke (!s.isShape), convert its sparse Key Nodes into an editable smooth Bézier spline ('line')!
           if (!s.isShape) {
-            const kIndices =
-              s.keyNodeIndices && s.keyNodeIndices.length >= 2
-                ? s.keyNodeIndices
-                : computeFreehandKeyNodeIndices(s.points);
-            const rawKeyPts: BezierPoint[] = kIndices
-              .map((kIdx, pos) => {
-                const kp = s.points[kIdx];
-                return {
-                  x: kp.x,
-                  y: kp.y,
-                  smooth: pos === nodeIdx || (pos > 0 && pos < kIndices.length - 1),
-                  pressure: 0.7,
-                };
-              });
-            const smoothPts = recomputeAutoSmoothHandles(rawKeyPts, false);
+            const wasWeldedClosed = s.points[0]?.twist === 999;
+            const splinePts = convertOpenStrokeToBezierSplinePoints(s).map((p, pos, arr) => ({
+              ...p,
+              smooth: pos === nodeIdx,
+              twist:
+                wasWeldedClosed && (pos === 0 || pos === arr.length - 1)
+                  ? 999
+                  : pos === nodeIdx
+                  ? undefined
+                  : 777,
+            }));
+            const smoothPts = recomputeAutoSmoothHandles(splinePts, wasWeldedClosed);
             return {
               ...s,
               isShape: true,
@@ -8137,13 +8209,16 @@ export default function App() {
           }
 
           const isClosedPoly =
+            (s.shapeType === 'line' &&
+              s.points.length >= 3 &&
+              s.points[0]?.twist === 999) ||
             s.shapeType === 'rectangle' ||
             s.shapeType === 'parallelogram' ||
             s.shapeType === 'trapezoid' ||
             s.shapeType === 'triangle';
           const nextPts = s.points.map((p, idx) =>
             idx === nodeIdx
-              ? { ...p, smooth: true, twist: undefined }
+              ? { ...p, smooth: true, twist: p.twist === 999 ? 999 : undefined }
               : p
           );
           return {
@@ -8248,6 +8323,9 @@ export default function App() {
     }
 
     const isClosedPoly =
+      (target.shapeType === 'line' &&
+        target.points.length >= 3 &&
+        target.points[0]?.twist === 999) ||
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
       target.shapeType === 'trapezoid' ||
@@ -8265,7 +8343,11 @@ export default function App() {
           ...page,
           strokes: page.strokes.map((s) => {
             if (s.id !== strokeId) return s;
+            const wasWelded = s.points[0]?.twist === 999;
             const ring = s.points.slice(0, -1).filter((_, idx) => idx !== nodeIdx);
+            if (wasWelded && ring.length > 0) {
+              ring[0] = { ...ring[0], twist: 999 };
+            }
             ring.push({ ...ring[0] });
             return { ...s, points: ring };
           }),
@@ -10235,35 +10317,153 @@ export default function App() {
       return;
     }
 
-    // 2. Direct Node Editing (syncs closing point for polygons, 4 nodes for ellipses, 3 curvature handles for Parabola/Hyperbola/Arc, 2 constrained handles for Sine/Cosine, & smooth Cosine-Hermite deformation + 1s Magnetic Endpoint Fusion for Freehand Key Nodes!)
+    // 2. Direct Node Editing (syncs closing point for polygons, 4 nodes for ellipses, 3 curvature handles for Parabola/Hyperbola/Arc, 2 constrained handles for Sine/Cosine, & smooth Cosine-Hermite deformation + 1s Magnetic Endpoint Fusion for Freehand & Bézier Curves!)
     if (activeTool === 'direct-node' && activeNodeStrokeId && draggingNodeIdx) {
       const activeTargetStroke = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
       let snapTargetPt: { x: number; y: number } | null = null;
 
-      if (activeTargetStroke && !activeTargetStroke.isShape && activeTargetStroke.points.length >= 6) {
-        const keyIndices =
-          activeTargetStroke.keyNodeIndices && activeTargetStroke.keyNodeIndices.length >= 2
-            ? activeTargetStroke.keyNodeIndices
-            : computeFreehandKeyNodeIndices(activeTargetStroke.points);
-        const isAlreadyWelded = activeTargetStroke.points[0]?.twist === 999;
-        const isDraggingEndpoint =
-          draggingNodeIdx.index === 0 || draggingNodeIdx.index === keyIndices.length - 1;
+      if (activeTargetStroke && !draggingNodeIdx.isControl) {
+        let draggedEndSide: 'start' | 'end' | null = null;
+        let canSelfClose = false;
 
-        if (!isAlreadyWelded && keyIndices.length >= 3 && isDraggingEndpoint) {
-          const otherEndPt =
-            draggingNodeIdx.index === 0
-              ? activeTargetStroke.points[activeTargetStroke.points.length - 1]
-              : activeTargetStroke.points[0];
+        if (!activeTargetStroke.isShape) {
+          const keyIndices =
+            activeTargetStroke.keyNodeIndices && activeTargetStroke.keyNodeIndices.length >= 2
+              ? activeTargetStroke.keyNodeIndices
+              : computeFreehandKeyNodeIndices(activeTargetStroke.points);
+          const isAlreadyWelded = activeTargetStroke.points[0]?.twist === 999;
+          if (!isAlreadyWelded && activeTargetStroke.points.length >= 2) {
+            if (draggingNodeIdx.index === 0) draggedEndSide = 'start';
+            else if (draggingNodeIdx.index === keyIndices.length - 1) draggedEndSide = 'end';
+            canSelfClose = keyIndices.length >= 3 && activeTargetStroke.points.length >= 6;
+          }
+        } else {
+          const st = activeTargetStroke.shapeType;
+          const isOpenShapeType =
+            st === 'line' ||
+            st === 'arrow' ||
+            st === 'double-arrow' ||
+            st === 'parabola' ||
+            st === 'hyperbola' ||
+            st === 'arc';
+          const isAlreadyWelded =
+            activeTargetStroke.points[0]?.twist === 999 && activeTargetStroke.points.length >= 3;
+          if (isOpenShapeType && !isAlreadyWelded && activeTargetStroke.points.length >= 2) {
+            const lastNodeIdx =
+              st === 'parabola' || st === 'hyperbola' || st === 'arc'
+                ? Math.min(2, activeTargetStroke.points.length - 1)
+                : activeTargetStroke.points.length - 1;
+            if (draggingNodeIdx.index === 0) draggedEndSide = 'start';
+            else if (draggingNodeIdx.index === lastNodeIdx) draggedEndSide = 'end';
+            canSelfClose =
+              activeTargetStroke.points.length >= 3 ||
+              activeTargetStroke.points.some(
+                (p) => p.inDx !== undefined || p.outDx !== undefined || p.cx !== undefined
+              );
+          }
+        }
 
-          if (otherEndPt && distance(latestPt, otherEndPt) <= 26) {
-            snapTargetPt = { x: otherEndPt.x, y: otherEndPt.y };
-            if (!nodeMagnetTimerRef.current || nodeMagnetTimerRef.current.strokeId !== activeTargetStroke.id) {
+        if (draggedEndSide) {
+          const hiddenOrLockedLayerIds = new Set(
+            activePage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+          );
+          let bestMatch: {
+            targetStrokeId: string;
+            targetEndSide: 'start' | 'end';
+            x: number;
+            y: number;
+            dist: number;
+          } | null = null;
+
+          // 1. Check opposite endpoint of the SAME stroke (Self-Closing)
+          if (canSelfClose) {
+            const otherEndPt =
+              draggedEndSide === 'start'
+                ? activeTargetStroke.points[activeTargetStroke.points.length - 1]
+                : activeTargetStroke.points[0];
+            const otherEndSide: 'start' | 'end' = draggedEndSide === 'start' ? 'end' : 'start';
+            if (otherEndPt) {
+              const d = distance(latestPt, otherEndPt);
+              if (d <= 26) {
+                bestMatch = {
+                  targetStrokeId: activeTargetStroke.id,
+                  targetEndSide: otherEndSide,
+                  x: otherEndPt.x,
+                  y: otherEndPt.y,
+                  dist: d,
+                };
+              }
+            }
+          }
+
+          // 2. Check open endpoints of OTHER open strokes on the same page (Multi-Stroke Weld!)
+          for (const other of activePage.strokes) {
+            if (
+              other.id === activeTargetStroke.id ||
+              other.points.length < 2 ||
+              hiddenOrLockedLayerIds.has(other.layerId)
+            ) {
+              continue;
+            }
+            const otherIsOpen =
+              (!other.isShape && other.points[0]?.twist !== 999) ||
+              (other.isShape &&
+                (other.shapeType === 'line' ||
+                  other.shapeType === 'arrow' ||
+                  other.shapeType === 'double-arrow' ||
+                  other.shapeType === 'parabola' ||
+                  other.shapeType === 'hyperbola' ||
+                  other.shapeType === 'arc') &&
+                other.points[0]?.twist !== 999);
+            if (!otherIsOpen) continue;
+
+            const startPt = other.points[0];
+            const endPt = other.points[other.points.length - 1];
+            if (startPt) {
+              const dStart = distance(latestPt, startPt);
+              if (dStart <= 26 && (!bestMatch || dStart < bestMatch.dist)) {
+                bestMatch = {
+                  targetStrokeId: other.id,
+                  targetEndSide: 'start',
+                  x: startPt.x,
+                  y: startPt.y,
+                  dist: dStart,
+                };
+              }
+            }
+            if (endPt) {
+              const dEnd = distance(latestPt, endPt);
+              if (dEnd <= 26 && (!bestMatch || dEnd < bestMatch.dist)) {
+                bestMatch = {
+                  targetStrokeId: other.id,
+                  targetEndSide: 'end',
+                  x: endPt.x,
+                  y: endPt.y,
+                  dist: dEnd,
+                };
+              }
+            }
+          }
+
+          if (bestMatch) {
+            snapTargetPt = { x: bestMatch.x, y: bestMatch.y };
+            const curTimer = nodeMagnetTimerRef.current;
+            if (
+              !curTimer ||
+              curTimer.strokeId !== activeTargetStroke.id ||
+              curTimer.targetStrokeId !== bestMatch.targetStrokeId ||
+              curTimer.targetEndSide !== bestMatch.targetEndSide ||
+              curTimer.draggedEndSide !== draggedEndSide
+            ) {
               cancelNodeMagnetTimer();
               const timerObj = {
                 strokeId: activeTargetStroke.id,
                 draggedKeyPosIdx: draggingNodeIdx.index,
-                targetX: otherEndPt.x,
-                targetY: otherEndPt.y,
+                draggedEndSide,
+                targetStrokeId: bestMatch.targetStrokeId,
+                targetEndSide: bestMatch.targetEndSide,
+                targetX: bestMatch.x,
+                targetY: bestMatch.y,
                 startTime: performance.now(),
                 rafId: null as number | null,
               };
@@ -10293,43 +10493,289 @@ export default function App() {
                   setNodeMagnetState(null);
                   setDraggingNodeIdx(null);
                   isDrawingRef.current = false;
-                  updateActivePage(
-                    (page) => ({
-                      ...page,
-                      strokes: page.strokes.map((s) => {
-                        if (s.id !== timerObj.strokeId) return s;
-                        const sKeys =
-                          s.keyNodeIndices && s.keyNodeIndices.length >= 2
-                            ? s.keyNodeIndices
-                            : computeFreehandKeyNodeIndices(s.points);
-                        const weldedPts = weldFreehandEndpointsSmoothly(
-                          s.points,
-                          sKeys,
+                  clearActiveOverlay();
+
+                  if (timerObj.targetStrokeId === timerObj.strokeId) {
+                    // Self-Closing Weld (1 stroke -> closed perimeter with 1 unified seam node)
+                    updateActivePage(
+                      (page) => ({
+                        ...page,
+                        strokes: page.strokes.map((s) => {
+                          if (s.id !== timerObj.strokeId) return s;
+                          if (!s.isShape) {
+                            const sKeys =
+                              s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                                ? s.keyNodeIndices
+                                : computeFreehandKeyNodeIndices(s.points);
+                            const weldedPts = weldFreehandEndpointsSmoothly(
+                              s.points,
+                              sKeys,
+                              timerObj.draggedKeyPosIdx,
+                              timerObj.targetX,
+                              timerObj.targetY
+                            );
+                            return {
+                              ...s,
+                              points: weldedPts,
+                              keyNodeIndices: sKeys,
+                              fillStyle: fillStyle !== 'none' ? fillStyle : s.fillStyle,
+                              fillColor: fillStyle !== 'none' ? s.color : s.fillColor,
+                              fillTransparency: s.fillTransparency ?? fillTransparency,
+                            };
+                          }
+
+                          const splinePts = convertOpenStrokeToBezierSplinePoints(s);
+                          const n = splinePts.length;
+                          if (n < 2) return s;
+                          const dragIdx = timerObj.draggedEndSide === 'start' ? 0 : n - 1;
+                          splinePts[dragIdx] = {
+                            ...splinePts[dragIdx],
+                            x: timerObj.targetX,
+                            y: timerObj.targetY,
+                          };
+                          const firstPt = splinePts[0];
+                          const lastPt = splinePts[n - 1];
+                          const seamPt: BezierPoint = {
+                            ...firstPt,
+                            x: timerObj.targetX,
+                            y: timerObj.targetY,
+                            inDx: lastPt.inDx,
+                            inDy: lastPt.inDy,
+                            outDx: firstPt.outDx,
+                            outDy: firstPt.outDy,
+                            smooth: false,
+                            twist: 999,
+                            cx: undefined,
+                            cy: undefined,
+                          };
+                          splinePts[0] = { ...seamPt };
+                          splinePts[n - 1] = { ...seamPt };
+                          return {
+                            ...s,
+                            isShape: true,
+                            shapeType: 'line',
+                            points: splinePts,
+                            keyNodeIndices: undefined,
+                            fillStyle: fillStyle !== 'none' ? fillStyle : s.fillStyle,
+                            fillColor: fillStyle !== 'none' ? s.color : s.fillColor,
+                            fillTransparency: s.fillTransparency ?? fillTransparency,
+                          };
+                        }),
+                      }),
+                      true
+                    );
+                    showToast('🧲 Οι 2 άκρες ενώθηκαν σε 1 ενιαίο κόμβο (Κλειστό Σχήμα)!');
+                  } else {
+                    // Multi-Stroke Weld (2 separate strokes -> 1 unified stroke + 1 welded node at the joint!)
+                    let alsoClosedOtherEnd = false;
+                    updateActivePage((page) => {
+                      const s1 = page.strokes.find((st) => st.id === timerObj.strokeId);
+                      const s2 = page.strokes.find((st) => st.id === timerObj.targetStrokeId);
+                      if (!s1 || !s2) return page;
+
+                      let mergedStroke: StrokeObject;
+
+                      if (!s1.isShape && !s2.isShape) {
+                        // Both are freehand strokes: merge dense points & keyNodeIndices seamlessly
+                        const keys1Raw =
+                          s1.keyNodeIndices && s1.keyNodeIndices.length >= 2
+                            ? s1.keyNodeIndices
+                            : computeFreehandKeyNodeIndices(s1.points);
+                        const pts1Deformed = deformStrokeAtKeyNode(
+                          s1.points,
+                          keys1Raw,
                           timerObj.draggedKeyPosIdx,
                           timerObj.targetX,
                           timerObj.targetY
                         );
-                        return {
-                          ...s,
-                          points: weldedPts,
-                          keyNodeIndices: sKeys,
-                          fillStyle: fillStyle !== 'none' ? fillStyle : s.fillStyle,
-                          fillColor: fillStyle !== 'none' ? s.color : s.fillColor,
-                          fillTransparency: s.fillTransparency ?? fillTransparency,
+                        const n1 = pts1Deformed.length;
+                        let chain1Pts = pts1Deformed.map((p) => ({ ...p }));
+                        let chain1Keys = [...keys1Raw];
+                        if (timerObj.draggedEndSide === 'start') {
+                          chain1Pts.reverse();
+                          for (let i = 0; i < chain1Pts.length; i++) {
+                            if (i === 0) {
+                              chain1Pts[i].cx = undefined;
+                              chain1Pts[i].cy = undefined;
+                            } else {
+                              chain1Pts[i].cx = (chain1Pts[i - 1].x + chain1Pts[i].x) / 2;
+                              chain1Pts[i].cy = (chain1Pts[i - 1].y + chain1Pts[i].y) / 2;
+                            }
+                          }
+                          chain1Keys = [...keys1Raw].reverse().map((k) => n1 - 1 - k);
+                        }
+
+                        const keys2Raw =
+                          s2.keyNodeIndices && s2.keyNodeIndices.length >= 2
+                            ? s2.keyNodeIndices
+                            : computeFreehandKeyNodeIndices(s2.points);
+                        const n2 = s2.points.length;
+                        let chain2Pts = s2.points.map((p) => ({ ...p }));
+                        let chain2Keys = [...keys2Raw];
+                        if (timerObj.targetEndSide === 'end') {
+                          chain2Pts.reverse();
+                          for (let i = 0; i < chain2Pts.length; i++) {
+                            if (i === 0) {
+                              chain2Pts[i].cx = undefined;
+                              chain2Pts[i].cy = undefined;
+                            } else {
+                              chain2Pts[i].cx = (chain2Pts[i - 1].x + chain2Pts[i].x) / 2;
+                              chain2Pts[i].cy = (chain2Pts[i - 1].y + chain2Pts[i].y) / 2;
+                            }
+                          }
+                          chain2Keys = [...keys2Raw].reverse().map((k) => n2 - 1 - k);
+                        }
+
+                        chain1Pts[chain1Pts.length - 1].x = timerObj.targetX;
+                        chain1Pts[chain1Pts.length - 1].y = timerObj.targetY;
+                        chain2Pts[0].x = timerObj.targetX;
+                        chain2Pts[0].y = timerObj.targetY;
+
+                        const tailPts = chain2Pts.slice(1).map((p, idx) => {
+                          const prev = idx === 0 ? chain1Pts[chain1Pts.length - 1] : chain2Pts[idx];
+                          return {
+                            ...p,
+                            cx: (prev.x + p.x) / 2,
+                            cy: (prev.y + p.y) / 2,
+                          };
+                        });
+                        let combinedPts = [...chain1Pts, ...tailPts];
+                        const offset = chain1Pts.length - 1;
+                        const combinedKeys = [
+                          ...chain1Keys,
+                          ...chain2Keys.slice(1).map((k) => k + offset),
+                        ];
+
+                        // If the remaining two open endpoints are also touching (<= 28px), weld them closed too!
+                        if (
+                          combinedKeys.length >= 3 &&
+                          distance(combinedPts[0], combinedPts[combinedPts.length - 1]) <= 28
+                        ) {
+                          alsoClosedOtherEnd = true;
+                          combinedPts = weldFreehandEndpointsSmoothly(
+                            combinedPts,
+                            combinedKeys,
+                            0,
+                            combinedPts[combinedPts.length - 1].x,
+                            combinedPts[combinedPts.length - 1].y
+                          );
+                        }
+
+                        mergedStroke = {
+                          ...s1,
+                          points: combinedPts,
+                          keyNodeIndices: combinedKeys,
+                          fillStyle:
+                            alsoClosedOtherEnd && fillStyle !== 'none' ? fillStyle : s1.fillStyle,
+                          fillColor:
+                            alsoClosedOtherEnd && fillStyle !== 'none' ? s1.color : s1.fillColor,
+                          fillTransparency: s1.fillTransparency ?? fillTransparency,
                         };
-                      }),
-                    }),
-                    true
-                  );
-                  showToast('🧲 Οι 2 άκρες ενώθηκαν τέλεια σε 1 ενιαίο κόμβο!');
+                      } else {
+                        // At least one stroke is a Bézier spline / shape: convert both to cubic Bézier splines & weld at 1 single node!
+                        const pts1 = convertOpenStrokeToBezierSplinePoints(s1);
+                        const pts2 = convertOpenStrokeToBezierSplinePoints(s2);
+                        const dragIdx = timerObj.draggedEndSide === 'start' ? 0 : pts1.length - 1;
+                        pts1[dragIdx] = {
+                          ...pts1[dragIdx],
+                          x: timerObj.targetX,
+                          y: timerObj.targetY,
+                        };
+
+                        const chain1 =
+                          timerObj.draggedEndSide === 'start'
+                            ? reverseBezierPointsExact(pts1)
+                            : pts1;
+                        const chain2 =
+                          timerObj.targetEndSide === 'end'
+                            ? reverseBezierPointsExact(pts2)
+                            : pts2;
+
+                        const end1 = chain1[chain1.length - 1];
+                        const start2 = chain2[0];
+                        const jointPt: BezierPoint = {
+                          x: timerObj.targetX,
+                          y: timerObj.targetY,
+                          pressure: end1.pressure ?? start2.pressure ?? 0.7,
+                          inDx: end1.inDx,
+                          inDy: end1.inDy,
+                          outDx: start2.outDx,
+                          outDy: start2.outDy,
+                          smooth: false,
+                          twist: 777,
+                        };
+
+                        const combinedPts: BezierPoint[] = [
+                          ...chain1.slice(0, -1),
+                          jointPt,
+                          ...chain2.slice(1),
+                        ];
+
+                        // If the remaining two open endpoints are also touching (<= 28px), weld them closed too!
+                        if (
+                          combinedPts.length >= 3 &&
+                          distance(combinedPts[0], combinedPts[combinedPts.length - 1]) <= 28
+                        ) {
+                          alsoClosedOtherEnd = true;
+                          const firstPt = combinedPts[0];
+                          const lastPt = combinedPts[combinedPts.length - 1];
+                          const closeSeamPt: BezierPoint = {
+                            ...firstPt,
+                            x: lastPt.x,
+                            y: lastPt.y,
+                            inDx: lastPt.inDx,
+                            inDy: lastPt.inDy,
+                            outDx: firstPt.outDx,
+                            outDy: firstPt.outDy,
+                            smooth: false,
+                            twist: 999,
+                            cx: undefined,
+                            cy: undefined,
+                          };
+                          combinedPts[0] = { ...closeSeamPt };
+                          combinedPts[combinedPts.length - 1] = { ...closeSeamPt };
+                        }
+
+                        mergedStroke = {
+                          ...s1,
+                          isShape: true,
+                          shapeType: 'line',
+                          points: combinedPts,
+                          keyNodeIndices: undefined,
+                          fillStyle:
+                            alsoClosedOtherEnd && fillStyle !== 'none' ? fillStyle : s1.fillStyle,
+                          fillColor:
+                            alsoClosedOtherEnd && fillStyle !== 'none' ? s1.color : s1.fillColor,
+                          fillTransparency: s1.fillTransparency ?? fillTransparency,
+                        };
+                      }
+
+                      return {
+                        ...page,
+                        strokes: page.strokes
+                          .filter((st) => st.id !== timerObj.targetStrokeId)
+                          .map((st) => (st.id === timerObj.strokeId ? mergedStroke : st)),
+                      };
+                    }, true);
+
+                    showToast(
+                      alsoClosedOtherEnd
+                        ? '🧲 Τα 2 σχήματα ενώθηκαν σε 1 ενιαίο κλειστό σχήμα!'
+                        : '🧲 Οι 2 γραμμές ενώθηκαν σε 1 ενιαίο κόμβο & σχήμα!'
+                    );
+                  }
                   return;
                 }
                 timerObj.rafId = window.requestAnimationFrame(stepMagnet);
               };
               timerObj.rafId = window.requestAnimationFrame(stepMagnet);
             }
-          } else if (otherEndPt && distance(latestPt, otherEndPt) > 28) {
-            if (nodeMagnetTimerRef.current) {
+          } else if (nodeMagnetTimerRef.current) {
+            const dFromMagnet = Math.hypot(
+              latestPt.x - nodeMagnetTimerRef.current.targetX,
+              latestPt.y - nodeMagnetTimerRef.current.targetY
+            );
+            if (dFromMagnet > 28) {
               cancelNodeMagnetTimer();
             }
           }
@@ -10349,6 +10795,9 @@ export default function App() {
             st === 'cosine';
           if (!isCurvedSpecial && activeTargetStroke.points.length >= 2) {
             const isClosedLoop =
+              (st === 'line' &&
+                activeTargetStroke.points.length >= 3 &&
+                activeTargetStroke.points[0]?.twist === 999) ||
               st === 'rectangle' ||
               st === 'parallelogram' ||
               st === 'trapezoid' ||
@@ -10456,8 +10905,8 @@ export default function App() {
                 const hdx = latestPt.x - targetPt.x;
                 const hdy = latestPt.y - targetPt.y;
                 const hDist = Math.hypot(hdx, hdy);
-                targetPt.smooth = true;
-                targetPt.twist = 777; // Mark manual user-adjusted Bézier handle!
+                targetPt.smooth = targetPt.twist === 999 ? false : true;
+                targetPt.twist = targetPt.twist === 999 ? 999 : 777; // Mark manual user-adjusted Bézier handle while preserving welded seam flag!
                 if (draggingNodeIdx.handleSide === 'out') {
                   targetPt.outDx = hdx;
                   targetPt.outDy = hdy;
@@ -10502,6 +10951,9 @@ export default function App() {
             }
             newPts[draggingNodeIdx.index] = targetPt;
             const isClosedPoly =
+              (s.shapeType === 'line' &&
+                s.points.length >= 3 &&
+                s.points[0]?.twist === 999) ||
               s.shapeType === 'rectangle' ||
               s.shapeType === 'parallelogram' ||
               s.shapeType === 'trapezoid' ||

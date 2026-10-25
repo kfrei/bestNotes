@@ -2043,6 +2043,7 @@ export function weldFreehandEndpointsSmoothly(
  */
 export function isFreehandLoopClosed(pts: BezierPoint[], lenientForManualToggle = false): boolean {
   const n = pts.length;
+  if (pts[0]?.twist === 999 && n >= 2) return true;
   if (n < 5) return false;
 
   let minX = Infinity,
@@ -3271,6 +3272,154 @@ export function recomputeAutoSmoothHandles(pts: BezierPoint[], isClosed = false)
 
   return out;
 }
+
+/**
+ * Reverses a `BezierPoint[]` spline array so the drawn curve remains 100% identical pixel-for-pixel,
+ * upgrading any quadratic `(cx, cy)` control points to cubic `(inDx, inDy, outDx, outDy)` and swapping
+ * incoming/outgoing tangent handles on every vertex.
+ */
+export function reverseBezierPointsExact(pts: BezierPoint[]): BezierPoint[] {
+  const n = pts.length;
+  if (n === 0) return [];
+  const upgraded = pts.map((p) => ({ ...p }));
+  for (let i = 1; i < n; i++) {
+    const prev = upgraded[i - 1];
+    const curr = upgraded[i];
+    if (
+      curr.cx !== undefined &&
+      curr.cy !== undefined &&
+      prev.outDx === undefined &&
+      curr.inDx === undefined
+    ) {
+      prev.outDx = (2 / 3) * (curr.cx - prev.x);
+      prev.outDy = (2 / 3) * (curr.cy - prev.y);
+      curr.inDx = (2 / 3) * (curr.cx - curr.x);
+      curr.inDy = (2 / 3) * (curr.cy - curr.y);
+      curr.cx = undefined;
+      curr.cy = undefined;
+    }
+  }
+  const out: BezierPoint[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const p = upgraded[i];
+    out.push({
+      ...p,
+      inDx: p.outDx,
+      inDy: p.outDy,
+      outDx: p.inDx,
+      outDy: p.inDy,
+      cx: undefined,
+      cy: undefined,
+    });
+  }
+  return out;
+}
+
+/**
+ * Converts any open stroke (`!s.isShape` freehand curve, 3-point parabola/arc/hyperbola, or `'line'` spline)
+ * into a sparse cubic Bézier spline (`BezierPoint[]`) that preserves the exact curve geometry and key nodes.
+ */
+export function convertOpenStrokeToBezierSplinePoints(s: StrokeObject): BezierPoint[] {
+  if (!s.isShape) {
+    const kIndices =
+      s.keyNodeIndices && s.keyNodeIndices.length >= 2
+        ? s.keyNodeIndices
+        : computeFreehandKeyNodeIndices(s.points);
+    const nodes: BezierPoint[] = kIndices.map((kIdx) => {
+      const kp = s.points[Math.max(0, Math.min(s.points.length - 1, kIdx))];
+      return {
+        x: kp.x,
+        y: kp.y,
+        pressure: kp.pressure ?? 0.7,
+        smooth: false,
+        twist: 777,
+      };
+    });
+
+    const sampleAtFraction = (idxA: number, idxB: number, frac: number): { x: number; y: number } => {
+      if (idxB <= idxA) {
+        const p = s.points[idxA];
+        return { x: p.x, y: p.y };
+      }
+      let totalArc = 0;
+      const cum: number[] = [0];
+      for (let i = idxA + 1; i <= idxB; i++) {
+        totalArc += distance(s.points[i - 1], s.points[i]);
+        cum.push(totalArc);
+      }
+      if (totalArc < 1e-4) {
+        const p = s.points[idxA];
+        return { x: p.x, y: p.y };
+      }
+      const targetArc = totalArc * frac;
+      for (let k = 1; k < cum.length; k++) {
+        if (cum[k] >= targetArc) {
+          const segStart = cum[k - 1];
+          const segLen = Math.max(1e-4, cum[k] - segStart);
+          const u = (targetArc - segStart) / segLen;
+          const p1 = s.points[idxA + k - 1];
+          const p2 = s.points[idxA + k];
+          return {
+            x: p1.x + u * (p2.x - p1.x),
+            y: p1.y + u * (p2.y - p1.y),
+          };
+        }
+      }
+      const pEnd = s.points[idxB];
+      return { x: pEnd.x, y: pEnd.y };
+    };
+
+    for (let pos = 0; pos < kIndices.length - 1; pos++) {
+      const idxA = Math.max(0, Math.min(s.points.length - 1, kIndices[pos]));
+      const idxB = Math.max(0, Math.min(s.points.length - 1, kIndices[pos + 1]));
+      const p0 = nodes[pos];
+      const p3 = nodes[pos + 1];
+      const q1 = sampleAtFraction(idxA, idxB, 1 / 3);
+      const q2 = sampleAtFraction(idxA, idxB, 2 / 3);
+      const cp1x = (-5 * p0.x + 18 * q1.x - 9 * q2.x + 2 * p3.x) / 6;
+      const cp1y = (-5 * p0.y + 18 * q1.y - 9 * q2.y + 2 * p3.y) / 6;
+      const cp2x = (2 * p0.x - 9 * q1.x + 18 * q2.x - 5 * p3.x) / 6;
+      const cp2y = (2 * p0.y - 9 * q1.y + 18 * q2.y - 5 * p3.y) / 6;
+      p0.outDx = cp1x - p0.x;
+      p0.outDy = cp1y - p0.y;
+      p3.inDx = cp2x - p3.x;
+      p3.inDy = cp2y - p3.y;
+    }
+    return nodes;
+  }
+
+  if (
+    (s.shapeType === 'parabola' || s.shapeType === 'arc' || s.shapeType === 'hyperbola') &&
+    s.points.length >= 3
+  ) {
+    const rawPts = s.points.map((p, idx) => ({
+      ...p,
+      smooth: idx === 1,
+    }));
+    return recomputeAutoSmoothHandles(rawPts, false);
+  }
+
+  const out = s.points.map((p) => ({ ...p }));
+  for (let i = 1; i < out.length; i++) {
+    const prev = out[i - 1];
+    const curr = out[i];
+    if (
+      curr.cx !== undefined &&
+      curr.cy !== undefined &&
+      prev.outDx === undefined &&
+      curr.inDx === undefined
+    ) {
+      prev.outDx = (2 / 3) * (curr.cx - prev.x);
+      prev.outDy = (2 / 3) * (curr.cy - prev.y);
+      curr.inDx = (2 / 3) * (curr.cx - curr.x);
+      curr.inDy = (2 / 3) * (curr.cy - curr.y);
+      curr.cx = undefined;
+      curr.cy = undefined;
+    }
+  }
+  return out;
+}
+
 
 
 
