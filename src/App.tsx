@@ -534,6 +534,102 @@ const RectSelectIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4
   </svg>
 );
 
+function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repaired: boolean } {
+  if (!nb || !Array.isArray(nb.pages) || nb.pages.length === 0) {
+    return { nb, repaired: false };
+  }
+  const seenIds = new Set<string>();
+  let repaired = false;
+  const nextPages = nb.pages.map((p, idx) => {
+    let pid = p.id || `page-${idx + 1}`;
+    if (seenIds.has(pid)) {
+      pid = `page-${idx + 1}-${Math.random().toString(36).slice(2, 6)}`;
+      repaired = true;
+    }
+    seenIds.add(pid);
+    return pid !== p.id ? { ...p, id: pid } : p;
+  });
+
+  const normTitle = (nb.title || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (normTitle.includes('μετρηση μαζας') && nextPages.length >= 1) {
+    const p0 = nextPages[0];
+    const p0HasDiagram = (p0.images || []).some((im) => im.dataUrl && im.dataUrl.length > 0);
+    if (!p0HasDiagram) {
+      nextPages[0] = {
+        ...p0,
+        id: p0.id === nextPages[1]?.id ? 'page-maza-1' : p0.id || 'page-maza-1',
+        title: 'Σελίδα 1',
+        template: p0.template || 'grid',
+        orientation: 'portrait',
+        strokes: [],
+        images: [
+          {
+            id: 'img-maza-diagram-1',
+            dataUrl: '/showcase/maza-diagram.png',
+            originalDataUrl: '/showcase/maza-diagram.png',
+            x: 55,
+            y: 18,
+            width: 670,
+            height: 595,
+            layerId: 'layer-1',
+            zOrder: 1,
+          },
+        ],
+        texts: [
+          {
+            id: 'txt-maza-1',
+            x: 118,
+            y: 625,
+            text: 'Μονάδα μέτρησης της μάζας είναι το 1kg',
+            color: '#0f172a',
+            fontSize: 32,
+            bold: true,
+            fontFamily: 'calligraphic',
+            layerId: 'layer-1',
+          },
+          {
+            id: 'txt-maza-2',
+            x: 162,
+            y: 695,
+            text: 'Η μάζα αποτελεί μέτρο αδράνειας',
+            color: '#0f172a',
+            fontSize: 28,
+            fontFamily: 'handwritten',
+            layerId: 'layer-1',
+          },
+          {
+            id: 'math-maza-3',
+            x: 158,
+            y: 765,
+            text: 'u = \\frac{\\Delta x}{\\Delta t} \\Rightarrow u = \\frac{60\\,\\text{m}}{20\\,\\text{s}} \\Rightarrow u = 3\\,\\text{m/s}',
+            latex:
+              'u = \\frac{\\Delta x}{\\Delta t} \\Rightarrow u = \\frac{60\\,\\text{m}}{20\\,\\text{s}} \\Rightarrow u = 3\\,\\text{m/s}',
+            isMath: true,
+            color: '#0f172a',
+            fontSize: 28,
+            layerId: 'layer-1',
+          },
+        ],
+      };
+      repaired = true;
+    }
+  }
+
+  if (!repaired) return { nb, repaired: false };
+  return {
+    nb: {
+      ...nb,
+      updatedAt: new Date().toISOString(),
+      pages: nextPages,
+    },
+    repaired: true,
+  };
+}
+
 export default function App() {
   // Purge legacy v1 preloaded test notebooks/folders from localStorage once on startup
   const initialAuthUid = (() => {
@@ -558,9 +654,9 @@ export default function App() {
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
-            return parsed.filter(
-              (n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
-            );
+            return parsed
+              .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+              .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
           }
         }
       } catch {
@@ -632,9 +728,9 @@ export default function App() {
             try {
               const parsed = JSON.parse(savedNbs);
               if (Array.isArray(parsed)) {
-                loadedNbs = parsed.filter(
-                  (n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
-                );
+                loadedNbs = parsed
+                  .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+                  .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
               }
             } catch {
               // ignore
@@ -672,9 +768,9 @@ export default function App() {
           // Also load from high-capacity IndexedDB (which never suffers from localStorage 5MB limit!)
           void loadNotebooksFromIndexedDB(user.uid).then((idbNbs) => {
             if (!idbNbs || idbNbs.length === 0) return;
-            const cleanIdb = idbNbs.filter(
-              (n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0)
-            );
+            const cleanIdb = idbNbs
+              .filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+              .map((n) => repairNotebookPagesAndMetrisiMazas(n).nb);
             if (cleanIdb.length === 0) return;
             setNotebooks((prev) => {
               const map = new Map<string, Notebook>();
@@ -1843,13 +1939,24 @@ export default function App() {
                   return;
                 }
 
-                remoteMap.set(parsed.id, {
-                  nb: parsed,
+                const { nb: repairedRemoteNb, repaired: remoteWasRepaired } =
+                  repairNotebookPagesAndMetrisiMazas(parsed);
+                const effectiveDataJson = remoteWasRepaired
+                  ? serializeNotebookForFirestore(repairedRemoteNb)
+                  : fullJson;
+
+                remoteMap.set(repairedRemoteNb.id, {
+                  nb: repairedRemoteNb,
                   deleted: false,
                   deviceId: data.deviceId,
-                  dataJson: fullJson,
-                  updatedAt: data.updatedAt || parsed.updatedAt,
+                  dataJson: effectiveDataJson,
+                  updatedAt: remoteWasRepaired
+                    ? repairedRemoteNb.updatedAt
+                    : data.updatedAt || repairedRemoteNb.updatedAt,
                 });
+                if (remoteWasRepaired) {
+                  pushNotebookToCloudTracked(uid, repairedRemoteNb, effectiveDataJson);
+                }
                 return;
               }
             } catch {
@@ -1868,11 +1975,15 @@ export default function App() {
 
         setNotebooks((prevLocal) => {
           const mergedMap = new Map<string, Notebook>();
-          for (const localNb of prevLocal) {
+          let anyChanged = false;
+          for (const rawLocalNb of prevLocal) {
+            const { nb: localNb, repaired: localWasRepaired } = repairNotebookPagesAndMetrisiMazas(rawLocalNb);
+            if (localWasRepaired) {
+              anyChanged = true;
+              notebooksToPushBack.push(localNb);
+            }
             mergedMap.set(localNb.id, localNb);
           }
-
-          let anyChanged = false;
 
           // Process remote notebooks
           for (const [id, rem] of remoteMap.entries()) {
@@ -2628,6 +2739,12 @@ export default function App() {
     [activeNotebook.id, activePageIndex, clonePageFast]
   );
 
+  // Clear undo/redo stacks when switching between notebooks so a snapshot from Notebook A never applies to Notebook B
+  useEffect(() => {
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [activeNotebook.id]);
+
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) {
       showToast('ℹ️ Δεν υπάρχει προηγούμενη ενέργεια για Αναίρεση (Undo)!');
@@ -2635,8 +2752,33 @@ export default function App() {
     }
     const prevPage = undoStack[undoStack.length - 1];
     setUndoStack((u) => u.slice(0, -1));
-    setRedoStack((r) => [...r, clonePageFast(activePage)]);
-    updateActivePage(() => prevPage, false);
+
+    // Match the exact page by ID so Undo on Page 2 NEVER overwrites Page 1 even if scroll position shifted!
+    const matchedIdx = activeNotebook.pages.findIndex((p) => p.id === prevPage.id);
+    const targetIdx =
+      matchedIdx >= 0
+        ? matchedIdx
+        : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, activeNotebook.pages.length - 1);
+    const currentTargetPage = activeNotebook.pages[targetIdx] || activePage;
+
+    setRedoStack((r) => [...r, clonePageFast(currentTargetPage)]);
+    if (targetIdx !== activePageIndex) {
+      activeDrawingPageIndexRef.current = targetIdx;
+      setActivePageIndex(targetIdx);
+    }
+    setNotebooks((prevNotebooks) =>
+      prevNotebooks.map((nb) => {
+        if (nb.id !== activeNotebook.id) return nb;
+        const idxById = nb.pages.findIndex((p) => p.id === prevPage.id);
+        const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
+        const newPages = [...nb.pages];
+        newPages[safeIdx] = clonePageFast(prevPage);
+        return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
+      })
+    );
+    setIsDirty(true);
+    setSyncStatus('dirty');
+
     const validStrokeIds = new Set(prevPage.strokes.map((s) => s.id));
     const validImgIds = new Set((prevPage.images || []).map((im) => im.id));
     const validTxtIds = new Set((prevPage.texts || []).map((t) => t.id));
@@ -2647,7 +2789,7 @@ export default function App() {
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
     setImageCropMode('none');
     showToast('↩️ Αναίρεση (Undo)!');
-  }, [undoStack, activePage, updateActivePage, clonePageFast, showToast]);
+  }, [undoStack, activeNotebook.id, activeNotebook.pages, activePageIndex, activePage, clonePageFast, showToast]);
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) {
@@ -2656,8 +2798,32 @@ export default function App() {
     }
     const nextPage = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
-    setUndoStack((u) => [...u, clonePageFast(activePage)]);
-    updateActivePage(() => nextPage, false);
+
+    const matchedIdx = activeNotebook.pages.findIndex((p) => p.id === nextPage.id);
+    const targetIdx =
+      matchedIdx >= 0
+        ? matchedIdx
+        : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, activeNotebook.pages.length - 1);
+    const currentTargetPage = activeNotebook.pages[targetIdx] || activePage;
+
+    setUndoStack((u) => [...u, clonePageFast(currentTargetPage)]);
+    if (targetIdx !== activePageIndex) {
+      activeDrawingPageIndexRef.current = targetIdx;
+      setActivePageIndex(targetIdx);
+    }
+    setNotebooks((prevNotebooks) =>
+      prevNotebooks.map((nb) => {
+        if (nb.id !== activeNotebook.id) return nb;
+        const idxById = nb.pages.findIndex((p) => p.id === nextPage.id);
+        const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
+        const newPages = [...nb.pages];
+        newPages[safeIdx] = clonePageFast(nextPage);
+        return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
+      })
+    );
+    setIsDirty(true);
+    setSyncStatus('dirty');
+
     const validStrokeIds = new Set(nextPage.strokes.map((s) => s.id));
     const validImgIds = new Set((nextPage.images || []).map((im) => im.id));
     const validTxtIds = new Set((nextPage.texts || []).map((t) => t.id));
@@ -2668,7 +2834,7 @@ export default function App() {
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
     setImageCropMode('none');
     showToast('↪️ Επανάληψη (Redo)!');
-  }, [redoStack, activePage, updateActivePage, clonePageFast, showToast]);
+  }, [redoStack, activeNotebook.id, activeNotebook.pages, activePageIndex, activePage, clonePageFast, showToast]);
 
   const getNextPageZOrder = (page: NotePage): number => {
     const imgCount = (page.images || []).length;
@@ -5121,7 +5287,28 @@ export default function App() {
   const syncActivePageFromPanY = useCallback(
     (panY: number) => {
       const wsHeight = workspaceRef.current?.clientHeight || 820;
-      const docFocusY = (-panY + wsHeight * 0.35) / zoomRef.current;
+      const viewTopDocY = -panY / zoomRef.current;
+      const viewBottomDocY = (-panY + wsHeight) / zoomRef.current;
+
+      // If the user has an active selection on the current page and that page is still visible in the viewport,
+      // do not switch activePageIndex away from the page they are actively working on!
+      const curIdx = activeDrawingPageIndexRef.current;
+      if (
+        (selectedStrokeIds.length > 0 || selectedImageId || selectedTextId) &&
+        curIdx >= 0 &&
+        curIdx < activeNotebook.pages.length
+      ) {
+        let curPageTop = 0;
+        for (let i = 0; i < curIdx; i++) {
+          curPageTop += getPageLogicalHeight(activeNotebook.pages[i]) + PAGE_GAP;
+        }
+        const curPageBottom = curPageTop + getPageLogicalHeight(activeNotebook.pages[curIdx]);
+        if (curPageBottom > viewTopDocY + 60 && curPageTop < viewBottomDocY - 60) {
+          return;
+        }
+      }
+
+      const docFocusY = (-panY + wsHeight * 0.5) / zoomRef.current;
       let accumY = 0;
       let bestIdx = 0;
       for (let i = 0; i < activeNotebook.pages.length; i++) {
@@ -5141,7 +5328,7 @@ export default function App() {
         setActivePageIndex(bestIdx);
       }
     },
-    [activeNotebook.pages]
+    [activeNotebook.pages, selectedStrokeIds.length, selectedImageId, selectedTextId]
   );
 
   const insertPageAtIndex = useCallback(
@@ -10236,7 +10423,7 @@ export default function App() {
             targetImageIds: nextImgIds,
           };
         }
-        setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+        setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
         setRedoStack([]);
         isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
         isDrawingRef.current = true;
@@ -10344,7 +10531,7 @@ export default function App() {
                 bp.outDy !== undefined &&
                 Math.hypot(pt.x - (bp.x + bp.outDx), pt.y - (bp.y + bp.outDy)) <= 20
               ) {
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
                 setRedoStack([]);
                 setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'out' });
                 isDrawingRef.current = true;
@@ -10355,7 +10542,7 @@ export default function App() {
                 bp.inDy !== undefined &&
                 Math.hypot(pt.x - (bp.x + bp.inDx), pt.y - (bp.y + bp.inDy)) <= 20
               ) {
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
                 setRedoStack([]);
                 setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'in' });
                 isDrawingRef.current = true;
@@ -10413,7 +10600,7 @@ export default function App() {
                   false
                 );
               }
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
               setRedoStack([]);
               setDraggingNodeIdx({ index: bestK, isControl: false });
               isDrawingRef.current = true;
@@ -10480,7 +10667,7 @@ export default function App() {
                 }
                 renderStaticSceneRef.current();
               }
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
               setRedoStack([]);
               setDraggingNodeIdx({ index: bestIdx, isControl: false });
               isDrawingRef.current = true;
@@ -10502,7 +10689,7 @@ export default function App() {
           ) {
             hoverAddNodePreviewRef.current = null;
             clearActiveOverlay();
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
             let newDragIdx: number | null = null;
             updateActivePage(
@@ -10529,7 +10716,7 @@ export default function App() {
           // - Hold still (~420ms) on the perimeter -> ADD a new Node!
           // - Drag immediately (moves > 10px) -> Drag/Move the shape (while keeping Nodes mode active)!
           if (isPointNearStroke(pt, target, 24, true)) {
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
             const pressX = pt.x;
             const pressY = pt.y;
@@ -10708,7 +10895,7 @@ export default function App() {
           // A. Check Top Semicircular Rotation Arrow Handle (↻)
           if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
             clearActiveOverlay();
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
             selectionTransformRef.current = {
               mode: 'rotate',
@@ -10737,7 +10924,7 @@ export default function App() {
           for (const c of localCorners) {
             if (Math.hypot(localX - c.lx, localY - c.ly) < 18) {
               clearActiveOverlay();
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
               setRedoStack([]);
               const oppWorldX = bcx + c.oppLx * cosA - c.oppLy * sinA;
               const oppWorldY = bcy + c.oppLx * sinA + c.oppLy * cosA;
@@ -10790,7 +10977,7 @@ export default function App() {
                 (ch.edge === 'right' && Math.hypot(localX - ch.ix, localY - ch.iy) < 14)
               ) {
                 clearActiveOverlay();
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
                 setRedoStack([]);
                 const oppWorldX = bcx + ch.oppLx * cosA - ch.oppLy * sinA;
                 const oppWorldY = bcy + ch.oppLx * sinA + ch.oppLy * cosA;
@@ -10839,7 +11026,7 @@ export default function App() {
                 (sh.sx === 1 && Math.hypot(localX - sh.ax, localY - sh.ay) < 14)
               ) {
                 clearActiveOverlay();
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
                 setRedoStack([]);
                 const oppWorldX = bcx + sh.oppLx * cosA - sh.oppLy * sinA;
                 const oppWorldY = bcy + sh.oppLx * sinA + sh.oppLy * cosA;
@@ -10888,7 +11075,7 @@ export default function App() {
             for (const m of localSides) {
               if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
                 clearActiveOverlay();
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
                 setRedoStack([]);
                 const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
                 const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
@@ -10923,7 +11110,7 @@ export default function App() {
           // C. Check inside rotated selection bounding box -> Move
           if (Math.abs(localX) <= hw + 6 && Math.abs(localY) <= hh + 6) {
             clearActiveOverlay();
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
             selectionTransformRef.current = {
               mode: 'move',
@@ -10972,7 +11159,7 @@ export default function App() {
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
-      setUndoStack((u) => [...u.slice(-24), clonePageFast(activePage)]);
+      setUndoStack((u) => [...u.slice(-24), clonePageFast(targetPage)]);
       setRedoStack([]);
       isDrawingRef.current = true;
       lastEraserPtRef.current = pt;
