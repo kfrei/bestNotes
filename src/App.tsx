@@ -510,6 +510,29 @@ const AlignObjectsIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h
   </svg>
 );
 
+const RectSelectIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.1"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect
+      x="3.5"
+      y="4.5"
+      width="16"
+      height="14"
+      rx="2"
+      strokeDasharray="3.2 2.8"
+    />
+    <circle cx="3.5" cy="4.5" r="1.7" fill="currentColor" stroke="none" />
+    <circle cx="19.5" cy="18.5" r="2.1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export default function App() {
   // Purge legacy v1 preloaded test notebooks/folders from localStorage once on startup
   const initialAuthUid = (() => {
@@ -806,6 +829,8 @@ export default function App() {
 
   // Goodnotes 6 Toolbar State
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
+  const [lassoMode, setLassoMode] = useState<'rect' | 'freehand'>('freehand');
+  const lassoModeRef = useRef<'rect' | 'freehand'>('freehand');
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
   const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>('medium');
@@ -10973,7 +10998,7 @@ export default function App() {
   };
 
   // Finalize Lasso Selection (called either automatically when the pencil comes close to the start point, or on pointerUp!)
-  const finalizeLassoSelection = (poly: { x: number; y: number }[], eventShiftKey = false) => {
+  const finalizeLassoSelection = (rawPoly: { x: number; y: number }[], eventShiftKey = false) => {
     clearActiveOverlay();
     const isAdditive = Boolean(
       eventShiftKey || lassoAdditiveRef.current || shiftKeyPressedRef.current
@@ -10984,11 +11009,17 @@ export default function App() {
     activePointerIdRef.current = null;
     activePointerTypeRef.current = null;
 
-    if (poly.length === 0) return;
+    if (rawPoly.length === 0) return;
+
+    const isRectMarquee = lassoModeRef.current === 'rect' && rawPoly.length >= 5;
+    const poly = isRectMarquee ? rawPoly.slice(1, 5) : rawPoly;
 
     let pathLen = 0;
     for (let i = 1; i < poly.length; i++) {
       pathLen += distance(poly[i - 1], poly[i]);
+    }
+    if (isRectMarquee && poly.length === 4) {
+      pathLen += distance(poly[3], poly[0]);
     }
 
     const imgList = activePage.images || [];
@@ -13089,8 +13120,56 @@ export default function App() {
         return;
       }
 
-      // Draw Lasso trajectory directly on overlay canvas (follows Apple Pencil 1:1, bright green #22c55e dashed line, NO fill, auto-closes when returning to start!)
+      // Draw Lasso trajectory directly on overlay canvas
       const poly = lassoPolygonRef.current;
+
+      // Rectangular Marquee Selection mode: drag diagonally from start point to current point
+      if (lassoModeRef.current === 'rect') {
+        const startPt = poly[0] || latestPt;
+        const curPt = latestPt;
+        const dragDist = Math.hypot(curPt.x - startPt.x, curPt.y - startPt.y);
+        if (dragDist < 8) {
+          lassoPolygonRef.current = [startPt, curPt];
+        } else {
+          const minX = Math.min(startPt.x, curPt.x);
+          const maxX = Math.max(startPt.x, curPt.x);
+          const minY = Math.min(startPt.y, curPt.y);
+          const maxY = Math.max(startPt.y, curPt.y);
+          lassoPolygonRef.current = [
+            startPt,
+            { x: minX, y: minY },
+            { x: maxX, y: minY },
+            { x: maxX, y: maxY },
+            { x: minX, y: maxY },
+          ];
+          const ctx = activeCtxRef.current;
+          const c = activeCanvasRef.current;
+          if (ctx && c) {
+            ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+            ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+            ctx.save();
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.07)';
+            ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 1.75;
+            ctx.setLineDash([7, 7]);
+            ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 1.8;
+            for (const corner of [startPt, curPt]) {
+              ctx.beginPath();
+              ctx.arc(corner.x, corner.y, 4.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+        }
+        return;
+      }
+
       for (const ce of coalesced) {
         const rawPt = getCanvasPointFromNative(ce.clientX, ce.clientY, ce.pressure);
         if (poly.length === 0 || distance(poly[poly.length - 1], rawPt) >= 0.8) {
@@ -17587,7 +17666,8 @@ export default function App() {
                 { id: 'highlighter', title: 'Highlight (Υπογραμμιστής) — H / Η', icon: Highlighter },
                 { id: 'shape', title: 'Objects (Σχήματα) — O / Ο', icon: Shapes },
                 { id: 'text', title: 'Text (Κείμενο) — T / Τ', icon: Type },
-                { id: 'lasso', title: 'Select (Επιλογή Λάσο) — S / Σ', icon: Lasso },
+                { id: 'rect-lasso', title: 'Rectangular Select (Επιλογή με Ορθογώνιο πλαίσιο)', icon: RectSelectIcon },
+                { id: 'lasso', title: 'Select (Ελεύθερη Επιλογή Λάσο) — S / Σ', icon: Lasso },
                 { id: 'direct-node', title: 'Nodes (Κόμβοι) — N / Ν', icon: BezierNodesIcon },
                 { id: 'align-objects', title: 'Justification / Κεντράρισμα & Στοίχιση Αντικειμένων — J / Ξ', icon: AlignObjectsIcon },
                 { id: 'tape', title: 'Tape (Ταινία Απόκρυψης)', icon: Bandage },
@@ -17597,8 +17677,10 @@ export default function App() {
                 const isActive =
                   tool.id === 'align-objects'
                     ? activeTool === 'lasso' && showAlignSubBar
+                    : tool.id === 'rect-lasso'
+                    ? activeTool === 'lasso' && !showAlignSubBar && lassoMode === 'rect'
                     : tool.id === 'lasso'
-                    ? activeTool === 'lasso' && !showAlignSubBar
+                    ? activeTool === 'lasso' && !showAlignSubBar && lassoMode === 'freehand'
                     : activeTool === tool.id;
                 return (
                   <button
@@ -17612,6 +17694,22 @@ export default function App() {
                           setShowAlignSubBar(true);
                           setShowToolSubBar(true);
                         }
+                        setImageCropMode('none');
+                        return;
+                      }
+                      if (tool.id === 'rect-lasso' || tool.id === 'lasso') {
+                        const targetMode = tool.id === 'rect-lasso' ? 'rect' : 'freehand';
+                        setShowAlignSubBar(false);
+                        if (activeTool === 'lasso' && !showAlignSubBar && lassoMode === targetMode) {
+                          setShowToolSubBar((s) => !s);
+                        } else {
+                          lassoModeRef.current = targetMode;
+                          setLassoMode(targetMode);
+                          setActiveTool('lasso');
+                          setShowToolSubBar(true);
+                        }
+                        setSelectedTextId(null);
+                        setEditingTextId(null);
                         setImageCropMode('none');
                         return;
                       }
@@ -17673,7 +17771,7 @@ export default function App() {
                     }}
                     className={`p-2 rounded-full transition cursor-pointer ${
                       isActive
-                        ? tool.id === 'lasso'
+                        ? tool.id === 'lasso' || tool.id === 'rect-lasso'
                           ? 'bg-[#22c55e] text-white ring-2 ring-emerald-300 shadow-xs scale-105'
                           : tool.id === 'align-objects'
                           ? 'bg-indigo-600 text-white ring-2 ring-indigo-300 shadow-xs scale-105'
