@@ -12,6 +12,18 @@
     <meta name="apple-mobile-web-app-title" content="BestNotes" />
     <meta name="theme-color" content="#ffffff" />
     <title>BestNotes — Σημειώσεις, Γραφιστικά & Μαθηματικά</title>
+    <script>
+      if (window.location.hostname.indexOf('explainboard') !== -1 || window.location.search.indexOf('explainboard') !== -1) {
+        document.title = 'ExplainBoards — Σημειώσεις, Γραφιστικά & Μαθηματικά';
+        var icons = document.querySelectorAll('link[rel*="icon"]');
+        icons.forEach(function (el) {
+          el.setAttribute('type', 'image/png');
+          el.setAttribute('href', '/explainboards-icon.png?v=1');
+        });
+        var appTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+        if (appTitle) appTitle.setAttribute('content', 'ExplainBoards');
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />

@@ -8,29 +8,49 @@
         "supportEmail": "freiderikoskostas@gmail.com",
         "authorizedRedirectUris": [
           "https://bestnotes-2026.firebaseapp.com/__/auth/handler",
+          "https://explainboards.firebaseapp.com/__/auth/handler",
+          "https://explainboards.web.app/__/auth/handler",
           "https://mybestnotes.firebaseapp.com/__/auth/handler",
           "https://mybestnotes.web.app/__/auth/handler",
-          "https://bestnotes-2026.web.app/__/auth/handler",
           "http://localhost:5173"
         ]
       }
     }
   },
-  "hosting": {
-    "site": "mybestnotes",
-    "public": "dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ],
-    "cleanUrls": true,
-    "trailingSlash": false
-  }
+  "hosting": [
+    {
+      "site": "explainboards",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "cleanUrls": true,
+      "trailingSlash": false
+    },
+    {
+      "site": "mybestnotes",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "cleanUrls": true,
+      "trailingSlash": false
+    }
+  ]
 }

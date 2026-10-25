@@ -59,7 +59,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { auth, onAuthStateChanged, signOut, signInToGoogleDrive, type User } from './firebase';
-import { LandingPage, AuthModal } from './components/LandingPage';
+import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
 import { syncNotebookPdfToGoogleDrive, exportNotebookToPdfBlob } from './utils/googleDrivePdfSync';
 import {
   Notebook,
@@ -7425,9 +7425,13 @@ export default function App() {
               setViewMode('landing');
             }}
             className="flex items-center justify-center p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
-            title="Αρχική Σελίδα Παρουσίασης BestNotes (Landing Page)"
+            title={`Αρχική Σελίδα Παρουσίασης ${isExplainBoardsBrand ? 'ExplainBoards' : 'BestNotes'} (Landing Page)`}
           >
-            <img src="/icon.svg" alt="BestNotes" className="w-6 h-6 rounded-md shadow-xs shrink-0" />
+            <img
+              src={isExplainBoardsBrand ? '/explainboards-icon.png' : '/icon.svg'}
+              alt={isExplainBoardsBrand ? 'ExplainBoards' : 'BestNotes'}
+              className="w-6 h-6 rounded-md shadow-xs shrink-0"
+            />
           </button>
           <button
             onClick={() => setViewMode('library')}

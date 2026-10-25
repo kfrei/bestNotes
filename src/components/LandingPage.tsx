@@ -254,23 +254,39 @@ const BiologyFloraFaunaSketch: React.FC<{ className?: string }> = ({ className =
   </svg>
 );
 
-export const BestNotesLogoIcon: React.FC<{ className?: string }> = ({ className = 'w-9 h-9' }) => (
-  <svg className={className} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Outer Squircle with White Fill and Soft Gray Border (1:1 Goodnotes Icon Frame) */}
-    <rect x="4" y="4" width="92" height="92" rx="23" fill="#ffffff" stroke="#dcdfe4" strokeWidth="5.5" />
-    {/* Red Horizontal Note Lines & Curved Smile on the Right */}
-    <line x1="42" y1="31" x2="77" y2="31" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" />
-    <line x1="48" y1="49" x2="77" y2="49" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" />
-    <path d="M 44 73.5 C 51 82, 69 81, 76 63" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" fill="none" />
-    {/* Iconic Seamless Black Stylus / Pencil on the Left (Tilted Down-Right toward the Red Curve) */}
-    <g transform="translate(30.5, 47.5) rotate(-21)">
-      <path
-        d="M -5.3 -16.5 A 5.3 5.3 0 0 1 5.3 -16.5 L 5.3 8.5 L 1.0 21.2 C 0.5 22.5 -0.5 22.5 -1.0 21.2 L -5.3 8.5 Z"
-        fill="#111315"
+export const isExplainBoardsBrand =
+  typeof window !== 'undefined' &&
+  (window.location.hostname.toLowerCase().includes('explainboard') ||
+    window.location.search.toLowerCase().includes('explainboard'));
+
+export const BestNotesLogoIcon: React.FC<{ className?: string }> = ({ className = 'w-9 h-9' }) => {
+  if (isExplainBoardsBrand) {
+    return (
+      <img
+        src="/explainboards-icon.png"
+        alt="ExplainBoards"
+        className={`${className} object-contain`}
       />
-    </g>
-  </svg>
-);
+    );
+  }
+  return (
+    <svg className={className} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Outer Squircle with White Fill and Soft Gray Border (1:1 Goodnotes Icon Frame) */}
+      <rect x="4" y="4" width="92" height="92" rx="23" fill="#ffffff" stroke="#dcdfe4" strokeWidth="5.5" />
+      {/* Red Horizontal Note Lines & Curved Smile on the Right */}
+      <line x1="42" y1="31" x2="77" y2="31" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" />
+      <line x1="48" y1="49" x2="77" y2="49" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" />
+      <path d="M 44 73.5 C 51 82, 69 81, 76 63" stroke="#e11d48" strokeWidth="6.6" strokeLinecap="round" fill="none" />
+      {/* Iconic Seamless Black Stylus / Pencil on the Left (Tilted Down-Right toward the Red Curve) */}
+      <g transform="translate(30.5, 47.5) rotate(-21)">
+        <path
+          d="M -5.3 -16.5 A 5.3 5.3 0 0 1 5.3 -16.5 L 5.3 8.5 L 1.0 21.2 C 0.5 22.5 -0.5 22.5 -1.0 21.2 L -5.3 8.5 Z"
+          fill="#111315"
+        />
+      </g>
+    </svg>
+  );
+};
 
 export const AuthModal: React.FC<{
   isOpen: boolean;
@@ -368,7 +384,11 @@ export const AuthModal: React.FC<{
               className="text-lg font-semibold tracking-[-0.025em] text-[#111315]"
               style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
             >
-              {mode === 'signin' ? 'Σύνδεση στο BestNotes' : 'Δημιουργία Λογαριασμού'}
+              {mode === 'signin'
+                ? isExplainBoardsBrand
+                  ? 'Σύνδεση στο ExplainBoards'
+                  : 'Σύνδεση στο BestNotes'
+                : 'Δημιουργία Λογαριασμού'}
             </h2>
             <p className="text-xs text-slate-500">
               Συγχρόνισε τις σημειώσεις και τα σχήματά σου παντού
@@ -658,22 +678,32 @@ export const LandingPage: React.FC<LandingPageProps> = ({
          ===================================================================== */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
-          {/* Left: BestNotes Logo + Nav Links */}
+          {/* Left: Brand Logo + Nav Links */}
           <div className="flex items-center gap-8">
             <div
               onClick={onEnterApp}
               className="flex items-center gap-2.5 cursor-pointer group"
             >
               <BestNotesLogoIcon className="w-9 h-9 group-hover:scale-105 transition shrink-0" />
-              <span
-                className="text-[22px] font-semibold tracking-[-0.03em] text-[#111315] inline-flex items-start leading-none"
-                style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
-              >
-                BestNotes
-                <sup className="text-[7px] font-bold tracking-normal text-[#111315] ml-0.5 mt-0.5">
-                  TM
-                </sup>
-              </span>
+              {isExplainBoardsBrand ? (
+                <span
+                  className="text-[22px] font-extrabold tracking-[-0.03em] inline-flex items-baseline leading-none"
+                  style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+                >
+                  <span className="text-[#111722]">Explain</span>
+                  <span className="text-[#df1b3f]">Boards</span>
+                </span>
+              ) : (
+                <span
+                  className="text-[22px] font-semibold tracking-[-0.03em] text-[#111315] inline-flex items-start leading-none"
+                  style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
+                >
+                  BestNotes
+                  <sup className="text-[7px] font-bold tracking-normal text-[#111315] ml-0.5 mt-0.5">
+                    TM
+                  </sup>
+                </span>
+              )}
             </div>
 
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-700">
@@ -756,7 +786,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <main className="max-w-6xl mx-auto px-4 sm:px-8 pt-11 pb-28">
         <div className="text-center max-w-3xl mx-auto">
           <h1 className="text-4xl sm:text-5xl md:text-[54px] font-extrabold tracking-tight text-slate-950 leading-[1.12]">
-            Take BestNotes wherever you work
+            {isExplainBoardsBrand ? (
+              <>
+                Take <span className="text-[#111722]">Explain</span>
+                <span className="text-[#df1b3f]">Boards</span> wherever you work
+              </>
+            ) : (
+              'Take BestNotes wherever you work'
+            )}
           </h1>
           <p className="mt-4 text-base sm:text-lg text-slate-600 font-normal leading-relaxed">
             Σημειώσεις, Σκελετός Βιολογίας, Τροχαλίες Φυσικής, Χημεία, Ημίτονα &amp; 3D Σχήματα
@@ -835,7 +872,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <FolderOpen className="w-4 h-4 text-sky-200" />
                 <Search className="w-4 h-4 text-sky-200" />
                 <span className="font-semibold text-sky-100 hidden sm:inline">
-                  BestNotes — {SHOWCASE_TABS.find((t) => t.id === activeTab)?.label}
+                  {isExplainBoardsBrand ? 'ExplainBoards' : 'BestNotes'} — {SHOWCASE_TABS.find((t) => t.id === activeTab)?.label}
                 </span>
               </div>
 
