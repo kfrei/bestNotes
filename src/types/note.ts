@@ -149,6 +149,8 @@ export interface NotePage {
   tags?: string[];
   template: PaperTemplateType;
   orientation?: 'portrait' | 'landscape';
+  customWidth?: number; // Exact page width for standalone imported PDFs/images (no letterbox border)
+  customHeight?: number; // Exact page height for standalone imported PDFs/images (no letterbox border)
   rotation?: number; // 0, 90, 180, 270
   backgroundDataUrl?: string; // Full-page PDF page or imported JPG/PNG background to write on top of
   layers: LayerItem[];
@@ -175,4 +177,14 @@ export interface Notebook {
 export const A4_GRID_STEP_PX = 23;
 export const A4_SHORT_PX = 41 * A4_GRID_STEP_PX; // 943px
 export const A4_LONG_PX = 58 * A4_GRID_STEP_PX; // 1334px
+
+export function getPageLogicalWidth(page?: NotePage): number {
+  if (page?.customWidth && page.customWidth >= 200) return page.customWidth;
+  return page?.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
+}
+
+export function getPageLogicalHeight(page?: NotePage): number {
+  if (page?.customHeight && page.customHeight >= 200) return page.customHeight;
+  return page?.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+}
 

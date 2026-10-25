@@ -92,6 +92,8 @@ import {
   A4_SHORT_PX,
   A4_LONG_PX,
   A4_GRID_STEP_PX,
+  getPageLogicalWidth,
+  getPageLogicalHeight,
 } from './types/note';
 import { importGoodnotesFile } from './utils/goodnotesParser';
 import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
@@ -1180,8 +1182,8 @@ export default function App() {
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId) || notebooks[0];
   const activePage =
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
-  const pageWidth = activePage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-  const pageHeight = activePage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+  const pageWidth = getPageLogicalWidth(activePage);
+  const pageHeight = getPageLogicalHeight(activePage);
 
   const showToast = useCallback((msg: string) => {
     setStatusBanner(msg);
@@ -1284,6 +1286,10 @@ export default function App() {
 
   const triggerSmartAutoTagsForNotebook = useCallback(
     async (targetNb: Notebook, extraImageDataUrls: string[] = [], silent = false) => {
+      // Do not spend AI resources automatically extracting tags for documents with > 3 pages
+      if (silent && (targetNb.pages?.length || 0) > 3) {
+        return;
+      }
       const collectedUrls: string[] = [...extraImageDataUrls];
       for (const p of targetNb.pages || []) {
         if (p.backgroundDataUrl && p.backgroundDataUrl.startsWith('data:image/')) {
@@ -1364,10 +1370,11 @@ export default function App() {
     [showToast]
   );
 
-  // Automatically extract #tags for untagged notebooks that contain handwritten strokes, images, or text
+  // Automatically extract #tags for untagged notebooks (<= 3 pages) that contain handwritten strokes, images, or text
   useEffect(() => {
     const untaggedCandidate = notebooks.find((nb) => {
       if (nb.tags && nb.tags.length > 0) return false;
+      if ((nb.pages?.length || 0) > 3) return false;
       const strokeCount = (nb.pages || []).reduce((acc, p) => acc + (p.strokes?.length || 0), 0);
       const imageCount = (nb.pages || []).reduce(
         (acc, p) => acc + (p.images?.length || 0) + (p.backgroundDataUrl ? 1 : 0),
@@ -3591,17 +3598,19 @@ export default function App() {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const pWidth = pageObj.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-      const pHeight = pageObj.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+      const pWidth = getPageLogicalWidth(pageObj);
+      const pHeight = getPageLogicalHeight(pageObj);
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.clearRect(0, 0, pWidth, pHeight);
 
-      drawPaperBackground(ctx, pWidth, pHeight, pageObj.template);
-
-      // 0. Full-Page PDF or JPG/PNG Document Background (write/highlight directly on top without erasing it!)
+      // 0. Full-Page PDF or JPG/PNG Document Background:
+      // Render as a standalone document page on plain white paper (never on top of our ruled/grid paper!)
       if (pageObj.backgroundDataUrl) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, pWidth, pHeight);
+
         let bgImg = imageElementsCacheRef.current.get(pageObj.backgroundDataUrl);
         if (!bgImg) {
           bgImg = new Image();
@@ -3612,16 +3621,42 @@ export default function App() {
           bgImg.src = pageObj.backgroundDataUrl;
           imageElementsCacheRef.current.set(pageObj.backgroundDataUrl, bgImg);
         }
-        if (bgImg.complete && bgImg.naturalWidth > 0) {
+        if (bgImg.complete && bgImg.naturalWidth > 0 && bgImg.naturalHeight > 0) {
+          // Auto-upgrade any previously saved PDF/image page that lacked customWidth/customHeight
+          // so its page frame matches the exact aspect ratio of the PDF/image with 0px border
+          if (!pageObj.customWidth || !pageObj.customHeight) {
+            const aspect = Math.max(0.25, Math.min(4, bgImg.naturalWidth / bgImg.naturalHeight));
+            const isLand = aspect > 1.05;
+            const nextW = isLand ? A4_LONG_PX : Math.max(320, Math.round(A4_LONG_PX * aspect));
+            const nextH = isLand ? Math.max(320, Math.round(A4_LONG_PX / aspect)) : A4_LONG_PX;
+            window.setTimeout(() => {
+              setNotebooks((prev) =>
+                prev.map((nb) => {
+                  if (nb.id !== activeNotebook.id) return nb;
+                  let changed = false;
+                  const nextPages = nb.pages.map((p) => {
+                    if (p.id === pageObj.id && (!p.customWidth || !p.customHeight)) {
+                      changed = true;
+                      return {
+                        ...p,
+                        template: 'blank' as PaperTemplateType,
+                        customWidth: nextW,
+                        customHeight: nextH,
+                      };
+                    }
+                    return p;
+                  });
+                  return changed ? { ...nb, pages: nextPages } : nb;
+                })
+              );
+            }, 0);
+          }
           ctx.save();
-          const scale = Math.min(pWidth / bgImg.naturalWidth, pHeight / bgImg.naturalHeight);
-          const drawW = bgImg.naturalWidth * scale;
-          const drawH = bgImg.naturalHeight * scale;
-          const drawX = (pWidth - drawW) / 2;
-          const drawY = (pHeight - drawH) / 2;
-          ctx.drawImage(bgImg, drawX, drawY, drawW, drawH);
+          ctx.drawImage(bgImg, 0, 0, pWidth, pHeight);
           ctx.restore();
         }
+      } else {
+        drawPaperBackground(ctx, pWidth, pHeight, pageObj.template);
       }
 
       const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
@@ -4604,7 +4639,7 @@ export default function App() {
       let y = 0;
       for (let i = 0; i < targetIdx && i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        y += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
+        y += getPageLogicalHeight(p) + PAGE_GAP;
       }
       return y;
     },
@@ -4612,7 +4647,7 @@ export default function App() {
   );
 
   const totalDocumentHeight = activeNotebook.pages.reduce(
-    (acc, p, idx) => acc + (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + (idx > 0 ? PAGE_GAP : 0),
+    (acc, p, idx) => acc + getPageLogicalHeight(p) + (idx > 0 ? PAGE_GAP : 0),
     0
   );
 
@@ -4658,7 +4693,7 @@ export default function App() {
       let bestIdx = 0;
       for (let i = 0; i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        const pH = p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+        const pH = getPageLogicalHeight(p);
         if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
           bestIdx = i;
           break;
@@ -4683,7 +4718,7 @@ export default function App() {
       const newPage: NotePage = {
         id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         title: `Σελίδα ${clampedIdx + 1}`,
-        template: refPage.template,
+        template: refPage.backgroundDataUrl ? 'blank' : refPage.template,
         orientation: refPage.orientation || 'portrait',
         layers: [
           { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
@@ -4698,7 +4733,7 @@ export default function App() {
       let newTopY = 0;
       for (let i = 0; i < clampedIdx && i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
+        newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
 
       setNotebooks((prev) =>
@@ -4749,7 +4784,7 @@ export default function App() {
       let newTopY = 0;
       for (let i = 0; i < insertIdx && i < activeNotebook.pages.length; i++) {
         const p = activeNotebook.pages[i];
-        newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
+        newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
       setNotebooks((prev) =>
         prev.map((nb) => {
@@ -4773,6 +4808,8 @@ export default function App() {
         updateActivePage((page) => ({
           ...page,
           backgroundDataUrl: undefined,
+          customWidth: undefined,
+          customHeight: undefined,
           strokes: [],
           texts: [],
           images: [],
@@ -4787,7 +4824,7 @@ export default function App() {
       const remainingPages = activeNotebook.pages.filter((_, i) => i !== targetIdx);
       for (let i = 0; i < nextIdx && i < remainingPages.length; i++) {
         const p = remainingPages[i];
-        newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
+        newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
 
       setNotebooks((prev) =>
@@ -4922,8 +4959,8 @@ export default function App() {
   // Rotate Page 90° Left or Right (rotates page orientation + all strokes, images, texts, tapes)
   const handleRotatePage = useCallback(
     (direction: 'left' | 'right') => {
-      const oldW = activePage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-      const oldH = activePage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+      const oldW = getPageLogicalWidth(activePage);
+      const oldH = getPageLogicalHeight(activePage);
       const nextOrientation: 'portrait' | 'landscape' =
         activePage.orientation === 'landscape' ? 'portrait' : 'landscape';
 
@@ -4933,6 +4970,8 @@ export default function App() {
       updateActivePage((page) => ({
         ...page,
         orientation: nextOrientation,
+        customWidth: page.customHeight,
+        customHeight: page.customWidth,
         rotation: (((page.rotation || 0) + (direction === 'right' ? 90 : 270)) % 360),
         strokes: page.strokes.map((s) => ({
           ...s,
@@ -8319,8 +8358,8 @@ export default function App() {
       });
     }
 
-    const pW = activePage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-    const pH = activePage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+    const pW = getPageLogicalWidth(activePage);
+    const pH = getPageLogicalHeight(activePage);
     for (const im of activePage.images || []) {
       if (excludeImgIds.includes(im.id) || !visibleLayerIds.has(im.layerId)) continue;
       // Skip full-page imported PDF sheets so we only snap to actual shapes/images on the canvas
@@ -8653,8 +8692,8 @@ export default function App() {
         return;
       }
 
-      const pW = targetPage.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-      const pH = targetPage.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+      const pW = getPageLogicalWidth(targetPage);
+      const pH = getPageLogicalHeight(targetPage);
       const newTxt: TextObject = {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         x: Math.max(16, Math.min(pW - 160, Math.round(pt.x))),
@@ -12891,6 +12930,19 @@ export default function App() {
   const handleGoodnotesFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const lowerName = file.name.toLowerCase();
+    if (
+      file.type === 'application/pdf' ||
+      lowerName.endsWith('.pdf') ||
+      lowerName.endsWith('.jpg') ||
+      lowerName.endsWith('.jpeg') ||
+      lowerName.endsWith('.png') ||
+      lowerName.endsWith('.webp')
+    ) {
+      pdfImportModeRef.current = 'new-notebook';
+      await handlePdfOrDocFileChange(e);
+      return;
+    }
     try {
       const importedNb = await importGoodnotesFile(file);
       setNotebooks((prev) => [importedNb, ...prev]);
@@ -12941,13 +12993,13 @@ export default function App() {
         const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
         if (isPdf) {
           setStatusBanner(`⏳ Φόρτωση PDF "${file.name}"...`);
-          const pdfPages = await renderPdfFileToPages(file, activePage.template, (curr, total) => {
+          const pdfPages = await renderPdfFileToPages(file, 'blank', (curr, total) => {
             setStatusBanner(`⏳ Φόρτωση PDF "${file.name}": Σελίδα ${curr} από ${total}...`);
           });
           importedPages.push(...pdfPages);
         } else {
           setStatusBanner(`⏳ Φόρτωση εικόνας "${file.name}" ως σελίδα εγγράφου...`);
-          const imgPage = await renderImageFileToPage(file, activePage.template);
+          const imgPage = await renderImageFileToPage(file, 'blank');
           importedPages.push(imgPage);
         }
       }
@@ -12976,7 +13028,9 @@ export default function App() {
         setViewMode('editor');
         applyPaperTransformDirect(zoomRef.current, 0, 0, true);
         showToast(`📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`);
-        void triggerSmartAutoTagsForNotebook(newNb, [], true);
+        if (importedPages.length <= 3) {
+          void triggerSmartAutoTagsForNotebook(newNb, [], true);
+        }
       } else {
         // Insert into current notebook right after activePageIndex (or replace current page if completely blank)
         const isCurrentPageEmpty =
@@ -12989,7 +13043,7 @@ export default function App() {
         let newTopY = 0;
         for (let i = 0; i < targetInsertIdx && i < activeNotebook.pages.length; i++) {
           const p = activeNotebook.pages[i];
-          newTopY += (p.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX) + PAGE_GAP;
+          newTopY += getPageLogicalHeight(p) + PAGE_GAP;
         }
 
         setNotebooks((prev) =>
@@ -13009,7 +13063,9 @@ export default function App() {
         applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
         setShowThumbnailsModal(false);
         showToast(`📄 Προστέθηκαν ${importedPages.length} σελίδες (PDF/Εικόνα) — γράψε απευθείας πάνω τους!`);
-        if ((activeNotebook.tags?.length || 0) < 4) {
+        const totalAfterInsert =
+          activeNotebook.pages.length - (isCurrentPageEmpty ? 1 : 0) + importedPages.length;
+        if (totalAfterInsert <= 3 && (activeNotebook.tags?.length || 0) < 4) {
           const bgUrls = importedPages
             .map((p) => p.backgroundDataUrl)
             .filter((u): u is string => Boolean(u && u.startsWith('data:image/')));
@@ -14097,8 +14153,9 @@ export default function App() {
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
                           {visibleNotebooks.map((nb) => {
                             const p0 = nb.pages[0];
-                            const pW = p0?.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-                            const pH = p0?.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+                            const pW = getPageLogicalWidth(p0);
+                            const pH = getPageLogicalHeight(p0);
+                            const hasDocBg = Boolean(p0?.backgroundDataUrl);
                             return (
                               <div
                                 key={nb.id}
@@ -14108,13 +14165,18 @@ export default function App() {
                                 <div
                                   className="w-48 h-64 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border border-slate-300/90 flex flex-col justify-between"
                                   style={{
-                                    backgroundColor: p0?.template === 'dark-grid' ? '#0f172a' : '#fffdf7',
-                                    backgroundImage:
-                                      p0?.template === 'grid' || !p0?.template
-                                        ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
-                                        : p0?.template === 'ruled'
-                                        ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
-                                        : undefined,
+                                    backgroundColor: hasDocBg
+                                      ? '#ffffff'
+                                      : p0?.template === 'dark-grid'
+                                      ? '#0f172a'
+                                      : '#fffdf7',
+                                    backgroundImage: hasDocBg
+                                      ? undefined
+                                      : p0?.template === 'grid' || !p0?.template
+                                      ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
+                                      : p0?.template === 'ruled'
+                                      ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
+                                      : undefined,
                                     backgroundSize: '14px 14px',
                                   }}
                                 >
@@ -14129,7 +14191,7 @@ export default function App() {
                                     <img
                                       src={p0.backgroundDataUrl}
                                       alt={nb.title}
-                                      className="absolute inset-0 w-full h-full object-contain pointer-events-none pl-3"
+                                      className="absolute inset-0 w-full h-full object-cover pointer-events-none pl-3"
                                     />
                                   )}
 
@@ -17555,8 +17617,8 @@ export default function App() {
 
               {/* Render All Pages Vertically (Word / Goodnotes Continuous Scroll) */}
               {activeNotebook.pages.map((pageObj, pageIdx) => {
-                const pW = pageObj.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-                const pH = pageObj.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+                const pW = getPageLogicalWidth(pageObj);
+                const pH = getPageLogicalHeight(pageObj);
                 const isCurrentActive = pageIdx === activePageIndex;
 
                 return (
@@ -18436,8 +18498,8 @@ export default function App() {
               >
                 {activeNotebook.pages.map((pObj, pIdx) => {
                   const isSelectedPage = pIdx === activePageIndex;
-                  const pW = pObj.orientation === 'landscape' ? A4_LONG_PX : A4_SHORT_PX;
-                  const pH = pObj.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
+                  const pW = getPageLogicalWidth(pObj);
+                  const pH = getPageLogicalHeight(pObj);
 
                   return (
                     <div
@@ -18455,9 +18517,13 @@ export default function App() {
                           setShowThumbnailsModal(false);
                         }}
                         style={{
-                          aspectRatio: pObj.orientation === 'landscape' ? '4 / 3' : '3 / 4',
+                          aspectRatio: `${pW} / ${pH}`,
                           minHeight: '200px',
-                          backgroundColor: pObj.template === 'dark-grid' ? '#0f172a' : '#fffdf7',
+                          backgroundColor: pObj.backgroundDataUrl
+                            ? '#ffffff'
+                            : pObj.template === 'dark-grid'
+                            ? '#0f172a'
+                            : '#fffdf7',
                         }}
                         className="relative w-full overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-100"
                       >
@@ -18481,7 +18547,7 @@ export default function App() {
                           <img
                             src={pObj.backgroundDataUrl}
                             alt={pObj.title}
-                            className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                           />
                         )}
 

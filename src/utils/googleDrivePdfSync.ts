@@ -1,4 +1,11 @@
-import { Notebook, NotePage, StrokeObject, A4_SHORT_PX, A4_LONG_PX, A4_GRID_STEP_PX } from '../types/note';
+import {
+  Notebook,
+  NotePage,
+  StrokeObject,
+  A4_GRID_STEP_PX,
+  getPageLogicalWidth,
+  getPageLogicalHeight,
+} from '../types/note';
 import {
   computeResistorOrSpringPoints,
   distance,
@@ -461,22 +468,23 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
   }[] = [];
 
   for (const page of notebook.pages) {
-    const isLandscape = page.orientation === 'landscape';
-    const logicalW = isLandscape ? A4_LONG_PX : A4_SHORT_PX;
-    const logicalH = isLandscape ? A4_SHORT_PX : A4_LONG_PX;
+    const logicalW = getPageLogicalWidth(page);
+    const logicalH = getPageLogicalHeight(page);
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(logicalW * PDF_SCALE);
     canvas.height = Math.round(logicalH * PDF_SCALE);
     const ctx = canvas.getContext('2d')!;
     ctx.scale(PDF_SCALE, PDF_SCALE);
 
-    drawPaperTemplateForPdf(ctx, page.template, logicalW, logicalH);
-
     if (page.backgroundDataUrl) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, logicalW, logicalH);
       const bgImg = await loadImageElement(page.backgroundDataUrl);
       if (bgImg) {
         ctx.drawImage(bgImg, 0, 0, logicalW, logicalH);
       }
+    } else {
+      drawPaperTemplateForPdf(ctx, page.template, logicalW, logicalH);
     }
 
     const visibleLayerIds = new Set(
@@ -510,11 +518,15 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
       ctx.fillStyle = tx.color || '#111827';
       const fontStack =
         tx.fontFamily === 'calligraphic'
-          ? '"Arima", "Playpen Sans", "Mynerve", cursive, sans-serif'
+          ? '"ExplainBoardsPen", "Mynerve", "Arima", cursive, sans-serif'
+          : tx.fontFamily === 'neohellenic'
+          ? 'italic "GFS Neohellenic", "Arima", cursive, serif'
           : tx.fontFamily === 'handwritten'
           ? '"Playpen Sans", "Arima", "Mansalva", cursive, sans-serif'
+          : tx.fontFamily === 'mansalva'
+          ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
           : tx.fontFamily === 'marker'
-          ? '"Mynerve", "Mansalva", "Playpen Sans", cursive, sans-serif'
+          ? '"ExplainBoardsHand", "Mynerve", "Mansalva", cursive, sans-serif'
           : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.font = `${tx.bold ? 'bold ' : ''}${tx.fontSize || 20}px ${fontStack}`;
       const lines = tx.text.split('\n');
@@ -526,12 +538,14 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
 
     const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.91);
     const jpegBytes = dataUrlToUint8Array(jpegDataUrl);
+    const isLandscape = logicalW > logicalH;
+    const ptLong = 841.89;
     pageImages.push({
       jpegBytes,
       pixelW: canvas.width,
       pixelH: canvas.height,
-      ptW: isLandscape ? 841.89 : 595.28,
-      ptH: isLandscape ? 595.28 : 841.89,
+      ptW: isLandscape ? ptLong : Math.round(ptLong * (logicalW / Math.max(1, logicalH)) * 100) / 100,
+      ptH: isLandscape ? Math.round(ptLong * (logicalH / Math.max(1, logicalW)) * 100) / 100 : ptLong,
     });
   }
 

@@ -13,7 +13,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
  */
 export async function renderPdfFileToPages(
   file: File,
-  defaultTemplate: PaperTemplateType = 'blank',
+  _defaultTemplate: PaperTemplateType = 'blank',
   onProgress?: (current: number, total: number) => void
 ): Promise<NotePage[]> {
   const arrayBuffer = await file.arrayBuffer();
@@ -26,14 +26,19 @@ export async function renderPdfFileToPages(
     if (onProgress) onProgress(i, numPages);
     const pdfPage = await pdfDoc.getPage(i);
     const unscaledViewport = pdfPage.getViewport({ scale: 1 });
-    const isLandscape = unscaledViewport.width > unscaledViewport.height * 1.05;
-    const targetLogicalW = isLandscape ? A4_LONG_PX : A4_SHORT_PX;
-    const targetLogicalH = isLandscape ? A4_SHORT_PX : A4_LONG_PX;
+    const aspect = Math.max(0.25, Math.min(4, unscaledViewport.width / Math.max(1, unscaledViewport.height)));
+    const isLandscape = aspect > 1.05;
+    const customWidth = isLandscape
+      ? A4_LONG_PX
+      : Math.max(320, Math.round(A4_LONG_PX * aspect));
+    const customHeight = isLandscape
+      ? Math.max(320, Math.round(A4_LONG_PX / aspect))
+      : A4_LONG_PX;
 
     // Render at ~1.75x Retina resolution for crisp text without exhausting localStorage/RAM on 30+ page PDFs
     const scale = Math.min(
-      (targetLogicalW * 1.75) / Math.max(1, unscaledViewport.width),
-      (targetLogicalH * 1.75) / Math.max(1, unscaledViewport.height)
+      (customWidth * 1.75) / Math.max(1, unscaledViewport.width),
+      (customHeight * 1.75) / Math.max(1, unscaledViewport.height)
     );
     const viewport = pdfPage.getViewport({ scale });
 
@@ -54,8 +59,10 @@ export async function renderPdfFileToPages(
     pages.push({
       id: `page-pdf-${Date.now()}-${i}`,
       title: `${file.name.replace(/\.pdf$/i, '')} - Σελ. ${i}`,
-      template: defaultTemplate,
+      template: 'blank',
       orientation: isLandscape ? 'landscape' : 'portrait',
+      customWidth,
+      customHeight,
       backgroundDataUrl,
       layers: [
         { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
@@ -77,7 +84,7 @@ export async function renderPdfFileToPages(
  */
 export async function renderImageFileToPage(
   file: File,
-  defaultTemplate: PaperTemplateType = 'blank'
+  _defaultTemplate: PaperTemplateType = 'blank'
 ): Promise<NotePage> {
   const rawDataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -93,7 +100,14 @@ export async function renderImageFileToPage(
     el.src = rawDataUrl;
   });
 
-  const isLandscape = img.naturalWidth > img.naturalHeight * 1.08;
+  const aspect = Math.max(0.25, Math.min(4, img.naturalWidth / Math.max(1, img.naturalHeight)));
+  const isLandscape = aspect > 1.08;
+  const customWidth = isLandscape
+    ? A4_LONG_PX
+    : Math.max(320, Math.round(A4_LONG_PX * aspect));
+  const customHeight = isLandscape
+    ? Math.max(320, Math.round(A4_LONG_PX / aspect))
+    : A4_LONG_PX;
   const maxDim = 1800;
   let finalDataUrl = rawDataUrl;
 
@@ -112,8 +126,10 @@ export async function renderImageFileToPage(
   return {
     id: `page-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     title: file.name.replace(/\.(jpe?g|png|webp)$/i, ''),
-    template: defaultTemplate,
+    template: 'blank',
     orientation: isLandscape ? 'landscape' : 'portrait',
+    customWidth,
+    customHeight,
     backgroundDataUrl: finalDataUrl,
     layers: [
       { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
