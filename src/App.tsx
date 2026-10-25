@@ -13566,6 +13566,411 @@ export default function App() {
     showToast,
   ]);
 
+  // Convert Lasso-selected discrete straight lines / open polylines into the closest closed geometric Polygon!
+  // Handles corner gaps, T-overshoots (by intersecting consecutive infinite edge lines), and snaps nearly horizontal/vertical edges to 0°/90°.
+  const handleConvertSelectedStrokesToPolygon = useCallback(() => {
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+
+    if (selStrokes.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τις διακριτές ευθείες/ακμές του πολυγώνου!');
+      return;
+    }
+
+    type Seg2D = { a: { x: number; y: number }; b: { x: number; y: number } };
+    const rawSegments: Seg2D[] = [];
+
+    for (const s of selStrokes) {
+      if (s.points.length < 2) continue;
+      if (s.isShape) {
+        if (s.points.length === 2) {
+          const p0 = s.points[0];
+          const p1 = s.points[1];
+          if (Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 10) {
+            rawSegments.push({ a: { x: p0.x, y: p0.y }, b: { x: p1.x, y: p1.y } });
+          }
+        } else {
+          for (let i = 0; i < s.points.length - 1; i++) {
+            const p0 = s.points[i];
+            const p1 = s.points[i + 1];
+            if (Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 10) {
+              rawSegments.push({ a: { x: p0.x, y: p0.y }, b: { x: p1.x, y: p1.y } });
+            }
+          }
+        }
+      } else {
+        // Freehand stroke: first check if the entire stroke is a single hand-drawn straight line
+        const pFirst = s.points[0];
+        const pLast = s.points[s.points.length - 1];
+        const chordDx = pLast.x - pFirst.x;
+        const chordDy = pLast.y - pFirst.y;
+        const chordLen = Math.hypot(chordDx, chordDy);
+        let arcLen = 0;
+        let maxDev = 0;
+        if (chordLen >= 10) {
+          const nx = -chordDy / chordLen;
+          const ny = chordDx / chordLen;
+          for (let i = 1; i < s.points.length; i++) {
+            arcLen += Math.hypot(
+              s.points[i].x - s.points[i - 1].x,
+              s.points[i].y - s.points[i - 1].y
+            );
+            const dev = Math.abs(
+              (s.points[i].x - pFirst.x) * nx + (s.points[i].y - pFirst.y) * ny
+            );
+            if (dev > maxDev) maxDev = dev;
+          }
+        }
+        if (
+          chordLen >= 12 &&
+          maxDev <= Math.max(14, chordLen * 0.09) &&
+          arcLen <= chordLen * 1.25
+        ) {
+          rawSegments.push({
+            a: { x: pFirst.x, y: pFirst.y },
+            b: { x: pLast.x, y: pLast.y },
+          });
+        } else {
+          const keyIdx =
+            s.keyNodeIndices && s.keyNodeIndices.length >= 2
+              ? s.keyNodeIndices
+              : computeFreehandKeyNodeIndices(s.points);
+          for (let k = 0; k < keyIdx.length - 1; k++) {
+            const p0 = s.points[keyIdx[k]];
+            const p1 = s.points[keyIdx[k + 1]];
+            if (p0 && p1 && Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 10) {
+              rawSegments.push({ a: { x: p0.x, y: p0.y }, b: { x: p1.x, y: p1.y } });
+            }
+          }
+        }
+      }
+    }
+
+    if (rawSegments.length < 3) {
+      showToast('ℹ️ Χρειάζονται τουλάχιστον 3 ευθείες/ακμές για μετατροπή σε κλειστό Πολύγωνο!');
+      return;
+    }
+
+    // Snap nearly-horizontal (|dy|/L < 0.07) and nearly-vertical (|dx|/L < 0.07) segments to exact 0° / 90°
+    const snapAxisSegment = (seg: Seg2D): Seg2D => {
+      const dx = seg.b.x - seg.a.x;
+      const dy = seg.b.y - seg.a.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) return seg;
+      if (Math.abs(dy) / len < 0.07) {
+        const my = (seg.a.y + seg.b.y) / 2;
+        return { a: { x: seg.a.x, y: my }, b: { x: seg.b.x, y: my } };
+      }
+      if (Math.abs(dx) / len < 0.07) {
+        const mx = (seg.a.x + seg.b.x) / 2;
+        return { a: { x: mx, y: seg.a.y }, b: { x: mx, y: seg.b.y } };
+      }
+      return seg;
+    };
+
+    const segments = rawSegments.map(snapAxisSegment);
+
+    const ptToSegDist = (
+      p: { x: number; y: number },
+      sA: { x: number; y: number },
+      sB: { x: number; y: number }
+    ): number => {
+      const vx = sB.x - sA.x;
+      const vy = sB.y - sA.y;
+      const l2 = vx * vx + vy * vy;
+      if (l2 < 1e-6) return Math.hypot(p.x - sA.x, p.y - sA.y);
+      const t = Math.max(0, Math.min(1, ((p.x - sA.x) * vx + (p.y - sA.y) * vy) / l2));
+      return Math.hypot(p.x - (sA.x + t * vx), p.y - (sA.y + t * vy));
+    };
+
+    // Cost of connecting the exit of oriented segment u (u.a -> u.b) to the entry of oriented segment v (v.a -> v.b).
+    // Accounts for both corner gaps AND slight T-overshoots (where one line extends slightly past the corner).
+    const cornerCost = (u: Seg2D, v: Seg2D): number => {
+      const dEnd = Math.hypot(u.b.x - v.a.x, u.b.y - v.a.y);
+      const dTouch = Math.min(ptToSegDist(u.b, v.a, v.b), ptToSegDist(v.a, u.a, u.b));
+      if (dEnd < 110) {
+        return 0.55 * dEnd + 0.45 * dTouch;
+      }
+      return dEnd;
+    };
+
+    const K = segments.length;
+    let orderedCycle: Seg2D[] = [];
+
+    if (K <= 9) {
+      // Exact branch-and-bound search for the optimal closed polygon cycle
+      let bestCost = Infinity;
+      let bestChain: Seg2D[] | null = null;
+      const used = new Array<boolean>(K).fill(false);
+      const currentChain: Seg2D[] = [segments[0]];
+      used[0] = true;
+
+      const dfs = (costSoFar: number) => {
+        if (costSoFar >= bestCost) return;
+        if (currentChain.length === K) {
+          const total = costSoFar + cornerCost(currentChain[K - 1], currentChain[0]);
+          if (total < bestCost) {
+            bestCost = total;
+            bestChain = currentChain.map((sg) => ({
+              a: { ...sg.a },
+              b: { ...sg.b },
+            }));
+          }
+          return;
+        }
+        const prevSeg = currentChain[currentChain.length - 1];
+        for (let idx = 1; idx < K; idx++) {
+          if (used[idx]) continue;
+          used[idx] = true;
+          const raw = segments[idx];
+
+          const fwd: Seg2D = { a: raw.a, b: raw.b };
+          const rev: Seg2D = { a: raw.b, b: raw.a };
+          const cFwd = cornerCost(prevSeg, fwd);
+          const cRev = cornerCost(prevSeg, rev);
+
+          if (cFwd <= cRev) {
+            currentChain.push(fwd);
+            dfs(costSoFar + cFwd);
+            currentChain.pop();
+            currentChain.push(rev);
+            dfs(costSoFar + cRev);
+            currentChain.pop();
+          } else {
+            currentChain.push(rev);
+            dfs(costSoFar + cRev);
+            currentChain.pop();
+            currentChain.push(fwd);
+            dfs(costSoFar + cFwd);
+            currentChain.pop();
+          }
+          used[idx] = false;
+        }
+      };
+
+      dfs(0);
+      orderedCycle = bestChain || segments;
+    } else {
+      // Greedy nearest-neighbor chaining for K > 9
+      const used = new Array<boolean>(K).fill(false);
+      orderedCycle.push(segments[0]);
+      used[0] = true;
+      while (orderedCycle.length < K) {
+        const last = orderedCycle[orderedCycle.length - 1];
+        let bestIdx = -1;
+        let bestRev = false;
+        let bestC = Infinity;
+        for (let i = 0; i < K; i++) {
+          if (used[i]) continue;
+          const fwd: Seg2D = { a: segments[i].a, b: segments[i].b };
+          const rev: Seg2D = { a: segments[i].b, b: segments[i].a };
+          const cF = cornerCost(last, fwd);
+          if (cF < bestC) {
+            bestC = cF;
+            bestIdx = i;
+            bestRev = false;
+          }
+          const cR = cornerCost(last, rev);
+          if (cR < bestC) {
+            bestC = cR;
+            bestIdx = i;
+            bestRev = true;
+          }
+        }
+        if (bestIdx === -1) break;
+        used[bestIdx] = true;
+        orderedCycle.push(
+          bestRev
+            ? { a: { ...segments[bestIdx].b }, b: { ...segments[bestIdx].a } }
+            : { a: { ...segments[bestIdx].a }, b: { ...segments[bestIdx].b } }
+        );
+      }
+    }
+
+    // Merge consecutive nearly-collinear segments (< 11° angle difference) along the cycle
+    let merged = true;
+    while (merged && orderedCycle.length > 3) {
+      merged = false;
+      for (let i = 0; i < orderedCycle.length; i++) {
+        const j = (i + 1) % orderedCycle.length;
+        const s1 = orderedCycle[i];
+        const s2 = orderedCycle[j];
+        const dx1 = s1.b.x - s1.a.x;
+        const dy1 = s1.b.y - s1.a.y;
+        const l1 = Math.hypot(dx1, dy1) || 1;
+        const dx2 = s2.b.x - s2.a.x;
+        const dy2 = s2.b.y - s2.a.y;
+        const l2 = Math.hypot(dx2, dy2) || 1;
+        const dot = (dx1 * dx2 + dy1 * dy2) / (l1 * l2);
+        const latDist = ptToSegDist(s1.b, s2.a, s2.b);
+        if (dot > 0.981 && latDist < 26) {
+          const combined = snapAxisSegment({ a: { ...s1.a }, b: { ...s2.b } });
+          if (j > i) {
+            orderedCycle.splice(i, 2, combined);
+          } else {
+            orderedCycle[0] = combined;
+            orderedCycle.pop();
+          }
+          merged = true;
+          break;
+        }
+      }
+    }
+
+    // Compute each polygon corner vertex as the exact Line-Line Intersection of consecutive edges!
+    // This closes corner gaps AND trims T-overshoots (such as a vertical edge extending past a horizontal top edge).
+    const m = orderedCycle.length;
+    const rawVertices: { x: number; y: number }[] = [];
+    for (let i = 0; i < m; i++) {
+      const s1 = orderedCycle[(i - 1 + m) % m];
+      const s2 = orderedCycle[i];
+      const dx1 = s1.b.x - s1.a.x;
+      const dy1 = s1.b.y - s1.a.y;
+      const l1 = Math.hypot(dx1, dy1) || 1;
+      const u1x = dx1 / l1;
+      const u1y = dy1 / l1;
+
+      const dx2 = s2.b.x - s2.a.x;
+      const dy2 = s2.b.y - s2.a.y;
+      const l2 = Math.hypot(dx2, dy2) || 1;
+      const u2x = dx2 / l2;
+      const u2y = dy2 / l2;
+
+      const midX = (s1.b.x + s2.a.x) / 2;
+      const midY = (s1.b.y + s2.a.y) / 2;
+      const gap = Math.hypot(s1.b.x - s2.a.x, s1.b.y - s2.a.y);
+      const det = u1x * u2y - u1y * u2x;
+
+      if (Math.abs(det) > 0.14) {
+        const t = ((s2.a.x - s1.a.x) * u2y - (s2.a.y - s1.a.y) * u2x) / det;
+        const ix = s1.a.x + t * u1x;
+        const iy = s1.a.y + t * u1y;
+        const maxJump = Math.max(135, gap * 2.6, Math.min(l1, l2) * 0.75);
+        if (Math.hypot(ix - midX, iy - midY) <= maxJump) {
+          rawVertices.push({ x: ix, y: iy });
+          continue;
+        }
+      }
+      rawVertices.push({ x: midX, y: midY });
+    }
+
+    // Deduplicate any vertices that collapsed closer than 6px
+    const vertices: { x: number; y: number }[] = [];
+    for (const v of rawVertices) {
+      if (
+        vertices.length === 0 ||
+        Math.hypot(v.x - vertices[vertices.length - 1].x, v.y - vertices[vertices.length - 1].y) >= 6
+      ) {
+        vertices.push(v);
+      }
+    }
+    if (
+      vertices.length > 3 &&
+      Math.hypot(
+        vertices[0].x - vertices[vertices.length - 1].x,
+        vertices[0].y - vertices[vertices.length - 1].y
+      ) < 6
+    ) {
+      vertices.pop();
+    }
+
+    if (vertices.length < 3) {
+      showToast('⚠️ Δεν βρέθηκαν αρκετές διακριτές κορυφές για σχηματισμό πολυγώνου.');
+      return;
+    }
+
+    const refStroke = selStrokes[0];
+    const polyPoints: BezierPoint[] = [
+      ...vertices.map((v, idx) => ({
+        x: v.x,
+        y: v.y,
+        pressure: 0.5,
+        twist: idx === 0 ? 999 : undefined,
+      })),
+      {
+        x: vertices[0].x,
+        y: vertices[0].y,
+        pressure: 0.5,
+        twist: 999,
+      },
+    ];
+
+    const polyShapeType: StrokeObject['shapeType'] =
+      vertices.length === 3 ? 'triangle' : vertices.length === 4 ? 'trapezoid' : 'rectangle';
+
+    const newPolyStroke: StrokeObject = {
+      id: `poly-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      tool: refStroke.tool === 'highlighter' ? 'pen' : refStroke.tool,
+      color: refStroke.color || strokeColor,
+      width: refStroke.width || strokeWidth,
+      opacity: refStroke.opacity ?? 1,
+      lineStyle: refStroke.lineStyle || 'solid',
+      fillStyle:
+        refStroke.fillStyle && refStroke.fillStyle !== 'none'
+          ? refStroke.fillStyle
+          : fillStyle !== 'none'
+          ? fillStyle
+          : 'none',
+      fillColor: refStroke.fillColor || refStroke.color || strokeColor,
+      fillTransparency: refStroke.fillTransparency ?? fillTransparency,
+      isShape: true,
+      shapeType: polyShapeType,
+      layerId: refStroke.layerId || activeLayerId,
+      zOrder: refStroke.zOrder,
+      points: polyPoints,
+    };
+
+    const removeSet = new Set(selStrokes.map((s) => s.id));
+    const firstIdx = activePage.strokes.findIndex((s) => removeSet.has(s.id));
+
+    setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+    setRedoStack([]);
+    updateActivePage((page) => {
+      const remaining = page.strokes.filter((s) => !removeSet.has(s.id));
+      const insertAt = firstIdx >= 0 ? Math.min(firstIdx, remaining.length) : remaining.length;
+      const nextStrokes = [...remaining];
+      nextStrokes.splice(insertAt, 0, newPolyStroke);
+      return {
+        ...page,
+        strokes: nextStrokes,
+      };
+    });
+
+    setSelectedStrokeIds([newPolyStroke.id]);
+    setActiveNodeStrokeId(newPolyStroke.id);
+    const shapeLabel =
+      vertices.length === 3
+        ? 'Τρίγωνο (3 κορυφές)'
+        : vertices.length === 4
+        ? 'Τετράπλευρο (4 κορυφές)'
+        : `Πολύγωνο (${vertices.length} κορυφές)`;
+    showToast(`⬠ Ενώθηκε σε κλειστό ${shapeLabel}!`);
+  }, [
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    activePage,
+    strokeColor,
+    strokeWidth,
+    fillStyle,
+    fillTransparency,
+    activeLayerId,
+    updateActivePage,
+    showToast,
+  ]);
+
   // NOTE: Temporarily disabled from toolbar until final phase ("Στρώσιμο" handwriting beautifier)
   const _handleBeautifySelected = () => {
     void Sparkles;
@@ -16864,14 +17269,25 @@ export default function App() {
 
                       if (totalSelCount >= 2) {
                         return (
-                          <button
-                            onClick={handleGroupSelected}
-                            className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer"
-                            title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
-                          >
-                            <Group className="w-3.5 h-3.5" />
-                            <span>Group ({totalSelCount})</span>
-                          </button>
+                          <>
+                            <button
+                              onClick={handleGroupSelected}
+                              className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer"
+                              title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
+                            >
+                              <Group className="w-3.5 h-3.5" />
+                              <span>Group ({totalSelCount})</span>
+                            </button>
+                            {selectedStrokeIds.length >= 2 && (
+                              <button
+                                onClick={handleConvertSelectedStrokesToPolygon}
+                                className="flex items-center gap-1 px-3 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                                title="Ένωση των επιλεγμένων διακριτών ευθειών στο πιο κοντινό κλειστό Πολύγωνο"
+                              >
+                                <span>⬠ Πολύγωνο</span>
+                              </button>
+                            )}
+                          </>
                         );
                       }
                       return null;
@@ -16947,19 +17363,28 @@ export default function App() {
                     </button>
 
                     {selectedStrokeIds.length > 0 && (
-                      <button
-                        onClick={() => void handleConvertLassoToCalligraphic()}
-                        disabled={isConvertingHandwriting}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
-                          isConvertingHandwriting
-                            ? 'bg-purple-300 text-white cursor-wait'
-                            : 'bg-purple-600 hover:bg-purple-700 text-white'
-                        }`}
-                        title="Αναγνώριση ελληνικού χειρογράφου με Gemini AI και μετατροπή σε Καλλιγραφικό Κείμενο (όπως στον Κύκλο του Νερού)"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>{isConvertingHandwriting ? 'Αναγνώριση...' : '✍️ Καλλιγραφικό'}</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={handleConvertSelectedStrokesToPolygon}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                          title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
+                        >
+                          <span>⬠ Πολύγωνο</span>
+                        </button>
+                        <button
+                          onClick={() => void handleConvertLassoToCalligraphic()}
+                          disabled={isConvertingHandwriting}
+                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                            isConvertingHandwriting
+                              ? 'bg-purple-300 text-white cursor-wait'
+                              : 'bg-purple-600 hover:bg-purple-700 text-white'
+                          }`}
+                          title="Αναγνώριση ελληνικού χειρογράφου με Gemini AI και μετατροπή σε Καλλιγραφικό Κείμενο (όπως στον Κύκλο του Νερού)"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{isConvertingHandwriting ? 'Αναγνώριση...' : '✍️ Καλλιγραφικό'}</span>
+                        </button>
+                      </>
                     )}
 
                     {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
@@ -19121,6 +19546,39 @@ export default function App() {
                         </div>
                       );
                     })}
+
+                    {/* Floating Quick "⬠ Πολύγωνο" Action Pill below the Lasso Selection Box when discrete lines/edges are selected */}
+                    {isCurrentActive &&
+                      activeTool === 'lasso' &&
+                      selectedStrokeIds.length >= 2 &&
+                      (() => {
+                        const selBox = getSelectionCombinedBox(selectedStrokeIds, []);
+                        if (!selBox) return null;
+                        const pillX = Math.max(70, Math.min(pW - 70, selBox.cx));
+                        const pillY = Math.min(pH - 28, selBox.maxY + 28);
+                        return (
+                          <div
+                            data-ui-panel="true"
+                            onPointerDown={(ev) => ev.stopPropagation()}
+                            onMouseDown={(ev) => ev.stopPropagation()}
+                            style={{
+                              left: pillX,
+                              top: pillY,
+                              touchAction: 'manipulation',
+                            }}
+                            className="absolute z-30 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5"
+                          >
+                            <button
+                              type="button"
+                              onClick={handleConvertSelectedStrokesToPolygon}
+                              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1b2a4a]/95 hover:bg-sky-600 text-white text-xs font-bold shadow-lg border border-sky-400/60 transition cursor-pointer whitespace-nowrap"
+                              title="Ένωση των επιλεγμένων διακριτών ευθειών στο πιο κοντινό κλειστό Πολύγωνο"
+                            >
+                              <span>⬠ Πολύγωνο</span>
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                     {/* 1-Second (1000ms) Filling Magnet Indicator when uniting 2 Freehand Endpoints into 1 Node! */}
                     {isCurrentActive && nodeMagnetState && (
