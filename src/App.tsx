@@ -4915,6 +4915,10 @@ export default function App() {
     };
 
     const onWheel = (e: WheelEvent) => {
+      const targetEl = e.target as HTMLElement | null;
+      if (targetEl && (targetEl.closest('[data-popover-panel]') || targetEl.closest('[data-ui-panel="true"]'))) {
+        return;
+      }
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const paperRect = paperTransformElRef.current?.getBoundingClientRect();
@@ -11141,6 +11145,7 @@ export default function App() {
                 data-ui-panel="true"
                 data-popover-panel="library"
                 onPointerDown={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
                 className="fixed right-4 sm:right-12 top-28 z-40 w-[360px] sm:w-[430px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 flex flex-col max-h-[80vh]"
               >
                 <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 shrink-0">
@@ -11432,6 +11437,7 @@ export default function App() {
                 data-ui-panel="true"
                 data-popover-panel="layers"
                 onPointerDown={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
                 className="fixed right-5 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800"
               >
                 <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100">
