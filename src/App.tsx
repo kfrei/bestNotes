@@ -10522,7 +10522,7 @@ export default function App() {
                 if (remaining.length === 0) {
                   const fallbackNb: Notebook = {
                     id: `nb-${Date.now()}`,
-                    title: 'Νέα Σημείωση 1',
+                    title: 'Σημείωση 1',
                     folder: activeLibraryFolder || '',
                     coverColor: '#0284c7',
                     updatedAt: new Date().toISOString(),
@@ -10627,7 +10627,7 @@ export default function App() {
                         onClick={() => {
                           const newNb: Notebook = {
                             id: `nb-${Date.now()}`,
-                            title: `Νέα Σημείωση ${notebooks.length + 1}`,
+                            title: `Σημείωση ${notebooks.length + 1}`,
                             folder: activeLibraryFolder || '',
                             coverColor: '#0284c7',
                             updatedAt: new Date().toISOString(),
