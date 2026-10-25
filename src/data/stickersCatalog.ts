@@ -1733,6 +1733,150 @@ export function buildCustomStickerSvgDataUrl(
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fullSvg)}`;
 }
 
+/**
+ * Strips any full-bleed square or rounded-square tile background `<rect>` or `<path>`
+ * from an emoji/icon SVG so that every inserted sticker has a 100% transparent background.
+ */
+function stripSvgBackgroundTile(svgText: string): string {
+  // Remove full-bleed 28x28 / 30x30 / 32x32 rounded-square background <path> in 32x32 emoji sets
+  // (e.g., d="M26.296 1.96H5.656c-2.03 0-3.68 1.65-3.68 3.68v20.64...")
+  let cleaned = svgText.replace(
+    /<path\b[^>]*\bd=["']M2[5678]\.[0-9]+\s+[123]\.[0-9]+H[23456]\.[0-9]+c-[0-9.\s-]+v2[0-9]\.[0-9]+[^>]*\/>/gi,
+    ''
+  );
+  // Also remove any top-level background <rect> covering >= 80% of the viewBox
+  cleaned = cleaned.replace(
+    /<rect\b[^>]*\bwidth=["'](2[6-9]|3[0-2]|100%)["'][^>]*\bheight=["'](2[6-9]|3[0-2]|100%)["'][^>]*\/>/gi,
+    ''
+  );
+  return cleaned;
+}
+
+interface CachedIconifyEntry {
+  body: string;
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+}
+
+const ICONIFY_API_HOSTS = [
+  'https://api.iconify.design',
+  'https://api.simplesvg.com',
+  'https://api.unisvg.com',
+];
+
+const ICONIFY_RAW_CACHE = new Map<string, CachedIconifyEntry>();
+const ICONIFY_MISSING_IDS = new Set<string>();
+
+/**
+ * Batch-fetches SVG bodies for any list of Iconify IDs (`prefix:name`) in 1 single JSON request per prefix
+ * across the 3 official Iconify CDN mirrors (`api.iconify.design`, `api.simplesvg.com`, `api.unisvg.com`).
+ * Completely eliminates browser rate-limiting (HTTP 429 / 1015) from loading 100+ individual `.svg` URLs,
+ * and verifies that every icon actually exists (filtering out any orphaned/missing icon IDs).
+ */
+export async function preloadIconifyStickersBatch(iconifyIds: string[]): Promise<Set<string>> {
+  const verified = new Set<string>();
+  const toFetchByPrefix = new Map<string, string[]>();
+
+  for (const id of iconifyIds) {
+    if (!id) continue;
+    if (id.startsWith('custom-svg:')) {
+      verified.add(id);
+      continue;
+    }
+    if (ICONIFY_RAW_CACHE.has(id)) {
+      verified.add(id);
+      continue;
+    }
+    if (ICONIFY_MISSING_IDS.has(id)) {
+      continue;
+    }
+    const [prefix, name] = id.split(':');
+    if (!prefix || !name) continue;
+    let list = toFetchByPrefix.get(prefix);
+    if (!list) {
+      list = [];
+      toFetchByPrefix.set(prefix, list);
+    }
+    if (!list.includes(name)) {
+      list.push(name);
+    }
+  }
+
+  const fetchPrefixChunk = async (prefix: string, names: string[]) => {
+    for (const host of ICONIFY_API_HOSTS) {
+      try {
+        const res = await fetch(
+          `${host}/${encodeURIComponent(prefix)}.json?icons=${encodeURIComponent(names.join(','))}`
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        const defW = Number(data?.width) || 24;
+        const defH = Number(data?.height) || 24;
+        const defL = Number(data?.left) || 0;
+        const defT = Number(data?.top) || 0;
+        const iconsMap = data?.icons || {};
+        const aliasesMap = data?.aliases || {};
+
+        for (const name of names) {
+          const fullId = `${prefix}:${name}`;
+          let iconObj = iconsMap[name];
+          if (!iconObj && aliasesMap[name]?.parent) {
+            const parentObj = iconsMap[aliasesMap[name].parent];
+            if (parentObj) {
+              iconObj = { ...parentObj, ...aliasesMap[name] };
+            }
+          }
+          if (iconObj && typeof iconObj.body === 'string' && iconObj.body.trim().length > 0) {
+            const cleanedBody = stripSvgBackgroundTile(iconObj.body);
+            if (/<(path|circle|rect|polygon|polyline|line|ellipse|g)\b/i.test(cleanedBody)) {
+              ICONIFY_RAW_CACHE.set(fullId, {
+                body: cleanedBody,
+                width: Number(iconObj.width) || defW,
+                height: Number(iconObj.height) || defH,
+                left: Number(iconObj.left) || defL,
+                top: Number(iconObj.top) || defT,
+              });
+              verified.add(fullId);
+            } else {
+              ICONIFY_MISSING_IDS.add(fullId);
+            }
+          } else {
+            ICONIFY_MISSING_IDS.add(fullId);
+          }
+        }
+        return;
+      } catch {
+        // try next CDN mirror
+      }
+    }
+  };
+
+  const tasks: Promise<void>[] = [];
+  for (const [prefix, names] of toFetchByPrefix.entries()) {
+    for (let i = 0; i < names.length; i += 45) {
+      tasks.push(fetchPrefixChunk(prefix, names.slice(i, i + 45)));
+    }
+  }
+  if (tasks.length > 0) {
+    await Promise.all(tasks);
+  }
+
+  for (const id of iconifyIds) {
+    if (id.startsWith('custom-svg:') || ICONIFY_RAW_CACHE.has(id)) {
+      verified.add(id);
+    }
+  }
+  return verified;
+}
+
+export function isStickerVerifiedOrCached(iconifyId: string): boolean {
+  if (iconifyId.startsWith('custom-svg:')) return true;
+  if (ICONIFY_MISSING_IDS.has(iconifyId)) return false;
+  return ICONIFY_RAW_CACHE.has(iconifyId);
+}
+
 export function getIconifySvgUrl(
   iconifyId: string,
   colorStyle: StickerColorStyle | Exclude<StickerColorStyle, 'all'>,
@@ -1753,8 +1897,25 @@ export function getIconifySvgUrl(
   }
   const [prefix, name] = iconifyId.split(':');
   if (!prefix || !name) return '';
+
+  const effectiveMonoColor = overrideCustomColor || customHexColor || '#1e293b';
+  const effectiveDuoColor = overrideCustomColor || '#0066ff';
+  const activeColor =
+    colorStyle === 'monochrome' || prefix === 'mdi' || prefix === 'lucide' || prefix === 'tabler'
+      ? effectiveMonoColor
+      : colorStyle === 'duotone' || prefix === 'ph' || prefix === 'solar'
+      ? effectiveDuoColor
+      : effectiveMonoColor;
+
+  // Serve directly as an instant local `data:image/svg+xml` URL if preloaded in ICONIFY_RAW_CACHE!
+  const cached = ICONIFY_RAW_CACHE.get(iconifyId);
+  if (cached) {
+    const coloredBody = cached.body.replace(/currentColor/g, activeColor);
+    const fullSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="${cached.left} ${cached.top} ${cached.width} ${cached.height}">${coloredBody}</svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fullSvg)}`;
+  }
+
   const baseUrl = `https://api.iconify.design/${prefix}/${name}.svg`;
-  const effectiveMonoColor = overrideCustomColor || customHexColor;
   if (
     colorStyle === 'monochrome' ||
     prefix === 'mdi' ||
@@ -1764,13 +1925,15 @@ export function getIconifySvgUrl(
     return `${baseUrl}?color=${encodeURIComponent(effectiveMonoColor)}`;
   }
   if (colorStyle === 'duotone' || prefix === 'ph' || prefix === 'solar') {
-    return `${baseUrl}?color=${encodeURIComponent(overrideCustomColor || '#0066ff')}`;
+    return `${baseUrl}?color=${encodeURIComponent(effectiveDuoColor)}`;
   }
   return baseUrl;
 }
 
 /**
- * Searches Iconify's 200,000+ online vector library live according to the user's query and color style.
+ * Searches Iconify's 200,000+ online vector library live according to the user's query and color style,
+ * deduplicates skin-tone/weight clones, and batch-preloads & verifies all returned icons so zero
+ * broken or orphaned icons ever appear.
  */
 export async function searchOnlineIconifyStickers(
   rawQuery: string,
@@ -1788,95 +1951,143 @@ export async function searchOnlineIconifyStickers(
     prefixes = 'mdi,lucide,tabler';
   }
 
-  try {
-    const res = await fetch(
-      `https://api.iconify.design/search?query=${encodeURIComponent(enQuery)}&prefixes=${encodeURIComponent(
-        prefixes
-      )}&limit=36`
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const icons: string[] = Array.isArray(data?.icons) ? data.icons : [];
-    const NON_TRANSPARENT_EMOJI_NAMES = new Set([
-      'fireworks',
-      'sparkler',
-      'night-with-stars',
-      'milky-way',
-      'bridge-at-night',
-      'sunrise-over-mountains',
-      'sunrise',
-      'sunset',
-      'cityscape',
-      'cityscape-at-dusk',
-      'shooting-star',
-    ]);
-    return icons
-      .filter((ic) => {
-        const [, icName = ''] = ic.split(':');
+  let icons: string[] = [];
+  for (const host of ICONIFY_API_HOSTS) {
+    try {
+      const res = await fetch(
+        `${host}/search?query=${encodeURIComponent(enQuery)}&prefixes=${encodeURIComponent(
+          prefixes
+        )}&limit=48`
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data?.icons)) {
+        icons = data.icons;
+        break;
+      }
+    } catch {
+      // try next mirror
+    }
+  }
+  if (icons.length === 0) return [];
+
+  const NON_TRANSPARENT_EMOJI_NAMES = new Set([
+    'fireworks',
+    'sparkler',
+    'night-with-stars',
+    'milky-way',
+    'bridge-at-night',
+    'sunrise-over-mountains',
+    'sunrise',
+    'sunset',
+    'cityscape',
+    'cityscape-at-dusk',
+    'shooting-star',
+  ]);
+
+  const seenPhBase = new Set<string>();
+  const filteredIds = icons
+    .filter((ic) => {
+      const [prefix = '', icName = ''] = ic.split(':');
+      if (!prefix || !icName) return false;
+      if (
+        NON_TRANSPARENT_EMOJI_NAMES.has(icName) ||
+        icName.endsWith('-button') ||
+        icName.startsWith('squared-')
+      ) {
+        return false;
+      }
+      // Skip skin-tone variants that clutter results with 6 identical copies
+      if (
+        /-(light|medium-light|medium|medium-dark|dark)(-skin-tone)?$/.test(icName) &&
+        !icName.startsWith('light-') &&
+        !icName.endsWith('-bulb-light')
+      ) {
         if (
-          NON_TRANSPARENT_EMOJI_NAMES.has(icName) ||
-          icName.endsWith('-button') ||
-          icName.startsWith('squared-')
+          icName.endsWith('-skin-tone') ||
+          icName.endsWith('-medium-light') ||
+          icName.endsWith('-medium-dark') ||
+          prefix === 'fluent-emoji' ||
+          prefix === 'fluent-emoji-flat' ||
+          prefix === 'noto'
         ) {
           return false;
         }
-        if (colorStyle === 'duotone') {
-          return ic.includes('duotone') || ic.startsWith('icon-park-twotone:');
+      }
+      // For Phosphor ('ph'), avoid showing 5 identical monochrome weight clones (-thin, -light, -bold, -fill)
+      if (prefix === 'ph' && colorStyle !== 'duotone') {
+        if (icName.endsWith('-thin') || icName.endsWith('-light') || icName.endsWith('-bold')) {
+          return false;
         }
-        return true;
-      })
-      .slice(0, 28)
-      .map((ic) => {
-        const [prefix, name] = ic.split(':');
-        const inferredStyle: Exclude<StickerColorStyle, 'all'> =
-          prefix === 'fluent-emoji' ||
-          prefix === 'fluent-emoji-flat' ||
-          prefix === 'noto' ||
-          prefix === 'twemoji' ||
-          prefix === 'icon-park'
-            ? 'multicolor'
-            : ic.includes('duotone') || prefix === 'icon-park-twotone'
-            ? 'duotone'
-            : 'monochrome';
-        return {
-          id: `online-${ic}`,
-          iconifyId: ic,
-          title: (name || ic).replace(/-/g, ' '),
-          category: 'Σχήματα & 3D',
-          colorStyle: inferredStyle,
-          tags: [rawQuery.trim(), prefix],
-        };
-      });
-  } catch {
-    return [];
+        const base = icName.replace(/-(duotone|fill)$/, '');
+        const key = `${base}:${icName.endsWith('-duotone') ? 'duo' : 'mono'}`;
+        if (seenPhBase.has(key)) return false;
+        seenPhBase.add(key);
+      }
+      if (colorStyle === 'duotone') {
+        return ic.includes('duotone') || ic.startsWith('icon-park-twotone:');
+      }
+      return true;
+    })
+    .slice(0, 24);
+
+  // Batch-preload & verify every candidate icon in 1 request per prefix before returning!
+  const verifiedSet = await preloadIconifyStickersBatch(filteredIds);
+
+  return filteredIds
+    .filter((ic) => verifiedSet.has(ic))
+    .map((ic) => {
+      const [prefix, name] = ic.split(':');
+      const inferredStyle: Exclude<StickerColorStyle, 'all'> =
+        prefix === 'fluent-emoji' ||
+        prefix === 'fluent-emoji-flat' ||
+        prefix === 'noto' ||
+        prefix === 'twemoji' ||
+        prefix === 'icon-park'
+          ? 'multicolor'
+          : ic.includes('duotone') || prefix === 'icon-park-twotone'
+          ? 'duotone'
+          : 'monochrome';
+      return {
+        id: `online-${ic}`,
+        iconifyId: ic,
+        title: (name || ic).replace(/-/g, ' '),
+        category: 'Σχήματα & 3D',
+        colorStyle: inferredStyle,
+        tags: [rawQuery.trim(), prefix],
+      };
+    });
+}
+
+/**
+ * Fetches an SVG from Iconify (or uses the preloaded `data:image/svg+xml` URL directly)
+ * and rasterizes it onto a crisp 512x512 transparent PNG data URL so it works offline,
+ * syncs to Firestore, exports to PDF, and supports all Lasso/Crop/Mirror tools.
+ */
+export async function rasterizeStickerUrlToPngDataUrl(
+  svgUrl: string,
+  iconifyId?: string,
+  colorStyle: StickerColorStyle | Exclude<StickerColorStyle, 'all'> = 'multicolor',
+  customHexColor = '#1e293b',
+  overrideCustomColor?: string | null,
+  overrideCustomWidth?: number | null
+): Promise<string> {
+  let effectiveUrl = svgUrl;
+
+  // If the URL is still a remote Iconify URL, batch-preload it via the 3-CDN JSON API first!
+  if (!effectiveUrl.startsWith('data:image/svg+xml') && iconifyId && !iconifyId.startsWith('custom-svg:')) {
+    await preloadIconifyStickersBatch([iconifyId]);
+    effectiveUrl = getIconifySvgUrl(
+      iconifyId,
+      colorStyle,
+      customHexColor,
+      overrideCustomColor,
+      overrideCustomWidth
+    );
   }
-}
 
-/**
- * Strips any full-bleed square or rounded-square tile background `<rect>` or `<path>`
- * from an emoji/icon SVG so that every inserted sticker has a 100% transparent background.
- */
-function stripSvgBackgroundTile(svgText: string): string {
-  // Remove full-bleed 28x28 / 30x30 / 32x32 rounded-square background <path> in 32x32 emoji sets
-  // (e.g., d="M26.296 1.96H5.656c-2.03 0-3.68 1.65-3.68 3.68v20.64...")
-  let cleaned = svgText.replace(
-    /<path\b[^>]*\bd=["']M2[5678]\.[0-9]+\s+[123]\.[0-9]+H[23456]\.[0-9]+c-[0-9.\s-]+v2[0-9]\.[0-9]+[^>]*\/>/gi,
-    ''
-  );
-  // Also remove any top-level background <rect> covering >= 80% of the viewBox
-  cleaned = cleaned.replace(
-    /<rect\b[^>]*\bwidth=["'](2[6-9]|3[0-2]|100%)["'][^>]*\bheight=["'](2[6-9]|3[0-2]|100%)["'][^>]*\/>/gi,
-    ''
-  );
-  return cleaned;
-}
-
-/**
- * Fetches an SVG from Iconify and rasterizes it onto a crisp 512x512 transparent PNG data URL
- * so it works offline, syncs to Firestore, exports to PDF, and supports all Lasso/Crop/Mirror tools.
- */
-export async function rasterizeStickerUrlToPngDataUrl(svgUrl: string): Promise<string> {
-  if (svgUrl.startsWith('data:image/svg+xml')) {
+  if (effectiveUrl.startsWith('data:image/svg+xml')) {
+    const isCustomFullBleed = Boolean(iconifyId && iconifyId.startsWith('custom-svg:'));
     return await new Promise<string>((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -1889,15 +2100,16 @@ export async function rasterizeStickerUrlToPngDataUrl(svgUrl: string): Promise<s
           reject(new Error('No 2d context'));
           return;
         }
-        ctx.drawImage(img, 0, 0, size, size);
+        const pad = isCustomFullBleed ? 0 : 24;
+        ctx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2);
         resolve(canvas.toDataURL('image/png'));
       };
       img.onerror = reject;
-      img.src = svgUrl;
+      img.src = effectiveUrl;
     });
   }
 
-  const res = await fetch(svgUrl);
+  const res = await fetch(effectiveUrl);
   if (!res.ok) throw new Error('Failed to fetch sticker SVG');
   let svgText = stripSvgBackgroundTile(await res.text());
   if (!svgText.includes('width=')) {

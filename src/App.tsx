@@ -133,6 +133,7 @@ import {
   STICKER_CATEGORIES,
   STICKER_COLOR_STYLES,
   getIconifySvgUrl,
+  preloadIconifyStickersBatch,
   searchOnlineIconifyStickers,
   rasterizeStickerUrlToPngDataUrl,
   type StickerCategory,
@@ -839,6 +840,19 @@ export default function App() {
   const [stickerSearchQuery, setStickerSearchQuery] = useState<string>('');
   const [onlineStickerResults, setOnlineStickerResults] = useState<StickerCatalogItem[]>([]);
   const [isSearchingOnlineStickers, setIsSearchingOnlineStickers] = useState<boolean>(false);
+  const [stickerCacheVersion, setStickerCacheVersion] = useState<number>(0);
+  const [failedStickerIds, setFailedStickerIds] = useState<Set<string>>(() => new Set());
+
+  // Batch-preload all Curated Stickers in just 5 JSON requests so 0 individual .svg requests hit Cloudflare rate-limits
+  useEffect(() => {
+    let active = true;
+    void preloadIconifyStickersBatch(CURATED_STICKERS_CATALOG.map((s) => s.iconifyId)).then(() => {
+      if (active) setStickerCacheVersion((v) => v + 1);
+    });
+    return () => {
+      active = false;
+    };
+  }, [showShapeLibraryPanel]);
 
   useEffect(() => {
     const q = stickerSearchQuery.trim();
@@ -853,6 +867,7 @@ export default function App() {
       const results = await searchOnlineIconifyStickers(q, stickerColorStyleFilter);
       if (!cancelled) {
         setOnlineStickerResults(results);
+        setStickerCacheVersion((v) => v + 1);
         setIsSearchingOnlineStickers(false);
       }
     }, 320);
@@ -16074,9 +16089,12 @@ export default function App() {
                       return qNorm.split(/\s+/).every((tok) => haystack.includes(tok));
                     });
 
+                    void stickerCacheVersion;
                     const seenIconify = new Set(filteredCurated.map((c) => c.iconifyId));
                     const extraOnline = onlineStickerResults.filter((o) => !seenIconify.has(o.iconifyId));
-                    const combinedStickers = [...filteredCurated, ...extraOnline];
+                    const combinedStickers = [...filteredCurated, ...extraOnline].filter(
+                      (s) => !failedStickerIds.has(s.id)
+                    );
 
                     const styleBadgeMap: Record<Exclude<StickerColorStyle, 'all'>, { label: string; cls: string }> = {
                       multicolor: {
@@ -16103,16 +16121,20 @@ export default function App() {
                       );
                       try {
                         showToast(`⏳ Φόρτωση «${stItem.title}»...`);
-                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(svgUrl);
+                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(
+                          svgUrl,
+                          stItem.iconifyId,
+                          stItem.colorStyle,
+                          strokeColor || '#1e293b',
+                          stickerCustomColor,
+                          stickerCustomWidth
+                        );
                         insertImageDataUrlOnPage(
                           pngDataUrl,
                           `🎨 Προστέθηκε: «${stItem.title}» (${stItem.category})`
                         );
                       } catch {
-                        insertImageDataUrlOnPage(
-                          svgUrl,
-                          `🎨 Προστέθηκε: «${stItem.title}» (${stItem.category})`
-                        );
+                        showToast('⚠️ Δεν ήταν δυνατή η φόρτωση αυτού του εικονιδίου.');
                       }
                     };
 
@@ -16129,7 +16151,14 @@ export default function App() {
                         stickerCustomWidth
                       );
                       try {
-                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(svgUrl);
+                        const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(
+                          svgUrl,
+                          stItem.iconifyId,
+                          stItem.colorStyle,
+                          strokeColor || '#1e293b',
+                          stickerCustomColor,
+                          stickerCustomWidth
+                        );
                         const newLibItem: SavedLibraryItem = {
                           id: `lib-stk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                           title: stItem.title,
@@ -16338,6 +16367,13 @@ export default function App() {
                                       src={svgUrl}
                                       alt={stItem.title}
                                       loading="lazy"
+                                      onError={() =>
+                                        setFailedStickerIds((prev) => {
+                                          const next = new Set(prev);
+                                          next.add(stItem.id);
+                                          return next;
+                                        })
+                                      }
                                       className="w-12 h-12 object-contain pointer-events-none select-none group-hover:scale-110 transition-transform"
                                     />
                                   </div>
