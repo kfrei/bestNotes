@@ -815,7 +815,9 @@ export default function App() {
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
     image?: ImageObject;
+    text?: TextObject;
   } | null>(null);
+  const lastPasteHandledAtRef = useRef<number>(0);
   const imageElementsCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const fileInputGoodnotesRef = useRef<HTMLInputElement | null>(null);
   const fileInputImageRef = useRef<HTMLInputElement | null>(null);
@@ -1519,11 +1521,18 @@ export default function App() {
 
   const clonePageFast = useCallback((p: NotePage): NotePage => ({
     ...p,
-    layers: [...p.layers],
-    strokes: [...p.strokes],
-    texts: [...(p.texts || [])],
-    images: [...(p.images || [])],
-    tapes: [...(p.tapes || [])],
+    layers: p.layers.map((l) => ({ ...l })),
+    strokes: p.strokes.map((s) => ({
+      ...s,
+      points: s.points.map((pt) => ({ ...pt })),
+      keyNodeIndices: s.keyNodeIndices ? [...s.keyNodeIndices] : undefined,
+    })),
+    texts: (p.texts || []).map((t) => ({ ...t })),
+    images: (p.images || []).map((im) => ({
+      ...im,
+      clipPolygon: im.clipPolygon ? im.clipPolygon.map((cp) => ({ ...cp })) : undefined,
+    })),
+    tapes: (p.tapes || []).map((tp) => ({ ...tp })),
   }), []);
 
   const updateActivePage = useCallback(
@@ -1535,7 +1544,7 @@ export default function App() {
           const safeIdx = Math.min(targetIdx, nb.pages.length - 1);
           const currentPage = nb.pages[safeIdx] || nb.pages[0];
           if (recordUndo) {
-            setUndoStack((u) => [...u.slice(-24), clonePageFast(currentPage)]);
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(currentPage)]);
             setRedoStack([]);
           }
           const updatedPage = updater(clonePageFast(currentPage));
@@ -1551,20 +1560,44 @@ export default function App() {
   );
 
   const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return;
+    if (undoStack.length === 0) {
+      showToast('ℹ️ Δεν υπάρχει προηγούμενη ενέργεια για Αναίρεση (Undo)!');
+      return;
+    }
     const prevPage = undoStack[undoStack.length - 1];
     setUndoStack((u) => u.slice(0, -1));
     setRedoStack((r) => [...r, clonePageFast(activePage)]);
     updateActivePage(() => prevPage, false);
-  }, [undoStack, activePage, updateActivePage, clonePageFast]);
+    const validStrokeIds = new Set(prevPage.strokes.map((s) => s.id));
+    const validImgIds = new Set((prevPage.images || []).map((im) => im.id));
+    const validTxtIds = new Set((prevPage.texts || []).map((t) => t.id));
+    setSelectedStrokeIds((prev) => prev.filter((id) => validStrokeIds.has(id)));
+    setActiveNodeStrokeId((prev) => (prev && validStrokeIds.has(prev) ? prev : null));
+    setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
+    setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setImageCropMode('none');
+    showToast('↩️ Αναίρεση (Undo)!');
+  }, [undoStack, activePage, updateActivePage, clonePageFast, showToast]);
 
   const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) return;
+    if (redoStack.length === 0) {
+      showToast('ℹ️ Δεν υπάρχει ενέργεια για Επανάληψη (Redo)!');
+      return;
+    }
     const nextPage = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
     setUndoStack((u) => [...u, clonePageFast(activePage)]);
     updateActivePage(() => nextPage, false);
-  }, [redoStack, activePage, updateActivePage, clonePageFast]);
+    const validStrokeIds = new Set(nextPage.strokes.map((s) => s.id));
+    const validImgIds = new Set((nextPage.images || []).map((im) => im.id));
+    const validTxtIds = new Set((nextPage.texts || []).map((t) => t.id));
+    setSelectedStrokeIds((prev) => prev.filter((id) => validStrokeIds.has(id)));
+    setActiveNodeStrokeId((prev) => (prev && validStrokeIds.has(prev) ? prev : null));
+    setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
+    setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setImageCropMode('none');
+    showToast('↪️ Επανάληψη (Redo)!');
+  }, [redoStack, activePage, updateActivePage, clonePageFast, showToast]);
 
   const getNextPageZOrder = (page: NotePage): number => {
     const imgCount = (page.images || []).length;
@@ -3606,41 +3639,107 @@ export default function App() {
     [activePage.orientation, updateActivePage, applyPaperTransformDirect, showToast]
   );
 
-  // CUT / COPY / PASTE (Supports internal strokes/images AND external photos/screenshots from iPad Clipboard!)
+  // CUT / COPY / PASTE (Supports internal strokes/groups/images/text AND external photos/screenshots from Clipboard!)
   const handleCopySelected = useCallback(() => {
-    const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
     const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
-    if (selStrokes.length === 0 && !selImg) {
-      showToast('ℹ️ Επίλεξε πρώτα σχήμα ή εικόνα με το Lasso για Copy!');
+    const selTxt = selectedTextId ? (activePage.texts || []).find((t) => t.id === selectedTextId) : undefined;
+    if (selStrokes.length === 0 && !selImg && !selTxt) {
+      showToast('ℹ️ Επίλεξε πρώτα σχήμα, εικόνα ή κείμενο με το Lasso για Copy (Ctrl+C)!');
       return;
     }
     internalClipboardRef.current = {
       strokes: structuredClone(selStrokes),
       image: selImg ? structuredClone(selImg) : undefined,
+      text: selTxt ? structuredClone(selTxt) : undefined,
     };
-    showToast('📋 Αντιγράφηκε (Copy) στο πρόχειρο!');
-  }, [activePage.strokes, activePage.images, selectedStrokeIds, selectedImageId, showToast]);
+    try {
+      void navigator.clipboard?.writeText?.('__EXPLAINBOARDS_INTERNAL__')?.catch(() => {});
+    } catch {
+      // ignore
+    }
+    showToast('📋 Αντιγράφηκε (Copy — Ctrl+C) στο πρόχειρο!');
+  }, [
+    activePage.strokes,
+    activePage.images,
+    activePage.texts,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    selectedImageId,
+    selectedTextId,
+    showToast,
+  ]);
 
   const handleCutSelected = useCallback(() => {
-    const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
     const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
-    if (selStrokes.length === 0 && !selImg) {
-      showToast('ℹ️ Επίλεξε πρώτα σχήμα ή εικόνα με το Lasso για Cut!');
+    const selTxt = selectedTextId ? (activePage.texts || []).find((t) => t.id === selectedTextId) : undefined;
+    if (selStrokes.length === 0 && !selImg && !selTxt) {
+      showToast('ℹ️ Επίλεξε πρώτα σχήμα, εικόνα ή κείμενο με το Lasso για Cut (Ctrl+X)!');
       return;
     }
     internalClipboardRef.current = {
       strokes: structuredClone(selStrokes),
       image: selImg ? structuredClone(selImg) : undefined,
+      text: selTxt ? structuredClone(selTxt) : undefined,
     };
+    try {
+      void navigator.clipboard?.writeText?.('__EXPLAINBOARDS_INTERNAL__')?.catch(() => {});
+    } catch {
+      // ignore
+    }
+    const targetStrokeIdSet = new Set(selStrokes.map((s) => s.id));
     updateActivePage((page) => ({
       ...page,
-      strokes: page.strokes.filter((s) => !selectedStrokeIds.includes(s.id)),
+      strokes: page.strokes.filter((s) => !targetStrokeIdSet.has(s.id)),
       images: (page.images || []).filter((im) => im.id !== selectedImageId),
+      texts: (page.texts || []).filter((t) => t.id !== selectedTextId),
     }));
     setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
     setSelectedImageId(null);
-    showToast('✂️ Αποκόπηκε (Cut) στο πρόχειρο!');
-  }, [activePage.strokes, activePage.images, selectedStrokeIds, selectedImageId, updateActivePage, showToast]);
+    setSelectedTextId(null);
+    setImageCropMode('none');
+    showToast('✂️ Αποκόπηκε (Cut — Ctrl+X) στο πρόχειρο!');
+  }, [
+    activePage.strokes,
+    activePage.images,
+    activePage.texts,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    selectedImageId,
+    selectedTextId,
+    updateActivePage,
+    showToast,
+  ]);
 
   // Instant 1-Tap Duplicate ("Αντίγραφο"): clones the selected shape/group or image slightly lower and slightly to the right (+28px, +28px)!
   const handleDuplicateSelected = useCallback(() => {
@@ -4175,8 +4274,99 @@ export default function App() {
     [updateActivePage]
   );
 
+  const pasteFromInternalClipboard = useCallback((): boolean => {
+    if (!internalClipboardRef.current) return false;
+    const { strokes: copiedStrokes, image: copiedImg, text: copiedTxt } = internalClipboardRef.current;
+
+    if (copiedImg) {
+      const newImg: ImageObject = {
+        ...structuredClone(copiedImg),
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: copiedImg.x + 28,
+        y: copiedImg.y + 28,
+      };
+      internalClipboardRef.current = {
+        ...internalClipboardRef.current,
+        image: structuredClone(newImg),
+      };
+      updateActivePage((page) => ({
+        ...page,
+        images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
+      }));
+      setSelectedImageId(newImg.id);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setSelectedTextId(null);
+      setActiveTool('lasso');
+      showToast('📥 Επικόλληση εικόνας (Paste — Ctrl+V)!');
+      return true;
+    }
+
+    if (copiedStrokes.length > 0) {
+      const newGroupId = copiedStrokes.some((s) => s.groupId) ? `grp-${Date.now()}` : undefined;
+      const pasted = copiedStrokes.map((s) => ({
+        ...structuredClone(s),
+        id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        groupId: s.groupId ? newGroupId : undefined,
+        points: s.points.map((p) => ({
+          ...p,
+          x: p.x + 26,
+          y: p.y + 26,
+          cx: p.cx !== undefined ? p.cx + 26 : undefined,
+          cy: p.cy !== undefined ? p.cy + 26 : undefined,
+        })),
+      }));
+      internalClipboardRef.current = {
+        ...internalClipboardRef.current,
+        strokes: structuredClone(pasted),
+      };
+      updateActivePage((page) => {
+        const baseZ = getNextPageZOrder(page);
+        return {
+          ...page,
+          strokes: [...page.strokes, ...pasted.map((s, idx) => ({ ...s, zOrder: baseZ + idx }))],
+        };
+      });
+      const pastedIds = pasted.map((s) => s.id);
+      setSelectedStrokeIds(pastedIds);
+      setActiveNodeStrokeId(pastedIds.length === 1 ? pastedIds[0] : null);
+      setSelectedImageId(null);
+      setSelectedTextId(null);
+      setActiveTool('lasso');
+      showToast(`📥 Επικόλληση (${pasted.length} αντικείμενα — Ctrl+V)!`);
+      return true;
+    }
+
+    if (copiedTxt) {
+      const newTxt: TextObject = {
+        ...structuredClone(copiedTxt),
+        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: copiedTxt.x + 24,
+        y: copiedTxt.y + 24,
+      };
+      internalClipboardRef.current = {
+        ...internalClipboardRef.current,
+        text: structuredClone(newTxt),
+      };
+      updateActivePage((page) => ({
+        ...page,
+        texts: [...(page.texts || []), newTxt],
+      }));
+      setSelectedTextId(newTxt.id);
+      setSelectedStrokeIds([]);
+      setSelectedImageId(null);
+      showToast('📥 Επικόλληση πλαισίου κειμένου (Paste — Ctrl+V)!');
+      return true;
+    }
+
+    return false;
+  }, [updateActivePage, showToast]);
+
   const handlePaste = useCallback(async () => {
-    // 1. Try reading external image/photo from System Clipboard (e.g. copied from Safari/Photos on iPad)
+    lastPasteHandledAtRef.current = performance.now();
+
+    // 1. If we have an internal clipboard item, check if system clipboard has an external image first;
+    //    if not (or if system clipboard has our '__EXPLAINBOARDS_INTERNAL__' marker), paste internal item!
     try {
       if (navigator.clipboard && 'read' in navigator.clipboard) {
         const items = await navigator.clipboard.read();
@@ -4199,60 +4389,16 @@ export default function App() {
       // Fall back to internal clipboard if system clipboard permission is declined or empty
     }
 
-    // 2. Paste from Internal BestNotes Clipboard (strokes or image)
-    if (internalClipboardRef.current) {
-      const { strokes: copiedStrokes, image: copiedImg } = internalClipboardRef.current;
-      if (copiedImg) {
-        const newImg: ImageObject = {
-          ...structuredClone(copiedImg),
-          id: `img-${Date.now()}`,
-          x: copiedImg.x + 28,
-          y: copiedImg.y + 28,
-        };
-        updateActivePage((page) => ({
-          ...page,
-          images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
-        }));
-        setSelectedImageId(newImg.id);
-        setSelectedStrokeIds([]);
-        setActiveTool('lasso');
-        showToast('📥 Επικόλληση εικόνας (Paste)!');
-        return;
-      }
-      if (copiedStrokes.length > 0) {
-        const newGroupId = copiedStrokes.some((s) => s.groupId) ? `grp-${Date.now()}` : undefined;
-        const pasted = copiedStrokes.map((s) => ({
-          ...structuredClone(s),
-          id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          groupId: s.groupId ? newGroupId : undefined,
-          points: s.points.map((p) => ({
-            ...p,
-            x: p.x + 26,
-            y: p.y + 26,
-            cx: p.cx !== undefined ? p.cx + 26 : undefined,
-            cy: p.cy !== undefined ? p.cy + 26 : undefined,
-          })),
-        }));
-        updateActivePage((page) => {
-          const baseZ = getNextPageZOrder(page);
-          return {
-            ...page,
-            strokes: [...page.strokes, ...pasted.map((s, idx) => ({ ...s, zOrder: baseZ + idx }))],
-          };
-        });
-        setSelectedStrokeIds(pasted.map((s) => s.id));
-        setSelectedImageId(null);
-        setActiveTool('lasso');
-        showToast(`📥 Επικόλληση (${pasted.length} αντικείμενα)!`);
-        return;
-      }
+    // 2. Paste from Internal ExplainBoards Clipboard (strokes, image, or text box)
+    if (pasteFromInternalClipboard()) {
+      return;
     }
 
     // 3. Try reading text from System Clipboard
     try {
       if (navigator.clipboard && 'readText' in navigator.clipboard) {
         const txt = await navigator.clipboard.readText();
-        if (txt && txt.trim()) {
+        if (txt && txt.trim() && txt.trim() !== '__EXPLAINBOARDS_INTERNAL__') {
           const newTxt: TextObject = {
             id: `txt-${Date.now()}`,
             x: 160,
@@ -4271,35 +4417,84 @@ export default function App() {
       // ignore
     }
 
-    showToast('ℹ️ Το πρόχειρο είναι κενό (Κάνε Copy μια φωτό εκτός app ή επίλεξε σχήμα με Lasso)!');
-  }, [insertImageDataUrlOnPage, updateActivePage, strokeColor, activeLayerId, showToast]);
+    showToast('ℹ️ Το πρόχειρο είναι κενό (Κάνε Copy με Ctrl+C ή επίλεξε σχήμα/εικόνα με Lasso)!');
+  }, [insertImageDataUrlOnPage, pasteFromInternalClipboard, updateActivePage, strokeColor, activeLayerId, showToast]);
 
-  // Global Paste event listener (handles Cmd+V / iPad 3-finger Paste of external photos & screenshots)
+  // Global Paste event listener (handles Ctrl+V / Cmd+V / iPad 3-finger Paste of both internal items & external photos)
   useEffect(() => {
     const onWindowPaste = (e: ClipboardEvent) => {
+      if (viewMode !== 'editor' || editingTextId !== null || showMathModal) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[contenteditable="true"]'))
+      ) {
+        return;
+      }
+
       const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.startsWith('image/')) {
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (typeof reader.result === 'string') {
-                insertImageDataUrlOnPage(reader.result);
-              }
-            };
-            reader.readAsDataURL(file);
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            lastPasteHandledAtRef.current = performance.now();
+            const file = item.getAsFile();
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (typeof reader.result === 'string') {
+                  insertImageDataUrlOnPage(reader.result);
+                }
+              };
+              reader.readAsDataURL(file);
+            }
+            return;
           }
-          return;
         }
+      }
+
+      if (internalClipboardRef.current) {
+        e.preventDefault();
+        lastPasteHandledAtRef.current = performance.now();
+        pasteFromInternalClipboard();
+        return;
+      }
+
+      const plainTxt = e.clipboardData?.getData('text/plain');
+      if (plainTxt && plainTxt.trim() && plainTxt.trim() !== '__EXPLAINBOARDS_INTERNAL__') {
+        e.preventDefault();
+        lastPasteHandledAtRef.current = performance.now();
+        const newTxt: TextObject = {
+          id: `txt-${Date.now()}`,
+          x: 160,
+          y: 200,
+          text: plainTxt.trim(),
+          color: strokeColor,
+          fontSize: 18,
+          layerId: activeLayerId,
+        };
+        updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+        showToast('📥 Επικόλληση κειμένου από το πρόχειρο!');
       }
     };
     window.addEventListener('paste', onWindowPaste);
     return () => window.removeEventListener('paste', onWindowPaste);
-  }, [insertImageDataUrlOnPage]);
+  }, [
+    viewMode,
+    editingTextId,
+    showMathModal,
+    insertImageDataUrlOnPage,
+    pasteFromInternalClipboard,
+    strokeColor,
+    activeLayerId,
+    updateActivePage,
+    showToast,
+  ]);
 
   // 120Hz 2-FINGER PINCH-TO-ZOOM & PAN + 1-FINGER OUTSIDE-PAGE SCROLL + WORD-STYLE CONTINUOUS MULTI-PAGE SCROLL
   useEffect(() => {
@@ -5078,6 +5273,8 @@ export default function App() {
             targetImageId: fingerHit.image.id,
           };
         }
+        setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+        setRedoStack([]);
         isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
         isDrawingRef.current = true;
         return;
@@ -5170,6 +5367,8 @@ export default function App() {
                   false
                 );
               }
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setRedoStack([]);
               setDraggingNodeIdx({ index: bestK, isControl: false });
               isDrawingRef.current = true;
               return;
@@ -5211,6 +5410,8 @@ export default function App() {
               }
             }
             if (bestIdx >= 0) {
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setRedoStack([]);
               setDraggingNodeIdx({ index: bestIdx, isControl: false });
               isDrawingRef.current = true;
               return;
@@ -5221,6 +5422,8 @@ export default function App() {
           // - Hold still (~420ms) on the perimeter -> ADD a new Node!
           // - Drag immediately (moves > 10px) -> Drag/Move the shape (while keeping Nodes mode active)!
           if (isPointNearStroke(pt, target, 24, true)) {
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setRedoStack([]);
             const pressX = pt.x;
             const pressY = pt.y;
             const targetId = target.id;
@@ -5455,6 +5658,8 @@ export default function App() {
           // A. Check Top Semicircular Rotation Arrow Handle (↻)
           if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
             clearActiveOverlay();
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setRedoStack([]);
             selectionTransformRef.current = {
               mode: 'rotate',
               startX: pt.x,
@@ -5482,6 +5687,8 @@ export default function App() {
           for (const c of localCorners) {
             if (Math.hypot(localX - c.lx, localY - c.ly) < 18) {
               clearActiveOverlay();
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setRedoStack([]);
               const oppWorldX = bcx + c.oppLx * cosA - c.oppLy * sinA;
               const oppWorldY = bcy + c.oppLx * sinA + c.oppLy * cosA;
               selectionTransformRef.current = {
@@ -5521,6 +5728,8 @@ export default function App() {
           for (const m of localSides) {
             if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
               clearActiveOverlay();
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setRedoStack([]);
               const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
               const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
               const rx = pt.x - oppWorldX;
@@ -5551,6 +5760,8 @@ export default function App() {
           // C. Check inside rotated selection bounding box -> Move
           if (Math.abs(localX) <= hw + 6 && Math.abs(localY) <= hh + 6) {
             clearActiveOverlay();
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+            setRedoStack([]);
             selectionTransformRef.current = {
               mode: 'move',
               startX: pt.x,
@@ -7502,7 +7713,6 @@ export default function App() {
       if (e.key === 'Shift') {
         shiftKeyPressedRef.current = true;
       }
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (editingTextId !== null || showMathModal) return;
 
       const target = e.target as HTMLElement | null;
@@ -7519,6 +7729,75 @@ export default function App() {
 
       const code = e.code;
       const key = e.key.toLowerCase();
+
+      // Support Ctrl+Z / Cmd+Z (Undo), Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z (Redo),
+      // Ctrl+C / Cmd+C (Copy), Ctrl+X / Cmd+X (Cut), Ctrl+V / Cmd+V (Paste), Ctrl+D / Cmd+D (Duplicate)
+      // Works with BOTH Control and Command keys on Mac Mini / Windows / iPad, in Greek & English layouts!
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        // Ctrl+Z / Cmd+Z -> Undo (or Redo if Shift is held)
+        if (code === 'KeyZ' || key === 'z' || key === 'ζ') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            handleRedo();
+          } else {
+            handleUndo();
+          }
+          return;
+        }
+
+        // Ctrl+Y / Cmd+Y -> Redo
+        if (code === 'KeyY' || key === 'y' || key === 'υ') {
+          e.preventDefault();
+          handleRedo();
+          return;
+        }
+
+        // Ctrl+C / Cmd+C -> Copy selected shape/stroke/group, image, or text box
+        if (code === 'KeyC' || key === 'c' || key === 'ψ') {
+          const nativeSel = window.getSelection?.()?.toString().trim();
+          if (nativeSel && selectedStrokeIds.length === 0 && !selectedImageId && !selectedTextId && !activeNodeStrokeId) {
+            return;
+          }
+          e.preventDefault();
+          handleCopySelected();
+          return;
+        }
+
+        // Ctrl+X / Cmd+X -> Cut selected shape/stroke/group, image, or text box
+        if (code === 'KeyX' || key === 'x' || key === 'χ') {
+          e.preventDefault();
+          handleCutSelected();
+          return;
+        }
+
+        // Ctrl+V / Cmd+V -> Paste
+        if (code === 'KeyV' || key === 'v' || key === 'ω') {
+          // On macOS, pressing physical Control+V (ctrlKey without metaKey) does NOT fire the native 'paste' event,
+          // so we invoke handlePaste() directly; for Cmd+V / Windows Ctrl+V, we also fallback after 40ms if 'paste' didn't fire.
+          if (e.ctrlKey && !e.metaKey && navigator.platform?.toLowerCase().includes('mac')) {
+            e.preventDefault();
+            void handlePaste();
+          } else {
+            window.setTimeout(() => {
+              if (performance.now() - lastPasteHandledAtRef.current > 120) {
+                void handlePaste();
+              }
+            }, 40);
+          }
+          return;
+        }
+
+        // Ctrl+D / Cmd+D -> Duplicate selected item
+        if (code === 'KeyD' || key === 'd' || key === 'δ') {
+          e.preventDefault();
+          handleDuplicateSelected();
+          return;
+        }
+
+        return;
+      }
+
+      if (e.altKey) return;
 
       // Backspace (<-- above Enter) or Delete -> Delete selected strokes/shapes/groups, image, or text box!
       if (code === 'Backspace' || code === 'Delete' || e.key === 'Backspace' || e.key === 'Delete') {
@@ -7709,6 +7988,12 @@ export default function App() {
     activePage.strokes,
     updateActivePage,
     toggleFillStyleToSelection,
+    handleUndo,
+    handleRedo,
+    handleCopySelected,
+    handleCutSelected,
+    handlePaste,
+    handleDuplicateSelected,
     showToast,
   ]);
 
