@@ -118,6 +118,8 @@ import {
   normalizeGreekSearchText,
   generateSmartGreekTagsFromImages,
   renderPageStrokesToSnapshotDataUrl,
+  getCubicSegmentControlPoints,
+  recomputeAutoSmoothHandles,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -887,7 +889,11 @@ export default function App() {
   const shiftKeyPressedRef = useRef<boolean>(false);
   const lassoAdditiveRef = useRef<boolean>(false);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
-  const [draggingNodeIdx, setDraggingNodeIdx] = useState<{ index: number; isControl: boolean } | null>(null);
+  const [draggingNodeIdx, setDraggingNodeIdx] = useState<{
+    index: number;
+    isControl: boolean;
+    handleSide?: 'in' | 'out';
+  } | null>(null);
   const [nodeMagnetState, setNodeMagnetState] = useState<{
     strokeId: string;
     draggedKeyPosIdx: number;
@@ -943,6 +949,12 @@ export default function App() {
     y: number;
     btnX: number;
     btnY: number;
+    bezierBtnX: number;
+    bezierBtnY: number;
+  } | null>(null);
+  const activeBezierNodeRef = useRef<{
+    strokeId: string;
+    nodeIdx: number;
   } | null>(null);
   const [textFontSize, setTextFontSize] = useState<number>(22);
   const [textBold, setTextBold] = useState<boolean>(false);
@@ -2362,6 +2374,26 @@ export default function App() {
         if (p.cy < minY) minY = p.cy;
         if (p.cy > maxY) maxY = p.cy;
       }
+      if (p.inDx !== undefined) {
+        const hx = p.x + p.inDx;
+        if (hx < minX) minX = hx;
+        if (hx > maxX) maxX = hx;
+      }
+      if (p.inDy !== undefined) {
+        const hy = p.y + p.inDy;
+        if (hy < minY) minY = hy;
+        if (hy > maxY) maxY = hy;
+      }
+      if (p.outDx !== undefined) {
+        const hx = p.x + p.outDx;
+        if (hx < minX) minX = hx;
+        if (hx > maxX) maxX = hx;
+      }
+      if (p.outDy !== undefined) {
+        const hy = p.y + p.outDy;
+        if (hy < minY) minY = hy;
+        if (hy > maxY) maxY = hy;
+      }
     }
     return { minX, minY, maxX, maxY };
   };
@@ -2551,7 +2583,28 @@ export default function App() {
     for (let i = 1; i < s.points.length; i++) {
       const pA = s.points[i - 1];
       const pB = s.points[i];
-      if (pB.cx !== undefined && pB.cy !== undefined) {
+      const cubicCtrl = getCubicSegmentControlPoints(pA, pB);
+      if (cubicCtrl) {
+        let prevPt: { x: number; y: number } = pA;
+        for (let k = 1; k <= 12; k++) {
+          const t = k / 12;
+          const u = 1 - t;
+          const curPt = {
+            x:
+              u * u * u * pA.x +
+              3 * u * u * t * cubicCtrl.cp1x +
+              3 * u * t * t * cubicCtrl.cp2x +
+              t * t * t * pB.x,
+            y:
+              u * u * u * pA.y +
+              3 * u * u * t * cubicCtrl.cp1y +
+              3 * u * t * t * cubicCtrl.cp2y +
+              t * t * t * pB.y,
+          };
+          if (isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+          prevPt = curPt;
+        }
+      } else if (pB.cx !== undefined && pB.cy !== undefined) {
         let prevPt: { x: number; y: number } = pA;
         for (let k = 1; k <= 10; k++) {
           const t = k / 10;
@@ -3297,8 +3350,12 @@ export default function App() {
         ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
       } else {
         for (let i = 1; i < s.points.length; i++) {
+          const prevPt = s.points[i - 1];
           const pt = s.points[i];
-          if (pt.cx !== undefined && pt.cy !== undefined) {
+          const cubicCtrl = getCubicSegmentControlPoints(prevPt, pt);
+          if (cubicCtrl) {
+            ctx.bezierCurveTo(cubicCtrl.cp1x, cubicCtrl.cp1y, cubicCtrl.cp2x, cubicCtrl.cp2y, pt.x, pt.y);
+          } else if (pt.cx !== undefined && pt.cy !== undefined) {
             ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
           } else {
             ctx.lineTo(pt.x, pt.y);
@@ -3344,7 +3401,12 @@ export default function App() {
     if ((s.arrowStart || s.shapeType === 'double-arrow') && s.points.length >= 2) {
       const first = s.points[0];
       const second = s.points[Math.min(s.points.length - 1, 1)];
-      const angle = Math.atan2(first.y - second.y, first.x - second.x);
+      const cubicStart = getCubicSegmentControlPoints(first, second);
+      const refStart =
+        cubicStart && Math.hypot(first.x - cubicStart.cp1x, first.y - cubicStart.cp1y) > 2
+          ? { x: cubicStart.cp1x, y: cubicStart.cp1y }
+          : second;
+      const angle = Math.atan2(first.y - refStart.y, first.x - refStart.x);
       const headLen = Math.max(12, s.width * 4);
       ctx.setLineDash([]);
       ctx.beginPath();
@@ -3364,7 +3426,12 @@ export default function App() {
     if ((s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') && s.points.length >= 2) {
       const last = s.points[s.points.length - 1];
       const prev = s.points[Math.max(0, s.points.length - 2)];
-      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+      const cubicEnd = getCubicSegmentControlPoints(prev, last);
+      const refEnd =
+        cubicEnd && Math.hypot(last.x - cubicEnd.cp2x, last.y - cubicEnd.cp2y) > 2
+          ? { x: cubicEnd.cp2x, y: cubicEnd.cp2y }
+          : prev;
+      const angle = Math.atan2(last.y - refEnd.y, last.x - refEnd.x);
       const headLen = Math.max(12, s.width * 4);
       ctx.setLineDash([]);
       ctx.beginPath();
@@ -4152,7 +4219,65 @@ export default function App() {
               }
             }
 
-            // If a node is focused/clicked (e.g. with Apple Pencil or mouse), draw the red Trash Bin button right next to it!
+            // Draw Illustrator-style Dashed Bézier Tangent Line (o - - - [□] - - - o) ONLY for the single active Bézier node!
+            const bezNode = activeBezierNodeRef.current;
+            if (bezNode && bezNode.strokeId === target.id && target.isShape) {
+              const bp = target.points[bezNode.nodeIdx];
+              if (bp && ((bp.inDx !== undefined && bp.inDy !== undefined) || (bp.outDx !== undefined && bp.outDy !== undefined))) {
+                const isClosedShape =
+                  target.shapeType === 'rectangle' ||
+                  target.shapeType === 'parallelogram' ||
+                  target.shapeType === 'triangle';
+                const showIn = bp.inDx !== undefined && bp.inDy !== undefined && (bezNode.nodeIdx > 0 || isClosedShape);
+                const showOut =
+                  bp.outDx !== undefined &&
+                  bp.outDy !== undefined &&
+                  (bezNode.nodeIdx < target.points.length - 1 || isClosedShape);
+
+                ctx.save();
+                ctx.strokeStyle = '#7c3aed';
+                ctx.lineWidth = 1.9;
+                ctx.setLineDash([5, 4]);
+                ctx.beginPath();
+                if (showIn) {
+                  ctx.moveTo(bp.x, bp.y);
+                  ctx.lineTo(bp.x + (bp.inDx as number), bp.y + (bp.inDy as number));
+                }
+                if (showOut) {
+                  ctx.moveTo(bp.x, bp.y);
+                  ctx.lineTo(bp.x + (bp.outDx as number), bp.y + (bp.outDy as number));
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                const drawBezierGrip = (hx: number, hy: number) => {
+                  ctx.shadowColor = 'rgba(124, 58, 237, 0.28)';
+                  ctx.shadowBlur = 4;
+                  ctx.fillStyle = '#ffffff';
+                  ctx.strokeStyle = '#7c3aed';
+                  ctx.lineWidth = 2.4;
+                  ctx.beginPath();
+                  ctx.arc(hx, hy, 6.8, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.stroke();
+                  ctx.shadowColor = 'transparent';
+                  ctx.fillStyle = '#7c3aed';
+                  ctx.beginPath();
+                  ctx.arc(hx, hy, 2.4, 0, Math.PI * 2);
+                  ctx.fill();
+                };
+
+                if (showIn) {
+                  drawBezierGrip(bp.x + (bp.inDx as number), bp.y + (bp.inDy as number));
+                }
+                if (showOut) {
+                  drawBezierGrip(bp.x + (bp.outDx as number), bp.y + (bp.outDy as number));
+                }
+                ctx.restore();
+              }
+            }
+
+            // If a node is focused/clicked (e.g. with Apple Pencil or mouse), draw the Purple Bézier button (left) & Red Trash Bin button (right)!
             const delNode = activeDeleteNodeRef.current;
             if (delNode && delNode.strokeId === target.id) {
               let liveNodePt: { x: number; y: number } | undefined;
@@ -4169,12 +4294,57 @@ export default function App() {
               if (liveNodePt) {
                 const bx = liveNodePt.x + 26;
                 const by = liveNodePt.y - 18;
+                const bzX = liveNodePt.x - 26;
+                const bzY = liveNodePt.y - 18;
                 delNode.x = liveNodePt.x;
                 delNode.y = liveNodePt.y;
                 delNode.btnX = bx;
                 delNode.btnY = by;
+                delNode.bezierBtnX = bzX;
+                delNode.bezierBtnY = bzY;
+
+                const isBezActive =
+                  activeBezierNodeRef.current?.strokeId === target.id &&
+                  activeBezierNodeRef.current?.nodeIdx === delNode.nodeIdx;
 
                 ctx.save();
+                // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️)
+                ctx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
+                ctx.lineWidth = 1.4;
+                ctx.beginPath();
+                ctx.moveTo(liveNodePt.x - 7, liveNodePt.y - 5);
+                ctx.lineTo(bzX + 9, bzY + 5);
+                ctx.stroke();
+
+                ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetY = 1.5;
+                ctx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // White Bézier curve + tangent icon inside purple circle
+                ctx.shadowColor = 'transparent';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.6;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(bzX - 5.2, bzY + 2.8);
+                ctx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
+                ctx.moveTo(bzX - 5.5, bzY - 2.2);
+                ctx.lineTo(bzX + 5.5, bzY - 2.2);
+                ctx.stroke();
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+                ctx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 2. Right Button: Red Trash Bin (🗑️)
                 ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
                 ctx.lineWidth = 1.4;
                 ctx.beginPath();
@@ -5058,11 +5228,15 @@ export default function App() {
                       ...p,
                       x: 2 * cx - p.x,
                       cx: p.cx !== undefined ? 2 * cx - p.cx : undefined,
+                      inDx: p.inDx !== undefined ? -p.inDx : undefined,
+                      outDx: p.outDx !== undefined ? -p.outDx : undefined,
                     }
                   : {
                       ...p,
                       y: 2 * cy - p.y,
                       cy: p.cy !== undefined ? 2 * cy - p.cy : undefined,
+                      inDy: p.inDy !== undefined ? -p.inDy : undefined,
+                      outDy: p.outDy !== undefined ? -p.outDy : undefined,
                     }
               ),
             };
@@ -6624,6 +6798,50 @@ export default function App() {
     c2x?: number;
     c2y?: number;
   } => {
+    const cubicCtrl = getCubicSegmentControlPoints(pA, pB);
+    if (cubicCtrl) {
+      const { cp1x, cp1y, cp2x, cp2y } = cubicCtrl;
+      let bestT = (tMin + tMax) / 2;
+      let bestD = Infinity;
+      const coarseSteps = 28;
+      for (let s = 0; s <= coarseSteps; s++) {
+        const t = tMin + ((tMax - tMin) * s) / coarseSteps;
+        const u = 1 - t;
+        const bx = u * u * u * pA.x + 3 * u * u * t * cp1x + 3 * u * t * t * cp2x + t * t * t * pB.x;
+        const by = u * u * u * pA.y + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * pB.y;
+        const d = Math.hypot(pt.x - bx, pt.y - by);
+        if (d < bestD) {
+          bestD = d;
+          bestT = t;
+        }
+      }
+      const span = (tMax - tMin) / coarseSteps;
+      const fineMin = Math.max(tMin, bestT - span);
+      const fineMax = Math.min(tMax, bestT + span);
+      for (let s = 0; s <= 8; s++) {
+        const t = fineMin + ((fineMax - fineMin) * s) / 8;
+        const u = 1 - t;
+        const bx = u * u * u * pA.x + 3 * u * u * t * cp1x + 3 * u * t * t * cp2x + t * t * t * pB.x;
+        const by = u * u * u * pA.y + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * pB.y;
+        const d = Math.hypot(pt.x - bx, pt.y - by);
+        if (d < bestD) {
+          bestD = d;
+          bestT = t;
+        }
+      }
+      const u = 1 - bestT;
+      const px =
+        u * u * u * pA.x + 3 * u * u * bestT * cp1x + 3 * u * bestT * bestT * cp2x + bestT * bestT * bestT * pB.x;
+      const py =
+        u * u * u * pA.y + 3 * u * u * bestT * cp1y + 3 * u * bestT * bestT * cp2y + bestT * bestT * bestT * pB.y;
+      return {
+        x: px,
+        y: py,
+        d: bestD,
+        t: bestT,
+      };
+    }
+
     if (pB.cx !== undefined && pB.cy !== undefined) {
       const cx = pB.cx;
       const cy = pB.cy;
@@ -7203,20 +7421,35 @@ export default function App() {
     // C. Geometric shape (polygon, line, arrow, circle, ellipse)
     if (s.isShape && typeof hoverPreview.segIdx === 'number' && s.points.length >= 2) {
       const segIdx = hoverPreview.segIdx;
-      const nextPts = [...s.points];
+      const isLineOrArrow =
+        s.shapeType === 'line' || s.shapeType === 'arrow' || s.shapeType === 'double-arrow';
+      const isClosedPoly =
+        s.shapeType === 'rectangle' ||
+        s.shapeType === 'parallelogram' ||
+        s.shapeType === 'triangle';
+      let nextPts = s.points.map((p) => ({ ...p }));
+      if (isLineOrArrow && nextPts.length === 2) {
+        // Clear any legacy midpoint cx/cy on straight 2-point lines so both halves curve 100% symmetrically!
+        nextPts[0] = { ...nextPts[0], cx: undefined, cy: undefined };
+        nextPts[1] = { ...nextPts[1], cx: undefined, cy: undefined };
+      }
       nextPts.splice(segIdx + 1, 0, {
         x: hoverPreview.x,
         y: hoverPreview.y,
-        cx: hoverPreview.c1x,
-        cy: hoverPreview.c1y,
+        cx: isLineOrArrow ? undefined : hoverPreview.c1x,
+        cy: isLineOrArrow ? undefined : hoverPreview.c1y,
+        smooth: isLineOrArrow ? true : undefined,
         pressure: 0.7,
       });
-      if (hoverPreview.c2x !== undefined && hoverPreview.c2y !== undefined && nextPts[segIdx + 2]) {
+      if (!isLineOrArrow && hoverPreview.c2x !== undefined && hoverPreview.c2y !== undefined && nextPts[segIdx + 2]) {
         nextPts[segIdx + 2] = {
           ...nextPts[segIdx + 2],
           cx: hoverPreview.c2x,
           cy: hoverPreview.c2y,
         };
+      }
+      if (isLineOrArrow || nextPts.some((p) => p.smooth)) {
+        nextPts = recomputeAutoSmoothHandles(nextPts, isClosedPoly);
       }
       return {
         stroke: { ...s, points: nextPts },
@@ -7232,7 +7465,16 @@ export default function App() {
     pt: { x: number; y: number },
     target: StrokeObject,
     hitRadius = 22
-  ): { strokeId: string; nodeIdx: number; x: number; y: number; btnX: number; btnY: number } | null => {
+  ): {
+    strokeId: string;
+    nodeIdx: number;
+    x: number;
+    y: number;
+    btnX: number;
+    btnY: number;
+    bezierBtnX: number;
+    bezierBtnY: number;
+  } | null => {
     if (!target || isShapeWithoutNodes(target)) return null;
 
     if (!target.isShape) {
@@ -7263,6 +7505,8 @@ export default function App() {
           y: p.y,
           btnX: p.x + 26,
           btnY: p.y - 18,
+          bezierBtnX: p.x - 26,
+          bezierBtnY: p.y - 18,
         };
       }
       return null;
@@ -7312,22 +7556,71 @@ export default function App() {
         y: p.y,
         btnX: p.x + 26,
         btnY: p.y - 18,
+        bezierBtnX: p.x - 26,
+        bezierBtnY: p.y - 18,
       };
     }
     return null;
   };
 
   const drawRedNodeTrashOverlay = (delNode: {
+    strokeId?: string;
+    nodeIdx?: number;
     x: number;
     y: number;
     btnX: number;
     btnY: number;
+    bezierBtnX?: number;
+    bezierBtnY?: number;
   }) => {
     clearActiveOverlay();
     const aCtx = activeCtxRef.current;
     if (!aCtx) return;
     const { x, y, btnX: bx, btnY: by } = delNode;
+    const bzX = delNode.bezierBtnX ?? x - 26;
+    const bzY = delNode.bezierBtnY ?? y - 18;
+    const isBezActive =
+      Boolean(delNode.strokeId) &&
+      activeBezierNodeRef.current?.strokeId === delNode.strokeId &&
+      activeBezierNodeRef.current?.nodeIdx === delNode.nodeIdx;
+
     aCtx.save();
+    // 1. Left Button: Purple/Indigo Bézier Tangent Handle Toggle (〰️)
+    aCtx.strokeStyle = 'rgba(124, 58, 237, 0.55)';
+    aCtx.lineWidth = 1.4;
+    aCtx.beginPath();
+    aCtx.moveTo(x - 7, y - 5);
+    aCtx.lineTo(bzX + 9, bzY + 5);
+    aCtx.stroke();
+
+    aCtx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+    aCtx.shadowBlur = 5;
+    aCtx.shadowOffsetY = 1.5;
+    aCtx.fillStyle = isBezActive ? '#4f46e5' : '#7c3aed';
+    aCtx.strokeStyle = '#ffffff';
+    aCtx.lineWidth = 2;
+    aCtx.beginPath();
+    aCtx.arc(bzX, bzY, 11.5, 0, Math.PI * 2);
+    aCtx.fill();
+    aCtx.stroke();
+
+    aCtx.shadowColor = 'transparent';
+    aCtx.strokeStyle = '#ffffff';
+    aCtx.lineWidth = 1.6;
+    aCtx.lineCap = 'round';
+    aCtx.beginPath();
+    aCtx.moveTo(bzX - 5.2, bzY + 2.8);
+    aCtx.quadraticCurveTo(bzX, bzY - 5.5, bzX + 5.2, bzY + 2.8);
+    aCtx.moveTo(bzX - 5.5, bzY - 2.2);
+    aCtx.lineTo(bzX + 5.5, bzY - 2.2);
+    aCtx.stroke();
+    aCtx.fillStyle = '#ffffff';
+    aCtx.beginPath();
+    aCtx.arc(bzX - 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+    aCtx.arc(bzX + 5.5, bzY - 2.2, 1.5, 0, Math.PI * 2);
+    aCtx.fill();
+
+    // 2. Right Button: Red Trash Bin (🗑️)
     aCtx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
     aCtx.lineWidth = 1.4;
     aCtx.beginPath();
@@ -7368,6 +7661,127 @@ export default function App() {
     aCtx.lineTo(bx + 1.2, by + 2.8);
     aCtx.stroke();
     aCtx.restore();
+  };
+
+  // Toggle the Illustrator-style Dashed Bézier Tangent Line (o - - - [□] - - - o) on a specific node!
+  const handleToggleNodeBezier = (strokeId: string, nodeIdx: number) => {
+    const target = activePage.strokes.find((s) => s.id === strokeId);
+    if (!target) return;
+
+    const alreadyOpen =
+      activeBezierNodeRef.current?.strokeId === strokeId &&
+      activeBezierNodeRef.current?.nodeIdx === nodeIdx;
+
+    if (alreadyOpen && target.isShape) {
+      const pt = target.points[nodeIdx];
+      if (pt && (pt.smooth || pt.inDx !== undefined || pt.outDx !== undefined)) {
+        // Second click on 〰️ while Bézier handles are visible: convert node to sharp straight corner (∧) and hide handles!
+        activeBezierNodeRef.current = null;
+        setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+        setRedoStack([]);
+        const isClosedPoly =
+          target.shapeType === 'rectangle' ||
+          target.shapeType === 'parallelogram' ||
+          target.shapeType === 'triangle';
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: page.strokes.map((s) => {
+              if (s.id !== strokeId) return s;
+              const nextPts = s.points.map((p, idx) =>
+                idx === nodeIdx || (isClosedPoly && nodeIdx === 0 && idx === s.points.length - 1)
+                  ? {
+                      ...p,
+                      smooth: false,
+                      twist: undefined,
+                      inDx: undefined,
+                      inDy: undefined,
+                      outDx: undefined,
+                      outDy: undefined,
+                    }
+                  : p
+              );
+              return { ...s, points: nextPts };
+            }),
+          }),
+          true
+        );
+        showToast('📐 Ο κόμβος έγινε ευθύγραμμος (Γωνία)!');
+        return;
+      }
+    }
+
+    setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+    setRedoStack([]);
+    updateActivePage(
+      (page) => ({
+        ...page,
+        strokes: page.strokes.map((s) => {
+          if (s.id !== strokeId) return s;
+
+          // If freehand stroke (!s.isShape), convert its sparse Key Nodes into an editable smooth Bézier spline ('line')!
+          if (!s.isShape) {
+            const kIndices =
+              s.keyNodeIndices && s.keyNodeIndices.length >= 2
+                ? s.keyNodeIndices
+                : computeFreehandKeyNodeIndices(s.points);
+            const rawKeyPts: BezierPoint[] = kIndices
+              .map((kIdx, pos) => {
+                const kp = s.points[kIdx];
+                return {
+                  x: kp.x,
+                  y: kp.y,
+                  smooth: pos === nodeIdx || (pos > 0 && pos < kIndices.length - 1),
+                  pressure: 0.7,
+                };
+              });
+            const smoothPts = recomputeAutoSmoothHandles(rawKeyPts, false);
+            return {
+              ...s,
+              isShape: true,
+              shapeType: 'line',
+              points: smoothPts,
+              keyNodeIndices: undefined,
+            };
+          }
+
+          // If 3-point curve ('parabola', 'arc', 'hyperbola'), convert to 3-node Bézier spline ('line') so handles are freely adjustable!
+          if (
+            (s.shapeType === 'parabola' || s.shapeType === 'arc' || s.shapeType === 'hyperbola') &&
+            s.points.length >= 3
+          ) {
+            const rawPts = s.points.map((p, idx) => ({
+              ...p,
+              smooth: idx === 1 || idx === nodeIdx,
+            }));
+            const smoothPts = recomputeAutoSmoothHandles(rawPts, false);
+            return {
+              ...s,
+              shapeType: 'line',
+              points: smoothPts,
+            };
+          }
+
+          const isClosedPoly =
+            s.shapeType === 'rectangle' ||
+            s.shapeType === 'parallelogram' ||
+            s.shapeType === 'triangle';
+          const nextPts = s.points.map((p, idx) =>
+            idx === nodeIdx
+              ? { ...p, smooth: true, twist: undefined }
+              : p
+          );
+          return {
+            ...s,
+            points: recomputeAutoSmoothHandles(nextPts, isClosedPoly),
+          };
+        }),
+      }),
+      true
+    );
+
+    activeBezierNodeRef.current = { strokeId, nodeIdx };
+    showToast('〰️ Εμφανίστηκε η γραμμή Bézier! Σύρε τις μωβ τελείες για καμπυλότητα & κοίλα.');
   };
 
   const handleDeleteSingleNode = (strokeId: string, nodeIdx: number) => {
@@ -8114,7 +8528,7 @@ export default function App() {
       cancelAddNodeLongPress();
       const nodeHitRadius = e.pointerType === 'touch' ? 30 : 22;
       if (activeNodeStrokeId) {
-        // 0. Check if user clicked/tapped the Red Trash Bin button next to the hovered/active node!
+        // 0a. Check if user clicked/tapped the Red Trash Bin button next to the hovered/active node!
         if (
           activeDeleteNodeRef.current &&
           activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
@@ -8122,6 +8536,7 @@ export default function App() {
         ) {
           const toDel = activeDeleteNodeRef.current;
           activeDeleteNodeRef.current = null;
+          activeBezierNodeRef.current = null;
           hoverAddNodePreviewRef.current = null;
           clearActiveOverlay();
           handleDeleteSingleNode(toDel.strokeId, toDel.nodeIdx);
@@ -8129,8 +8544,55 @@ export default function App() {
           return;
         }
 
+        // 0b. Check if user clicked/tapped the Purple Bézier Tangent Handle button (〰️) next to the hovered/active node!
+        if (
+          activeDeleteNodeRef.current &&
+          activeDeleteNodeRef.current.strokeId === activeNodeStrokeId &&
+          Math.hypot(
+            pt.x - (activeDeleteNodeRef.current.bezierBtnX ?? activeDeleteNodeRef.current.x - 26),
+            pt.y - (activeDeleteNodeRef.current.bezierBtnY ?? activeDeleteNodeRef.current.y - 18)
+          ) <= 20
+        ) {
+          const toBez = activeDeleteNodeRef.current;
+          hoverAddNodePreviewRef.current = null;
+          clearActiveOverlay();
+          handleToggleNodeBezier(toBez.strokeId, toBez.nodeIdx);
+          renderStaticSceneRef.current();
+          return;
+        }
+
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         if (target && !isShapeWithoutNodes(target)) {
+          // 0c. Check if user grabbed one of the two Circular Illustrator Bézier Tangent Grips (● in or ● out) on the active Bézier node!
+          const bezNode = activeBezierNodeRef.current;
+          if (bezNode && bezNode.strokeId === target.id && target.isShape) {
+            const bp = target.points[bezNode.nodeIdx];
+            if (bp) {
+              if (
+                bp.outDx !== undefined &&
+                bp.outDy !== undefined &&
+                Math.hypot(pt.x - (bp.x + bp.outDx), pt.y - (bp.y + bp.outDy)) <= 20
+              ) {
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setRedoStack([]);
+                setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'out' });
+                isDrawingRef.current = true;
+                return;
+              }
+              if (
+                bp.inDx !== undefined &&
+                bp.inDy !== undefined &&
+                Math.hypot(pt.x - (bp.x + bp.inDx), pt.y - (bp.y + bp.inDy)) <= 20
+              ) {
+                setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+                setRedoStack([]);
+                setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'in' });
+                isDrawingRef.current = true;
+                return;
+              }
+            }
+          }
+
           if (!target.isShape) {
             const keyIndices =
               target.keyNodeIndices && target.keyNodeIndices.length >= 2
@@ -8164,6 +8626,8 @@ export default function App() {
                   y: hitPt.y,
                   btnX: hitPt.x + 26,
                   btnY: hitPt.y - 18,
+                  bezierBtnX: hitPt.x - 26,
+                  bezierBtnY: hitPt.y - 18,
                 };
                 renderStaticSceneRef.current();
               }
@@ -8234,7 +8698,14 @@ export default function App() {
                   y: hitPt.y,
                   btnX: hitPt.x + 26,
                   btnY: hitPt.y - 18,
+                  bezierBtnX: hitPt.x - 26,
+                  bezierBtnY: hitPt.y - 18,
                 };
+                if (hitPt.smooth || hitPt.inDx !== undefined || hitPt.outDx !== undefined) {
+                  activeBezierNodeRef.current = { strokeId: target.id, nodeIdx: bestIdx };
+                } else {
+                  activeBezierNodeRef.current = null;
+                }
                 renderStaticSceneRef.current();
               }
               setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
@@ -9181,15 +9652,41 @@ export default function App() {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
 
-        // 1. Check if cursor is hovering over an existing node OR over its adjacent Red Trash Bin button
+        // 1. Check if cursor is hovering over an existing node OR over its adjacent Purple Bézier / Red Trash Bin buttons
         if (target) {
+          const bezNode = activeBezierNodeRef.current;
+          if (bezNode && bezNode.strokeId === target.id && target.isShape) {
+            const bp = target.points[bezNode.nodeIdx];
+            if (
+              bp &&
+              ((bp.outDx !== undefined &&
+                bp.outDy !== undefined &&
+                Math.hypot(hoverPt.x - (bp.x + bp.outDx), hoverPt.y - (bp.y + bp.outDy)) <= 18) ||
+                (bp.inDx !== undefined &&
+                  bp.inDy !== undefined &&
+                  Math.hypot(hoverPt.x - (bp.x + bp.inDx), hoverPt.y - (bp.y + bp.inDy)) <= 18))
+            ) {
+              hoverAddNodePreviewRef.current = null;
+              e.currentTarget.style.cursor = 'grab';
+              clearActiveOverlay();
+              return;
+            }
+          }
+
           const curDel = activeDeleteNodeRef.current;
           const isNearExistingDelBtn =
             curDel &&
             curDel.strokeId === target.id &&
             (Math.hypot(hoverPt.x - curDel.btnX, hoverPt.y - curDel.btnY) <= 22 ||
+              Math.hypot(hoverPt.x - (curDel.bezierBtnX ?? curDel.x - 26), hoverPt.y - (curDel.bezierBtnY ?? curDel.y - 18)) <= 22 ||
               Math.hypot(hoverPt.x - curDel.x, hoverPt.y - curDel.y) <= 22 ||
-              isPointNearSegment(hoverPt, { x: curDel.x, y: curDel.y }, { x: curDel.btnX, y: curDel.btnY }, 16));
+              isPointNearSegment(hoverPt, { x: curDel.x, y: curDel.y }, { x: curDel.btnX, y: curDel.btnY }, 16) ||
+              isPointNearSegment(
+                hoverPt,
+                { x: curDel.x, y: curDel.y },
+                { x: curDel.bezierBtnX ?? curDel.x - 26, y: curDel.bezierBtnY ?? curDel.y - 18 },
+                16
+              ));
 
           const hoveredNode = isNearExistingDelBtn ? curDel : findHoveredNodeOnStroke(hoverPt, target, 20);
           if (hoveredNode) {
@@ -9517,8 +10014,33 @@ export default function App() {
             }
 
             if (draggingNodeIdx.isControl) {
-              targetPt.cx = latestPt.x;
-              targetPt.cy = latestPt.y;
+              if (draggingNodeIdx.handleSide === 'out' || draggingNodeIdx.handleSide === 'in') {
+                const hdx = latestPt.x - targetPt.x;
+                const hdy = latestPt.y - targetPt.y;
+                const hDist = Math.hypot(hdx, hdy);
+                targetPt.smooth = true;
+                targetPt.twist = 777; // Mark manual user-adjusted Bézier handle!
+                if (draggingNodeIdx.handleSide === 'out') {
+                  targetPt.outDx = hdx;
+                  targetPt.outDy = hdy;
+                  if (targetPt.inDx !== undefined && targetPt.inDy !== undefined && hDist > 1) {
+                    const inLen = Math.hypot(targetPt.inDx, targetPt.inDy);
+                    targetPt.inDx = -(hdx / hDist) * inLen;
+                    targetPt.inDy = -(hdy / hDist) * inLen;
+                  }
+                } else {
+                  targetPt.inDx = hdx;
+                  targetPt.inDy = hdy;
+                  if (targetPt.outDx !== undefined && targetPt.outDy !== undefined && hDist > 1) {
+                    const outLen = Math.hypot(targetPt.outDx, targetPt.outDy);
+                    targetPt.outDx = -(hdx / hDist) * outLen;
+                    targetPt.outDy = -(hdy / hDist) * outLen;
+                  }
+                }
+              } else {
+                targetPt.cx = latestPt.x;
+                targetPt.cy = latestPt.y;
+              }
             } else {
               const dx = latestPt.x - targetPt.x;
               const dy = latestPt.y - targetPt.y;
@@ -9554,11 +10076,20 @@ export default function App() {
             if (isClosedPoly && draggingNodeIdx.index === 0 && newPts.length > 1) {
               newPts[newPts.length - 1] = {
                 ...newPts[newPts.length - 1],
-                x: latestPt.x,
-                y: latestPt.y,
+                x: targetPt.x,
+                y: targetPt.y,
+                inDx: targetPt.inDx,
+                inDy: targetPt.inDy,
+                outDx: targetPt.outDx,
+                outDy: targetPt.outDy,
+                smooth: targetPt.smooth,
+                twist: targetPt.twist,
               };
             }
-            return { ...s, points: newPts };
+            const finalPts = newPts.some((p) => p.smooth && p.twist !== 777)
+              ? recomputeAutoSmoothHandles(newPts, isClosedPoly)
+              : newPts;
+            return { ...s, points: finalPts };
           }),
         }),
         false
@@ -9659,6 +10190,14 @@ export default function App() {
                       const rcy = p.cy - tf.centerY;
                       nextPt.cx = tf.centerX + rcx * cosA - rcy * sinA;
                       nextPt.cy = tf.centerY + rcx * sinA + rcy * cosA;
+                    }
+                    if (p.inDx !== undefined && p.inDy !== undefined) {
+                      nextPt.inDx = p.inDx * cosA - p.inDy * sinA;
+                      nextPt.inDy = p.inDx * sinA + p.inDy * cosA;
+                    }
+                    if (p.outDx !== undefined && p.outDy !== undefined) {
+                      nextPt.outDx = p.outDx * cosA - p.outDy * sinA;
+                      nextPt.outDy = p.outDx * sinA + p.outDy * cosA;
                     }
                     return nextPt;
                   }),
@@ -9818,6 +10357,10 @@ export default function App() {
                     y: tf.anchorY + (p.y - tf.anchorY) * scaleFactor,
                     cx: p.cx !== undefined ? tf.anchorX + (p.cx - tf.anchorX) * scaleFactor : undefined,
                     cy: p.cy !== undefined ? tf.anchorY + (p.cy - tf.anchorY) * scaleFactor : undefined,
+                    inDx: p.inDx !== undefined ? p.inDx * scaleFactor : undefined,
+                    inDy: p.inDy !== undefined ? p.inDy * scaleFactor : undefined,
+                    outDx: p.outDx !== undefined ? p.outDx * scaleFactor : undefined,
+                    outDy: p.outDy !== undefined ? p.outDy * scaleFactor : undefined,
                   })),
                 };
               }),
@@ -10069,6 +10612,16 @@ export default function App() {
                       const sc = stretchPoint(p.cx, p.cy);
                       nextPt.cx = sc.x;
                       nextPt.cy = sc.y;
+                    }
+                    if (p.inDx !== undefined && p.inDy !== undefined) {
+                      const sinPt = stretchPoint(p.x + p.inDx, p.y + p.inDy);
+                      nextPt.inDx = sinPt.x - sp.x;
+                      nextPt.inDy = sinPt.y - sp.y;
+                    }
+                    if (p.outDx !== undefined && p.outDy !== undefined) {
+                      const soutPt = stretchPoint(p.x + p.outDx, p.y + p.outDy);
+                      nextPt.outDx = soutPt.x - sp.x;
+                      nextPt.outDy = soutPt.y - sp.y;
                     }
                     return nextPt;
                   }),

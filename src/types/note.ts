@@ -47,10 +47,15 @@ export interface BezierPoint {
   y: number;
   cx?: number;
   cy?: number;
+  inDx?: number; // Incoming Illustrator Bézier handle offset from x
+  inDy?: number; // Incoming Illustrator Bézier handle offset from y
+  outDx?: number; // Outgoing Illustrator Bézier handle offset from x
+  outDy?: number; // Outgoing Illustrator Bézier handle offset from y
+  smooth?: boolean; // Symmetrical smooth arc node when true
   pressure?: number;
   tiltX?: number;
   tiltY?: number;
-  twist?: number; // Apple Pencil Pro barrel roll (0-359)
+  twist?: number; // Apple Pencil Pro barrel roll (0-359) or 777 when Bézier handle is manually locked
 }
 
 export interface StrokeObject {

@@ -229,7 +229,7 @@ export function recognizeAndSnapShape(
       shapeType: 'line',
       points: [
         { x: start.x, y: start.y, pressure: 0.7 },
-        { x: x2, y: y2, cx: (start.x + x2) / 2, cy: (start.y + y2) / 2, pressure: 0.7 },
+        { x: x2, y: y2, pressure: 0.7 },
       ],
     };
   }
@@ -837,7 +837,7 @@ function buildPresetShape(
       shapeType: preset,
       points: [
         { x: start.x, y: start.y, pressure: 0.7 },
-        { x: x2, y: y2, cx: (start.x + x2) / 2, cy: (start.y + y2) / 2, pressure: 0.7 },
+        { x: x2, y: y2, pressure: 0.7 },
       ],
     };
   }
@@ -3029,5 +3029,119 @@ export async function generateSmartGreekTagsFromImages(
 
   return [];
 }
+
+/**
+ * Returns the two cubic Bézier control points `(cp1x, cp1y, cp2x, cp2y)` for a segment `pA -> pB`
+ * when either `pA` has outgoing Illustrator handle `(outDx, outDy)` or `pB` has incoming handle `(inDx, inDy)`,
+ * or `null` if the segment does not use cubic Bézier tangent handles.
+ */
+export function getCubicSegmentControlPoints(
+  pA: BezierPoint,
+  pB: BezierPoint
+): { cp1x: number; cp1y: number; cp2x: number; cp2y: number } | null {
+  const hasOutA = pA.outDx !== undefined && pA.outDy !== undefined;
+  const hasInB = pB.inDx !== undefined && pB.inDy !== undefined;
+  if (!hasOutA && !hasInB) return null;
+
+  const hInBx = hasInB ? pB.x + (pB.inDx as number) : pB.x;
+  const hInBy = hasInB ? pB.y + (pB.inDy as number) : pB.y;
+  const hOutAx = hasOutA ? pA.x + (pA.outDx as number) : pA.x;
+  const hOutAy = hasOutA ? pA.y + (pA.outDy as number) : pA.y;
+
+  const cp1x = hasOutA ? hOutAx : pA.x + 0.5 * (hInBx - pA.x);
+  const cp1y = hasOutA ? hOutAy : pA.y + 0.5 * (hInBy - pA.y);
+  const cp2x = hasInB ? hInBx : pB.x + 0.5 * (hOutAx - pB.x);
+  const cp2y = hasInB ? hInBy : pB.y + 0.5 * (hOutAy - pB.y);
+  return { cp1x, cp1y, cp2x, cp2y };
+}
+
+/**
+ * Recomputes symmetrical Catmull-Rom / Cardinal Bézier tangent handles (`inDx, inDy, outDx, outDy`)
+ * for all nodes in `pts` that have `smooth === true` and have not been manually locked (`twist !== 777`).
+ * Guarantees that dragging an interior node on a line creates a 100% symmetrical smooth arch (τόξο)!
+ */
+export function recomputeAutoSmoothHandles(pts: BezierPoint[], isClosed = false): BezierPoint[] {
+  if (pts.length < 2) return pts;
+  const out = pts.map((p) => ({ ...p }));
+  const n = out.length;
+  const hasClosingDup = isClosed && n > 2 && distance(out[0], out[n - 1]) < 1.5;
+  const uniqueN = hasClosingDup ? n - 1 : n;
+
+  for (let i = 0; i < uniqueN; i++) {
+    const p = out[i];
+    if (!p.smooth || p.twist === 777) continue;
+
+    if (isClosed && uniqueN >= 3) {
+      const pPrev = out[(i - 1 + uniqueN) % uniqueN];
+      const pNext = out[(i + 1) % uniqueN];
+      const tx = pNext.x - pPrev.x;
+      const ty = pNext.y - pPrev.y;
+      const tLen = Math.hypot(tx, ty) || 1;
+      const ux = tx / tLen;
+      const uy = ty / tLen;
+      const dPrev = distance(p, pPrev);
+      const dNext = distance(pNext, p);
+      p.inDx = -ux * dPrev * 0.36;
+      p.inDy = -uy * dPrev * 0.36;
+      p.outDx = ux * dNext * 0.36;
+      p.outDy = uy * dNext * 0.36;
+      p.cx = undefined;
+      p.cy = undefined;
+    } else if (i > 0 && i < n - 1) {
+      const pPrev = out[i - 1];
+      const pNext = out[i + 1];
+      const tx = pNext.x - pPrev.x;
+      const ty = pNext.y - pPrev.y;
+      const tLen = Math.hypot(tx, ty) || 1;
+      const ux = tx / tLen;
+      const uy = ty / tLen;
+      const dPrev = distance(p, pPrev);
+      const dNext = distance(pNext, p);
+      p.inDx = -ux * dPrev * 0.38;
+      p.inDy = -uy * dPrev * 0.38;
+      p.outDx = ux * dNext * 0.38;
+      p.outDy = uy * dNext * 0.38;
+      p.cx = undefined;
+      p.cy = undefined;
+      if (out[i + 1]) {
+        out[i + 1].cx = undefined;
+        out[i + 1].cy = undefined;
+      }
+    } else if (i === 0 && n >= 2) {
+      const pNext = out[1];
+      p.outDx = (pNext.x - p.x) * 0.38;
+      p.outDy = (pNext.y - p.y) * 0.38;
+      p.inDx = -p.outDx;
+      p.inDy = -p.outDy;
+      p.cx = undefined;
+      p.cy = undefined;
+    } else if (i === n - 1 && n >= 2) {
+      const pPrev = out[n - 2];
+      p.inDx = (pPrev.x - p.x) * 0.38;
+      p.inDy = (pPrev.y - p.y) * 0.38;
+      p.outDx = -p.inDx;
+      p.outDy = -p.inDy;
+      p.cx = undefined;
+      p.cy = undefined;
+    }
+  }
+
+  if (hasClosingDup && uniqueN >= 3) {
+    out[n - 1] = {
+      ...out[n - 1],
+      x: out[0].x,
+      y: out[0].y,
+      inDx: out[0].inDx,
+      inDy: out[0].inDy,
+      outDx: out[0].outDx,
+      outDy: out[0].outDy,
+      smooth: out[0].smooth,
+      twist: out[0].twist,
+    };
+  }
+
+  return out;
+}
+
 
 
