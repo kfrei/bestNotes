@@ -11770,13 +11770,12 @@ export default function App() {
             </div>
           )}
 
-          {/* Contextual Sub-Bar (Appears for Shape, Text, Lasso Selection, Direct Node, or Eraser) */}
+          {/* Contextual Sub-Bar (Appears for Shape, Text, Lasso Selection, or Eraser) */}
           {(activeTool === 'shape' ||
             activeTool === 'text' ||
             selectedTextId !== null ||
-            activeTool === 'direct-node' ||
-            selectedStrokeIds.length > 0 ||
-            selectedImgObj ||
+            (activeTool !== 'direct-node' &&
+              (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso')) ||
             activeTool === 'eraser') &&
             showToolSubBar && (
               <div
@@ -12166,7 +12165,8 @@ export default function App() {
                   </div>
                 )}
 
-                {(selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso' || activeTool === 'direct-node') && (
+                {activeTool !== 'direct-node' &&
+                  (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso') && (
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={handleCutSelected}
@@ -12262,86 +12262,57 @@ export default function App() {
                       </button>
                     </div>
 
-                    {selectedStrokeIds.length === 1 && activeTool !== 'direct-node' && (() => {
-                      const selStroke = activePage.strokes.find((s) => s.id === selectedStrokeIds[0]);
-                      if (!selStroke || isShapeWithoutNodes(selStroke)) return null;
-                      let nodeCountLabel = 4;
-                      if (!selStroke.isShape) {
-                        const kIndices =
-                          selStroke.keyNodeIndices && selStroke.keyNodeIndices.length >= 2
-                            ? selStroke.keyNodeIndices
-                            : computeFreehandKeyNodeIndices(selStroke.points);
-                        nodeCountLabel =
-                          selStroke.points[0]?.twist === 999 && kIndices.length >= 3
-                            ? kIndices.length - 1
-                            : kIndices.length;
-                      } else if (
-                        selStroke.shapeType === 'sine' ||
-                        selStroke.shapeType === 'cosine' ||
-                        selStroke.shapeType === 'line' ||
-                        selStroke.shapeType === 'arrow' ||
-                        selStroke.shapeType === 'double-arrow'
-                      ) {
-                        nodeCountLabel = 2;
-                      } else if (
-                        selStroke.shapeType === 'parabola' ||
-                        selStroke.shapeType === 'hyperbola' ||
-                        selStroke.shapeType === 'arc' ||
-                        selStroke.shapeType === 'triangle'
-                      ) {
-                        nodeCountLabel = 3;
-                      } else {
-                        nodeCountLabel = 4;
+                    {(() => {
+                      if (selectedStrokeIds.length === 0) return null;
+                      const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+                      const hasGroupedStroke = selStrokes.some((s) => Boolean(s.groupId));
+                      const firstGrpId = selStrokes[0]?.groupId;
+                      const allAlreadyInSameGroup =
+                        selStrokes.length >= 2 &&
+                        Boolean(firstGrpId) &&
+                        selStrokes.every((s) => s.groupId === firstGrpId);
+
+                      if (hasGroupedStroke && allAlreadyInSameGroup) {
+                        return (
+                          <button
+                            onClick={handleUngroupSelected}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer"
+                            title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
+                          >
+                            <Ungroup className="w-3.5 h-3.5" />
+                            <span>Ungroup</span>
+                          </button>
+                        );
                       }
-                      return (
-                        <button
-                          onClick={() => {
-                            setActiveNodeStrokeId(selectedStrokeIds[0]);
-                            setActiveTool('direct-node');
-                          }}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 text-white font-semibold cursor-pointer"
-                          title="Επεξεργασία των βασικών Κόμβων (Άκρα & Κορυφές) της γραμμής ή του σχήματος — Συντόμευση: N / Ν"
-                        >
-                          <BezierNodesIcon className="w-3.5 h-3.5" />
-                          <span>{nodeCountLabel} Κόμβοι</span>
-                        </button>
-                      );
+
+                      if (selectedStrokeIds.length >= 2) {
+                        return (
+                          <button
+                            onClick={handleGroupSelected}
+                            className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer"
+                            title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
+                          >
+                            <Group className="w-3.5 h-3.5" />
+                            <span>Group ({selectedStrokeIds.length})</span>
+                          </button>
+                        );
+                      }
+
+                      if (hasGroupedStroke) {
+                        return (
+                          <button
+                            onClick={handleUngroupSelected}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer"
+                            title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
+                          >
+                            <Ungroup className="w-3.5 h-3.5" />
+                            <span>Ungroup</span>
+                          </button>
+                        );
+                      }
+
+                      return null;
                     })()}
-
-                    {activeTool === 'direct-node' && activeNodeStrokeId && (
-                      <button
-                        onClick={() => {
-                          setSelectedStrokeIds([activeNodeStrokeId]);
-                          setActiveTool('lasso');
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0066ff] text-white font-semibold cursor-pointer"
-                        title="Επιστροφή σε Resize (Μεγέθυνση) & Περιστροφή"
-                      >
-                        <Lasso className="w-3.5 h-3.5" />
-                        <span>Resize & Περιστροφή</span>
-                      </button>
-                    )}
-
-                    {selectedStrokeIds.length >= 2 && (
-                      <button
-                        onClick={handleGroupSelected}
-                        className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold cursor-pointer"
-                        title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
-                      >
-                        <Group className="w-3.5 h-3.5" />
-                        <span>Group ({selectedStrokeIds.length})</span>
-                      </button>
-                    )}
-                    {selectedStrokeIds.length > 0 && (
-                      <button
-                        onClick={handleUngroupSelected}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 font-medium cursor-pointer"
-                        title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
-                      >
-                        <Ungroup className="w-3.5 h-3.5" />
-                        <span>Ungroup</span>
-                      </button>
-                    )}
                     {selectedStrokeIds.length > 0 && (
                       <button
                         onClick={() => {
