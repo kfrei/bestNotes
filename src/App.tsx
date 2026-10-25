@@ -21212,47 +21212,6 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                {/* 3 vs 4 Columns Switcher */}
-                <div className="flex items-center bg-[#263961] rounded-lg p-0.5 text-xs">
-                  <button
-                    onClick={() => setThumbnailCols(3)}
-                    className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
-                      thumbnailCols === 3 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    3 Στήλες
-                  </button>
-                  <button
-                    onClick={() => setThumbnailCols(4)}
-                    className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
-                      thumbnailCols === 4 ? 'bg-[#0066ff] text-white' : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    4 Στήλες
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => insertPageAtIndex(activePageIndex + 1)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0066ff] hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
-                  title="Προσθήκη νέας σελίδας μετά την τρέχουσα"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>+ Σελίδα (Μετά την #{activePageIndex + 1})</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    pdfImportModeRef.current = 'insert-pages';
-                    fileInputPdfOrDocRef.current?.click();
-                  }}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
-                  title="Εισαγωγή PDF, JPG ή PNG στο έγγραφο"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>+ PDF / JPG</span>
-                </button>
-
                 <button
                   onClick={() => setShowThumbnailsModal(false)}
                   className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold text-white cursor-pointer"
@@ -21303,7 +21262,7 @@ export default function App() {
                             ? '#0f172a'
                             : '#fffdf7',
                         }}
-                        className="relative w-full overflow-hidden cursor-pointer flex items-center justify-center border-b border-slate-100"
+                        className="relative w-full overflow-hidden cursor-pointer flex items-center justify-center"
                       >
                         {/* Page Number Badge */}
                         <div
@@ -21319,6 +21278,19 @@ export default function App() {
                             Ενεργή
                           </div>
                         )}
+
+                        {/* Larger Trash Can Button at Bottom-Right Inside the Page */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deletePageAtIndex(pIdx);
+                          }}
+                          className="absolute bottom-2.5 right-2.5 z-10 p-2.5 rounded-xl bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/90 shadow-md transition cursor-pointer"
+                          title="Διαγραφή αυτής της σελίδας"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
 
                         {/* PDF / JPG / PNG Background Preview if present */}
                         {pObj.backgroundDataUrl && (
@@ -21410,59 +21382,6 @@ export default function App() {
                             );
                           })}
                         </svg>
-                      </div>
-
-                      {/* Card Footer: Title + Quick Insert Before / Insert After (in Middle) / Duplicate / Delete */}
-                      <div className="p-2.5 bg-slate-50 flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-800 truncate">{pObj.title}</span>
-                          <span className="text-[10px] text-slate-400 shrink-0">
-                            {pObj.orientation === 'landscape' ? 'Landscape' : 'Portrait'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-200/80">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              insertPageAtIndex(pIdx);
-                            }}
-                            className="flex-1 py-1 rounded bg-white hover:bg-sky-50 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
-                            title="Προσθήκη σελίδας ΠΡΙΝ από αυτή"
-                          >
-                            + Πριν
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              insertPageAtIndex(pIdx + 1);
-                            }}
-                            className="flex-1 py-1 rounded bg-sky-600 hover:bg-sky-500 text-[10px] font-semibold text-white cursor-pointer"
-                            title="Προσθήκη σελίδας ΜΕΤΑ από αυτή (στη μέση)"
-                          >
-                            + Μετά
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              duplicatePageAtIndex(pIdx);
-                            }}
-                            className="px-2 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-semibold text-slate-700 cursor-pointer"
-                            title="Διπλασιασμός σελίδας"
-                          >
-                            📑
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deletePageAtIndex(pIdx);
-                            }}
-                            className="px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 cursor-pointer"
-                            title="Διαγραφή αυτής της σελίδας"
-                          >
-                            🗑️
-                          </button>
-                        </div>
                       </div>
                     </div>
                   );
