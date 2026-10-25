@@ -3531,15 +3531,17 @@ export default function App() {
             const sideOffX = Math.min(22, Math.max(12, hw * 0.34));
             const sideOffY = Math.min(22, Math.max(12, hh * 0.34));
 
-            // 1. 4 Orange Stretch Dots (● #f97316) + Small Orange Resize Arrows (↕ / ↔) outside the frame
+            // 1. 4 Orange Stretch Dots (● #f97316) + Small Orange Resize Arrow (↔) ONLY on the Right side outside the frame
             const imgStretchDots = [
-              { x: -sideOffX, y: -hh, ax: -sideOffX, ay: -hh - 14, isVert: true }, // Top stretch
-              { x: hw, y: -sideOffY, ax: hw + 14, ay: -sideOffY, isVert: false },  // Right stretch
-              { x: -sideOffX, y: hh, ax: -sideOffX, ay: hh + 14, isVert: true },   // Bottom stretch
-              { x: -hw, y: -sideOffY, ax: -hw - 14, ay: -sideOffY, isVert: false }, // Left stretch
+              { x: -sideOffX, y: -hh, ax: -sideOffX, ay: -hh - 14, isVert: true, showIcon: false }, // Top stretch
+              { x: hw, y: -sideOffY, ax: hw + 14, ay: -sideOffY, isVert: false, showIcon: true },   // Right stretch
+              { x: -sideOffX, y: hh, ax: -sideOffX, ay: hh + 14, isVert: true, showIcon: false },   // Bottom stretch
+              { x: -hw, y: -sideOffY, ax: -hw - 14, ay: -sideOffY, isVert: false, showIcon: false }, // Left stretch
             ];
             for (const m of imgStretchDots) {
-              drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
+              if (m.showIcon) {
+                drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
+              }
               ctx.fillStyle = '#f97316';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.2;
@@ -3549,7 +3551,7 @@ export default function App() {
               ctx.stroke();
             }
 
-            // 2. 4 Green Side Crop Bars (Top ▬, Right ▮, Bottom ▬, Left ▮) + Green Crop Symbol outside the frame!
+            // 2. 4 Green Side Crop Bars (Top ▬, Right ▮, Bottom ▬, Left ▮) + Green Crop Symbol ONLY on the Right side outside the frame!
             const sideCropBars: {
               edge: 'top' | 'right' | 'bottom' | 'left';
               cx: number;
@@ -3599,7 +3601,9 @@ export default function App() {
 
             for (const bar of sideCropBars) {
               const isThisActive = activeEdge === bar.edge;
-              drawGreenCropIcon(bar.ix, bar.iy, isThisActive);
+              if (bar.edge === 'right') {
+                drawGreenCropIcon(bar.ix, bar.iy, isThisActive);
+              }
               ctx.fillStyle = isThisActive ? '#f59e0b' : '#0d9488';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.0;
@@ -3622,15 +3626,17 @@ export default function App() {
               ctx.stroke();
             }
           } else {
-            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows!)
+            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrow ONLY on the Right side!)
             const localSideMidpoints = [
-              { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true }, // Top (height stretch)
-              { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false },  // Right (width stretch)
-              { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true },   // Bottom (height stretch)
-              { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false }, // Left (width stretch)
+              { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: false }, // Top (height stretch)
+              { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true },   // Right (width stretch)
+              { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true, showIcon: false },   // Bottom (height stretch)
+              { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false, showIcon: false }, // Left (width stretch)
             ];
             for (const m of localSideMidpoints) {
-              drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
+              if (m.showIcon) {
+                drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
+              }
               ctx.fillStyle = '#f97316';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.2;
@@ -6572,7 +6578,10 @@ export default function App() {
               { lx: -hw, ly: sideOffY, ix: -hw - 15, iy: sideOffY, oppLx: hw, oppLy: 0, edge: 'left', sx: -1, sy: 0 },
             ];
             for (const ch of imgCropHandles) {
-              if (Math.hypot(localX - ch.lx, localY - ch.ly) < 17 || Math.hypot(localX - ch.ix, localY - ch.iy) < 14) {
+              if (
+                Math.hypot(localX - ch.lx, localY - ch.ly) < 17 ||
+                (ch.edge === 'right' && Math.hypot(localX - ch.ix, localY - ch.iy) < 14)
+              ) {
                 clearActiveOverlay();
                 setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
                 setRedoStack([]);
@@ -6600,7 +6609,7 @@ export default function App() {
               }
             }
 
-            // 2. Check 4 Orange Stretch Dots (● at -sideOff, or the Orange Resize Arrow outside it) -> One-Side Stretch ('scale-x' / 'scale-y')
+            // 2. Check 4 Orange Stretch Dots (● at -sideOff, or the Orange Resize Arrow on the Right side) -> One-Side Stretch ('scale-x' / 'scale-y')
             const imgStretchHandles: {
               lx: number;
               ly: number;
@@ -6618,7 +6627,10 @@ export default function App() {
               { lx: -hw, ly: -sideOffY, ax: -hw - 14, ay: -sideOffY, oppLx: hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
             ];
             for (const sh of imgStretchHandles) {
-              if (Math.hypot(localX - sh.lx, localY - sh.ly) < 17 || Math.hypot(localX - sh.ax, localY - sh.ay) < 14) {
+              if (
+                Math.hypot(localX - sh.lx, localY - sh.ly) < 17 ||
+                (sh.sx === 1 && Math.hypot(localX - sh.ax, localY - sh.ay) < 14)
+              ) {
                 clearActiveOverlay();
                 setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
                 setRedoStack([]);
