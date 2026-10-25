@@ -10541,6 +10541,25 @@ export default function App() {
                     : new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
                 );
 
+              const formatLibraryTimestamp = (isoStr?: string, fallbackId?: string) => {
+                let d = isoStr ? new Date(isoStr) : null;
+                if (!d || Number.isNaN(d.getTime())) {
+                  const idMatch = fallbackId?.match(/(\d{12,14})/);
+                  d = idMatch ? new Date(Number(idMatch[1])) : new Date();
+                }
+                const datePart = d.toLocaleDateString('el-GR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                });
+                const timePart = d.toLocaleTimeString('el-GR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false,
+                });
+                return `${datePart}, ${timePart}`;
+              };
+
               const openNotebookDirectly = (nb: Notebook) => {
                 if (!openNotebookIds.includes(nb.id)) setOpenNotebookIds((p) => [...p, nb.id]);
                 setActiveNotebookId(nb.id);
@@ -10945,7 +10964,7 @@ export default function App() {
                                 <div>
                                   <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
                                   <p className="text-[11px] text-slate-500">
-                                    {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'}
+                                    {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
                                   </p>
                                 </div>
                               </div>
@@ -11196,8 +11215,8 @@ export default function App() {
                                         {nb.title}
                                       </p>
                                     )}
-                                    <p className="text-[10px] text-slate-500">
-                                      {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • .bestNotes
+                                    <p className="text-[10px] text-slate-500 truncate">
+                                      {nb.pages.length} {nb.pages.length === 1 ? 'σελ.' : 'σελ.'} • {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                                     </p>
                                   </div>
                                 </div>
@@ -11236,6 +11255,9 @@ export default function App() {
                                     {nb.title}
                                   </span>
                                 )}
+                                <span className="text-[10px] text-slate-400">
+                                  {formatLibraryTimestamp(nb.updatedAt, nb.id)}
+                                </span>
 
                                 {/* Tags & "+ Tag" inline control under each Notebook in Grid View */}
                                 <div
@@ -11387,14 +11409,14 @@ export default function App() {
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
                               <p className="text-[11px] text-slate-500">
-                                Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'}
+                                Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="text-[11px] text-slate-400 hidden sm:inline">
-                              {new Date(folder.updatedAt).toLocaleDateString('el-GR')}
+                              {formatLibraryTimestamp(folder.updatedAt)}
                             </span>
                             <button
                               onClick={(e) => {
@@ -11526,14 +11548,14 @@ export default function App() {
                                 </button>
                               </div>
                               <p className="text-[11px] text-slate-500">
-                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • .bestNotes
+                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="text-[11px] text-slate-400 hidden sm:inline">
-                              {new Date(nb.updatedAt || Date.now()).toLocaleDateString('el-GR')}
+                              {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                             </span>
                             <button
                               onClick={(e) => {
