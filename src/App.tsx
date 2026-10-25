@@ -16359,17 +16359,48 @@ export default function App() {
                   {/* Cloud Recycle Bin Recovery Bar */}
                   {showRecycleBinBar && deletedCloudNotebooks.length > 0 && (
                     <div className="bg-white border border-rose-300 rounded-2xl p-3.5 shadow-md space-y-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="text-xs font-bold text-rose-700 flex items-center gap-1.5">
                           <RotateCcw className="w-4 h-4" />
                           <span>Διαγραμμένες Σημειώσεις στο Cloud (πάτησε Επαναφορά για ανάκτηση)</span>
                         </span>
-                        <button
-                          onClick={() => setShowRecycleBinBar(false)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              const toPurge = [...deletedCloudNotebooks];
+                              setDeletedCloudNotebooks([]);
+                              setShowRecycleBinBar(false);
+                              if (currentUser) {
+                                for (const item of toPurge) {
+                                  void setDoc(
+                                    doc(db, 'users', currentUser.uid, 'notebooks', item.id),
+                                    {
+                                      id: item.id,
+                                      title: '',
+                                      updatedAt: new Date().toISOString(),
+                                      dataJson: '',
+                                      deleted: true,
+                                      deviceId: deviceIdRef.current,
+                                    }
+                                  );
+                                }
+                              }
+                              showToast('🗑️ Ο Κάδος άδειασε οριστικά!');
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                            title="Οριστική διαγραφή όλων των σημειώσεων από τον Κάδο"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Άδειασμα Κάδου</span>
+                          </button>
+                          <button
+                            onClick={() => setShowRecycleBinBar(false)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                            title="Κλείσιμο Κάδου"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                       <div className="divide-y divide-slate-100">
                         {deletedCloudNotebooks.map((delNb) => (
@@ -16383,34 +16414,61 @@ export default function App() {
                                 {delNb.pages.length} {delNb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • {formatLibraryTimestamp(delNb.updatedAt, delNb.id)}
                               </p>
                             </div>
-                            <button
-                              onClick={() => {
-                                if (currentUser) {
-                                  void setDoc(
-                                    doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
-                                    {
-                                      deleted: false,
-                                      updatedAt: new Date().toISOString(),
-                                      deviceId: deviceIdRef.current,
-                                    },
-                                    { merge: true }
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => {
+                                  if (currentUser) {
+                                    void setDoc(
+                                      doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
+                                      {
+                                        deleted: false,
+                                        updatedAt: new Date().toISOString(),
+                                        deviceId: deviceIdRef.current,
+                                      },
+                                      { merge: true }
+                                    );
+                                  }
+                                  setNotebooks((prev) =>
+                                    prev.some((n) => n.id === delNb.id)
+                                      ? prev
+                                      : [{ ...delNb, updatedAt: new Date().toISOString() }, ...prev]
                                   );
-                                }
-                                setNotebooks((prev) =>
-                                  prev.some((n) => n.id === delNb.id)
-                                    ? prev
-                                    : [{ ...delNb, updatedAt: new Date().toISOString() }, ...prev]
-                                );
-                                setDeletedCloudNotebooks((prev) =>
-                                  prev.filter((n) => n.id !== delNb.id)
-                                );
-                                showToast(`🎉 Επαναφέρθηκε η σημείωση «${delNb.title}»!`);
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              <span>Επαναφορά</span>
-                            </button>
+                                  setDeletedCloudNotebooks((prev) =>
+                                    prev.filter((n) => n.id !== delNb.id)
+                                  );
+                                  showToast(`🎉 Επαναφέρθηκε η σημείωση «${delNb.title}»!`);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span>Επαναφορά</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (currentUser) {
+                                    void setDoc(
+                                      doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
+                                      {
+                                        id: delNb.id,
+                                        title: '',
+                                        updatedAt: new Date().toISOString(),
+                                        dataJson: '',
+                                        deleted: true,
+                                        deviceId: deviceIdRef.current,
+                                      }
+                                    );
+                                  }
+                                  setDeletedCloudNotebooks((prev) =>
+                                    prev.filter((n) => n.id !== delNb.id)
+                                  );
+                                  showToast(`🗑️ Διαγράφηκε οριστικά το «${delNb.title}» από τον Κάδο.`);
+                                }}
+                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 transition cursor-pointer"
+                                title={`Οριστική διαγραφή «${delNb.title}» από τον Κάδο`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
