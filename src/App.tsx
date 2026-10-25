@@ -16632,7 +16632,7 @@ export default function App() {
                         <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                           Σημειώσεις ({visibleNotebooks.length})
                         </h2>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
                           {/* Symmetrical Faint-Gray Drag & Drop New Document Card right before the first Note! */}
                           <div
                             onClick={() => {
@@ -16670,10 +16670,10 @@ export default function App() {
                               }
                             }}
                             title="Σύρε (Drag & Drop) ή πάτα εδώ για προσθήκη νέου .pdf, .jpg, .png"
-                            className="group cursor-pointer flex flex-col items-center"
+                            className="group cursor-pointer flex flex-col items-stretch w-full"
                           >
                             <div
-                              className={`w-48 h-64 rounded-r-2xl rounded-l-md transition-all relative overflow-hidden border-2 border-dashed flex flex-col items-center justify-center px-4 text-center ${
+                              className={`w-full aspect-[3/4] rounded-r-2xl rounded-l-md transition-all relative overflow-hidden border-2 border-dashed flex flex-col items-center justify-center px-4 text-center ${
                                 isLibraryDropZoneActive
                                   ? 'bg-sky-50/90 border-[#0066ff] shadow-lg -translate-y-1 scale-[1.02]'
                                   : 'bg-slate-200/45 hover:bg-slate-200/75 border-slate-300/90 hover:border-slate-400 shadow-xs group-hover:shadow-md group-hover:-translate-y-1'
@@ -16721,7 +16721,7 @@ export default function App() {
                               </span>
                             </div>
 
-                            <div className="mt-2 w-48 px-2.5 py-1.5 rounded-xl bg-slate-100/80 border border-dashed border-slate-300/80 flex flex-col items-center">
+                            <div className="mt-2 w-full px-2.5 py-1.5 rounded-xl bg-slate-100/80 border border-dashed border-slate-300/80 flex flex-col items-center">
                               <span className="text-xs font-semibold text-slate-500 group-hover:text-slate-700 truncate max-w-full">
                                 Νέο Έγγραφο
                               </span>
@@ -16743,12 +16743,12 @@ export default function App() {
                                 onPointerDown={(e) => startLibraryNotebookPointerDrag(e, nb)}
                                 onClick={() => openNotebookDirectly(nb)}
                                 title="Πάτα για άνοιγμα ή σύρε (Drag & Drop) μέσα σε φάκελο"
-                                className={`group cursor-grab active:cursor-grabbing flex flex-col items-center select-none transition ${
+                                className={`group cursor-grab active:cursor-grabbing flex flex-col items-stretch w-full select-none transition ${
                                   isDraggingThisNb ? 'opacity-45 scale-95' : ''
                                 }`}
                               >
                                 <div
-                                  className={`w-48 h-64 rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border flex flex-col justify-between touch-none select-none ${
+                                  className={`w-full aspect-[3/4] rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border flex flex-col justify-between touch-none select-none ${
                                     isDraggingThisNb
                                       ? 'border-[#0066ff] ring-2 ring-[#0066ff] ring-dashed'
                                       : 'border-slate-300/90'
@@ -16950,7 +16950,7 @@ export default function App() {
                                     </div>
                                   </div>
                                 </div>
-                                <div className="mt-2 w-48 px-2.5 py-1.5 rounded-xl bg-white/95 border border-slate-200/80 shadow-2xs flex flex-col items-center">
+                                <div className="mt-2 w-full px-2.5 py-1.5 rounded-xl bg-white/95 border border-slate-200/80 shadow-2xs flex flex-col items-center">
                                   {renamingNotebookId === nb.id && renamingNotebookContext === 'grid-below' ? (
                                     <input
                                       type="text"
@@ -16993,7 +16993,7 @@ export default function App() {
 
                                 {/* Tags & "+ Tag" inline control under each Notebook in Grid View */}
                                 <div
-                                  className="mt-1 flex items-center justify-center gap-1 flex-wrap max-w-[195px]"
+                                  className="mt-1 flex items-center justify-center gap-1 flex-wrap w-full"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {(nb.tags || []).slice(0, 4).map((tag) => {
