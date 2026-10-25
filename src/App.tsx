@@ -3930,6 +3930,131 @@ export default function App() {
     [activeLayerId, updateActivePage, showToast]
   );
 
+  const applyTightLassoCropToImage = useCallback(
+    (imgObj: ImageObject, poly: { x: number; y: number }[]) => {
+      const relPoly = poly.map((p) => ({
+        x: Math.max(0, Math.min(imgObj.width, p.x - imgObj.x)),
+        y: Math.max(0, Math.min(imgObj.height, p.y - imgObj.y)),
+      }));
+      let minRelX = Infinity,
+        minRelY = Infinity,
+        maxRelX = -Infinity,
+        maxRelY = -Infinity;
+      for (const rp of relPoly) {
+        if (rp.x < minRelX) minRelX = rp.x;
+        if (rp.y < minRelY) minRelY = rp.y;
+        if (rp.x > maxRelX) maxRelX = rp.x;
+        if (rp.y > maxRelY) maxRelY = rp.y;
+      }
+      minRelX = Math.max(0, Math.floor(minRelX));
+      minRelY = Math.max(0, Math.floor(minRelY));
+      maxRelX = Math.min(imgObj.width, Math.ceil(maxRelX));
+      maxRelY = Math.min(imgObj.height, Math.ceil(maxRelY));
+
+      const cropW = Math.max(16, maxRelX - minRelX);
+      const cropH = Math.max(16, maxRelY - minRelY);
+      const shiftedPoly = relPoly.map((rp) => ({
+        x: rp.x - minRelX,
+        y: rp.y - minRelY,
+      }));
+
+      const cachedEl = imageElementsCacheRef.current.get(imgObj.dataUrl);
+      if (cachedEl && cachedEl.complete && cachedEl.naturalWidth > 0 && cachedEl.naturalHeight > 0) {
+        const scaleX = cachedEl.naturalWidth / Math.max(1, imgObj.width);
+        const scaleY = cachedEl.naturalHeight / Math.max(1, imgObj.height);
+        const natCropW = Math.max(16, Math.round(cropW * scaleX));
+        const natCropH = Math.max(16, Math.round(cropH * scaleY));
+
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = natCropW;
+        offCanvas.height = natCropH;
+        const offCtx = offCanvas.getContext('2d');
+        if (offCtx && shiftedPoly.length >= 3) {
+          offCtx.save();
+          offCtx.beginPath();
+          offCtx.moveTo(shiftedPoly[0].x * scaleX, shiftedPoly[0].y * scaleY);
+          for (let i = 1; i < shiftedPoly.length; i++) {
+            offCtx.lineTo(shiftedPoly[i].x * scaleX, shiftedPoly[i].y * scaleY);
+          }
+          offCtx.closePath();
+          offCtx.clip();
+
+          if (imgObj.clipPolygon && imgObj.clipPolygon.length >= 3) {
+            offCtx.beginPath();
+            offCtx.moveTo(
+              (imgObj.clipPolygon[0].x - minRelX) * scaleX,
+              (imgObj.clipPolygon[0].y - minRelY) * scaleY
+            );
+            for (let i = 1; i < imgObj.clipPolygon.length; i++) {
+              offCtx.lineTo(
+                (imgObj.clipPolygon[i].x - minRelX) * scaleX,
+                (imgObj.clipPolygon[i].y - minRelY) * scaleY
+              );
+            }
+            offCtx.closePath();
+            offCtx.clip();
+          }
+
+          offCtx.drawImage(
+            cachedEl,
+            -minRelX * scaleX,
+            -minRelY * scaleY,
+            imgObj.width * scaleX,
+            imgObj.height * scaleY
+          );
+          offCtx.restore();
+
+          try {
+            const croppedDataUrl = offCanvas.toDataURL('image/png');
+            const preloaded = new Image();
+            preloaded.src = croppedDataUrl;
+            imageElementsCacheRef.current.set(croppedDataUrl, preloaded);
+
+            updateActivePage((page) => ({
+              ...page,
+              images: page.images.map((im) =>
+                im.id === imgObj.id
+                  ? {
+                      ...im,
+                      x: Math.round(imgObj.x + minRelX),
+                      y: Math.round(imgObj.y + minRelY),
+                      width: Math.round(cropW),
+                      height: Math.round(cropH),
+                      naturalWidth: natCropW,
+                      naturalHeight: natCropH,
+                      dataUrl: croppedDataUrl,
+                      originalDataUrl: im.originalDataUrl || im.dataUrl,
+                      clipPolygon: undefined,
+                    }
+                  : im
+              ),
+            }));
+            return;
+          } catch {
+            // Fall through to tight bounding-box clipPolygon if canvas is tainted
+          }
+        }
+      }
+
+      updateActivePage((page) => ({
+        ...page,
+        images: page.images.map((im) =>
+          im.id === imgObj.id
+            ? {
+                ...im,
+                x: Math.round(imgObj.x + minRelX),
+                y: Math.round(imgObj.y + minRelY),
+                width: Math.round(cropW),
+                height: Math.round(cropH),
+                clipPolygon: shiftedPoly,
+              }
+            : im
+        ),
+      }));
+    },
+    [updateActivePage]
+  );
+
   const handlePaste = useCallback(async () => {
     // 1. Try reading external image/photo from System Clipboard (e.g. copied from Safari/Photos on iPad)
     try {
@@ -5716,14 +5841,7 @@ export default function App() {
           isDrawingRef.current = false;
           activePointerIdRef.current = null;
           activePointerTypeRef.current = null;
-          const relPoly = poly.map((p) => ({
-            x: Math.max(0, Math.min(imgObj.width, p.x - imgObj.x)),
-            y: Math.max(0, Math.min(imgObj.height, p.y - imgObj.y)),
-          }));
-          updateActivePage((page) => ({
-            ...page,
-            images: page.images.map((im) => (im.id === selectedImageId ? { ...im, clipPolygon: relPoly } : im)),
-          }));
+          applyTightLassoCropToImage(imgObj, poly);
           setImageCropMode('none');
           setCropPolygonPts([]);
           showToast(
@@ -6499,14 +6617,7 @@ export default function App() {
       lassoPolygonRef.current = [];
       const imgObj = activePage.images.find((im) => im.id === selectedImageId);
       if (imgObj) {
-        const relPoly = poly.map((p) => ({
-          x: Math.max(0, Math.min(imgObj.width, p.x - imgObj.x)),
-          y: Math.max(0, Math.min(imgObj.height, p.y - imgObj.y)),
-        }));
-        updateActivePage((page) => ({
-          ...page,
-          images: page.images.map((im) => (im.id === selectedImageId ? { ...im, clipPolygon: relPoly } : im)),
-        }));
+        applyTightLassoCropToImage(imgObj, poly);
         showToast(
           imageCropMode === 'magnetic'
             ? '🧲 Magnetic Lasso Crop ολοκληρώθηκε!'
@@ -10442,7 +10553,14 @@ export default function App() {
                           ...page,
                           images: page.images.map((im) =>
                             im.id === selectedImgObj.id
-                              ? { ...im, dataUrl: im.originalDataUrl || im.dataUrl, clipPolygon: undefined, rotation: 0 }
+                              ? {
+                                  ...im,
+                                  dataUrl: im.originalDataUrl || im.dataUrl,
+                                  naturalWidth: undefined,
+                                  naturalHeight: undefined,
+                                  clipPolygon: undefined,
+                                  rotation: 0,
+                                }
                               : im
                           ),
                         }));
