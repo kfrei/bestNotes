@@ -987,9 +987,9 @@ export default function App() {
   const [fillColor, setFillColor] = useState<string>('#fef08a');
   const [fillStyle, setFillStyle] = useState<FillStyleType>('none');
   const [fillTransparency, setFillTransparency] = useState<25 | 45 | 90>(90);
-  const [strokeWidth, setStrokeWidth] = useState<number>(3.0);
+  const [strokeWidth, setStrokeWidth] = useState<number>(2.0);
   const [widthSlots, setWidthSlots] = useState<number[]>([2.0, 3.5, 6.5]);
-  const [activeWidthSlotIdx, setActiveWidthSlotIdx] = useState<number>(1);
+  const [activeWidthSlotIdx, setActiveWidthSlotIdx] = useState<number>(0);
   const [showWidthPopover, setShowWidthPopover] = useState<boolean>(false);
   const [lineStyle, setLineStyle] = useState<LineStyleType>('solid');
   const [arrowEnd, setArrowEnd] = useState<boolean>(false);
@@ -1416,6 +1416,15 @@ export default function App() {
     if (activeTool !== 'eraser') {
       lastNonEraserToolRef.current = activeTool;
     }
+    if (activeTool === 'pen' || activeTool === 'pencil') {
+      let minIdx = 0;
+      for (let i = 1; i < widthSlots.length; i++) {
+        if (widthSlots[i] < widthSlots[minIdx]) minIdx = i;
+      }
+      setActiveWidthSlotIdx(minIdx);
+      setStrokeWidth(widthSlots[minIdx] ?? 2.0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool]);
   const pencilHoverTwistRef = useRef<{
     baseTwist: number;
@@ -19315,6 +19324,12 @@ export default function App() {
                       setShowAlignSubBar(false);
                       if (tool.id === 'pen') {
                         setFillStyle('none');
+                        let minIdx = 0;
+                        for (let i = 1; i < widthSlots.length; i++) {
+                          if (widthSlots[i] < widthSlots[minIdx]) minIdx = i;
+                        }
+                        setActiveWidthSlotIdx(minIdx);
+                        setStrokeWidth(widthSlots[minIdx] ?? 2.0);
                       }
                       if (activeTool === tool.id && !showAlignSubBar && tool.id !== 'eraser' && tool.id !== 'text' && tool.id !== 'shape') {
                         setShowToolSubBar((s) => !s);
