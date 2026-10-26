@@ -7715,6 +7715,88 @@ export default function App() {
       return 1.0 + Math.min(2.6, Math.pow((speedPxPerMs - 0.35) * 1.45, 1.15));
     };
 
+    const registerHeldFingerModifier = (clientX: number, clientY: number, immediateActivate = false) => {
+      if (!pencilOnlyMode || activeTool === 'laser') return;
+      const now = performance.now();
+      const existing = heldFingerModifierRef.current;
+      // Avoid resetting an already-active modifier started milliseconds ago by pointerdown/touchstart
+      if (
+        existing &&
+        existing.active &&
+        !existing.fingerLifted &&
+        (existing.triggeredTempEraser ||
+          (now - existing.startTime < 85 && Math.hypot(clientX - existing.startX, clientY - existing.startY) <= 40))
+      ) {
+        if (immediateActivate && !existing.triggeredTempEraser) {
+          if (heldFingerTimerRef.current) {
+            window.clearTimeout(heldFingerTimerRef.current);
+            heldFingerTimerRef.current = null;
+          }
+          existing.triggeredTempEraser = true;
+          tempEraserActiveRef.current = true;
+          setActiveTool('eraser');
+          showToast('🧹 Κράτημα Δαχτύλου: Προσωρινή Σβήστρα (Σηκώστε το δάχτυλο για Πένα)');
+        }
+        return;
+      }
+
+      if (tempEraserReleaseTimerRef.current) {
+        window.clearTimeout(tempEraserReleaseTimerRef.current);
+        tempEraserReleaseTimerRef.current = null;
+      }
+      if (heldFingerTimerRef.current) {
+        window.clearTimeout(heldFingerTimerRef.current);
+        heldFingerTimerRef.current = null;
+      }
+
+      const savedPrevTool: ToolType =
+        tempEraserActiveRef.current && heldFingerModifierRef.current?.prevTool
+          ? heldFingerModifierRef.current.prevTool
+          : activeTool !== 'eraser'
+          ? activeTool
+          : lastNonEraserToolRef.current || 'pen';
+
+      heldFingerModifierRef.current = {
+        active: true,
+        startX: clientX,
+        startY: clientY,
+        startTime: now,
+        maxMoved: 0,
+        triggeredTempEraser: tempEraserActiveRef.current || immediateActivate,
+        cancelledByStylusAt: null,
+        fingerLifted: false,
+        prevTool: savedPrevTool,
+      };
+
+      if (immediateActivate) {
+        tempEraserActiveRef.current = true;
+        setActiveTool('eraser');
+        showToast('🧹 Κράτημα Δαχτύλου + Pencil: Προσωρινή Σβήστρα!');
+        return;
+      }
+
+      // Hold 1 stationary finger (~145ms) -> immediately activate Temporary Eraser (works in Safari, Home Screen Web App & Chrome on iPad!)
+      heldFingerTimerRef.current = window.setTimeout(() => {
+        heldFingerTimerRef.current = null;
+        const mod = heldFingerModifierRef.current;
+        if (
+          mod &&
+          mod.active &&
+          !mod.fingerLifted &&
+          mod.maxMoved <= 28 &&
+          !pinchStateRef.current?.active
+        ) {
+          outsidePanDragRef.current = null;
+          if (!mod.triggeredTempEraser) {
+            mod.triggeredTempEraser = true;
+            tempEraserActiveRef.current = true;
+            setActiveTool('eraser');
+            showToast('🧹 Κράτημα Δαχτύλου: Προσωρινή Σβήστρα (Σηκώστε το δάχτυλο για Πένα)');
+          }
+        }
+      }, 145);
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       cancelScrollMomentum();
       if (draggingTextRef.current) {
@@ -7728,6 +7810,19 @@ export default function App() {
 
       // Only block touch gestures if the Apple Pencil is physically touching the glass right now
       if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
+        // If 1 direct finger of the other hand touches the paper at the same time as the Apple Pencil, register Hold-to-Erase!
+        const simultaneousDirect = getDirectFingerTouches(e.touches);
+        if (
+          simultaneousDirect.length === 1 &&
+          pencilOnlyMode &&
+          activeTool !== 'laser' &&
+          !targetEl?.closest('button, input, textarea, select, a, [data-ui-panel="true"]')
+        ) {
+          const ft = simultaneousDirect[0] as any;
+          if (!((ft.radiusX && ft.radiusX > 58) || (ft.radiusY && ft.radiusY > 58))) {
+            registerHeldFingerModifier(ft.clientX, ft.clientY, true);
+          }
+        }
         const isOnTextBoxControl =
           targetEl?.closest('[data-text-box="true"]') &&
           !targetEl?.closest('button, input, select, a');
@@ -7797,12 +7892,22 @@ export default function App() {
         (isOutsideCanvas || (pencilOnlyMode && activeTool !== 'laser'))
       ) {
         const t = directTouches[0] as any;
-        if (!isOutsideCanvas && isClientPointOnSelectableOrLasso(t.clientX, t.clientY, e.target)) {
-          outsidePanDragRef.current = null;
+        if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 78) || (t.radiusY && t.radiusY > 78))) {
           return;
         }
-        if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 72) || (t.radiusY && t.radiusY > 72))) {
+        if (!isOutsideCanvas && isClientPointOnSelectableOrLasso(t.clientX, t.clientY, e.target)) {
+          outsidePanDragRef.current = null;
+          // Still allow Hold-1-Finger Temp Eraser if the user is in Pen/Highlighter/Shape mode and holds the finger stationary!
+          if (pencilOnlyMode && ['pen', 'pencil', 'highlighter', 'shape', 'eraser'].includes(activeTool)) {
+            registerHeldFingerModifier(t.clientX, t.clientY, false);
+          }
           return;
+        }
+        // CRITICAL Safari & Home Screen Web App (iPadOS WebKit) Fix:
+        // Prevent iOS Safari's native long-press / callout / gesture recognizer from claiming the stationary finger touch
+        // and blocking secondary Apple Pencil pointer events!
+        if (e.cancelable) {
+          e.preventDefault();
         }
         // Tapping/dragging with 1 finger on empty paper deselects any active Lasso/Nodes/Text selection while keeping the active tool
         if (
@@ -7817,56 +7922,7 @@ export default function App() {
           setImageCropMode('none');
         }
 
-        if (tempEraserReleaseTimerRef.current) {
-          window.clearTimeout(tempEraserReleaseTimerRef.current);
-          tempEraserReleaseTimerRef.current = null;
-        }
-        if (heldFingerTimerRef.current) {
-          window.clearTimeout(heldFingerTimerRef.current);
-          heldFingerTimerRef.current = null;
-        }
-
-        const savedPrevTool: ToolType =
-          tempEraserActiveRef.current && heldFingerModifierRef.current?.prevTool
-            ? heldFingerModifierRef.current.prevTool
-            : activeTool !== 'eraser'
-            ? activeTool
-            : lastNonEraserToolRef.current || 'pen';
-
-        heldFingerModifierRef.current = {
-          active: true,
-          startX: t.clientX,
-          startY: t.clientY,
-          startTime: performance.now(),
-          maxMoved: 0,
-          triggeredTempEraser: tempEraserActiveRef.current,
-          cancelledByStylusAt: null,
-          fingerLifted: false,
-          prevTool: savedPrevTool,
-        };
-
-        // Hold 1 stationary finger (~190ms) -> immediately activate Temporary Eraser (works in Chrome & Safari on iPad!)
-        if (pencilOnlyMode && activeTool !== 'laser') {
-          heldFingerTimerRef.current = window.setTimeout(() => {
-            heldFingerTimerRef.current = null;
-            const mod = heldFingerModifierRef.current;
-            if (
-              mod &&
-              mod.active &&
-              !mod.fingerLifted &&
-              mod.maxMoved <= 26 &&
-              !pinchStateRef.current?.active
-            ) {
-              outsidePanDragRef.current = null;
-              if (!mod.triggeredTempEraser) {
-                mod.triggeredTempEraser = true;
-                tempEraserActiveRef.current = true;
-                setActiveTool('eraser');
-                showToast('🧹 Κράτημα Δαχτύλου: Προσωρινή Σβήστρα (Σηκώστε το δάχτυλο για Πένα)');
-              }
-            }
-          }, 190);
-        }
+        registerHeldFingerModifier(t.clientX, t.clientY, false);
 
         outsidePanDragRef.current = {
           active: true,
@@ -7885,6 +7941,30 @@ export default function App() {
       if (directTouches.length >= 2) {
         if (e.cancelable) e.preventDefault();
         outsidePanDragRef.current = null;
+        // CRITICAL iPadOS Fix:
+        // If 1 stationary finger of the left hand has ALREADY activated Hold-to-Erase (or been held stationary >= 115ms),
+        // a 2nd touch is almost always the side of the user's right palm resting on the glass as they bring the Apple Pencil down!
+        // Never let that palm touch cancel Hold-to-Erase or trigger a 2-finger pinch!
+        const curMod = heldFingerModifierRef.current;
+        if (
+          curMod &&
+          curMod.active &&
+          (curMod.triggeredTempEraser ||
+            tempEraserActiveRef.current ||
+            (curMod.maxMoved <= 24 && performance.now() - curMod.startTime >= 115))
+        ) {
+          if (heldFingerTimerRef.current) {
+            window.clearTimeout(heldFingerTimerRef.current);
+            heldFingerTimerRef.current = null;
+          }
+          if (!curMod.triggeredTempEraser) {
+            curMod.triggeredTempEraser = true;
+            tempEraserActiveRef.current = true;
+            setActiveTool('eraser');
+            showToast('🧹 Κράτημα Δαχτύλου: Προσωρινή Σβήστρα (Σηκώστε το δάχτυλο για Πένα)');
+          }
+          return;
+        }
         if (heldFingerTimerRef.current) {
           window.clearTimeout(heldFingerTimerRef.current);
           heldFingerTimerRef.current = null;
@@ -8078,6 +8158,15 @@ export default function App() {
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      // CRITICAL Safari & Home Screen Web App Fix:
+      // In WebKit on iPadOS, lifting the Apple Pencil fires `touchend` with `changedTouches[0].touchType === 'stylus'`.
+      // If `changedTouches` contains ONLY stylus touches (no direct finger touches), ignore this event completely
+      // so lifting the Apple Pencil between erase strokes NEVER cancels Hold-to-Erase!
+      const changedDirectTouches = getDirectFingerTouches(e.changedTouches);
+      if (changedDirectTouches.length === 0) {
+        return;
+      }
+
       const directTouches = getDirectFingerTouches(e.touches);
       if (directTouches.length === 0) {
         stopPullToAddPageHold();
@@ -8086,15 +8175,15 @@ export default function App() {
           heldFingerTimerRef.current = null;
         }
 
-        // CRITICAL iPadOS Chrome & Safari Fix:
-        // When the user holds 1 stationary finger on the glass and brings the Apple Pencil down,
+        // CRITICAL iPadOS Safari, Home Screen Web App & Chrome Fix:
+        // When the user holds 1 stationary finger on the glass and brings the Apple Pencil down (or into hover range),
         // iPadOS hardware palm rejection fires `touchcancel` on the held finger!
-        // Do NOT kill heldFingerModifierRef on `touchcancel` — preserve it so the Apple Pencil erases!
+        // Do NOT kill heldFingerModifierRef on `touchcancel` (or while stylus is touching) — preserve it so the Apple Pencil erases!
         if (
-          e.type === 'touchcancel' &&
+          (e.type === 'touchcancel' || hasStylusTouch(e.touches)) &&
           heldFingerModifierRef.current &&
           heldFingerModifierRef.current.active &&
-          heldFingerModifierRef.current.maxMoved <= 32
+          heldFingerModifierRef.current.maxMoved <= 36
         ) {
           const mod = heldFingerModifierRef.current;
           mod.cancelledByStylusAt = performance.now();
@@ -8117,7 +8206,7 @@ export default function App() {
             lastEraserPtRef.current = null;
             clearActiveOverlay();
             setActiveTool(restoreTool);
-          }, 850);
+          }, 1800);
           return;
         }
 
@@ -10749,7 +10838,7 @@ export default function App() {
       }
 
       // If 1 finger of the other hand is held on the paper, synchronously activate Temporary Eraser at 0ms!
-      if (heldFingerModifierRef.current?.active && heldFingerModifierRef.current.maxMoved <= 32) {
+      if (heldFingerModifierRef.current?.active && heldFingerModifierRef.current.maxMoved <= 36) {
         if (heldFingerTimerRef.current) {
           window.clearTimeout(heldFingerTimerRef.current);
           heldFingerTimerRef.current = null;
@@ -10773,9 +10862,69 @@ export default function App() {
         clearActiveOverlay();
       }
     } else if (e.pointerType === 'touch') {
-      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 140) return;
       const nev = e.nativeEvent as PointerEvent;
-      if ((nev.width && nev.width > 68) || (nev.height && nev.height > 68)) return;
+      if ((nev.width && nev.width > 72) || (nev.height && nev.height > 72)) return;
+
+      // Also register 1-finger Hold-to-Erase modifier directly on canvas PointerDown (crucial for iPadOS Safari & Home Screen Web App!)
+      if (pencilOnlyMode && activeTool !== 'laser' && !pinchStateRef.current?.active) {
+        const nowTouch = performance.now();
+        const existingMod = heldFingerModifierRef.current;
+        if (
+          !existingMod ||
+          !existingMod.active ||
+          existingMod.fingerLifted ||
+          (!existingMod.triggeredTempEraser &&
+            (nowTouch - existingMod.startTime >= 85 ||
+              Math.hypot(e.clientX - existingMod.startX, e.clientY - existingMod.startY) > 40))
+        ) {
+          if (tempEraserReleaseTimerRef.current) {
+            window.clearTimeout(tempEraserReleaseTimerRef.current);
+            tempEraserReleaseTimerRef.current = null;
+          }
+          if (heldFingerTimerRef.current) {
+            window.clearTimeout(heldFingerTimerRef.current);
+            heldFingerTimerRef.current = null;
+          }
+          const savedPrevTool: ToolType =
+            tempEraserActiveRef.current && existingMod?.prevTool
+              ? existingMod.prevTool
+              : activeTool !== 'eraser'
+              ? activeTool
+              : lastNonEraserToolRef.current || 'pen';
+          heldFingerModifierRef.current = {
+            active: true,
+            startX: e.clientX,
+            startY: e.clientY,
+            startTime: nowTouch,
+            maxMoved: 0,
+            triggeredTempEraser: tempEraserActiveRef.current,
+            cancelledByStylusAt: null,
+            fingerLifted: false,
+            prevTool: savedPrevTool,
+          };
+          heldFingerTimerRef.current = window.setTimeout(() => {
+            heldFingerTimerRef.current = null;
+            const mod = heldFingerModifierRef.current;
+            if (
+              mod &&
+              mod.active &&
+              !mod.fingerLifted &&
+              mod.maxMoved <= 28 &&
+              !pinchStateRef.current?.active
+            ) {
+              outsidePanDragRef.current = null;
+              if (!mod.triggeredTempEraser) {
+                mod.triggeredTempEraser = true;
+                tempEraserActiveRef.current = true;
+                setActiveTool('eraser');
+                showToast('🧹 Κράτημα Δαχτύλου: Προσωρινή Σβήστρα (Σηκώστε το δάχτυλο για Πένα)');
+              }
+            }
+          }, 145);
+        }
+      }
+
+      if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 140) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
       // Tapping outside an active text box with a finger ALWAYS releases/deselects the text box!
@@ -12294,9 +12443,43 @@ export default function App() {
       }
     }
     if (!isDrawingRef.current) {
+      if (e.pointerType === 'touch' && heldFingerModifierRef.current?.active) {
+        const movedDist = Math.hypot(
+          e.clientX - heldFingerModifierRef.current.startX,
+          e.clientY - heldFingerModifierRef.current.startY
+        );
+        if (movedDist > heldFingerModifierRef.current.maxMoved) {
+          heldFingerModifierRef.current.maxMoved = movedDist;
+        }
+        if (movedDist > 28 && !heldFingerModifierRef.current.triggeredTempEraser) {
+          if (heldFingerTimerRef.current) {
+            window.clearTimeout(heldFingerTimerRef.current);
+            heldFingerTimerRef.current = null;
+          }
+          heldFingerModifierRef.current.active = false;
+        }
+      }
       // Apple Pencil Pro Hover Barrel Roll (`twist` sensor in Safari):
       // Rotating the Apple Pencil Pro >= 46° between the fingers while hovering in place opens the Floating Squeeze Palette!
       if (e.pointerType === 'pen') {
+        if (tempEraserActiveRef.current) {
+          const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+          drawEraserCursorOverlay(hoverPt);
+          if (tempEraserReleaseTimerRef.current) {
+            window.clearTimeout(tempEraserReleaseTimerRef.current);
+            tempEraserReleaseTimerRef.current = window.setTimeout(() => {
+              tempEraserReleaseTimerRef.current = null;
+              if (isDrawingRef.current) return;
+              const curMod = heldFingerModifierRef.current;
+              const restoreTool = curMod?.prevTool || lastNonEraserToolRef.current || 'pen';
+              tempEraserActiveRef.current = false;
+              heldFingerModifierRef.current = null;
+              lastEraserPtRef.current = null;
+              clearActiveOverlay();
+              setActiveTool(restoreTool);
+            }, 1800);
+          }
+        }
         const nev = e.nativeEvent as PointerEvent;
         const twist = typeof nev.twist === 'number' ? nev.twist : 0;
         const nowHover = performance.now();
@@ -14577,6 +14760,59 @@ export default function App() {
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Handle 1-Finger Hold-to-Erase pointercancel / pointerup directly on canvas (for iPadOS Safari & Home Screen Web App!)
+    if (e.pointerType === 'touch' && heldFingerModifierRef.current) {
+      const mod = heldFingerModifierRef.current;
+      if (e.type === 'pointercancel' && mod.active && mod.maxMoved <= 36) {
+        if (heldFingerTimerRef.current) {
+          window.clearTimeout(heldFingerTimerRef.current);
+          heldFingerTimerRef.current = null;
+        }
+        mod.cancelledByStylusAt = performance.now();
+        outsidePanDragRef.current = null;
+        if (!mod.triggeredTempEraser) {
+          mod.triggeredTempEraser = true;
+          tempEraserActiveRef.current = true;
+          setActiveTool('eraser');
+        }
+        if (tempEraserReleaseTimerRef.current) {
+          window.clearTimeout(tempEraserReleaseTimerRef.current);
+        }
+        tempEraserReleaseTimerRef.current = window.setTimeout(() => {
+          tempEraserReleaseTimerRef.current = null;
+          if (isDrawingRef.current) return;
+          const curMod = heldFingerModifierRef.current;
+          const restoreTool = curMod?.prevTool || lastNonEraserToolRef.current || 'pen';
+          tempEraserActiveRef.current = false;
+          heldFingerModifierRef.current = null;
+          lastEraserPtRef.current = null;
+          clearActiveOverlay();
+          setActiveTool(restoreTool);
+        }, 1800);
+      } else if (e.type === 'pointerup' && mod.cancelledByStylusAt === null) {
+        if (heldFingerTimerRef.current) {
+          window.clearTimeout(heldFingerTimerRef.current);
+          heldFingerTimerRef.current = null;
+        }
+        if (mod.triggeredTempEraser || tempEraserActiveRef.current) {
+          if (isDrawingRef.current && activePointerTypeRef.current === 'pen') {
+            mod.fingerLifted = true;
+          } else {
+            if (tempEraserReleaseTimerRef.current) {
+              window.clearTimeout(tempEraserReleaseTimerRef.current);
+              tempEraserReleaseTimerRef.current = null;
+            }
+            tempEraserActiveRef.current = false;
+            heldFingerModifierRef.current = null;
+            lastEraserPtRef.current = null;
+            clearActiveOverlay();
+            setActiveTool(mod.prevTool);
+            showToast('✏️ Αφήσατε το δάχτυλο: Επιστροφή σε Πένα!');
+          }
+        }
+      }
+    }
+
     // Ignore palm/finger pointerup or pointercancel events while Apple Pencil (or another active pointerId) is drawing!
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
@@ -14805,7 +15041,7 @@ export default function App() {
               setActiveTool(restoreTool);
               showToast('✏️ Επιστροφή στην Πένα!');
             }
-          }, 450);
+          }, 750);
         }
       }
       return;
