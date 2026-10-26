@@ -3637,8 +3637,8 @@ export default function App() {
     ctx.lineJoin = 'round';
 
     if (isSelected) {
-      ctx.shadowColor = 'rgba(0, 102, 255, 0.75)';
-      ctx.shadowBlur = 11;
+      ctx.shadowColor = 'rgba(0, 102, 255, 0.32)';
+      ctx.shadowBlur = 4;
     }
 
     if (s.lineStyle === 'dashed') {
@@ -4337,7 +4337,11 @@ export default function App() {
           const s = entry.stroke;
           const layer = visibleLayerMap.get(s.layerId);
           if (layer && !layer.visible) continue;
-          drawStrokeOnContext(ctx, s, isCurrentActivePage && selectedStrokeIds.includes(s.id));
+          drawStrokeOnContext(
+            ctx,
+            s,
+            isCurrentActivePage && selectedStrokeIds.length === 1 && selectedStrokeIds.includes(s.id)
+          );
         }
       }
 
@@ -4356,54 +4360,11 @@ export default function App() {
           const angle = selBounds.angle || 0;
           const rotStemTopY = -hh - 32;
 
-          // 4a. When 2+ shapes/strokes/images are selected together, highlight each individual object with its own cyan dashed sub-frame + #1, #2 badge!
           const effectiveImgIds =
             selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
           const selStrokesList = pageObj.strokes.filter((st) => selectedStrokeIds.includes(st.id));
           const selImagesList = (pageObj.images || []).filter((im) => effectiveImgIds.includes(im.id));
           const totalSelObjects = selStrokesList.length + selImagesList.length;
-          if (totalSelObjects >= 2) {
-            ctx.save();
-            const subBoxItems: { minX: number; minY: number; maxX: number; maxY: number }[] = [
-              ...selImagesList.map((im) => ({
-                minX: im.x,
-                minY: im.y,
-                maxX: im.x + im.width,
-                maxY: im.y + im.height,
-              })),
-              ...selStrokesList.map((ms) => getStrokeBounds(ms)),
-            ];
-            subBoxItems.forEach((sb, mIdx) => {
-              const subPad = 5;
-              const sx = sb.minX - subPad;
-              const sy = sb.minY - subPad;
-              const sw = Math.max(12, sb.maxX - sb.minX + subPad * 2);
-              const sh = Math.max(12, sb.maxY - sb.minY + subPad * 2);
-
-              ctx.fillStyle = 'rgba(14, 165, 233, 0.06)';
-              ctx.fillRect(sx, sy, sw, sh);
-              ctx.strokeStyle = '#0ea5e9';
-              ctx.lineWidth = 1.4;
-              ctx.setLineDash([4, 3]);
-              ctx.strokeRect(sx, sy, sw, sh);
-
-              // Numbered Selection Badge (#1, #2, ...) at top-left of each selected object
-              ctx.setLineDash([]);
-              ctx.fillStyle = '#0284c7';
-              ctx.beginPath();
-              ctx.roundRect(sx - 6, sy - 10, 22, 16, 8);
-              ctx.fill();
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 1.4;
-              ctx.stroke();
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 10px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(`#${mIdx + 1}`, sx + 5, sy - 2);
-            });
-            ctx.restore();
-          }
 
           ctx.save();
           ctx.translate(bcx, bcy);
@@ -14993,12 +14954,19 @@ export default function App() {
     showToast('✍️ Κείμενο OCR: Αναγνώριση ελληνικού χειρόγραφου κειμένου...');
 
     try {
-      const transcribed = await transcribeHandwrittenStrokesWithGemini(
-        cropDataUrl,
-        activeNotebook?.title || ''
-      );
+      const transcribed = await Promise.race([
+        transcribeHandwrittenStrokesWithGemini(cropDataUrl, activeNotebook?.title || ''),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 8200)),
+      ]);
       if (!transcribed || !transcribed.trim()) {
-        showToast('⚠️ Δεν αναγνωρίστηκε κείμενο στην επιλογή. Δοκίμασε να επιλέξεις καθαρά τις λέξεις με το Λάσο!');
+        // Fallback if online OCR timed out or couldn't read: apply local calligraphic beautification to the strokes!
+        const beautified = beautifyHandwritingStrokes(selStrokes);
+        const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
+        updateActivePage((page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
+        }));
+        showToast('✨ Το online OCR καθυστέρησε — εφαρμόστηκε αυτόματα Καλλιγραφική Εξομάλυνση στα γράμματα!');
         return;
       }
 
@@ -15116,12 +15084,19 @@ export default function App() {
     showToast('🧮 MathOCR: Αναγνώριση εξισώσεων, κλασμάτων, συνεπαγωγών & μονάδων...');
 
     try {
-      const mathRes = await transcribeHandwrittenMathWithGemini(
-        cropDataUrl,
-        activeNotebook?.title || ''
-      );
+      const mathRes = await Promise.race([
+        transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 8500)),
+      ]);
       if (!mathRes || !mathRes.latex.trim()) {
-        showToast('⚠️ Δεν αναγνωρίστηκε εξίσωση στην επιλογή. Επίλεξε καθαρά τις εξισώσεις με το Λάσο!');
+        // Fallback if online MathOCR timed out or couldn't respond: smooth the handwritten equation in place!
+        const beautified = beautifyHandwritingStrokes(selStrokes);
+        const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
+        updateActivePage((page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
+        }));
+        showToast('✨ Το online MathOCR καθυστέρησε — εφαρμόστηκε αυτόματα Εξομάλυνση στην εξίσωση! Δοκίμασε ξανά σε λίγο.');
         return;
       }
 
@@ -21866,14 +21841,22 @@ export default function App() {
                       );
                     })}
 
-                    {/* Floating Quick "⬠ Πολύγωνο" Action Pill below the Lasso Selection Box when discrete lines/edges are selected */}
+                    {/* Floating Quick "⬠ Πολύγωνο" Action Pill below the Lasso Selection Box when 3-10 discrete straight lines/edges are selected */}
                     {isCurrentActive &&
                       activeTool === 'lasso' &&
-                      selectedStrokeIds.length >= 2 &&
+                      selectedStrokeIds.length >= 3 &&
+                      selectedStrokeIds.length <= 10 &&
                       (() => {
+                        const selStrokesForPoly = activePage.strokes.filter((s) =>
+                          selectedStrokeIds.includes(s.id)
+                        );
+                        const allAreDiscreteLines =
+                          selStrokesForPoly.length >= 3 &&
+                          selStrokesForPoly.every((s) => s.isShape && s.shapeType === 'line');
+                        if (!allAreDiscreteLines) return null;
                         const selBox = getSelectionCombinedBox(selectedStrokeIds, []);
                         if (!selBox) return null;
-                        const pillX = Math.max(70, Math.min(pW - 70, selBox.cx));
+                        const pillX = Math.max(70, Math.min(pW - 70, selBox.cx + 88));
                         const pillY = Math.min(pH - 28, selBox.maxY + 28);
                         return (
                           <div

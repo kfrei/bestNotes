@@ -3196,14 +3196,21 @@ export async function transcribeHandwrittenStrokesWithGemini(
   const candidateModels = Array.from(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-flash-latest',
-      'gemini-3.8-flash',
       'gemini-3.5-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.6-flash',
       'gemini-flash-lite-latest',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
     ])
   );
 
-  const tryTranscribeWithModel = async (modelName: string): Promise<string | null> => {
+  const tryTranscribeWithModel = async (
+    modelName: string,
+    timeoutMs = 4200
+  ): Promise<string | null> => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
       const res = await fetch(
@@ -3211,13 +3218,17 @@ export async function transcribeHandwrittenStrokesWithGemini(
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
             generationConfig: { responseMimeType: 'application/json' },
           }),
         }
       );
-      if (!res.ok) return null;
+      if (!res.ok) {
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        return null;
+      }
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
@@ -3233,45 +3244,42 @@ export async function transcribeHandwrittenStrokesWithGemini(
         return transcribed;
       }
     } catch {
-      // try next model
+      if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
+        cachedWorkingVisionModel = null;
+      }
+    } finally {
+      window.clearTimeout(timer);
     }
     return null;
   };
 
-  for (const modelName of candidateModels) {
-    const out = await tryTranscribeWithModel(modelName);
-    if (out) return out;
+  // 1. Try primary fastest model first with a tight 3.6s timeout
+  const primaryModel = candidateModels[0];
+  if (primaryModel) {
+    const firstTry = await tryTranscribeWithModel(primaryModel, 3600);
+    if (firstTry) return firstTry;
   }
 
-  try {
-    const listRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-    );
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      const discovered: string[] = (listData?.models || [])
-        .filter(
-          (m: any) =>
-            Array.isArray(m?.supportedGenerationMethods) &&
-            m.supportedGenerationMethods.includes('generateContent') &&
-            typeof m.name === 'string' &&
-            m.name.includes('gemini') &&
-            m.name.includes('flash') &&
-            !m.name.includes('tts') &&
-            !m.name.includes('transcribe') &&
-            !m.name.includes('embedding')
-        )
-        .map((m: any) => String(m.name).replace(/^models\//, ''))
-        .sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
-
-      for (const dynModel of discovered) {
-        if (candidateModels.includes(dynModel)) continue;
-        const out = await tryTranscribeWithModel(dynModel);
-        if (out) return out;
-      }
+  // 2. If primary model timed out or returned 503/429, race the backup models in parallel so the fastest responder wins immediately!
+  const backupModels = candidateModels.slice(1, 5);
+  if (backupModels.length > 0) {
+    try {
+      const fastestBackup = await Promise.any(
+        backupModels.map(async (m) => {
+          const res = await tryTranscribeWithModel(m, 4500);
+          if (!res) throw new Error('empty');
+          return res;
+        })
+      );
+      if (fastestBackup) return fastestBackup;
+    } catch {
+      // All parallel backup models failed; try remaining candidates if any
     }
-  } catch {
-    // ignore
+  }
+
+  for (const modelName of candidateModels.slice(5)) {
+    const out = await tryTranscribeWithModel(modelName, 3800);
+    if (out) return out;
   }
 
   return null;
@@ -3357,16 +3365,21 @@ export async function transcribeHandwrittenMathWithGemini(
   const candidateModels = Array.from(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-flash-latest',
-      'gemini-3.8-flash',
       'gemini-3.5-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.6-flash',
       'gemini-flash-lite-latest',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
     ])
   );
 
   const tryMathWithModel = async (
-    modelName: string
+    modelName: string,
+    timeoutMs = 4500
   ): Promise<{ latex: string; plainText: string } | null> => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
       const res = await fetch(
@@ -3374,13 +3387,17 @@ export async function transcribeHandwrittenMathWithGemini(
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
             generationConfig: { responseMimeType: 'application/json' },
           }),
         }
       );
-      if (!res.ok) return null;
+      if (!res.ok) {
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        return null;
+      }
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
@@ -3409,45 +3426,42 @@ export async function transcribeHandwrittenMathWithGemini(
         return { latex: cleanLatex, plainText };
       }
     } catch {
-      // try next model
+      if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
+        cachedWorkingVisionModel = null;
+      }
+    } finally {
+      window.clearTimeout(timer);
     }
     return null;
   };
 
-  for (const modelName of candidateModels) {
-    const out = await tryMathWithModel(modelName);
-    if (out) return out;
+  // 1. Try primary fastest model first with a tight 3.8s timeout
+  const primaryModel = candidateModels[0];
+  if (primaryModel) {
+    const firstTry = await tryMathWithModel(primaryModel, 3800);
+    if (firstTry) return firstTry;
   }
 
-  try {
-    const listRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-    );
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      const discovered: string[] = (listData?.models || [])
-        .filter(
-          (m: any) =>
-            Array.isArray(m?.supportedGenerationMethods) &&
-            m.supportedGenerationMethods.includes('generateContent') &&
-            typeof m.name === 'string' &&
-            m.name.includes('gemini') &&
-            m.name.includes('flash') &&
-            !m.name.includes('tts') &&
-            !m.name.includes('transcribe') &&
-            !m.name.includes('embedding')
-        )
-        .map((m: any) => String(m.name).replace(/^models\//, ''))
-        .sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
-
-      for (const dynModel of discovered) {
-        if (candidateModels.includes(dynModel)) continue;
-        const out = await tryMathWithModel(dynModel);
-        if (out) return out;
-      }
+  // 2. If primary model timed out or returned 503/429, race the backup models in parallel so the fastest responder wins immediately!
+  const backupModels = candidateModels.slice(1, 5);
+  if (backupModels.length > 0) {
+    try {
+      const fastestBackup = await Promise.any(
+        backupModels.map(async (m) => {
+          const res = await tryMathWithModel(m, 4800);
+          if (!res) throw new Error('empty');
+          return res;
+        })
+      );
+      if (fastestBackup) return fastestBackup;
+    } catch {
+      // All parallel backup models failed; try remaining candidates if any
     }
-  } catch {
-    // ignore
+  }
+
+  for (const modelName of candidateModels.slice(5)) {
+    const out = await tryMathWithModel(modelName, 4000);
+    if (out) return out;
   }
 
   return null;
