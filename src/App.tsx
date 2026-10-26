@@ -3205,34 +3205,46 @@ export default function App() {
       if (p.x > maxX) maxX = p.x;
       if (p.y > maxY) maxY = p.y;
     }
-    for (const p of s.points) {
-      if (p.cx !== undefined) {
-        if (p.cx < minX) minX = p.cx;
-        if (p.cx > maxX) maxX = p.cx;
-      }
-      if (p.cy !== undefined) {
-        if (p.cy < minY) minY = p.cy;
-        if (p.cy > maxY) maxY = p.cy;
-      }
-      if (p.inDx !== undefined) {
-        const hx = p.x + p.inDx;
-        if (hx < minX) minX = hx;
-        if (hx > maxX) maxX = hx;
-      }
-      if (p.inDy !== undefined) {
-        const hy = p.y + p.inDy;
-        if (hy < minY) minY = hy;
-        if (hy > maxY) maxY = hy;
-      }
-      if (p.outDx !== undefined) {
-        const hx = p.x + p.outDx;
-        if (hx < minX) minX = hx;
-        if (hx > maxX) maxX = hx;
-      }
-      if (p.outDy !== undefined) {
-        const hy = p.y + p.outDy;
-        if (hy < minY) minY = hy;
-        if (hy > maxY) maxY = hy;
+    if (
+      s.points.length >= 2 &&
+      s.shapeType !== 'wave-guide-top' &&
+      s.shapeType !== 'wave-guide-bottom' &&
+      s.shapeType !== 'wave-axis-x' &&
+      s.shapeType !== 'wave-axis-y'
+    ) {
+      for (let i = 1; i < s.points.length; i++) {
+        const pA = s.points[i - 1];
+        const pB = s.points[i];
+        const cubicCtrl = getCubicSegmentControlPoints(pA, pB);
+        if (cubicCtrl) {
+          for (const t of [0.2, 0.35, 0.5, 0.65, 0.8]) {
+            const u = 1 - t;
+            const bx =
+              u * u * u * pA.x +
+              3 * u * u * t * cubicCtrl.cp1x +
+              3 * u * t * t * cubicCtrl.cp2x +
+              t * t * t * pB.x;
+            const by =
+              u * u * u * pA.y +
+              3 * u * u * t * cubicCtrl.cp1y +
+              3 * u * t * t * cubicCtrl.cp2y +
+              t * t * t * pB.y;
+            if (bx < minX) minX = bx;
+            if (by < minY) minY = by;
+            if (bx > maxX) maxX = bx;
+            if (by > maxY) maxY = by;
+          }
+        } else if (pB.cx !== undefined && pB.cy !== undefined) {
+          for (const t of [0.25, 0.5, 0.75]) {
+            const u = 1 - t;
+            const qx = u * u * pA.x + 2 * u * t * pB.cx + t * t * pB.x;
+            const qy = u * u * pA.y + 2 * u * t * pB.cy + t * t * pB.y;
+            if (qx < minX) minX = qx;
+            if (qy < minY) minY = qy;
+            if (qx > maxX) maxX = qx;
+            if (qy > maxY) maxY = qy;
+          }
+        }
       }
     }
     return { minX, minY, maxX, maxY };
@@ -13319,7 +13331,7 @@ export default function App() {
             const candCy = (candMinY + candMaxY) / 2;
 
             let bestScaleSnap: number | null = null;
-            let bestDiff = 6;
+            let bestDiff = 2.4;
             const tryScaleCandidate = (candVal: number, curVal: number, anchorVal: number, targetVal: number) => {
               const diff = Math.abs(candVal - targetVal);
               const denom = curVal - anchorVal;
@@ -13592,62 +13604,79 @@ export default function App() {
               isCircleLike ? 'circle' : 'square'
             );
           } else {
-            let effPtX = latestPt.x;
-            let effPtY = latestPt.y;
+            const rx = latestPt.x - tf.anchorX;
+            const ry = latestPt.y - tf.anchorY;
+            const rawCurrSpan =
+              tf.mode === 'scale-x'
+                ? Math.max(16, Math.abs(rx * cosF + ry * sinF))
+                : Math.max(16, Math.abs(-rx * sinF + ry * cosF));
+            const rawDeltaSpan = rawCurrSpan - tf.initialDist;
+            // Fine-step precision damping (0.58x for small movements < 3.5px) so orange handles allow ultra-fine height/width matching!
+            const fineGain = Math.abs(rawDeltaSpan) < 3.5 ? 0.58 : 0.85;
+            const dampedSpan = Math.max(12, tf.initialDist + rawDeltaSpan * fineGain);
+            scaleFactor = Math.max(0.85, Math.min(1.18, dampedSpan / Math.max(1, tf.initialDist)));
+
+            // Snap the ACTUAL visual shape edge (curBox.minX/maxX or curBox.minY/maxY — NOT the +10px padded orange handle!)
+            // with a gentle 2.2px snap tolerance so peaks/troughs land 100% flush on dashed guide lines!
             if (curBox && refBoxes.length > 0 && Math.abs(fAngle) < 0.05) {
-              const SNAP_T = 6;
+              const SNAP_T = 2.2;
               if (tf.mode === 'scale-x') {
+                const candMinX = tf.anchorX + (curBox.minX - tf.anchorX) * scaleFactor;
+                const candMaxX = tf.anchorX + (curBox.maxX - tf.anchorX) * scaleFactor;
+                const candCx = (candMinX + candMaxX) / 2;
                 let bestDiffX = SNAP_T;
-                let snappedX: number | null = null;
-                const candCx = (tf.anchorX + latestPt.x) / 2;
-                for (const ref of refBoxes) {
-                  for (const rx of [ref.minX, ref.maxX]) {
-                    const dEdge = Math.abs(latestPt.x - rx);
-                    if (dEdge <= bestDiffX) {
-                      bestDiffX = dEdge;
-                      snappedX = rx;
+                let snappedScaleX: number | null = null;
+                const trySnapX = (candVal: number, curVal: number, targetVal: number) => {
+                  const diff = Math.abs(candVal - targetVal);
+                  const denom = curVal - tf.anchorX;
+                  if (diff <= bestDiffX && Math.abs(denom) > 8) {
+                    const reqScale = (targetVal - tf.anchorX) / denom;
+                    if (reqScale >= 0.85 && reqScale <= 1.18) {
+                      bestDiffX = diff;
+                      snappedScaleX = reqScale;
                     }
                   }
-                  const dCenter = Math.abs(candCx - ref.cx);
-                  if (dCenter <= bestDiffX) {
-                    bestDiffX = dCenter;
-                    snappedX = 2 * ref.cx - tf.anchorX;
+                };
+                for (const ref of refBoxes) {
+                  for (const refX of [ref.minX, ref.maxX]) {
+                    trySnapX(candMinX, curBox.minX, refX);
+                    trySnapX(candMaxX, curBox.maxX, refX);
                   }
+                  trySnapX(candCx, curBox.cx, ref.cx);
                 }
-                if (snappedX !== null) {
-                  effPtX = snappedX;
+                if (snappedScaleX !== null) {
+                  scaleFactor = snappedScaleX;
                 }
               } else {
+                const candMinY = tf.anchorY + (curBox.minY - tf.anchorY) * scaleFactor;
+                const candMaxY = tf.anchorY + (curBox.maxY - tf.anchorY) * scaleFactor;
+                const candCy = (candMinY + candMaxY) / 2;
                 let bestDiffY = SNAP_T;
-                let snappedY: number | null = null;
-                const candCy = (tf.anchorY + latestPt.y) / 2;
-                for (const ref of refBoxes) {
-                  for (const ry of [ref.minY, ref.maxY]) {
-                    const dEdge = Math.abs(latestPt.y - ry);
-                    if (dEdge <= bestDiffY) {
-                      bestDiffY = dEdge;
-                      snappedY = ry;
+                let snappedScaleY: number | null = null;
+                const trySnapY = (candVal: number, curVal: number, targetVal: number) => {
+                  const diff = Math.abs(candVal - targetVal);
+                  const denom = curVal - tf.anchorY;
+                  if (diff <= bestDiffY && Math.abs(denom) > 8) {
+                    const reqScale = (targetVal - tf.anchorY) / denom;
+                    if (reqScale >= 0.85 && reqScale <= 1.18) {
+                      bestDiffY = diff;
+                      snappedScaleY = reqScale;
                     }
                   }
-                  const dCenter = Math.abs(candCy - ref.cy);
-                  if (dCenter <= bestDiffY) {
-                    bestDiffY = dCenter;
-                    snappedY = 2 * ref.cy - tf.anchorY;
+                };
+                for (const ref of refBoxes) {
+                  for (const refY of [ref.minY, ref.maxY]) {
+                    trySnapY(candMinY, curBox.minY, refY);
+                    trySnapY(candMaxY, curBox.maxY, refY);
                   }
+                  trySnapY(candCy, curBox.cy, ref.cy);
                 }
-                if (snappedY !== null) {
-                  effPtY = snappedY;
+                if (snappedScaleY !== null) {
+                  scaleFactor = snappedScaleY;
                 }
               }
             }
 
-            const rx = effPtX - tf.anchorX;
-            const ry = effPtY - tf.anchorY;
-            const currSpan =
-              tf.mode === 'scale-x'
-                ? Math.max(16, Math.abs(rx * cosF + ry * sinF))
-                : Math.max(16, Math.abs(-rx * sinF + ry * cosF));
-            scaleFactor = Math.max(0.82, Math.min(1.22, currSpan / Math.max(1, tf.initialDist)));
             tf.initialDist = Math.max(8, tf.initialDist * scaleFactor);
             if (tf.mode === 'scale-x') {
               tf.curWidth = curW * scaleFactor;
@@ -13845,8 +13874,10 @@ export default function App() {
         const targetStrokeIdList =
           tf.targetStrokeIds && tf.targetStrokeIds.length > 0 ? tf.targetStrokeIds : selectedStrokeIds;
 
-        const rawDx = latestPt.x - tf.startX;
-        const rawDy = latestPt.y - tf.startY;
+        const stepMoveDist = Math.hypot(latestPt.x - tf.startX, latestPt.y - tf.startY);
+        const moveFineGain = stepMoveDist < 2.8 ? 0.65 : 1.0;
+        const rawDx = (latestPt.x - tf.startX) * moveFineGain;
+        const rawDy = (latestPt.y - tf.startY) * moveFineGain;
         const refBoxes = getReferenceSnapBoxes(targetStrokeIdList, targetImgIdList);
         const curBox = getSelectionCombinedBox(targetStrokeIdList, targetImgIdList);
 
@@ -14190,7 +14221,7 @@ export default function App() {
             cancelNodeMagnetTimer();
           }
           if (curBox && refBoxes.length > 0) {
-            const SNAP_T = 6;
+            const SNAP_T = 2.2;
             const candMinX = curBox.minX + rawDx;
             const candMaxX = curBox.maxX + rawDx;
             const candCx = curBox.cx + rawDx;
