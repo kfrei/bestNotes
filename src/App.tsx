@@ -7364,11 +7364,12 @@ export default function App() {
 
       // Case A: 1 finger touching OUTSIDE the paper canvas OR 1 finger on EMPTY paper when Pencil-Only Mode is ON -> Scroll pages like Word!
       // IMPORTANT:
+      // - When Laser ('laser') is active, 1 finger on the paper draws the red laser beam!
       // - In Pencil-Only Mode, if the 1 finger touches a shape, group, stroke, image, text box, or active Lasso selection box/handle,
       //   do NOT scroll — let handlePointerDown / text box handlers select, drag, resize, or rotate it!
       if (
         directTouches.length === 1 &&
-        (isOutsideCanvas || pencilOnlyMode) &&
+        (isOutsideCanvas || (pencilOnlyMode && activeTool !== 'laser')) &&
         performance.now() - lastPenActivityTimeRef.current > 140
       ) {
         const t = directTouches[0] as any;
@@ -10034,7 +10035,7 @@ export default function App() {
     // If a text box is currently selected/editing and the user touches or puts the Pencil within 32px of its border,
     // treat it as resizing/moving that text box (never drawing a pen stroke or scrolling the page)!
     const currentActiveTxtId = selectedTextId || editingTextId;
-    if (currentActiveTxtId && pageIdx === activePageIndex) {
+    if (currentActiveTxtId && pageIdx === activePageIndex && activeTool !== 'laser') {
       const activeTxtEl = document.querySelector(
         `[data-text-id="${currentActiveTxtId}"]`
       ) as HTMLElement | null;
@@ -10104,7 +10105,8 @@ export default function App() {
       if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
 
       // When Pencil-Only Mode is ON, 1 finger on a shape/image/Lasso-box selects & transforms it; 1 finger on empty paper scrolls the page
-      if (pencilOnlyMode) {
+      // Exception: When Laser ('laser') is active, 1 finger ALSO draws the red laser beam without selecting objects!
+      if (pencilOnlyMode && activeTool !== 'laser') {
         if (isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget)) {
           outsidePanDragRef.current = null;
           cancelScrollMomentum();
@@ -10115,7 +10117,7 @@ export default function App() {
         if (hadActiveTextOnTouch && activeTool === 'text') {
           return;
         }
-        // When Finger Drawing is enabled (!pencilOnlyMode), let the finger act like the pencil for the active tool
+        // When Finger Drawing is enabled (!pencilOnlyMode) or Laser is active, let the finger act like the pencil for the active tool
         outsidePanDragRef.current = null;
         cancelScrollMomentum();
       }
@@ -10210,6 +10212,7 @@ export default function App() {
     if (
       e.pointerType === 'touch' &&
       activeTool !== 'direct-node' &&
+      activeTool !== 'laser' &&
       (pencilOnlyMode || activeTool === 'lasso') &&
       !(activeTool === 'lasso' && !isAdditiveSelect && isClientPointInLassoSelection(e.clientX, e.clientY))
     ) {
@@ -21176,7 +21179,9 @@ export default function App() {
                         userSelect: 'none',
                         touchAction: 'none',
                       }}
-                      className="absolute inset-0 cursor-crosshair touch-none select-none"
+                      className={`absolute inset-0 cursor-crosshair touch-none select-none ${
+                        activeTool === 'laser' ? 'z-20' : ''
+                      }`}
                     />
 
                     {/* Rendered Interactive Text & LaTeX Blocks for this page */}
@@ -21205,12 +21210,13 @@ export default function App() {
                             lineHeight: 1.35,
                             ...fontCss,
                             touchAction: 'none',
+                            pointerEvents: activeTool === 'laser' ? 'none' : undefined,
                             WebkitTouchCallout: 'none',
                             WebkitUserSelect: isEditingTxt ? 'text' : 'none',
                             userSelect: isEditingTxt ? 'text' : 'none',
                           }}
                           onPointerDown={(ev) => {
-                            if (isLocked) return;
+                            if (isLocked || activeTool === 'laser') return;
                             if (ev.pointerType === 'mouse' && ev.button !== 0) return;
                             const targetEl =
                               ev.target instanceof Element
@@ -21302,7 +21308,7 @@ export default function App() {
                             }
                           }}
                           onTouchStart={(ev) => {
-                            if (isLocked || ev.touches.length !== 1) return;
+                            if (isLocked || activeTool === 'laser' || ev.touches.length !== 1) return;
                             const targetEl =
                               ev.target instanceof Element
                                 ? ev.target
