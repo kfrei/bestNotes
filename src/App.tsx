@@ -69,6 +69,8 @@ import {
   onAuthStateChanged,
   signOut,
   signInToGoogleDrive,
+  GoogleAuthProvider,
+  getRedirectResult,
   type User,
 } from './firebase';
 import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
@@ -1215,7 +1217,12 @@ export default function App() {
   const [showUserDropdown, setShowUserDropdown] = useState<boolean>(false);
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
     try {
-      return localStorage.getItem('bestnotes_drive_token_v1');
+      const savedToken = localStorage.getItem('bestnotes_drive_token_v1');
+      const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v1') || '0');
+      if (savedToken && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
+        return null;
+      }
+      return savedToken;
     } catch {
       return null;
     }
@@ -1229,6 +1236,78 @@ export default function App() {
   });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
   const [driveSyncingAll, setDriveSyncingAll] = useState<boolean>(false);
+
+  const saveDriveCredentials = useCallback(
+    (token: string | null, email: string | null, issuedAt = Date.now()) => {
+      setDriveAccessToken(token);
+      if (email) setDriveEmail(email);
+      try {
+        if (token) {
+          localStorage.setItem('bestnotes_drive_token_v1', token);
+          localStorage.setItem('bestnotes_drive_token_time_v1', String(issuedAt));
+        } else {
+          localStorage.removeItem('bestnotes_drive_token_v1');
+        }
+        if (email) {
+          localStorage.setItem('bestnotes_drive_email_v1', email);
+        }
+      } catch {
+        // ignore
+      }
+      if (currentUser && (token || email)) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          {
+            ...(email ? { driveEmail: email } : {}),
+            ...(token ? { driveAccessToken: token, driveTokenIssuedAt: issuedAt } : {}),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+    },
+    [currentUser]
+  );
+
+  // Listen for Google Sign-In popup/redirect Drive credentials & auto-link Google account email
+  useEffect(() => {
+    const onDriveAuthEvent = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ accessToken?: string; email?: string }>).detail;
+      if (detail?.accessToken) {
+        saveDriveCredentials(detail.accessToken, detail.email || null);
+      }
+    };
+    window.addEventListener('bestnotes-drive-auth', onDriveAuthEvent);
+
+    void getRedirectResult(auth)
+      .then((res) => {
+        if (!res) return;
+        const cred = GoogleAuthProvider.credentialFromResult(res);
+        const token = cred?.accessToken || null;
+        const gEmail = res.user.email || res.user.displayName || null;
+        if (token || gEmail) {
+          saveDriveCredentials(token, gEmail);
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+
+    return () => window.removeEventListener('bestnotes-drive-auth', onDriveAuthEvent);
+  }, [saveDriveCredentials]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const isGoogleUser = currentUser.providerData?.some((p) => p.providerId === 'google.com');
+    if (isGoogleUser && currentUser.email && !driveEmail) {
+      setDriveEmail(currentUser.email);
+      try {
+        localStorage.setItem('bestnotes_drive_email_v1', currentUser.email);
+      } catch {
+        // ignore
+      }
+    }
+  }, [currentUser, driveEmail]);
 
   // Library ("Σημειώσεις") View Controls: Icons vs List, Sort (Alpha vs Date), Search, Folders
   const [libraryLayoutMode, setLibraryLayoutMode] = useState<'grid' | 'list'>(() => {
@@ -2144,7 +2223,39 @@ export default function App() {
       (docSnap) => {
         if (!docSnap.exists()) return;
         const data = docSnap.data();
-        if (!data || data.deviceId === deviceIdRef.current) return;
+        if (!data) return;
+
+        // Always restore Google Drive linked email & active token across devices / PWA sessions
+        if (typeof data.driveEmail === 'string' && data.driveEmail.length > 0) {
+          setDriveEmail((prev) => {
+            if (prev === data.driveEmail) return prev;
+            try {
+              localStorage.setItem('bestnotes_drive_email_v1', data.driveEmail);
+            } catch {
+              // ignore
+            }
+            return data.driveEmail;
+          });
+        }
+        if (
+          typeof data.driveAccessToken === 'string' &&
+          data.driveAccessToken.length > 0 &&
+          typeof data.driveTokenIssuedAt === 'number' &&
+          Date.now() - data.driveTokenIssuedAt < 52 * 60 * 1000
+        ) {
+          setDriveAccessToken((prev) => {
+            if (prev === data.driveAccessToken) return prev;
+            try {
+              localStorage.setItem('bestnotes_drive_token_v1', data.driveAccessToken);
+              localStorage.setItem('bestnotes_drive_token_time_v1', String(data.driveTokenIssuedAt));
+            } catch {
+              // ignore
+            }
+            return data.driveAccessToken;
+          });
+        }
+
+        if (data.deviceId === deviceIdRef.current) return;
 
         if (
           typeof data.customFoldersJson === 'string' &&
@@ -2354,7 +2465,12 @@ export default function App() {
   }, [notebooks]);
 
   const performDrivePdfSync = useCallback(
-    async (showFeedback = true, overrideToken?: string, overrideNotebook?: Notebook) => {
+    async (
+      showFeedback = true,
+      overrideToken?: string,
+      overrideNotebook?: Notebook,
+      forceDrivePrompt = false
+    ) => {
       if (!currentUser) {
         if (showFeedback) {
           showToast('🔒 Λειτουργία Επισκέπτη (Προσωρινή): Κάνε Σύνδεση / Εγγραφή από το προφίλ 👤 για αποθήκευση!');
@@ -2373,8 +2489,21 @@ export default function App() {
         // ignore
       }
 
-      const token = overrideToken ?? driveAccessToken;
+      let token = overrideToken ?? driveAccessToken;
       const targetNb = overrideNotebook ?? activeNotebook;
+      const hintEmail = driveEmail || currentUser.email || null;
+
+      // If user explicitly triggered Drive PDF sync (or has Drive linked) and the 1h token expired, renew seamlessly with login_hint!
+      if (!token && forceDrivePrompt && showFeedback) {
+        try {
+          const refreshed = await signInToGoogleDrive(hintEmail, false);
+          token = refreshed.accessToken;
+          saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+        } catch {
+          // ignore if popup closed
+        }
+      }
+
       if (!token) {
         setSyncStatus('syncing');
         window.setTimeout(() => {
@@ -2405,36 +2534,72 @@ export default function App() {
           );
         }
       } catch (err: any) {
-        setSyncStatus('dirty');
         if (err?.message === 'DRIVE_TOKEN_EXPIRED' || err?.message === 'DRIVE_SCOPE_MISSING') {
+          // Keep driveEmail connected so Google Drive never logs out visually!
           setDriveAccessToken(null);
           try {
             localStorage.removeItem('bestnotes_drive_token_v1');
-            localStorage.removeItem('bestnotes_gdrive_session_v1');
           } catch {
             // ignore
           }
+          // If this was a manual user click, automatically refresh the token with login_hint right now and retry!
           if (showFeedback) {
-            showToast(
-              err?.message === 'DRIVE_SCOPE_MISSING'
-                ? '⚠️ Κάνε ξανά Google Drive Login από το προφίλ 👤 και επίλεξε το κουτάκι δικαιωμάτων Google Drive!'
-                : '⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login από το προφίλ 👤.'
-            );
+            try {
+              const refreshed = await signInToGoogleDrive(
+                hintEmail,
+                err?.message === 'DRIVE_SCOPE_MISSING'
+              );
+              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+              const retryRes = await syncNotebookPdfToGoogleDrive(refreshed.accessToken, targetNb);
+              setSyncStatus('synced');
+              setIsDirty(false);
+              setSecondsToNextSync(30);
+              secondsToNextDrivePdfSyncRef.current = 120;
+              hasPendingDrivePdfSyncRef.current = false;
+              if (retryRes.webViewLink) setLastDrivePdfLink(retryRes.webViewLink);
+              showToast(
+                `☁️ Google Drive (/BestNotes${targetNb.folder ? `/${targetNb.folder}` : ''}): Συγχρονίστηκε στο ίδιο όνομα «${retryRes.pdfFileName}»!`
+              );
+              return;
+            } catch {
+              setSyncStatus('synced');
+              showToast('☁️ Cloud Sync ολοκληρώθηκε! (Πάτησε Συγχρονισμός PDF στο προφίλ 👤 για Google Drive)');
+              return;
+            }
           }
-        } else if (showFeedback) {
-          showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
+          setSyncStatus('synced');
+        } else {
+          setSyncStatus('dirty');
+          if (showFeedback) {
+            showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
+          }
         }
       }
     },
-    [currentUser, driveAccessToken, activeNotebook, showToast]
+    [
+      currentUser,
+      driveAccessToken,
+      driveEmail,
+      activeNotebook,
+      pushNotebookToCloudTracked,
+      saveDriveCredentials,
+      showToast,
+    ]
   );
 
   const performAllNotebooksDrivePdfSync = useCallback(
     async (overrideToken?: string) => {
-      const token = overrideToken ?? driveAccessToken;
+      let token = overrideToken ?? driveAccessToken;
+      const hintEmail = driveEmail || currentUser?.email || null;
       if (!token) {
-        showToast('⚠️ Πρώτα κάνε Google Drive Login από το μενού προφίλ 👤!');
-        return;
+        try {
+          const refreshed = await signInToGoogleDrive(hintEmail, false);
+          token = refreshed.accessToken;
+          saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+        } catch {
+          showToast('⚠️ Η σύνδεση με το Google Drive ακυρώθηκε.');
+          return;
+        }
       }
       setDriveSyncingAll(true);
       setSyncStatus('syncing');
@@ -2442,7 +2607,25 @@ export default function App() {
         let syncedCount = 0;
         let lastLink: string | undefined;
         for (const nb of notebooks) {
-          const res = await syncNotebookPdfToGoogleDrive(token, nb);
+          let res;
+          try {
+            res = await syncNotebookPdfToGoogleDrive(token, nb);
+          } catch (innerErr: any) {
+            if (
+              innerErr?.message === 'DRIVE_TOKEN_EXPIRED' ||
+              innerErr?.message === 'DRIVE_SCOPE_MISSING'
+            ) {
+              const refreshed = await signInToGoogleDrive(
+                hintEmail,
+                innerErr?.message === 'DRIVE_SCOPE_MISSING'
+              );
+              token = refreshed.accessToken;
+              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+              res = await syncNotebookPdfToGoogleDrive(token, nb);
+            } else {
+              throw innerErr;
+            }
+          }
           syncedCount++;
           if (nb.id === activeNotebook.id && res.webViewLink) {
             lastLink = res.webViewLink;
@@ -2457,27 +2640,20 @@ export default function App() {
         showToast(`☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & φάκελοι σε PDF στον φάκελο /BestNotes του Google Drive!`);
       } catch (err: any) {
         setSyncStatus('dirty');
-        if (err?.message === 'DRIVE_TOKEN_EXPIRED' || err?.message === 'DRIVE_SCOPE_MISSING') {
-          setDriveAccessToken(null);
-          try {
-            localStorage.removeItem('bestnotes_drive_token_v1');
-            localStorage.removeItem('bestnotes_gdrive_session_v1');
-          } catch {
-            // ignore
-          }
-          showToast(
-            err?.message === 'DRIVE_SCOPE_MISSING'
-              ? '⚠️ Κάνε ξανά Google Drive Login και επίλεξε το κουτάκι δικαιωμάτων Google Drive!'
-              : '⚠️ Η σύνδεση με το Google Drive έληξε. Κάνε ξανά Google Drive Login.'
-          );
-        } else {
-          showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
-        }
+        showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
       } finally {
         setDriveSyncingAll(false);
       }
     },
-    [driveAccessToken, notebooks, activeNotebook.id, showToast]
+    [
+      driveAccessToken,
+      driveEmail,
+      currentUser?.email,
+      notebooks,
+      activeNotebook.id,
+      saveDriveCredentials,
+      showToast,
+    ]
   );
 
   const [pendingShareFile, setPendingShareFile] = useState<{ file: File; title: string } | null>(null);
@@ -16318,7 +16494,7 @@ export default function App() {
       <header
         data-sticky-app-nav="true"
         style={{ touchAction: 'manipulation' }}
-        className="sticky top-0 z-40 flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none"
+        className="sticky top-0 z-40 flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none bn-safe-top-header"
       >
         {/* Left Navigation Icons (BestNotes Logo -> Landing Page, Home -> Documents/Notes Library, Page Thumbnails Grid) */}
         <div className="flex items-center gap-1 pb-1.5">
@@ -16583,6 +16759,22 @@ export default function App() {
             </>
           )}
 
+          {/* Direct Login / Sign-Up Pill when in Guest Mode */}
+          {!currentUser && (
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('signup');
+                setShowAuthModal(true);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-[11px] font-bold text-white shadow-xs transition cursor-pointer"
+              title="Σύνδεση ή Εγγραφή για μόνιμη αποθήκευση στο Cloud"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Εγγραφή / Σύνδεση</span>
+            </button>
+          )}
+
           {/* Classic Person Icon Button & Profile + Google Drive PDF Sync Dropdown */}
           <div className="relative">
             <button
@@ -16598,10 +16790,10 @@ export default function App() {
               }
             >
               <UserIcon className="w-4 h-4" />
-              {(currentUser || driveAccessToken) && (
+              {(currentUser || driveAccessToken || driveEmail) && (
                 <span
                   className={`absolute top-1 right-1 w-2 h-2 rounded-full border border-[#1b2a4a] ${
-                    driveAccessToken ? 'bg-emerald-400' : 'bg-sky-400'
+                    driveAccessToken || driveEmail ? 'bg-emerald-400' : 'bg-sky-400'
                   }`}
                 />
               )}
@@ -16660,18 +16852,18 @@ export default function App() {
                         className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#007185] hover:bg-[#005f70] text-xs font-bold text-white transition cursor-pointer"
                       >
                         <LogIn className="w-3.5 h-3.5" />
-                        <span>Login</span>
+                        <span>Σύνδεση</span>
                       </button>
                       <button
                         onClick={() => {
                           setShowUserDropdown(false);
-                          explicitLandingNavRef.current = true;
-                          setViewMode('landing');
+                          setAuthMode('signup');
+                          setShowAuthModal(true);
                         }}
-                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 transition cursor-pointer"
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0066ff] hover:bg-blue-700 text-xs font-bold text-white transition cursor-pointer"
                       >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>Logout</span>
+                        <UserIcon className="w-3.5 h-3.5" />
+                        <span>Εγγραφή</span>
                       </button>
                     </div>
                   )}
@@ -16684,25 +16876,27 @@ export default function App() {
                       <Cloud className="w-3.5 h-3.5 text-[#0066ff]" />
                       <span>Google Drive Sync (/BestNotes)</span>
                     </span>
-                    {driveAccessToken && (
+                    {(driveAccessToken || driveEmail) && (
                       <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold">
                         Συνδεδεμένο
                       </span>
                     )}
                   </div>
 
-                  {driveAccessToken ? (
+                  {driveAccessToken || driveEmail ? (
                     <div className="space-y-2">
                       <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px]">
                         <div className="text-slate-500">Λογαριασμός Google Drive:</div>
-                        <div className="font-semibold text-slate-800 truncate">{driveEmail || 'Google Drive Account'}</div>
+                        <div className="font-semibold text-slate-800 truncate">
+                          {driveEmail || currentUser?.email || 'Google Drive Account'}
+                        </div>
                         <div className="text-[10px] text-sky-700 font-medium mt-0.5 truncate">
                           📁 BestNotes{activeNotebook.folder ? ` / ${activeNotebook.folder}` : ''} / {activeNotebook.title}.pdf
                         </div>
                       </div>
 
                       <button
-                        onClick={() => void performDrivePdfSync(true)}
+                        onClick={() => void performDrivePdfSync(true, undefined, undefined, true)}
                         disabled={syncStatus === 'syncing'}
                         className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition cursor-pointer"
                       >
@@ -16750,11 +16944,8 @@ export default function App() {
                         <button
                           onClick={async () => {
                             try {
-                              const res = await signInToGoogleDrive();
-                              setDriveAccessToken(res.accessToken);
-                              setDriveEmail(res.email || res.displayName);
-                              localStorage.setItem('bestnotes_drive_token_v1', res.accessToken);
-                              localStorage.setItem('bestnotes_drive_email_v1', res.email || res.displayName);
+                              const res = await signInToGoogleDrive(null, true);
+                              saveDriveCredentials(res.accessToken, res.email || res.displayName);
                               await performDrivePdfSync(true, res.accessToken);
                             } catch (err: any) {
                               showToast(`⚠️ Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
@@ -16775,15 +16966,8 @@ export default function App() {
                       <button
                         onClick={async () => {
                           try {
-                            const res = await signInToGoogleDrive();
-                            setDriveAccessToken(res.accessToken);
-                            setDriveEmail(res.email || res.displayName);
-                            try {
-                              localStorage.setItem('bestnotes_drive_token_v1', res.accessToken);
-                              localStorage.setItem('bestnotes_drive_email_v1', res.email || res.displayName);
-                            } catch {
-                              // ignore
-                            }
+                            const res = await signInToGoogleDrive(currentUser?.email || null, false);
+                            saveDriveCredentials(res.accessToken, res.email || res.displayName);
                             showToast(`✅ Συνδέθηκες στο Google Drive (${res.email})! Συγχρονισμός στο /BestNotes...`);
                             await performDrivePdfSync(true, res.accessToken);
                           } catch (err: any) {

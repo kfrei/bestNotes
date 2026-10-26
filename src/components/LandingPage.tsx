@@ -28,7 +28,9 @@ import {
 import {
   auth,
   googleProvider,
+  GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -340,10 +342,40 @@ export const AuthModal: React.FC<{
     setErrorMsg(null);
     setLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const cred = GoogleAuthProvider.credentialFromResult(result);
+      const token = cred?.accessToken;
+      const gEmail = result.user.email || result.user.displayName || '';
+      if (token) {
+        try {
+          localStorage.setItem('bestnotes_drive_token_v1', token);
+          localStorage.setItem('bestnotes_drive_token_time_v1', String(Date.now()));
+          if (gEmail) localStorage.setItem('bestnotes_drive_email_v1', gEmail);
+          window.dispatchEvent(
+            new CustomEvent('bestnotes-drive-auth', {
+              detail: { accessToken: token, email: gEmail },
+            })
+          );
+        } catch {
+          // ignore
+        }
+      }
       onSuccess();
     } catch (err: any) {
-      setErrorMsg(translateFirebaseError(err));
+      const code = err?.code || '';
+      if (
+        code === 'auth/popup-blocked' ||
+        code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirErr: any) {
+          setErrorMsg(translateFirebaseError(redirErr));
+        }
+      } else {
+        setErrorMsg(translateFirebaseError(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -562,6 +594,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   currentUser,
   onEnterApp,
   onOpenAuthModal,
+  showAuthModal,
+  setShowAuthModal,
+  authMode,
+  setAuthMode,
 }) => {
   const [activeTab, setActiveTab] = useState<ShowcaseTabId>('water-cycle');
   const [tabProgress, setTabProgress] = useState<number>(0);
@@ -712,7 +748,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* =====================================================================
           1. TOP NAVIGATION BAR (Goodnotes.com Minimalist Header)
          ===================================================================== */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100 bn-safe-top-header">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6 lg:gap-8">
             <div
@@ -784,13 +820,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => onOpenAuthModal('signin')}
-                className="px-3.5 py-2 rounded-xl text-sm font-bold text-slate-800 hover:bg-slate-100 transition cursor-pointer"
-              >
-                Login
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onOpenAuthModal('signin')}
+                  className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-800 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Σύνδεση
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuthModal('signup')}
+                  className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs sm:text-sm font-bold text-[#0066ff] transition cursor-pointer"
+                >
+                  Εγγραφή
+                </button>
+              </div>
             )}
 
             <button
@@ -1662,6 +1707,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Auth Modal inside Landing Page so Login / Εγγραφή buttons always open it immediately */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        mode={authMode}
+        setMode={setAuthMode}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          onEnterApp();
+        }}
+      />
     </div>
   );
 };

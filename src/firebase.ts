@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -34,17 +36,27 @@ export const auth = getAuth(firebaseApp);
 export const driveAuth = getAuth(driveFirebaseApp);
 export const db = getFirestore(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const googleDriveProvider = new GoogleAuthProvider();
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
-googleDriveProvider.setCustomParameters({ prompt: 'consent select_account' });
 
-export async function signInToGoogleDrive(): Promise<{
+export async function signInToGoogleDrive(
+  hintEmail?: string | null,
+  forceAccountSelect = false
+): Promise<{
   accessToken: string;
   email: string;
   displayName: string;
 }> {
+  if (forceAccountSelect) {
+    googleDriveProvider.setCustomParameters({ prompt: 'consent select_account' });
+  } else if (hintEmail && hintEmail.includes('@')) {
+    googleDriveProvider.setCustomParameters({ login_hint: hintEmail.trim() });
+  } else {
+    googleDriveProvider.setCustomParameters({ prompt: 'select_account' });
+  }
   const result = await signInWithPopup(driveAuth, googleDriveProvider);
   const credential = GoogleAuthProvider.credentialFromResult(result);
   const accessToken = credential?.accessToken;
@@ -59,7 +71,10 @@ export async function signInToGoogleDrive(): Promise<{
 }
 
 export {
+  GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
