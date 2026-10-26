@@ -1148,8 +1148,74 @@ function buildPresetShape(
 /**
  * Generates multi-stroke grouped Physics Stencils (e.g. Cylindrical Conductor, Coordinate Axes, Resistor)
  */
+/**
+ * Computes the 4 closed-polygon Bezier corners of a rectangular block resting flush
+ * on the hypotenuse (pSlopeStart -> pSlopePeak) of an inclined-plane triangle
+ * whose right-angle base corner is pBaseCorner.
+ * Invariant under rotation, horizontal/vertical mirror, and non-uniform scaling!
+ */
+export function computeInclinedPlaneBlockPoints(
+  pSlopeStart: { x: number; y: number },
+  pBaseCorner: { x: number; y: number },
+  pSlopePeak: { x: number; y: number },
+  tCenter = 0.52,
+  blockLenRatio = 0.27,
+  blockAspect = 0.64
+): BezierPoint[] {
+  const dx = pSlopePeak.x - pSlopeStart.x;
+  const dy = pSlopePeak.y - pSlopeStart.y;
+  const slopeLen = Math.max(1, Math.hypot(dx, dy));
+  const ux = dx / slopeLen;
+  const uy = dy / slopeLen;
+
+  // Choose the unit normal perpendicular to the hypotenuse that points AWAY from pBaseCorner
+  const midX = (pSlopeStart.x + pSlopePeak.x) / 2;
+  const midY = (pSlopeStart.y + pSlopePeak.y) / 2;
+  const toMidX = midX - pBaseCorner.x;
+  const toMidY = midY - pBaseCorner.y;
+  let nx = uy;
+  let ny = -ux;
+  if (nx * toMidX + ny * toMidY < 0) {
+    nx = -uy;
+    ny = ux;
+  }
+
+  const blockL = Math.max(18, slopeLen * blockLenRatio);
+  const blockH = Math.max(12, blockL * blockAspect);
+  const baseCenterX = pSlopeStart.x + dx * tCenter;
+  const baseCenterY = pSlopeStart.y + dy * tCenter;
+  const halfL = blockL / 2;
+
+  const b1 = {
+    x: baseCenterX - ux * halfL,
+    y: baseCenterY - uy * halfL,
+  };
+  const b2 = {
+    x: baseCenterX + ux * halfL,
+    y: baseCenterY + uy * halfL,
+  };
+  const t2 = {
+    x: b2.x + nx * blockH,
+    y: b2.y + ny * blockH,
+  };
+  const t1 = {
+    x: b1.x + nx * blockH,
+    y: b1.y + ny * blockH,
+  };
+
+  return makePolygonBezier([b1, b2, t2, t1]);
+}
+
 export function createPhysicsStencilStrokes(
-  preset: 'cylinder' | 'axes' | 'wave-axes' | 'resistor',
+  preset:
+    | 'cylinder'
+    | 'axes'
+    | 'wave-axes'
+    | 'resistor'
+    | 'bulb'
+    | 'battery'
+    | 'voltage-source'
+    | 'inclined-plane',
   x: number,
   y: number,
   w: number,
@@ -1158,7 +1224,12 @@ export function createPhysicsStencilStrokes(
   layerId: string,
   guideColor = '#2563eb'
 ): StrokeObject[] {
-  const groupId = preset === 'wave-axes' ? `wave-axes-grp-${Date.now()}` : `group-${Date.now()}`;
+  const groupId =
+    preset === 'wave-axes'
+      ? `wave-axes-grp-${Date.now()}`
+      : preset === 'inclined-plane'
+        ? `incline-grp-${Date.now()}`
+        : `group-${Date.now()}`;
   const out: StrokeObject[] = [];
 
   if (preset === 'cylinder') {
@@ -1368,6 +1439,433 @@ export function createPhysicsStencilStrokes(
       groupId,
       isShape: true,
       shapeType: 'resistor',
+    });
+  } else if (preset === 'bulb') {
+    // Light Bulb (Λαμπτήρας) matching the user's sketch:
+    // Top pear/rounded glass dome tapering smoothly into a threaded screw base at the bottom.
+    const cx = x + w / 2;
+    const domeRx = Math.max(14, w * 0.44);
+    const domeRy = Math.max(14, h * 0.34);
+    const domeCy = y + domeRy + h * 0.02;
+    const neckY = y + h * 0.66;
+    const baseRx = Math.max(8, domeRx * 0.52);
+    const baseBotY = y + h * 0.93;
+    const tipBotY = y + h;
+
+    // Build smooth bulb glass dome + tapering neck contour (from left neck -> up around crown -> right neck)
+    const domePts: BezierPoint[] = [];
+    // Left neck to left dome equator (smooth S-taper)
+    const leftEqAngle = Math.PI * 0.85;
+    const rightEqAngle = Math.PI * 0.15;
+    const leftNeckPt = { x: cx - baseRx, y: neckY, pressure: 0.7 };
+    domePts.push(leftNeckPt);
+    const taperSteps = 8;
+    const leftEqX = cx + domeRx * Math.cos(leftEqAngle);
+    const leftEqY = domeCy + domeRy * Math.sin(leftEqAngle);
+    for (let i = 1; i <= taperSteps; i++) {
+      const t = i / taperSteps;
+      const ease = t * t * (3 - 2 * t);
+      const px = leftNeckPt.x + (leftEqX - leftNeckPt.x) * ease;
+      const py = leftNeckPt.y + (leftEqY - leftNeckPt.y) * t;
+      const prev = domePts[domePts.length - 1];
+      domePts.push({
+        x: px,
+        y: py,
+        cx: (prev.x + px) / 2,
+        cy: (prev.y + py) / 2,
+        pressure: 0.7,
+      });
+    }
+    // Crown arc from leftEqAngle (0.85*PI) through top (1.5*PI) to rightEqAngle (2.15*PI)
+    const startCrown = leftEqAngle;
+    const endCrown = Math.PI * 2 + rightEqAngle;
+    const crownSteps = 28;
+    for (let i = 1; i <= crownSteps; i++) {
+      const ang = startCrown + ((endCrown - startCrown) * i) / crownSteps;
+      const px = cx + domeRx * Math.cos(ang);
+      const py = domeCy + domeRy * Math.sin(ang);
+      const prev = domePts[domePts.length - 1];
+      domePts.push({
+        x: px,
+        y: py,
+        cx: (prev.x + px) / 2,
+        cy: (prev.y + py) / 2,
+        pressure: 0.7,
+      });
+    }
+    // Right dome equator down to right neck
+    const rightEqX = cx + domeRx * Math.cos(rightEqAngle);
+    const rightEqY = domeCy + domeRy * Math.sin(rightEqAngle);
+    const rightNeckPt = { x: cx + baseRx, y: neckY };
+    for (let i = 1; i <= taperSteps; i++) {
+      const t = i / taperSteps;
+      const ease = t * t * (3 - 2 * t);
+      const px = rightEqX + (rightNeckPt.x - rightEqX) * ease;
+      const py = rightEqY + (rightNeckPt.y - rightEqY) * t;
+      const prev = domePts[domePts.length - 1];
+      domePts.push({
+        x: px,
+        y: py,
+        cx: (prev.x + px) / 2,
+        cy: (prev.y + py) / 2,
+        pressure: 0.7,
+      });
+    }
+
+    // Continue down right side of screw base, around bottom tip, and up left side of screw base to close
+    const screwSteps = 12;
+    for (let i = 1; i <= screwSteps; i++) {
+      const t = i / screwSteps;
+      // Right screw side with slight thread wave
+      const wave = Math.sin(t * Math.PI * 3) * (baseRx * 0.08);
+      const px = cx + baseRx * (1 - t * 0.14) + wave;
+      const py = neckY + (baseBotY - neckY) * t;
+      const prev = domePts[domePts.length - 1];
+      domePts.push({
+        x: px,
+        y: py,
+        cx: (prev.x + px) / 2,
+        cy: (prev.y + py) / 2,
+        pressure: 0.7,
+      });
+    }
+    // Bottom contact curve
+    const botSteps = 8;
+    const rBotX = cx + baseRx * 0.86;
+    const lBotX = cx - baseRx * 0.86;
+    for (let i = 1; i <= botSteps; i++) {
+      const t = i / botSteps;
+      const ang = t * Math.PI;
+      const px = cx + ((rBotX - lBotX) / 2) * Math.cos(ang);
+      const py = baseBotY + (tipBotY - baseBotY) * Math.sin(ang);
+      const prev = domePts[domePts.length - 1];
+      domePts.push({
+        x: px,
+        y: py,
+        cx: (prev.x + px) / 2,
+        cy: (prev.y + py) / 2,
+        pressure: 0.7,
+      });
+    }
+    // Left screw side up to leftNeckPt
+    for (let i = 1; i <= screwSteps; i++) {
+      const t = i / screwSteps;
+      const wave = Math.sin((1 - t) * Math.PI * 3) * (baseRx * 0.08);
+      const px = cx - baseRx * (1 - (1 - t) * 0.14) - wave;
+      const py = baseBotY - (baseBotY - neckY) * t;
+      const prev = domePts[domePts.length - 1];
+      domePts.push({
+        x: px,
+        y: py,
+        cx: (prev.x + px) / 2,
+        cy: (prev.y + py) / 2,
+        pressure: 0.7,
+      });
+    }
+
+    out.push({
+      id: `st-${Date.now()}-bulb-body`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: domePts,
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'bulb',
+    });
+
+    // Spiral screw thread ribs across the base (matching the user's sketch)
+    const threadFracs = [0.06, 0.36, 0.66, 0.92];
+    threadFracs.forEach((frac, idx) => {
+      const yL = neckY + (baseBotY - neckY) * Math.min(1, frac + 0.08);
+      const yR = neckY + (baseBotY - neckY) * Math.max(0, frac - 0.04);
+      const wScale = 1 - frac * 0.12;
+      const xL = cx - baseRx * wScale;
+      const xR = cx + baseRx * wScale;
+      const midY = (yL + yR) / 2 + (baseBotY - neckY) * 0.06;
+      out.push({
+        id: `st-${Date.now()}-bulb-th-${idx}`,
+        tool: 'pen',
+        color,
+        width: 2.4,
+        opacity: 1,
+        points: [
+          { x: xL, y: yL, pressure: 0.7 },
+          { x: (xL + xR) / 2, y: midY, cx: (xL + (xL + xR) / 2) / 2, cy: (yL + midY) / 2, pressure: 0.7 },
+          { x: xR, y: yR, cx: ((xL + xR) / 2 + xR) / 2, cy: (midY + yR) / 2, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'bulb',
+      });
+    });
+  } else if (preset === 'battery') {
+    // Battery (Μπαταρία) matching the user's sketch:
+    // [+]  [small protruding cap][main rectangular body]  [-]
+    const cy = y + h / 2;
+    const signSize = Math.max(8, Math.min(w * 0.075, h * 0.24));
+    const plusCx = x + signSize * 0.85;
+    const minusCx = x + w - signSize * 0.85;
+
+    const capLeftX = x + Math.max(signSize * 2.1, w * 0.16);
+    const bodyLeftX = capLeftX + Math.max(10, w * 0.1);
+    const bodyRightX = x + w - Math.max(signSize * 2.1, w * 0.16);
+
+    const bodyTopY = y + h * 0.08;
+    const bodyBotY = y + h * 0.92;
+    const capHalfH = (bodyBotY - bodyTopY) * 0.23;
+    const capTopY = cy - capHalfH;
+    const capBotY = cy + capHalfH;
+
+    // Stepped 8-corner closed battery contour (protruding left cap + main rectangular body)
+    const batteryOutline = makePolygonBezier([
+      { x: bodyLeftX, y: bodyTopY },
+      { x: bodyRightX, y: bodyTopY },
+      { x: bodyRightX, y: bodyBotY },
+      { x: bodyLeftX, y: bodyBotY },
+      { x: bodyLeftX, y: capBotY },
+      { x: capLeftX, y: capBotY },
+      { x: capLeftX, y: capTopY },
+      { x: bodyLeftX, y: capTopY },
+    ]);
+    out.push({
+      id: `st-${Date.now()}-bat-body`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: batteryOutline,
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'battery',
+    });
+
+    // '+' sign on the left (horizontal + vertical strokes)
+    out.push({
+      id: `st-${Date.now()}-bat-plus-h`,
+      tool: 'pen',
+      color,
+      width: 2.5,
+      opacity: 1,
+      points: [
+        { x: plusCx - signSize / 2, y: cy, pressure: 0.7 },
+        { x: plusCx + signSize / 2, y: cy, cx: plusCx, cy: cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'battery',
+    });
+    out.push({
+      id: `st-${Date.now()}-bat-plus-v`,
+      tool: 'pen',
+      color,
+      width: 2.5,
+      opacity: 1,
+      points: [
+        { x: plusCx, y: cy - signSize / 2, pressure: 0.7 },
+        { x: plusCx, y: cy + signSize / 2, cx: plusCx, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'battery',
+    });
+
+    // '-' sign on the right
+    out.push({
+      id: `st-${Date.now()}-bat-minus-h`,
+      tool: 'pen',
+      color,
+      width: 2.5,
+      opacity: 1,
+      points: [
+        { x: minusCx - signSize / 2, y: cy, pressure: 0.7 },
+        { x: minusCx + signSize / 2, y: cy, cx: minusCx, cy: cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'battery',
+    });
+  } else if (preset === 'voltage-source') {
+    // DC Voltage Source (Πηγή Τάσης) matching the user's sketch:
+    // Left horizontal wire -> tall vertical (+) plate | gap | short vertical (-) plate -> right horizontal wire
+    // With '+' at top-left of tall plate and '-' at top-right of short plate
+    const cy = y + h / 2;
+    const cx = x + w / 2;
+    const plateGap = Math.max(10, Math.min(26, w * 0.11));
+    const plusPlateX = cx - plateGap / 2;
+    const minusPlateX = cx + plateGap / 2;
+
+    const tallTopY = y + h * 0.06;
+    const tallBotY = y + h * 0.94;
+    const shortTopY = y + h * 0.27;
+    const shortBotY = y + h * 0.73;
+
+    // 1. Left horizontal wire lead
+    out.push({
+      id: `st-${Date.now()}-vs-wl`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: [
+        { x, y: cy, pressure: 0.7 },
+        { x: plusPlateX, y: cy, cx: (x + plusPlateX) / 2, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'voltage-source',
+    });
+
+    // 2. Right horizontal wire lead
+    out.push({
+      id: `st-${Date.now()}-vs-wr`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: [
+        { x: minusPlateX, y: cy, pressure: 0.7 },
+        { x: x + w, y: cy, cx: (minusPlateX + x + w) / 2, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'voltage-source',
+    });
+
+    // 3. Tall vertical positive plate (+)
+    out.push({
+      id: `st-${Date.now()}-vs-ptall`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: [
+        { x: plusPlateX, y: tallTopY, pressure: 0.7 },
+        { x: plusPlateX, y: tallBotY, cx: plusPlateX, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'voltage-source',
+    });
+
+    // 4. Short vertical negative plate (-)
+    out.push({
+      id: `st-${Date.now()}-vs-pshort`,
+      tool: 'pen',
+      color,
+      width: 3.8,
+      opacity: 1,
+      points: [
+        { x: minusPlateX, y: shortTopY, pressure: 0.7 },
+        { x: minusPlateX, y: shortBotY, cx: minusPlateX, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'voltage-source',
+    });
+
+    // 5. '+' sign at upper-left of tall plate and '-' sign at upper-right of short plate
+    const signSize = Math.max(8, Math.min(w * 0.08, h * 0.16));
+    const signOffsetX = Math.max(signSize * 1.15, plateGap * 0.85);
+    const signY = y + h * 0.22;
+    const plusSignCx = plusPlateX - signOffsetX;
+    const minusSignCx = minusPlateX + signOffsetX;
+
+    out.push({
+      id: `st-${Date.now()}-vs-plus-h`,
+      tool: 'pen',
+      color,
+      width: 2.4,
+      opacity: 1,
+      points: [
+        { x: plusSignCx - signSize / 2, y: signY, pressure: 0.7 },
+        { x: plusSignCx + signSize / 2, y: signY, cx: plusSignCx, cy: signY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'voltage-source',
+    });
+    out.push({
+      id: `st-${Date.now()}-vs-plus-v`,
+      tool: 'pen',
+      color,
+      width: 2.4,
+      opacity: 1,
+      points: [
+        { x: plusSignCx, y: signY - signSize / 2, pressure: 0.7 },
+        { x: plusSignCx, y: signY + signSize / 2, cx: plusSignCx, cy: signY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'voltage-source',
+    });
+    out.push({
+      id: `st-${Date.now()}-vs-minus-h`,
+      tool: 'pen',
+      color,
+      width: 2.4,
+      opacity: 1,
+      points: [
+        { x: minusSignCx - signSize / 2, y: signY, pressure: 0.7 },
+        { x: minusSignCx + signSize / 2, y: signY, cx: minusSignCx, cy: signY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'voltage-source',
+    });
+  } else if (preset === 'inclined-plane') {
+    // Inclined Plane with Block (Κεκλιμένο Επίπεδο με Σώμα) matching the user's screenshot:
+    // 1. Right-triangle ramp (dark outline + subtle gray fill)
+    // 2. Rectangular block resting flush on the hypotenuse (blue outline + subtle blue fill)
+    const pSlopeStart = { x, y: y + h };
+    const pBaseCorner = { x: x + w, y: y + h };
+    const pSlopePeak = { x: x + w, y: y + h * 0.22 };
+
+    const wedgePts = makePolygonBezier([pSlopeStart, pBaseCorner, pSlopePeak]);
+    out.push({
+      id: `st-${Date.now()}-inc-wedge`,
+      tool: 'pen',
+      color: color || '#111827',
+      fillColor: 'rgba(148, 163, 184, 0.18)',
+      fillStyle: 'solid',
+      width: 2.8,
+      opacity: 1,
+      points: wedgePts,
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'incline-wedge',
+    });
+
+    const blockPts = computeInclinedPlaneBlockPoints(pSlopeStart, pBaseCorner, pSlopePeak);
+    const blockStrokeColor = color === '#2563eb' ? '#1d4ed8' : '#2563eb';
+    out.push({
+      id: `st-${Date.now()}-inc-block`,
+      tool: 'pen',
+      color: blockStrokeColor,
+      fillColor: 'rgba(59, 130, 246, 0.16)',
+      fillStyle: 'solid',
+      width: 2.8,
+      opacity: 1,
+      points: blockPts,
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'incline-block',
     });
   }
 

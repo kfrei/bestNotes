@@ -105,6 +105,7 @@ import {
   recognizeAndSnapShape,
   isScribbleEraseGesture,
   createPhysicsStencilStrokes,
+  computeInclinedPlaneBlockPoints,
   beautifyHandwritingStrokes,
   removeImageBackground,
   computeImageSobelEdgeMap,
@@ -3146,7 +3147,12 @@ export default function App() {
       s.shapeType === 'wave-axis-y' ||
       s.shapeType === 'wave-axis-x' ||
       s.shapeType === 'wave-guide-top' ||
-      s.shapeType === 'wave-guide-bottom'
+      s.shapeType === 'wave-guide-bottom' ||
+      s.shapeType === 'bulb' ||
+      s.shapeType === 'battery' ||
+      s.shapeType === 'voltage-source' ||
+      s.shapeType === 'incline-wedge' ||
+      s.shapeType === 'incline-block'
     );
   };
 
@@ -6250,6 +6256,8 @@ export default function App() {
           ? selectedStrokeIds
           : activeNodeStrokeId
           ? [activeNodeStrokeId]
+          : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+          ? lastCreatedShapeIdsRef.current
           : [];
       const baseSet = new Set(baseIds);
       const groupIds = new Set(
@@ -8290,7 +8298,12 @@ export default function App() {
 
     if (
       activeTool === 'shape' &&
-      (shapePreset === 'axes' || shapePreset === 'wave-axes') &&
+      (shapePreset === 'axes' ||
+        shapePreset === 'wave-axes' ||
+        shapePreset === 'bulb' ||
+        shapePreset === 'battery' ||
+        shapePreset === 'voltage-source' ||
+        shapePreset === 'inclined-plane') &&
       currentStrokePtsRef.current.length >= 2
     ) {
       let minX = Infinity,
@@ -8303,8 +8316,28 @@ export default function App() {
         if (p.x > maxX) maxX = p.x;
         if (p.y > maxY) maxY = p.y;
       }
-      const w = Math.max(120, maxX - minX);
-      const h = Math.max(shapePreset === 'wave-axes' ? 110 : 65, maxY - minY);
+      const minW =
+        shapePreset === 'bulb'
+          ? 56
+          : shapePreset === 'battery' || shapePreset === 'voltage-source'
+            ? 96
+            : shapePreset === 'inclined-plane'
+              ? 130
+              : 120;
+      const minH =
+        shapePreset === 'bulb'
+          ? 80
+          : shapePreset === 'battery'
+            ? 52
+            : shapePreset === 'voltage-source'
+              ? 68
+              : shapePreset === 'inclined-plane'
+                ? 90
+                : shapePreset === 'wave-axes'
+                  ? 110
+                  : 65;
+      const w = Math.max(minW, maxX - minX);
+      const h = Math.max(minH, maxY - minY);
       const previewStencils = createPhysicsStencilStrokes(
         shapePreset,
         minX,
@@ -8327,6 +8360,10 @@ export default function App() {
       shapePreset !== 'auto' &&
       shapePreset !== 'axes' &&
       shapePreset !== 'wave-axes' &&
+      shapePreset !== 'bulb' &&
+      shapePreset !== 'battery' &&
+      shapePreset !== 'voltage-source' &&
+      shapePreset !== 'inclined-plane' &&
       currentStrokePtsRef.current.length >= 2
         ? recognizeAndSnapShape(currentStrokePtsRef.current, shapePreset)
         : null;
@@ -13831,6 +13868,38 @@ export default function App() {
               }),
               strokes: page.strokes.map((s) => {
                 if (!selectedStrokeIds.includes(s.id)) return s;
+                // Keep inclined-plane block a true 90° rectangle sitting flush on the stretched slope when grouped
+                if (s.shapeType === 'incline-block' && s.groupId) {
+                  const companionWedge = page.strokes.find(
+                    (ws) =>
+                      ws.groupId === s.groupId &&
+                      ws.shapeType === 'incline-wedge' &&
+                      selectedStrokeIds.includes(ws.id) &&
+                      ws.points.length >= 3
+                  );
+                  if (companionWedge) {
+                    const pSlopeStart = stretchPoint(
+                      companionWedge.points[0].x,
+                      companionWedge.points[0].y
+                    );
+                    const pBaseCorner = stretchPoint(
+                      companionWedge.points[1].x,
+                      companionWedge.points[1].y
+                    );
+                    const pSlopePeak = stretchPoint(
+                      companionWedge.points[2].x,
+                      companionWedge.points[2].y
+                    );
+                    return {
+                      ...s,
+                      points: computeInclinedPlaneBlockPoints(
+                        pSlopeStart,
+                        pBaseCorner,
+                        pSlopePeak
+                      ),
+                    };
+                  }
+                }
                 const nextShapeType =
                   selectedStrokeIds.length === 1 &&
                   (s.shapeType === 'ellipse' || s.shapeType === 'circle')
@@ -14851,8 +14920,16 @@ export default function App() {
       }
     }
 
-    // 4. Physics Grouped Stencils ('axes', 'wave-axes')
-    if (activeTool === 'shape' && (shapePreset === 'axes' || shapePreset === 'wave-axes')) {
+    // 4. Physics Grouped Stencils ('axes', 'wave-axes', 'bulb', 'battery', 'voltage-source', 'inclined-plane')
+    if (
+      activeTool === 'shape' &&
+      (shapePreset === 'axes' ||
+        shapePreset === 'wave-axes' ||
+        shapePreset === 'bulb' ||
+        shapePreset === 'battery' ||
+        shapePreset === 'voltage-source' ||
+        shapePreset === 'inclined-plane')
+    ) {
       clearActiveOverlay();
       let minX = Infinity,
         minY = Infinity,
@@ -14864,8 +14941,28 @@ export default function App() {
         maxX = Math.max(maxX, p.x);
         maxY = Math.max(maxY, p.y);
       }
-      const w = Math.max(120, maxX - minX);
-      const h = Math.max(shapePreset === 'wave-axes' ? 110 : 65, maxY - minY);
+      const minW =
+        shapePreset === 'bulb'
+          ? 56
+          : shapePreset === 'battery' || shapePreset === 'voltage-source'
+            ? 96
+            : shapePreset === 'inclined-plane'
+              ? 130
+              : 120;
+      const minH =
+        shapePreset === 'bulb'
+          ? 80
+          : shapePreset === 'battery'
+            ? 52
+            : shapePreset === 'voltage-source'
+              ? 68
+              : shapePreset === 'inclined-plane'
+                ? 90
+                : shapePreset === 'wave-axes'
+                  ? 110
+                  : 65;
+      const w = Math.max(minW, maxX - minX);
+      const h = Math.max(minH, maxY - minY);
       const stencilStrokes = createPhysicsStencilStrokes(
         shapePreset,
         minX,
@@ -14879,10 +14976,8 @@ export default function App() {
       const createdIds = stencilStrokes.map((s) => s.id);
       lastCreatedShapeIdsRef.current = createdIds;
       updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...stencilStrokes] }));
-      if (shapePreset === 'wave-axes') {
-        setSelectedStrokeIds(createdIds);
-        setShowToolSubBar(true);
-      }
+      setSelectedStrokeIds(createdIds);
+      setShowToolSubBar(true);
       snappedCurrentStrokeRef.current = null;
       return;
     }
@@ -20186,6 +20281,55 @@ export default function App() {
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 2 11 L 6 11 C 6.5 3.5, 11.5 3.5, 11 11 C 10.5 18.5, 8.5 18.5, 9 11 C 9.5 3.5, 16.5 3.5, 16 11 C 15.5 18.5, 13.5 18.5, 14 11 C 14.5 3.5, 21.5 3.5, 21 11 C 20.5 18.5, 18.5 18.5, 19 11 C 19.5 3.5, 26.5 3.5, 26 11 L 32 11" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'bulb',
+                          title: 'Λαμπτήρας',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 13.5 13.5 C 12.2 11.5, 10.5 9.8, 10.5 7.4 A 6.5 6.0 0 1 1 23.5 7.4 C 23.5 9.8, 21.8 11.5, 20.5 13.5 Z" />
+                              <path d="M 13.5 13.5 L 14 19.2 C 15.2 20.8, 18.8 20.8, 20 19.2 L 20.5 13.5" />
+                              <line x1="13.7" y1="15.5" x2="20.3" y2="14.7" strokeWidth="1.5" />
+                              <line x1="13.9" y1="17.6" x2="20.1" y2="16.8" strokeWidth="1.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'battery',
+                          title: 'Μπαταρία (+ / -)',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 11 5.5 L 25 5.5 L 25 16.5 L 11 16.5 L 11 13.5 L 8 13.5 L 8 8.5 L 11 8.5 Z" />
+                              <line x1="2.2" y1="11" x2="5.4" y2="11" strokeWidth="1.7" />
+                              <line x1="3.8" y1="9.4" x2="3.8" y2="12.6" strokeWidth="1.7" />
+                              <line x1="28.2" y1="11" x2="31.4" y2="11" strokeWidth="1.7" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'voltage-source',
+                          title: 'Πηγή Τάσης (+ / -)',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="2" y1="11.5" x2="14.5" y2="11.5" />
+                              <line x1="14.5" y1="2.5" x2="14.5" y2="19.5" strokeWidth="2.0" />
+                              <line x1="19.5" y1="6.5" x2="19.5" y2="15.5" strokeWidth="2.6" />
+                              <line x1="19.5" y1="11.5" x2="32" y2="11.5" />
+                              <line x1="8.2" y1="5.5" x2="11.4" y2="5.5" strokeWidth="1.6" />
+                              <line x1="9.8" y1="3.9" x2="9.8" y2="7.1" strokeWidth="1.6" />
+                              <line x1="22.6" y1="5.5" x2="25.8" y2="5.5" strokeWidth="1.6" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'inclined-plane',
+                          title: 'Κεκλιμένο Επίπεδο με Σώμα',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="3,19.5 30,19.5 30,6.5" fill="rgba(148,163,184,0.28)" stroke="#111827" strokeWidth="1.8" />
+                              <polygon points="12.5,14.9 20.6,11.0 18.4,6.4 10.3,10.3" fill="rgba(59,130,246,0.25)" stroke="#2563eb" strokeWidth="1.75" />
                             </svg>
                           ),
                         },

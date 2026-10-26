@@ -38,7 +38,11 @@ export type ShapePresetType =
   | 'axes'
   | 'wave-axes'
   | 'resistor'
-  | 'spring';
+  | 'spring'
+  | 'bulb'
+  | 'battery'
+  | 'voltage-source'
+  | 'inclined-plane';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
 export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';
