@@ -1330,6 +1330,46 @@ export default function App() {
   const activePointerIdRef = useRef<number | null>(null);
   const activePointerTypeRef = useRef<string | null>(null);
   const lastPenActivityTimeRef = useRef<number>(0);
+  const [squeezePalettePos, setSqueezePalettePos] = useState<{ x: number; y: number } | null>(null);
+  const lastNonEraserToolRef = useRef<ToolType>('pen');
+  useEffect(() => {
+    if (activeTool !== 'eraser') {
+      lastNonEraserToolRef.current = activeTool;
+    }
+  }, [activeTool]);
+  const pencilHoverTwistRef = useRef<{
+    baseTwist: number;
+    baseTime: number;
+    baseX: number;
+    baseY: number;
+    lastTriggerTime: number;
+  } | null>(null);
+  const penTapTrackRef = useRef<{
+    startTime: number;
+    startX: number;
+    startY: number;
+    maxDist: number;
+  } | null>(null);
+  const lastStationaryPenTapRef = useRef<{
+    time: number;
+    x: number;
+    y: number;
+    strokeId: string;
+  } | null>(null);
+  const lastRealPenStrokeEndTimeRef = useRef<number>(0);
+  const heldFingerModifierRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    maxMoved: number;
+    triggeredTempEraser: boolean;
+    prevTool: ToolType;
+  } | null>(null);
+  const lastFingerEmptyTapRef = useRef<{
+    time: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
   const holdTimerRef = useRef<number | null>(null);
   const holdAnchorPtRef = useRef<{ x: number; y: number } | null>(null);
   const lastHoldMoveTimeRef = useRef<number>(0);
@@ -7416,6 +7456,16 @@ export default function App() {
           setImageCropMode('none');
         }
         if (e.cancelable) e.preventDefault();
+        if (!isOutsideCanvas && pencilOnlyMode) {
+          heldFingerModifierRef.current = {
+            active: true,
+            startX: t.clientX,
+            startY: t.clientY,
+            maxMoved: 0,
+            triggeredTempEraser: false,
+            prevTool: activeTool,
+          };
+        }
         outsidePanDragRef.current = {
           active: true,
           startClientX: t.clientX,
@@ -7526,6 +7576,18 @@ export default function App() {
       if (outsidePanDragRef.current?.active && directTouches.length === 1) {
         if (e.cancelable) e.preventDefault();
         const t = directTouches[0];
+        if (heldFingerModifierRef.current?.active) {
+          const movedDist = Math.hypot(
+            t.clientX - heldFingerModifierRef.current.startX,
+            t.clientY - heldFingerModifierRef.current.startY
+          );
+          if (movedDist > heldFingerModifierRef.current.maxMoved) {
+            heldFingerModifierRef.current.maxMoved = movedDist;
+          }
+          if (movedDist > 14 && !heldFingerModifierRef.current.triggeredTempEraser) {
+            heldFingerModifierRef.current.active = false;
+          }
+        }
         const drag = outsidePanDragRef.current;
         const now = performance.now();
         const dt = Math.max(4, Math.min(60, now - drag.lastMoveTime));
@@ -7585,6 +7647,49 @@ export default function App() {
       const directTouches = getDirectFingerTouches(e.touches);
       if (directTouches.length === 0) {
         stopPullToAddPageHold();
+        if (heldFingerModifierRef.current) {
+          const mod = heldFingerModifierRef.current;
+          heldFingerModifierRef.current = null;
+          if (mod.triggeredTempEraser) {
+            setActiveTool(mod.prevTool);
+            showToast('✏️ Αφήσατε το δάχτυλο: Επιστροφή σε Πένα!');
+          } else if (mod.active && mod.maxMoved <= 12 && pencilOnlyMode) {
+            const nowTap = performance.now();
+            const prevFingerTap = lastFingerEmptyTapRef.current;
+            if (
+              prevFingerTap &&
+              nowTap - prevFingerTap.time >= 50 &&
+              nowTap - prevFingerTap.time <= 320 &&
+              Math.hypot(mod.startX - prevFingerTap.clientX, mod.startY - prevFingerTap.clientY) <= 28
+            ) {
+              lastFingerEmptyTapRef.current = null;
+              const canvas = activeCanvasRef.current;
+              if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                  const logicalW = canvas.width / CANVAS_DPR;
+                  const logicalH = canvas.height / CANVAS_DPR;
+                  const px = Math.max(
+                    130,
+                    Math.min(logicalW - 130, (mod.startX - rect.left) * (logicalW / rect.width))
+                  );
+                  const py = Math.max(
+                    70,
+                    Math.min(logicalH - 70, (mod.startY - rect.top) * (logicalH / rect.height))
+                  );
+                  setSqueezePalettePos((curr) => (curr ? null : { x: px, y: py }));
+                  showToast('🎨 Παλέτα Εργαλείων (Squeeze Palette)!');
+                }
+              }
+            } else {
+              lastFingerEmptyTapRef.current = {
+                time: nowTap,
+                clientX: mod.startX,
+                clientY: mod.startY,
+              };
+            }
+          }
+        }
       }
       if (outsidePanDragRef.current?.active && directTouches.length === 0) {
         const drag = outsidePanDragRef.current;
@@ -10166,6 +10271,10 @@ export default function App() {
       activeCtxRef.current = aCtx;
     }
 
+    if (squeezePalettePos) {
+      setSqueezePalettePos(null);
+    }
+
     const activeLayer = targetPage.layers.find((l) => l.id === activeLayerId);
     if (activeLayer?.locked && ['pen', 'pencil', 'highlighter', 'eraser', 'shape'].includes(activeTool)) {
       showToast('🔒 Το επιλεγμένο Layer είναι κλειδωμένο!');
@@ -10175,6 +10284,16 @@ export default function App() {
     canvasRectRef.current = e.currentTarget.getBoundingClientRect();
     const pt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = pt;
+    if (isPen) {
+      penTapTrackRef.current = {
+        startTime: performance.now(),
+        startX: pt.x,
+        startY: pt.y,
+        maxDist: 0,
+      };
+    } else {
+      penTapTrackRef.current = null;
+    }
 
     // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or if a text box is currently selected/editing, release it!)
     if (activeTool === 'text') {
@@ -11087,8 +11206,24 @@ export default function App() {
       return;
     }
 
-    // 5. Eraser
-    if (activeTool === 'eraser') {
+    // 5. Eraser (or Temporary Eraser when holding 1 stationary finger on the screen while touching Apple Pencil!)
+    if (
+      activeTool === 'eraser' ||
+      (isPen &&
+        heldFingerModifierRef.current?.active &&
+        heldFingerModifierRef.current.maxMoved <= 12)
+    ) {
+      if (
+        isPen &&
+        heldFingerModifierRef.current?.active &&
+        !heldFingerModifierRef.current.triggeredTempEraser &&
+        activeTool !== 'eraser'
+      ) {
+        heldFingerModifierRef.current.triggeredTempEraser = true;
+        heldFingerModifierRef.current.prevTool = activeTool;
+        setActiveTool('eraser');
+        showToast('🧹 Κράτημα Δαχτύλου + Pencil: Προσωρινή Σβήστρα!');
+      }
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
@@ -11541,6 +11676,43 @@ export default function App() {
       }
     }
     if (!isDrawingRef.current) {
+      // Apple Pencil Pro Hover Barrel Roll (`twist` sensor in Safari):
+      // Rotating the Apple Pencil Pro >= 46° between the fingers while hovering in place opens the Floating Squeeze Palette!
+      if (e.pointerType === 'pen') {
+        const nev = e.nativeEvent as PointerEvent;
+        const twist = typeof nev.twist === 'number' ? nev.twist : 0;
+        const nowHover = performance.now();
+        const curHover = pencilHoverTwistRef.current;
+        if (
+          !curHover ||
+          nowHover - curHover.baseTime > 380 ||
+          Math.hypot(e.clientX - curHover.baseX, e.clientY - curHover.baseY) > 36
+        ) {
+          pencilHoverTwistRef.current = {
+            baseTwist: twist,
+            baseTime: nowHover,
+            baseX: e.clientX,
+            baseY: e.clientY,
+            lastTriggerTime: curHover?.lastTriggerTime || 0,
+          };
+        } else {
+          let deltaTwist = Math.abs(twist - curHover.baseTwist);
+          if (deltaTwist > 180) deltaTwist = 360 - deltaTwist;
+          if (deltaTwist >= 46 && nowHover - curHover.lastTriggerTime > 650) {
+            curHover.lastTriggerTime = nowHover;
+            curHover.baseTwist = twist;
+            curHover.baseTime = nowHover;
+            const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
+            const pW = getPageLogicalWidth(activePage);
+            const pH = getPageLogicalHeight(activePage);
+            const px = Math.max(130, Math.min(pW - 130, hoverPt.x));
+            const py = Math.max(70, Math.min(pH - 70, hoverPt.y));
+            setSqueezePalettePos((curr) => (curr ? null : { x: px, y: py }));
+            showToast('🌀 Apple Pencil Pro Twist: Παλέτα Εργαλείων (Squeeze)!');
+          }
+        }
+      }
+
       if (activeTool === 'direct-node' && activeNodeStrokeId && e.pointerType !== 'touch') {
         const target = activePage.strokes.find((s) => s.id === activeNodeStrokeId);
         const hoverPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
@@ -11658,6 +11830,15 @@ export default function App() {
     const prevRawPt = lastRawCanvasPtRef.current;
     const latestPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = latestPt;
+    if (e.pointerType === 'pen' && penTapTrackRef.current) {
+      const distFromStart = Math.hypot(
+        latestPt.x - penTapTrackRef.current.startX,
+        latestPt.y - penTapTrackRef.current.startY
+      );
+      if (distFromStart > penTapTrackRef.current.maxDist) {
+        penTapTrackRef.current.maxDist = distFromStart;
+      }
+    }
 
     // 1. Image Freehand / Magnetic Lasso Crop on active overlay canvas (NO fill, auto-closes near start point!)
     if (imageCropMode !== 'none' && selectedImageId) {
@@ -13842,7 +14023,66 @@ export default function App() {
       return;
     }
 
+    // Apple Pencil Stationary Double-Tap with the Tip (in Safari without native wrapper):
+    // Two quick vertical micro-taps (duration <= 175ms, movement <= 3.5px) at the exact same spot (<= 8px)
+    // when not immediately preceded by normal handwriting (> 420ms after last real stroke) toggles Pen <-> Eraser!
+    const nowUp = performance.now();
+    const tapTrack = e.pointerType === 'pen' ? penTapTrackRef.current : null;
+    penTapTrackRef.current = null;
+    const isStationaryPenMicroTap =
+      tapTrack !== null &&
+      nowUp - tapTrack.startTime <= 175 &&
+      tapTrack.maxDist <= 3.5 &&
+      nowUp - lastRealPenStrokeEndTimeRef.current > 420;
+
+    if (isStationaryPenMicroTap && tapTrack) {
+      const prevTap = lastStationaryPenTapRef.current;
+      if (
+        prevTap &&
+        nowUp - prevTap.time >= 55 &&
+        nowUp - prevTap.time <= 320 &&
+        Math.hypot(tapTrack.startX - prevTap.x, tapTrack.startY - prevTap.y) <= 8.5
+      ) {
+        lastStationaryPenTapRef.current = null;
+        currentStrokePtsRef.current = [];
+        lastEraserPtRef.current = null;
+        snappedCurrentStrokeRef.current = null;
+        clearActiveOverlay();
+        if (prevTap.strokeId) {
+          const dotId = prevTap.strokeId;
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.filter((s) => s.id !== dotId),
+            }),
+            false
+          );
+        }
+        if (activeTool === 'eraser') {
+          const nextTool = lastNonEraserToolRef.current || 'pen';
+          setActiveTool(nextTool);
+          showToast('✏️ Apple Pencil Διπλό Tap: Εναλλαγή σε Πένα!');
+        } else {
+          lastNonEraserToolRef.current = activeTool;
+          setActiveTool('eraser');
+          showToast('🧹 Apple Pencil Διπλό Tap: Εναλλαγή σε Σβήστρα!');
+        }
+        return;
+      }
+    } else if (e.pointerType === 'pen') {
+      lastRealPenStrokeEndTimeRef.current = nowUp;
+      lastStationaryPenTapRef.current = null;
+    }
+
     if (activeTool === 'eraser') {
+      if (isStationaryPenMicroTap && tapTrack) {
+        lastStationaryPenTapRef.current = {
+          time: nowUp,
+          x: tapTrack.startX,
+          y: tapTrack.startY,
+          strokeId: '',
+        };
+      }
       lastEraserPtRef.current = null;
       clearActiveOverlay();
       return;
@@ -14056,6 +14296,15 @@ export default function App() {
       ...page,
       strokes: [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }],
     }));
+
+    if (isStationaryPenMicroTap && tapTrack) {
+      lastStationaryPenTapRef.current = {
+        time: nowUp,
+        x: tapTrack.startX,
+        y: tapTrack.startY,
+        strokeId: newStroke.id,
+      };
+    }
   };
 
   const handleGroupSelected = () => {
@@ -21970,6 +22219,138 @@ export default function App() {
                             }
                           />
                         </svg>
+                      </div>
+                    )}
+
+                    {/* Floating Apple Pencil Squeeze Palette (opened via Apple Pencil Pro Hover Barrel Twist or 1-Finger Double-Tap on Empty Paper) */}
+                    {isCurrentActive && squeezePalettePos && (
+                      <div
+                        data-ui-panel="true"
+                        onPointerDown={(ev) => ev.stopPropagation()}
+                        onMouseDown={(ev) => ev.stopPropagation()}
+                        style={{
+                          left: Math.max(150, Math.min(pW - 150, squeezePalettePos.x)),
+                          top: Math.max(70, Math.min(pH - 70, squeezePalettePos.y)),
+                          touchAction: 'manipulation',
+                        }}
+                        className="absolute z-50 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 px-3 py-2.5 rounded-2xl bg-[#1b2a4a]/95 backdrop-blur-md text-white shadow-2xl border border-sky-400/50 select-none"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTool('pen');
+                              setSqueezePalettePos(null);
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              activeTool === 'pen'
+                                ? 'bg-sky-500 text-white shadow'
+                                : 'bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                            }`}
+                            title="Πένα"
+                          >
+                            <Pen className="w-3.5 h-3.5" />
+                            <span>Πένα</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTool('eraser');
+                              setSqueezePalettePos(null);
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              activeTool === 'eraser'
+                                ? 'bg-rose-500 text-white shadow'
+                                : 'bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                            }`}
+                            title="Σβήστρα"
+                          >
+                            <Eraser className="w-3.5 h-3.5" />
+                            <span>Σβήστρα</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTool('highlighter');
+                              setSqueezePalettePos(null);
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              activeTool === 'highlighter'
+                                ? 'bg-amber-500 text-slate-950 shadow'
+                                : 'bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                            }`}
+                            title="Μαρκαδόρος"
+                          >
+                            <Highlighter className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTool('lasso');
+                              setSqueezePalettePos(null);
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              activeTool === 'lasso'
+                                ? 'bg-indigo-500 text-white shadow'
+                                : 'bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                            }`}
+                            title="Λάσο Επιλογής"
+                          >
+                            <Lasso className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTool('laser');
+                              setSqueezePalettePos(null);
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                              activeTool === 'laser'
+                                ? 'bg-red-600 text-white shadow'
+                                : 'bg-slate-800/80 text-slate-200 hover:bg-slate-700'
+                            }`}
+                            title="Laser"
+                          >
+                            <Radio className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleUndo();
+                              setSqueezePalettePos(null);
+                            }}
+                            className="flex items-center justify-center p-1.5 rounded-xl bg-slate-800/80 text-slate-200 hover:bg-slate-700 transition cursor-pointer"
+                            title="Αναίρεση (Undo)"
+                          >
+                            <Undo2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSqueezePalettePos(null)}
+                            className="flex items-center justify-center p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+                            title="Κλείσιμο"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 pt-1 border-t border-slate-700/80 w-full justify-center">
+                          {colorSlots.slice(0, 6).map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => {
+                                setStrokeColor(c);
+                                if (activeTool === 'eraser') setActiveTool('pen');
+                                setSqueezePalettePos(null);
+                              }}
+                              style={{ backgroundColor: c }}
+                              className={`w-5 h-5 rounded-full border-2 transition transform hover:scale-110 cursor-pointer ${
+                                strokeColor === c ? 'border-white scale-110 shadow' : 'border-slate-500/60'
+                              }`}
+                              title={`Χρώμα ${c}`}
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
 
