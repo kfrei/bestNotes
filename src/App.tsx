@@ -14486,9 +14486,8 @@ export default function App() {
       renderLiveOverlayStroke();
     }
 
-    // Hold-to-Snap (~0.28s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
-    // IMPORTANT: Ignore slow deceleration / micro-tremors (< 4.5px step within 16px of holdAnchorPtRef)
-    // so natural hand drift while holding the pencil or mouse at the end of a line NEVER resets the timer!
+    // Hold-to-Snap (~0.56s stationary hold at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
+    // Reset timer on any active writing movement so normal handwriting letters NEVER snap into shapes!
     if (
       holdToSnapEnabled &&
       ['pen', 'pencil', 'highlighter', 'shape'].includes(activeTool) &&
@@ -14500,17 +14499,11 @@ export default function App() {
         : Infinity;
       const movedFromHoldAnchor =
         !holdAnchorPtRef.current ||
-        distFromHoldAnchor >= 16 ||
-        (stepDist >= 4.5 && distFromHoldAnchor >= 7.5);
+        distFromHoldAnchor >= 5.5 ||
+        stepDist >= 2.0;
       if (movedFromHoldAnchor) {
         holdAnchorPtRef.current = { x: latestPt.x, y: latestPt.y };
         lastHoldMoveTimeRef.current = performance.now();
-      } else if (holdAnchorPtRef.current) {
-        // Gently recenter anchor on tiny micro-drifts so slow drift never accumulates past 16px
-        holdAnchorPtRef.current = {
-          x: holdAnchorPtRef.current.x * 0.82 + latestPt.x * 0.18,
-          y: holdAnchorPtRef.current.y * 0.82 + latestPt.y * 0.18,
-        };
       }
       if (movedFromHoldAnchor || !holdTimerRef.current) {
         if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
@@ -14525,6 +14518,19 @@ export default function App() {
             ) >= 1.5
               ? [...currentStrokePtsRef.current, lastRawCanvasPtRef.current]
               : currentStrokePtsRef.current;
+          if (activeTool !== 'shape') {
+            let minX = Infinity,
+              minY = Infinity,
+              maxX = -Infinity,
+              maxY = -Infinity;
+            for (const p of ptsForSnap) {
+              if (p.x < minX) minX = p.x;
+              if (p.y < minY) minY = p.y;
+              if (p.x > maxX) maxX = p.x;
+              if (p.y > maxY) maxY = p.y;
+            }
+            if (Math.hypot(maxX - minX, maxY - minY) < 28) return;
+          }
           const snapped = recognizeAndSnapShape(
             ptsForSnap,
             activeTool === 'shape' ? shapePreset : 'auto'
@@ -14533,7 +14539,7 @@ export default function App() {
             snappedCurrentStrokeRef.current = snapped;
             renderLiveOverlayStroke();
           }
-        }, 280);
+        }, 560);
       }
     }
   };
@@ -14844,29 +14850,24 @@ export default function App() {
     } else if (
       holdToSnapEnabled &&
       ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
-      holdElapsedMs >= 155
+      holdElapsedMs >= 520
     ) {
-      // Fallback if user paused briefly (>= 0.155s) at the end of a straight line/shape and lifted just before the live timer fired!
-      const snapped = recognizeAndSnapShape(rawPts, 'auto');
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const p of rawPts) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+      const snapped =
+        Math.hypot(maxX - minX, maxY - minY) >= 28 ? recognizeAndSnapShape(rawPts, 'auto') : null;
       if (snapped) {
         finalPts = snapped.points;
         isShape = true;
         shapeType = snapped.shapeType;
-      } else {
-        finalPts = smoothStrokeToBezier(rawPts);
-      }
-    } else if (
-      holdToSnapEnabled &&
-      ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
-      holdElapsedMs >= 80 &&
-      rawPts.length >= 2
-    ) {
-      // Quick-pause straight line fallback: if the stroke is a very straight line segment and user paused >= 80ms at the end, perfect it!
-      const snapped = recognizeAndSnapShape(rawPts, 'auto');
-      if (snapped && snapped.shapeType === 'line') {
-        finalPts = snapped.points;
-        isShape = true;
-        shapeType = 'line';
       } else {
         finalPts = smoothStrokeToBezier(rawPts);
       }
