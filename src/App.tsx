@@ -14977,6 +14977,10 @@ export default function App() {
       lastCreatedShapeIdsRef.current = createdIds;
       updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...stencilStrokes] }));
       setSelectedStrokeIds(createdIds);
+      setSelectedImageId(null);
+      setSelectedImageIds([]);
+      setActiveNodeStrokeId(null);
+      setActiveTool('lasso');
       setShowToolSubBar(true);
       snappedCurrentStrokeRef.current = null;
       return;
@@ -14994,7 +14998,21 @@ export default function App() {
       isShape = true;
       shapeType = snappedCurrentStrokeRef.current.shapeType;
     } else if (activeTool === 'shape') {
-      const snapped = recognizeAndSnapShape(rawPts, shapePreset);
+      const effectiveShapePts =
+        shapePreset !== 'auto' &&
+        (rawPts.length < 2 || distance(rawPts[0], rawPts[rawPts.length - 1]) < 6)
+          ? [
+              rawPts[0],
+              {
+                x: rawPts[0].x + 110,
+                y:
+                  rawPts[0].y +
+                  (shapePreset === 'ellipse' || shapePreset === 'sphere' ? 110 : 75),
+                pressure: 0.7,
+              },
+            ]
+          : rawPts;
+      const snapped = recognizeAndSnapShape(effectiveShapePts, shapePreset);
       if (snapped) {
         finalPts = snapped.points;
         isShape = true;
@@ -15116,6 +15134,15 @@ export default function App() {
       ...page,
       strokes: [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }],
     }));
+
+    if (activeTool === 'shape' && isShape) {
+      setSelectedStrokeIds([newStroke.id]);
+      setSelectedImageId(null);
+      setSelectedImageIds([]);
+      setActiveNodeStrokeId(isShapeWithoutNodes(newStroke) ? null : newStroke.id);
+      setActiveTool('lasso');
+      setShowToolSubBar(true);
+    }
 
     if (isStationaryPenMicroTap && tapTrack) {
       lastStationaryPenTapRef.current = {
