@@ -1436,12 +1436,18 @@ export default function App() {
     strokeId: string;
   } | null>(null);
   const lastRealPenStrokeEndTimeRef = useRef<number>(0);
+  const tempEraserActiveRef = useRef<boolean>(false);
+  const tempEraserReleaseTimerRef = useRef<number | null>(null);
+  const heldFingerTimerRef = useRef<number | null>(null);
   const heldFingerModifierRef = useRef<{
     active: boolean;
     startX: number;
     startY: number;
+    startTime: number;
     maxMoved: number;
     triggeredTempEraser: boolean;
+    cancelledByStylusAt: number | null;
+    fingerLifted: boolean;
     prevTool: ToolType;
   } | null>(null);
   const lastFingerEmptyTapRef = useRef<{
@@ -3819,6 +3825,10 @@ export default function App() {
             return true;
           }
         }
+      }
+
+      if (activeTool !== 'lasso' && activeTool !== 'direct-node') {
+        return false;
       }
 
       return findSelectableObjectAtPagePoint({ x: ptX, y: ptY }, targetPageObj) !== null;
@@ -7516,22 +7526,21 @@ export default function App() {
         }
       }
 
-      // Case A: 1 finger touching OUTSIDE the paper canvas OR 1 finger on EMPTY paper when Pencil-Only Mode is ON -> Scroll pages like Word!
+      // Case A: 1 finger touching OUTSIDE the paper canvas OR 1 finger on paper when Pencil-Only Mode is ON -> Scroll pages like Word & Hold-1-Finger Temp Eraser!
       // IMPORTANT:
       // - When Laser ('laser') is active, 1 finger on the paper draws the red laser beam!
-      // - In Pencil-Only Mode, if the 1 finger touches a shape, group, stroke, image, text box, or active Lasso selection box/handle,
-      //   do NOT scroll — let handlePointerDown / text box handlers select, drag, resize, or rotate it!
+      // - In Pencil-Only Mode, if the 1 finger touches an active Lasso selection box/handle or Text Box,
+      //   do NOT scroll — let handlePointerDown / text box handlers drag, resize, or rotate it!
       if (
         directTouches.length === 1 &&
-        (isOutsideCanvas || (pencilOnlyMode && activeTool !== 'laser')) &&
-        performance.now() - lastPenActivityTimeRef.current > 140
+        (isOutsideCanvas || (pencilOnlyMode && activeTool !== 'laser'))
       ) {
         const t = directTouches[0] as any;
         if (!isOutsideCanvas && isClientPointOnSelectableOrLasso(t.clientX, t.clientY, e.target)) {
           outsidePanDragRef.current = null;
           return;
         }
-        if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 48) || (t.radiusY && t.radiusY > 48))) {
+        if (!isOutsideCanvas && ((t.radiusX && t.radiusX > 72) || (t.radiusY && t.radiusY > 72))) {
           return;
         }
         // Tapping/dragging with 1 finger on empty paper deselects any active Lasso/Nodes/Text selection while keeping the active tool
@@ -7546,17 +7555,58 @@ export default function App() {
           setDraggingNodeIdx(null);
           setImageCropMode('none');
         }
-        if (e.cancelable) e.preventDefault();
-        if (!isOutsideCanvas && pencilOnlyMode) {
-          heldFingerModifierRef.current = {
-            active: true,
-            startX: t.clientX,
-            startY: t.clientY,
-            maxMoved: 0,
-            triggeredTempEraser: false,
-            prevTool: activeTool,
-          };
+
+        if (tempEraserReleaseTimerRef.current) {
+          window.clearTimeout(tempEraserReleaseTimerRef.current);
+          tempEraserReleaseTimerRef.current = null;
         }
+        if (heldFingerTimerRef.current) {
+          window.clearTimeout(heldFingerTimerRef.current);
+          heldFingerTimerRef.current = null;
+        }
+
+        const savedPrevTool: ToolType =
+          tempEraserActiveRef.current && heldFingerModifierRef.current?.prevTool
+            ? heldFingerModifierRef.current.prevTool
+            : activeTool !== 'eraser'
+            ? activeTool
+            : lastNonEraserToolRef.current || 'pen';
+
+        heldFingerModifierRef.current = {
+          active: true,
+          startX: t.clientX,
+          startY: t.clientY,
+          startTime: performance.now(),
+          maxMoved: 0,
+          triggeredTempEraser: tempEraserActiveRef.current,
+          cancelledByStylusAt: null,
+          fingerLifted: false,
+          prevTool: savedPrevTool,
+        };
+
+        // Hold 1 stationary finger (~190ms) -> immediately activate Temporary Eraser (works in Chrome & Safari on iPad!)
+        if (pencilOnlyMode && activeTool !== 'laser') {
+          heldFingerTimerRef.current = window.setTimeout(() => {
+            heldFingerTimerRef.current = null;
+            const mod = heldFingerModifierRef.current;
+            if (
+              mod &&
+              mod.active &&
+              !mod.fingerLifted &&
+              mod.maxMoved <= 26 &&
+              !pinchStateRef.current?.active
+            ) {
+              outsidePanDragRef.current = null;
+              if (!mod.triggeredTempEraser) {
+                mod.triggeredTempEraser = true;
+                tempEraserActiveRef.current = true;
+                setActiveTool('eraser');
+                showToast('🧹 Κράτημα Δαχτύλου: Προσωρινή Σβήστρα (Σηκώστε το δάχτυλο για Πένα)');
+              }
+            }
+          }, 190);
+        }
+
         outsidePanDragRef.current = {
           active: true,
           startClientX: t.clientX,
@@ -7574,6 +7624,18 @@ export default function App() {
       if (directTouches.length >= 2) {
         if (e.cancelable) e.preventDefault();
         outsidePanDragRef.current = null;
+        if (heldFingerTimerRef.current) {
+          window.clearTimeout(heldFingerTimerRef.current);
+          heldFingerTimerRef.current = null;
+        }
+        if (heldFingerModifierRef.current) {
+          const prevMod = heldFingerModifierRef.current;
+          heldFingerModifierRef.current = null;
+          if (prevMod.triggeredTempEraser && !isDrawingRef.current) {
+            tempEraserActiveRef.current = false;
+            setActiveTool(prevMod.prevTool);
+          }
+        }
 
         // Cancel any accidental 1-finger 'touch' dot that started milliseconds before the 2nd finger landed
         if (holdTimerRef.current) {
@@ -7663,9 +7725,8 @@ export default function App() {
 
       const directTouches = getDirectFingerTouches(e.touches);
 
-      // Case A: 1-finger velocity-sensitive scroll through Word-style pages
-      if (outsidePanDragRef.current?.active && directTouches.length === 1) {
-        if (e.cancelable) e.preventDefault();
+      // Case A: 1-finger velocity-sensitive scroll through Word-style pages (or Hold-1-Finger Temp Eraser modifier)
+      if (directTouches.length === 1) {
         const t = directTouches[0];
         if (heldFingerModifierRef.current?.active) {
           const movedDist = Math.hypot(
@@ -7675,26 +7736,47 @@ export default function App() {
           if (movedDist > heldFingerModifierRef.current.maxMoved) {
             heldFingerModifierRef.current.maxMoved = movedDist;
           }
-          if (movedDist > 14 && !heldFingerModifierRef.current.triggeredTempEraser) {
+          if (movedDist > 26 && !heldFingerModifierRef.current.triggeredTempEraser) {
+            if (heldFingerTimerRef.current) {
+              window.clearTimeout(heldFingerTimerRef.current);
+              heldFingerTimerRef.current = null;
+            }
             heldFingerModifierRef.current.active = false;
           }
         }
-        const drag = outsidePanDragRef.current;
-        const now = performance.now();
-        const dt = Math.max(4, Math.min(60, now - drag.lastMoveTime));
-        const stepDy = t.clientY - drag.lastClientY;
-        const instVy = stepDy / dt;
-        const gain = computeFingerSpeedGain(Math.abs(instVy));
+        // If Temporary Eraser was triggered by holding the finger, keep page locked (no scrolling while erasing!)
+        if (heldFingerModifierRef.current?.triggeredTempEraser || tempEraserActiveRef.current) {
+          if (e.cancelable) e.preventDefault();
+          outsidePanDragRef.current = null;
+          return;
+        }
+        if (outsidePanDragRef.current?.active) {
+          if (e.cancelable) e.preventDefault();
+          // 10px stationary deadzone during the first 190ms so resting a finger for Hold-to-Erase never jitters the page
+          if (
+            heldFingerModifierRef.current?.active &&
+            heldFingerModifierRef.current.maxMoved <= 10 &&
+            performance.now() - heldFingerModifierRef.current.startTime < 190
+          ) {
+            return;
+          }
+          const drag = outsidePanDragRef.current;
+          const now = performance.now();
+          const dt = Math.max(4, Math.min(60, now - drag.lastMoveTime));
+          const stepDy = t.clientY - drag.lastClientY;
+          const instVy = stepDy / dt;
+          const gain = computeFingerSpeedGain(Math.abs(instVy));
 
-        drag.velocityY = drag.velocityY * 0.4 + instVy * gain * 0.6;
-        drag.lastClientY = t.clientY;
-        drag.lastMoveTime = now;
+          drag.velocityY = drag.velocityY * 0.4 + instVy * gain * 0.6;
+          drag.lastClientY = t.clientY;
+          drag.lastMoveTime = now;
 
-        const nextPanY = panRef.current.y + stepDy * gain;
-        applyPaperTransformDirect(zoomRef.current, 0, nextPanY, false);
-        syncActivePageFromPanY(nextPanY);
-        checkPullToAddPageHold(nextPanY);
-        return;
+          const nextPanY = panRef.current.y + stepDy * gain;
+          applyPaperTransformDirect(zoomRef.current, 0, nextPanY, false);
+          syncActivePageFromPanY(nextPanY);
+          checkPullToAddPageHold(nextPanY);
+          return;
+        }
       }
 
       // Case B: 2-finger pinch & velocity-sensitive vertical scroll across Word-style pages
@@ -7738,46 +7820,111 @@ export default function App() {
       const directTouches = getDirectFingerTouches(e.touches);
       if (directTouches.length === 0) {
         stopPullToAddPageHold();
+        if (heldFingerTimerRef.current) {
+          window.clearTimeout(heldFingerTimerRef.current);
+          heldFingerTimerRef.current = null;
+        }
+
+        // CRITICAL iPadOS Chrome & Safari Fix:
+        // When the user holds 1 stationary finger on the glass and brings the Apple Pencil down,
+        // iPadOS hardware palm rejection fires `touchcancel` on the held finger!
+        // Do NOT kill heldFingerModifierRef on `touchcancel` — preserve it so the Apple Pencil erases!
+        if (
+          e.type === 'touchcancel' &&
+          heldFingerModifierRef.current &&
+          heldFingerModifierRef.current.active &&
+          heldFingerModifierRef.current.maxMoved <= 32
+        ) {
+          const mod = heldFingerModifierRef.current;
+          mod.cancelledByStylusAt = performance.now();
+          outsidePanDragRef.current = null;
+          if (!mod.triggeredTempEraser) {
+            mod.triggeredTempEraser = true;
+            tempEraserActiveRef.current = true;
+            setActiveTool('eraser');
+          }
+          if (tempEraserReleaseTimerRef.current) {
+            window.clearTimeout(tempEraserReleaseTimerRef.current);
+          }
+          tempEraserReleaseTimerRef.current = window.setTimeout(() => {
+            tempEraserReleaseTimerRef.current = null;
+            if (isDrawingRef.current) return;
+            const curMod = heldFingerModifierRef.current;
+            const restoreTool = curMod?.prevTool || lastNonEraserToolRef.current || 'pen';
+            tempEraserActiveRef.current = false;
+            heldFingerModifierRef.current = null;
+            lastEraserPtRef.current = null;
+            clearActiveOverlay();
+            setActiveTool(restoreTool);
+          }, 850);
+          return;
+        }
+
         if (heldFingerModifierRef.current) {
           const mod = heldFingerModifierRef.current;
-          heldFingerModifierRef.current = null;
-          if (mod.triggeredTempEraser) {
-            setActiveTool(mod.prevTool);
-            showToast('✏️ Αφήσατε το δάχτυλο: Επιστροφή σε Πένα!');
-          } else if (mod.active && mod.maxMoved <= 12 && pencilOnlyMode) {
-            const nowTap = performance.now();
-            const prevFingerTap = lastFingerEmptyTapRef.current;
-            if (
-              prevFingerTap &&
-              nowTap - prevFingerTap.time >= 50 &&
-              nowTap - prevFingerTap.time <= 320 &&
-              Math.hypot(mod.startX - prevFingerTap.clientX, mod.startY - prevFingerTap.clientY) <= 28
-            ) {
-              lastFingerEmptyTapRef.current = null;
-              const canvas = activeCanvasRef.current;
-              if (canvas) {
-                const rect = canvas.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                  const logicalW = canvas.width / CANVAS_DPR;
-                  const logicalH = canvas.height / CANVAS_DPR;
-                  const px = Math.max(
-                    130,
-                    Math.min(logicalW - 130, (mod.startX - rect.left) * (logicalW / rect.width))
-                  );
-                  const py = Math.max(
-                    70,
-                    Math.min(logicalH - 70, (mod.startY - rect.top) * (logicalH / rect.height))
-                  );
-                  setSqueezePalettePos((curr) => (curr ? null : { x: px, y: py }));
-                  showToast('🎨 Παλέτα Εργαλείων (Squeeze Palette)!');
-                }
-              }
+          if (mod.triggeredTempEraser || tempEraserActiveRef.current) {
+            if (isDrawingRef.current && activePointerTypeRef.current === 'pen') {
+              // Pencil is still mid-stroke erasing; restore tool as soon as the Pencil lifts in handlePointerUp!
+              mod.fingerLifted = true;
             } else {
-              lastFingerEmptyTapRef.current = {
-                time: nowTap,
-                clientX: mod.startX,
-                clientY: mod.startY,
-              };
+              if (tempEraserReleaseTimerRef.current) {
+                window.clearTimeout(tempEraserReleaseTimerRef.current);
+                tempEraserReleaseTimerRef.current = null;
+              }
+              tempEraserActiveRef.current = false;
+              heldFingerModifierRef.current = null;
+              lastEraserPtRef.current = null;
+              clearActiveOverlay();
+              setActiveTool(mod.prevTool);
+              showToast('✏️ Αφήσατε το δάχτυλο: Επιστροφή σε Πένα!');
+            }
+          } else {
+            heldFingerModifierRef.current = null;
+            if (mod.active && mod.maxMoved <= 22 && pencilOnlyMode) {
+              const nowTap = performance.now();
+              const prevFingerTap = lastFingerEmptyTapRef.current;
+              if (
+                prevFingerTap &&
+                nowTap - prevFingerTap.time >= 45 &&
+                nowTap - prevFingerTap.time <= 360 &&
+                Math.hypot(mod.startX - prevFingerTap.clientX, mod.startY - prevFingerTap.clientY) <= 36
+              ) {
+                lastFingerEmptyTapRef.current = null;
+                const nextTool: ToolType =
+                  activeTool === 'eraser' ? lastNonEraserToolRef.current || 'pen' : 'eraser';
+                if (activeTool !== 'eraser') {
+                  lastNonEraserToolRef.current = activeTool;
+                }
+                setActiveTool(nextTool);
+                const canvas = activeCanvasRef.current;
+                if (canvas) {
+                  const rect = canvas.getBoundingClientRect();
+                  if (rect.width > 0 && rect.height > 0) {
+                    const logicalW = canvas.width / CANVAS_DPR;
+                    const logicalH = canvas.height / CANVAS_DPR;
+                    const px = Math.max(
+                      150,
+                      Math.min(logicalW - 150, (mod.startX - rect.left) * (logicalW / rect.width))
+                    );
+                    const py = Math.max(
+                      70,
+                      Math.min(logicalH - 70, (mod.startY - rect.top) * (logicalH / rect.height))
+                    );
+                    setSqueezePalettePos({ x: px, y: py });
+                  }
+                }
+                showToast(
+                  nextTool === 'eraser'
+                    ? '🧹 Διπλό Tap: Εναλλαγή σε Σβήστρα (+ Παλέτα)!'
+                    : '✏️ Διπλό Tap: Εναλλαγή σε Πένα (+ Παλέτα)!'
+                );
+              } else {
+                lastFingerEmptyTapRef.current = {
+                  time: nowTap,
+                  clientX: mod.startX,
+                  clientY: mod.startY,
+                };
+              }
             }
           }
         }
@@ -10301,6 +10448,27 @@ export default function App() {
       outsidePanDragRef.current = null;
       stopPullToAddPageHold();
       cancelScrollMomentum();
+      if (tempEraserReleaseTimerRef.current) {
+        window.clearTimeout(tempEraserReleaseTimerRef.current);
+        tempEraserReleaseTimerRef.current = null;
+      }
+
+      // If 1 finger of the other hand is held on the paper, synchronously activate Temporary Eraser at 0ms!
+      if (heldFingerModifierRef.current?.active && heldFingerModifierRef.current.maxMoved <= 32) {
+        if (heldFingerTimerRef.current) {
+          window.clearTimeout(heldFingerTimerRef.current);
+          heldFingerTimerRef.current = null;
+        }
+        if (!heldFingerModifierRef.current.triggeredTempEraser) {
+          heldFingerModifierRef.current.triggeredTempEraser = true;
+          if (activeTool !== 'eraser') {
+            heldFingerModifierRef.current.prevTool = activeTool;
+          }
+          setActiveTool('eraser');
+          showToast('🧹 Κράτημα Δαχτύλου + Pencil: Προσωρινή Σβήστρα!');
+        }
+        tempEraserActiveRef.current = true;
+      }
 
       // If a stray palm 'touch' stroke was in progress, wipe it immediately so the Apple Pencil takes over!
       if (isDrawingRef.current && activePointerTypeRef.current === 'touch') {
@@ -10342,6 +10510,8 @@ export default function App() {
       }
     }
 
+    const effectiveTool: ToolType = tempEraserActiveRef.current ? 'eraser' : activeTool;
+
     // Switch active page immediately if user touches another page in the Word-style vertical stack!
     const targetPage = activeNotebook.pages[pageIdx] || activePage;
     activeDrawingPageIndexRef.current = pageIdx;
@@ -10367,7 +10537,7 @@ export default function App() {
     }
 
     const activeLayer = targetPage.layers.find((l) => l.id === activeLayerId);
-    if (activeLayer?.locked && ['pen', 'pencil', 'highlighter', 'eraser', 'shape'].includes(activeTool)) {
+    if (activeLayer?.locked && ['pen', 'pencil', 'highlighter', 'eraser', 'shape'].includes(effectiveTool)) {
       showToast('🔒 Το επιλεγμένο Layer είναι κλειδωμένο!');
       return;
     }
@@ -10387,7 +10557,7 @@ export default function App() {
     }
 
     // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or if a text box is currently selected/editing, release it!)
-    if (activeTool === 'text') {
+    if (effectiveTool === 'text') {
       e.preventDefault();
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
@@ -10440,14 +10610,11 @@ export default function App() {
     const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current);
 
     // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image:
-    //    - When Pencil-Only Mode is ON (`pencilOnlyMode === true`): ALWAYS auto-select with Lasso & allow immediate drag/resize/rotate!
-    //    - When Finger Drawing is ON (`!pencilOnlyMode`): only select/drag when Lasso ('lasso') or Nodes ('direct-node') is active (so Pen draws with finger)!
+    //    - Only auto-select & drag when Lasso ('lasso') or Nodes ('direct-node') is active so 1-finger touch in Pen mode always allows Hold-to-Erase, 1-Finger Double-Tap, or Page Scroll!
     if (
       e.pointerType === 'touch' &&
-      activeTool !== 'direct-node' &&
-      activeTool !== 'laser' &&
-      (pencilOnlyMode || activeTool === 'lasso') &&
-      !(activeTool === 'lasso' && !isAdditiveSelect && isClientPointInLassoSelection(e.clientX, e.clientY))
+      effectiveTool === 'lasso' &&
+      !(!isAdditiveSelect && isClientPointInLassoSelection(e.clientX, e.clientY))
     ) {
       const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
       if (fingerHit) {
@@ -10597,7 +10764,7 @@ export default function App() {
     }
 
     // 2. Tape Tool
-    if (activeTool === 'tape') {
+    if (effectiveTool === 'tape') {
       const hitTape = (activePage.tapes || []).find((t) => {
         const midX = (t.x1 + t.x2) / 2;
         const midY = (t.y1 + t.y2) / 2;
@@ -10620,7 +10787,7 @@ export default function App() {
     //    - Parabola/Hyperbola/Arc: strictly 3 nodes (2 Endpoints + 1 Middle Curvature)
     //    - Sine/Cosine: strictly 2 nodes (0: Peak [up/down only], 1: Right Endpoint [left/right only])
     //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices)
-    if (activeTool === 'direct-node') {
+    if (effectiveTool === 'direct-node') {
       cancelNodeMagnetTimer();
       cancelAddNodeLongPress();
       const nodeHitRadius = e.pointerType === 'touch' ? 30 : 22;
@@ -10994,7 +11161,7 @@ export default function App() {
     }
 
     // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle on Oriented Bounding Box!)
-    if (activeTool === 'lasso') {
+    if (effectiveTool === 'lasso') {
       const selBounds = getSelectionBounds();
       if (selBounds) {
         const pad = 8;
@@ -11299,21 +11466,25 @@ export default function App() {
 
     // 5. Eraser (or Temporary Eraser when holding 1 stationary finger on the screen while touching Apple Pencil!)
     if (
-      activeTool === 'eraser' ||
+      effectiveTool === 'eraser' ||
       (isPen &&
         heldFingerModifierRef.current?.active &&
-        heldFingerModifierRef.current.maxMoved <= 12)
+        heldFingerModifierRef.current.maxMoved <= 32)
     ) {
       if (
         isPen &&
         heldFingerModifierRef.current?.active &&
-        !heldFingerModifierRef.current.triggeredTempEraser &&
-        activeTool !== 'eraser'
+        !heldFingerModifierRef.current.triggeredTempEraser
       ) {
         heldFingerModifierRef.current.triggeredTempEraser = true;
-        heldFingerModifierRef.current.prevTool = activeTool;
+        if (activeTool !== 'eraser') {
+          heldFingerModifierRef.current.prevTool = activeTool;
+        }
         setActiveTool('eraser');
         showToast('🧹 Κράτημα Δαχτύλου + Pencil: Προσωρινή Σβήστρα!');
+      }
+      if (isPen && heldFingerModifierRef.current?.active) {
+        tempEraserActiveRef.current = true;
       }
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
@@ -11336,10 +11507,10 @@ export default function App() {
     currentStrokePtsRef.current = [pt];
     holdAnchorPtRef.current = { x: pt.x, y: pt.y };
     lastHoldMoveTimeRef.current = performance.now();
-    if (activeTool === 'laser') {
+    if (effectiveTool === 'laser') {
       cancelLaserTimers();
       renderLaserOverlay(1);
-    } else if (['pen', 'pencil'].includes(activeTool)) {
+    } else if (['pen', 'pencil'].includes(effectiveTool)) {
       drawInitialDot(pt);
     }
   };
@@ -11905,12 +12076,17 @@ export default function App() {
       }
       return;
     }
-    if (draggingTextRef.current || activeTool === 'text') return;
+    const effectiveTool: ToolType = tempEraserActiveRef.current ? 'eraser' : activeTool;
+    if (draggingTextRef.current || effectiveTool === 'text') return;
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
     if (e.pointerType === 'pen') {
       lastPenActivityTimeRef.current = performance.now();
       pinchStateRef.current = null;
+      if (tempEraserActiveRef.current && tempEraserReleaseTimerRef.current) {
+        window.clearTimeout(tempEraserReleaseTimerRef.current);
+        tempEraserReleaseTimerRef.current = null;
+      }
     } else if (pinchStateRef.current?.active) {
       return;
     }
@@ -13818,7 +13994,7 @@ export default function App() {
     }
 
     // 4. Eraser (supports both Whole-Stroke and Pixel / Segment Splitting along coalesced path!)
-    if (activeTool === 'eraser') {
+    if (effectiveTool === 'eraser') {
       const samplePts: { x: number; y: number }[] = [];
       let prevPt = lastEraserPtRef.current || latestPt;
       const stepSize = Math.max(2.5, getEraserRadius() * 0.45);
@@ -14006,6 +14182,8 @@ export default function App() {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
 
+    const effectiveTool: ToolType = tempEraserActiveRef.current ? 'eraser' : activeTool;
+
     // 1. Finish Image Lasso / Magnetic Lasso Crop
     if (imageCropMode !== 'none' && selectedImageId && lassoPolygonRef.current.length >= 3) {
       clearActiveOverlay();
@@ -14025,7 +14203,7 @@ export default function App() {
       return;
     }
 
-    if (activeTool === 'direct-node') {
+    if (effectiveTool === 'direct-node') {
       cancelNodeMagnetTimer();
       clearActiveOverlay();
       setDraggingNodeIdx(null);
@@ -14034,7 +14212,7 @@ export default function App() {
       return;
     }
 
-    if (activeTool === 'laser') {
+    if (effectiveTool === 'laser') {
       if (currentStrokePtsRef.current.length > 0) {
         laserStrokesRef.current.push([...currentStrokePtsRef.current]);
         currentStrokePtsRef.current = [];
@@ -14070,7 +14248,7 @@ export default function App() {
       return;
     }
 
-    if (activeTool === 'tape' && currentStrokePtsRef.current.length >= 2) {
+    if (effectiveTool === 'tape' && currentStrokePtsRef.current.length >= 2) {
       clearActiveOverlay();
       const first = currentStrokePtsRef.current[0];
       const last = currentStrokePtsRef.current[currentStrokePtsRef.current.length - 1];
@@ -14093,7 +14271,7 @@ export default function App() {
     }
 
     // 2. Finish Lasso Selection
-    if (activeTool === 'lasso' || selectionTransformRef.current || isDraggingSelectionRef.current) {
+    if (effectiveTool === 'lasso' || selectionTransformRef.current || isDraggingSelectionRef.current) {
       cancelNodeMagnetTimer();
       clearActiveOverlay();
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
@@ -14114,25 +14292,26 @@ export default function App() {
       return;
     }
 
-    // Apple Pencil Stationary Double-Tap with the Tip (in Safari without native wrapper):
-    // Two quick vertical micro-taps (duration <= 175ms, movement <= 3.5px) at the exact same spot (<= 8px)
-    // when not immediately preceded by normal handwriting (> 420ms after last real stroke) toggles Pen <-> Eraser!
+    // Apple Pencil Stationary Double-Tap with the Tip (in Chrome & Safari without native wrapper):
+    // Two quick vertical micro-taps (duration <= 215ms, movement <= 7.5px) at the same spot (<= 18px)
+    // when not immediately preceded by normal handwriting (> 350ms after last real stroke) toggles Pen <-> Eraser!
     const nowUp = performance.now();
     const tapTrack = e.pointerType === 'pen' ? penTapTrackRef.current : null;
     penTapTrackRef.current = null;
     const isStationaryPenMicroTap =
       tapTrack !== null &&
-      nowUp - tapTrack.startTime <= 175 &&
-      tapTrack.maxDist <= 3.5 &&
-      nowUp - lastRealPenStrokeEndTimeRef.current > 420;
+      !tempEraserActiveRef.current &&
+      nowUp - tapTrack.startTime <= 215 &&
+      tapTrack.maxDist <= 7.5 &&
+      nowUp - lastRealPenStrokeEndTimeRef.current > 350;
 
     if (isStationaryPenMicroTap && tapTrack) {
       const prevTap = lastStationaryPenTapRef.current;
       if (
         prevTap &&
-        nowUp - prevTap.time >= 55 &&
-        nowUp - prevTap.time <= 320 &&
-        Math.hypot(tapTrack.startX - prevTap.x, tapTrack.startY - prevTap.y) <= 8.5
+        nowUp - prevTap.time >= 40 &&
+        nowUp - prevTap.time <= 380 &&
+        Math.hypot(tapTrack.startX - prevTap.x, tapTrack.startY - prevTap.y) <= 18
       ) {
         lastStationaryPenTapRef.current = null;
         currentStrokePtsRef.current = [];
@@ -14160,12 +14339,12 @@ export default function App() {
         }
         return;
       }
-    } else if (e.pointerType === 'pen') {
+    } else if (e.pointerType === 'pen' && !tempEraserActiveRef.current) {
       lastRealPenStrokeEndTimeRef.current = nowUp;
       lastStationaryPenTapRef.current = null;
     }
 
-    if (activeTool === 'eraser') {
+    if (effectiveTool === 'eraser') {
       if (isStationaryPenMicroTap && tapTrack) {
         lastStationaryPenTapRef.current = {
           time: nowUp,
@@ -14176,6 +14355,32 @@ export default function App() {
       }
       lastEraserPtRef.current = null;
       clearActiveOverlay();
+      if (tempEraserActiveRef.current) {
+        const mod = heldFingerModifierRef.current;
+        if (!mod || mod.fingerLifted) {
+          const restoreTool = mod?.prevTool || lastNonEraserToolRef.current || 'pen';
+          heldFingerModifierRef.current = null;
+          tempEraserActiveRef.current = false;
+          setActiveTool(restoreTool);
+          showToast('✏️ Επιστροφή στην Πένα!');
+        } else if (mod.cancelledByStylusAt !== null) {
+          if (tempEraserReleaseTimerRef.current) {
+            window.clearTimeout(tempEraserReleaseTimerRef.current);
+          }
+          tempEraserReleaseTimerRef.current = window.setTimeout(() => {
+            tempEraserReleaseTimerRef.current = null;
+            if (isDrawingRef.current && activePointerTypeRef.current === 'pen') return;
+            const curMod = heldFingerModifierRef.current;
+            if (curMod) {
+              const restoreTool = curMod.prevTool || lastNonEraserToolRef.current || 'pen';
+              heldFingerModifierRef.current = null;
+              tempEraserActiveRef.current = false;
+              setActiveTool(restoreTool);
+              showToast('✏️ Επιστροφή στην Πένα!');
+            }
+          }, 450);
+        }
+      }
       return;
     }
 
