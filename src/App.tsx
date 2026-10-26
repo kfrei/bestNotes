@@ -4342,6 +4342,14 @@ export default function App() {
       if (s.points.length === 1) {
         // 1-point tap/dot/accent: HTML5 Canvas requires a tiny non-zero segment to render a round cap dot!
         ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
+      } else if (
+        s.shapeType === 'wave-guide-top' ||
+        s.shapeType === 'wave-guide-bottom' ||
+        s.shapeType === 'wave-axis-x' ||
+        s.shapeType === 'wave-axis-y'
+      ) {
+        const endPt = s.points[s.points.length - 1];
+        ctx.lineTo(endPt.x, endPt.y);
       } else {
         for (let i = 1; i < s.points.length; i++) {
           const prevPt = s.points[i - 1];
@@ -12338,6 +12346,12 @@ export default function App() {
                   ...p,
                   x: p.x + dTop * wg.ux,
                   y: p.y + dTop * wg.uy,
+                  cx: undefined,
+                  cy: undefined,
+                  inDx: undefined,
+                  inDy: undefined,
+                  outDx: undefined,
+                  outDy: undefined,
                 })),
               };
             }
@@ -12348,6 +12362,12 @@ export default function App() {
                   ...p,
                   x: p.x + dBot * wg.ux,
                   y: p.y + dBot * wg.uy,
+                  cx: undefined,
+                  cy: undefined,
+                  inDx: undefined,
+                  inDy: undefined,
+                  outDx: undefined,
+                  outDy: undefined,
                 })),
               };
             }
@@ -15340,6 +15360,12 @@ export default function App() {
                   ...p,
                   x: p.x + dTop * diag.ux,
                   y: p.y + dTop * diag.uy,
+                  cx: undefined,
+                  cy: undefined,
+                  inDx: undefined,
+                  inDy: undefined,
+                  outDx: undefined,
+                  outDy: undefined,
                 })),
               };
             }
@@ -15350,6 +15376,12 @@ export default function App() {
                   ...p,
                   x: p.x + dBot * diag.ux,
                   y: p.y + dBot * diag.uy,
+                  cx: undefined,
+                  cy: undefined,
+                  inDx: undefined,
+                  inDy: undefined,
+                  outDx: undefined,
+                  outDy: undefined,
                 })),
               };
             }
@@ -20131,92 +20163,6 @@ export default function App() {
                     ))}
                   </div>
                 )}
-
-                {(() => {
-                  const candidateIds =
-                    selectedStrokeIds.length > 0
-                      ? selectedStrokeIds
-                      : activeNodeStrokeId
-                      ? [activeNodeStrokeId]
-                      : lastCreatedShapeIdsRef.current;
-                  const activeWaveDiag = resolveWaveAxesDiagram(activePage, candidateIds);
-                  const showWaveControls =
-                    (activeTool === 'shape' && shapePreset === 'wave-axes') || Boolean(activeWaveDiag);
-                  if (!showWaveControls) return null;
-                  const curGuideColor = activeWaveDiag?.guideTop?.color || waveGuideColor;
-                  return (
-                    <div className="flex items-center gap-1.5 flex-wrap bg-blue-50/90 px-2.5 py-1 rounded-full border border-blue-200 shadow-2xs">
-                      <span className="text-[11px] font-bold text-blue-800">┅ Διακεκομμένες (±A):</span>
-                      {(
-                        [
-                          { c: '#2563eb', label: 'Μπλε' },
-                          { c: '#dc2626', label: 'Κόκκινο' },
-                          { c: '#16a34a', label: 'Πράσινο' },
-                          { c: '#9333ea', label: 'Μωβ' },
-                          { c: '#ea580c', label: 'Πορτοκαλί' },
-                          { c: '#0891b2', label: 'Κυανό' },
-                          { c: '#111827', label: 'Μαύρο' },
-                        ] as const
-                      ).map((sw) => (
-                        <button
-                          key={sw.c}
-                          onClick={() => applyWaveGuideColor(sw.c)}
-                          title={`Χρώμα Διακεκομμένων: ${sw.label}`}
-                          className={`w-4.5 h-4.5 rounded-full border transition cursor-pointer ${
-                            curGuideColor.toLowerCase() === sw.c
-                              ? 'ring-2 ring-offset-1 ring-blue-600 scale-110 border-white'
-                              : 'border-slate-300 hover:scale-110'
-                          }`}
-                          style={{ backgroundColor: sw.c }}
-                        />
-                      ))}
-                      <label
-                        className="relative w-5 h-5 rounded-full border border-slate-300 overflow-hidden cursor-pointer flex items-center justify-center shadow-2xs"
-                        style={{
-                          background:
-                            'conic-gradient(#ef4444, #f59e0b, #10b981, #3b82f6, #8b5cf6, #ec4899, #ef4444)',
-                        }}
-                        title="Επιλογή οποιουδήποτε χρώματος για τις 2 διακεκομμένες"
-                      >
-                        <input
-                          type="color"
-                          value={curGuideColor}
-                          onChange={(ev) => applyWaveGuideColor(ev.target.value)}
-                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-                        />
-                      </label>
-                      {activeWaveDiag && (
-                        <>
-                          <div className="h-3.5 w-px bg-blue-200 mx-0.5" />
-                          <button
-                            onClick={() => adjustSelectedWaveAxesGuides('narrow')}
-                            className="px-2 py-0.5 rounded-full bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-[11px] font-bold transition cursor-pointer"
-                            title="Στένεμα του ύψους των 2 διακεκομμένων (±A) χωρίς να αλλάξουν οι άξονες"
-                          >
-                            ➖ Στένεμα Ύψους
-                          </button>
-                          <button
-                            onClick={() => adjustSelectedWaveAxesGuides('widen')}
-                            className="px-2 py-0.5 rounded-full bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-[11px] font-bold transition cursor-pointer"
-                            title="Φάρδυμα του ύψους των 2 διακεκομμένων (±A) χωρίς να αλλάξουν οι άξονες"
-                          >
-                            ➕ Άνοιγμα Ύψους
-                          </button>
-                          <button
-                            onClick={() => adjustSelectedWaveAxesGuides('symmetrize')}
-                            className="px-2 py-0.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition cursor-pointer"
-                            title="Συμμετρική στοίχιση των 2 διακεκομμένων σε ίση απόσταση (+A / -A) από τον οριζόντιο άξονα"
-                          >
-                            ⚖️ Συμμετρικά ±A
-                          </button>
-                          <span className="text-[10.5px] font-semibold text-blue-700/90 hidden sm:inline">
-                            (Σύρετε <b>[↕]</b> ανεξάρτητα, <b>[±A]</b> συμμετρικά, <b>[⇅]</b> μαζί)
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  );
-                })()}
 
                 {activeTool === 'eraser' && (
                   <div className="flex items-center gap-1.5 flex-wrap">

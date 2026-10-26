@@ -1277,7 +1277,7 @@ export function createPhysicsStencilStrokes(
     const yTop = yMid - amp;
     const yBot = yMid + amp;
     const guideRightX = x + Math.max(40, w - Math.min(20, w * 0.045));
-    const axisColor = color || '#111827';
+    const axisColor = '#111827';
 
     // 1. Vertical Y-axis (bottom -> top with arrow)
     out.push({
@@ -1289,7 +1289,7 @@ export function createPhysicsStencilStrokes(
       arrowEnd: true,
       points: [
         { x, y: y + h, pressure: 0.7 },
-        { x, y, cx: x, cy: yMid, pressure: 0.7 },
+        { x, y, pressure: 0.7 },
       ],
       layerId,
       groupId,
@@ -1307,7 +1307,7 @@ export function createPhysicsStencilStrokes(
       arrowEnd: true,
       points: [
         { x, y: yMid, pressure: 0.7 },
-        { x: x + w, y: yMid, cx: x + w / 2, cy: yMid, pressure: 0.7 },
+        { x: x + w, y: yMid, pressure: 0.7 },
       ],
       layerId,
       groupId,
@@ -1315,7 +1315,7 @@ export function createPhysicsStencilStrokes(
       shapeType: 'wave-axis-x',
     });
 
-    // 3. Top Dashed Guide (+A)
+    // 3. Top Dashed Guide (+A) — strictly straight & parallel to horizontal axis
     out.push({
       id: `st-${Date.now()}-wgt`,
       tool: 'pen',
@@ -1325,7 +1325,7 @@ export function createPhysicsStencilStrokes(
       lineStyle: 'dashed',
       points: [
         { x, y: yTop, pressure: 0.7 },
-        { x: guideRightX, y: yTop, cx: (x + guideRightX) / 2, cy: yTop, pressure: 0.7 },
+        { x: guideRightX, y: yTop, pressure: 0.7 },
       ],
       layerId,
       groupId,
@@ -1333,7 +1333,7 @@ export function createPhysicsStencilStrokes(
       shapeType: 'wave-guide-top',
     });
 
-    // 4. Bottom Dashed Guide (-A)
+    // 4. Bottom Dashed Guide (-A) — strictly straight & parallel to horizontal axis
     out.push({
       id: `st-${Date.now()}-wgb`,
       tool: 'pen',
@@ -1343,7 +1343,7 @@ export function createPhysicsStencilStrokes(
       lineStyle: 'dashed',
       points: [
         { x, y: yBot, pressure: 0.7 },
-        { x: guideRightX, y: yBot, cx: (x + guideRightX) / 2, cy: yBot, pressure: 0.7 },
+        { x: guideRightX, y: yBot, pressure: 0.7 },
       ],
       layerId,
       groupId,
