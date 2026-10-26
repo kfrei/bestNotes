@@ -14198,13 +14198,22 @@ export default function App() {
         } | null = null;
 
         if (targetImgIdList.length === 0 && targetStrokeIdList.length === 1) {
+          const isOpenLassoWeldable = (st: StrokeObject) =>
+            st.points.length >= 2 &&
+            st.points[0]?.twist !== 999 &&
+            !(st.groupId && (st.groupId.startsWith('axes-') || st.groupId.startsWith('wave-axes-'))) &&
+            (!st.isShape ||
+              st.shapeType === 'line' ||
+              st.shapeType === 'arrow' ||
+              st.shapeType === 'double-arrow' ||
+              st.shapeType === 'sine' ||
+              st.shapeType === 'cosine' ||
+              st.shapeType === 'parabola' ||
+              st.shapeType === 'hyperbola' ||
+              st.shapeType === 'arc');
+
           const draggedWave = activePage.strokes.find((s) => s.id === targetStrokeIdList[0]);
-          if (
-            draggedWave &&
-            (draggedWave.shapeType === 'sine' || draggedWave.shapeType === 'cosine') &&
-            draggedWave.points.length >= 2 &&
-            draggedWave.points[0]?.twist !== 999
-          ) {
+          if (draggedWave && isOpenLassoWeldable(draggedWave)) {
             const hiddenOrLockedLayerIds = new Set(
               activePage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
             );
@@ -14220,9 +14229,7 @@ export default function App() {
             for (const other of activePage.strokes) {
               if (
                 other.id === draggedWave.id ||
-                other.shapeType !== draggedWave.shapeType ||
-                other.points.length < 2 ||
-                other.points[0]?.twist === 999 ||
+                !isOpenLassoWeldable(other) ||
                 hiddenOrLockedLayerIds.has(other.layerId)
               ) {
                 continue;
@@ -14242,7 +14249,7 @@ export default function App() {
               ];
               for (const pr of pairs) {
                 const d = distance(pr.candPt, pr.targetPt);
-                if (d <= 28 && (!matchedWaveEndpoint || d < matchedWaveEndpoint.dist)) {
+                if (d <= 32 && (!matchedWaveEndpoint || d < matchedWaveEndpoint.dist)) {
                   matchedWaveEndpoint = {
                     draggedStrokeId: draggedWave.id,
                     draggedEndSide: pr.dragSide,
@@ -14312,58 +14319,177 @@ export default function App() {
                 isDrawingRef.current = false;
                 clearActiveOverlay();
 
-                let mergedWaveType: string | undefined = 'sine';
+                let mergedWaveType: string | undefined;
+                let alsoClosedOtherEnd = false;
                 updateActivePage((page) => {
                   const s1 = page.strokes.find((st) => st.id === timerObj.strokeId);
                   const s2 = page.strokes.find((st) => st.id === timerObj.targetStrokeId);
                   if (!s1 || !s2) return page;
-                  mergedWaveType = s1.shapeType;
+                  mergedWaveType =
+                    s1.shapeType === s2.shapeType && (s1.shapeType === 'sine' || s1.shapeType === 'cosine')
+                      ? s1.shapeType
+                      : undefined;
 
-                  const pts1 = convertOpenStrokeToBezierSplinePoints(s1);
-                  const pts2 = convertOpenStrokeToBezierSplinePoints(s2);
-                  const dragIdx = timerObj.draggedEndSide === 'start' ? 0 : pts1.length - 1;
-                  pts1[dragIdx] = {
-                    ...pts1[dragIdx],
-                    x: timerObj.targetX,
-                    y: timerObj.targetY,
-                  };
+                  let mergedStroke: StrokeObject;
 
-                  const chain1 =
-                    timerObj.draggedEndSide === 'start'
-                      ? reverseBezierPointsExact(pts1)
-                      : pts1;
-                  const chain2 =
-                    timerObj.targetEndSide === 'end'
-                      ? reverseBezierPointsExact(pts2)
-                      : pts2;
+                  if (!s1.isShape && !s2.isShape) {
+                    // Both strokes are freehand curves/lines: preserve exact freehand points & key nodes!
+                    const keys1 =
+                      s1.keyNodeIndices && s1.keyNodeIndices.length >= 2
+                        ? s1.keyNodeIndices
+                        : computeFreehandKeyNodeIndices(s1.points);
+                    const keys2 =
+                      s2.keyNodeIndices && s2.keyNodeIndices.length >= 2
+                        ? s2.keyNodeIndices
+                        : computeFreehandKeyNodeIndices(s2.points);
 
-                  const end1 = chain1[chain1.length - 1];
-                  const start2 = chain2[0];
-                  const jointPt: BezierPoint = {
-                    x: timerObj.targetX,
-                    y: timerObj.targetY,
-                    pressure: end1.pressure ?? start2.pressure ?? 0.7,
-                    inDx: end1.inDx,
-                    inDy: end1.inDy,
-                    outDx: start2.outDx,
-                    outDy: start2.outDy,
-                    smooth: false,
-                    twist: 777,
-                  };
+                    const dragKeyPos = timerObj.draggedEndSide === 'start' ? 0 : keys1.length - 1;
+                    const deformed1 = deformStrokeAtKeyNode(
+                      s1.points,
+                      keys1,
+                      dragKeyPos,
+                      timerObj.targetX,
+                      timerObj.targetY
+                    );
+                    const pts2 = s2.points.map((p) => ({ ...p }));
 
-                  const combinedPts: BezierPoint[] = [
-                    ...chain1.slice(0, -1),
-                    jointPt,
-                    ...chain2.slice(1),
-                  ];
+                    let chain1: BezierPoint[];
+                    let chain1Keys: number[];
+                    if (timerObj.draggedEndSide === 'start') {
+                      chain1 = [...deformed1].reverse();
+                      const n1 = deformed1.length;
+                      chain1Keys = [...keys1].reverse().map((k) => n1 - 1 - k);
+                    } else {
+                      chain1 = deformed1;
+                      chain1Keys = [...keys1];
+                    }
 
-                  const mergedStroke: StrokeObject = {
-                    ...s1,
-                    isShape: true,
-                    shapeType: s1.shapeType,
-                    points: combinedPts,
-                    keyNodeIndices: undefined,
-                  };
+                    let chain2: BezierPoint[];
+                    let chain2Keys: number[];
+                    if (timerObj.targetEndSide === 'end') {
+                      chain2 = [...pts2].reverse();
+                      const n2 = pts2.length;
+                      chain2Keys = [...keys2].reverse().map((k) => n2 - 1 - k);
+                    } else {
+                      chain2 = pts2;
+                      chain2Keys = [...keys2];
+                    }
+
+                    const offset = chain1.length - 1;
+                    let combinedPts = [...chain1, ...chain2.slice(1)];
+                    const combinedKeys = [
+                      ...chain1Keys,
+                      ...chain2Keys.slice(1).map((k) => k + offset),
+                    ];
+
+                    if (
+                      combinedKeys.length >= 3 &&
+                      distance(combinedPts[0], combinedPts[combinedPts.length - 1]) <= 32
+                    ) {
+                      alsoClosedOtherEnd = true;
+                      combinedPts = weldFreehandEndpointsSmoothly(
+                        combinedPts,
+                        combinedKeys,
+                        0,
+                        combinedPts[combinedPts.length - 1].x,
+                        combinedPts[combinedPts.length - 1].y
+                      );
+                    }
+
+                    mergedStroke = {
+                      ...s1,
+                      points: combinedPts,
+                      keyNodeIndices: combinedKeys,
+                      fillStyle:
+                        alsoClosedOtherEnd && fillStyle !== 'none' ? fillStyle : s1.fillStyle,
+                      fillColor:
+                        alsoClosedOtherEnd && fillStyle !== 'none' ? s1.color : s1.fillColor,
+                      fillTransparency: s1.fillTransparency ?? fillTransparency,
+                    };
+                  } else {
+                    // At least one stroke is a Bézier spline / shape: convert both to cubic Bézier splines & weld at 1 single node!
+                    const pts1 = convertOpenStrokeToBezierSplinePoints(s1);
+                    const pts2 = convertOpenStrokeToBezierSplinePoints(s2);
+                    const dragIdx = timerObj.draggedEndSide === 'start' ? 0 : pts1.length - 1;
+                    pts1[dragIdx] = {
+                      ...pts1[dragIdx],
+                      x: timerObj.targetX,
+                      y: timerObj.targetY,
+                    };
+
+                    const chain1 =
+                      timerObj.draggedEndSide === 'start'
+                        ? reverseBezierPointsExact(pts1)
+                        : pts1;
+                    const chain2 =
+                      timerObj.targetEndSide === 'end'
+                        ? reverseBezierPointsExact(pts2)
+                        : pts2;
+
+                    const end1 = chain1[chain1.length - 1];
+                    const start2 = chain2[0];
+                    const jointPt: BezierPoint = {
+                      x: timerObj.targetX,
+                      y: timerObj.targetY,
+                      pressure: end1.pressure ?? start2.pressure ?? 0.7,
+                      inDx: end1.inDx,
+                      inDy: end1.inDy,
+                      outDx: start2.outDx,
+                      outDy: start2.outDy,
+                      smooth: false,
+                      twist: 777,
+                    };
+
+                    const combinedPts: BezierPoint[] = [
+                      ...chain1.slice(0, -1),
+                      jointPt,
+                      ...chain2.slice(1),
+                    ];
+
+                    if (
+                      combinedPts.length >= 3 &&
+                      distance(combinedPts[0], combinedPts[combinedPts.length - 1]) <= 32
+                    ) {
+                      alsoClosedOtherEnd = true;
+                      const firstPt = combinedPts[0];
+                      const lastPt = combinedPts[combinedPts.length - 1];
+                      const closeSeamPt: BezierPoint = {
+                        ...firstPt,
+                        x: lastPt.x,
+                        y: lastPt.y,
+                        inDx: lastPt.inDx,
+                        inDy: lastPt.inDy,
+                        outDx: firstPt.outDx,
+                        outDy: firstPt.outDy,
+                        smooth: false,
+                        twist: 999,
+                        cx: undefined,
+                        cy: undefined,
+                      };
+                      combinedPts[0] = { ...closeSeamPt };
+                      combinedPts[combinedPts.length - 1] = { ...closeSeamPt };
+                    }
+
+                    const keepWaveShapeType =
+                      !alsoClosedOtherEnd &&
+                      s1.shapeType === s2.shapeType &&
+                      (s1.shapeType === 'sine' || s1.shapeType === 'cosine')
+                        ? s1.shapeType
+                        : 'line';
+
+                    mergedStroke = {
+                      ...s1,
+                      isShape: true,
+                      shapeType: keepWaveShapeType,
+                      points: combinedPts,
+                      keyNodeIndices: undefined,
+                      fillStyle:
+                        alsoClosedOtherEnd && fillStyle !== 'none' ? fillStyle : s1.fillStyle,
+                      fillColor:
+                        alsoClosedOtherEnd && fillStyle !== 'none' ? s1.color : s1.fillColor,
+                      fillTransparency: s1.fillTransparency ?? fillTransparency,
+                    };
+                  }
 
                   return {
                     ...page,
@@ -14376,9 +14502,13 @@ export default function App() {
                 setSelectedStrokeIds([timerObj.strokeId]);
                 setActiveNodeStrokeId(timerObj.strokeId);
                 showToast(
-                  mergedWaveType === 'cosine'
+                  alsoClosedOtherEnd
+                    ? '🧲 Οι 2 γραμμές ενώθηκαν σε 1 ενιαίο κλειστό σχήμα!'
+                    : mergedWaveType === 'cosine'
                     ? '🧲 Τα 2 συνημίτονα ενώθηκαν σε 1 ενιαίο κύμα!'
-                    : '🧲 Τα 2 ημίτονα ενώθηκαν σε 1 ενιαίο κύμα!'
+                    : mergedWaveType === 'sine'
+                    ? '🧲 Τα 2 ημίτονα ενώθηκαν σε 1 ενιαίο κύμα!'
+                    : '🧲 Οι 2 γραμμές ενώθηκαν σε 1 ενιαίο κόμβο & σχήμα!'
                 );
                 return;
               }
