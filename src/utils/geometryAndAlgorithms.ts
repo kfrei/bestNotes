@@ -1149,15 +1149,16 @@ function buildPresetShape(
  * Generates multi-stroke grouped Physics Stencils (e.g. Cylindrical Conductor, Coordinate Axes, Resistor)
  */
 export function createPhysicsStencilStrokes(
-  preset: 'cylinder' | 'axes' | 'resistor',
+  preset: 'cylinder' | 'axes' | 'wave-axes' | 'resistor',
   x: number,
   y: number,
   w: number,
   h: number,
   color: string,
-  layerId: string
+  layerId: string,
+  guideColor = '#2563eb'
 ): StrokeObject[] {
-  const groupId = `group-${Date.now()}`;
+  const groupId = preset === 'wave-axes' ? `wave-axes-grp-${Date.now()}` : `group-${Date.now()}`;
   const out: StrokeObject[] = [];
 
   if (preset === 'cylinder') {
@@ -1265,6 +1266,89 @@ export function createPhysicsStencilStrokes(
       layerId,
       groupId,
       isShape: true,
+    });
+  } else if (preset === 'wave-axes') {
+    // Oscillation / Wave Axes Diagram:
+    // 1. Vertical axis (bottom to top with upward arrow)
+    // 2. Central horizontal axis (left to right at yMid with rightward arrow)
+    // 3. Upper & Lower dashed horizontal amplitude guides (+A / -A) with independent color & vertical movement!
+    const yMid = y + h / 2;
+    const amp = Math.max(18, h * 0.34);
+    const yTop = yMid - amp;
+    const yBot = yMid + amp;
+    const guideRightX = x + Math.max(40, w - Math.min(20, w * 0.045));
+    const axisColor = color || '#111827';
+
+    // 1. Vertical Y-axis (bottom -> top with arrow)
+    out.push({
+      id: `st-${Date.now()}-way`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.8,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x, y: y + h, pressure: 0.7 },
+        { x, y, cx: x, cy: yMid, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-y',
+    });
+
+    // 2. Horizontal X/t-axis (middle left -> middle right with arrow)
+    out.push({
+      id: `st-${Date.now()}-wax`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.8,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x, y: yMid, pressure: 0.7 },
+        { x: x + w, y: yMid, cx: x + w / 2, cy: yMid, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-x',
+    });
+
+    // 3. Top Dashed Guide (+A)
+    out.push({
+      id: `st-${Date.now()}-wgt`,
+      tool: 'pen',
+      color: guideColor,
+      width: 2.2,
+      opacity: 1,
+      lineStyle: 'dashed',
+      points: [
+        { x, y: yTop, pressure: 0.7 },
+        { x: guideRightX, y: yTop, cx: (x + guideRightX) / 2, cy: yTop, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-guide-top',
+    });
+
+    // 4. Bottom Dashed Guide (-A)
+    out.push({
+      id: `st-${Date.now()}-wgb`,
+      tool: 'pen',
+      color: guideColor,
+      width: 2.2,
+      opacity: 1,
+      lineStyle: 'dashed',
+      points: [
+        { x, y: yBot, pressure: 0.7 },
+        { x: guideRightX, y: yBot, cx: (x + guideRightX) / 2, cy: yBot, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-guide-bottom',
     });
   } else if (preset === 'resistor') {
     const corners = makePolygonBezier([

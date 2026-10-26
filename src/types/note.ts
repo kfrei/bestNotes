@@ -36,6 +36,7 @@ export type ShapePresetType =
   | 'sphere'
   | 'pyramid'
   | 'axes'
+  | 'wave-axes'
   | 'resistor'
   | 'spring';
 

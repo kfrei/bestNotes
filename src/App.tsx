@@ -949,6 +949,7 @@ export default function App() {
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
   const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [shapePreset, setShapePreset] = useState<ShapePresetType>('sine');
+  const [waveGuideColor, setWaveGuideColor] = useState<string>('#2563eb');
   const [strokeColor, setStrokeColor] = useState<string>('#111827');
   const [colorSlots, setColorSlots] = useState<string[]>(() => {
     try {
@@ -1486,6 +1487,19 @@ export default function App() {
     targetStrokeIds?: string[];
     targetImageId?: string | null;
     targetImageIds?: string[];
+  } | null>(null);
+  const waveGuideDragRef = useRef<{
+    groupId: string;
+    mode: 'top-independent' | 'bottom-independent' | 'symmetric-top' | 'symmetric-bottom' | 'parallel';
+    startPt: { x: number; y: number };
+    startTopT: number;
+    startBotT: number;
+    tMid: number;
+    axisLen: number;
+    ux: number;
+    uy: number;
+    topBasePts: BezierPoint[];
+    botBasePts: BezierPoint[];
   } | null>(null);
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
@@ -3117,7 +3131,7 @@ export default function App() {
     return s.points;
   };
 
-  // Spring, Resistor, and 3D Shapes (Cuboid, Cylinder, Sphere, Pyramid) are transformed exclusively via Lasso (no Nodes!)
+  // Spring, Resistor, 3D Shapes, and Oscillation Wave-Axes use Lasso / Custom Guide Handles (no raw endpoint Nodes!)
   const isShapeWithoutNodes = (s: StrokeObject | undefined | null): boolean => {
     if (!s || !s.isShape) return false;
     return (
@@ -3126,7 +3140,11 @@ export default function App() {
       s.shapeType === 'cuboid' ||
       s.shapeType === 'cylinder' ||
       s.shapeType === 'sphere' ||
-      s.shapeType === 'pyramid'
+      s.shapeType === 'pyramid' ||
+      s.shapeType === 'wave-axis-y' ||
+      s.shapeType === 'wave-axis-x' ||
+      s.shapeType === 'wave-guide-top' ||
+      s.shapeType === 'wave-guide-bottom'
     );
   };
 
@@ -3757,6 +3775,117 @@ export default function App() {
     []
   );
 
+  // Resolves the 4 member strokes and handle coordinates of an Oscillation / Wave-Axes diagram (`wave-axes`)
+  const resolveWaveAxesDiagram = useCallback((page: NotePage, candidateIds: string[]) => {
+    if (!candidateIds || candidateIds.length === 0) return null;
+    const candSet = new Set(candidateIds);
+    const matchedStroke = page.strokes.find(
+      (s) =>
+        candSet.has(s.id) &&
+        (s.groupId?.startsWith('wave-axes-') ||
+          s.shapeType === 'wave-axis-y' ||
+          s.shapeType === 'wave-axis-x' ||
+          s.shapeType === 'wave-guide-top' ||
+          s.shapeType === 'wave-guide-bottom')
+    );
+    if (!matchedStroke || !matchedStroke.groupId) return null;
+    const grpId = matchedStroke.groupId;
+    const members = page.strokes.filter((s) => s.groupId === grpId);
+    const axisY = members.find((s) => s.shapeType === 'wave-axis-y');
+    const axisX = members.find((s) => s.shapeType === 'wave-axis-x');
+    const guideTop = members.find((s) => s.shapeType === 'wave-guide-top');
+    const guideBottom = members.find((s) => s.shapeType === 'wave-guide-bottom');
+    if (!axisY || (!guideTop && !guideBottom)) return null;
+
+    const pBot = axisY.points[0];
+    const pTop = axisY.points[axisY.points.length - 1];
+    const vx = pBot.x - pTop.x;
+    const vy = pBot.y - pTop.y;
+    const axisLen = Math.hypot(vx, vy) || 1;
+    const ux = vx / axisLen;
+    const uy = vy / axisLen;
+    const nx = -uy;
+    const ny = ux;
+    const pOrig = axisX
+      ? axisX.points[0]
+      : { x: (pTop.x + pBot.x) / 2, y: (pTop.y + pBot.y) / 2 };
+    const tMid = (pOrig.x - pTop.x) * ux + (pOrig.y - pTop.y) * uy;
+
+    const gtStart = guideTop ? guideTop.points[0] : pTop;
+    const gtEnd = guideTop ? guideTop.points[guideTop.points.length - 1] : pTop;
+    const gtMid = { x: (gtStart.x + gtEnd.x) / 2, y: (gtStart.y + gtEnd.y) / 2 };
+    const tTop = (gtStart.x - pTop.x) * ux + (gtStart.y - pTop.y) * uy;
+
+    const gbStart = guideBottom ? guideBottom.points[0] : pBot;
+    const gbEnd = guideBottom ? guideBottom.points[guideBottom.points.length - 1] : pBot;
+    const gbMid = { x: (gbStart.x + gbEnd.x) / 2, y: (gbStart.y + gbEnd.y) / 2 };
+    const tBot = (gbStart.x - pTop.x) * ux + (gbStart.y - pTop.y) * uy;
+
+    const topIndepHandle = { x: gtMid.x, y: gtMid.y };
+    const botIndepHandle = { x: gbMid.x, y: gbMid.y };
+    const topSymHandle = { x: gtEnd.x + nx * 22, y: gtEnd.y + ny * 22 };
+    const botSymHandle = { x: gbEnd.x + nx * 22, y: gbEnd.y + ny * 22 };
+    const parallelHandle = {
+      x: (gtStart.x + gbStart.x) / 2 - nx * 24,
+      y: (gtStart.y + gbStart.y) / 2 - ny * 24,
+    };
+
+    return {
+      groupId: grpId,
+      memberIds: members.map((m) => m.id),
+      axisY,
+      axisX,
+      guideTop,
+      guideBottom,
+      pTop,
+      pBot,
+      pOrig,
+      axisLen,
+      ux,
+      uy,
+      nx,
+      ny,
+      tMid,
+      tTop,
+      tBot,
+      topIndepHandle,
+      botIndepHandle,
+      topSymHandle,
+      botSymHandle,
+      parallelHandle,
+    };
+  }, []);
+
+  const hitTestWaveAxesGuideHandle = useCallback(
+    (
+      pt: { x: number; y: number },
+      diag: NonNullable<ReturnType<typeof resolveWaveAxesDiagram>>,
+      includeLineBody = true
+    ): 'top-independent' | 'bottom-independent' | 'symmetric-top' | 'symmetric-bottom' | 'parallel' | null => {
+      if (distance(pt, diag.topSymHandle) <= 22) return 'symmetric-top';
+      if (distance(pt, diag.botSymHandle) <= 22) return 'symmetric-bottom';
+      if (distance(pt, diag.parallelHandle) <= 22) return 'parallel';
+      if (distance(pt, diag.topIndepHandle) <= 24) return 'top-independent';
+      if (distance(pt, diag.botIndepHandle) <= 24) return 'bottom-independent';
+      if (includeLineBody) {
+        // Touching/dragging anywhere along the Top or Bottom dashed line (away from the vertical axis) moves that dashed line independently!
+        const distFromYAxis = Math.abs(
+          (pt.x - diag.pTop.x) * diag.nx + (pt.y - diag.pTop.y) * diag.ny
+        );
+        if (distFromYAxis > 18) {
+          if (diag.guideTop && isPointNearStroke(pt, diag.guideTop, 16, false)) {
+            return 'top-independent';
+          }
+          if (diag.guideBottom && isPointNearStroke(pt, diag.guideBottom, 16, false)) {
+            return 'bottom-independent';
+          }
+        }
+      }
+      return null;
+    },
+    []
+  );
+
   // Checks if a 1-finger touch point (clientX, clientY) lands either on an active Lasso selection box/handle
   // OR directly on any shape, group, stroke, image, or text box on the page!
   const isClientPointOnSelectableOrLasso = useCallback(
@@ -3805,6 +3934,19 @@ export default function App() {
           targetPageObj = p;
           break;
         }
+      }
+
+      const waveCandIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : activeTool === 'shape'
+          ? lastCreatedShapeIdsRef.current
+          : [];
+      const activeWaveDiag = resolveWaveAxesDiagram(targetPageObj, waveCandIds);
+      if (activeWaveDiag && hitTestWaveAxesGuideHandle({ x: ptX, y: ptY }, activeWaveDiag, true)) {
+        return true;
       }
 
       if (activeTool === 'direct-node' && activeNodeStrokeId) {
@@ -5012,11 +5154,130 @@ export default function App() {
           }
         }
 
+        // 4c. Oscillation / Wave-Axes Interactive Dashed Guide Handles (`[ ↕ ]` independent, `[ ±A ]` symmetric, `[ ⇅ ]` parallel)
+        const waveCandIds =
+          selectedStrokeIds.length > 0
+            ? selectedStrokeIds
+            : activeNodeStrokeId
+            ? [activeNodeStrokeId]
+            : activeTool === 'shape'
+            ? lastCreatedShapeIdsRef.current
+            : [];
+        const activeWaveDiag = resolveWaveAxesDiagram(pageObj, waveCandIds);
+        if (activeWaveDiag) {
+          const guideCol =
+            activeWaveDiag.guideTop?.color || activeWaveDiag.guideBottom?.color || '#2563eb';
+          const topAmpPx = Math.round(Math.abs(activeWaveDiag.tMid - activeWaveDiag.tTop));
+          const botAmpPx = Math.round(Math.abs(activeWaveDiag.tBot - activeWaveDiag.tMid));
+          const isSym = Math.abs(topAmpPx - botAmpPx) <= 2;
+
+          ctx.save();
+          ctx.setLineDash([]);
+
+          // 1. Center Independent Slider Pills (`[ ↕ ]`) on Top & Bottom Dashed Lines
+          const drawIndepPill = (hx: number, hy: number) => {
+            const pw = 30;
+            const ph = 18;
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.2)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = guideCol;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(hx - pw / 2, hy - ph / 2, pw, ph, 9);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.strokeStyle = guideCol;
+            ctx.lineWidth = 1.8;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(hx, hy - 5.2);
+            ctx.lineTo(hx, hy + 5.2);
+            ctx.moveTo(hx - 3, hy - 2.4);
+            ctx.lineTo(hx, hy - 5.2);
+            ctx.lineTo(hx + 3, hy - 2.4);
+            ctx.moveTo(hx - 3, hy + 2.4);
+            ctx.lineTo(hx, hy + 5.2);
+            ctx.lineTo(hx + 3, hy + 2.4);
+            ctx.stroke();
+            ctx.restore();
+          };
+
+          if (activeWaveDiag.guideTop) {
+            drawIndepPill(activeWaveDiag.topIndepHandle.x, activeWaveDiag.topIndepHandle.y);
+          }
+          if (activeWaveDiag.guideBottom) {
+            drawIndepPill(activeWaveDiag.botIndepHandle.x, activeWaveDiag.botIndepHandle.y);
+          }
+
+          // 2. Right-Tip Symmetric Height Pills (`±A`) on Top & Bottom Dashed Lines
+          const drawSymPill = (hx: number, hy: number, label: string) => {
+            const pw = 34;
+            const ph = 19;
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = isSym ? guideCol : '#334155';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(hx - pw / 2, hy - ph / 2, pw, ph, 9.5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10.5px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, hx, hy + 0.5);
+            ctx.restore();
+          };
+
+          if (activeWaveDiag.guideTop) {
+            drawSymPill(activeWaveDiag.topSymHandle.x, activeWaveDiag.topSymHandle.y, '±A');
+          }
+          if (activeWaveDiag.guideBottom) {
+            drawSymPill(activeWaveDiag.botSymHandle.x, activeWaveDiag.botSymHandle.y, '±A');
+          }
+
+          // 3. Left Parallel Move Pill (`⇅`) on the left of the Y-axis
+          {
+            const hx = activeWaveDiag.parallelHandle.x;
+            const hy = activeWaveDiag.parallelHandle.y;
+            const pw = 28;
+            const ph = 22;
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = '#4f46e5';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(hx - pw / 2, hy - ph / 2, pw, ph, 9);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⇅', hx, hy + 0.5);
+            ctx.restore();
+          }
+
+          ctx.restore();
+        }
+
         // 5. Direct Node Handles ("Λευκό Βελάκι"):
-        //    - Circle/Ellipse: strictly 4 nodes at 90°
-        //    - Parabola/Hyperbola/Arc: strictly 3 nodes (2 Endpoints + 1 Middle Curvature)
-        //    - Sine/Cosine: 5 normal nodes per period (both endpoints + peaks/zero-crossings, no text labels!)
-        //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices, NEVER 500!)
         if (activeTool === 'direct-node' && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
           if (target && !isShapeWithoutNodes(target)) {
@@ -8123,11 +8384,45 @@ export default function App() {
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
 
+    if (
+      activeTool === 'shape' &&
+      (shapePreset === 'axes' || shapePreset === 'wave-axes') &&
+      currentStrokePtsRef.current.length >= 2
+    ) {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const p of currentStrokePtsRef.current) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+      const w = Math.max(120, maxX - minX);
+      const h = Math.max(shapePreset === 'wave-axes' ? 110 : 65, maxY - minY);
+      const previewStencils = createPhysicsStencilStrokes(
+        shapePreset,
+        minX,
+        minY,
+        w,
+        h,
+        strokeColor,
+        activeLayerId,
+        waveGuideColor
+      );
+      for (const st of previewStencils) {
+        drawStrokeOnContext(ctx, st);
+      }
+      return;
+    }
+
     const liveForcedShape =
       !snappedCurrentStrokeRef.current &&
       activeTool === 'shape' &&
       shapePreset !== 'auto' &&
       shapePreset !== 'axes' &&
+      shapePreset !== 'wave-axes' &&
       currentStrokePtsRef.current.length >= 2
         ? recognizeAndSnapShape(currentStrokePtsRef.current, shapePreset)
         : null;
@@ -10556,6 +10851,67 @@ export default function App() {
       penTapTrackRef.current = null;
     }
 
+    // 0. Wave Axes ('wave-axes') Interactive Dashed Guide Handles ([ ↕ ] independent, [ ±A ] symmetric height, [ ⇅ ] parallel):
+    // Allows moving the 2 dashed guide lines up/down independently, narrowing/widening height symmetrically (±A),
+    // or shifting both together without changing the axes!
+    if (
+      effectiveTool === 'lasso' ||
+      effectiveTool === 'direct-node' ||
+      (effectiveTool === 'shape' && (shapePreset === 'wave-axes' || lastCreatedShapeIdsRef.current.length > 0))
+    ) {
+      const candidateIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : lastCreatedShapeIdsRef.current;
+      let targetWaveDiag = resolveWaveAxesDiagram(targetPage, candidateIds);
+      let waveMode = targetWaveDiag ? hitTestWaveAxesGuideHandle(pt, targetWaveDiag, true) : null;
+      if (!waveMode) {
+        const seenWaveGroups = new Set<string>();
+        for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
+          const st = targetPage.strokes[i];
+          if (st.groupId && st.groupId.startsWith('wave-axes-') && !seenWaveGroups.has(st.groupId)) {
+            seenWaveGroups.add(st.groupId);
+            const candidateDiag = resolveWaveAxesDiagram(targetPage, [st.id]);
+            if (candidateDiag) {
+              const m = hitTestWaveAxesGuideHandle(pt, candidateDiag, effectiveTool !== 'shape');
+              if (m) {
+                targetWaveDiag = candidateDiag;
+                waveMode = m;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (targetWaveDiag && waveMode && targetWaveDiag.guideTop && targetWaveDiag.guideBottom) {
+        e.preventDefault();
+        setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
+        setRedoStack([]);
+        if (!selectedStrokeIds.includes(targetWaveDiag.guideTop.id)) {
+          setSelectedStrokeIds(targetWaveDiag.memberIds);
+        }
+        setWaveGuideColor(targetWaveDiag.guideTop.color || '#2563eb');
+        setShowToolSubBar(true);
+        waveGuideDragRef.current = {
+          groupId: targetWaveDiag.groupId,
+          mode: waveMode,
+          startPt: { x: pt.x, y: pt.y },
+          startTopT: targetWaveDiag.tTop,
+          startBotT: targetWaveDiag.tBot,
+          tMid: targetWaveDiag.tMid,
+          axisLen: targetWaveDiag.axisLen,
+          ux: targetWaveDiag.ux,
+          uy: targetWaveDiag.uy,
+          topBasePts: targetWaveDiag.guideTop.points.map((p) => ({ ...p })),
+          botBasePts: targetWaveDiag.guideBottom.points.map((p) => ({ ...p })),
+        };
+        isDrawingRef.current = true;
+        return;
+      }
+    }
+
     // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or if a text box is currently selected/editing, release it!)
     if (effectiveTool === 'text') {
       e.preventDefault();
@@ -12105,6 +12461,70 @@ export default function App() {
       if (distFromStart > penTapTrackRef.current.maxDist) {
         penTapTrackRef.current.maxDist = distFromStart;
       }
+    }
+
+    // 0. Wave Axes ('wave-axes') Interactive Dashed Guide Dragging:
+    // Moves top/bottom dashed guides independently ([ ↕ ]), symmetrically ([ ±A ]), or in parallel ([ ⇅ ]) without changing the axes!
+    if (waveGuideDragRef.current) {
+      const wg = waveGuideDragRef.current;
+      const deltaT = (latestPt.x - wg.startPt.x) * wg.ux + (latestPt.y - wg.startPt.y) * wg.uy;
+      let dTop = 0;
+      let dBot = 0;
+      if (wg.mode === 'top-independent') {
+        const newTopT = Math.max(8, Math.min(wg.startBotT - 12, wg.startTopT + deltaT));
+        dTop = newTopT - wg.startTopT;
+      } else if (wg.mode === 'bottom-independent') {
+        const newBotT = Math.max(wg.startTopT + 12, Math.min(wg.axisLen - 8, wg.startBotT + deltaT));
+        dBot = newBotT - wg.startBotT;
+      } else if (wg.mode === 'symmetric-top' || wg.mode === 'symmetric-bottom') {
+        const maxAllowedAmp = Math.max(10, Math.min(wg.tMid - 8, wg.axisLen - 8 - wg.tMid));
+        const baseAmp =
+          wg.mode === 'symmetric-top'
+            ? wg.tMid - wg.startTopT - deltaT
+            : wg.startBotT - wg.tMid + deltaT;
+        const newAmp = Math.max(8, Math.min(maxAllowedAmp, baseAmp));
+        dTop = wg.tMid - newAmp - wg.startTopT;
+        dBot = wg.tMid + newAmp - wg.startBotT;
+      } else if (wg.mode === 'parallel') {
+        const clampedDelta = Math.max(
+          8 - wg.startTopT,
+          Math.min(wg.axisLen - 8 - wg.startBotT, deltaT)
+        );
+        dTop = clampedDelta;
+        dBot = clampedDelta;
+      }
+
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.groupId !== wg.groupId) return s;
+            if (s.shapeType === 'wave-guide-top') {
+              return {
+                ...s,
+                points: wg.topBasePts.map((p) => ({
+                  ...p,
+                  x: p.x + dTop * wg.ux,
+                  y: p.y + dTop * wg.uy,
+                })),
+              };
+            }
+            if (s.shapeType === 'wave-guide-bottom') {
+              return {
+                ...s,
+                points: wg.botBasePts.map((p) => ({
+                  ...p,
+                  x: p.x + dBot * wg.ux,
+                  y: p.y + dBot * wg.uy,
+                })),
+              };
+            }
+            return s;
+          }),
+        }),
+        false
+      );
+      return;
     }
 
     // 1. Image Freehand / Magnetic Lasso Crop on active overlay canvas (NO fill, auto-closes near start point!)
@@ -14182,6 +14602,13 @@ export default function App() {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
 
+    if (waveGuideDragRef.current) {
+      waveGuideDragRef.current = null;
+      clearActiveOverlay();
+      renderStaticSceneRef.current();
+      return;
+    }
+
     const effectiveTool: ToolType = tempEraserActiveRef.current ? 'eraser' : activeTool;
 
     // 1. Finish Image Lasso / Magnetic Lasso Crop
@@ -14423,8 +14850,8 @@ export default function App() {
       }
     }
 
-    // 4. Physics Grouped Stencils ('axes')
-    if (activeTool === 'shape' && shapePreset === 'axes') {
+    // 4. Physics Grouped Stencils ('axes', 'wave-axes')
+    if (activeTool === 'shape' && (shapePreset === 'axes' || shapePreset === 'wave-axes')) {
       clearActiveOverlay();
       let minX = Infinity,
         minY = Infinity,
@@ -14437,18 +14864,24 @@ export default function App() {
         maxY = Math.max(maxY, p.y);
       }
       const w = Math.max(120, maxX - minX);
-      const h = Math.max(65, maxY - minY);
+      const h = Math.max(shapePreset === 'wave-axes' ? 110 : 65, maxY - minY);
       const stencilStrokes = createPhysicsStencilStrokes(
-        'axes',
+        shapePreset,
         minX,
         minY,
         w,
         h,
         strokeColor,
-        activeLayerId
+        activeLayerId,
+        waveGuideColor
       );
-      lastCreatedShapeIdsRef.current = stencilStrokes.map((s) => s.id);
+      const createdIds = stencilStrokes.map((s) => s.id);
+      lastCreatedShapeIdsRef.current = createdIds;
       updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...stencilStrokes] }));
+      if (shapePreset === 'wave-axes') {
+        setSelectedStrokeIds(createdIds);
+        setShowToolSubBar(true);
+      }
       snappedCurrentStrokeRef.current = null;
       return;
     }
@@ -14872,10 +15305,20 @@ export default function App() {
             .filter((s) => baseSet.has(s.id) && s.groupId)
             .map((s) => s.groupId as string)
         );
+        const hasWaveAxesGroup = Array.from(groupIds).some((g) => g.startsWith('wave-axes-'));
+        if (hasWaveAxesGroup) {
+          setWaveGuideColor(c);
+        }
         return {
           ...page,
           strokes: page.strokes.map((s) => {
             if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
+              if (s.groupId && s.groupId.startsWith('wave-axes-')) {
+                if (s.shapeType === 'wave-guide-top' || s.shapeType === 'wave-guide-bottom') {
+                  return { ...s, color: c };
+                }
+                return s;
+              }
               return {
                 ...s,
                 color: c,
@@ -14888,6 +15331,98 @@ export default function App() {
       });
     },
     [activeTool, selectedStrokeIds, activeNodeStrokeId, selectedTextId, editingTextId, updateActivePage, recordRecentColor]
+  );
+
+  const applyWaveGuideColor = useCallback(
+    (c: string) => {
+      setWaveGuideColor(c);
+      recordRecentColor(c);
+      const candidateIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : lastCreatedShapeIdsRef.current;
+      updateActivePage((page) => {
+        const diag = resolveWaveAxesDiagram(page, candidateIds);
+        if (!diag) return page;
+        return {
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (
+              s.groupId === diag.groupId &&
+              (s.shapeType === 'wave-guide-top' || s.shapeType === 'wave-guide-bottom')
+            ) {
+              return { ...s, color: c };
+            }
+            return s;
+          }),
+        };
+      });
+    },
+    [selectedStrokeIds, activeNodeStrokeId, updateActivePage, resolveWaveAxesDiagram, recordRecentColor]
+  );
+
+  const adjustSelectedWaveAxesGuides = useCallback(
+    (action: 'narrow' | 'widen' | 'symmetrize') => {
+      const candidateIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : lastCreatedShapeIdsRef.current;
+      updateActivePage((page) => {
+        const diag = resolveWaveAxesDiagram(page, candidateIds);
+        if (!diag || !diag.guideTop || !diag.guideBottom) return page;
+        const maxAllowedAmp = Math.max(12, Math.min(diag.tMid - 8, diag.axisLen - 8 - diag.tMid));
+        const curTopAmp = Math.max(8, diag.tMid - diag.tTop);
+        const curBotAmp = Math.max(8, diag.tBot - diag.tMid);
+        let nextTopT = diag.tTop;
+        let nextBotT = diag.tBot;
+        if (action === 'symmetrize') {
+          const avgAmp = Math.max(10, Math.min(maxAllowedAmp, (curTopAmp + curBotAmp) / 2));
+          nextTopT = diag.tMid - avgAmp;
+          nextBotT = diag.tMid + avgAmp;
+        } else {
+          const step = Math.max(6, Math.round(diag.axisLen * 0.055));
+          const delta = action === 'narrow' ? -step : step;
+          const newTopAmp = Math.max(10, Math.min(maxAllowedAmp, curTopAmp + delta));
+          const newBotAmp = Math.max(10, Math.min(maxAllowedAmp, curBotAmp + delta));
+          nextTopT = diag.tMid - newTopAmp;
+          nextBotT = diag.tMid + newBotAmp;
+        }
+        const dTop = nextTopT - diag.tTop;
+        const dBot = nextBotT - diag.tBot;
+        return {
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.groupId !== diag.groupId) return s;
+            if (s.shapeType === 'wave-guide-top') {
+              return {
+                ...s,
+                points: s.points.map((p) => ({
+                  ...p,
+                  x: p.x + dTop * diag.ux,
+                  y: p.y + dTop * diag.uy,
+                })),
+              };
+            }
+            if (s.shapeType === 'wave-guide-bottom') {
+              return {
+                ...s,
+                points: s.points.map((p) => ({
+                  ...p,
+                  x: p.x + dBot * diag.ux,
+                  y: p.y + dBot * diag.uy,
+                })),
+              };
+            }
+            return s;
+          }),
+        };
+      });
+    },
+    [selectedStrokeIds, activeNodeStrokeId, updateActivePage, resolveWaveAxesDiagram]
   );
 
   const applyWidthToSelection = useCallback(
@@ -19609,6 +20144,20 @@ export default function App() {
                           ),
                         },
                         {
+                          id: 'wave-axes',
+                          title: 'Διάγραμμα Ταλάντωσης / Κύματος (Άξονες + 2 Διακεκομμένες ±A)',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="6" y1="19.5" x2="6" y2="2.5" stroke="#111827" strokeWidth="2.0" />
+                              <polyline points="3.3,5.8 6,2.3 8.7,5.8" stroke="#111827" strokeWidth="2.0" />
+                              <line x1="6" y1="11.5" x2="30" y2="11.5" stroke="#111827" strokeWidth="2.0" />
+                              <polyline points="26.5,8.8 30.2,11.5 26.5,14.2" stroke="#111827" strokeWidth="2.0" />
+                              <line x1="6" y1="6.5" x2="29" y2="6.5" stroke="#2563eb" strokeWidth="1.8" strokeDasharray="2.8 2.4" />
+                              <line x1="6" y1="16.5" x2="29" y2="16.5" stroke="#2563eb" strokeWidth="1.8" strokeDasharray="2.8 2.4" />
+                            </svg>
+                          ),
+                        },
+                        {
                           id: 'resistor',
                           title: 'Αντιστάτης',
                           icon: (
@@ -19646,6 +20195,92 @@ export default function App() {
                     ))}
                   </div>
                 )}
+
+                {(() => {
+                  const candidateIds =
+                    selectedStrokeIds.length > 0
+                      ? selectedStrokeIds
+                      : activeNodeStrokeId
+                      ? [activeNodeStrokeId]
+                      : lastCreatedShapeIdsRef.current;
+                  const activeWaveDiag = resolveWaveAxesDiagram(activePage, candidateIds);
+                  const showWaveControls =
+                    (activeTool === 'shape' && shapePreset === 'wave-axes') || Boolean(activeWaveDiag);
+                  if (!showWaveControls) return null;
+                  const curGuideColor = activeWaveDiag?.guideTop?.color || waveGuideColor;
+                  return (
+                    <div className="flex items-center gap-1.5 flex-wrap bg-blue-50/90 px-2.5 py-1 rounded-full border border-blue-200 shadow-2xs">
+                      <span className="text-[11px] font-bold text-blue-800">┅ Διακεκομμένες (±A):</span>
+                      {(
+                        [
+                          { c: '#2563eb', label: 'Μπλε' },
+                          { c: '#dc2626', label: 'Κόκκινο' },
+                          { c: '#16a34a', label: 'Πράσινο' },
+                          { c: '#9333ea', label: 'Μωβ' },
+                          { c: '#ea580c', label: 'Πορτοκαλί' },
+                          { c: '#0891b2', label: 'Κυανό' },
+                          { c: '#111827', label: 'Μαύρο' },
+                        ] as const
+                      ).map((sw) => (
+                        <button
+                          key={sw.c}
+                          onClick={() => applyWaveGuideColor(sw.c)}
+                          title={`Χρώμα Διακεκομμένων: ${sw.label}`}
+                          className={`w-4.5 h-4.5 rounded-full border transition cursor-pointer ${
+                            curGuideColor.toLowerCase() === sw.c
+                              ? 'ring-2 ring-offset-1 ring-blue-600 scale-110 border-white'
+                              : 'border-slate-300 hover:scale-110'
+                          }`}
+                          style={{ backgroundColor: sw.c }}
+                        />
+                      ))}
+                      <label
+                        className="relative w-5 h-5 rounded-full border border-slate-300 overflow-hidden cursor-pointer flex items-center justify-center shadow-2xs"
+                        style={{
+                          background:
+                            'conic-gradient(#ef4444, #f59e0b, #10b981, #3b82f6, #8b5cf6, #ec4899, #ef4444)',
+                        }}
+                        title="Επιλογή οποιουδήποτε χρώματος για τις 2 διακεκομμένες"
+                      >
+                        <input
+                          type="color"
+                          value={curGuideColor}
+                          onChange={(ev) => applyWaveGuideColor(ev.target.value)}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                        />
+                      </label>
+                      {activeWaveDiag && (
+                        <>
+                          <div className="h-3.5 w-px bg-blue-200 mx-0.5" />
+                          <button
+                            onClick={() => adjustSelectedWaveAxesGuides('narrow')}
+                            className="px-2 py-0.5 rounded-full bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-[11px] font-bold transition cursor-pointer"
+                            title="Στένεμα του ύψους των 2 διακεκομμένων (±A) χωρίς να αλλάξουν οι άξονες"
+                          >
+                            ➖ Στένεμα Ύψους
+                          </button>
+                          <button
+                            onClick={() => adjustSelectedWaveAxesGuides('widen')}
+                            className="px-2 py-0.5 rounded-full bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 text-[11px] font-bold transition cursor-pointer"
+                            title="Φάρδυμα του ύψους των 2 διακεκομμένων (±A) χωρίς να αλλάξουν οι άξονες"
+                          >
+                            ➕ Άνοιγμα Ύψους
+                          </button>
+                          <button
+                            onClick={() => adjustSelectedWaveAxesGuides('symmetrize')}
+                            className="px-2 py-0.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition cursor-pointer"
+                            title="Συμμετρική στοίχιση των 2 διακεκομμένων σε ίση απόσταση (+A / -A) από τον οριζόντιο άξονα"
+                          >
+                            ⚖️ Συμμετρικά ±A
+                          </button>
+                          <span className="text-[10.5px] font-semibold text-blue-700/90 hidden sm:inline">
+                            (Σύρετε <b>[↕]</b> ανεξάρτητα, <b>[±A]</b> συμμετρικά, <b>[⇅]</b> μαζί)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {activeTool === 'eraser' && (
                   <div className="flex items-center gap-1.5 flex-wrap">
