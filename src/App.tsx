@@ -6943,6 +6943,27 @@ export default function App() {
     }
   };
 
+  // Reflows single line-wrap newlines (\n) inside a sentence/paragraph into normal spaces (' ')
+  // while preserving double-newline paragraph breaks (\n\n) and bullet/numbered list items,
+  // so that dragging a text box wider/narrower pulls words from lower lines up (or pushes them down) smoothly!
+  const reflowTextForResponsiveBox = useCallback((rawText: string): string => {
+    if (!rawText || !rawText.includes('\n')) return rawText;
+    const lines = rawText.split(/\r?\n/);
+    if (lines.length <= 1) return rawText;
+    let out = lines[0].trimEnd();
+    for (let i = 1; i < lines.length; i++) {
+      const prev = lines[i - 1].trim();
+      const cur = lines[i].trimStart();
+      const isBulletOrNumbered = /^(?:[-•*▪‣]|\d+[.)]|[α-ωΑ-Ωa-zA-Z][.)])\s/.test(cur);
+      if (prev.length === 0 || cur.length === 0 || isBulletOrNumbered) {
+        out += '\n' + cur;
+      } else {
+        out += (out.endsWith(' ') ? '' : ' ') + cur;
+      }
+    }
+    return out;
+  }, []);
+
   // Computes the maximum font size (8px..96px) so that the entire text fits inside (boxW, boxH)
   // both horizontally (wrapping words into lines of width <= availW without clipping a word) and vertically (all wrapped lines <= availH).
   const computeMaxFitFontSizeForBox = useCallback(
@@ -7155,13 +7176,15 @@ export default function App() {
                   fontSize: mathFs,
                 };
               }
+              const reflowedText = reflowTextForResponsiveBox(t.text);
               const autoFs =
-                t.text && t.text.trim().length > 0
-                  ? computeMaxFitFontSizeForBox(t.text, t.fontFamily, t.bold, nextW, nextH)
+                reflowedText && reflowedText.trim().length > 0
+                  ? computeMaxFitFontSizeForBox(reflowedText, t.fontFamily, t.bold, nextW, nextH)
                   : t.fontSize;
               nextAutoFs = autoFs;
               return {
                 ...t,
+                text: reflowedText,
                 x: nextX,
                 y: nextY,
                 boxWidth: nextW,
@@ -14973,20 +14996,32 @@ export default function App() {
         return;
       }
 
-      const cleanText = transcribed.trim();
-      const lines = cleanText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      const lineCount = Math.max(1, lines.length);
-      const estimatedSize = Math.round(((maxY - minY) / lineCount) * 0.78);
-      const finalFontSize = Math.max(20, Math.min(52, estimatedSize || 28));
+      const rawCleanText = transcribed.trim();
+      const reflowedText = reflowTextForResponsiveBox(rawCleanText);
       const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
       const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
       const chosenFont: TextFontStyle = textFontFamily || 'calligraphic';
+      const boxX = Math.max(12, Math.round(minX));
+      const boxY = Math.max(12, Math.round(minY));
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const initBoxW = Math.max(160, Math.min(pW - boxX - 12, Math.round(maxX - minX + 32)));
+      const initBoxH = Math.max(48, Math.min(pH - boxY - 12, Math.round(maxY - minY + 24)));
+      const finalFontSize = Math.max(
+        18,
+        Math.min(
+          64,
+          computeMaxFitFontSizeForBox(reflowedText, chosenFont, true, initBoxW, initBoxH)
+        )
+      );
 
       const newTxt: TextObject = {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        x: Math.max(12, Math.round(minX)),
-        y: Math.max(12, Math.round(minY - finalFontSize * 0.12)),
-        text: cleanText,
+        x: boxX,
+        y: boxY,
+        boxWidth: initBoxW,
+        boxHeight: initBoxH,
+        text: reflowedText,
         isMath: false,
         color: dominantColor,
         fontSize: finalFontSize,
