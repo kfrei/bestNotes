@@ -4553,11 +4553,7 @@ export default function App() {
           const s = entry.stroke;
           const layer = visibleLayerMap.get(s.layerId);
           if (layer && !layer.visible) continue;
-          drawStrokeOnContext(
-            ctx,
-            s,
-            isCurrentActivePage && selectedStrokeIds.length === 1 && selectedStrokeIds.includes(s.id)
-          );
+          drawStrokeOnContext(ctx, s, false);
         }
       }
 
@@ -5329,87 +5325,6 @@ export default function App() {
       renderStaticScene();
     }
   }, [renderStaticScene, viewMode, activeNotebook.id]);
-
-  // Smooth Pulsing / Breathing Highlight Animation ("αναβοσβήνουν απαλά και έντονα") on activeCanvasRef for Lasso-selected shapes!
-  useEffect(() => {
-    if (viewMode !== 'editor' || activeTool !== 'lasso' || selectedStrokeIds.length === 0) {
-      return;
-    }
-
-    let rafId: number | null = null;
-    const selIdSet = new Set(selectedStrokeIds);
-
-    const stepPulse = (now: number) => {
-      if (!isDrawingRef.current) {
-        const canvas = activeCanvasRef.current;
-        const ctx = activeCtxRef.current;
-        if (canvas && ctx) {
-          const selStrokes = activePage.strokes.filter((s) => selIdSet.has(s.id));
-          if (selStrokes.length > 0) {
-            const pulse = 0.5 + 0.5 * Math.sin(now * 0.0085); // ~1.35Hz breathing pulse
-            ctx.save();
-            ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-            ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
-
-            // 1. Draw pulsing electric-cyan outer halo + crisp stroke on top for each selected shape
-            for (const s of selStrokes) {
-              drawStrokeOnContext(
-                ctx,
-                {
-                  ...s,
-                  color: '#0ea5e9',
-                  width: (s.width || 3) + 4.5 + 4.5 * pulse,
-                  opacity: 0.14 + 0.36 * pulse,
-                  fillStyle: 'none',
-                  fillColor: undefined,
-                },
-                false
-              );
-              drawStrokeOnContext(ctx, s, false);
-            }
-
-            // 2. When 2+ shapes are selected, animate marching-ants cyan sub-frames around each selected item
-            if (selStrokes.length >= 2) {
-              ctx.save();
-              ctx.strokeStyle = `rgba(2, 132, 199, ${0.45 + 0.5 * pulse})`;
-              ctx.lineWidth = 1.8;
-              ctx.setLineDash([5, 4]);
-              ctx.lineDashOffset = -(now * 0.025);
-              for (const ms of selStrokes) {
-                const sb = getStrokeBounds(ms);
-                const subPad = 5;
-                ctx.strokeRect(
-                  sb.minX - subPad,
-                  sb.minY - subPad,
-                  Math.max(12, sb.maxX - sb.minX + subPad * 2),
-                  Math.max(12, sb.maxY - sb.minY + subPad * 2)
-                );
-              }
-              ctx.restore();
-            }
-
-            ctx.restore();
-          }
-        }
-      }
-      rafId = window.requestAnimationFrame(stepPulse);
-    };
-
-    rafId = window.requestAnimationFrame(stepPulse);
-    return () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-      }
-      const canvas = activeCanvasRef.current;
-      const ctx = activeCtxRef.current;
-      if (canvas && ctx && !isDrawingRef.current) {
-        ctx.save();
-        ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-        ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
-        ctx.restore();
-      }
-    };
-  }, [viewMode, activeTool, selectedStrokeIds, activePage.strokes]);
 
   // Sync activeCanvasRef & staticCanvasRef with the current active page in the multi-page stack
   useEffect(() => {
