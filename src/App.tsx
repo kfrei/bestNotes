@@ -128,6 +128,7 @@ import {
   recomputeAutoSmoothHandles,
   reverseBezierPointsExact,
   convertOpenStrokeToBezierSplinePoints,
+  ensureWaveBezierPoints,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -547,7 +548,21 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       repaired = true;
     }
     seenIds.add(pid);
-    return pid !== p.id ? { ...p, id: pid } : p;
+    let pageModified = pid !== p.id;
+    const nextStrokes = (p.strokes || []).map((s) => {
+      if (
+        (s.shapeType === 'sine' || s.shapeType === 'cosine') &&
+        s.points.length >= 2 &&
+        s.points.length <= 3 &&
+        s.points[0]?.outDx === undefined
+      ) {
+        pageModified = true;
+        repaired = true;
+        return { ...s, points: ensureWaveBezierPoints(s) };
+      }
+      return s;
+    });
+    return pageModified ? { ...p, id: pid, strokes: nextStrokes } : p;
   });
 
   const normTitle = (nb.title || '')
@@ -2850,24 +2865,13 @@ export default function App() {
   };
 
   const getStrokeSamplePoints = (s: StrokeObject): { x: number; y: number }[] => {
-    if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
-      const pPeak = s.points[0];
-      const pEnd = s.points[1];
-      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-      const dx = pEnd.x - pStart.x;
-      const dy = pEnd.y - pStart.y;
-      const spanL = Math.hypot(dx, dy) || 1;
-      const ux = dx / spanL;
-      const uy = dy / spanL;
-      const nx = uy;
-      const ny = -ux;
-      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
-      return [
-        { x: pStart.x + amp * nx, y: pStart.y + amp * ny },
-        { x: pStart.x - amp * nx, y: pStart.y - amp * ny },
-        { x: pEnd.x + amp * nx, y: pEnd.y + amp * ny },
-        { x: pEnd.x - amp * nx, y: pEnd.y - amp * ny },
-      ];
+    if (
+      (s.shapeType === 'sine' || s.shapeType === 'cosine') &&
+      s.points.length >= 2 &&
+      s.points.length <= 3 &&
+      s.points[0]?.outDx === undefined
+    ) {
+      return ensureWaveBezierPoints(s);
     }
     if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
       const [p0, p1, p2, p3] = s.points;
@@ -2919,12 +2923,22 @@ export default function App() {
       // On an open freehand line, endpoints (0 and kList.length - 1) cannot be deleted
       return kList.length > 2 && nodeIdx > 0 && nodeIdx < kList.length - 1;
     }
-    if (s.shapeType === 'line' || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') {
-      if (s.shapeType === 'line' && s.points[0]?.twist === 999 && s.points.length >= 3) {
+    if (
+      s.shapeType === 'line' ||
+      s.shapeType === 'arrow' ||
+      s.shapeType === 'double-arrow' ||
+      s.shapeType === 'sine' ||
+      s.shapeType === 'cosine'
+    ) {
+      if (
+        (s.shapeType === 'line' || s.shapeType === 'sine' || s.shapeType === 'cosine') &&
+        s.points[0]?.twist === 999 &&
+        s.points.length >= 3
+      ) {
         const uniqueVerts = s.points.length - 1;
         return uniqueVerts > 3;
       }
-      // On an open line/arrow, endpoints (0 and s.points.length - 1) cannot be deleted
+      // On an open line/arrow/wave, endpoints (0 and s.points.length - 1) cannot be deleted
       return s.points.length > 2 && nodeIdx > 0 && nodeIdx < s.points.length - 1;
     }
     if (s.shapeType === 'parabola' || s.shapeType === 'hyperbola' || s.shapeType === 'arc') {
@@ -3062,33 +3076,38 @@ export default function App() {
       return false;
     }
 
-    if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
-      const pPeak = s.points[0];
-      const pEnd = s.points[1];
-      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-      const dx = pEnd.x - pStart.x;
-      const dy = pEnd.y - pStart.y;
-      const spanL = Math.hypot(dx, dy) || 1;
-      const ux = dx / spanL;
-      const uy = dy / spanL;
-      const nx = uy;
-      const ny = -ux;
-      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
-      const halfCycles = Math.max(1, pStart.twist || 2);
-      let prevPt: { x: number; y: number } | null = null;
-      for (let i = 0; i <= 40; i++) {
-        const t = i / 40;
-        const along = t * spanL;
-        const waveOffset =
-          s.shapeType === 'sine'
-            ? amp * Math.sin(t * halfCycles * Math.PI)
-            : -amp * Math.cos(t * halfCycles * Math.PI);
-        const curPt = {
-          x: pStart.x + along * ux + waveOffset * nx,
-          y: pStart.y + along * uy + waveOffset * ny,
-        };
-        if (prevPt && isPointNearSegment(pt, prevPt, curPt, tol)) return true;
-        prevPt = curPt;
+    if (
+      (s.shapeType === 'sine' || s.shapeType === 'cosine') &&
+      s.points.length >= 2 &&
+      s.points.length <= 3 &&
+      s.points[0]?.outDx === undefined
+    ) {
+      const wavePts = ensureWaveBezierPoints(s);
+      for (let i = 1; i < wavePts.length; i++) {
+        const pA = wavePts[i - 1];
+        const pB = wavePts[i];
+        const cubicCtrl = getCubicSegmentControlPoints(pA, pB);
+        if (cubicCtrl) {
+          let prevPt: { x: number; y: number } = pA;
+          for (let k = 1; k <= 12; k++) {
+            const t = k / 12;
+            const u = 1 - t;
+            const curPt = {
+              x:
+                u * u * u * pA.x +
+                3 * u * u * t * cubicCtrl.cp1x +
+                3 * u * t * t * cubicCtrl.cp2x +
+                t * t * t * pB.x,
+              y:
+                u * u * u * pA.y +
+                3 * u * u * t * cubicCtrl.cp1y +
+                3 * u * t * t * cubicCtrl.cp2y +
+                t * t * t * pB.y,
+            };
+            if (isPointNearSegment(pt, prevPt, curPt, tol)) return true;
+            prevPt = curPt;
+          }
+        }
       }
       return false;
     }
@@ -3908,33 +3927,23 @@ export default function App() {
         ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pB.x, pB.y);
       }
       ctx.closePath();
-    } else if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
-      // 2. Symmetrical Sine ('sine') & Cosine ('cosine') Wave (supports full 360° rotation!)
-      //    points[0] = Peak handle (up/down), points[1] = Right Endpoint handle (left/right), points[2] = Left Origin
-      const pPeak = s.points[0];
-      const pEnd = s.points[1];
-      const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-      const dx = pEnd.x - pStart.x;
-      const dy = pEnd.y - pStart.y;
-      const spanL = Math.hypot(dx, dy) || 1;
-      const ux = dx / spanL;
-      const uy = dy / spanL;
-      const nx = uy;
-      const ny = -ux;
-      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
-      const halfCycles = Math.max(1, pStart.twist || 2);
-      const steps = 72;
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const along = t * spanL;
-        const waveOffset =
-          s.shapeType === 'sine'
-            ? amp * Math.sin(t * halfCycles * Math.PI)
-            : -amp * Math.cos(t * halfCycles * Math.PI);
-        const x = pStart.x + along * ux + waveOffset * nx;
-        const y = pStart.y + along * uy + waveOffset * ny;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+    } else if (
+      (s.shapeType === 'sine' || s.shapeType === 'cosine') &&
+      s.points.length >= 2 &&
+      s.points.length <= 3 &&
+      s.points[0]?.outDx === undefined
+    ) {
+      const wavePts = ensureWaveBezierPoints(s);
+      ctx.moveTo(wavePts[0].x, wavePts[0].y);
+      for (let i = 1; i < wavePts.length; i++) {
+        const prevPt = wavePts[i - 1];
+        const pt = wavePts[i];
+        const cubicCtrl = getCubicSegmentControlPoints(prevPt, pt);
+        if (cubicCtrl) {
+          ctx.bezierCurveTo(cubicCtrl.cp1x, cubicCtrl.cp1y, cubicCtrl.cp2x, cubicCtrl.cp2y, pt.x, pt.y);
+        } else {
+          ctx.lineTo(pt.x, pt.y);
+        }
       }
     } else if ((s.shapeType === 'parabola' || s.shapeType === 'arc') && s.points.length === 3) {
       // 3. Symmetrical 3-Node Parabola ('parabola') & Circular Arc ('arc')
@@ -4783,10 +4792,47 @@ export default function App() {
           ctx.restore();
         }
 
+        // 4b. When a single Sine or Cosine wave is selected in Lasso mode, highlight open endpoints of other matching waves on the page!
+        if (activeTool === 'lasso' && selectedStrokeIds.length === 1 && selectedImageIds.length === 0) {
+          const selWave = pageObj.strokes.find((s) => s.id === selectedStrokeIds[0]);
+          if (
+            selWave &&
+            (selWave.shapeType === 'sine' || selWave.shapeType === 'cosine') &&
+            selWave.points.length >= 2 &&
+            selWave.points[0]?.twist !== 999
+          ) {
+            for (const other of pageObj.strokes) {
+              if (
+                other.id === selWave.id ||
+                other.shapeType !== selWave.shapeType ||
+                other.points.length < 2 ||
+                other.points[0]?.twist === 999
+              ) {
+                continue;
+              }
+              const pStart = other.points[0];
+              const pEnd = other.points[other.points.length - 1];
+              for (const ep of [pStart, pEnd, selWave.points[0], selWave.points[selWave.points.length - 1]]) {
+                if (!ep) continue;
+                ctx.save();
+                ctx.fillStyle = 'rgba(209, 250, 229, 0.85)';
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([3, 2]);
+                ctx.beginPath();
+                ctx.arc(ep.x, ep.y, 7.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+          }
+        }
+
         // 5. Direct Node Handles ("Λευκό Βελάκι"):
         //    - Circle/Ellipse: strictly 4 nodes at 90°
         //    - Parabola/Hyperbola/Arc: strictly 3 nodes (2 Endpoints + 1 Middle Curvature)
-        //    - Sine/Cosine: strictly 2 nodes (0: Peak [up/down only], 1: Right Endpoint [left/right only])
+        //    - Sine/Cosine: 5 normal nodes per period (both endpoints + peaks/zero-crossings, no text labels!)
         //    - Freehand Line/Curve (!target.isShape): sparse Key Nodes (2 endpoints + ~5 distinct peaks/vertices, NEVER 500!)
         if (activeTool === 'direct-node' && activeNodeStrokeId) {
           const target = pageObj.strokes.find((s) => s.id === activeNodeStrokeId);
@@ -4799,6 +4845,8 @@ export default function App() {
                 (target.shapeType === 'line' ||
                   target.shapeType === 'arrow' ||
                   target.shapeType === 'double-arrow' ||
+                  target.shapeType === 'sine' ||
+                  target.shapeType === 'cosine' ||
                   target.shapeType === 'parabola' ||
                   target.shapeType === 'hyperbola' ||
                   target.shapeType === 'arc') &&
@@ -4812,6 +4860,8 @@ export default function App() {
                     (other.shapeType === 'line' ||
                       other.shapeType === 'arrow' ||
                       other.shapeType === 'double-arrow' ||
+                      other.shapeType === 'sine' ||
+                      other.shapeType === 'cosine' ||
                       other.shapeType === 'parabola' ||
                       other.shapeType === 'hyperbola' ||
                       other.shapeType === 'arc') &&
@@ -4855,13 +4905,14 @@ export default function App() {
                 ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
               }
             } else {
-              const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
               const isThreePtCurve =
                 target.shapeType === 'parabola' ||
                 target.shapeType === 'hyperbola' ||
                 target.shapeType === 'arc';
               const isWeldedSplineClosed =
-                target.shapeType === 'line' &&
+                (target.shapeType === 'line' ||
+                  target.shapeType === 'sine' ||
+                  target.shapeType === 'cosine') &&
                 target.points.length >= 3 &&
                 target.points[0]?.twist === 999;
               const isClosedPoly =
@@ -4876,34 +4927,17 @@ export default function App() {
                 target.shapeType === 'pyramid' ||
                 target.shapeType === 'resistor' ||
                 target.shapeType === 'spring';
-              const nodeCount = isWave
-                ? Math.min(2, target.points.length)
-                : isThreePtCurve
+              const nodeCount = isThreePtCurve
                 ? Math.min(3, target.points.length)
                 : isClosedPoly
                 ? Math.max(1, target.points.length - 1)
                 : target.points.length;
-
-              if (isWave && target.points.length >= 3) {
-                const pStart = target.points[2];
-                const pEnd = target.points[1];
-                ctx.strokeStyle = 'rgba(37, 99, 235, 0.35)';
-                ctx.lineWidth = 1.2;
-                ctx.setLineDash([4, 4]);
-                ctx.beginPath();
-                ctx.moveTo(pStart.x, pEnd.y);
-                ctx.lineTo(pEnd.x, pEnd.y);
-                ctx.stroke();
-                ctx.setLineDash([]);
-              }
 
               for (let i = 0; i < nodeCount; i++) {
                 const p = target.points[i];
                 ctx.fillStyle =
                   isWeldedSplineClosed && i === 0
                     ? '#d1fae5'
-                    : isWave && i === 0
-                    ? '#fef08a'
                     : isThreePtCurve && i === 1
                     ? '#fef08a'
                     : '#ffffff';
@@ -4911,20 +4945,6 @@ export default function App() {
                 ctx.lineWidth = 2.4;
                 ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
                 ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
-
-                if (isWave) {
-                  ctx.font = 'bold 11px sans-serif';
-                  ctx.fillStyle = '#1e3a8a';
-                  if (i === 0) {
-                    ctx.fillText('↕ Κορυφή', p.x - 24, p.y - 12);
-                  } else if (i === 1) {
-                    ctx.fillText('↔ Άκρο', p.x + 10, p.y + 4);
-                  }
-                } else if (isThreePtCurve && i === 1) {
-                  ctx.font = 'bold 11px sans-serif';
-                  ctx.fillStyle = '#1e3a8a';
-                  ctx.fillText('✦ Μέση (Καμπυλότητα)', p.x - 45, p.y - 12);
-                }
               }
             }
 
@@ -8261,87 +8281,6 @@ export default function App() {
       return null;
     }
 
-    // 3. Sine & Cosine Waves ('sine', 'cosine'): sample the 72 wave points!
-    if ((target.shapeType === 'sine' || target.shapeType === 'cosine') && target.points.length >= 2) {
-      for (let i = 0; i < Math.min(2, target.points.length); i++) {
-        const p = target.points[i];
-        if (p && distance(pt, p) < 22) return null;
-      }
-      const pPeak = target.points[0];
-      const pEnd = target.points[1];
-      const pStart = target.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-      const dx = pEnd.x - pStart.x;
-      const dy = pEnd.y - pStart.y;
-      const spanL = Math.hypot(dx, dy) || 1;
-      const ux = dx / spanL;
-      const uy = dy / spanL;
-      const nx = uy;
-      const ny = -ux;
-      const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
-      const halfCycles = Math.max(1, pStart.twist || 2);
-      const N = 72;
-      const rawSamples: { x: number; y: number }[] = [];
-      for (let k = 0; k <= N; k++) {
-        const t = k / N;
-        const along = t * spanL;
-        const waveOffset =
-          target.shapeType === 'sine'
-            ? amp * Math.sin(t * halfCycles * Math.PI)
-            : -amp * Math.cos(t * halfCycles * Math.PI);
-        rawSamples.push({
-          x: pStart.x + along * ux + waveOffset * nx,
-          y: pStart.y + along * uy + waveOffset * ny,
-        });
-      }
-
-      let bestDist = maxDist;
-      let bestProjX = pt.x;
-      let bestProjY = pt.y;
-      let bestSampleIdx = -1;
-      for (let k = 0; k < N; k++) {
-        const sA = rawSamples[k];
-        const sB = rawSamples[k + 1];
-        const sdx = sB.x - sA.x;
-        const sdy = sB.y - sA.y;
-        const lenSq = sdx * sdx + sdy * sdy;
-        const t =
-          lenSq > 1e-4 ? Math.max(0, Math.min(1, ((pt.x - sA.x) * sdx + (pt.y - sA.y) * sdy) / lenSq)) : 0.5;
-        const px = sA.x + t * sdx;
-        const py = sA.y + t * sdy;
-        const d = Math.hypot(pt.x - px, pt.y - py);
-        if (d < bestDist) {
-          if (Math.hypot(px - pPeak.x, py - pPeak.y) < 18 || Math.hypot(px - pEnd.x, py - pEnd.y) < 18) {
-            continue;
-          }
-          bestDist = d;
-          bestProjX = px;
-          bestProjY = py;
-          bestSampleIdx = t < 0.5 ? k : k + 1;
-        }
-      }
-
-      if (bestSampleIdx >= 1) {
-        const idx = Math.max(2, Math.min(N - 2, bestSampleIdx));
-        const sampledPts: BezierPoint[] = rawSamples.map((sp, k) => ({
-          x: k === idx ? bestProjX : sp.x,
-          y: k === idx ? bestProjY : sp.y,
-          cx: k > 0 ? (rawSamples[k - 1].x + (k === idx ? bestProjX : sp.x)) / 2 : undefined,
-          cy: k > 0 ? (rawSamples[k - 1].y + (k === idx ? bestProjY : sp.y)) / 2 : undefined,
-          pressure: 0.7,
-        }));
-        const baseKeys = computeFreehandKeyNodeIndices(sampledPts);
-        return {
-          strokeId: target.id,
-          x: bestProjX,
-          y: bestProjY,
-          convertCurveSampleIdx: idx,
-          sampledCurvePoints: sampledPts,
-          sampledBaseKeyIndices: baseKeys,
-        };
-      }
-      return null;
-    }
-
     // 4. Circle / Ellipse ('circle', 'ellipse'): sample each cubic Bézier arc between adjacent perimeter nodes!
     if ((target.shapeType === 'circle' || target.shapeType === 'ellipse') && target.points.length >= 3) {
       const pts = target.points;
@@ -8388,7 +8327,7 @@ export default function App() {
       return null;
     }
 
-    // 5. Editable Polygons & Lines ('rectangle', 'parallelogram', 'trapezoid', 'triangle', 'line', 'arrow', 'double-arrow') — including curved Quadratic Bézier segments!
+    // 5. Editable Polygons, Lines & Waves ('rectangle', 'parallelogram', 'trapezoid', 'triangle', 'line', 'arrow', 'double-arrow', 'sine', 'cosine')
     const isEditablePoly =
       target.shapeType === 'rectangle' ||
       target.shapeType === 'parallelogram' ||
@@ -8396,7 +8335,9 @@ export default function App() {
       target.shapeType === 'triangle' ||
       target.shapeType === 'line' ||
       target.shapeType === 'arrow' ||
-      target.shapeType === 'double-arrow';
+      target.shapeType === 'double-arrow' ||
+      target.shapeType === 'sine' ||
+      target.shapeType === 'cosine';
     if (!isEditablePoly || target.points.length < 2) return null;
 
     const isClosedPoly =
@@ -8581,11 +8522,15 @@ export default function App() {
       }
     }
 
-    // C. Geometric shape (polygon, line, arrow, circle, ellipse)
+    // C. Geometric shape (polygon, line, arrow, sine, cosine, circle, ellipse)
     if (s.isShape && typeof hoverPreview.segIdx === 'number' && s.points.length >= 2) {
       const segIdx = hoverPreview.segIdx;
       const isLineOrArrow =
-        s.shapeType === 'line' || s.shapeType === 'arrow' || s.shapeType === 'double-arrow';
+        s.shapeType === 'line' ||
+        s.shapeType === 'arrow' ||
+        s.shapeType === 'double-arrow' ||
+        s.shapeType === 'sine' ||
+        s.shapeType === 'cosine';
       const isClosedPoly =
         s.shapeType === 'rectangle' ||
         s.shapeType === 'parallelogram' ||
@@ -8676,13 +8621,14 @@ export default function App() {
       return null;
     }
 
-    const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
     const isThreePtCurve =
       target.shapeType === 'parabola' ||
       target.shapeType === 'hyperbola' ||
       target.shapeType === 'arc';
     const isClosedPoly =
-      (target.shapeType === 'line' &&
+      ((target.shapeType === 'line' ||
+        target.shapeType === 'sine' ||
+        target.shapeType === 'cosine') &&
         target.points.length >= 3 &&
         target.points[0]?.twist === 999) ||
       target.shapeType === 'rectangle' ||
@@ -8695,9 +8641,7 @@ export default function App() {
       target.shapeType === 'pyramid' ||
       target.shapeType === 'resistor' ||
       target.shapeType === 'spring';
-    const nodeCount = isWave
-      ? Math.min(2, target.points.length)
-      : isThreePtCurve
+    const nodeCount = isThreePtCurve
       ? Math.min(3, target.points.length)
       : isClosedPoly
       ? Math.max(1, target.points.length - 1)
@@ -10607,12 +10551,16 @@ export default function App() {
               return;
             }
           } else {
-            const isWave = target.shapeType === 'sine' || target.shapeType === 'cosine';
             const isThreePtCurve =
               target.shapeType === 'parabola' ||
               target.shapeType === 'hyperbola' ||
               target.shapeType === 'arc';
             const isClosedPoly =
+              ((target.shapeType === 'line' ||
+                target.shapeType === 'sine' ||
+                target.shapeType === 'cosine') &&
+                target.points.length >= 3 &&
+                target.points[0]?.twist === 999) ||
               target.shapeType === 'rectangle' ||
               target.shapeType === 'parallelogram' ||
               target.shapeType === 'trapezoid' ||
@@ -10623,9 +10571,7 @@ export default function App() {
               target.shapeType === 'pyramid' ||
               target.shapeType === 'resistor' ||
               target.shapeType === 'spring';
-            const nodeCount = isWave
-              ? Math.min(2, target.points.length)
-              : isThreePtCurve
+            const nodeCount = isThreePtCurve
               ? Math.min(3, target.points.length)
               : isClosedPoly
               ? Math.max(1, target.points.length - 1)
@@ -11722,6 +11668,7 @@ export default function App() {
     // Collect coalesced high-frequency Apple Pencil events (up to 240Hz on iPad Pro)
     const nativeEv = e.nativeEvent as PointerEvent;
     const coalesced = nativeEv.getCoalescedEvents ? nativeEv.getCoalescedEvents() : [nativeEv];
+    const prevRawPt = lastRawCanvasPtRef.current;
     const latestPt = getCanvasPointFromNative(e.clientX, e.clientY, e.pressure);
     lastRawCanvasPtRef.current = latestPt;
 
@@ -11842,6 +11789,8 @@ export default function App() {
             st === 'line' ||
             st === 'arrow' ||
             st === 'double-arrow' ||
+            st === 'sine' ||
+            st === 'cosine' ||
             st === 'parabola' ||
             st === 'hyperbola' ||
             st === 'arc';
@@ -11910,6 +11859,8 @@ export default function App() {
                 (other.shapeType === 'line' ||
                   other.shapeType === 'arrow' ||
                   other.shapeType === 'double-arrow' ||
+                  other.shapeType === 'sine' ||
+                  other.shapeType === 'cosine' ||
                   other.shapeType === 'parabola' ||
                   other.shapeType === 'hyperbola' ||
                   other.shapeType === 'arc') &&
@@ -12235,10 +12186,17 @@ export default function App() {
                           combinedPts[combinedPts.length - 1] = { ...closeSeamPt };
                         }
 
+                        const keepWaveShapeType =
+                          !alsoClosedOtherEnd &&
+                          s1.shapeType === s2.shapeType &&
+                          (s1.shapeType === 'sine' || s1.shapeType === 'cosine')
+                            ? s1.shapeType
+                            : 'line';
+
                         mergedStroke = {
                           ...s1,
                           isShape: true,
-                          shapeType: 'line',
+                          shapeType: keepWaveShapeType,
                           points: combinedPts,
                           keyNodeIndices: undefined,
                           fillStyle:
@@ -12423,36 +12381,6 @@ export default function App() {
             const newPts = [...s.points];
             const targetPt = { ...newPts[draggingNodeIdx.index] };
 
-            // Special strict axis constraints for Sine / Cosine waves:
-            // - index 0 (Κορυφή / Peak): moves ONLY vertically (up/down) to change amplitude
-            // - index 1 (Δεξί Άκρο / Endpoint): moves ONLY horizontally (left/right) to widen/narrow the wave
-            if (s.shapeType === 'sine' || s.shapeType === 'cosine') {
-              const pStart = newPts[2] || { x: newPts[0].x - 80, y: newPts[1].y, twist: 2 };
-              const halfCycles = Math.max(1, Math.round(pStart.twist || 2));
-              const tPeak = s.shapeType === 'sine' ? 1 / (2 * halfCycles) : 0;
-
-              if (draggingNodeIdx.index === 0) {
-                // Peak handle: strictly vertical (taller / shorter)
-                targetPt.y = latestPt.y;
-                newPts[0] = targetPt;
-              } else if (draggingNodeIdx.index === 1) {
-                // Endpoint handle: strictly horizontal (wider / narrower), supporting both normal and horizontally mirrored waves
-                const dirSign = newPts[1].x >= pStart.x ? 1 : -1;
-                const nextEndX =
-                  dirSign > 0
-                    ? Math.max(pStart.x + 48, latestPt.x)
-                    : Math.min(pStart.x - 48, latestPt.x);
-                targetPt.x = nextEndX;
-                newPts[1] = targetPt;
-                // Keep the Peak handle's X locked at the crest of the first half-cycle
-                newPts[0] = {
-                  ...newPts[0],
-                  x: pStart.x + (nextEndX - pStart.x) * tPeak,
-                };
-              }
-              return { ...s, points: newPts };
-            }
-
             if (draggingNodeIdx.isControl) {
               if (draggingNodeIdx.handleSide === 'out' || draggingNodeIdx.handleSide === 'in') {
                 const hdx = latestPt.x - targetPt.x;
@@ -12516,7 +12444,9 @@ export default function App() {
               };
             }
             const isClosedPoly =
-              (s.shapeType === 'line' &&
+              ((s.shapeType === 'line' ||
+                s.shapeType === 'sine' ||
+                s.shapeType === 'cosine') &&
                 s.points.length >= 3 &&
                 s.points[0]?.twist === 999) ||
               s.shapeType === 'rectangle' ||
@@ -13215,49 +13145,257 @@ export default function App() {
 
         let snapDx = 0;
         let snapDy = 0;
-        if (curBox && refBoxes.length > 0) {
-          const SNAP_T = 6;
-          const candMinX = curBox.minX + rawDx;
-          const candMaxX = curBox.maxX + rawDx;
-          const candCx = curBox.cx + rawDx;
-          const candMinY = curBox.minY + rawDy;
-          const candMaxY = curBox.maxY + rawDy;
-          const candCy = curBox.cy + rawDy;
 
-          let bestDiffX = SNAP_T;
-          let bestDiffY = SNAP_T;
+        // Wave-to-Wave Magnetic Endpoint Snap & 1.0s Weld (Sine ↔ Sine or Cosine ↔ Cosine in Lasso Move mode!)
+        let matchedWaveEndpoint: {
+          draggedStrokeId: string;
+          draggedEndSide: 'start' | 'end';
+          targetStrokeId: string;
+          targetEndSide: 'start' | 'end';
+          targetX: number;
+          targetY: number;
+          snapDx: number;
+          snapDy: number;
+          dist: number;
+        } | null = null;
 
-          for (const ref of refBoxes) {
-            // Center X snap
-            const dCx = Math.abs(candCx - ref.cx);
-            if (dCx <= bestDiffX) {
-              bestDiffX = dCx;
-              snapDx = ref.cx - candCx;
-            }
-            // Left / Right edge snaps
-            for (const sx of [candMinX, candMaxX]) {
-              for (const rx of [ref.minX, ref.maxX]) {
-                const dEdgeX = Math.abs(sx - rx);
-                if (dEdgeX < bestDiffX) {
-                  bestDiffX = dEdgeX;
-                  snapDx = rx - sx;
+        if (targetImgIdList.length === 0 && targetStrokeIdList.length === 1) {
+          const draggedWave = activePage.strokes.find((s) => s.id === targetStrokeIdList[0]);
+          if (
+            draggedWave &&
+            (draggedWave.shapeType === 'sine' || draggedWave.shapeType === 'cosine') &&
+            draggedWave.points.length >= 2 &&
+            draggedWave.points[0]?.twist !== 999
+          ) {
+            const hiddenOrLockedLayerIds = new Set(
+              activePage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+            );
+            const candStart = {
+              x: draggedWave.points[0].x + rawDx,
+              y: draggedWave.points[0].y + rawDy,
+            };
+            const candEnd = {
+              x: draggedWave.points[draggedWave.points.length - 1].x + rawDx,
+              y: draggedWave.points[draggedWave.points.length - 1].y + rawDy,
+            };
+
+            for (const other of activePage.strokes) {
+              if (
+                other.id === draggedWave.id ||
+                other.shapeType !== draggedWave.shapeType ||
+                other.points.length < 2 ||
+                other.points[0]?.twist === 999 ||
+                hiddenOrLockedLayerIds.has(other.layerId)
+              ) {
+                continue;
+              }
+              const otherStart = other.points[0];
+              const otherEnd = other.points[other.points.length - 1];
+              const pairs: {
+                dragSide: 'start' | 'end';
+                candPt: { x: number; y: number };
+                targetSide: 'start' | 'end';
+                targetPt: { x: number; y: number };
+              }[] = [
+                { dragSide: 'start', candPt: candStart, targetSide: 'end', targetPt: otherEnd },
+                { dragSide: 'end', candPt: candEnd, targetSide: 'start', targetPt: otherStart },
+                { dragSide: 'start', candPt: candStart, targetSide: 'start', targetPt: otherStart },
+                { dragSide: 'end', candPt: candEnd, targetSide: 'end', targetPt: otherEnd },
+              ];
+              for (const pr of pairs) {
+                const d = distance(pr.candPt, pr.targetPt);
+                if (d <= 28 && (!matchedWaveEndpoint || d < matchedWaveEndpoint.dist)) {
+                  matchedWaveEndpoint = {
+                    draggedStrokeId: draggedWave.id,
+                    draggedEndSide: pr.dragSide,
+                    targetStrokeId: other.id,
+                    targetEndSide: pr.targetSide,
+                    targetX: pr.targetPt.x,
+                    targetY: pr.targetPt.y,
+                    snapDx: pr.targetPt.x - pr.candPt.x,
+                    snapDy: pr.targetPt.y - pr.candPt.y,
+                    dist: d,
+                  };
                 }
               }
             }
+          }
+        }
 
-            // Center Y snap
-            const dCy = Math.abs(candCy - ref.cy);
-            if (dCy <= bestDiffY) {
-              bestDiffY = dCy;
-              snapDy = ref.cy - candCy;
-            }
-            // Top / Bottom edge snaps
-            for (const sy of [candMinY, candMaxY]) {
-              for (const ry of [ref.minY, ref.maxY]) {
-                const dEdgeY = Math.abs(sy - ry);
-                if (dEdgeY < bestDiffY) {
-                  bestDiffY = dEdgeY;
-                  snapDy = ry - sy;
+        if (matchedWaveEndpoint) {
+          snapDx = matchedWaveEndpoint.snapDx;
+          snapDy = matchedWaveEndpoint.snapDy;
+          const curTimer = nodeMagnetTimerRef.current;
+          if (
+            !curTimer ||
+            curTimer.strokeId !== matchedWaveEndpoint.draggedStrokeId ||
+            curTimer.targetStrokeId !== matchedWaveEndpoint.targetStrokeId ||
+            curTimer.targetEndSide !== matchedWaveEndpoint.targetEndSide ||
+            curTimer.draggedEndSide !== matchedWaveEndpoint.draggedEndSide
+          ) {
+            cancelNodeMagnetTimer();
+            const timerObj = {
+              strokeId: matchedWaveEndpoint.draggedStrokeId,
+              draggedKeyPosIdx: matchedWaveEndpoint.draggedEndSide === 'start' ? 0 : 1,
+              draggedEndSide: matchedWaveEndpoint.draggedEndSide,
+              targetStrokeId: matchedWaveEndpoint.targetStrokeId,
+              targetEndSide: matchedWaveEndpoint.targetEndSide,
+              targetX: matchedWaveEndpoint.targetX,
+              targetY: matchedWaveEndpoint.targetY,
+              startTime: performance.now(),
+              rafId: null as number | null,
+            };
+            nodeMagnetTimerRef.current = timerObj;
+            setNodeMagnetState({
+              strokeId: timerObj.strokeId,
+              draggedKeyPosIdx: timerObj.draggedKeyPosIdx,
+              targetX: timerObj.targetX,
+              targetY: timerObj.targetY,
+              progress: 0,
+            });
+
+            const stepWaveMagnet = (now: number) => {
+              if (nodeMagnetTimerRef.current !== timerObj) return;
+              const elapsed = now - timerObj.startTime;
+              const pct = Math.min(100, (elapsed / 1000) * 100);
+              setNodeMagnetState({
+                strokeId: timerObj.strokeId,
+                draggedKeyPosIdx: timerObj.draggedKeyPosIdx,
+                targetX: timerObj.targetX,
+                targetY: timerObj.targetY,
+                progress: pct,
+              });
+
+              if (elapsed >= 1000) {
+                nodeMagnetTimerRef.current = null;
+                setNodeMagnetState(null);
+                selectionTransformRef.current = null;
+                isDraggingSelectionRef.current = null;
+                isDrawingRef.current = false;
+                clearActiveOverlay();
+
+                let mergedWaveType: string | undefined = 'sine';
+                updateActivePage((page) => {
+                  const s1 = page.strokes.find((st) => st.id === timerObj.strokeId);
+                  const s2 = page.strokes.find((st) => st.id === timerObj.targetStrokeId);
+                  if (!s1 || !s2) return page;
+                  mergedWaveType = s1.shapeType;
+
+                  const pts1 = convertOpenStrokeToBezierSplinePoints(s1);
+                  const pts2 = convertOpenStrokeToBezierSplinePoints(s2);
+                  const dragIdx = timerObj.draggedEndSide === 'start' ? 0 : pts1.length - 1;
+                  pts1[dragIdx] = {
+                    ...pts1[dragIdx],
+                    x: timerObj.targetX,
+                    y: timerObj.targetY,
+                  };
+
+                  const chain1 =
+                    timerObj.draggedEndSide === 'start'
+                      ? reverseBezierPointsExact(pts1)
+                      : pts1;
+                  const chain2 =
+                    timerObj.targetEndSide === 'end'
+                      ? reverseBezierPointsExact(pts2)
+                      : pts2;
+
+                  const end1 = chain1[chain1.length - 1];
+                  const start2 = chain2[0];
+                  const jointPt: BezierPoint = {
+                    x: timerObj.targetX,
+                    y: timerObj.targetY,
+                    pressure: end1.pressure ?? start2.pressure ?? 0.7,
+                    inDx: end1.inDx,
+                    inDy: end1.inDy,
+                    outDx: start2.outDx,
+                    outDy: start2.outDy,
+                    smooth: false,
+                    twist: 777,
+                  };
+
+                  const combinedPts: BezierPoint[] = [
+                    ...chain1.slice(0, -1),
+                    jointPt,
+                    ...chain2.slice(1),
+                  ];
+
+                  const mergedStroke: StrokeObject = {
+                    ...s1,
+                    isShape: true,
+                    shapeType: s1.shapeType,
+                    points: combinedPts,
+                    keyNodeIndices: undefined,
+                  };
+
+                  return {
+                    ...page,
+                    strokes: page.strokes
+                      .filter((st) => st.id !== timerObj.targetStrokeId)
+                      .map((st) => (st.id === timerObj.strokeId ? mergedStroke : st)),
+                  };
+                }, true);
+
+                setSelectedStrokeIds([timerObj.strokeId]);
+                setActiveNodeStrokeId(timerObj.strokeId);
+                showToast(
+                  mergedWaveType === 'cosine'
+                    ? '🧲 Τα 2 συνημίτονα ενώθηκαν σε 1 ενιαίο κύμα!'
+                    : '🧲 Τα 2 ημίτονα ενώθηκαν σε 1 ενιαίο κύμα!'
+                );
+                return;
+              }
+              timerObj.rafId = window.requestAnimationFrame(stepWaveMagnet);
+            };
+            timerObj.rafId = window.requestAnimationFrame(stepWaveMagnet);
+          }
+        } else {
+          if (nodeMagnetTimerRef.current) {
+            cancelNodeMagnetTimer();
+          }
+          if (curBox && refBoxes.length > 0) {
+            const SNAP_T = 6;
+            const candMinX = curBox.minX + rawDx;
+            const candMaxX = curBox.maxX + rawDx;
+            const candCx = curBox.cx + rawDx;
+            const candMinY = curBox.minY + rawDy;
+            const candMaxY = curBox.maxY + rawDy;
+            const candCy = curBox.cy + rawDy;
+
+            let bestDiffX = SNAP_T;
+            let bestDiffY = SNAP_T;
+
+            for (const ref of refBoxes) {
+              // Center X snap
+              const dCx = Math.abs(candCx - ref.cx);
+              if (dCx <= bestDiffX) {
+                bestDiffX = dCx;
+                snapDx = ref.cx - candCx;
+              }
+              // Left / Right edge snaps
+              for (const sx of [candMinX, candMaxX]) {
+                for (const rx of [ref.minX, ref.maxX]) {
+                  const dEdgeX = Math.abs(sx - rx);
+                  if (dEdgeX < bestDiffX) {
+                    bestDiffX = dEdgeX;
+                    snapDx = rx - sx;
+                  }
+                }
+              }
+
+              // Center Y snap
+              const dCy = Math.abs(candCy - ref.cy);
+              if (dCy <= bestDiffY) {
+                bestDiffY = dCy;
+                snapDy = ref.cy - candCy;
+              }
+              // Top / Bottom edge snaps
+              for (const sy of [candMinY, candMaxY]) {
+                for (const ry of [ref.minY, ref.maxY]) {
+                  const dEdgeY = Math.abs(sy - ry);
+                  if (dEdgeY < bestDiffY) {
+                    bestDiffY = dEdgeY;
+                    snapDy = ry - sy;
+                  }
                 }
               }
             }
@@ -13531,34 +13669,54 @@ export default function App() {
       renderLiveOverlayStroke();
     }
 
-    // Hold-to-Snap (~0.37s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
-    // IMPORTANT: We anchor a 7.5px radius around holdAnchorPtRef so natural hand micro-tremors or
-    // 240Hz pressure/tilt events while holding the pencil pressed on the glass NEVER reset the timer!
+    // Hold-to-Snap (~0.28s pause at end of stroke in Pen, Pencil, Highlighter, or Shape tool):
+    // IMPORTANT: Ignore slow deceleration / micro-tremors (< 4.5px step within 16px of holdAnchorPtRef)
+    // so natural hand drift while holding the pencil or mouse at the end of a line NEVER resets the timer!
     if (
       holdToSnapEnabled &&
       ['pen', 'pencil', 'highlighter', 'shape'].includes(activeTool) &&
       !snappedCurrentStrokeRef.current
     ) {
+      const stepDist = prevRawPt ? distance(prevRawPt, latestPt) : 0;
+      const distFromHoldAnchor = holdAnchorPtRef.current
+        ? distance(holdAnchorPtRef.current, latestPt)
+        : Infinity;
       const movedFromHoldAnchor =
-        !holdAnchorPtRef.current || distance(holdAnchorPtRef.current, latestPt) >= 7.5;
+        !holdAnchorPtRef.current ||
+        distFromHoldAnchor >= 16 ||
+        (stepDist >= 4.5 && distFromHoldAnchor >= 7.5);
       if (movedFromHoldAnchor) {
         holdAnchorPtRef.current = { x: latestPt.x, y: latestPt.y };
         lastHoldMoveTimeRef.current = performance.now();
+      } else if (holdAnchorPtRef.current) {
+        // Gently recenter anchor on tiny micro-drifts so slow drift never accumulates past 16px
+        holdAnchorPtRef.current = {
+          x: holdAnchorPtRef.current.x * 0.82 + latestPt.x * 0.18,
+          y: holdAnchorPtRef.current.y * 0.82 + latestPt.y * 0.18,
+        };
       }
       if (movedFromHoldAnchor || !holdTimerRef.current) {
         if (holdTimerRef.current) window.clearTimeout(holdTimerRef.current);
         holdTimerRef.current = window.setTimeout(() => {
           holdTimerRef.current = null;
           if (!isDrawingRef.current || currentStrokePtsRef.current.length < 2) return;
+          const ptsForSnap =
+            lastRawCanvasPtRef.current &&
+            distance(
+              currentStrokePtsRef.current[currentStrokePtsRef.current.length - 1],
+              lastRawCanvasPtRef.current
+            ) >= 1.5
+              ? [...currentStrokePtsRef.current, lastRawCanvasPtRef.current]
+              : currentStrokePtsRef.current;
           const snapped = recognizeAndSnapShape(
-            currentStrokePtsRef.current,
+            ptsForSnap,
             activeTool === 'shape' ? shapePreset : 'auto'
           );
           if (snapped) {
             snappedCurrentStrokeRef.current = snapped;
             renderLiveOverlayStroke();
           }
-        }, 370);
+        }, 280);
       }
     }
   };
@@ -13609,6 +13767,7 @@ export default function App() {
     }
 
     if (activeTool === 'direct-node') {
+      cancelNodeMagnetTimer();
       clearActiveOverlay();
       setDraggingNodeIdx(null);
       selectionTransformRef.current = null;
@@ -13676,6 +13835,7 @@ export default function App() {
 
     // 2. Finish Lasso Selection
     if (activeTool === 'lasso' || selectionTransformRef.current || isDraggingSelectionRef.current) {
+      cancelNodeMagnetTimer();
       clearActiveOverlay();
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
         const finishedTf = selectionTransformRef.current;
@@ -13711,8 +13871,13 @@ export default function App() {
       clearActiveOverlay();
       return;
     }
-    // Preserve short micro-strokes (like Greek accents / τόνοι) that moved < 1.5px
-    if (rawPts.length === 1 && lastRawCanvasPtRef.current && distance(rawPts[0], lastRawCanvasPtRef.current) > 0.35) {
+    // Preserve short micro-strokes (like Greek accents / τόνοι) that moved < 1.5px,
+    // and ensure the final unsmoothed endpoint is included on fast straight lines!
+    if (
+      lastRawCanvasPtRef.current &&
+      distance(rawPts[rawPts.length - 1], lastRawCanvasPtRef.current) >
+        (rawPts.length === 1 ? 0.35 : 1.5)
+    ) {
       rawPts.push(lastRawCanvasPtRef.current);
     }
 
@@ -13770,6 +13935,8 @@ export default function App() {
     let isShape = false;
     let shapeType: string | undefined;
 
+    const holdElapsedMs = performance.now() - lastHoldMoveTimeRef.current;
+
     if (snappedCurrentStrokeRef.current) {
       finalPts = snappedCurrentStrokeRef.current.points;
       isShape = true;
@@ -13786,14 +13953,29 @@ export default function App() {
     } else if (
       holdToSnapEnabled &&
       ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
-      performance.now() - lastHoldMoveTimeRef.current >= 265
+      holdElapsedMs >= 155
     ) {
-      // Fallback if user paused briefly (>= 0.265s) at the end of a straight line/shape and lifted just before the live timer fired!
+      // Fallback if user paused briefly (>= 0.155s) at the end of a straight line/shape and lifted just before the live timer fired!
       const snapped = recognizeAndSnapShape(rawPts, 'auto');
       if (snapped) {
         finalPts = snapped.points;
         isShape = true;
         shapeType = snapped.shapeType;
+      } else {
+        finalPts = smoothStrokeToBezier(rawPts);
+      }
+    } else if (
+      holdToSnapEnabled &&
+      ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
+      holdElapsedMs >= 80 &&
+      rawPts.length >= 2
+    ) {
+      // Quick-pause straight line fallback: if the stroke is a very straight line segment and user paused >= 80ms at the end, perfect it!
+      const snapped = recognizeAndSnapShape(rawPts, 'auto');
+      if (snapped && snapped.shapeType === 'line') {
+        finalPts = snapped.points;
+        isShape = true;
+        shapeType = 'line';
       } else {
         finalPts = smoothStrokeToBezier(rawPts);
       }

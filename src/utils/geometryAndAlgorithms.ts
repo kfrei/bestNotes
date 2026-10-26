@@ -190,15 +190,33 @@ export function recognizeAndSnapShape(
     return buildPresetShape(start, end, minX, minY, maxX, maxY, forcedPreset, rawPoints);
   }
 
-  if (totalLen < 14) return null;
+  if (totalLen < 8) return null;
   const directDist = distance(start, end);
-  const straightness = directDist / totalLen;
 
-  // Compute maximum perpendicular deviation of stroke points from the chord (start -> end)
+  // If the user paused at the end of a straight line and the stylus hooked/retraced slightly in the last 25% of points,
+  // find the farthest point in the tail so the end-hook never ruins the straight-line chord or straightness ratio!
+  let trueEnd = end;
+  const tailStartIdx = Math.max(1, Math.floor(rawPoints.length * 0.72));
+  let maxTailDist = directDist;
+  for (let i = tailStartIdx; i < rawPoints.length; i++) {
+    const d = distance(start, rawPoints[i]);
+    if (d > maxTailDist) {
+      maxTailDist = d;
+      trueEnd = rawPoints[i];
+    }
+  }
+  const useTrueEnd =
+    maxTailDist > directDist * 1.02 &&
+    distance(end, trueEnd) <= Math.max(26, maxTailDist * 0.24);
+  const lineEnd = useTrueEnd ? trueEnd : end;
+  const lineDist = distance(start, lineEnd);
+  const straightness = lineDist / Math.max(1, totalLen);
+
+  // Compute maximum perpendicular deviation of stroke points from the chord (start -> lineEnd)
   let maxPerpDev = 0;
-  if (directDist > 10) {
-    const ux = (end.x - start.x) / directDist;
-    const uy = (end.y - start.y) / directDist;
+  if (lineDist > 6) {
+    const ux = (lineEnd.x - start.x) / lineDist;
+    const uy = (lineEnd.y - start.y) / lineDist;
     for (let i = 1; i < rawPoints.length - 1; i++) {
       const vx = rawPoints[i].x - start.x;
       const vy = rawPoints[i].y - start.y;
@@ -207,15 +225,9 @@ export function recognizeAndSnapShape(
     }
   }
 
-  // 1. Straight Line Test (snaps horizontal, vertical, or any diagonal line reliably even with slight hand arc or end-hold hook!)
-  const isStraightLine =
-    directDist >= 14 &&
-    (straightness > 0.80 ||
-      (straightness > 0.70 && maxPerpDev < Math.max(26, directDist * 0.17)));
-
-  if (isStraightLine) {
-    let x2 = end.x;
-    let y2 = end.y;
+  const snapLineFromStartTo = (targetEnd: BezierPoint) => {
+    let x2 = targetEnd.x;
+    let y2 = targetEnd.y;
     const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;
     const absAngle = Math.abs(angleDeg);
 
@@ -232,6 +244,17 @@ export function recognizeAndSnapShape(
         { x: x2, y: y2, pressure: 0.7 },
       ],
     };
+  };
+
+  // 1. Straight Line Test (snaps horizontal, vertical, or any diagonal line reliably even with slight hand arc or end-hold hook!)
+  const isStraightLine =
+    lineDist >= 8 &&
+    ((straightness > 0.80 && maxPerpDev < Math.max(28, lineDist * 0.19)) ||
+      (straightness > 0.64 && maxPerpDev < Math.max(24, lineDist * 0.16)) ||
+      (lineDist >= totalLen * 0.50 && maxPerpDev < Math.max(15, lineDist * 0.10)));
+
+  if (isStraightLine) {
+    return snapLineFromStartTo(lineEnd);
   }
 
   // 2. Closed Shape Test (Circle, Ellipse, Square, Rectangle, Parallelogram, Triangle)
@@ -593,50 +616,14 @@ export function recognizeAndSnapShape(
         const signDir = firstLobeSign !== 0 ? firstLobeSign : 1;
 
         if (isCosine) {
-          // Cosine wave: Peak control point at central extremum t = 1 / halfCycles
-          const tPeak = 1 / halfCycles;
-          const peakPt: BezierPoint = {
-            x: leftX + spanW * tPeak,
-            y: yMid - signDir * amp,
-            pressure: 0.7,
-          };
-          const rightEndPt: BezierPoint = {
-            x: leftX + spanW,
-            y: yMid,
-            pressure: 0.7,
-          };
-          const leftOriginPt: BezierPoint = {
-            x: leftX,
-            y: yMid,
-            twist: halfCycles,
-            pressure: 0.7,
-          };
           return {
             shapeType: 'cosine',
-            points: [peakPt, rightEndPt, leftOriginPt],
+            points: makeWaveBezierPoints('cosine', leftX, yMid, spanW, amp, halfCycles, -signDir),
           };
         } else {
-          // Sine wave: Peak control point at first crest t = 1 / (2 * halfCycles)
-          const tPeak = 1 / (2 * halfCycles);
-          const peakPt: BezierPoint = {
-            x: leftX + spanW * tPeak,
-            y: yMid - signDir * amp,
-            pressure: 0.7,
-          };
-          const rightEndPt: BezierPoint = {
-            x: leftX + spanW,
-            y: yMid,
-            pressure: 0.7,
-          };
-          const leftOriginPt: BezierPoint = {
-            x: leftX,
-            y: yMid,
-            twist: halfCycles,
-            pressure: 0.7,
-          };
           return {
             shapeType: 'sine',
-            points: [peakPt, rightEndPt, leftOriginPt],
+            points: makeWaveBezierPoints('sine', leftX, yMid, spanW, amp, halfCycles, signDir),
           };
         }
       }
@@ -727,7 +714,147 @@ export function recognizeAndSnapShape(
     }
   }
 
+  // Fallback for open flat strokes: if the user held the pen to snap an open segment that didn't arch enough to be a curve,
+  // always perfect it into a clean straight line ('line') rather than leaving it unperfected!
+  if (!isClosed && lineDist >= 8 && maxPerpDev < Math.max(24, lineDist * 0.20)) {
+    return snapLineFromStartTo(lineEnd);
+  }
+
   return null;
+}
+
+/**
+ * Generates a `2 * halfCycles + 1` node cubic Bézier spline for a Sine ('sine') or Cosine ('cosine') wave
+ * (5 nodes for 1 period: Left Endpoint, 1st Quarter, Center, 3rd Quarter, Right Endpoint) with exact cubic
+ * Bézier handles so both endpoints are true editable/connectable nodes and there are no text labels.
+ */
+export function makeWaveBezierPoints(
+  shapeType: 'sine' | 'cosine',
+  leftX: number,
+  yMid: number,
+  spanW: number,
+  amp: number,
+  halfCycles = 2,
+  signDir = 1
+): BezierPoint[] {
+  const numHalf = Math.max(1, Math.round(halfCycles));
+  const numQuarters = numHalf * 2;
+  const evalWave = (u: number): { x: number; y: number } => {
+    const theta = u * numHalf * Math.PI;
+    const x = leftX + u * spanW;
+    const y =
+      shapeType === 'sine'
+        ? yMid - signDir * amp * Math.sin(theta)
+        : yMid + signDir * amp * Math.cos(theta);
+    return { x, y };
+  };
+
+  const nodes: BezierPoint[] = [];
+  for (let j = 0; j <= numQuarters; j++) {
+    const u = j / numQuarters;
+    const pt = evalWave(u);
+    nodes.push({
+      x: pt.x,
+      y: pt.y,
+      pressure: 0.7,
+      smooth: false,
+      twist: 777,
+    });
+  }
+
+  for (let j = 0; j < numQuarters; j++) {
+    const u0 = j / numQuarters;
+    const u3 = (j + 1) / numQuarters;
+    const p0 = nodes[j];
+    const p3 = nodes[j + 1];
+    const q1 = evalWave(u0 + (u3 - u0) / 3);
+    const q2 = evalWave(u0 + (2 * (u3 - u0)) / 3);
+    const cp1x = (-5 * p0.x + 18 * q1.x - 9 * q2.x + 2 * p3.x) / 6;
+    const cp1y = (-5 * p0.y + 18 * q1.y - 9 * q2.y + 2 * p3.y) / 6;
+    const cp2x = (2 * p0.x - 9 * q1.x + 18 * q2.x - 5 * p3.x) / 6;
+    const cp2y = (2 * p0.y - 9 * q1.y + 18 * q2.y - 5 * p3.y) / 6;
+    p0.outDx = cp1x - p0.x;
+    p0.outDy = cp1y - p0.y;
+    p3.inDx = cp2x - p3.x;
+    p3.inDy = cp2y - p3.y;
+  }
+
+  return nodes;
+}
+
+/**
+ * Upgrades any legacy 2/3-point parametric `'sine'` or `'cosine'` stroke into a 5-node (or `2 * halfCycles + 1`-node)
+ * cubic Bézier wave spline so both endpoints and all extrema/zero-crossings are normal editable nodes.
+ */
+export function ensureWaveBezierPoints(s: {
+  shapeType?: string;
+  points: BezierPoint[];
+}): BezierPoint[] {
+  if (
+    (s.shapeType === 'sine' || s.shapeType === 'cosine') &&
+    s.points.length >= 2 &&
+    s.points.length <= 3 &&
+    s.points[0]?.outDx === undefined &&
+    s.points[1]?.inDx === undefined
+  ) {
+    const pPeak = s.points[0];
+    const pEnd = s.points[1];
+    const pStart = s.points[2] || {
+      x: pPeak.x - (pEnd.x - pPeak.x) / 3,
+      y: pEnd.y,
+      twist: 2,
+    };
+    const dx = pEnd.x - pStart.x;
+    const dy = pEnd.y - pStart.y;
+    const spanL = Math.hypot(dx, dy) || 1;
+    const ux = dx / spanL;
+    const uy = dy / spanL;
+    const nx = uy;
+    const ny = -ux;
+    const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
+    const numHalf = Math.max(1, Math.round(pStart.twist || 2));
+    const numQuarters = numHalf * 2;
+    const evalRotWave = (u: number): { x: number; y: number } => {
+      const along = u * spanL;
+      const waveOffset =
+        s.shapeType === 'sine'
+          ? amp * Math.sin(u * numHalf * Math.PI)
+          : -amp * Math.cos(u * numHalf * Math.PI);
+      return {
+        x: pStart.x + along * ux + waveOffset * nx,
+        y: pStart.y + along * uy + waveOffset * ny,
+      };
+    };
+    const nodes: BezierPoint[] = [];
+    for (let j = 0; j <= numQuarters; j++) {
+      const pt = evalRotWave(j / numQuarters);
+      nodes.push({
+        x: pt.x,
+        y: pt.y,
+        pressure: pPeak.pressure ?? 0.7,
+        smooth: false,
+        twist: 777,
+      });
+    }
+    for (let j = 0; j < numQuarters; j++) {
+      const u0 = j / numQuarters;
+      const u3 = (j + 1) / numQuarters;
+      const p0 = nodes[j];
+      const p3 = nodes[j + 1];
+      const q1 = evalRotWave(u0 + (u3 - u0) / 3);
+      const q2 = evalRotWave(u0 + (2 * (u3 - u0)) / 3);
+      const cp1x = (-5 * p0.x + 18 * q1.x - 9 * q2.x + 2 * p3.x) / 6;
+      const cp1y = (-5 * p0.y + 18 * q1.y - 9 * q2.y + 2 * p3.y) / 6;
+      const cp2x = (2 * p0.x - 9 * q1.x + 18 * q2.x - 5 * p3.x) / 6;
+      const cp2y = (2 * p0.y - 9 * q1.y + 18 * q2.y - 5 * p3.y) / 6;
+      p0.outDx = cp1x - p0.x;
+      p0.outDy = cp1y - p0.y;
+      p3.inDx = cp2x - p3.x;
+      p3.inDy = cp2y - p3.y;
+    }
+    return nodes;
+  }
+  return s.points;
 }
 
 export function makePolygonBezier(corners: { x: number; y: number }[]): BezierPoint[] {
@@ -846,11 +973,7 @@ function buildPresetShape(
     const amp = Math.max(24, h / 2);
     return {
       shapeType: 'sine',
-      points: [
-        { x: minX + w * 0.25, y: yAxis - amp, pressure: 0.7 }, // Handle 0: Peak (up/down only)
-        { x: minX + w, y: yAxis, pressure: 0.7 }, // Handle 1: Right Endpoint (left/right only)
-        { x: minX, y: yAxis, twist: 2, pressure: 0.7 }, // Origin anchor
-      ],
+      points: makeWaveBezierPoints('sine', minX, yAxis, w, amp, 2, 1),
     };
   }
   if (preset === 'cosine') {
@@ -858,11 +981,7 @@ function buildPresetShape(
     const amp = Math.max(24, h / 2);
     return {
       shapeType: 'cosine',
-      points: [
-        { x: minX + w * 0.5, y: yAxis - amp, pressure: 0.7 }, // Handle 0: Peak (up/down only)
-        { x: minX + w, y: yAxis, pressure: 0.7 }, // Handle 1: Right Endpoint (left/right only)
-        { x: minX, y: yAxis, twist: 2, pressure: 0.7 }, // Origin anchor
-      ],
+      points: makeWaveBezierPoints('cosine', minX, yAxis, w, amp, 2, 1),
     };
   }
   if (preset === 'hyperbola') {
@@ -2139,32 +2258,30 @@ function tessellateParametricShapeForErase(s: StrokeObject): BezierPoint[] {
   }
 
   if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
-    const pPeak = s.points[0];
-    const pEnd = s.points[1];
-    const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-    const dx = pEnd.x - pStart.x;
-    const dy = pEnd.y - pStart.y;
-    const spanL = Math.hypot(dx, dy) || 1;
-    const ux = dx / spanL;
-    const uy = dy / spanL;
-    const nx = uy;
-    const ny = -ux;
-    const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
-    const halfCycles = Math.max(1, pStart.twist || 2);
-    const steps = 80;
+    const wavePts = ensureWaveBezierPoints(s);
     const out: BezierPoint[] = [];
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const along = t * spanL;
-      const waveOffset =
-        s.shapeType === 'sine'
-          ? amp * Math.sin(t * halfCycles * Math.PI)
-          : -amp * Math.cos(t * halfCycles * Math.PI);
-      out.push({
-        x: pStart.x + along * ux + waveOffset * nx,
-        y: pStart.y + along * uy + waveOffset * ny,
-        pressure: pPeak.pressure ?? 0.7,
-      });
+    for (let i = 0; i < wavePts.length - 1; i++) {
+      const pA = wavePts[i];
+      const pB = wavePts[i + 1];
+      const ctrl = getCubicSegmentControlPoints(pA, pB);
+      const segSteps = 20;
+      for (let k = i === 0 ? 0 : 1; k <= segSteps; k++) {
+        const t = k / segSteps;
+        const u = 1 - t;
+        if (ctrl) {
+          out.push({
+            x: u * u * u * pA.x + 3 * u * u * t * ctrl.cp1x + 3 * u * t * t * ctrl.cp2x + t * t * t * pB.x,
+            y: u * u * u * pA.y + 3 * u * u * t * ctrl.cp1y + 3 * u * t * t * ctrl.cp2y + t * t * t * pB.y,
+            pressure: pA.pressure ?? 0.7,
+          });
+        } else {
+          out.push({
+            x: pA.x + t * (pB.x - pA.x),
+            y: pA.y + t * (pB.y - pA.y),
+            pressure: pA.pressure ?? 0.7,
+          });
+        }
+      }
     }
     return out;
   }
@@ -3573,6 +3690,10 @@ export function convertOpenStrokeToBezierSplinePoints(s: StrokeObject): BezierPo
       smooth: idx === 1,
     }));
     return recomputeAutoSmoothHandles(rawPts, false);
+  }
+
+  if (s.shapeType === 'sine' || s.shapeType === 'cosine') {
+    return ensureWaveBezierPoints(s).map((p) => ({ ...p }));
   }
 
   const out = s.points.map((p) => ({ ...p }));
