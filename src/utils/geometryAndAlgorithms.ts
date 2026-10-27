@@ -6162,14 +6162,14 @@ export function analyzeCircuitForSimulation(
       to: wn.v,
       type: 'wire',
       wireIdx: wn.idx,
-      resistance: 0.04,
+      resistance: 0.25,
       forwardFromU: true,
     });
     adj[wn.v].push({
       to: wn.u,
       type: 'wire',
       wireIdx: wn.idx,
-      resistance: 0.04,
+      resistance: 0.25,
       forwardFromU: false,
     });
   }
@@ -6235,13 +6235,13 @@ export function analyzeCircuitForSimulation(
   }
 
   // Step 1: Identify all edges and nodes that belong to a genuine complete closed loop
-  // starting at Source (+), passing through AT LEAST ONE load (bulb/fan/resistor), and returning to Source (-)!
+  // starting at Source (+) and returning to Source (-), including parallel pure-wire branches without loads!
   const wireInLoop = new Uint8Array(wires.length);
   const compInLoop = new Set<string>();
   const nodeInLoop = new Uint8Array(nodeCenters.length);
   let anyClosedLoop = false;
 
-  if (hasSource && loadCompsList.length > 0 && openSwitches.length === 0) {
+  if (hasSource && openSwitches.length === 0) {
     const primarySourceNode = compNodes.find(
       (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
     )!;
@@ -6259,9 +6259,7 @@ export function analyzeCircuitForSimulation(
 
     const dfs = (curr: number, depth: number) => {
       if (depth > 32) return;
-      if (targetNodes.has(curr) && pathEdges.length >= 2) {
-        const loadCount = pathEdges.filter((e) => e.type === 'load').length;
-        if (loadCount < 1) return; // Require at least 1 load in the closed loop!
+      if (targetNodes.has(curr) && pathEdges.length >= 1) {
         anyClosedLoop = true;
         for (const nIdx of pathNodes) nodeInLoop[nIdx] = 1;
         for (const edge of pathEdges) {

@@ -8414,6 +8414,50 @@ export default function App() {
     return `sim${valid.length + 1}`;
   };
 
+  const isCircuitEligibleStroke = (s: StrokeObject): boolean => {
+    if (!s.isShape) return false;
+    if (s.shapeType === 'line') {
+      if (s.points[0]?.twist === 999) return false;
+      if (s.fillStyle && s.fillStyle !== 'none') return false;
+      return s.points.length >= 2;
+    }
+    return (
+      s.shapeType === 'battery' ||
+      s.shapeType === 'voltage-source' ||
+      s.shapeType === 'bulb' ||
+      s.shapeType === 'bulb-symbol' ||
+      s.shapeType === 'resistor' ||
+      s.shapeType === 'switch' ||
+      s.shapeType === 'switch-blade' ||
+      s.shapeType === 'switch-knob' ||
+      s.shapeType === 'fan' ||
+      s.shapeType === 'fan-blade' ||
+      s.shapeType === 'fan-hub'
+    );
+  };
+
+  const areStrokesWithinCircuitTol = (a: StrokeObject, b: StrokeObject, tol = 40): boolean => {
+    for (const pt of a.points) {
+      if (b.points.length === 1) {
+        if (Math.hypot(pt.x - b.points[0].x, pt.y - b.points[0].y) <= tol) return true;
+      } else {
+        for (let i = 0; i < b.points.length - 1; i++) {
+          if (isPointNearSegment(pt, b.points[i], b.points[i + 1], tol)) return true;
+        }
+      }
+    }
+    for (const pt of b.points) {
+      if (a.points.length === 1) {
+        if (Math.hypot(pt.x - a.points[0].x, pt.y - a.points[0].y) <= tol) return true;
+      } else {
+        for (let i = 0; i < a.points.length - 1; i++) {
+          if (isPointNearSegment(pt, a.points[i], a.points[i + 1], tol)) return true;
+        }
+      }
+    }
+    return false;
+  };
+
   const getSimExpandedStrokeSet = (page: NotePage, sim: CircuitSimConfig | null): Set<string> => {
     if (!sim) return new Set();
     const baseSet = new Set(sim.strokeIds);
@@ -8424,6 +8468,37 @@ export default function App() {
     for (const s of page.strokes) {
       if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
         out.add(s.id);
+      }
+    }
+
+    // Exclude strokes explicitly registered to other named simulations (e.g. sim02)
+    const otherSimIds = new Set<string>();
+    for (const other of page.circuitSims || []) {
+      if (other.id === sim.id) continue;
+      for (const id of other.strokeIds) otherSimIds.add(id);
+    }
+
+    // Transitively include any newly drawn wire branch or circuit component physically connected (<= 40px) to this circuit
+    const eligible = page.strokes.filter(
+      (s) => !otherSimIds.has(s.id) && (out.has(s.id) || isCircuitEligibleStroke(s))
+    );
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const currentMembers = eligible.filter((s) => out.has(s.id));
+      for (const cand of eligible) {
+        if (out.has(cand.id)) continue;
+        if (currentMembers.some((m) => areStrokesWithinCircuitTol(cand, m, 40))) {
+          out.add(cand.id);
+          changed = true;
+          if (cand.groupId) {
+            for (const g of page.strokes) {
+              if (g.groupId === cand.groupId && !out.has(g.id)) {
+                out.add(g.id);
+              }
+            }
+          }
+        }
       }
     }
     return out;
@@ -8789,7 +8864,7 @@ export default function App() {
         for (let segIdx = 0; segIdx < simData.wireSegments.length; segIdx++) {
           const seg = simData.wireSegments[segIdx];
           if (!seg.inClosedLoop) continue;
-          const count = Math.max(1, Math.floor(seg.length / spacing));
+          const count = Math.max(1, Math.round(seg.length / spacing));
           const stepDist = seg.length / count;
           const speedPxPerSec = seg.active
             ? 64 * seg.currentSpeed * simSpeedMultiplier * dirSign
@@ -16264,21 +16339,18 @@ export default function App() {
         const nextStrokes = page.strokes
           .filter((s) => s.id !== weldedRemoveSecondaryId)
           .map((s) => (s.id === updatedStroke.id ? updatedStroke : s));
-        const hasCircuitSource = nextStrokes.some(
-          (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
-        );
-        if (hasCircuitSource && updatedStroke.shapeType === 'line') {
-          const wasClosedBefore = analyzeCircuitForSimulation(page.strokes, true).isCircuitClosed;
-          const aligned = autoAlignAndConnectCircuit(nextStrokes);
-          const isClosedNow = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
-          if (isClosedNow) {
-            if (!wasClosedBefore) {
-              setSimCircuitSwitchClosed(false);
-            }
-            return { ...page, strokes: aligned };
-          }
-        }
-        return { ...page, strokes: nextStrokes };
+        const nextSims = page.circuitSims
+          ? page.circuitSims.map((sim) => {
+              const hasPrimaryOrSecondary =
+                sim.strokeIds.includes(updatedStroke.id) ||
+                (weldedRemoveSecondaryId ? sim.strokeIds.includes(weldedRemoveSecondaryId) : false);
+              if (!hasPrimaryOrSecondary) return sim;
+              const filtered = sim.strokeIds.filter((id) => id !== weldedRemoveSecondaryId);
+              if (!filtered.includes(updatedStroke.id)) filtered.push(updatedStroke.id);
+              return { ...sim, strokeIds: filtered };
+            })
+          : page.circuitSims;
+        return { ...page, strokes: nextStrokes, circuitSims: nextSims };
       });
 
       if (activeTool === 'shape' && weldedClosedIntoPolygon) {
