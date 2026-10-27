@@ -1021,6 +1021,10 @@ export default function App() {
   const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs' | null>(null);
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(false);
+  const [springSettleAnim, setSpringSettleAnim] = useState<{
+    simId: string;
+    startTime: number;
+  } | null>(null);
   const [editingSpringSimId, setEditingSpringSimId] = useState<string | null>(null);
   const [editingSpringSimName, setEditingSpringSimName] = useState<string>('');
   const draggingSpringAmpHandleRef = useRef<{
@@ -5072,11 +5076,13 @@ export default function App() {
           if (hiddenNaturalSpringIds.has(s.id)) {
             continue;
           }
-          // While spring oscillation (or live mass pulling) is active, hide the static equilibrium spring & mass block so only the 60fps oscillating version renders!
+          // While spring oscillation (or live mass pulling / initial l0->Θ.Ι. settling animation) is active, hide the static equilibrium spring & mass block so only the 60fps animated version renders!
           if (
             isCurrentActivePage &&
             activePageSpringSim &&
-            (isSpringSimulating || draggingSpringMassRef.current?.simId === activePageSpringSim.id) &&
+            (isSpringSimulating ||
+              draggingSpringMassRef.current?.simId === activePageSpringSim.id ||
+              springSettleAnim?.simId === activePageSpringSim.id) &&
             (s.id === activePageSpringSim.eqSpringStrokeId ||
               s.id === activePageSpringSim.massStrokeId)
           ) {
@@ -5975,7 +5981,7 @@ export default function App() {
         ctx.restore();
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating, isSpringSimulating]);
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
@@ -9180,6 +9186,7 @@ export default function App() {
 
   const attachMassToSpringAndCreateEquilibriumClone = (springId: string, massId: string) => {
     let createdOrUpdatedName = '';
+    let createdSimId = '';
     updateActivePage((page) => {
       const sp = page.strokes.find((s) => s.id === springId);
       const mass = page.strokes.find((s) => s.id === massId);
@@ -9369,6 +9376,7 @@ export default function App() {
           at: { visible: false },
         },
       };
+      createdSimId = newSpringSim.id;
 
       const curValid = getValidSpringSims(page);
       return {
@@ -9380,6 +9388,9 @@ export default function App() {
     }, true);
 
     setSelectedStrokeIds([]);
+    if (createdSimId) {
+      setSpringSettleAnim({ simId: createdSimId, startTime: performance.now() });
+    }
     setSimActiveCategory('springs');
     setShowSimulationPanel(true);
     if (createdOrUpdatedName) {
@@ -10472,6 +10483,7 @@ export default function App() {
     const hasSpringOverlay =
       Boolean(activeSpringSim) &&
       (isSpringSimulating ||
+        springSettleAnim !== null ||
         showSimulationPanel ||
         activeSpringSim!.showAmplitudeLines ||
         activeSpringSim!.showForceVectors ||
@@ -11149,21 +11161,47 @@ export default function App() {
               : activeSpringSim.customInitialPhaseRad ?? -Math.PI / 2;
           const A = Math.max(16, activeSpringSim.amplitudePx || 55);
 
+          const isSettlingToEq =
+            springSettleAnim !== null &&
+            springSettleAnim.simId === activeSpringSim.id &&
+            now - springSettleAnim.startTime < 820;
+
           let xDisp = 0;
+          let dispDx = 0;
+          let dispDy = 0;
+
           if (draggingSpringMassRef.current?.simId === activeSpringSim.id) {
             xDisp = draggingSpringMassRef.current.currentDisplacementPx;
+            dispDx = xDisp * oscUx;
+            dispDy = xDisp * oscUy;
           } else if (isSpringSimulating) {
             xDisp = A * Math.sin(omega * elapsedSec + phi0);
+            dispDx = xDisp * oscUx;
+            dispDy = xDisp * oscUy;
+          } else if (isSettlingToEq && springSettleAnim) {
+            // Smooth 0.82s damped spring-settle animation from natural length (l0) down to Equilibrium (Θ.Ι.)!
+            const u = Math.max(0, Math.min(1, (now - springSettleAnim.startTime) / 820));
+            const progress = 1 - Math.pow(1 - u, 2.2) * Math.cos(u * Math.PI * 1.65);
+            const deltaFromEqAlongAxis =
+              (progress - 1) * (axLen - activeSpringSim.naturalLengthPx);
+            dispDx = deltaFromEqAlongAxis * axisUx;
+            dispDy = deltaFromEqAlongAxis * axisUy;
+            xDisp = dispDx * oscUx + dispDy * oscUy;
+          } else if (
+            springSettleAnim !== null &&
+            springSettleAnim.simId === activeSpringSim.id &&
+            now - springSettleAnim.startTime >= 820
+          ) {
+            setSpringSettleAnim(null);
           }
 
-          const dispDx = xDisp * oscUx;
-          const dispDy = xDisp * oscUy;
           const curMassCx = eqMassCx + dispDx;
           const curMassCy = eqMassCy + dispDy;
 
-          // 6A. Draw Live Oscillating (or Pulled) Spring & Mass Block
+          // 6A. Draw Live Oscillating (or Pulled / Settling from l0 -> Θ.Ι.) Spring & Mass Block
           if (
             isSpringSimulating ||
+            isSettlingToEq ||
             draggingSpringMassRef.current?.simId === activeSpringSim.id
           ) {
             const curFreePt = {
@@ -11634,6 +11672,8 @@ export default function App() {
       if (
         isSimulating ||
         isSpringSimulating ||
+        hasProposal ||
+        springSettleAnim !== null ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       ) {
         rafId = window.requestAnimationFrame(renderSimFrame);
@@ -11647,6 +11687,7 @@ export default function App() {
   }, [
     isSimulating,
     isSpringSimulating,
+    springSettleAnim,
     showSimulationPanel,
     simActiveCategory,
     circuitAlignFlashStart,
