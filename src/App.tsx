@@ -1029,6 +1029,13 @@ export default function App() {
     simId: string;
     startTime: number;
   } | null>(null);
+  const [springPhaseShiftAnim, setSpringPhaseShiftAnim] = useState<{
+    simId: string;
+    fromDispPx: number;
+    toDispPx: number;
+    startTime: number;
+  } | null>(null);
+  const lastSpringRenderedDispRef = useRef<number>(0);
   const [editingSpringSimId, setEditingSpringSimId] = useState<string | null>(null);
   const [editingSpringSimName, setEditingSpringSimName] = useState<string>('');
   const draggingSpringAmpHandleRef = useRef<{
@@ -5110,13 +5117,15 @@ export default function App() {
           if (hiddenNaturalSpringIds.has(s.id)) {
             continue;
           }
-          // While spring oscillation (or live mass pulling / initial l0->Θ.Ι. settling animation) is active, hide the static equilibrium spring & mass block so only the 60fps animated version renders!
+          // While spring oscillation (or live mass pulling / initial l0->Θ.Ι. settling / initial position shift to +A or -A) is active, hide the static equilibrium spring & mass block so only the 60fps animated/displaced version renders!
           if (
             isCurrentActivePage &&
             activePageSpringSim &&
             (isSpringSimulating ||
               draggingSpringMassRef.current?.simId === activePageSpringSim.id ||
-              springSettleAnim?.simId === activePageSpringSim.id) &&
+              springSettleAnim?.simId === activePageSpringSim.id ||
+              springPhaseShiftAnim?.simId === activePageSpringSim.id ||
+              activePageSpringSim.initialPhaseMode !== 'eq') &&
             (s.id === activePageSpringSim.eqSpringStrokeId ||
               s.id === activePageSpringSim.massStrokeId)
           ) {
@@ -6015,7 +6024,7 @@ export default function App() {
         ctx.restore();
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim]);
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
@@ -9400,7 +9409,7 @@ export default function App() {
         mass: 1.0,
         stiffness: 1.0,
         amplitudePx: defaultAmp,
-        initialPhaseMode: 'minusA',
+        initialPhaseMode: 'eq',
         showNaturalSpring: isVertical,
         showAmplitudeLines: true,
         showForceVectors: false,
@@ -10518,7 +10527,9 @@ export default function App() {
       Boolean(activeSpringSim) &&
       (isSpringSimulating ||
         springSettleAnim !== null ||
+        springPhaseShiftAnim !== null ||
         showSimulationPanel ||
+        activeSpringSim!.initialPhaseMode !== 'eq' ||
         activeSpringSim!.showAmplitudeLines ||
         activeSpringSim!.showForceVectors ||
         activeSpringSim!.graphs.xt.visible ||
@@ -11195,7 +11206,16 @@ export default function App() {
               : activeSpringSim.customInitialPhaseRad ?? -Math.PI / 2;
           const A = Math.max(16, activeSpringSim.amplitudePx || 55);
 
-          if (isSpringSimulating && !isSpringPaused) {
+          const isSettlingToEq =
+            springSettleAnim !== null &&
+            springSettleAnim.simId === activeSpringSim.id &&
+            now - springSettleAnim.startTime < 820;
+          const isPhaseShifting =
+            springPhaseShiftAnim !== null &&
+            springPhaseShiftAnim.simId === activeSpringSim.id &&
+            now - springPhaseShiftAnim.startTime < 380;
+
+          if (isSpringSimulating && !isSpringPaused && !isPhaseShifting) {
             if (springSimLastFrameTimeRef.current !== null) {
               const dt = Math.max(
                 0,
@@ -11209,17 +11229,21 @@ export default function App() {
           }
           const springElapsedSec = springSimElapsedRef.current;
 
-          const isSettlingToEq =
-            springSettleAnim !== null &&
-            springSettleAnim.simId === activeSpringSim.id &&
-            now - springSettleAnim.startTime < 820;
-
+          const targetInitDisp = A * Math.sin(phi0);
           let xDisp = 0;
           let dispDx = 0;
           let dispDy = 0;
 
           if (draggingSpringMassRef.current?.simId === activeSpringSim.id) {
             xDisp = draggingSpringMassRef.current.currentDisplacementPx;
+            dispDx = xDisp * oscUx;
+            dispDy = xDisp * oscUy;
+          } else if (isPhaseShifting && springPhaseShiftAnim) {
+            const u = Math.max(0, Math.min(1, (now - springPhaseShiftAnim.startTime) / 380));
+            const ease = 1 - Math.pow(1 - u, 3);
+            xDisp =
+              springPhaseShiftAnim.fromDispPx +
+              (targetInitDisp - springPhaseShiftAnim.fromDispPx) * ease;
             dispDx = xDisp * oscUx;
             dispDy = xDisp * oscUy;
           } else if (isSpringSimulating) {
@@ -11235,21 +11259,36 @@ export default function App() {
             dispDx = deltaFromEqAlongAxis * axisUx;
             dispDy = deltaFromEqAlongAxis * axisUy;
             xDisp = dispDx * oscUx + dispDy * oscUy;
-          } else if (
-            springSettleAnim !== null &&
-            springSettleAnim.simId === activeSpringSim.id &&
-            now - springSettleAnim.startTime >= 820
-          ) {
-            setSpringSettleAnim(null);
+          } else {
+            if (
+              springSettleAnim !== null &&
+              springSettleAnim.simId === activeSpringSim.id &&
+              now - springSettleAnim.startTime >= 820
+            ) {
+              setSpringSettleAnim(null);
+            }
+            if (
+              springPhaseShiftAnim !== null &&
+              springPhaseShiftAnim.simId === activeSpringSim.id &&
+              now - springPhaseShiftAnim.startTime >= 380
+            ) {
+              setSpringPhaseShiftAnim(null);
+            }
+            xDisp = targetInitDisp;
+            dispDx = xDisp * oscUx;
+            dispDy = xDisp * oscUy;
           }
+          lastSpringRenderedDispRef.current = xDisp;
 
           const curMassCx = eqMassCx + dispDx;
           const curMassCy = eqMassCy + dispDy;
 
-          // 6A. Draw Live Oscillating (or Pulled / Settling from l0 -> Θ.Ι.) Spring & Mass Block
+          // 6A. Draw Live Oscillating (or Pulled / Settling / Displaced at -A or +A) Spring & Mass Block
           if (
             isSpringSimulating ||
             isSettlingToEq ||
+            isPhaseShifting ||
+            activeSpringSim.initialPhaseMode !== 'eq' ||
             draggingSpringMassRef.current?.simId === activeSpringSim.id
           ) {
             const curFreePt = {
@@ -11827,6 +11866,7 @@ export default function App() {
         (isSpringSimulating && !isSpringPaused) ||
         hasProposal ||
         springSettleAnim !== null ||
+        springPhaseShiftAnim !== null ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       ) {
         rafId = window.requestAnimationFrame(renderSimFrame);
@@ -11843,6 +11883,7 @@ export default function App() {
     isSpringPaused,
     springGraphClearTick,
     springSettleAnim,
+    springPhaseShiftAnim,
     showSimulationPanel,
     simActiveCategory,
     circuitAlignFlashStart,
@@ -28151,6 +28192,18 @@ export default function App() {
                                     key={opt.id}
                                     type="button"
                                     onClick={() => {
+                                      const amp = Math.max(16, activeSpring.amplitudePx || 55);
+                                      const targetDisp =
+                                        opt.id === 'minusA' ? -amp : opt.id === 'plusA' ? amp : 0;
+                                      springSimElapsedRef.current = 0;
+                                      springSimLastFrameTimeRef.current = null;
+                                      setSpringGraphClearTick((t) => t + 1);
+                                      setSpringPhaseShiftAnim({
+                                        simId: activeSpring.id,
+                                        fromDispPx: lastSpringRenderedDispRef.current,
+                                        toDispPx: targetDisp,
+                                        startTime: performance.now(),
+                                      });
                                       updateActiveSpringSimConfig((sim) => ({
                                         ...sim,
                                         initialPhaseMode: opt.id,
