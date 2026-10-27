@@ -4970,28 +4970,32 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
   const wireRefs: WireRef[] = [];
   currentStrokes.forEach((s, idx) => {
     if (compStrokeSet.has(s.id)) return;
-    if (s.tool === 'highlighter' || s.points.length !== 2) return;
+    if (s.tool === 'highlighter' || s.points.length < 2) return;
     if (s.shapeType && s.shapeType !== 'line') return;
-    const p0 = s.points[0];
-    const p1 = s.points[1];
-    const dx = Math.abs(p1.x - p0.x);
-    const dy = Math.abs(p1.y - p0.y);
-    const len = Math.hypot(dx, dy);
-    if (len < 10) return;
-    let orientation: 'h' | 'v' | 'diag' = 'diag';
-    if (dy <= Math.max(20, dx * 0.28)) orientation = 'h';
-    else if (dx <= Math.max(20, dy * 0.28)) orientation = 'v';
-    wireRefs.push({
-      strokeIdx: idx,
-      stroke: s,
-      orientation,
-      x1: p0.x,
-      y1: p0.y,
-      x2: p1.x,
-      y2: p1.y,
-      avgX: (p0.x + p1.x) / 2,
-      avgY: (p0.y + p1.y) / 2,
-    });
+    if (s.points[0]?.twist === 999) return;
+    if (!s.isShape && s.points.length > 2) return;
+    for (let k = 0; k < s.points.length - 1; k++) {
+      const p0 = s.points[k];
+      const p1 = s.points[k + 1];
+      const dx = Math.abs(p1.x - p0.x);
+      const dy = Math.abs(p1.y - p0.y);
+      const len = Math.hypot(dx, dy);
+      if (len < 10) continue;
+      let orientation: 'h' | 'v' | 'diag' = 'diag';
+      if (dy <= Math.max(20, dx * 0.28)) orientation = 'h';
+      else if (dx <= Math.max(20, dy * 0.28)) orientation = 'v';
+      wireRefs.push({
+        strokeIdx: idx,
+        stroke: s,
+        orientation,
+        x1: p0.x,
+        y1: p0.y,
+        x2: p1.x,
+        y2: p1.y,
+        avgX: (p0.x + p1.x) / 2,
+        avgY: (p0.y + p1.y) / 2,
+      });
+    }
   });
 
   if (wireRefs.length === 0) return currentStrokes;

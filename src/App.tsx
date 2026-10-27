@@ -15701,6 +15701,360 @@ export default function App() {
     snappedCurrentStrokeRef.current = null;
     holdAnchorPtRef.current = null;
 
+    // Auto-chain straight lines when starting (or ending) almost touching (<= 18px) an open straight line's endpoint!
+    // First, if drawn with Pen/Pencil without holding for 560ms, check if it started/ended <= 18px from an open 'line' endpoint and is straight:
+    const ALMOST_TOUCH_LINE_TOL = 18;
+    const CLOSE_POLYGON_RING_TOL = 22;
+    const isCandidateOpenLine = (s: StrokeObject): boolean =>
+      Boolean(
+        s.isShape &&
+          s.shapeType === 'line' &&
+          !s.groupId &&
+          !s.arrowStart &&
+          !s.arrowEnd &&
+          s.points.length >= 2 &&
+          s.points[0]?.twist !== 999 &&
+          (s.layerId || 'layer-1') === activeLayerId
+      );
+
+    if (
+      !isShape &&
+      (activeTool === 'pen' || activeTool === 'pencil') &&
+      !arrowEnd &&
+      rawPts.length >= 2
+    ) {
+      const rFirst = rawPts[0];
+      const rLast = rawPts[rawPts.length - 1];
+      const nearOpenLineEnd = activePage.strokes.some((s) => {
+        if (!isCandidateOpenLine(s)) return false;
+        const sStart = s.points[0];
+        const sEnd = s.points[s.points.length - 1];
+        return (
+          distance(rFirst, sStart) <= ALMOST_TOUCH_LINE_TOL ||
+          distance(rFirst, sEnd) <= ALMOST_TOUCH_LINE_TOL ||
+          distance(rLast, sStart) <= ALMOST_TOUCH_LINE_TOL ||
+          distance(rLast, sEnd) <= ALMOST_TOUCH_LINE_TOL
+        );
+      });
+      if (nearOpenLineEnd) {
+        const chordDx = rLast.x - rFirst.x;
+        const chordDy = rLast.y - rFirst.y;
+        const chordLen = Math.hypot(chordDx, chordDy);
+        if (chordLen >= 18) {
+          const nx = -chordDy / chordLen;
+          const ny = chordDx / chordLen;
+          let arcLen = 0;
+          let maxDev = 0;
+          for (let i = 1; i < rawPts.length; i++) {
+            arcLen += Math.hypot(rawPts[i].x - rawPts[i - 1].x, rawPts[i].y - rawPts[i - 1].y);
+            const dev = Math.abs((rawPts[i].x - rFirst.x) * nx + (rawPts[i].y - rFirst.y) * ny);
+            if (dev > maxDev) maxDev = dev;
+          }
+          if (maxDev <= Math.max(10, chordLen * 0.08) && arcLen <= chordLen * 1.18) {
+            const snappedLine = recognizeAndSnapShape(rawPts, 'line');
+            if (snappedLine) {
+              finalPts = snappedLine.points;
+              isShape = true;
+              shapeType = 'line';
+            }
+          }
+        }
+      }
+    }
+
+    // Check if this newly drawn straight line almost touches (<= 18px) the endpoint of an existing open 'line' stroke on the active layer.
+    // If so, weld them into a single connected polyline — and if it closes a loop of >= 3 vertices, automatically form a Polygon!
+    let weldedIntoExistingStroke: StrokeObject | null = null;
+    let weldedRemoveSecondaryId: string | null = null;
+    let weldedClosedIntoPolygon = false;
+
+    if (
+      isShape &&
+      shapeType === 'line' &&
+      finalPts.length === 2 &&
+      !arrowEnd &&
+      shapePreset !== 'arrow'
+    ) {
+      const p0 = finalPts[0];
+      const p1 = finalPts[1];
+      type EndpointMatch = {
+        stroke: StrokeObject;
+        which: 'start' | 'end';
+        dist: number;
+      };
+      let match0: EndpointMatch | null = null;
+      let match1: EndpointMatch | null = null;
+
+      for (const s of activePage.strokes) {
+        if (!isCandidateOpenLine(s)) continue;
+        const sStart = s.points[0];
+        const sEnd = s.points[s.points.length - 1];
+        const d0Start = distance(p0, sStart);
+        const d0End = distance(p0, sEnd);
+        if (d0Start <= d0End) {
+          if (d0Start <= CLOSE_POLYGON_RING_TOL && (!match0 || d0Start < match0.dist)) {
+            match0 = { stroke: s, which: 'start', dist: d0Start };
+          }
+        } else {
+          if (d0End <= CLOSE_POLYGON_RING_TOL && (!match0 || d0End < match0.dist)) {
+            match0 = { stroke: s, which: 'end', dist: d0End };
+          }
+        }
+
+        const d1Start = distance(p1, sStart);
+        const d1End = distance(p1, sEnd);
+        if (d1Start <= d1End) {
+          if (d1Start <= CLOSE_POLYGON_RING_TOL && (!match1 || d1Start < match1.dist)) {
+            match1 = { stroke: s, which: 'start', dist: d1Start };
+          }
+        } else {
+          if (d1End <= CLOSE_POLYGON_RING_TOL && (!match1 || d1End < match1.dist)) {
+            match1 = { stroke: s, which: 'end', dist: d1End };
+          }
+        }
+      }
+
+      // Require at least one endpoint to be strictly within ALMOST_TOUCH_LINE_TOL (18px)
+      const m0Strict = match0 && match0.dist <= ALMOST_TOUCH_LINE_TOL;
+      const m1Strict = match1 && match1.dist <= ALMOST_TOUCH_LINE_TOL;
+      if (!m0Strict && !m1Strict) {
+        match0 = null;
+        match1 = null;
+      } else {
+        // Only allow the 22px closing tolerance on the second end when the first end matched <= 18px
+        if (match0 && !m0Strict && !m1Strict) match0 = null;
+        if (match1 && !m1Strict && !m0Strict) match1 = null;
+      }
+
+      // Prevent both ends of the new segment from matching the exact same endpoint of the same stroke
+      if (
+        match0 &&
+        match1 &&
+        match0.stroke.id === match1.stroke.id &&
+        match0.which === match1.which
+      ) {
+        if (match0.dist <= match1.dist) {
+          match1 = null;
+        } else {
+          match0 = null;
+        }
+      }
+
+      if (match0 || match1) {
+        const isNewHoriz = Math.abs(p1.y - p0.y) < 1.5;
+        const isNewVert = Math.abs(p1.x - p0.x) < 1.5;
+        let chainPts: { x: number; y: number }[] = [];
+        let primaryStroke: StrokeObject = (match0 ?? match1)!.stroke;
+        let closeLoop = false;
+
+        if (match0 && match1 && match0.stroke.id === match1.stroke.id) {
+          // Both ends of the new line touch the opposite open ends of the SAME stroke!
+          primaryStroke = match0.stroke;
+          const basePts = primaryStroke.points.map((pt) => ({ x: pt.x, y: pt.y }));
+          if (basePts.length >= 3) {
+            // Align the closing corner if the closing segment is strictly horizontal or vertical
+            const idxCloseFrom = match0.which === 'end' ? basePts.length - 1 : 0;
+            const idxCloseTo = match0.which === 'end' ? 0 : basePts.length - 1;
+            if (isNewHoriz) {
+              basePts[idxCloseFrom].y = basePts[idxCloseTo].y;
+            } else if (isNewVert) {
+              basePts[idxCloseFrom].x = basePts[idxCloseTo].x;
+            }
+            chainPts = basePts;
+            closeLoop = true;
+          } else {
+            // Only 1 existing segment (2 vertices) — cannot form a 2-gon, so just attach at the closer endpoint
+            const useM0 = match0.dist <= match1.dist;
+            const m = useM0 ? match0 : match1;
+            const freeP = useM0 ? p1 : p0;
+            const weldPt =
+              m.which === 'start' ? basePts[0] : basePts[basePts.length - 1];
+            const adjFree = {
+              x: isNewVert ? weldPt.x : freeP.x,
+              y: isNewHoriz ? weldPt.y : freeP.y,
+            };
+            chainPts = m.which === 'end' ? [...basePts, adjFree] : [adjFree, ...basePts];
+          }
+        } else if (match0 && match1 && match0.stroke.id !== match1.stroke.id) {
+          // The new line bridges two separate open 'line' strokes!
+          primaryStroke = match0.stroke;
+          const secondaryStroke = match1.stroke;
+          weldedRemoveSecondaryId = secondaryStroke.id;
+          const ptsA = primaryStroke.points.map((pt) => ({ x: pt.x, y: pt.y }));
+          const ptsB = secondaryStroke.points.map((pt) => ({ x: pt.x, y: pt.y }));
+          const orientedA = match0.which === 'end' ? ptsA : ptsA.slice().reverse();
+          const orientedB = match1.which === 'start' ? ptsB : ptsB.slice().reverse();
+          if (isNewHoriz && orientedA.length >= 1 && orientedB.length >= 1) {
+            orientedB[0].y = orientedA[orientedA.length - 1].y;
+          } else if (isNewVert && orientedA.length >= 1 && orientedB.length >= 1) {
+            orientedB[0].x = orientedA[orientedA.length - 1].x;
+          }
+          chainPts = [...orientedA, ...orientedB];
+          if (
+            chainPts.length >= 4 &&
+            distance(chainPts[0], chainPts[chainPts.length - 1]) <= CLOSE_POLYGON_RING_TOL
+          ) {
+            chainPts.pop();
+            closeLoop = true;
+          }
+        } else {
+          // Single endpoint match (either match0 or match1)
+          const m = (match0 ?? match1)!;
+          const freeP = match0 ? p1 : p0;
+          primaryStroke = m.stroke;
+          const basePts = primaryStroke.points.map((pt) => ({ x: pt.x, y: pt.y }));
+          const weldPt =
+            m.which === 'start' ? basePts[0] : basePts[basePts.length - 1];
+          const oppPt =
+            m.which === 'start' ? basePts[basePts.length - 1] : basePts[0];
+          const adjFree = {
+            x: isNewVert ? weldPt.x : freeP.x,
+            y: isNewHoriz ? weldPt.y : freeP.y,
+          };
+          if (
+            basePts.length >= 3 &&
+            distance(adjFree, oppPt) <= CLOSE_POLYGON_RING_TOL
+          ) {
+            if (isNewHoriz) {
+              weldPt.y = oppPt.y;
+            } else if (isNewVert) {
+              weldPt.x = oppPt.x;
+            }
+            chainPts = basePts;
+            closeLoop = true;
+          } else {
+            chainPts = m.which === 'end' ? [...basePts, adjFree] : [adjFree, ...basePts];
+          }
+        }
+
+        // Do not convert into a closed filled polygon if any vertex is attached to a circuit component
+        if (closeLoop && chainPts.length >= 3) {
+          const attachedToCircuitComp = activePage.strokes.some((cs) => {
+            if (
+              cs.shapeType !== 'battery' &&
+              cs.shapeType !== 'voltage-source' &&
+              cs.shapeType !== 'bulb' &&
+              cs.shapeType !== 'bulb-symbol' &&
+              cs.shapeType !== 'resistor' &&
+              cs.shapeType !== 'switch' &&
+              cs.shapeType !== 'fan'
+            ) {
+              return false;
+            }
+            return chainPts.some((v) =>
+              cs.points.some((cp) => Math.hypot(cp.x - v.x, cp.y - v.y) <= 36)
+            );
+          });
+          if (attachedToCircuitComp) {
+            closeLoop = false;
+            chainPts = [...chainPts, { x: chainPts[0].x, y: chainPts[0].y }];
+          }
+        }
+
+        if (closeLoop && chainPts.length >= 3) {
+          const polyShapeType =
+            chainPts.length === 3
+              ? 'triangle'
+              : chainPts.length === 4
+              ? 'trapezoid'
+              : 'rectangle';
+          const closedPolyPts: BezierPoint[] = [
+            ...chainPts.map((v, idx) => ({
+              x: v.x,
+              y: v.y,
+              pressure: 0.7,
+              twist: idx === 0 ? 999 : undefined,
+            })),
+            {
+              x: chainPts[0].x,
+              y: chainPts[0].y,
+              pressure: 0.7,
+              twist: 999,
+            },
+          ];
+          const polyFillStyle: FillStyleType =
+            activeTool === 'pen' || activeTool === 'pencil'
+              ? 'solid'
+              : fillStyle !== 'none'
+              ? fillStyle
+              : primaryStroke.fillStyle && primaryStroke.fillStyle !== 'none'
+              ? primaryStroke.fillStyle
+              : 'none';
+          weldedIntoExistingStroke = {
+            ...primaryStroke,
+            isShape: true,
+            shapeType: polyShapeType,
+            points: closedPolyPts,
+            fillStyle: polyFillStyle,
+            fillColor:
+              polyFillStyle !== 'none'
+                ? primaryStroke.fillColor || primaryStroke.color
+                : undefined,
+            fillTransparency: primaryStroke.fillTransparency ?? fillTransparency,
+            keyNodeIndices: undefined,
+          };
+          weldedClosedIntoPolygon = true;
+        } else if (chainPts.length >= 2) {
+          const openLinePts: BezierPoint[] = chainPts.map((v, idx) => ({
+            x: v.x,
+            y: v.y,
+            cx: idx > 0 ? (chainPts[idx - 1].x + v.x) / 2 : undefined,
+            cy: idx > 0 ? (chainPts[idx - 1].y + v.y) / 2 : undefined,
+            pressure: 0.7,
+          }));
+          weldedIntoExistingStroke = {
+            ...primaryStroke,
+            isShape: true,
+            shapeType: 'line',
+            points: openLinePts,
+            keyNodeIndices: undefined,
+          };
+        }
+      }
+    }
+
+    if (weldedIntoExistingStroke) {
+      const updatedStroke = weldedIntoExistingStroke;
+      lastCreatedShapeIdsRef.current = [updatedStroke.id];
+      const sCtx = staticCanvasRef.current?.getContext('2d');
+      if (sCtx) {
+        sCtx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+        drawStrokeOnContext(sCtx, updatedStroke);
+      }
+      clearActiveOverlay();
+
+      updateActivePage((page) => {
+        const nextStrokes = page.strokes
+          .filter((s) => s.id !== weldedRemoveSecondaryId)
+          .map((s) => (s.id === updatedStroke.id ? updatedStroke : s));
+        const hasCircuitSource = nextStrokes.some(
+          (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+        );
+        if (hasCircuitSource && updatedStroke.shapeType === 'line') {
+          const wasClosedBefore = analyzeCircuitForSimulation(page.strokes, true).isCircuitClosed;
+          const aligned = autoAlignAndConnectCircuit(nextStrokes);
+          const isClosedNow = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
+          if (isClosedNow) {
+            if (!wasClosedBefore) {
+              setSimCircuitSwitchClosed(false);
+            }
+            return { ...page, strokes: aligned };
+          }
+        }
+        return { ...page, strokes: nextStrokes };
+      });
+
+      if (activeTool === 'shape' && weldedClosedIntoPolygon) {
+        setSelectedStrokeIds([updatedStroke.id]);
+        setSelectedImageId(null);
+        setSelectedImageIds([]);
+        setActiveNodeStrokeId(isShapeWithoutNodes(updatedStroke) ? null : updatedStroke.id);
+        setActiveTool('lasso');
+        setShowToolSubBar(true);
+      }
+      return;
+    }
+
     // Check if a freehand stroke drawn with Pen/Pencil forms a closed loop (one end touches/approaches the other)
     // WITHOUT needing to hold the pencil at the end!
     const isClosedFreehand = !isShape && isFreehandLoopClosed(finalPts, false);
@@ -15810,7 +16164,7 @@ export default function App() {
       };
     });
 
-    if (activeTool === 'shape' && isShape) {
+    if (activeTool === 'shape' && isShape && newStroke.shapeType !== 'line') {
       setSelectedStrokeIds([newStroke.id]);
       setSelectedImageId(null);
       setSelectedImageIds([]);
