@@ -1039,7 +1039,11 @@ export default function App() {
     pageId: string;
     simId: string;
     simName: string;
-    colorMode: 'red' | 'green';
+    wireColor: string;
+    wireWidth: number;
+    wireLineStyle?: LineStyleType;
+    wirePenSubType?: PenSubType;
+    wireOpacity: number;
     xLeft: number;
     xRight: number;
     yTop: number;
@@ -8772,6 +8776,114 @@ export default function App() {
     return out;
   };
 
+  const dismissedSimStrokeIdsRef = useRef<Set<string>>(new Set());
+
+  // Automatically discover and register any closed circuit (with a battery/voltage-source) on any page of the active notebook
+  // that is not yet in page.circuitSims, assigning it the next sequential name (sim01, sim02, sim03, ...)!
+  useEffect(() => {
+    if (circuitProposal) return;
+
+    const usedNames = new Set<string>();
+    for (const p of activeNotebook.pages) {
+      for (const s of getValidCircuitSims(p)) {
+        usedNames.add(s.name.trim().toLowerCase());
+      }
+    }
+
+    const pagesToAppend = new Map<string, CircuitSimConfig[]>();
+
+    for (const p of activeNotebook.pages) {
+      const validSims = getValidCircuitSims(p);
+      const registeredIds = new Set<string>();
+      for (const vs of validSims) {
+        for (const sid of getSimExpandedStrokeSet(p, vs)) {
+          registeredIds.add(sid);
+        }
+      }
+
+      const unregisteredEligible = p.strokes.filter(
+        (s) =>
+          isCircuitEligibleStroke(s) &&
+          !registeredIds.has(s.id) &&
+          !dismissedSimStrokeIdsRef.current.has(s.id)
+      );
+      if (unregisteredEligible.length === 0) continue;
+
+      const visited = new Uint8Array(unregisteredEligible.length);
+      for (let i = 0; i < unregisteredEligible.length; i++) {
+        if (visited[i]) continue;
+        visited[i] = 1;
+        const cluster: StrokeObject[] = [unregisteredEligible[i]];
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (let j = 0; j < unregisteredEligible.length; j++) {
+            if (visited[j]) continue;
+            const cand = unregisteredEligible[j];
+            const sameGrp =
+              Boolean(cand.groupId) &&
+              cluster.some((m) => m.groupId === cand.groupId);
+            if (
+              sameGrp ||
+              cluster.some((m) => areStrokesWithinCircuitTol(cand, m, 44))
+            ) {
+              visited[j] = 1;
+              cluster.push(cand);
+              changed = true;
+            }
+          }
+        }
+
+        const hasSource = cluster.some(
+          (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+        );
+        if (!hasSource) continue;
+        const simCheck = analyzeCircuitForSimulation(cluster, true);
+        if (!simCheck.isCircuitClosed) continue;
+
+        let nextName = `sim${usedNames.size + 1}`;
+        for (let k = 1; k <= 99; k++) {
+          const candName = `sim${String(k).padStart(2, '0')}`;
+          if (!usedNames.has(candName)) {
+            nextName = candName;
+            break;
+          }
+        }
+        usedNames.add(nextName);
+        const newSim: CircuitSimConfig = {
+          id: `sim-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: nextName,
+          strokeIds: cluster.map((s) => s.id),
+        };
+        const arr = pagesToAppend.get(p.id) || [];
+        arr.push(newSim);
+        pagesToAppend.set(p.id, arr);
+      }
+    }
+
+    if (pagesToAppend.size === 0) return;
+
+    setNotebooks((prev) =>
+      prev.map((nb) => {
+        if (nb.id !== activeNotebook.id) return nb;
+        return {
+          ...nb,
+          pages: nb.pages.map((p) => {
+            const added = pagesToAppend.get(p.id);
+            if (!added || added.length === 0) return p;
+            const curValid = getValidCircuitSims(p);
+            const nextSims = [...curValid, ...added];
+            return {
+              ...p,
+              circuitSims: nextSims,
+              activeCircuitSimId: p.activeCircuitSimId || added[added.length - 1].id,
+            };
+          }),
+        };
+      })
+    );
+  }, [activeNotebook, circuitProposal]);
+
   const runScopedCircuitOperationOnPage = (
     page: NotePage,
     op: (subStrokes: StrokeObject[]) => StrokeObject[],
@@ -9105,8 +9217,13 @@ export default function App() {
       }
     }
 
-    // Case 1 (partial wires exist -> Red Dashed '#ef4444') vs Case 2 (only components selected -> Green Dashed '#16a34a')
-    const colorMode: 'red' | 'green' = rawExternalSegs.length > 0 ? 'red' : 'green';
+    // Inherit wire color, thickness, and line style if partial wires exist; otherwise default to black ('#111827') solid!
+    const refWireStroke = rawExternalSegs[0]?.stroke;
+    const wireColor = refWireStroke?.color || '#111827';
+    const wireWidth = refWireStroke?.width || 2.8;
+    const wireLineStyle = refWireStroke?.lineStyle || 'solid';
+    const wirePenSubType = refWireStroke?.penType;
+    const wireOpacity = refWireStroke?.opacity ?? 1;
 
     // Partition components into Top Row and Bottom Row
     const minTermY = Math.min(...comps.map((c) => c.leftTerm.y));
@@ -9327,9 +9444,11 @@ export default function App() {
           matchedWireStrokes.push({
             id: wireId,
             tool: 'pen',
+            penType: match.stroke.penType,
+            lineStyle: match.stroke.lineStyle || 'solid',
             color: match.stroke.color || '#111827',
             width: match.stroke.width || 2.8,
-            opacity: 1,
+            opacity: match.stroke.opacity ?? 1,
             layerId: match.stroke.layerId || defaultLayerId,
             isShape: true,
             shapeType: 'line',
@@ -9369,9 +9488,11 @@ export default function App() {
           matchedWireStrokes.push({
             id: wireId,
             tool: 'pen',
+            penType: match.stroke.penType,
+            lineStyle: match.stroke.lineStyle || 'solid',
             color: match.stroke.color || '#111827',
             width: match.stroke.width || 2.8,
-            opacity: 1,
+            opacity: match.stroke.opacity ?? 1,
             layerId: match.stroke.layerId || defaultLayerId,
             isShape: true,
             shapeType: 'line',
@@ -9447,7 +9568,11 @@ export default function App() {
       pageId: activePage.id,
       simId: targetSimId,
       simName: targetSimName,
-      colorMode,
+      wireColor,
+      wireWidth,
+      wireLineStyle,
+      wirePenSubType,
+      wireOpacity,
       xLeft,
       xRight,
       yTop,
@@ -9480,9 +9605,11 @@ export default function App() {
       createdWires.push({
         id: `st-wire-comp-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`,
         tool: 'pen',
-        color: '#111827',
-        width: 2.8,
-        opacity: 1,
+        penType: prop.wirePenSubType,
+        lineStyle: prop.wireLineStyle || 'solid',
+        color: prop.wireColor || '#111827',
+        width: prop.wireWidth || 2.8,
+        opacity: prop.wireOpacity ?? 1,
         layerId: prop.layerId,
         isShape: true,
         shapeType: 'line',
@@ -9647,7 +9774,8 @@ export default function App() {
       //     - On-Diagram "✓ Αποδοχή" check button + "✕" cancel button
       if (circuitProposal && circuitProposal.pageId === activePage.id) {
         const prop = circuitProposal;
-        const dashColor = prop.colorMode === 'red' ? '#ef4444' : '#16a34a';
+        const dashColor = prop.wireColor || '#111827';
+        const dashWidth = Math.max(2.2, prop.wireWidth || 2.8);
         const swX = prop.xLeft;
         const swYCenter = (prop.yTop + prop.yBot) / 2;
         const swHalfGap = Math.min(21, Math.max(14, Math.abs(prop.yBot - prop.yTop) * 0.18));
@@ -9678,7 +9806,7 @@ export default function App() {
           const c = evalCircuitProposalSpan(prop, sp);
           ctx.save();
           ctx.strokeStyle = dashColor;
-          ctx.lineWidth = 3.2;
+          ctx.lineWidth = dashWidth;
           ctx.setLineDash([9, 7]);
           ctx.beginPath();
           if (sp.id === 'v-left') {
@@ -9708,7 +9836,7 @@ export default function App() {
         const bladeTipY = swYTop + 4;
         ctx.save();
         ctx.strokeStyle = dashColor;
-        ctx.lineWidth = 3.6;
+        ctx.lineWidth = Math.max(3.2, dashWidth);
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
         ctx.moveTo(swX, swYBot);
@@ -9743,9 +9871,7 @@ export default function App() {
           ctx.arc(cPt.x, cPt.y, isDraggingThis ? 15 : 13, 0, Math.PI * 2);
           ctx.fillStyle = isDraggingThis
             ? 'rgba(37, 99, 235, 0.24)'
-            : prop.colorMode === 'red'
-            ? 'rgba(239, 68, 68, 0.16)'
-            : 'rgba(22, 163, 74, 0.16)';
+            : 'rgba(15, 23, 42, 0.14)';
           ctx.fill();
 
           ctx.beginPath();
@@ -25250,6 +25376,9 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      for (const sid of sim.strokeIds) {
+                                        dismissedSimStrokeIdsRef.current.add(sid);
+                                      }
                                       setNotebooks((prev) =>
                                         prev.map((nb) => {
                                           if (nb.id !== activeNotebook.id) return nb;
