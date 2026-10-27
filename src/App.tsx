@@ -8631,10 +8631,36 @@ export default function App() {
         .filter((s) => rawSelSet.has(s.id) && s.groupId)
         .map((s) => s.groupId!)
     );
-    const expandedStrokes = activePage.strokes.filter(
-      (s) => rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))
+    const expandedIdSet = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))) {
+        expandedIdSet.add(s.id);
+      }
+    }
+
+    // Transitively include all connected circuit wires & components (<= 40px) belonging to this circuit!
+    const eligible = activePage.strokes.filter(
+      (s) => expandedIdSet.has(s.id) || isCircuitEligibleStroke(s)
     );
-    const expandedIdSet = new Set(expandedStrokes.map((s) => s.id));
+    let addedConnected = true;
+    while (addedConnected) {
+      addedConnected = false;
+      const members = eligible.filter((s) => expandedIdSet.has(s.id));
+      for (const cand of eligible) {
+        if (expandedIdSet.has(cand.id)) continue;
+        if (members.some((m) => areStrokesWithinCircuitTol(cand, m, 40))) {
+          expandedIdSet.add(cand.id);
+          addedConnected = true;
+          if (cand.groupId) {
+            for (const g of activePage.strokes) {
+              if (g.groupId === cand.groupId) expandedIdSet.add(g.id);
+            }
+          }
+        }
+      }
+    }
+
+    const expandedStrokes = activePage.strokes.filter((s) => expandedIdSet.has(s.id));
 
     const hasSource = expandedStrokes.some(
       (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
@@ -21128,11 +21154,20 @@ export default function App() {
 
                   if (selectedStrokeIds.length > 0) {
                     const ok = registerOrActivateSimFromLasso();
+                    setSelectedStrokeIds([]);
+                    setSelectedImageId(null);
+                    setSelectedImageIds([]);
+                    setActiveNodeStrokeId(null);
                     if (!ok) {
                       setShowSimulationPanel(true);
                     }
                     return;
                   }
+
+                  setSelectedStrokeIds([]);
+                  setSelectedImageId(null);
+                  setSelectedImageIds([]);
+                  setActiveNodeStrokeId(null);
 
                   setShowSimulationPanel((v) => {
                     const next = !v;
@@ -21148,6 +21183,47 @@ export default function App() {
                             existingSim.id
                           )
                         );
+                      } else {
+                        // If no sim is registered yet, check if there is a closed circuit on the page and auto-register sim01 without any selection box!
+                        const firstSource = activePage.strokes.find(
+                          (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+                        );
+                        if (firstSource) {
+                          const seedSim: CircuitSimConfig = {
+                            id: `sim-${Date.now()}-auto`,
+                            name: getNextDefaultSimName(activePage),
+                            strokeIds: [firstSource.id],
+                          };
+                          const connectedSet = getSimExpandedStrokeSet(activePage, seedSim);
+                          const subStrokes = activePage.strokes.filter((s) => connectedSet.has(s.id));
+                          const alignedSub = autoAlignAndConnectCircuit(subStrokes);
+                          if (analyzeCircuitForSimulation(alignedSub, true).isCircuitClosed) {
+                            const alignedIds = alignedSub.map((s) => s.id);
+                            updateActivePage((page) => {
+                              const nextStrokes: StrokeObject[] = [];
+                              let inserted = false;
+                              for (const s of page.strokes) {
+                                if (connectedSet.has(s.id)) {
+                                  if (!inserted) {
+                                    nextStrokes.push(...alignedSub);
+                                    inserted = true;
+                                  }
+                                  continue;
+                                }
+                                nextStrokes.push(s);
+                              }
+                              if (!inserted) nextStrokes.push(...alignedSub);
+                              return {
+                                ...page,
+                                strokes: nextStrokes,
+                                circuitSims: [{ id: seedSim.id, name: seedSim.name, strokeIds: alignedIds }],
+                                activeCircuitSimId: seedSim.id,
+                              };
+                            });
+                            setSimCircuitSwitchClosed(false);
+                            setIsSimulating(true);
+                          }
+                        }
                       }
                     }
                     return next;
@@ -22461,9 +22537,8 @@ export default function App() {
                                       selectedStrokeIds,
                                       'toggle'
                                     );
-                                    if (res.newIds.length > 0) {
-                                      setSelectedStrokeIds(res.newIds);
-                                    }
+                                    setSelectedStrokeIds([]);
+                                    setActiveNodeStrokeId(null);
                                     const nextSims = (page.circuitSims || []).map((sim) => {
                                       if (!sim.strokeIds.some((id) => oldSet.has(id))) return sim;
                                       const kept = sim.strokeIds.filter((id) => !oldSet.has(id));
