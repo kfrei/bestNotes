@@ -1078,6 +1078,8 @@ export default function App() {
     oscUx: number;
     oscUy: number;
     massBox: { minX: number; minY: number; maxX: number; maxY: number };
+    posPointerPt?: { x: number; y: number };
+    posScaleBox?: { minX: number; minY: number; maxX: number; maxY: number };
     pauseBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     clearBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     stopBtnBox?: { x1: number; y1: number; x2: number; y2: number };
@@ -4222,6 +4224,21 @@ export default function App() {
           ) {
             return true;
           }
+        }
+        if (
+          spHit.posPointerPt &&
+          Math.hypot(ptX - spHit.posPointerPt.x, ptY - spHit.posPointerPt.y) <= 26
+        ) {
+          return true;
+        }
+        if (
+          spHit.posScaleBox &&
+          ptX >= spHit.posScaleBox.minX - 6 &&
+          ptX <= spHit.posScaleBox.maxX + 6 &&
+          ptY >= spHit.posScaleBox.minY - 6 &&
+          ptY <= spHit.posScaleBox.maxY + 6
+        ) {
+          return true;
         }
         if (
           (isSpringSimulating || (showSimulationPanel && simActiveCategory === 'springs')) &&
@@ -11368,6 +11385,148 @@ export default function App() {
           }
 
           const ampHandles: { x: number; y: number }[] = [];
+          let posPointerPtHit: { x: number; y: number } | undefined;
+          let posScaleBoxHit:
+            | { minX: number; minY: number; maxX: number; maxY: number }
+            | undefined;
+
+          // 6B-0. Faint Grey Position Scale & Draggable Position Pointer Arrow (αχνή γκρι κλίμακα θέσης με βελάκι δείκτη) on the left of the mass block!
+          {
+            const scaleDist = massW / 2 + 18;
+            const scaleMidX = eqMassCx - perpUx * scaleDist;
+            const scaleMidY = eqMassCy - perpUy * scaleDist;
+            const scaleTopX = scaleMidX + A * oscUx;
+            const scaleTopY = scaleMidY + A * oscUy;
+            const scaleBotX = scaleMidX - A * oscUx;
+            const scaleBotY = scaleMidY - A * oscUy;
+
+            const clampedDisp = Math.max(-A, Math.min(A, xDisp));
+            const ptrX = scaleMidX + clampedDisp * oscUx;
+            const ptrY = scaleMidY + clampedDisp * oscUy;
+            const isDraggingPos =
+              draggingSpringMassRef.current?.simId === activeSpringSim.id;
+            const isSnappedPlusA = Math.abs(clampedDisp - A) <= 1.5;
+            const isSnappedZero = Math.abs(clampedDisp) <= 1.5;
+            const isSnappedMinusA = Math.abs(clampedDisp + A) <= 1.5;
+
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Main faint grey scale line from +A to -A
+            ctx.strokeStyle = 'rgba(100, 116, 139, 0.44)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(scaleTopX + oscUx * 4, scaleTopY + oscUy * 4);
+            ctx.lineTo(scaleBotX - oscUx * 4, scaleBotY - oscUy * 4);
+            ctx.stroke();
+
+            // Graduated scale ticks at -1, -0.75, -0.5, -0.25, 0, +0.25, +0.5, +0.75, +1
+            const tickFracs = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
+            for (const f of tickFracs) {
+              const tx = scaleMidX + f * A * oscUx;
+              const ty = scaleMidY + f * A * oscUy;
+              const isMajor = f === 1 || f === 0 || f === -1;
+              const isMed = Math.abs(f) === 0.5;
+              const tickLen = isMajor ? 7.5 : isMed ? 4.8 : 3.0;
+              const isLockedHere =
+                (f === 1 && isSnappedPlusA) ||
+                (f === 0 && isSnappedZero) ||
+                (f === -1 && isSnappedMinusA);
+
+              ctx.strokeStyle = isLockedHere
+                ? '#2563eb'
+                : isMajor
+                ? 'rgba(71, 85, 105, 0.72)'
+                : 'rgba(100, 116, 139, 0.42)';
+              ctx.lineWidth = isLockedHere ? 2.2 : isMajor ? 1.7 : 1.2;
+              ctx.beginPath();
+              ctx.moveTo(tx - perpUx * tickLen, ty - perpUy * tickLen);
+              ctx.lineTo(tx + perpUx * (isMajor ? 2.2 : 1.0), ty + perpUy * (isMajor ? 2.2 : 1.0));
+              ctx.stroke();
+
+              if (isMajor) {
+                const lbl = f === 1 ? '+A' : f === -1 ? '-A' : '0';
+                ctx.fillStyle = isLockedHere
+                  ? '#2563eb'
+                  : 'rgba(100, 116, 139, 0.78)';
+                ctx.font = `${isLockedHere ? '800' : '600'} 9.5px system-ui, -apple-system, sans-serif`;
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(lbl, tx - perpUx * (tickLen + 3.5), ty - perpUy * (tickLen + 3.5));
+              }
+            }
+
+            // Faint horizontal dotted line from pointer arrow tip to left edge of mass block
+            const tipX = ptrX + perpUx * 8.5;
+            const tipY = ptrY + perpUy * 8.5;
+            const massLeftX = curMassCx - perpUx * (massW / 2);
+            const massLeftY = curMassCy - perpUy * (massW / 2);
+            ctx.save();
+            ctx.strokeStyle = isDraggingPos
+              ? 'rgba(37, 99, 235, 0.55)'
+              : 'rgba(100, 116, 139, 0.42)';
+            ctx.lineWidth = 1.3;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(massLeftX, massLeftY);
+            ctx.stroke();
+            ctx.restore();
+
+            // Position Pointer Arrow (βελάκι δείκτης θέσης) on the scale
+            const tailX = ptrX - perpUx * 10.5;
+            const tailY = ptrY - perpUy * 10.5;
+            if (isDraggingPos) {
+              ctx.fillStyle = 'rgba(37, 99, 235, 0.15)';
+              ctx.beginPath();
+              ctx.arc(ptrX, ptrY, 12, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            const arrowColor = isDraggingPos
+              ? '#1d4ed8'
+              : isSnappedPlusA || isSnappedZero || isSnappedMinusA
+              ? '#334155'
+              : '#475569';
+            ctx.strokeStyle = arrowColor;
+            ctx.fillStyle = arrowColor;
+            ctx.lineWidth = 2.0;
+            // Shaft from tail to tip
+            ctx.beginPath();
+            ctx.moveTo(tailX, tailY);
+            ctx.lineTo(tipX, tipY);
+            ctx.stroke();
+            // Filled pointer arrowhead at tip pointing right towards mass block
+            const headLen = 6.2;
+            const headHalfW = 3.8;
+            ctx.beginPath();
+            ctx.moveTo(tipX, tipY);
+            ctx.lineTo(
+              tipX - perpUx * headLen + oscUx * headHalfW,
+              tipY - perpUy * headLen + oscUy * headHalfW
+            );
+            ctx.lineTo(
+              tipX - perpUx * headLen - oscUx * headHalfW,
+              tipY - perpUy * headLen - oscUy * headHalfW
+            );
+            ctx.closePath();
+            ctx.fill();
+            // Small grip dot at tail so it's super easy to grab by hand
+            ctx.beginPath();
+            ctx.arc(tailX, tailY, 2.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            posPointerPtHit = { x: ptrX, y: ptrY };
+            posScaleBoxHit = {
+              minX: Math.min(scaleTopX, scaleBotX) - 18,
+              minY: Math.min(scaleTopY, scaleBotY) - 14,
+              maxX: Math.max(scaleTopX, scaleBotX) + 14,
+              maxY: Math.max(scaleTopY, scaleBotY) + 14,
+            };
+          }
 
           // 6B. Draw Black Dashed Equilibrium Line (Θ.Ι.) & 2 Blue Dashed Amplitude Lines (+A / -A) with Blue Square Handles (□)
           if (activeSpringSim.showAmplitudeLines) {
@@ -11798,14 +11957,44 @@ export default function App() {
             ctx.lineJoin = 'round';
 
             const numSamples = 150;
+            const isActivelyScrubbingPos =
+              draggingSpringMassRef.current?.simId === activeSpringSim.id;
             if (!isSpringSimulating || springElapsedSec <= 0.005) {
-              // Clean diagram state (before Play or after "Καθαρισμός"): only starting phase dot at t = 0
+              // When actively dragging the left position pointer (or mass block) while stopped, show faint shifted wave preview + live starting dot!
+              if (isActivelyScrubbingPos) {
+                ctx.save();
+                ctx.globalAlpha = 0.35;
+                ctx.beginPath();
+                for (let i = 0; i <= numSamples; i++) {
+                  const u = i / numSamples;
+                  const tau = u * timeWindowSec;
+                  const theta = omega * tau + phi0;
+                  const val = evalWaveNorm(theta);
+                  const wx = axisLeftX + u * waveSpanW;
+                  const wy = axisMidY - val * envHalfH;
+                  if (i === 0) ctx.moveTo(wx, wy);
+                  else ctx.lineTo(wx, wy);
+                }
+                ctx.stroke();
+                ctx.restore();
+              }
               const startVal = evalWaveNorm(phi0);
               const startY = axisMidY - startVal * envHalfH;
               ctx.fillStyle = meta.curveColor;
               ctx.beginPath();
-              ctx.arc(axisLeftX, startY, 4.8, 0, Math.PI * 2);
+              ctx.arc(axisLeftX, startY, 5.0, 0, Math.PI * 2);
               ctx.fill();
+              if (gKey === 'xt' && Math.abs(startY - curMassCy) <= 28) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.42)';
+                ctx.lineWidth = 1.4;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(curMassCx + massW / 2, curMassCy);
+                ctx.lineTo(axisLeftX, startY);
+                ctx.stroke();
+                ctx.restore();
+              }
             } else {
               // Live progressive / scrolling wave during Play (freezes at current instant when Paused)!
               const tStart =
@@ -11956,6 +12145,8 @@ export default function App() {
               maxX: curMassCx + massW / 2,
               maxY: curMassCy + massH / 2,
             },
+            posPointerPt: posPointerPtHit,
+            posScaleBox: posScaleBoxHit,
             pauseBtnBox,
             clearBtnBox,
             stopBtnBox,
@@ -14809,22 +15000,38 @@ export default function App() {
         }
       }
 
-      // 3) Direct Pulling of the Mass Block on the Canvas (when Spring Sim is active or panel is on 'springs')
-      if (
+      // 3) Interactive Position Pointer Arrow on the Left Grey Scale (posPointerPt / posScaleBox) OR Direct Pulling of the Mass Block
+      const hitPosScale =
+        (spHit.posPointerPt &&
+          Math.hypot(pt.x - spHit.posPointerPt.x, pt.y - spHit.posPointerPt.y) <= 26) ||
+        (spHit.posScaleBox &&
+          pt.x >= spHit.posScaleBox.minX - 6 &&
+          pt.x <= spHit.posScaleBox.maxX + 6 &&
+          pt.y >= spHit.posScaleBox.minY - 6 &&
+          pt.y <= spHit.posScaleBox.maxY + 6);
+      const hitMassBlock =
         (isSpringSimulating || (showSimulationPanel && simActiveCategory === 'springs')) &&
         pt.x >= spHit.massBox.minX - 8 &&
         pt.x <= spHit.massBox.maxX + 8 &&
         pt.y >= spHit.massBox.minY - 8 &&
-        pt.y <= spHit.massBox.maxY + 8
-      ) {
+        pt.y <= spHit.massBox.maxY + 8;
+
+      if (hitPosScale || hitMassBlock) {
         e.preventDefault();
-        setIsSpringSimulating(false);
+        if (isSpringSimulating && !isSpringPaused) {
+          setIsSpringPaused(true);
+        }
+        const curSpring = getActiveSpringSim(activePage);
+        const amp = Math.max(16, curSpring?.amplitudePx || 55);
+        const snapTol = Math.max(11, Math.min(16, amp * 0.22));
         const relX = pt.x - spHit.eqCenterX;
         const relY = pt.y - spHit.eqCenterY;
-        const initDisp = Math.max(
-          -200,
-          Math.min(200, relX * spHit.oscUx + relY * spHit.oscUy)
-        );
+        const rawDisp = relX * spHit.oscUx + relY * spHit.oscUy;
+        let initDisp = Math.round(Math.max(-amp, Math.min(amp, rawDisp)));
+        if (Math.abs(initDisp - amp) <= snapTol) initDisp = amp;
+        else if (Math.abs(initDisp + amp) <= snapTol) initDisp = -amp;
+        else if (Math.abs(initDisp) <= snapTol) initDisp = 0;
+
         draggingSpringMassRef.current = {
           simId: spHit.simId,
           eqCenterX: spHit.eqCenterX,
@@ -14833,6 +15040,37 @@ export default function App() {
           oscUy: spHit.oscUy,
           currentDisplacementPx: initDisp,
         };
+        updateActiveSpringSimConfig((sim) => {
+          if (sim.id !== spHit.simId) return sim;
+          const a = Math.max(16, sim.amplitudePx || 55);
+          const sinVal = Math.max(-1, Math.min(1, initDisp / a));
+          const baseTheta = Math.asin(sinVal);
+          const om =
+            2.6 *
+            Math.sqrt(sim.stiffness / Math.max(0.2, sim.mass)) *
+            simSpeedMultiplier;
+          const el = springSimElapsedRef.current;
+          if (isSpringSimulating && el > 0.005) {
+            return {
+              ...sim,
+              initialPhaseMode: 'custom',
+              customInitialPhaseRad: baseTheta - om * el,
+            };
+          }
+          const nextMode =
+            initDisp === a
+              ? 'plusA'
+              : initDisp === -a
+              ? 'minusA'
+              : initDisp === 0
+              ? 'eq'
+              : 'custom';
+          return {
+            ...sim,
+            initialPhaseMode: nextMode,
+            customInitialPhaseRad: baseTheta,
+          };
+        });
         activePointerIdRef.current = e.pointerId;
         activePointerTypeRef.current = e.pointerType;
         try {
@@ -16584,26 +16822,53 @@ export default function App() {
 
     if (draggingSpringMassRef.current) {
       const dragM = draggingSpringMassRef.current;
+      const curSpring = getActiveSpringSim(activePage);
+      const amp = Math.max(16, curSpring?.amplitudePx || 55);
+      const snapTol = Math.max(11, Math.min(16, amp * 0.22));
       const relX = latestPt.x - dragM.eqCenterX;
       const relY = latestPt.y - dragM.eqCenterY;
-      const disp = Math.round(
-        Math.max(-210, Math.min(210, relX * dragM.oscUx + relY * dragM.oscUy))
-      );
+      const rawDisp = relX * dragM.oscUx + relY * dragM.oscUy;
+      let disp = Math.round(Math.max(-amp, Math.min(amp, rawDisp)));
+      // Magnetic snap at +A, 0 (Θ.Ι.), and -A
+      if (Math.abs(disp - amp) <= snapTol) disp = amp;
+      else if (Math.abs(disp + amp) <= snapTol) disp = -amp;
+      else if (Math.abs(disp) <= snapTol) disp = 0;
+
       draggingSpringMassRef.current = {
         ...dragM,
         currentDisplacementPx: disp,
       };
-      if (Math.abs(disp) >= 18) {
-        updateActiveSpringSimConfig((sim) =>
-          sim.id !== dragM.simId
-            ? sim
-            : {
-                ...sim,
-                amplitudePx: Math.abs(disp),
-                initialPhaseMode: disp >= 0 ? 'plusA' : 'minusA',
-              }
-        );
-      }
+      updateActiveSpringSimConfig((sim) => {
+        if (sim.id !== dragM.simId) return sim;
+        const a = Math.max(16, sim.amplitudePx || 55);
+        const sinVal = Math.max(-1, Math.min(1, disp / a));
+        const baseTheta = Math.asin(sinVal);
+        const om =
+          2.6 *
+          Math.sqrt(sim.stiffness / Math.max(0.2, sim.mass)) *
+          simSpeedMultiplier;
+        const el = springSimElapsedRef.current;
+        if (isSpringSimulating && el > 0.005) {
+          return {
+            ...sim,
+            initialPhaseMode: 'custom',
+            customInitialPhaseRad: baseTheta - om * el,
+          };
+        }
+        const nextMode =
+          disp === a
+            ? 'plusA'
+            : disp === -a
+            ? 'minusA'
+            : disp === 0
+            ? 'eq'
+            : 'custom';
+        return {
+          ...sim,
+          initialPhaseMode: nextMode,
+          customInitialPhaseRad: baseTheta,
+        };
+      });
       return;
     }
 
@@ -19317,14 +19582,8 @@ export default function App() {
     }
 
     if (draggingSpringMassRef.current) {
-      const pulledDisp = draggingSpringMassRef.current.currentDisplacementPx;
       draggingSpringMassRef.current = null;
-      if (Math.abs(pulledDisp) >= 12) {
-        springSimElapsedRef.current = 0;
-        springSimLastFrameTimeRef.current = null;
-        setIsSpringPaused(false);
-        setIsSpringSimulating(true);
-      }
+      setSpringGraphClearTick((t) => t + 1);
       renderStaticSceneRef.current();
       return;
     }
