@@ -11327,20 +11327,56 @@ export default function App() {
               ctx.stroke();
               ctx.restore();
 
-              // Blue Square Handle (□) on the right end of the blue dashed line
-              const hSize = 15;
-              const hx = bx2 + perpUx * (hSize / 2);
-              const hy = by2 + perpUy * (hSize / 2);
+              // Small Up-Down Double Arrow Handle (↕) at the end of the blue dashed line
+              const hx = bx2 + perpUx * 9;
+              const hy = by2 + perpUy * 9;
               const isDraggingAmp =
                 draggingSpringAmpHandleRef.current?.simId === activeSpringSim.id;
+              const halfLen = 8.5;
+              const wingLen = 4.2;
+              const wingSpread = 3.6;
+              const topX = hx - oscUx * halfLen;
+              const topY = hy - oscUy * halfLen;
+              const botX = hx + oscUx * halfLen;
+              const botY = hy + oscUy * halfLen;
+
               ctx.save();
-              ctx.fillStyle = isDraggingAmp
-                ? 'rgba(37, 99, 235, 0.34)'
-                : 'rgba(59, 130, 246, 0.18)';
-              ctx.strokeStyle = '#2563eb';
-              ctx.lineWidth = 2.2;
-              ctx.fillRect(hx - hSize / 2, hy - hSize / 2, hSize, hSize);
-              ctx.strokeRect(hx - hSize / 2, hy - hSize / 2, hSize, hSize);
+              ctx.setLineDash([]);
+              if (isDraggingAmp) {
+                ctx.fillStyle = 'rgba(37, 99, 235, 0.14)';
+                ctx.beginPath();
+                ctx.arc(hx, hy, 11, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              ctx.strokeStyle = isDraggingAmp ? '#1d4ed8' : '#2563eb';
+              ctx.lineWidth = 2.1;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.beginPath();
+              // Main shaft
+              ctx.moveTo(topX, topY);
+              ctx.lineTo(botX, botY);
+              // Upper arrowhead (^)
+              ctx.moveTo(
+                topX + oscUx * wingLen - perpUx * wingSpread,
+                topY + oscUy * wingLen - perpUy * wingSpread
+              );
+              ctx.lineTo(topX, topY);
+              ctx.lineTo(
+                topX + oscUx * wingLen + perpUx * wingSpread,
+                topY + oscUy * wingLen + perpUy * wingSpread
+              );
+              // Lower arrowhead (v)
+              ctx.moveTo(
+                botX - oscUx * wingLen - perpUx * wingSpread,
+                botY - oscUy * wingLen - perpUy * wingSpread
+              );
+              ctx.lineTo(botX, botY);
+              ctx.lineTo(
+                botX - oscUx * wingLen + perpUx * wingSpread,
+                botY - oscUy * wingLen + perpUy * wingSpread
+              );
+              ctx.stroke();
               ctx.restore();
 
               ampHandles.push({ x: hx, y: hy });
