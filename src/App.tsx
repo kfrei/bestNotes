@@ -1062,6 +1062,15 @@ export default function App() {
     origBoxX: number;
     origBoxY: number;
   } | null>(null);
+  const draggingSpringGraphResizeRef = useRef<{
+    simId: string;
+    graphKey: 'xt' | 'vt' | 'at';
+    mode: 'width' | 'height';
+    axisLeftX: number;
+    axisMidY: number;
+    stackedKeys: ('xt' | 'vt' | 'at')[];
+    syncSpringAmp: boolean;
+  } | null>(null);
   const springOverlayHitRef = useRef<{
     simId: string;
     eqCenterX: number;
@@ -1073,6 +1082,16 @@ export default function App() {
     clearBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     stopBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     ampHandles: { x: number; y: number }[];
+    graphResizeHandles: {
+      key: 'xt' | 'vt' | 'at';
+      mode: 'width' | 'height';
+      x: number;
+      y: number;
+      axisLeftX: number;
+      axisMidY: number;
+      gx: number;
+      customMoved: boolean;
+    }[];
     graphBoxes: {
       key: 'xt' | 'vt' | 'at';
       x: number;
@@ -4186,6 +4205,11 @@ export default function App() {
         }
         for (const hPt of spHit.ampHandles) {
           if (Math.hypot(ptX - hPt.x, ptY - hPt.y) <= 26) {
+            return true;
+          }
+        }
+        for (const rh of spHit.graphResizeHandles) {
+          if (Math.hypot(ptX - rh.x, ptY - rh.y) <= 24) {
             return true;
           }
         }
@@ -8367,6 +8391,7 @@ export default function App() {
             draggingNodeIdx !== null ||
             draggingProposalCornerRef.current !== null ||
             draggingSpringAmpHandleRef.current !== null ||
+            draggingSpringGraphResizeRef.current !== null ||
             draggingSpringGraphRef.current !== null ||
             draggingSpringMassRef.current !== null)) ||
         draggingTextRef.current
@@ -10540,6 +10565,7 @@ export default function App() {
         activeSpringSim!.graphs.at.visible ||
         draggingSpringMassRef.current !== null ||
         draggingSpringAmpHandleRef.current !== null ||
+        draggingSpringGraphResizeRef.current !== null ||
         draggingSpringGraphRef.current !== null);
     const hasAlignFlash = circuitAlignFlashStart !== null;
     const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
@@ -11536,26 +11562,33 @@ export default function App() {
             height: number;
             closePt: { x: number; y: number; r: number };
           }[] = [];
+          const graphResizeHandlesHit: {
+            key: 'xt' | 'vt' | 'at';
+            mode: 'width' | 'height';
+            x: number;
+            y: number;
+            axisLeftX: number;
+            axisMidY: number;
+            gx: number;
+            customMoved: boolean;
+          }[] = [];
 
           let runningPrevBotY = 0;
           for (let gIdx = 0; gIdx < visibleGraphKeys.length; gIdx++) {
             const gKey = visibleGraphKeys[gIdx];
             const gCfg = activeSpringSim.graphs[gKey];
-            const gW = gCfg.width || 368; // ~16 grid squares wide
+            const baseDefaultX = Math.max(20, eqMassCx + massW / 2 + 224);
+            const defaultGraphW = Math.min(448, Math.max(320, w - baseDefaultX - 18));
+            const gW = gCfg.width || defaultGraphW;
 
-            // All 3 diagrams (x-t, u-t, a-t) share the exact same vertical height (A) as x-t and follow +A / -A!
-            const envHalfH = A;
+            // All 3 diagrams (x-t, u-t, a-t) share the exact same vertical height (A) by default and follow +A / -A!
+            const envHalfH = gCfg.height || A;
 
             const topPad = 28;
             const botPad = 24;
             const halfAxisH = envHalfH + topPad;
-            const gH = halfAxisH * 2;
 
-            // Default X: 2 grid squares (~46px) to the right of the blue square handles (□)
-            const defaultX = Math.min(
-              w - gW - 12,
-              Math.max(20, eqMassCx + massW / 2 + 230)
-            );
+            const defaultX = Math.min(w - gW - 12, baseDefaultX);
             let defaultMidY: number;
             if (gIdx === 0) {
               // 1st checked diagram is ALWAYS directly to the right of the spring, with its t-axis on Θ.Ι. (eqMassCy)!
@@ -11621,7 +11654,7 @@ export default function App() {
               closePt: { x: -9999, y: -9999, r: -1 },
             });
 
-            // 1. Upper & Lower Blue Dashed Envelope Lines (#2563eb) on all 3 diagrams (matching user's textbook screenshot)
+            // 1. Upper & Lower Blue Dashed Envelope Lines (#2563eb) on all 3 diagrams + Small Up-Down Height Resize Arrows (↕)
             const yEnvTop = axisMidY - envHalfH;
             const yEnvBot = axisMidY + envHalfH;
             ctx.save();
@@ -11635,6 +11668,85 @@ export default function App() {
             ctx.moveTo(axisLeftX, yEnvBot);
             ctx.lineTo(axisRightX - 16, yEnvBot);
             ctx.stroke();
+
+            // Draw small up-down double arrow (↕) at the right end of the upper & lower blue dashed lines to resize height
+            const isResizingThisHeight =
+              draggingSpringGraphResizeRef.current?.mode === 'height' &&
+              draggingSpringGraphResizeRef.current.stackedKeys.includes(gKey);
+            ctx.setLineDash([]);
+            ctx.strokeStyle = isResizingThisHeight ? '#1d4ed8' : '#2563eb';
+            ctx.lineWidth = 1.9;
+            ctx.lineJoin = 'round';
+            for (const envY of [yEnvTop, yEnvBot]) {
+              const rhX = axisRightX - 8;
+              const rhY = envY;
+              const hLen = 7;
+              const wLen = 3.4;
+              const wSpr = 3.0;
+              if (isResizingThisHeight) {
+                ctx.fillStyle = 'rgba(37, 99, 235, 0.14)';
+                ctx.beginPath();
+                ctx.arc(rhX, rhY, 9.5, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              ctx.beginPath();
+              ctx.moveTo(rhX, rhY - hLen);
+              ctx.lineTo(rhX, rhY + hLen);
+              ctx.moveTo(rhX - wSpr, rhY - hLen + wLen);
+              ctx.lineTo(rhX, rhY - hLen);
+              ctx.lineTo(rhX + wSpr, rhY - hLen + wLen);
+              ctx.moveTo(rhX - wSpr, rhY + hLen - wLen);
+              ctx.lineTo(rhX, rhY + hLen);
+              ctx.lineTo(rhX + wSpr, rhY + hLen - wLen);
+              ctx.stroke();
+              graphResizeHandlesHit.push({
+                key: gKey,
+                mode: 'height',
+                x: rhX,
+                y: rhY,
+                axisLeftX,
+                axisMidY,
+                gx,
+                customMoved: Boolean(gCfg.customMoved),
+              });
+            }
+
+            // Draw small left-right double arrow (↔) just to the right of the horizontal t-axis arrow to resize width
+            const isResizingThisWidth =
+              draggingSpringGraphResizeRef.current?.mode === 'width' &&
+              draggingSpringGraphResizeRef.current.stackedKeys.includes(gKey);
+            const rwX = axisRightX + 12;
+            const rwY = axisMidY;
+            const wHalf = 7;
+            const wWing = 3.4;
+            const wSpread = 3.0;
+            if (isResizingThisWidth) {
+              ctx.fillStyle = 'rgba(37, 99, 235, 0.14)';
+              ctx.beginPath();
+              ctx.arc(rwX, rwY, 9.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.strokeStyle = isResizingThisWidth ? '#1d4ed8' : '#2563eb';
+            ctx.beginPath();
+            ctx.moveTo(rwX - wHalf, rwY);
+            ctx.lineTo(rwX + wHalf, rwY);
+            ctx.moveTo(rwX - wHalf + wWing, rwY - wSpread);
+            ctx.lineTo(rwX - wHalf, rwY);
+            ctx.lineTo(rwX - wHalf + wWing, rwY + wSpread);
+            ctx.moveTo(rwX + wHalf - wWing, rwY - wSpread);
+            ctx.lineTo(rwX + wHalf, rwY);
+            ctx.lineTo(rwX + wHalf - wWing, rwY + wSpread);
+            ctx.stroke();
+            graphResizeHandlesHit.push({
+              key: gKey,
+              mode: 'width',
+              x: rwX,
+              y: rwY,
+              axisLeftX,
+              axisMidY,
+              gx,
+              customMoved: Boolean(gCfg.customMoved),
+            });
             ctx.restore();
 
             // 2. Vertical Axis (x, u, a) & Horizontal Time Axis (t) with open V-shaped arrowheads (^ and >)
@@ -11848,6 +11960,7 @@ export default function App() {
             clearBtnBox,
             stopBtnBox,
             ampHandles,
+            graphResizeHandles: graphResizeHandlesHit,
             graphBoxes: graphBoxesHit,
           };
         } else {
@@ -14622,6 +14735,36 @@ export default function App() {
         }
       }
 
+      // 1B) Check Diagram Width (↔) & Height (↕) Resize Handles
+      for (const rh of spHit.graphResizeHandles) {
+        if (Math.hypot(pt.x - rh.x, pt.y - rh.y) <= 22) {
+          e.preventDefault();
+          // Find all visible diagrams that are vertically stacked in the same column (|gx_other - gx_this| <= 32)
+          const stackedKeys = spHit.graphBoxes
+            .filter((gb) => Math.abs(gb.x - rh.gx) <= 32)
+            .map((gb) => gb.key);
+          if (!stackedKeys.includes(rh.key)) stackedKeys.push(rh.key);
+          draggingSpringGraphResizeRef.current = {
+            simId: spHit.simId,
+            graphKey: rh.key,
+            mode: rh.mode,
+            axisLeftX: rh.axisLeftX,
+            axisMidY: rh.axisMidY,
+            stackedKeys,
+            syncSpringAmp: !rh.customMoved,
+          };
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
+          return;
+        }
+      }
+
       // 2) Check Live Graph Cards (Close '✕' button or Drag Card anywhere on Canvas)
       for (let gIdx = spHit.graphBoxes.length - 1; gIdx >= 0; gIdx--) {
         const gb = spHit.graphBoxes[gIdx];
@@ -16361,8 +16504,52 @@ export default function App() {
       const proj = Math.abs(relX * dragAmp.oscUx + relY * dragAmp.oscUy);
       const nextAmp = Math.round(Math.max(18, Math.min(220, proj)));
       updateActiveSpringSimConfig((sim) =>
-        sim.id === dragAmp.simId ? { ...sim, amplitudePx: nextAmp } : sim
+        sim.id !== dragAmp.simId
+          ? sim
+          : {
+              ...sim,
+              amplitudePx: nextAmp,
+              graphs: {
+                xt: { ...sim.graphs.xt, height: sim.graphs.xt.customMoved ? sim.graphs.xt.height : nextAmp },
+                vt: { ...sim.graphs.vt, height: sim.graphs.vt.customMoved ? sim.graphs.vt.height : nextAmp },
+                at: { ...sim.graphs.at, height: sim.graphs.at.customMoved ? sim.graphs.at.height : nextAmp },
+              },
+            }
       );
+      return;
+    }
+
+    if (draggingSpringGraphResizeRef.current) {
+      const dragR = draggingSpringGraphResizeRef.current;
+      if (dragR.mode === 'width') {
+        const nextW = Math.round(
+          Math.max(260, Math.min(680, latestPt.x - dragR.axisLeftX + 32))
+        );
+        updateActiveSpringSimConfig((sim) => {
+          if (sim.id !== dragR.simId) return sim;
+          const nextGraphs = { ...sim.graphs };
+          for (const k of dragR.stackedKeys) {
+            nextGraphs[k] = { ...nextGraphs[k], width: nextW };
+          }
+          return { ...sim, graphs: nextGraphs };
+        });
+      } else {
+        const nextHalfH = Math.round(
+          Math.max(24, Math.min(180, Math.abs(latestPt.y - dragR.axisMidY)))
+        );
+        updateActiveSpringSimConfig((sim) => {
+          if (sim.id !== dragR.simId) return sim;
+          const nextGraphs = { ...sim.graphs };
+          for (const k of dragR.stackedKeys) {
+            nextGraphs[k] = { ...nextGraphs[k], height: nextHalfH };
+          }
+          return {
+            ...sim,
+            amplitudePx: dragR.syncSpringAmp ? nextHalfH : sim.amplitudePx,
+            graphs: nextGraphs,
+          };
+        });
+      }
       return;
     }
 
@@ -19113,6 +19300,12 @@ export default function App() {
 
     if (draggingSpringAmpHandleRef.current) {
       draggingSpringAmpHandleRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
+
+    if (draggingSpringGraphResizeRef.current) {
+      draggingSpringGraphResizeRef.current = null;
       renderStaticSceneRef.current();
       return;
     }
