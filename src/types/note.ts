@@ -97,6 +97,10 @@ export interface StrokeObject {
     schematicW: number;
     schematicH: number;
   };
+  springSupport?: {
+    supportStrokeId: string;
+    fixedEnd: 'start' | 'end';
+  };
 }
 
 export type TextFontStyle =
@@ -168,6 +172,42 @@ export interface CircuitSimConfig {
   strokeIds: string[]; // Strokes belonging to this circuit simulation
 }
 
+export interface SpringGraphBox {
+  visible: boolean;
+  x?: number; // Custom canvas logical X if dragged by user
+  y?: number; // Custom canvas logical Y if dragged by user
+  width?: number;
+  height?: number;
+  customMoved?: boolean;
+}
+
+export interface SpringSimConfig {
+  id: string;
+  name: string; // e.g. 'ελ01', 'ελ02'
+  naturalSpringStrokeId?: string; // Reference natural length (l0) spring stroke ID
+  eqSpringStrokeId: string; // Equilibrium / oscillating spring stroke ID
+  massStrokeId: string; // Attached mass block/sphere stroke ID
+  supportStrokeId?: string; // Ceiling / floor / wall / incline line stroke ID
+  fixedEnd: 'start' | 'end'; // Which end of eqSpringStroke is fixed to support
+  naturalLengthPx: number; // l0 in canvas px
+  baseSpringWidthPx: number; // Transverse width of spring coils
+  baseMassWidthPx: number; // Reference width of mass block at m = 1.0
+  baseMassHeightPx: number; // Reference height of mass block at m = 1.0
+  mass: number; // Mass multiplier m (0.4 to 2.5, default 1.0)
+  stiffness: number; // Spring constant k multiplier (0.5 to 2.5, default 1.0)
+  amplitudePx: number; // Oscillation amplitude A in canvas px (default 55)
+  initialPhaseMode: 'eq' | 'plusA' | 'minusA' | 'custom'; // t=0 starting position
+  customInitialPhaseRad?: number;
+  showNaturalSpring: boolean; // Show/hide natural length l0 spring
+  showAmplitudeLines: boolean; // Show black dashed Θ.Ι. + 2 blue dashed +A/-A lines with blue square handles
+  showForceVectors: boolean; // Show dynamic force vectors (W, F_el, ΣF)
+  graphs: {
+    xt: SpringGraphBox; // Position - Time x(t) [Red #ef4444]
+    vt: SpringGraphBox; // Velocity - Time v(t) [Green #10b981]
+    at: SpringGraphBox; // Acceleration - Time a(t) [Purple #8b5cf6]
+  };
+}
+
 export interface NotePage {
   id: string;
   title: string;
@@ -186,6 +226,8 @@ export interface NotePage {
   tapes: TapeObject[];
   circuitSims?: CircuitSimConfig[];
   activeCircuitSimId?: string;
+  springSims?: SpringSimConfig[];
+  activeSpringSimId?: string;
 }
 
 export interface Notebook {

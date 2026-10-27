@@ -79,6 +79,8 @@ import {
   Notebook,
   NotePage,
   CircuitSimConfig,
+  SpringSimConfig,
+  SpringGraphBox,
   StrokeObject,
   BezierPoint,
   ToolType,
@@ -1016,7 +1018,61 @@ export default function App() {
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
   const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(false);
+  const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs'>('circuits');
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(false);
+  const [editingSpringSimId, setEditingSpringSimId] = useState<string | null>(null);
+  const [editingSpringSimName, setEditingSpringSimName] = useState<string>('');
+  const draggingSpringAmpHandleRef = useRef<{
+    simId: string;
+    eqCenterX: number;
+    eqCenterY: number;
+    oscUx: number;
+    oscUy: number;
+  } | null>(null);
+  const draggingSpringMassRef = useRef<{
+    simId: string;
+    eqCenterX: number;
+    eqCenterY: number;
+    oscUx: number;
+    oscUy: number;
+    currentDisplacementPx: number;
+  } | null>(null);
+  const draggingSpringGraphRef = useRef<{
+    simId: string;
+    graphKey: 'xt' | 'vt' | 'at';
+    startX: number;
+    startY: number;
+    origBoxX: number;
+    origBoxY: number;
+  } | null>(null);
+  const springOverlayHitRef = useRef<{
+    simId: string;
+    eqCenterX: number;
+    eqCenterY: number;
+    oscUx: number;
+    oscUy: number;
+    massBox: { minX: number; minY: number; maxX: number; maxY: number };
+    ampHandles: { x: number; y: number }[];
+    graphBoxes: {
+      key: 'xt' | 'vt' | 'at';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      closePt: { x: number; y: number; r: number };
+    }[];
+  } | null>(null);
+  const pendingPhysicsMagnetRef = useRef<{
+    kind: 'spring-to-support' | 'mass-to-spring';
+    springStrokeId: string;
+    supportStrokeId?: string;
+    fixedEnd?: 'start' | 'end';
+    massStrokeId?: string;
+    targetX: number;
+    targetY: number;
+    startTime: number;
+  } | null>(null);
   const [simCircuitSwitchClosed, setSimCircuitSwitchClosed] = useState<boolean>(false);
   const autoSwitchHitRef = useRef<{
     x: number;
@@ -4075,6 +4131,34 @@ export default function App() {
         }
       }
 
+      if (springOverlayHitRef.current) {
+        const spHit = springOverlayHitRef.current;
+        for (const hPt of spHit.ampHandles) {
+          if (Math.hypot(ptX - hPt.x, ptY - hPt.y) <= 26) {
+            return true;
+          }
+        }
+        for (const gb of spHit.graphBoxes) {
+          if (
+            ptX >= gb.x - 4 &&
+            ptX <= gb.x + gb.width + 4 &&
+            ptY >= gb.y - 4 &&
+            ptY <= gb.y + gb.height + 4
+          ) {
+            return true;
+          }
+        }
+        if (
+          (isSpringSimulating || (showSimulationPanel && simActiveCategory === 'springs')) &&
+          ptX >= spHit.massBox.minX - 10 &&
+          ptX <= spHit.massBox.maxX + 10 &&
+          ptY >= spHit.massBox.minY - 10 &&
+          ptY <= spHit.massBox.maxY + 10
+        ) {
+          return true;
+        }
+      }
+
       if (isSimulating && autoSwitchHitRef.current) {
         const sw = autoSwitchHitRef.current;
         const knobX = sw.x + 17;
@@ -4844,6 +4928,21 @@ export default function App() {
       );
       const isStrokeInActiveSim = (s: StrokeObject) =>
         activeSimBaseSet.has(s.id) || Boolean(s.groupId && activeSimGroupIds.has(s.groupId));
+
+      const pageValidSpringSims = (pageObj.springSims || []).filter(
+        (sm) =>
+          strokeList.some((s) => s.id === sm.eqSpringStrokeId) &&
+          strokeList.some((s) => s.id === sm.massStrokeId)
+      );
+      const hiddenNaturalSpringIds = new Set(
+        pageValidSpringSims
+          .filter((sm) => sm.naturalSpringStrokeId && !sm.showNaturalSpring)
+          .map((sm) => sm.naturalSpringStrokeId!)
+      );
+      const activePageSpringSim =
+        pageValidSpringSims.find((sm) => sm.id === pageObj.activeSpringSimId) ||
+        pageValidSpringSims[0] ||
+        null;
       type RenderEntry =
         | { kind: 'image'; layerRank: number; z: number; img: ImageObject }
         | { kind: 'stroke'; layerRank: number; z: number; stroke: StrokeObject };
@@ -4962,6 +5061,20 @@ export default function App() {
           if (layer && !layer.visible) continue;
           // Never render legacy M-shaped bulb filament strokes ('-bulb-fil' or 5-point bulb filament)
           if (s.id.includes('-bulb-fil') || (s.shapeType === 'bulb' && s.points.length === 5)) {
+            continue;
+          }
+          // Hide natural length (l0) spring when user unchecks "Εμφάνιση Φυσικού Μήκους (l₀)"
+          if (hiddenNaturalSpringIds.has(s.id)) {
+            continue;
+          }
+          // While spring oscillation (or live mass pulling) is active, hide the static equilibrium spring & mass block so only the 60fps oscillating version renders!
+          if (
+            isCurrentActivePage &&
+            activePageSpringSim &&
+            (isSpringSimulating || draggingSpringMassRef.current?.simId === activePageSpringSim.id) &&
+            (s.id === activePageSpringSim.eqSpringStrokeId ||
+              s.id === activePageSpringSim.massStrokeId)
+          ) {
             continue;
           }
           // While simulation is running, hide static Fan strokes ONLY for the currently active simulated circuit!
@@ -5857,7 +5970,7 @@ export default function App() {
         ctx.restore();
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating]);
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating, isSpringSimulating]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
@@ -8196,7 +8309,10 @@ export default function App() {
           (selectionTransformRef.current ||
             isDraggingSelectionRef.current ||
             draggingNodeIdx !== null ||
-            draggingProposalCornerRef.current !== null)) ||
+            draggingProposalCornerRef.current !== null ||
+            draggingSpringAmpHandleRef.current !== null ||
+            draggingSpringGraphRef.current !== null ||
+            draggingSpringMassRef.current !== null)) ||
         draggingTextRef.current
       ) {
         if (e.cancelable) e.preventDefault();
@@ -8685,6 +8801,672 @@ export default function App() {
     },
     [activeNotebook.pages, getPageTopOffset, applyPaperTransformDirect]
   );
+
+  // ============================================================================
+  // SPRING & HARMONIC OSCILLATION SIMULATION ENGINE (ελ01, ελ02, ...)
+  // ============================================================================
+  const getValidSpringSims = (page: NotePage): SpringSimConfig[] => {
+    const strokeIdSet = new Set(page.strokes.map((s) => s.id));
+    return (page.springSims || []).filter(
+      (sim) => strokeIdSet.has(sim.eqSpringStrokeId) && strokeIdSet.has(sim.massStrokeId)
+    );
+  };
+
+  const getAllNotebookSpringSims = (
+    nb: Notebook = activeNotebook
+  ): { pageId: string; pageIdx: number; sim: SpringSimConfig }[] => {
+    const list: { pageId: string; pageIdx: number; sim: SpringSimConfig }[] = [];
+    nb.pages.forEach((p, pageIdx) => {
+      const valid = getValidSpringSims(p);
+      for (const sim of valid) {
+        list.push({ pageId: p.id, pageIdx, sim });
+      }
+    });
+    return list;
+  };
+
+  const getActiveSpringSim = (page: NotePage): SpringSimConfig | null => {
+    const valid = getValidSpringSims(page);
+    if (valid.length === 0) return null;
+    return valid.find((sim) => sim.id === page.activeSpringSimId) || valid[0];
+  };
+
+  const getNextDefaultSpringSimName = (page?: NotePage): string => {
+    const allEntries = getAllNotebookSpringSims(activeNotebook);
+    const usedNames = new Set(allEntries.map((e) => e.sim.name.trim().toLowerCase()));
+    if (page) {
+      for (const s of getValidSpringSims(page)) {
+        usedNames.add(s.name.trim().toLowerCase());
+      }
+    }
+    for (let i = 1; i <= 99; i++) {
+      const candidate = `ελ${String(i).padStart(2, '0')}`;
+      if (!usedNames.has(candidate)) return candidate;
+    }
+    return `ελ${usedNames.size + 1}`;
+  };
+
+  const scrollToSpringSim = useCallback(
+    (targetPageIdx: number, sim: SpringSimConfig) => {
+      const clampedIdx = Math.max(0, Math.min(activeNotebook.pages.length - 1, targetPageIdx));
+      const targetPage = activeNotebook.pages[clampedIdx];
+      if (!targetPage) return;
+
+      setActivePageIndex(clampedIdx);
+      activeDrawingPageIndexRef.current = clampedIdx;
+
+      const pageTopY = getPageTopOffset(clampedIdx);
+      const idSet = new Set(
+        [sim.eqSpringStrokeId, sim.massStrokeId, sim.naturalSpringStrokeId, sim.supportStrokeId].filter(
+          Boolean
+        ) as string[]
+      );
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const s of targetPage.strokes) {
+        if (!idSet.has(s.id)) continue;
+        for (const p of s.points) {
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+      }
+      const simCenterY = Number.isFinite(minY)
+        ? (minY + maxY) / 2
+        : getPageLogicalHeight(targetPage) * 0.45;
+      const docTargetY = pageTopY + simCenterY;
+      const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
+      const targetPanY = Math.min(40, Math.round(wsHeight * 0.44 - docTargetY * zoomRef.current));
+      const startPanY = panRef.current.y;
+
+      if (simScrollAnimRef.current !== null) {
+        cancelAnimationFrame(simScrollAnimRef.current);
+        simScrollAnimRef.current = null;
+      }
+
+      if (Math.abs(targetPanY - startPanY) < 2) {
+        applyPaperTransformDirect(zoomRef.current, 0, targetPanY, true);
+        return;
+      }
+
+      const startTime = performance.now();
+      const duration = 420;
+      const step = (now: number) => {
+        const t = Math.min(1, (now - startTime) / duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        const curPanY = startPanY + (targetPanY - startPanY) * ease;
+        applyPaperTransformDirect(zoomRef.current, 0, curPanY, t >= 1);
+        if (t < 1) {
+          simScrollAnimRef.current = requestAnimationFrame(step);
+        } else {
+          simScrollAnimRef.current = null;
+        }
+      };
+      simScrollAnimRef.current = requestAnimationFrame(step);
+    },
+    [activeNotebook.pages, getPageTopOffset, applyPaperTransformDirect]
+  );
+
+  const getSpringTerminalsAndWidthVec = (springStroke: StrokeObject) => {
+    const pts = springStroke.points;
+    if (pts.length < 4) {
+      const b = getStrokeBounds(springStroke);
+      const startTerm = { x: (b.minX + b.maxX) / 2, y: b.minY };
+      const endTerm = { x: (b.minX + b.maxX) / 2, y: b.maxY };
+      const w = Math.max(24, b.maxX - b.minX);
+      const h = Math.max(32, b.maxY - b.minY);
+      return {
+        startTerm,
+        endTerm,
+        widthVec: { x: w, y: 0 },
+        springWidth: w,
+        length: h,
+        ux: 0,
+        uy: 1,
+      };
+    }
+    const [q0, q1, q2, q3] = pts;
+    const startTerm = { x: (q0.x + q3.x) / 2, y: (q0.y + q3.y) / 2 };
+    const endTerm = { x: (q1.x + q2.x) / 2, y: (q1.y + q2.y) / 2 };
+    const widthVec = {
+      x: (q3.x - q0.x + (q2.x - q1.x)) / 2,
+      y: (q3.y - q0.y + (q2.y - q1.y)) / 2,
+    };
+    const springWidth = Math.max(16, Math.hypot(widthVec.x, widthVec.y));
+    const dx = endTerm.x - startTerm.x;
+    const dy = endTerm.y - startTerm.y;
+    const length = Math.max(24, Math.hypot(dx, dy));
+    return {
+      startTerm,
+      endTerm,
+      widthVec,
+      springWidth,
+      length,
+      ux: dx / length,
+      uy: dy / length,
+    };
+  };
+
+  const orientSpringWidthVec = (
+    ux: number,
+    uy: number,
+    springWidth: number,
+    origWidthVec: { x: number; y: number }
+  ) => {
+    const nx = -uy;
+    const ny = ux;
+    const dot = origWidthVec.x * nx + origWidthVec.y * ny;
+    const sign = dot >= 0 ? 1 : -1;
+    return {
+      x: nx * springWidth * sign,
+      y: ny * springWidth * sign,
+    };
+  };
+
+  const buildSpringQuadCorners = (
+    startTerm: { x: number; y: number },
+    endTerm: { x: number; y: number },
+    widthVec: { x: number; y: number }
+  ): BezierPoint[] => {
+    const hwx = widthVec.x / 2;
+    const hwy = widthVec.y / 2;
+    return [
+      { x: startTerm.x - hwx, y: startTerm.y - hwy, pressure: 0.7 },
+      { x: endTerm.x - hwx, y: endTerm.y - hwy, pressure: 0.7 },
+      { x: endTerm.x + hwx, y: endTerm.y + hwy, pressure: 0.7 },
+      { x: startTerm.x + hwx, y: startTerm.y + hwy, pressure: 0.7 },
+    ];
+  };
+
+  const scaleAndMoveMassStrokeToBox = (
+    massStroke: StrokeObject,
+    targetCenterX: number,
+    targetCenterY: number,
+    targetW: number,
+    targetH: number
+  ): StrokeObject => {
+    const b = getStrokeBounds(massStroke);
+    const curW = Math.max(4, b.maxX - b.minX);
+    const curH = Math.max(4, b.maxY - b.minY);
+    const curCx = (b.minX + b.maxX) / 2;
+    const curCy = (b.minY + b.maxY) / 2;
+    const sx = targetW / curW;
+    const sy = targetH / curH;
+    return {
+      ...massStroke,
+      points: massStroke.points.map((p) => ({
+        ...p,
+        x: targetCenterX + (p.x - curCx) * sx,
+        y: targetCenterY + (p.y - curCy) * sy,
+        cx: p.cx !== undefined ? targetCenterX + (p.cx - curCx) * sx : undefined,
+        cy: p.cy !== undefined ? targetCenterY + (p.cy - curCy) * sy : undefined,
+        inDx: p.inDx !== undefined ? p.inDx * sx : undefined,
+        inDy: p.inDy !== undefined ? p.inDy * sy : undefined,
+        outDx: p.outDx !== undefined ? p.outDx * sx : undefined,
+        outDy: p.outDy !== undefined ? p.outDy * sy : undefined,
+      })),
+    };
+  };
+
+  const computeEquilibriumLengthPx = (
+    naturalLengthPx: number,
+    ux: number,
+    uy: number,
+    mass: number,
+    stiffness: number
+  ): number => {
+    const ratio = mass / Math.max(0.25, stiffness);
+    if (uy > 0.45) {
+      // Hanging from ceiling: gravity elongates the spring downwards
+      return naturalLengthPx * (1 + 0.30 * ratio);
+    }
+    if (uy < -0.45) {
+      // Standing on floor: gravity compresses the spring downwards
+      return naturalLengthPx * Math.max(0.36, 1 - 0.26 * ratio);
+    }
+    // Inclined plane or horizontal spring
+    return naturalLengthPx * Math.max(0.4, 1 + 0.28 * uy * ratio);
+  };
+
+  const applySpringSimParametersToStrokes = (
+    page: NotePage,
+    updatedSim: SpringSimConfig
+  ): NotePage => {
+    const eqSpring = page.strokes.find((s) => s.id === updatedSim.eqSpringStrokeId);
+    const massStroke = page.strokes.find((s) => s.id === updatedSim.massStrokeId);
+    if (!eqSpring || !massStroke) return page;
+
+    const info = getSpringTerminalsAndWidthVec(eqSpring);
+    const fixedPt = updatedSim.fixedEnd === 'start' ? info.startTerm : info.endTerm;
+    const freePt = updatedSim.fixedEnd === 'start' ? info.endTerm : info.startTerm;
+    const dx = freePt.x - fixedPt.x;
+    const dy = freePt.y - fixedPt.y;
+    const dLen = Math.max(12, Math.hypot(dx, dy));
+    const ux = dx / dLen;
+    const uy = dy / dLen;
+
+    const eqLen = computeEquilibriumLengthPx(
+      updatedSim.naturalLengthPx,
+      ux,
+      uy,
+      updatedSim.mass,
+      updatedSim.stiffness
+    );
+    const newFreePt = {
+      x: fixedPt.x + ux * eqLen,
+      y: fixedPt.y + uy * eqLen,
+    };
+    const newStartTerm = updatedSim.fixedEnd === 'start' ? fixedPt : newFreePt;
+    const newEndTerm = updatedSim.fixedEnd === 'start' ? newFreePt : fixedPt;
+    const wVec = orientSpringWidthVec(ux, uy, updatedSim.baseSpringWidthPx, info.widthVec);
+    const nextSpringCorners = buildSpringQuadCorners(newStartTerm, newEndTerm, wVec);
+
+    const scaleM = Math.pow(updatedSim.mass, 0.38);
+    const newMassW = Math.max(18, updatedSim.baseMassWidthPx * scaleM);
+    const newMassH = Math.max(18, updatedSim.baseMassHeightPx * scaleM);
+    // Floor spring has a slight 4px visual breathing gap or direct contact at the top terminal
+    const floorGap = uy < -0.45 ? 4 : 0;
+    const newMassCx = newFreePt.x + ux * (newMassW / 2 + floorGap);
+    const newMassCy = newFreePt.y + uy * (newMassH / 2 + floorGap);
+    const nextMassStroke = scaleAndMoveMassStrokeToBox(
+      massStroke,
+      newMassCx,
+      newMassCy,
+      newMassW,
+      newMassH
+    );
+
+    const nextStrokes = page.strokes.map((s) => {
+      if (s.id === eqSpring.id) {
+        return {
+          ...s,
+          points: nextSpringCorners,
+        };
+      }
+      if (s.id === massStroke.id) {
+        return nextMassStroke;
+      }
+      return s;
+    });
+
+    const nextSpringSims = (page.springSims || []).map((sm) =>
+      sm.id === updatedSim.id ? updatedSim : sm
+    );
+    return {
+      ...page,
+      strokes: nextStrokes,
+      springSims: nextSpringSims,
+      activeSpringSimId: updatedSim.id,
+    };
+  };
+
+  const updateActiveSpringSimConfig = (updater: (sim: SpringSimConfig) => SpringSimConfig) => {
+    updateActivePage((page) => {
+      const activeSim = getActiveSpringSim(page);
+      if (!activeSim) return page;
+      const nextSim = updater(activeSim);
+      return applySpringSimParametersToStrokes(page, nextSim);
+    }, false);
+  };
+
+  const snapAndAttachSpringToSupport = (
+    springId: string,
+    supportId: string,
+    fixedEnd: 'start' | 'end',
+    attachPt: { x: number; y: number }
+  ) => {
+    updateActivePage((page) => {
+      const sp = page.strokes.find((s) => s.id === springId);
+      const sup = page.strokes.find((s) => s.id === supportId);
+      if (!sp || !sup) return page;
+
+      const info = getSpringTerminalsAndWidthVec(sp);
+      const curFixed = fixedEnd === 'start' ? info.startTerm : info.endTerm;
+      const curFree = fixedEnd === 'start' ? info.endTerm : info.startTerm;
+      let ux = (curFree.x - curFixed.x) / info.length;
+      let uy = (curFree.y - curFixed.y) / info.length;
+
+      // If support is a straight line segment, check if spring is nearly perpendicular to it and align cleanly at 90°!
+      if (sup.points.length >= 2) {
+        const p0 = sup.points[0];
+        const p1 = sup.points[sup.points.length - 1];
+        const sdx = p1.x - p0.x;
+        const sdy = p1.y - p0.y;
+        const sLen = Math.hypot(sdx, sdy);
+        if (sLen >= 20) {
+          const tx = sdx / sLen;
+          const ty = sdy / sLen;
+          // Two unit normals to the support line
+          const n1x = -ty;
+          const n1y = tx;
+          const dot1 = ux * n1x + uy * n1y;
+          if (Math.abs(dot1) >= Math.cos((32 * Math.PI) / 180)) {
+            const sign = dot1 >= 0 ? 1 : -1;
+            ux = n1x * sign;
+            uy = n1y * sign;
+          }
+        }
+      }
+
+      const newFixed = { x: attachPt.x, y: attachPt.y };
+      const newFree = {
+        x: newFixed.x + ux * info.length,
+        y: newFixed.y + uy * info.length,
+      };
+      const newStart = fixedEnd === 'start' ? newFixed : newFree;
+      const newEnd = fixedEnd === 'start' ? newFree : newFixed;
+      const wVec = orientSpringWidthVec(ux, uy, info.springWidth, info.widthVec);
+      const nextCorners = buildSpringQuadCorners(newStart, newEnd, wVec);
+
+      return {
+        ...page,
+        strokes: page.strokes.map((s) =>
+          s.id === sp.id
+            ? {
+                ...s,
+                points: nextCorners,
+                springSupport: { supportStrokeId: sup.id, fixedEnd },
+              }
+            : s
+        ),
+      };
+    }, true);
+    showToast('🧲 Το ελατήριο συνδέθηκε μαγνητικά στη βάση στήριξης!');
+  };
+
+  const attachMassToSpringAndCreateEquilibriumClone = (springId: string, massId: string) => {
+    let createdOrUpdatedName = '';
+    updateActivePage((page) => {
+      const sp = page.strokes.find((s) => s.id === springId);
+      const mass = page.strokes.find((s) => s.id === massId);
+      if (!sp || !mass) return page;
+
+      const info = getSpringTerminalsAndWidthVec(sp);
+      const mb = getStrokeBounds(mass);
+      const massCx = (mb.minX + mb.maxX) / 2;
+      const massCy = (mb.minY + mb.maxY) / 2;
+      const massW = Math.max(24, mb.maxX - mb.minX);
+      const massH = Math.max(24, mb.maxY - mb.minY);
+
+      // Determine fixedEnd and supportStrokeId
+      let fixedEnd: 'start' | 'end' = sp.springSupport?.fixedEnd || 'start';
+      let supportStrokeId: string | undefined = sp.springSupport?.supportStrokeId;
+
+      if (!supportStrokeId) {
+        const distPtToSeg = (
+          pt: { x: number; y: number },
+          a: { x: number; y: number },
+          b: { x: number; y: number }
+        ) => {
+          const abx = b.x - a.x;
+          const aby = b.y - a.y;
+          const lenSq = abx * abx + aby * aby;
+          if (lenSq < 1e-6) return Math.hypot(pt.x - a.x, pt.y - a.y);
+          const t = Math.max(0, Math.min(1, ((pt.x - a.x) * abx + (pt.y - a.y) * aby) / lenSq));
+          return Math.hypot(pt.x - (a.x + t * abx), pt.y - (a.y + t * aby));
+        };
+        // Check if either terminal of sp touches a support line on the page
+        let bestSupDist = 42;
+        for (const cand of page.strokes) {
+          if (cand.id === sp.id || cand.id === mass.id || cand.shapeType === 'spring') continue;
+          if (cand.shapeType === 'line' && cand.points.length >= 2) {
+            const p0 = cand.points[0];
+            const p1 = cand.points[cand.points.length - 1];
+            if (Math.hypot(p1.x - p0.x, p1.y - p0.y) < 35) continue;
+            const dStart = distPtToSeg(info.startTerm, p0, p1);
+            const dEnd = distPtToSeg(info.endTerm, p0, p1);
+            if (dStart < bestSupDist) {
+              bestSupDist = dStart;
+              fixedEnd = 'start';
+              supportStrokeId = cand.id;
+            }
+            if (dEnd < bestSupDist) {
+              bestSupDist = dEnd;
+              fixedEnd = 'end';
+              supportStrokeId = cand.id;
+            }
+          }
+        }
+        if (!supportStrokeId) {
+          // Fallback: whichever terminal is farther from the dragged mass block is the fixed end!
+          const dStartToMass = Math.hypot(info.startTerm.x - massCx, info.startTerm.y - massCy);
+          const dEndToMass = Math.hypot(info.endTerm.x - massCx, info.endTerm.y - massCy);
+          fixedEnd = dStartToMass >= dEndToMass ? 'start' : 'end';
+        }
+      }
+
+      const fixedPt = fixedEnd === 'start' ? info.startTerm : info.endTerm;
+      const freePt = fixedEnd === 'start' ? info.endTerm : info.startTerm;
+      const ux = (freePt.x - fixedPt.x) / info.length;
+      const uy = (freePt.y - fixedPt.y) / info.length;
+
+      // Check if sp is ALREADY an equilibrium spring of an existing SpringSimConfig
+      const existingSim = getValidSpringSims(page).find(
+        (sm) => sm.eqSpringStrokeId === sp.id || sm.naturalSpringStrokeId === sp.id
+      );
+
+      if (existingSim && existingSim.eqSpringStrokeId === sp.id) {
+        createdOrUpdatedName = existingSim.name;
+        const updatedSim: SpringSimConfig = {
+          ...existingSim,
+          massStrokeId: mass.id,
+          baseMassWidthPx: massW,
+          baseMassHeightPx: massH,
+        };
+        return applySpringSimParametersToStrokes(page, updatedSim);
+      }
+
+      // Fresh Spring: Keep sp as the Natural Length (l0) spring on the left,
+      // and create a Cloned Equilibrium Spring (eqSpring) to the right with the mass attached at Equilibrium (Θ.Ι.)!
+      const isVertical = Math.abs(uy) >= 0.5;
+      const cloneOffsetX = isVertical
+        ? Math.round(Math.max(92, info.springWidth * 1.9, massW * 1.45) / A4_GRID_STEP_PX) *
+          A4_GRID_STEP_PX
+        : 0;
+      const cloneOffsetY = !isVertical
+        ? -Math.round(Math.max(92, info.springWidth * 1.9, massH * 1.45) / A4_GRID_STEP_PX) *
+          A4_GRID_STEP_PX
+        : 0;
+
+      const eqFixedPt = {
+        x: fixedPt.x + cloneOffsetX,
+        y: fixedPt.y + cloneOffsetY,
+      };
+      const eqLen = computeEquilibriumLengthPx(info.length, ux, uy, 1.0, 1.0);
+      const eqFreePt = {
+        x: eqFixedPt.x + ux * eqLen,
+        y: eqFixedPt.y + uy * eqLen,
+      };
+      const eqStartTerm = fixedEnd === 'start' ? eqFixedPt : eqFreePt;
+      const eqEndTerm = fixedEnd === 'start' ? eqFreePt : eqFixedPt;
+      const wVec = orientSpringWidthVec(ux, uy, info.springWidth, info.widthVec);
+      const eqCorners = buildSpringQuadCorners(eqStartTerm, eqEndTerm, wVec);
+
+      const eqSpringId = `spring-eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const eqSpringStroke: StrokeObject = {
+        ...sp,
+        id: eqSpringId,
+        points: eqCorners,
+        springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : undefined,
+      };
+
+      const floorGap = uy < -0.45 ? 4 : 0;
+      const newMassCx = eqFreePt.x + ux * (massW / 2 + floorGap);
+      const newMassCy = eqFreePt.y + uy * (massH / 2 + floorGap);
+      const movedMassStroke = scaleAndMoveMassStrokeToBox(
+        mass,
+        newMassCx,
+        newMassCy,
+        massW,
+        massH
+      );
+
+      // Auto-extend horizontal ceiling/floor support line to the right so it covers the cloned equilibrium spring!
+      const nextStrokes = page.strokes.map((s) => {
+        if (s.id === sp.id) {
+          return {
+            ...s,
+            springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : s.springSupport,
+          };
+        }
+        if (s.id === mass.id) {
+          return movedMassStroke;
+        }
+        if (supportStrokeId && s.id === supportStrokeId && s.points.length >= 2) {
+          const p0 = s.points[0];
+          const pLast = s.points[s.points.length - 1];
+          if (Math.abs(pLast.y - p0.y) <= 14 && isVertical) {
+            const neededMaxX = eqFixedPt.x + Math.max(64, massW * 0.85);
+            const curMaxX = Math.max(p0.x, pLast.x);
+            if (neededMaxX > curMaxX) {
+              const newPts = s.points.map((pt, idx) => {
+                if (
+                  (pLast.x >= p0.x && idx === s.points.length - 1) ||
+                  (p0.x > pLast.x && idx === 0)
+                ) {
+                  return { ...pt, x: neededMaxX };
+                }
+                return pt;
+              });
+              return { ...s, points: newPts };
+            }
+          }
+        }
+        return s;
+      });
+
+      nextStrokes.push(eqSpringStroke);
+
+      const newSimName = getNextDefaultSpringSimName(page);
+      createdOrUpdatedName = newSimName;
+      const defaultAmp = Math.round(Math.max(46, Math.min(82, info.length * 0.28)));
+      const newSpringSim: SpringSimConfig = {
+        id: `spring-sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        name: newSimName,
+        naturalSpringStrokeId: sp.id,
+        eqSpringStrokeId: eqSpringId,
+        massStrokeId: mass.id,
+        supportStrokeId,
+        fixedEnd,
+        naturalLengthPx: info.length,
+        baseSpringWidthPx: info.springWidth,
+        baseMassWidthPx: massW,
+        baseMassHeightPx: massH,
+        mass: 1.0,
+        stiffness: 1.0,
+        amplitudePx: defaultAmp,
+        initialPhaseMode: 'minusA',
+        showNaturalSpring: isVertical,
+        showAmplitudeLines: true,
+        showForceVectors: false,
+        graphs: {
+          xt: { visible: false },
+          vt: { visible: false },
+          at: { visible: false },
+        },
+      };
+
+      const curValid = getValidSpringSims(page);
+      return {
+        ...page,
+        strokes: nextStrokes,
+        springSims: [...curValid, newSpringSim],
+        activeSpringSimId: newSpringSim.id,
+      };
+    }, true);
+
+    setSelectedStrokeIds([]);
+    setSimActiveCategory('springs');
+    setShowSimulationPanel(true);
+    if (createdOrUpdatedName) {
+      showToast(
+        `🧲 [${createdOrUpdatedName}] Το σώμα συνδέθηκε! Δημιουργήθηκε θέση ισορροπίας (Θ.Ι.) δίπλα στο φυσικό μήκος (l₀).`
+      );
+    }
+  };
+
+  const registerOrActivateSpringSimFromLasso = (): boolean => {
+    const rawSelSet = new Set(selectedStrokeIds);
+    const selStrokes = activePage.strokes.filter((s) => rawSelSet.has(s.id));
+    const springsInSel = selStrokes.filter((s) => s.shapeType === 'spring');
+    if (springsInSel.length === 0) return false;
+
+    // Check if any selected spring already belongs to a SpringSimConfig
+    const existing = getValidSpringSims(activePage).find((sm) =>
+      springsInSel.some(
+        (sp) => sp.id === sm.eqSpringStrokeId || sp.id === sm.naturalSpringStrokeId
+      )
+    );
+    if (existing) {
+      updateActivePage((page) => ({ ...page, activeSpringSimId: existing.id }), false);
+      setSelectedStrokeIds([]);
+      setSimActiveCategory('springs');
+      setShowSimulationPanel(true);
+      showToast(`🌀 Ενεργοποιήθηκε το ελατήριο "${existing.name}"!`);
+      return true;
+    }
+
+    // Look for a mass block in the selection or near the spring's free end
+    const sp = springsInSel[springsInSel.length - 1];
+    const info = getSpringTerminalsAndWidthVec(sp);
+    const massShapes = ['rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere'];
+    let mass = selStrokes.find((s) => s.id !== sp.id && massShapes.includes(s.shapeType || ''));
+    if (!mass) {
+      mass = activePage.strokes.find((s) => {
+        if (s.id === sp.id || !massShapes.includes(s.shapeType || '')) return false;
+        const b = getStrokeBounds(s);
+        const cx = (b.minX + b.maxX) / 2;
+        const cy = (b.minY + b.maxY) / 2;
+        return (
+          Math.hypot(cx - info.endTerm.x, cy - info.endTerm.y) <= 85 ||
+          Math.hypot(cx - info.startTerm.x, cy - info.startTerm.y) <= 85
+        );
+      });
+    }
+
+    if (mass) {
+      attachMassToSpringAndCreateEquilibriumClone(sp.id, mass.id);
+      return true;
+    }
+
+    // If only a spring was selected without a mass block, create a clean grey mass block and attach it!
+    const fixedEnd: 'start' | 'end' = sp.springSupport?.fixedEnd || 'start';
+    const freePt = fixedEnd === 'start' ? info.endTerm : info.startTerm;
+    const fixedPt = fixedEnd === 'start' ? info.startTerm : info.endTerm;
+    const ux = (freePt.x - fixedPt.x) / info.length;
+    const uy = (freePt.y - fixedPt.y) / info.length;
+    const bw = 69;
+    const bh = 46;
+    const mCx = freePt.x + ux * (bw / 2);
+    const mCy = freePt.y + uy * (bh / 2);
+    const newMassId = `mass-auto-${Date.now()}`;
+    const newMassStroke: StrokeObject = {
+      id: newMassId,
+      tool: 'pen',
+      penType: 'ballpoint',
+      color: '#0f172a',
+      fillColor: '#cbd5e1',
+      fillStyle: 'solid',
+      fillTransparency: 45,
+      width: 2.5,
+      opacity: 1,
+      lineStyle: 'solid',
+      isShape: true,
+      shapeType: 'rectangle',
+      layerId: sp.layerId,
+      points: [
+        { x: mCx - bw / 2, y: mCy - bh / 2, pressure: 0.7 },
+        { x: mCx + bw / 2, y: mCy - bh / 2, pressure: 0.7 },
+        { x: mCx + bw / 2, y: mCy + bh / 2, pressure: 0.7 },
+        { x: mCx - bw / 2, y: mCy + bh / 2, pressure: 0.7 },
+        { x: mCx - bw / 2, y: mCy - bh / 2, pressure: 0.7 },
+      ],
+    };
+    updateActivePage((page) => ({ ...page, strokes: [...page.strokes, newMassStroke] }), false);
+    window.setTimeout(() => {
+      attachMassToSpringAndCreateEquilibriumClone(sp.id, newMassId);
+    }, 0);
+    return true;
+  };
 
   const isCircuitEligibleStroke = (s: StrokeObject): boolean => {
     if (!s.isShape) return false;
@@ -9681,11 +10463,25 @@ export default function App() {
     if (!ctx) return;
 
     const activeSim = getActiveCircuitSim(activePage);
+    const activeSpringSim = getActiveSpringSim(activePage);
+    const hasSpringOverlay =
+      Boolean(activeSpringSim) &&
+      (isSpringSimulating ||
+        showSimulationPanel ||
+        activeSpringSim!.showAmplitudeLines ||
+        activeSpringSim!.showForceVectors ||
+        activeSpringSim!.graphs.xt.visible ||
+        activeSpringSim!.graphs.vt.visible ||
+        activeSpringSim!.graphs.at.visible ||
+        draggingSpringMassRef.current !== null ||
+        draggingSpringAmpHandleRef.current !== null ||
+        draggingSpringGraphRef.current !== null);
     const hasAlignFlash = circuitAlignFlashStart !== null;
     const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
-    if (!hasProposal && ((!isSimulating && !hasAlignFlash) || !activeSim)) {
+    if (!hasProposal && !hasSpringOverlay && ((!isSimulating && !hasAlignFlash) || !activeSim)) {
       autoSwitchHitRef.current = null;
       proposalOverlayHitRef.current = null;
+      springOverlayHitRef.current = null;
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
       return;
@@ -9961,16 +10757,9 @@ export default function App() {
         proposalOverlayHitRef.current = null;
       }
 
-      if (!isSimulating) {
-        ctx.restore();
-        if (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560) {
-          rafId = window.requestAnimationFrame(renderSimFrame);
-        }
-        return;
-      }
-
-      // 1. Optional PhET-style Dark Conductive Tube Track behind particles
-      if (simShowDarkWireTrack && simData.wireSegments.length > 0) {
+      if (isSimulating && activeSim) {
+        // 1. Optional PhET-style Dark Conductive Tube Track behind particles
+        if (simShowDarkWireTrack && simData.wireSegments.length > 0) {
         ctx.save();
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -10290,9 +11079,598 @@ export default function App() {
         }
         ctx.restore();
       }
+      } // end if (isSimulating && activeSim)
+
+      // ======================================================================
+      // 6. SPRING & HARMONIC OSCILLATION OVERLAY (60fps Spring + Mass,
+      //    Θ.Ι. Black Dashed Line, Symmetric Blue Dashed +A/-A Handles,
+      //    Live Force Vectors & 3 Draggable Live Graphs x(t), υ(t), α(t))
+      // ======================================================================
+      if (activeSpringSim && hasSpringOverlay) {
+        const eqSpring = activePage.strokes.find(
+          (s) => s.id === activeSpringSim.eqSpringStrokeId
+        );
+        const massStroke = activePage.strokes.find(
+          (s) => s.id === activeSpringSim.massStrokeId
+        );
+        if (eqSpring && massStroke) {
+          const spInfo = getSpringTerminalsAndWidthVec(eqSpring);
+          const mb = getStrokeBounds(massStroke);
+          const fixedPt =
+            activeSpringSim.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+          const eqFreePt =
+            activeSpringSim.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+          const eqMassCx = (mb.minX + mb.maxX) / 2;
+          const eqMassCy = (mb.minY + mb.maxY) / 2;
+          const massW = Math.max(20, mb.maxX - mb.minX);
+          const massH = Math.max(20, mb.maxY - mb.minY);
+
+          const axDx = eqFreePt.x - fixedPt.x;
+          const axDy = eqFreePt.y - fixedPt.y;
+          const axLen = Math.max(12, Math.hypot(axDx, axDy));
+          const axisUx = axDx / axLen;
+          const axisUy = axDy / axLen;
+
+          // Unit oscillation vector towards +A:
+          // For vertical springs (hanging or standing), +A is UPWARDS (0, -1) and -A is DOWNWARDS (0, +1)
+          const isVertSpring = Math.abs(axisUy) >= 0.5;
+          const oscUx = isVertSpring ? 0 : axisUx >= 0 ? axisUx : -axisUx;
+          const oscUy = isVertSpring ? -1 : axisUx >= 0 ? axisUy : -axisUy;
+          // Perpendicular unit vector along which the Θ.Ι. and +A/-A dashed lines extend (rightwards for vertical springs)
+          const perpUx = -oscUy;
+          const perpUy = oscUx;
+
+          const omega =
+            2.6 *
+            Math.sqrt(activeSpringSim.stiffness / Math.max(0.2, activeSpringSim.mass)) *
+            simSpeedMultiplier;
+          const phi0 =
+            activeSpringSim.initialPhaseMode === 'eq'
+              ? 0
+              : activeSpringSim.initialPhaseMode === 'plusA'
+              ? Math.PI / 2
+              : activeSpringSim.initialPhaseMode === 'minusA'
+              ? -Math.PI / 2
+              : activeSpringSim.customInitialPhaseRad ?? -Math.PI / 2;
+          const A = Math.max(16, activeSpringSim.amplitudePx || 55);
+
+          let xDisp = 0;
+          if (draggingSpringMassRef.current?.simId === activeSpringSim.id) {
+            xDisp = draggingSpringMassRef.current.currentDisplacementPx;
+          } else if (isSpringSimulating) {
+            xDisp = A * Math.sin(omega * elapsedSec + phi0);
+          }
+
+          const dispDx = xDisp * oscUx;
+          const dispDy = xDisp * oscUy;
+          const curMassCx = eqMassCx + dispDx;
+          const curMassCy = eqMassCy + dispDy;
+
+          // 6A. Draw Live Oscillating (or Pulled) Spring & Mass Block
+          if (
+            isSpringSimulating ||
+            draggingSpringMassRef.current?.simId === activeSpringSim.id
+          ) {
+            const curFreePt = {
+              x: eqFreePt.x + dispDx,
+              y: eqFreePt.y + dispDy,
+            };
+            const curStartTerm =
+              activeSpringSim.fixedEnd === 'start' ? fixedPt : curFreePt;
+            const curEndTerm =
+              activeSpringSim.fixedEnd === 'start' ? curFreePt : fixedPt;
+            const oscCorners = buildSpringQuadCorners(
+              curStartTerm,
+              curEndTerm,
+              spInfo.widthVec
+            );
+            const oscSpringStroke: StrokeObject = {
+              ...eqSpring,
+              points: oscCorners,
+            };
+            const oscMassStroke: StrokeObject = {
+              ...massStroke,
+              points: massStroke.points.map((p) => ({
+                ...p,
+                x: p.x + dispDx,
+                y: p.y + dispDy,
+                cx: p.cx !== undefined ? p.cx + dispDx : undefined,
+                cy: p.cy !== undefined ? p.cy + dispDy : undefined,
+              })),
+            };
+            drawStrokeOnContext(ctx, oscSpringStroke, false);
+            drawStrokeOnContext(ctx, oscMassStroke, false);
+          }
+
+          const ampHandles: { x: number; y: number }[] = [];
+
+          // 6B. Draw Black Dashed Equilibrium Line (Θ.Ι.) & 2 Blue Dashed Amplitude Lines (+A / -A) with Blue Square Handles (□)
+          if (activeSpringSim.showAmplitudeLines) {
+            const eqStartDist = massW / 2 + 12;
+            const lineEndDist = massW / 2 + 196;
+            const blueStartDist = Math.max(8, spInfo.springWidth / 2 + 8);
+
+            ctx.save();
+            ctx.lineCap = 'round';
+            // Black Dashed Line (Θ.Ι.)
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2.4;
+            ctx.setLineDash([7, 5]);
+            ctx.beginPath();
+            ctx.moveTo(
+              eqMassCx + perpUx * eqStartDist,
+              eqMassCy + perpUy * eqStartDist
+            );
+            ctx.lineTo(
+              eqMassCx + perpUx * lineEndDist,
+              eqMassCy + perpUy * lineEndDist
+            );
+            ctx.stroke();
+
+            // Two Symmetric Blue Dashed Lines (+A and -A) with Blue Square Handles (□) at their right ends!
+            for (const sign of [1, -1]) {
+              const lvlX = eqMassCx + sign * A * oscUx;
+              const lvlY = eqMassCy + sign * A * oscUy;
+              const bx1 = lvlX + perpUx * blueStartDist;
+              const by1 = lvlY + perpUy * blueStartDist;
+              const bx2 = lvlX + perpUx * lineEndDist;
+              const by2 = lvlY + perpUy * lineEndDist;
+
+              ctx.save();
+              ctx.strokeStyle = '#2563eb';
+              ctx.lineWidth = 2.4;
+              ctx.setLineDash([7, 5]);
+              ctx.beginPath();
+              ctx.moveTo(bx1, by1);
+              ctx.lineTo(bx2, by2);
+              ctx.stroke();
+              ctx.restore();
+
+              // Blue Square Handle (□) on the right end of the blue dashed line
+              const hSize = 15;
+              const hx = bx2 + perpUx * (hSize / 2);
+              const hy = by2 + perpUy * (hSize / 2);
+              const isDraggingAmp =
+                draggingSpringAmpHandleRef.current?.simId === activeSpringSim.id;
+              ctx.save();
+              ctx.fillStyle = isDraggingAmp
+                ? 'rgba(37, 99, 235, 0.34)'
+                : 'rgba(59, 130, 246, 0.18)';
+              ctx.strokeStyle = '#2563eb';
+              ctx.lineWidth = 2.2;
+              ctx.fillRect(hx - hSize / 2, hy - hSize / 2, hSize, hSize);
+              ctx.strokeRect(hx - hSize / 2, hy - hSize / 2, hSize, hSize);
+              ctx.restore();
+
+              ampHandles.push({ x: hx, y: hy });
+            }
+            ctx.restore();
+          }
+
+          // 6C. Draw Dynamic Force Vectors (W, F_ελ, ΣF_επ) when enabled
+          if (activeSpringSim.showForceVectors) {
+            const drawPhysicsArrow = (
+              x1: number,
+              y1: number,
+              x2: number,
+              y2: number,
+              color: string,
+              label: string
+            ) => {
+              const len = Math.hypot(x2 - x1, y2 - y1);
+              if (len < 6) return;
+              const ang = Math.atan2(y2 - y1, x2 - x1);
+              ctx.save();
+              ctx.strokeStyle = color;
+              ctx.fillStyle = color;
+              ctx.lineWidth = 2.6;
+              ctx.lineCap = 'round';
+              ctx.beginPath();
+              ctx.moveTo(x1, y1);
+              ctx.lineTo(x2, y2);
+              ctx.stroke();
+              const head = 8.5;
+              ctx.beginPath();
+              ctx.moveTo(x2, y2);
+              ctx.lineTo(
+                x2 - head * Math.cos(ang - 0.45),
+                y2 - head * Math.sin(ang - 0.45)
+              );
+              ctx.lineTo(
+                x2 - head * Math.cos(ang + 0.45),
+                y2 - head * Math.sin(ang + 0.45)
+              );
+              ctx.closePath();
+              ctx.fill();
+              ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+              ctx.fillText(label, x2 + 8, y2 + 4);
+              ctx.restore();
+            };
+
+            const wLen = 46 * activeSpringSim.mass;
+            // Weight W (downwards)
+            if (isVertSpring) {
+              drawPhysicsArrow(
+                curMassCx - 10,
+                curMassCy,
+                curMassCx - 10,
+                curMassCy + wLen,
+                '#0284c7',
+                'W'
+              );
+              // Spring force F_ελ (upwards, proportional to total stretch)
+              const fElLen = Math.max(
+                8,
+                wLen - xDisp * 0.65 * activeSpringSim.stiffness
+              );
+              drawPhysicsArrow(
+                curMassCx + 10,
+                curMassCy,
+                curMassCx + 10,
+                curMassCy - fElLen,
+                '#059669',
+                'Fελ'
+              );
+            }
+            // Restoring Force ΣF = -k*x along oscU
+            const netFLen = -xDisp * 0.75 * activeSpringSim.stiffness;
+            if (Math.abs(netFLen) >= 7) {
+              drawPhysicsArrow(
+                curMassCx,
+                curMassCy,
+                curMassCx + oscUx * netFLen,
+                curMassCy + oscUy * netFLen,
+                '#e11d48',
+                'ΣF'
+              );
+            }
+          }
+
+          // 6D. Draw the 3 Independent Draggable Live Animated Graphs:
+          //     - x(t) [Red #ef4444] + Blue Dashed +A/-A lines synced with the spring's amplitude!
+          //     - υ(t) [Green #10b981]
+          //     - α(t) [Purple #8b5cf6]
+          const visibleGraphKeys = (['xt', 'vt', 'at'] as const).filter(
+            (k) => activeSpringSim.graphs[k]?.visible
+          );
+          const graphBoxesHit: {
+            key: 'xt' | 'vt' | 'at';
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+            closePt: { x: number; y: number; r: number };
+          }[] = [];
+
+          let runningStackY = 0;
+          for (let gIdx = 0; gIdx < visibleGraphKeys.length; gIdx++) {
+            const gKey = visibleGraphKeys[gIdx];
+            const gCfg = activeSpringSim.graphs[gKey];
+            const gW = gCfg.width || 292;
+            const gH =
+              gKey === 'xt'
+                ? Math.max(156, Math.min(256, A * 2 + 56))
+                : gCfg.height || 164;
+
+            const defaultX = Math.min(
+              w - gW - 14,
+              Math.max(20, eqMassCx + massW / 2 + 220)
+            );
+            let defaultY: number;
+            if (gIdx === 0) {
+              // 1st checked diagram is always right next to the spring, centered on Θ.Ι. (eqMassCy)!
+              defaultY = Math.max(16, Math.min(h - gH - 16, eqMassCy - gH / 2));
+              runningStackY = defaultY + gH + 14;
+            } else {
+              defaultY = Math.min(h - gH - 14, runningStackY);
+              runningStackY = defaultY + gH + 14;
+            }
+
+            const gx =
+              gCfg.customMoved && gCfg.x !== undefined ? gCfg.x : defaultX;
+            const gy =
+              gCfg.customMoved && gCfg.y !== undefined ? gCfg.y : defaultY;
+            const axisLeftX = gx + 34;
+            const axisRightX = gx + gW - 18;
+            const axisMidY = gy + gH / 2 + 6;
+            const axisTopY = gy + 26;
+            const axisBotY = gy + gH - 12;
+
+            const meta =
+              gKey === 'xt'
+                ? {
+                    title: 'x(t) Θέση - Χρόνος',
+                    yLabel: 'x',
+                    curveColor: '#ef4444',
+                    envColor: '#2563eb',
+                    topLabel: '+A',
+                    botLabel: '-A',
+                    envHalfH: Math.min((axisBotY - axisTopY) * 0.44, A),
+                  }
+                : gKey === 'vt'
+                ? {
+                    title: 'υ(t) Ταχύτητα - Χρόνος',
+                    yLabel: 'υ',
+                    curveColor: '#10b981',
+                    envColor: '#059669',
+                    topLabel: '+υ',
+                    botLabel: '-υ',
+                    envHalfH: Math.max(
+                      18,
+                      Math.min(
+                        (axisBotY - axisTopY) * 0.44,
+                        A *
+                          0.82 *
+                          Math.sqrt(
+                            activeSpringSim.stiffness /
+                              Math.max(0.2, activeSpringSim.mass)
+                          )
+                      )
+                    ),
+                  }
+                : {
+                    title: 'α(t) Επιτάχυνση - Χρόνος',
+                    yLabel: 'α',
+                    curveColor: '#8b5cf6',
+                    envColor: '#7c3aed',
+                    topLabel: '+α',
+                    botLabel: '-α',
+                    envHalfH: Math.max(
+                      18,
+                      Math.min(
+                        (axisBotY - axisTopY) * 0.44,
+                        A *
+                          0.82 *
+                          (activeSpringSim.stiffness /
+                            Math.max(0.2, activeSpringSim.mass))
+                      )
+                    ),
+                  };
+
+            ctx.save();
+            // Card shadow & rounded background
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetY = 2;
+            ctx.fillStyle =
+              activePage.template === 'dark-grid'
+                ? 'rgba(15, 23, 42, 0.92)'
+                : 'rgba(255, 255, 255, 0.94)';
+            ctx.strokeStyle =
+              draggingSpringGraphRef.current?.graphKey === gKey
+                ? meta.curveColor
+                : '#cbd5e1';
+            ctx.lineWidth =
+              draggingSpringGraphRef.current?.graphKey === gKey ? 2.2 : 1.5;
+            ctx.beginPath();
+            ctx.roundRect(gx, gy, gW, gH, 12);
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowColor = 'transparent';
+
+            // Draggable Header Bar
+            ctx.fillStyle = '#f8fafc';
+            ctx.beginPath();
+            ctx.roundRect(gx + 2, gy + 2, gW - 4, 21, [10, 10, 0, 0]);
+            ctx.fill();
+            ctx.fillStyle = meta.curveColor;
+            ctx.font = 'bold 10.5px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`⠿ ${meta.title}`, gx + 10, gy + 12.5);
+
+            // Close ('✕') button on top-right of card
+            const closeX = gx + gW - 13;
+            const closeY = gy + 12.5;
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('✕', closeX, closeY);
+
+            graphBoxesHit.push({
+              key: gKey,
+              x: gx,
+              y: gy,
+              width: gW,
+              height: gH,
+              closePt: { x: closeX, y: closeY, r: 10 },
+            });
+
+            // Axes (Vertical axis + Horizontal time axis t)
+            ctx.strokeStyle = '#1e293b';
+            ctx.fillStyle = '#1e293b';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            // Vertical axis
+            ctx.moveTo(axisLeftX, axisBotY);
+            ctx.lineTo(axisLeftX, axisTopY);
+            // Horizontal t-axis
+            ctx.moveTo(axisLeftX - 4, axisMidY);
+            ctx.lineTo(axisRightX, axisMidY);
+            ctx.stroke();
+
+            // Arrowheads on axes
+            ctx.beginPath();
+            ctx.moveTo(axisLeftX, axisTopY - 2);
+            ctx.lineTo(axisLeftX - 3.8, axisTopY + 5);
+            ctx.lineTo(axisLeftX + 3.8, axisTopY + 5);
+            ctx.closePath();
+            ctx.moveTo(axisRightX + 2, axisMidY);
+            ctx.lineTo(axisRightX - 5, axisMidY - 3.8);
+            ctx.lineTo(axisRightX - 5, axisMidY + 3.8);
+            ctx.closePath();
+            ctx.fill();
+
+            // Axis Labels
+            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(meta.yLabel, axisLeftX - 6, axisTopY + 4);
+            ctx.fillText('0', axisLeftX - 5, axisMidY + 1);
+            ctx.textAlign = 'left';
+            ctx.fillText('t', axisRightX - 4, axisMidY + 11);
+
+            // Upper & Lower Envelope Dashed Lines (+A/-A in Blue for x(t)!)
+            const yEnvTop = axisMidY - meta.envHalfH;
+            const yEnvBot = axisMidY + meta.envHalfH;
+            ctx.save();
+            ctx.strokeStyle = meta.envColor;
+            ctx.lineWidth = gKey === 'xt' ? 2.0 : 1.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(axisLeftX, yEnvTop);
+            ctx.lineTo(axisRightX - 4, yEnvTop);
+            ctx.moveTo(axisLeftX, yEnvBot);
+            ctx.lineTo(axisRightX - 4, yEnvBot);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = meta.envColor;
+            ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(meta.topLabel, axisLeftX - 4, yEnvTop);
+            ctx.fillText(meta.botLabel, axisLeftX - 4, yEnvBot);
+
+            // For x(t), also draw the interactive Blue Square Handles (□) on the right ends of its +A/-A blue dashed lines!
+            if (gKey === 'xt') {
+              const hs = 11;
+              for (const ey of [yEnvTop, yEnvBot]) {
+                const ehx = axisRightX - 4;
+                ctx.save();
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.18)';
+                ctx.strokeStyle = '#2563eb';
+                ctx.lineWidth = 1.8;
+                ctx.fillRect(ehx - hs / 2, ey - hs / 2, hs, hs);
+                ctx.strokeRect(ehx - hs / 2, ey - hs / 2, hs, hs);
+                ctx.restore();
+              }
+            }
+
+            // Sine / Cosine Wave Curve (Red for x-t, Green for υ-t, Purple for α-t)
+            const waveSpanW = axisRightX - axisLeftX - 10;
+            const timeWindowSec = 4.6; // ~2 periods on the horizontal t-axis
+            const evalWaveNorm = (theta: number): number => {
+              if (gKey === 'xt') return Math.sin(theta);
+              if (gKey === 'vt') return Math.cos(theta);
+              return -Math.sin(theta);
+            };
+
+            ctx.save();
+            ctx.strokeStyle = meta.curveColor;
+            ctx.lineWidth = 2.6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            const numSamples = 140;
+            if (!isSpringSimulating) {
+              // Static preview when paused so teacher can show phase relations
+              ctx.globalAlpha = 0.62;
+              ctx.beginPath();
+              for (let i = 0; i <= numSamples; i++) {
+                const u = i / numSamples;
+                const tau = u * timeWindowSec;
+                const theta = omega * tau + phi0;
+                const val = evalWaveNorm(theta);
+                const wx = axisLeftX + u * waveSpanW;
+                const wy = axisMidY - val * meta.envHalfH;
+                if (i === 0) ctx.moveTo(wx, wy);
+                else ctx.lineTo(wx, wy);
+              }
+              ctx.stroke();
+              ctx.globalAlpha = 1;
+              const startVal = evalWaveNorm(phi0);
+              const startY = axisMidY - startVal * meta.envHalfH;
+              ctx.fillStyle = meta.curveColor;
+              ctx.beginPath();
+              ctx.arc(axisLeftX, startY, 4.5, 0, Math.PI * 2);
+              ctx.fill();
+            } else {
+              // Live progressive / scrolling wave during Play!
+              const tStart =
+                elapsedSec > timeWindowSec ? elapsedSec - timeWindowSec : 0;
+              const tEnd = elapsedSec;
+              const activeFraction = Math.min(1, elapsedSec / timeWindowSec);
+              const activeSamples = Math.max(
+                2,
+                Math.round(numSamples * activeFraction)
+              );
+              let tipX = axisLeftX;
+              let tipY = axisMidY;
+
+              ctx.beginPath();
+              for (let i = 0; i <= activeSamples; i++) {
+                const frac = i / activeSamples;
+                const tau = tStart + frac * (tEnd - tStart);
+                const theta = omega * tau + phi0;
+                const val = evalWaveNorm(theta);
+                const wx = axisLeftX + frac * activeFraction * waveSpanW;
+                const wy = axisMidY - val * meta.envHalfH;
+                if (i === 0) ctx.moveTo(wx, wy);
+                else ctx.lineTo(wx, wy);
+                if (i === activeSamples) {
+                  tipX = wx;
+                  tipY = wy;
+                }
+              }
+              ctx.stroke();
+
+              // Glowing leading phase dot at current instant t
+              ctx.save();
+              ctx.fillStyle = meta.curveColor;
+              ctx.shadowColor = meta.curveColor;
+              ctx.shadowBlur = 8;
+              ctx.beginPath();
+              ctx.arc(tipX, tipY, 5.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+
+              // Dotted horizontal projection line from oscillating mass to x(t) leading dot!
+              if (gKey === 'xt' && Math.abs(tipY - curMassCy) <= 28) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(curMassCx + massW / 2, curMassCy);
+                ctx.lineTo(tipX, tipY);
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+
+            ctx.restore();
+            ctx.restore();
+          }
+
+          springOverlayHitRef.current = {
+            simId: activeSpringSim.id,
+            eqCenterX: eqMassCx,
+            eqCenterY: eqMassCy,
+            oscUx,
+            oscUy,
+            massBox: {
+              minX: curMassCx - massW / 2,
+              minY: curMassCy - massH / 2,
+              maxX: curMassCx + massW / 2,
+              maxY: curMassCy + massH / 2,
+            },
+            ampHandles,
+            graphBoxes: graphBoxesHit,
+          };
+        } else {
+          springOverlayHitRef.current = null;
+        }
+      } else {
+        springOverlayHitRef.current = null;
+      }
 
       ctx.restore();
-      rafId = window.requestAnimationFrame(renderSimFrame);
+      if (
+        isSimulating ||
+        isSpringSimulating ||
+        (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
+      ) {
+        rafId = window.requestAnimationFrame(renderSimFrame);
+      }
     };
 
     rafId = window.requestAnimationFrame(renderSimFrame);
@@ -10301,11 +11679,16 @@ export default function App() {
     };
   }, [
     isSimulating,
+    isSpringSimulating,
+    showSimulationPanel,
+    simActiveCategory,
     circuitAlignFlashStart,
     circuitProposal,
     simCircuitSwitchClosed,
     activePage.id,
     activePage.strokes,
+    activePage.springSims,
+    activePage.activeSpringSimId,
     activePage.layers,
     activePage.template,
     simShowElectrons,
@@ -12954,6 +14337,116 @@ export default function App() {
       }
     }
 
+    // 0a-spring. Interactive Spring Simulation Canvas Handles:
+    //            1) Blue Square Handles (□) on the +A / -A blue dashed lines (symmetric amplitude sliding)
+    //            2) Draggable Live Graph Cards (x(t), υ(t), α(t)) & their "✕" close buttons
+    //            3) Direct Mass Block pulling along the oscillation axis to release into SHM!
+    if (springOverlayHitRef.current) {
+      const spHit = springOverlayHitRef.current;
+      // 1) Check Blue Square Amplitude Handles (□)
+      for (const hPt of spHit.ampHandles) {
+        if (Math.hypot(pt.x - hPt.x, pt.y - hPt.y) <= 24) {
+          e.preventDefault();
+          draggingSpringAmpHandleRef.current = {
+            simId: spHit.simId,
+            eqCenterX: spHit.eqCenterX,
+            eqCenterY: spHit.eqCenterY,
+            oscUx: spHit.oscUx,
+            oscUy: spHit.oscUy,
+          };
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
+          return;
+        }
+      }
+
+      // 2) Check Live Graph Cards (Close '✕' button or Drag Card anywhere on Canvas)
+      for (let gIdx = spHit.graphBoxes.length - 1; gIdx >= 0; gIdx--) {
+        const gb = spHit.graphBoxes[gIdx];
+        if (Math.hypot(pt.x - gb.closePt.x, pt.y - gb.closePt.y) <= gb.closePt.r + 6) {
+          e.preventDefault();
+          updateActiveSpringSimConfig((sim) => ({
+            ...sim,
+            graphs: {
+              ...sim.graphs,
+              [gb.key]: { ...sim.graphs[gb.key], visible: false },
+            },
+          }));
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+        if (
+          pt.x >= gb.x &&
+          pt.x <= gb.x + gb.width &&
+          pt.y >= gb.y &&
+          pt.y <= gb.y + gb.height
+        ) {
+          e.preventDefault();
+          draggingSpringGraphRef.current = {
+            simId: spHit.simId,
+            graphKey: gb.key,
+            startX: pt.x,
+            startY: pt.y,
+            origBoxX: gb.x,
+            origBoxY: gb.y,
+          };
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
+          return;
+        }
+      }
+
+      // 3) Direct Pulling of the Mass Block on the Canvas (when Spring Sim is active or panel is on 'springs')
+      if (
+        (isSpringSimulating || (showSimulationPanel && simActiveCategory === 'springs')) &&
+        pt.x >= spHit.massBox.minX - 8 &&
+        pt.x <= spHit.massBox.maxX + 8 &&
+        pt.y >= spHit.massBox.minY - 8 &&
+        pt.y <= spHit.massBox.maxY + 8
+      ) {
+        e.preventDefault();
+        setIsSpringSimulating(false);
+        const relX = pt.x - spHit.eqCenterX;
+        const relY = pt.y - spHit.eqCenterY;
+        const initDisp = Math.max(
+          -200,
+          Math.min(200, relX * spHit.oscUx + relY * spHit.oscUy)
+        );
+        draggingSpringMassRef.current = {
+          simId: spHit.simId,
+          eqCenterX: spHit.eqCenterX,
+          eqCenterY: spHit.eqCenterY,
+          oscUx: spHit.oscUx,
+          oscUy: spHit.oscUy,
+          currentDisplacementPx: initDisp,
+        };
+        activePointerIdRef.current = e.pointerId;
+        activePointerTypeRef.current = e.pointerType;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+        isDrawingRef.current = true;
+        renderStaticSceneRef.current();
+        return;
+      }
+    }
+
     // 0a. Instant 1-Tap Circuit Switch Toggle on the Automatic Left Vertical Wire Switch (or any manual switch)!
     if (isSimulating && autoSwitchHitRef.current) {
       const sw = autoSwitchHitRef.current;
@@ -14602,6 +16095,73 @@ export default function App() {
       if (distFromStart > penTapTrackRef.current.maxDist) {
         penTapTrackRef.current.maxDist = distFromStart;
       }
+    }
+
+    // 0-spring. Interactive Spring Simulation Dragging (Symmetric Blue Amplitude Handles, Draggable Graph Cards, or Mass Pulling):
+    if (draggingSpringAmpHandleRef.current) {
+      const dragAmp = draggingSpringAmpHandleRef.current;
+      const relX = latestPt.x - dragAmp.eqCenterX;
+      const relY = latestPt.y - dragAmp.eqCenterY;
+      const proj = Math.abs(relX * dragAmp.oscUx + relY * dragAmp.oscUy);
+      const nextAmp = Math.round(Math.max(18, Math.min(220, proj)));
+      updateActiveSpringSimConfig((sim) =>
+        sim.id === dragAmp.simId ? { ...sim, amplitudePx: nextAmp } : sim
+      );
+      return;
+    }
+
+    if (draggingSpringGraphRef.current) {
+      const dragG = draggingSpringGraphRef.current;
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const nextX = Math.round(
+        Math.max(8, Math.min(pW - 220, dragG.origBoxX + (latestPt.x - dragG.startX)))
+      );
+      const nextY = Math.round(
+        Math.max(8, Math.min(pH - 120, dragG.origBoxY + (latestPt.y - dragG.startY)))
+      );
+      updateActiveSpringSimConfig((sim) =>
+        sim.id !== dragG.simId
+          ? sim
+          : {
+              ...sim,
+              graphs: {
+                ...sim.graphs,
+                [dragG.graphKey]: {
+                  ...sim.graphs[dragG.graphKey],
+                  x: nextX,
+                  y: nextY,
+                  customMoved: true,
+                },
+              },
+            }
+      );
+      return;
+    }
+
+    if (draggingSpringMassRef.current) {
+      const dragM = draggingSpringMassRef.current;
+      const relX = latestPt.x - dragM.eqCenterX;
+      const relY = latestPt.y - dragM.eqCenterY;
+      const disp = Math.round(
+        Math.max(-210, Math.min(210, relX * dragM.oscUx + relY * dragM.oscUy))
+      );
+      draggingSpringMassRef.current = {
+        ...dragM,
+        currentDisplacementPx: disp,
+      };
+      if (Math.abs(disp) >= 18) {
+        updateActiveSpringSimConfig((sim) =>
+          sim.id !== dragM.simId
+            ? sim
+            : {
+                ...sim,
+                amplitudePx: Math.abs(disp),
+                initialPhaseMode: disp >= 0 ? 'plusA' : 'minusA',
+              }
+        );
+      }
+      return;
     }
 
     // 0-prop. Interactive 4-Corner Wire Sliding for Circuit Completion Proposal ("✨ Ολοκλήρωση"):
@@ -16318,6 +17878,151 @@ export default function App() {
         let snapDx = 0;
         let snapDy = 0;
 
+        // ======================================================================
+        // FAST GREEN PHYSICS MAGNET (0.48s = Half Weld Time!) for Springs:
+        // 1) Spring -> Ceiling / Floor / Wall / Inclined Plane Support Line
+        // 2) Mass Body <-> Free End of Spring (creates Equilibrium Clone next to l₀)
+        // ======================================================================
+        let matchedPhysicsMagnet: {
+          kind: 'spring-to-support' | 'mass-to-spring';
+          springStrokeId: string;
+          supportStrokeId?: string;
+          fixedEnd?: 'start' | 'end';
+          massStrokeId?: string;
+          targetX: number;
+          targetY: number;
+          snapDx: number;
+          snapDy: number;
+          dist: number;
+        } | null = null;
+
+        if (targetImgIdList.length === 0 && targetStrokeIdList.length === 1) {
+          const draggedSt = activePage.strokes.find((s) => s.id === targetStrokeIdList[0]);
+          const hiddenOrLockedLayerIds = new Set(
+            activePage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+          );
+          const massShapeTypes = [
+            'rectangle',
+            'ellipse',
+            'circle',
+            'parallelogram',
+            'trapezoid',
+            'triangle',
+            'cuboid',
+            'sphere',
+            'cylinder',
+          ];
+
+          if (draggedSt && draggedSt.shapeType === 'spring') {
+            const info = getSpringTerminalsAndWidthVec(draggedSt);
+            const candStart = { x: info.startTerm.x + rawDx, y: info.startTerm.y + rawDy };
+            const candEnd = { x: info.endTerm.x + rawDx, y: info.endTerm.y + rawDy };
+
+            for (const other of activePage.strokes) {
+              if (
+                other.id === draggedSt.id ||
+                hiddenOrLockedLayerIds.has(other.layerId) ||
+                other.shapeType === 'spring'
+              ) {
+                continue;
+              }
+              // Check support lines (ceiling, floor, wall, incline)
+              if (
+                (other.shapeType === 'line' || other.shapeType === 'inclined-plane') &&
+                other.points.length >= 2
+              ) {
+                const segCount = other.shapeType === 'inclined-plane' ? other.points.length - 1 : 1;
+                for (let sIdx = 0; sIdx < segCount; sIdx++) {
+                  const pA = other.points[sIdx];
+                  const pB =
+                    other.shapeType === 'inclined-plane'
+                      ? other.points[sIdx + 1]
+                      : other.points[other.points.length - 1];
+                  const abx = pB.x - pA.x;
+                  const aby = pB.y - pA.y;
+                  const lenSq = abx * abx + aby * aby;
+                  if (lenSq < 36 * 36) continue;
+                  for (const termEntry of [
+                    { side: 'start' as const, pt: candStart },
+                    { side: 'end' as const, pt: candEnd },
+                  ]) {
+                    const t = Math.max(
+                      0.04,
+                      Math.min(
+                        0.96,
+                        ((termEntry.pt.x - pA.x) * abx + (termEntry.pt.y - pA.y) * aby) / lenSq
+                      )
+                    );
+                    const projX = pA.x + t * abx;
+                    const projY = pA.y + t * aby;
+                    const d = Math.hypot(termEntry.pt.x - projX, termEntry.pt.y - projY);
+                    if (d <= 38 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                      matchedPhysicsMagnet = {
+                        kind: 'spring-to-support',
+                        springStrokeId: draggedSt.id,
+                        supportStrokeId: other.id,
+                        fixedEnd: termEntry.side,
+                        targetX: projX,
+                        targetY: projY,
+                        snapDx: projX - termEntry.pt.x,
+                        snapDy: projY - termEntry.pt.y,
+                        dist: d,
+                      };
+                    }
+                  }
+                }
+              }
+            }
+          } else if (
+            draggedSt &&
+            draggedSt.isShape &&
+            massShapeTypes.includes(draggedSt.shapeType || '')
+          ) {
+            const mb = getStrokeBounds(draggedSt);
+            const mW = Math.max(20, mb.maxX - mb.minX);
+            const mH = Math.max(20, mb.maxY - mb.minY);
+            const candCx = (mb.minX + mb.maxX) / 2 + rawDx;
+            const candCy = (mb.minY + mb.maxY) / 2 + rawDy;
+
+            for (const other of activePage.strokes) {
+              if (
+                other.id === draggedSt.id ||
+                hiddenOrLockedLayerIds.has(other.layerId) ||
+                other.shapeType !== 'spring'
+              ) {
+                continue;
+              }
+              const spInfo = getSpringTerminalsAndWidthVec(other);
+              // Determine which terminal of the spring is the free end
+              let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
+              if (!other.springSupport) {
+                const dStart = Math.hypot(spInfo.startTerm.x - candCx, spInfo.startTerm.y - candCy);
+                const dEnd = Math.hypot(spInfo.endTerm.x - candCx, spInfo.endTerm.y - candCy);
+                fixedEnd = dStart >= dEnd ? 'start' : 'end';
+              }
+              const fixedPt = fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+              const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+              const ux = (freePt.x - fixedPt.x) / spInfo.length;
+              const uy = (freePt.y - fixedPt.y) / spInfo.length;
+              const candAttachX = candCx - ux * (mW / 2);
+              const candAttachY = candCy - uy * (mH / 2);
+              const d = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
+              if (d <= 46 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                matchedPhysicsMagnet = {
+                  kind: 'mass-to-spring',
+                  springStrokeId: other.id,
+                  massStrokeId: draggedSt.id,
+                  targetX: freePt.x,
+                  targetY: freePt.y,
+                  snapDx: freePt.x - candAttachX,
+                  snapDy: freePt.y - candAttachY,
+                  dist: d,
+                };
+              }
+            }
+          }
+        }
+
         // Wave-to-Wave Magnetic Endpoint Snap & 1.0s Weld (Sine ↔ Sine or Cosine ↔ Cosine in Lasso Move mode!)
         let matchedWaveEndpoint: {
           draggedStrokeId: string;
@@ -16401,7 +18106,100 @@ export default function App() {
           }
         }
 
-        if (matchedWaveEndpoint) {
+        if (matchedPhysicsMagnet) {
+          snapDx = matchedPhysicsMagnet.snapDx;
+          snapDy = matchedPhysicsMagnet.snapDy;
+          const curPhys = pendingPhysicsMagnetRef.current;
+          const isSameTarget =
+            curPhys &&
+            curPhys.kind === matchedPhysicsMagnet.kind &&
+            curPhys.springStrokeId === matchedPhysicsMagnet.springStrokeId &&
+            curPhys.supportStrokeId === matchedPhysicsMagnet.supportStrokeId &&
+            curPhys.fixedEnd === matchedPhysicsMagnet.fixedEnd &&
+            curPhys.massStrokeId === matchedPhysicsMagnet.massStrokeId;
+
+          if (!isSameTarget) {
+            cancelNodeMagnetTimer();
+            const physObj = {
+              kind: matchedPhysicsMagnet.kind,
+              springStrokeId: matchedPhysicsMagnet.springStrokeId,
+              supportStrokeId: matchedPhysicsMagnet.supportStrokeId,
+              fixedEnd: matchedPhysicsMagnet.fixedEnd,
+              massStrokeId: matchedPhysicsMagnet.massStrokeId,
+              targetX: matchedPhysicsMagnet.targetX,
+              targetY: matchedPhysicsMagnet.targetY,
+              startTime: performance.now(),
+            };
+            pendingPhysicsMagnetRef.current = physObj;
+            const timerObj = {
+              strokeId: physObj.springStrokeId,
+              draggedKeyPosIdx: 0,
+              draggedEndSide: 'start' as const,
+              targetStrokeId: physObj.supportStrokeId || physObj.massStrokeId || '',
+              targetEndSide: 'end' as const,
+              targetX: physObj.targetX,
+              targetY: physObj.targetY,
+              startTime: physObj.startTime,
+              rafId: null as number | null,
+            };
+            nodeMagnetTimerRef.current = timerObj;
+            setNodeMagnetState({
+              strokeId: timerObj.strokeId,
+              draggedKeyPosIdx: 0,
+              targetX: physObj.targetX,
+              targetY: physObj.targetY,
+              progress: 0,
+            });
+
+            // 480ms Fast Green Magnet (Half the 1000ms line weld time!)
+            const FAST_MAGNET_MS = 480;
+            const stepPhysicsMagnet = (now: number) => {
+              if (nodeMagnetTimerRef.current !== timerObj) return;
+              const elapsed = now - timerObj.startTime;
+              const pct = Math.min(100, (elapsed / FAST_MAGNET_MS) * 100);
+              setNodeMagnetState({
+                strokeId: timerObj.strokeId,
+                draggedKeyPosIdx: 0,
+                targetX: physObj.targetX,
+                targetY: physObj.targetY,
+                progress: pct,
+              });
+
+              if (elapsed >= FAST_MAGNET_MS) {
+                nodeMagnetTimerRef.current = null;
+                pendingPhysicsMagnetRef.current = null;
+                setNodeMagnetState(null);
+                selectionTransformRef.current = null;
+                isDraggingSelectionRef.current = null;
+                isDrawingRef.current = false;
+                clearActiveOverlay();
+
+                if (physObj.kind === 'spring-to-support' && physObj.supportStrokeId && physObj.fixedEnd) {
+                  snapAndAttachSpringToSupport(
+                    physObj.springStrokeId,
+                    physObj.supportStrokeId,
+                    physObj.fixedEnd,
+                    { x: physObj.targetX, y: physObj.targetY }
+                  );
+                } else if (physObj.kind === 'mass-to-spring' && physObj.massStrokeId) {
+                  attachMassToSpringAndCreateEquilibriumClone(
+                    physObj.springStrokeId,
+                    physObj.massStrokeId
+                  );
+                }
+                return;
+              }
+              timerObj.rafId = window.requestAnimationFrame(stepPhysicsMagnet);
+            };
+            timerObj.rafId = window.requestAnimationFrame(stepPhysicsMagnet);
+          } else {
+            pendingPhysicsMagnetRef.current = {
+              ...curPhys,
+              targetX: matchedPhysicsMagnet.targetX,
+              targetY: matchedPhysicsMagnet.targetY,
+            };
+          }
+        } else if (matchedWaveEndpoint) {
           snapDx = matchedWaveEndpoint.snapDx;
           snapDy = matchedWaveEndpoint.snapDy;
           const curTimer = nodeMagnetTimerRef.current;
@@ -16651,6 +18449,7 @@ export default function App() {
             timerObj.rafId = window.requestAnimationFrame(stepWaveMagnet);
           }
         } else {
+          pendingPhysicsMagnetRef.current = null;
           if (nodeMagnetTimerRef.current) {
             cancelNodeMagnetTimer();
           }
@@ -17056,6 +18855,28 @@ export default function App() {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
 
+    if (draggingSpringAmpHandleRef.current) {
+      draggingSpringAmpHandleRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
+
+    if (draggingSpringGraphRef.current) {
+      draggingSpringGraphRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
+
+    if (draggingSpringMassRef.current) {
+      const pulledDisp = draggingSpringMassRef.current.currentDisplacementPx;
+      draggingSpringMassRef.current = null;
+      if (Math.abs(pulledDisp) >= 12) {
+        setIsSpringSimulating(true);
+      }
+      renderStaticSceneRef.current();
+      return;
+    }
+
     if (draggingProposalCornerRef.current) {
       draggingProposalCornerRef.current = null;
       renderStaticSceneRef.current();
@@ -17159,8 +18980,32 @@ export default function App() {
 
     // 2. Finish Lasso Selection
     if (effectiveTool === 'lasso' || selectionTransformRef.current || isDraggingSelectionRef.current) {
+      const pendingPhys = pendingPhysicsMagnetRef.current;
+      pendingPhysicsMagnetRef.current = null;
       cancelNodeMagnetTimer();
       clearActiveOverlay();
+      if (pendingPhys) {
+        selectionTransformRef.current = null;
+        isDraggingSelectionRef.current = null;
+        if (
+          pendingPhys.kind === 'spring-to-support' &&
+          pendingPhys.supportStrokeId &&
+          pendingPhys.fixedEnd
+        ) {
+          snapAndAttachSpringToSupport(
+            pendingPhys.springStrokeId,
+            pendingPhys.supportStrokeId,
+            pendingPhys.fixedEnd,
+            { x: pendingPhys.targetX, y: pendingPhys.targetY }
+          );
+        } else if (pendingPhys.kind === 'mass-to-spring' && pendingPhys.massStrokeId) {
+          attachMassToSpringAndCreateEquilibriumClone(
+            pendingPhys.springStrokeId,
+            pendingPhys.massStrokeId
+          );
+        }
+        return;
+      }
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
         const finishedTf = selectionTransformRef.current;
         const dragOrigin = isDraggingSelectionRef.current;
@@ -22474,12 +24319,21 @@ export default function App() {
                   setShowColorPopover(false);
 
                   if (selectedStrokeIds.length > 0) {
+                    const hasSpringSelected = activePage.strokes.some(
+                      (s) => selectedStrokeIds.includes(s.id) && s.shapeType === 'spring'
+                    );
+                    if (hasSpringSelected) {
+                      registerOrActivateSpringSimFromLasso();
+                      return;
+                    }
                     const ok = registerOrActivateSimFromLasso();
                     setSelectedStrokeIds([]);
                     setSelectedImageId(null);
                     setSelectedImageIds([]);
                     setActiveNodeStrokeId(null);
-                    if (!ok) {
+                    if (ok) {
+                      setSimActiveCategory('circuits');
+                    } else {
                       setShowSimulationPanel(true);
                     }
                     return;
@@ -22492,57 +24346,64 @@ export default function App() {
 
                   setShowSimulationPanel((v) => {
                     const next = !v;
-                    if (next && !isSimulating) {
-                      const existingSim = getActiveCircuitSim(activePage);
-                      if (existingSim) {
-                        setSimCircuitSwitchClosed(false);
-                        setIsSimulating(true);
-                        updateActivePage((page) =>
-                          runScopedCircuitOperationOnPage(
-                            page,
-                            (sub) => autoAlignAndConnectCircuit(sub),
-                            existingSim.id
-                          )
-                        );
-                      } else {
-                        // If no sim is registered yet, check if there is a closed circuit on the page and auto-register sim01 without any selection box!
-                        const firstSource = activePage.strokes.find(
-                          (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
-                        );
-                        if (firstSource) {
-                          const seedSim: CircuitSimConfig = {
-                            id: `sim-${Date.now()}-auto`,
-                            name: getNextDefaultSimName(activePage),
-                            strokeIds: [firstSource.id],
-                          };
-                          const connectedSet = getSimExpandedStrokeSet(activePage, seedSim);
-                          const subStrokes = activePage.strokes.filter((s) => connectedSet.has(s.id));
-                          const alignedSub = autoAlignAndConnectCircuit(subStrokes);
-                          if (analyzeCircuitForSimulation(alignedSub, true).isCircuitClosed) {
-                            const alignedIds = alignedSub.map((s) => s.id);
-                            updateActivePage((page) => {
-                              const nextStrokes: StrokeObject[] = [];
-                              let inserted = false;
-                              for (const s of page.strokes) {
-                                if (connectedSet.has(s.id)) {
-                                  if (!inserted) {
-                                    nextStrokes.push(...alignedSub);
-                                    inserted = true;
+                    if (next) {
+                      const existingSpringSim = getActiveSpringSim(activePage);
+                      const existingCircuitSim = getActiveCircuitSim(activePage);
+                      if (existingSpringSim && !existingCircuitSim) {
+                        setSimActiveCategory('springs');
+                        return next;
+                      }
+                      if (!isSimulating) {
+                        if (existingCircuitSim) {
+                          setSimCircuitSwitchClosed(false);
+                          setIsSimulating(true);
+                          updateActivePage((page) =>
+                            runScopedCircuitOperationOnPage(
+                              page,
+                              (sub) => autoAlignAndConnectCircuit(sub),
+                              existingCircuitSim.id
+                            )
+                          );
+                        } else {
+                          // If no sim is registered yet, check if there is a closed circuit on the page and auto-register sim01 without any selection box!
+                          const firstSource = activePage.strokes.find(
+                            (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+                          );
+                          if (firstSource) {
+                            const seedSim: CircuitSimConfig = {
+                              id: `sim-${Date.now()}-auto`,
+                              name: getNextDefaultSimName(activePage),
+                              strokeIds: [firstSource.id],
+                            };
+                            const connectedSet = getSimExpandedStrokeSet(activePage, seedSim);
+                            const subStrokes = activePage.strokes.filter((s) => connectedSet.has(s.id));
+                            const alignedSub = autoAlignAndConnectCircuit(subStrokes);
+                            if (analyzeCircuitForSimulation(alignedSub, true).isCircuitClosed) {
+                              const alignedIds = alignedSub.map((s) => s.id);
+                              updateActivePage((page) => {
+                                const nextStrokes: StrokeObject[] = [];
+                                let inserted = false;
+                                for (const s of page.strokes) {
+                                  if (connectedSet.has(s.id)) {
+                                    if (!inserted) {
+                                      nextStrokes.push(...alignedSub);
+                                      inserted = true;
+                                    }
+                                    continue;
                                   }
-                                  continue;
+                                  nextStrokes.push(s);
                                 }
-                                nextStrokes.push(s);
-                              }
-                              if (!inserted) nextStrokes.push(...alignedSub);
-                              return {
-                                ...page,
-                                strokes: nextStrokes,
-                                circuitSims: [{ id: seedSim.id, name: seedSim.name, strokeIds: alignedIds }],
-                                activeCircuitSimId: seedSim.id,
-                              };
-                            });
-                            setSimCircuitSwitchClosed(false);
-                            setIsSimulating(true);
+                                if (!inserted) nextStrokes.push(...alignedSub);
+                                return {
+                                  ...page,
+                                  strokes: nextStrokes,
+                                  circuitSims: [{ id: seedSim.id, name: seedSim.name, strokeIds: alignedIds }],
+                                  activeCircuitSimId: seedSim.id,
+                                };
+                              });
+                              setSimCircuitSwitchClosed(false);
+                              setIsSimulating(true);
+                            }
                           }
                         }
                       }
@@ -22551,11 +24412,11 @@ export default function App() {
                   });
                 }}
                 className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
-                  showSimulationPanel || isSimulating
+                  showSimulationPanel || isSimulating || isSpringSimulating
                     ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
                     : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
                 }`}
-                title="Προσομοίωση Ηλεκτρικών Κυκλωμάτων & Φυσικής (⚙️▶️)"
+                title="Προσομοίωση Φυσικής: Κυκλώματα & Ελατήρια (⚙️▶️)"
               >
                 <svg
                   className="w-4 h-4 shrink-0"
@@ -22574,7 +24435,7 @@ export default function App() {
                   />
                 </svg>
                 <span className="hidden sm:inline">Sim</span>
-                {isSimulating && (
+                {(isSimulating || isSpringSimulating) && (
                   <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
                 )}
               </button>
@@ -25234,6 +27095,36 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Top-Level Physics Simulation Category Switcher: "Κυκλώματα" vs "Ελατήρια" */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setSimActiveCategory('circuits')}
+                    className={`py-1.5 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      simActiveCategory === 'circuits'
+                        ? 'bg-[#1b2a4a] text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <span>⚡</span>
+                    <span>Κυκλώματα</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSimActiveCategory('springs')}
+                    className={`py-1.5 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      simActiveCategory === 'springs'
+                        ? 'bg-[#1b2a4a] text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <span>🌀</span>
+                    <span>Ελατήρια</span>
+                  </button>
+                </div>
+
+                {simActiveCategory === 'circuits' ? (
+                  <>
                 {/* Named Lasso Circuit Simulations Selector (sim01, sim02, ... — 1 Active at a Time across the Notebook) */}
                 {(() => {
                   const allNotebookSims = getAllNotebookCircuitSims(activeNotebook);
@@ -25758,6 +27649,479 @@ export default function App() {
                     />
                   </div>
                 </div>
+                  </>
+                ) : (
+                  /* ==========================================================
+                     TAB 2: "🌀 ΕΛΑΤΗΡΙΑ" (Harmonic Oscillation & Live Graphs)
+                     ========================================================== */
+                  (() => {
+                    const allSpringSims = getAllNotebookSpringSims(activeNotebook);
+                    const activeSpring = getActiveSpringSim(activePage);
+                    const nextSpringLabel = getNextDefaultSpringSimName(activePage);
+                    const hasSelectedSpring =
+                      selectedStrokeIds.length > 0 &&
+                      activePage.strokes.some(
+                        (s) => selectedStrokeIds.includes(s.id) && s.shapeType === 'spring'
+                      );
+
+                    return (
+                      <div className="space-y-2.5">
+                        {/* 1. Named Spring Simulations Selector (ελ01, ελ02, ...) */}
+                        <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
+                          {hasSelectedSpring && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                registerOrActivateSpringSimFromLasso();
+                              }}
+                              className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                              title="Δημιουργεί σύστημα ελατηρίου-μάζας με θέση ισορροπίας από το επιλεγμένο ελατήριο"
+                            >
+                              <span>➕ Προσθήκη από Λάσο ({nextSpringLabel})</span>
+                            </button>
+                          )}
+
+                          {allSpringSims.length > 0 ? (
+                            <>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                  Ενεργό Ελατήριο (1 κάθε φορά):
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {allSpringSims.map((entry) => {
+                                  const { sim, pageId: spPageId, pageIdx: spPageIdx } = entry;
+                                  const isCurrent =
+                                    spPageId === activePage.id && activeSpring?.id === sim.id;
+                                  const isEditingThis = editingSpringSimId === sim.id;
+                                  const commitSpringName = () => {
+                                    const trimmed = editingSpringSimName.trim() || sim.name;
+                                    setNotebooks((prev) =>
+                                      prev.map((nb) =>
+                                        nb.id !== activeNotebook.id
+                                          ? nb
+                                          : {
+                                              ...nb,
+                                              pages: nb.pages.map((p) =>
+                                                p.id !== spPageId
+                                                  ? p
+                                                  : {
+                                                      ...p,
+                                                      springSims: (p.springSims || []).map((s) =>
+                                                        s.id === sim.id ? { ...s, name: trimmed } : s
+                                                      ),
+                                                    }
+                                              ),
+                                            }
+                                      )
+                                    );
+                                    setEditingSpringSimId(null);
+                                  };
+                                  return (
+                                    <div
+                                      key={sim.id}
+                                      className={`inline-flex items-center rounded-lg border text-[11px] font-extrabold transition ${
+                                        isCurrent
+                                          ? 'bg-slate-200 text-slate-800 border-slate-400 shadow-2xs'
+                                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                      }`}
+                                    >
+                                      {isEditingThis ? (
+                                        <input
+                                          type="text"
+                                          value={editingSpringSimName}
+                                          autoFocus
+                                          onChange={(e) => setEditingSpringSimName(e.target.value)}
+                                          onBlur={commitSpringName}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              e.preventDefault();
+                                              commitSpringName();
+                                            } else if (e.key === 'Escape') {
+                                              e.preventDefault();
+                                              setEditingSpringSimId(null);
+                                            }
+                                          }}
+                                          className="w-16 px-1.5 py-0.5 m-0.5 rounded bg-white border border-slate-400 text-[11px] font-extrabold text-slate-800 focus:outline-none"
+                                        />
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setNotebooks((prev) =>
+                                              prev.map((nb) =>
+                                                nb.id !== activeNotebook.id
+                                                  ? nb
+                                                  : {
+                                                      ...nb,
+                                                      pages: nb.pages.map((p) =>
+                                                        p.id === spPageId
+                                                          ? { ...p, activeSpringSimId: sim.id }
+                                                          : p
+                                                      ),
+                                                    }
+                                              )
+                                            );
+                                            setSelectedStrokeIds([]);
+                                            scrollToSpringSim(spPageIdx, sim);
+                                          }}
+                                          className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1"
+                                          title={`Μετάβαση & Ενεργοποίηση ελατηρίου "${sim.name}"`}
+                                        >
+                                          <span>{sim.name}</span>
+                                        </button>
+                                      )}
+                                      {!isEditingThis && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingSpringSimId(sim.id);
+                                            setEditingSpringSimName(sim.name);
+                                          }}
+                                          className={`px-1 py-1 text-[10px] cursor-pointer transition ${
+                                            isCurrent
+                                              ? 'text-slate-600 hover:text-slate-950'
+                                              : 'text-slate-400 hover:text-slate-700'
+                                          }`}
+                                          title={`Μετονομασία "${sim.name}"`}
+                                        >
+                                          ✎
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setNotebooks((prev) =>
+                                            prev.map((nb) => {
+                                              if (nb.id !== activeNotebook.id) return nb;
+                                              const nextPages = nb.pages.map((p) => {
+                                                if (p.id !== spPageId) return p;
+                                                const remaining = (p.springSims || []).filter(
+                                                  (s) => s.id !== sim.id
+                                                );
+                                                const nextActiveId =
+                                                  p.activeSpringSimId === sim.id
+                                                    ? remaining[0]?.id
+                                                    : p.activeSpringSimId;
+                                                return {
+                                                  ...p,
+                                                  springSims: remaining,
+                                                  activeSpringSimId: nextActiveId,
+                                                };
+                                              });
+                                              const anyLeft = nextPages.some(
+                                                (p) => getValidSpringSims(p).length > 0
+                                              );
+                                              if (!anyLeft) {
+                                                setIsSpringSimulating(false);
+                                              }
+                                              return { ...nb, pages: nextPages };
+                                            })
+                                          );
+                                        }}
+                                        className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
+                                          isCurrent
+                                            ? 'text-slate-600 hover:text-rose-600'
+                                            : 'text-slate-400 hover:text-rose-600'
+                                        }`}
+                                        title={`Αφαίρεση "${sim.name}"`}
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-[10.5px] font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-snug text-center">
+                              🧲 Πλησιάστε ένα <b>Ελατήριο</b> σε ταβάνι/πάτωμα και έπειτα ένα <b>Σώμα</b> (τετράγωνο/κύκλο) στο ελεύθερο άκρο του για να δημιουργηθεί αυτόματα η <b>Θέση Ισορροπίας ({nextSpringLabel})</b>!
+                            </div>
+                          )}
+                        </div>
+
+                        {activeSpring && (
+                          <>
+                            {/* 2. Primary Play / Stop Oscillation Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsSpringSimulating((prev) => !prev);
+                              }}
+                              className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
+                                isSpringSimulating
+                                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
+                            >
+                              <span>
+                                {isSpringSimulating
+                                  ? '⏹️ Διακοπή (Επιστροφή στη Θ.Ι.)'
+                                  : '▶️ Έναρξη Αμείωτης Ταλάντωσης'}
+                              </span>
+                            </button>
+
+                            {/* 3. Initial Phase / Starting Position Selector (x=0, +A, -A) */}
+                            <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/80 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                  Αρχική Θέση (t = 0):
+                                </span>
+                                <span className="text-[9.5px] text-slate-400 font-semibold">
+                                  ή τράβηξε το σώμα!
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-1">
+                                {(
+                                  [
+                                    { id: 'minusA', label: 'Από -A' },
+                                    { id: 'eq', label: 'Από Θ.Ι. (0)' },
+                                    { id: 'plusA', label: 'Από +A' },
+                                  ] as const
+                                ).map((opt) => (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => {
+                                      updateActiveSpringSimConfig((sim) => ({
+                                        ...sim,
+                                        initialPhaseMode: opt.id,
+                                      }));
+                                    }}
+                                    className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                      activeSpring.initialPhaseMode === opt.id
+                                        ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* 4. Mass (m) & Stiffness (k) & Speed Sliders */}
+                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                              <div className="space-y-0.5">
+                                <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                  <span>⚖️ Μάζα Σώματος (m):</span>
+                                  <span className="text-emerald-700 font-extrabold">
+                                    {activeSpring.mass.toFixed(1)} kg
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0.4"
+                                  max="2.5"
+                                  step="0.1"
+                                  value={activeSpring.mass}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      mass: val,
+                                    }));
+                                  }}
+                                  className="w-full accent-emerald-600 cursor-pointer"
+                                />
+                              </div>
+
+                              <div className="space-y-0.5">
+                                <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                  <span>🌀 Σταθερά Ελατηρίου (k):</span>
+                                  <span className="text-sky-700 font-extrabold">
+                                    {activeSpring.stiffness.toFixed(1)}×
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0.5"
+                                  max="2.5"
+                                  step="0.1"
+                                  value={activeSpring.stiffness}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      stiffness: val,
+                                    }));
+                                  }}
+                                  className="w-full accent-sky-600 cursor-pointer"
+                                />
+                              </div>
+
+                              <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-slate-200/60">
+                                <span className="text-[10.5px] font-semibold text-slate-600">
+                                  Ταχύτητα ({simSpeedMultiplier.toFixed(1)}x):
+                                </span>
+                                <input
+                                  type="range"
+                                  min="0.4"
+                                  max="2.4"
+                                  step="0.2"
+                                  value={simSpeedMultiplier}
+                                  onChange={(e) => setSimSpeedMultiplier(parseFloat(e.target.value))}
+                                  className="w-28 accent-emerald-600 cursor-pointer"
+                                />
+                              </div>
+                            </div>
+
+                            {/* 5. Canvas Display Checkboxes (Amplitude +A/-A, Natural Length l₀, Force Vectors) */}
+                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                              <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                <span>📏 Πλάτος (+A / -A) & Θ.Ι.</span>
+                                <input
+                                  type="checkbox"
+                                  checked={activeSpring.showAmplitudeLines}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      showAmplitudeLines: checked,
+                                    }));
+                                  }}
+                                  className="accent-blue-600 w-4 h-4 cursor-pointer"
+                                />
+                              </label>
+
+                              {activeSpring.naturalSpringStrokeId && (
+                                <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                  <span>🌀 Ελατήριο Φυσικού Μήκους (l₀)</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={activeSpring.showNaturalSpring}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      updateActiveSpringSimConfig((sim) => ({
+                                        ...sim,
+                                        showNaturalSpring: checked,
+                                      }));
+                                      renderStaticSceneRef.current();
+                                    }}
+                                    className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                                  />
+                                </label>
+                              )}
+
+                              <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                <span>🏹 Διανύσματα Δυνάμεων (W, Fελ, ΣF)</span>
+                                <input
+                                  type="checkbox"
+                                  checked={activeSpring.showForceVectors}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      showForceVectors: checked,
+                                    }));
+                                  }}
+                                  className="accent-rose-600 w-4 h-4 cursor-pointer"
+                                />
+                              </label>
+                            </div>
+
+                            {/* 6. Live Animated Diagrams Checkboxes: x(t) [Red], υ(t) [Green], α(t) [Purple] */}
+                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                  Ζωντανά Διαγράμματα (1, 2 ή 3):
+                                </span>
+                                {(activeSpring.graphs.xt.customMoved ||
+                                  activeSpring.graphs.vt.customMoved ||
+                                  activeSpring.graphs.at.customMoved) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      updateActiveSpringSimConfig((sim) => ({
+                                        ...sim,
+                                        graphs: {
+                                          xt: { ...sim.graphs.xt, customMoved: false },
+                                          vt: { ...sim.graphs.vt, customMoved: false },
+                                          at: { ...sim.graphs.at, customMoved: false },
+                                        },
+                                      }));
+                                    }}
+                                    className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                    title="Επαναφέρει τα διαγράμματα δίπλα στο ελατήριο"
+                                  >
+                                    ↺ Στοίχιση
+                                  </button>
+                                )}
+                              </div>
+
+                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+                                  <span>Θέση – Χρόνος x(t)</span>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={activeSpring.graphs.xt.visible}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      graphs: {
+                                        ...sim.graphs,
+                                        xt: { ...sim.graphs.xt, visible: checked },
+                                      },
+                                    }));
+                                  }}
+                                  className="accent-red-500 w-4 h-4 cursor-pointer"
+                                />
+                              </label>
+
+                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                                  <span>Ταχύτητα – Χρόνος υ(t)</span>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={activeSpring.graphs.vt.visible}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      graphs: {
+                                        ...sim.graphs,
+                                        vt: { ...sim.graphs.vt, visible: checked },
+                                      },
+                                    }));
+                                  }}
+                                  className="accent-emerald-500 w-4 h-4 cursor-pointer"
+                                />
+                              </label>
+
+                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
+                                  <span>Επιτάχυνση – Χρόνος α(t)</span>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={activeSpring.graphs.at.visible}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      graphs: {
+                                        ...sim.graphs,
+                                        at: { ...sim.graphs.at, visible: checked },
+                                      },
+                                    }));
+                                  }}
+                                  className="accent-purple-600 w-4 h-4 cursor-pointer"
+                                />
+                              </label>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()
+                )}
               </div>
             )}
 
