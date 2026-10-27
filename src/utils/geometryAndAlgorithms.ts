@@ -4905,34 +4905,29 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
 
   for (const comp of preComps) {
     if (comp.kind === 'fan') {
-      const hasModernBlades = currentStrokes.some(
-        (s) => comp.strokeIds.includes(s.id) && s.shapeType === 'fan-blade'
+      const upgradedFan = createPhysicsStencilStrokes(
+        'fan',
+        comp.minX,
+        comp.minY,
+        Math.max(84, comp.w),
+        Math.max(68, comp.h),
+        comp.color,
+        comp.layerId
       );
-      if (!hasModernBlades) {
-        const upgradedFan = createPhysicsStencilStrokes(
-          'fan',
-          comp.minX,
-          comp.minY,
-          Math.max(84, comp.w),
-          Math.max(68, comp.h),
-          comp.color,
-          comp.layerId
-        );
-        const removeSet = new Set(comp.strokeIds);
-        const next: StrokeObject[] = [];
-        let inserted = false;
-        for (const s of currentStrokes) {
-          if (removeSet.has(s.id)) {
-            if (!inserted) {
-              next.push(...upgradedFan);
-              inserted = true;
-            }
-            continue;
+      const removeSet = new Set(comp.strokeIds);
+      const next: StrokeObject[] = [];
+      let inserted = false;
+      for (const s of currentStrokes) {
+        if (removeSet.has(s.id)) {
+          if (!inserted) {
+            next.push(...upgradedFan);
+            inserted = true;
           }
-          next.push(s);
+          continue;
         }
-        currentStrokes = next;
+        next.push(s);
       }
+      currentStrokes = next;
     }
   }
 
@@ -5203,6 +5198,59 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
         newWireStrokes.push(
           makeCleanWireStroke(m.stroke, m.xL, yRow, m.xR, yRow, `h${rIdx}-${mIdx}`)
         );
+      }
+    }
+
+    // Also bridge any small gap (<= CLOSE_SNAP_TOL) where a component's leftTerm or rightTerm sits right next to a vertical rail with no separate horizontal wire between them!
+    const templateWireStroke =
+      merged[0]?.stroke || wireRefs[row.wireIndices[0]]?.stroke || currentStrokes[0];
+    if (templateWireStroke) {
+      for (const c of rowComps) {
+        for (const col of vCols) {
+          const colHasNearY = col.wireIndices.some((cwi) => {
+            const cw = wireRefs[cwi];
+            const minY = Math.min(cw.y1, cw.y2) - CLOSE_SNAP_TOL;
+            const maxY = Math.max(cw.y1, cw.y2) + CLOSE_SNAP_TOL;
+            return yRow >= minY && yRow <= maxY;
+          });
+          if (!colHasNearY) continue;
+          const distR = col.xCol - c.rightTerm.x;
+          if (distR > 1 && distR <= CLOSE_SNAP_TOL) {
+            const alreadyBridged = merged.some(
+              (m) => m.xL <= c.rightTerm.x + 6 && m.xR >= col.xCol - 6
+            );
+            if (!alreadyBridged) {
+              newWireStrokes.push(
+                makeCleanWireStroke(
+                  templateWireStroke,
+                  c.rightTerm.x,
+                  yRow,
+                  col.xCol,
+                  yRow,
+                  `hbr-r-${rIdx}-${c.key}`
+                )
+              );
+            }
+          }
+          const distL = c.leftTerm.x - col.xCol;
+          if (distL > 1 && distL <= CLOSE_SNAP_TOL) {
+            const alreadyBridged = merged.some(
+              (m) => m.xL <= col.xCol + 6 && m.xR >= c.leftTerm.x - 6
+            );
+            if (!alreadyBridged) {
+              newWireStrokes.push(
+                makeCleanWireStroke(
+                  templateWireStroke,
+                  col.xCol,
+                  yRow,
+                  c.leftTerm.x,
+                  yRow,
+                  `hbr-l-${rIdx}-${c.key}`
+                )
+              );
+            }
+          }
+        }
       }
     }
   }
@@ -6040,8 +6088,8 @@ export function analyzeCircuitForSimulation(
     const active = circuitSwitchClosed && inClosedLoop;
     const speed = Math.min(2.2, Math.max(0.4, Math.abs(flow)));
 
-    // Extend wire endpoints that connect to a Battery's (+) or (-) zone right up to the battery cap/wall
-    // so electrons never stop in mid-air outside the '+' or '-' symbol!
+    // Extend wire endpoints that connect to a Battery, Voltage Source, Fan, or Switch right up to the inner element
+    // so electrons flow seamlessly across the component's horizontal black leads with 100% uniform spacing!
     let wx1 = w.x1;
     let wy1 = w.y1;
     let wx2 = w.x2;
@@ -6049,19 +6097,37 @@ export function analyzeCircuitForSimulation(
     const wn = wireNodes[idx];
     if (inClosedLoop && Math.abs(w.y2 - w.y1) <= Math.abs(w.x2 - w.x1) * 0.35) {
       for (const cn of compNodes) {
-        if (cn.comp.kind === 'battery') {
-          const batCapLeftX = cn.comp.minX + cn.comp.w * 0.16;
-          const batBodyRightX = cn.comp.maxX - cn.comp.w * 0.16;
-          if (wn.u === cn.u && wx1 < batCapLeftX && wx2 < wx1) {
-            wx1 = batCapLeftX;
-          } else if (wn.v === cn.u && wx2 < batCapLeftX && wx1 < wx2) {
-            wx2 = batCapLeftX;
-          }
-          if (wn.u === cn.v && wx1 > batBodyRightX && wx2 > wx1) {
-            wx1 = batBodyRightX;
-          } else if (wn.v === cn.v && wx2 > batBodyRightX && wx1 > wx2) {
-            wx2 = batBodyRightX;
-          }
+        const c = cn.comp;
+        if (c.kind === 'battery') {
+          const batCapLeftX = c.minX + c.w * 0.16;
+          const batBodyRightX = c.maxX - c.w * 0.16;
+          if (wn.u === cn.u && wx1 < batCapLeftX && wx2 < wx1) wx1 = batCapLeftX;
+          else if (wn.v === cn.u && wx2 < batCapLeftX && wx1 < wx2) wx2 = batCapLeftX;
+          if (wn.u === cn.v && wx1 > batBodyRightX && wx2 > wx1) wx1 = batBodyRightX;
+          else if (wn.v === cn.v && wx2 > batBodyRightX && wx1 > wx2) wx2 = batBodyRightX;
+        } else if (c.kind === 'voltage-source') {
+          const plateGap = Math.max(10, Math.min(26, c.w * 0.11));
+          const plusPlateX = c.cx - plateGap / 2;
+          const minusPlateX = c.cx + plateGap / 2;
+          if (wn.u === cn.u && wx1 < plusPlateX && wx2 < wx1) wx1 = plusPlateX;
+          else if (wn.v === cn.u && wx2 < plusPlateX && wx1 < wx2) wx2 = plusPlateX;
+          if (wn.u === cn.v && wx1 > minusPlateX && wx2 > wx1) wx1 = minusPlateX;
+          else if (wn.v === cn.v && wx2 > minusPlateX && wx1 > wx2) wx2 = minusPlateX;
+        } else if (c.kind === 'fan') {
+          const rOuter = Math.max(20, Math.min(c.w * 0.36, c.h * 0.45));
+          const fanLeftEdgeX = c.cx - rOuter;
+          const fanRightEdgeX = c.cx + rOuter;
+          if (wn.u === cn.u && wx1 < fanLeftEdgeX && wx2 < wx1) wx1 = fanLeftEdgeX;
+          else if (wn.v === cn.u && wx2 < fanLeftEdgeX && wx1 < wx2) wx2 = fanLeftEdgeX;
+          if (wn.u === cn.v && wx1 > fanRightEdgeX && wx2 > wx1) wx1 = fanRightEdgeX;
+          else if (wn.v === cn.v && wx2 > fanRightEdgeX && wx1 > wx2) wx2 = fanRightEdgeX;
+        } else if (c.kind === 'switch') {
+          const swLeftX = c.minX + c.w * 0.26;
+          const swRightX = c.minX + c.w * 0.74;
+          if (wn.u === cn.u && wx1 < swLeftX && wx2 < wx1) wx1 = swLeftX;
+          else if (wn.v === cn.u && wx2 < swLeftX && wx1 < wx2) wx2 = swLeftX;
+          if (wn.u === cn.v && wx1 > swRightX && wx2 > wx1) wx1 = swRightX;
+          else if (wn.v === cn.v && wx2 > swRightX && wx1 > wx2) wx2 = swRightX;
         }
       }
     }

@@ -4793,13 +4793,12 @@ export default function App() {
           const s = entry.stroke;
           const layer = visibleLayerMap.get(s.layerId);
           if (layer && !layer.visible) continue;
-          // While simulation is running on the active page, hide static Fan body/blades so only the clean animated round Fan renders!
+          // While simulation is running, hide all static Fan strokes so only the clean animated round Fan renders with zero background remnant!
           if (
-            isCurrentActivePage &&
             isSimulating &&
-            (s.shapeType === 'fan-blade' ||
-              s.shapeType === 'fan-hub' ||
-              (s.shapeType === 'fan' && s.points.length > 2))
+            (s.shapeType === 'fan' ||
+              s.shapeType === 'fan-blade' ||
+              s.shapeType === 'fan-hub')
           ) {
             continue;
           }
@@ -8467,29 +8466,10 @@ export default function App() {
           ctx.lineTo(domeCx + Math.cos(ang) * rOuter, domeCy + Math.sin(ang) * rOuter);
           ctx.stroke();
         }
-
-        // Glowing orange zigzag filament inside the bulb
-        const filW = domeR * 0.55;
-        const filY = domeCy + domeR * 0.18;
-        const filH = domeR * 0.34;
-        ctx.strokeStyle = '#f59e0b';
-        ctx.shadowColor = '#fbbf24';
-        ctx.shadowBlur = 10 * pwr;
-        ctx.lineWidth = 2.6;
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(domeCx - filW * 0.65, domeCy + domeR * 0.62);
-        ctx.lineTo(domeCx - filW * 0.65, filY);
-        ctx.lineTo(domeCx - filW * 0.32, filY - filH);
-        ctx.lineTo(domeCx, filY + filH * 0.35);
-        ctx.lineTo(domeCx + filW * 0.32, filY - filH);
-        ctx.lineTo(domeCx + filW * 0.65, filY);
-        ctx.lineTo(domeCx + filW * 0.65, domeCy + domeR * 0.62);
-        ctx.stroke();
         ctx.restore();
       }
 
-      // 3. Spinning Fan / Propeller Blades (Always active in simulation: Grey circle backplate + Solid Blue Blades!)
+      // 3. Spinning Fan / Propeller Blades (Always active in simulation: Clean lead wires + Grey circle backplate + Solid Blue Blades!)
       for (const cs of simData.components) {
         if (cs.comp.kind !== 'fan') continue;
         const f = cs.comp;
@@ -8501,6 +8481,23 @@ export default function App() {
             : 0;
 
         ctx.save();
+        // Horizontal left & right lead wires up to the circle edge
+        ctx.strokeStyle = f.color || '#1e293b';
+        ctx.lineWidth = 2.8;
+        ctx.lineCap = 'round';
+        if (f.cx - rOuter > f.minX + 2) {
+          ctx.beginPath();
+          ctx.moveTo(f.minX, f.cy);
+          ctx.lineTo(f.cx - rOuter, f.cy);
+          ctx.stroke();
+        }
+        if (f.maxX > f.cx + rOuter + 2) {
+          ctx.beginPath();
+          ctx.moveTo(f.cx + rOuter, f.cy);
+          ctx.lineTo(f.maxX, f.cy);
+          ctx.stroke();
+        }
+
         // Round grey-filled circle backplate
         ctx.fillStyle = '#cbd5e1';
         ctx.strokeStyle = '#1e293b';
