@@ -1022,6 +1022,7 @@ export default function App() {
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(false);
   const [isSpringPaused, setIsSpringPaused] = useState<boolean>(false);
+  const [springGraphClearTick, setSpringGraphClearTick] = useState<number>(0);
   const springSimElapsedRef = useRef<number>(0);
   const springSimLastFrameTimeRef = useRef<number | null>(null);
   const [springSettleAnim, setSpringSettleAnim] = useState<{
@@ -1061,6 +1062,7 @@ export default function App() {
     oscUy: number;
     massBox: { minX: number; minY: number; maxX: number; maxY: number };
     pauseBtnBox?: { x1: number; y1: number; x2: number; y2: number };
+    clearBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     stopBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     ampHandles: { x: number; y: number }[];
     graphBoxes: {
@@ -4153,6 +4155,15 @@ export default function App() {
           ptX <= spHit.pauseBtnBox.x2 + 6 &&
           ptY >= spHit.pauseBtnBox.y1 - 6 &&
           ptY <= spHit.pauseBtnBox.y2 + 6
+        ) {
+          return true;
+        }
+        if (
+          spHit.clearBtnBox &&
+          ptX >= spHit.clearBtnBox.x1 - 6 &&
+          ptX <= spHit.clearBtnBox.x2 + 6 &&
+          ptY >= spHit.clearBtnBox.y1 - 6 &&
+          ptY <= spHit.clearBtnBox.y2 + 6
         ) {
           return true;
         }
@@ -11603,27 +11614,13 @@ export default function App() {
             ctx.lineJoin = 'round';
 
             const numSamples = 150;
-            if (!isSpringSimulating) {
-              // Static preview curve when paused so user can see phase & amplitude changes immediately
-              ctx.globalAlpha = 0.65;
-              ctx.beginPath();
-              for (let i = 0; i <= numSamples; i++) {
-                const u = i / numSamples;
-                const tau = u * timeWindowSec;
-                const theta = omega * tau + phi0;
-                const val = evalWaveNorm(theta);
-                const wx = axisLeftX + u * waveSpanW;
-                const wy = axisMidY - val * envHalfH;
-                if (i === 0) ctx.moveTo(wx, wy);
-                else ctx.lineTo(wx, wy);
-              }
-              ctx.stroke();
-              ctx.globalAlpha = 1;
+            if (!isSpringSimulating || springElapsedSec <= 0.005) {
+              // Clean diagram state (before Play or after "Καθαρισμός"): only starting phase dot at t = 0
               const startVal = evalWaveNorm(phi0);
               const startY = axisMidY - startVal * envHalfH;
               ctx.fillStyle = meta.curveColor;
               ctx.beginPath();
-              ctx.arc(axisLeftX, startY, 4.5, 0, Math.PI * 2);
+              ctx.arc(axisLeftX, startY, 4.8, 0, Math.PI * 2);
               ctx.fill();
             } else {
               // Live progressive / scrolling wave during Play (freezes at current instant when Paused)!
@@ -11683,25 +11680,29 @@ export default function App() {
             ctx.restore();
           }
 
-          // 6E. On-Canvas Floating "⏸ Παύση / ▶ Συνέχεια" & "⏹" Pill Buttons right above the oscillating spring!
+          // 6E. On-Canvas Floating "⏸ Παύση / ▶ Συνέχεια", "🧹 Καθαρισμός" & "⏹" Pill Buttons right above the oscillating spring!
           let pauseBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
+          let clearBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
           let stopBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
           if (isSpringSimulating) {
-            const pW = isSpringPaused ? 96 : 82;
-            const sW = 30;
+            const pW = isSpringPaused ? 94 : 80;
+            const cW = 98;
+            const sW = 28;
             const bH = 26;
-            const gap = 6;
-            const totW = pW + gap + sW;
+            const gap = 5;
+            const totW = pW + gap + cW + gap + sW;
             const topAnchorY = Math.min(fixedPt.y, eqFreePt.y - A);
             const bY = Math.max(12, topAnchorY - 38);
             const pX = Math.max(12, Math.min(w - totW - 12, fixedPt.x - totW / 2));
-            const sX = pX + pW + gap;
+            const cX = pX + pW + gap;
+            const sX = cX + cW + gap;
 
             pauseBtnBox = { x1: pX, y1: bY, x2: pX + pW, y2: bY + bH };
+            clearBtnBox = { x1: cX, y1: bY, x2: cX + cW, y2: bY + bH };
             stopBtnBox = { x1: sX, y1: bY, x2: sX + sW, y2: bY + bH };
 
             ctx.save();
-            // Pause / Resume Pill
+            // 1) Pause / Resume Pill
             ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
             ctx.shadowBlur = 6;
             ctx.shadowOffsetY = 1.5;
@@ -11715,7 +11716,7 @@ export default function App() {
 
             ctx.shadowColor = 'transparent';
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 11.5px system-ui, -apple-system, sans-serif';
+            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(
@@ -11724,7 +11725,24 @@ export default function App() {
               bY + bH / 2 + 0.5
             );
 
-            // Stop Pill ("⏹")
+            // 2) Clear Diagrams Pill ("🧹 Καθαρισμός")
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = '#0284c7';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(cX, bY, cW, bH, 13);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+            ctx.fillText('🧹 Καθαρισμός', cX + cW / 2, bY + bH / 2 + 0.5);
+
+            // 3) Stop Pill ("⏹")
             ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
             ctx.shadowBlur = 6;
             ctx.shadowOffsetY = 1.5;
@@ -11755,6 +11773,7 @@ export default function App() {
               maxY: curMassCy + massH / 2,
             },
             pauseBtnBox,
+            clearBtnBox,
             stopBtnBox,
             ampHandles,
             graphBoxes: graphBoxesHit,
@@ -11786,6 +11805,7 @@ export default function App() {
     isSimulating,
     isSpringSimulating,
     isSpringPaused,
+    springGraphClearTick,
     springSettleAnim,
     showSimulationPanel,
     simActiveCategory,
@@ -14455,7 +14475,7 @@ export default function App() {
     //            3) Direct Mass Block pulling along the oscillation axis to release into SHM!
     if (springOverlayHitRef.current) {
       const spHit = springOverlayHitRef.current;
-      // 0) Check On-Canvas "⏸ Παύση / ▶ Συνέχεια" & "⏹" Pill Buttons
+      // 0) Check On-Canvas "⏸ Παύση / ▶ Συνέχεια", "🧹 Καθαρισμός" & "⏹" Pill Buttons
       if (
         spHit.pauseBtnBox &&
         pt.x >= spHit.pauseBtnBox.x1 - 6 &&
@@ -14465,6 +14485,22 @@ export default function App() {
       ) {
         e.preventDefault();
         setIsSpringPaused((p) => !p);
+        isDrawingRef.current = false;
+        activePointerIdRef.current = null;
+        activePointerTypeRef.current = null;
+        return;
+      }
+      if (
+        spHit.clearBtnBox &&
+        pt.x >= spHit.clearBtnBox.x1 - 6 &&
+        pt.x <= spHit.clearBtnBox.x2 + 6 &&
+        pt.y >= spHit.clearBtnBox.y1 - 6 &&
+        pt.y <= spHit.clearBtnBox.y2 + 6
+      ) {
+        e.preventDefault();
+        springSimElapsedRef.current = 0;
+        springSimLastFrameTimeRef.current = null;
+        setSpringGraphClearTick((t) => t + 1);
         isDrawingRef.current = false;
         activePointerIdRef.current = null;
         activePointerTypeRef.current = null;
@@ -14482,6 +14518,7 @@ export default function App() {
         setIsSpringPaused(false);
         springSimElapsedRef.current = 0;
         springSimLastFrameTimeRef.current = null;
+        setSpringGraphClearTick((t) => t + 1);
         isDrawingRef.current = false;
         activePointerIdRef.current = null;
         activePointerTypeRef.current = null;
@@ -27991,7 +28028,7 @@ export default function App() {
 
                         {activeSpring && (
                           <>
-                            {/* 2. Primary Play / Pause / Resume / Stop Oscillation Controls */}
+                            {/* 2. Primary Play / Pause / Resume / Clear / Stop Oscillation Controls */}
                             {!isSpringSimulating ? (
                               <button
                                 type="button"
@@ -28006,25 +28043,39 @@ export default function App() {
                                 <span>▶️ Έναρξη Αμείωτης Ταλάντωσης</span>
                               </button>
                             ) : (
-                              <div className="grid grid-cols-2 gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setIsSpringPaused((p) => !p)}
-                                  className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer ${
-                                    isSpringPaused
-                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                      : 'bg-amber-500 hover:bg-amber-600 text-white'
-                                  }`}
-                                  title={
-                                    isSpringPaused
-                                      ? 'Συνέχιση ταλάντωσης και διαγραμμάτων από το σημείο παύσης'
-                                      : 'Προσωρινή παύση ταλάντωσης και διαγραμμάτων'
-                                  }
-                                >
-                                  <span>
-                                    {isSpringPaused ? '▶️ Συνέχεια' : '⏸️ Παύση'}
-                                  </span>
-                                </button>
+                              <div className="space-y-1.5">
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsSpringPaused((p) => !p)}
+                                    className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer ${
+                                      isSpringPaused
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                        : 'bg-amber-500 hover:bg-amber-600 text-white'
+                                    }`}
+                                    title={
+                                      isSpringPaused
+                                        ? 'Συνέχιση ταλάντωσης και διαγραμμάτων από το σημείο παύσης'
+                                        : 'Προσωρινή παύση ταλάντωσης και διαγραμμάτων'
+                                    }
+                                  >
+                                    <span>
+                                      {isSpringPaused ? '▶️ Συνέχεια' : '⏸️ Παύση'}
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      springSimElapsedRef.current = 0;
+                                      springSimLastFrameTimeRef.current = null;
+                                      setSpringGraphClearTick((t) => t + 1);
+                                    }}
+                                    className="py-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                                    title="Καθαρισμός των καμπυλών στα διαγράμματα x(t), υ(t), α(t)"
+                                  >
+                                    <span>🧹 Καθαρισμός</span>
+                                  </button>
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -28032,11 +28083,12 @@ export default function App() {
                                     setIsSpringPaused(false);
                                     springSimElapsedRef.current = 0;
                                     springSimLastFrameTimeRef.current = null;
+                                    setSpringGraphClearTick((t) => t + 1);
                                   }}
-                                  className="py-1.5 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-                                  title="Διακοπή ταλάντωσης και επιστροφή στη Θέση Ισορροπίας (Θ.Ι.)"
+                                  className="w-full py-1 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                                  title="Διακοπή ταλάντωσης και καθαρισμός διαγραμμάτων"
                                 >
-                                  <span>⏹️ Διακοπή</span>
+                                  <span>⏹️ Διακοπή & Επαναφορά</span>
                                 </button>
                               </div>
                             )}
@@ -28202,31 +28254,49 @@ export default function App() {
 
                             {/* 6. Live Animated Diagrams Checkboxes: x(t) [Red], υ(t) [Green], α(t) [Purple] */}
                             <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between gap-1">
                                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                                   Ζωντανά Διαγράμματα (1, 2 ή 3):
                                 </span>
-                                {(activeSpring.graphs.xt.customMoved ||
-                                  activeSpring.graphs.vt.customMoved ||
-                                  activeSpring.graphs.at.customMoved) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      updateActiveSpringSimConfig((sim) => ({
-                                        ...sim,
-                                        graphs: {
-                                          xt: { ...sim.graphs.xt, customMoved: false },
-                                          vt: { ...sim.graphs.vt, customMoved: false },
-                                          at: { ...sim.graphs.at, customMoved: false },
-                                        },
-                                      }));
-                                    }}
-                                    className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
-                                    title="Επαναφέρει τα διαγράμματα δίπλα στο ελατήριο"
-                                  >
-                                    ↺ Στοίχιση
-                                  </button>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  {(activeSpring.graphs.xt.visible ||
+                                    activeSpring.graphs.vt.visible ||
+                                    activeSpring.graphs.at.visible) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        springSimElapsedRef.current = 0;
+                                        springSimLastFrameTimeRef.current = null;
+                                        setSpringGraphClearTick((t) => t + 1);
+                                      }}
+                                      className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                      title="Καθαρισμός των καμπυλών στα διαγράμματα"
+                                    >
+                                      🧹 Καθαρισμός
+                                    </button>
+                                  )}
+                                  {(activeSpring.graphs.xt.customMoved ||
+                                    activeSpring.graphs.vt.customMoved ||
+                                    activeSpring.graphs.at.customMoved) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          graphs: {
+                                            xt: { ...sim.graphs.xt, customMoved: false },
+                                            vt: { ...sim.graphs.vt, customMoved: false },
+                                            at: { ...sim.graphs.at, customMoved: false },
+                                          },
+                                        }));
+                                      }}
+                                      className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                      title="Επαναφέρει τα διαγράμματα δίπλα στο ελατήριο"
+                                    >
+                                      ↺ Στοίχιση
+                                    </button>
+                                  )}
+                                </div>
                               </div>
 
                               <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
