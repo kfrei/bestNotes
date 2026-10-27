@@ -11526,8 +11526,7 @@ export default function App() {
 
           const omega =
             2.6 *
-            Math.sqrt(activeSpringSim.stiffness / Math.max(0.2, activeSpringSim.mass)) *
-            simSpeedMultiplier;
+            Math.sqrt(activeSpringSim.stiffness / Math.max(0.2, activeSpringSim.mass));
           const phi0 =
             activeSpringSim.initialPhaseMode === 'eq'
               ? 0
@@ -15354,8 +15353,7 @@ export default function App() {
           const baseTheta = Math.asin(sinVal);
           const om =
             2.6 *
-            Math.sqrt(sim.stiffness / Math.max(0.2, sim.mass)) *
-            simSpeedMultiplier;
+            Math.sqrt(sim.stiffness / Math.max(0.2, sim.mass));
           const el = springSimElapsedRef.current;
           if (isSpringSimulating && el > 0.005) {
             return {
@@ -17152,8 +17150,7 @@ export default function App() {
         const baseTheta = Math.asin(sinVal);
         const om =
           2.6 *
-          Math.sqrt(sim.stiffness / Math.max(0.2, sim.mass)) *
-          simSpeedMultiplier;
+          Math.sqrt(sim.stiffness / Math.max(0.2, sim.mass));
         const el = springSimElapsedRef.current;
         if (isSpringSimulating && el > 0.005) {
           return {
@@ -28982,71 +28979,125 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* 4. Mass (m) & Stiffness (k) & Speed Sliders */}
-                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                              <div className="space-y-0.5">
-                                <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
-                                  <span>⚖️ Μάζα Σώματος (m):</span>
-                                  <span className="text-emerald-700 font-extrabold">
-                                    {activeSpring.mass.toFixed(1)} kg
-                                  </span>
-                                </div>
-                                <input
-                                  type="range"
-                                  min="0.4"
-                                  max="2.5"
-                                  step="0.1"
-                                  value={activeSpring.mass}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value);
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      mass: val,
-                                    }));
-                                  }}
-                                  className="w-full accent-emerald-600 cursor-pointer"
-                                />
-                              </div>
+                            {/* 4. Mass (m), Stiffness (k) & Coupled Frequency f = (1/2π)√(k/m) Sliders */}
+                            {(() => {
+                              const curM = Math.max(0.4, Math.min(2.5, activeSpring.mass));
+                              const curK = Math.max(0.4, Math.min(2.5, activeSpring.stiffness));
+                              const curRootRatio = Math.sqrt(curK / curM); // √(k/m) in [0.4, 2.5]
+                              const curFreqHz = curRootRatio / (2 * Math.PI); // f = (1/2π)√(k/m)
+                              const minFreqHz = 0.4 / (2 * Math.PI);
+                              const maxFreqHz = 2.5 / (2 * Math.PI);
 
-                              <div className="space-y-0.5">
-                                <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
-                                  <span>🌀 Σταθερά Ελατηρίου (k):</span>
-                                  <span className="text-sky-700 font-extrabold">
-                                    {activeSpring.stiffness.toFixed(1)}×
-                                  </span>
-                                </div>
-                                <input
-                                  type="range"
-                                  min="0.5"
-                                  max="2.5"
-                                  step="0.1"
-                                  value={activeSpring.stiffness}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value);
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      stiffness: val,
-                                    }));
-                                  }}
-                                  className="w-full accent-sky-600 cursor-pointer"
-                                />
-                              </div>
+                              return (
+                                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                      <span>⚖️ Μάζα Σώματος (m):</span>
+                                      <span className="text-emerald-700 font-extrabold">
+                                        {curM.toFixed(2)} kg
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="0.4"
+                                      max="2.5"
+                                      step="0.05"
+                                      value={curM}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        const oldRatio = Math.sqrt(curK / curM);
+                                        const newRatio = Math.sqrt(curK / val);
+                                        if (isSpringSimulating && newRatio > 1e-4) {
+                                          springSimElapsedRef.current *= oldRatio / newRatio;
+                                        }
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          mass: val,
+                                        }));
+                                      }}
+                                      className="w-full accent-emerald-600 cursor-pointer"
+                                    />
+                                  </div>
 
-                              <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-slate-200/60">
-                                <span className="text-[10.5px] font-semibold text-slate-600">
-                                  Ταχύτητα ({simSpeedMultiplier.toFixed(1)}x):
-                                </span>
-                                <input
-                                  type="range"
-                                  min="0.4"
-                                  max="2.4"
-                                  step="0.2"
-                                  value={simSpeedMultiplier}
-                                  onChange={(e) => setSimSpeedMultiplier(parseFloat(e.target.value))}
-                                  className="w-28 accent-emerald-600 cursor-pointer"
-                                />
-                              </div>
-                            </div>
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                      <span>🌀 Σταθερά Ελατηρίου (k):</span>
+                                      <span className="text-sky-700 font-extrabold">
+                                        {curK.toFixed(2)} N/m
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="0.4"
+                                      max="2.5"
+                                      step="0.05"
+                                      value={curK}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        const oldRatio = Math.sqrt(curK / curM);
+                                        const newRatio = Math.sqrt(val / curM);
+                                        if (isSpringSimulating && newRatio > 1e-4) {
+                                          springSimElapsedRef.current *= oldRatio / newRatio;
+                                        }
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          stiffness: val,
+                                        }));
+                                      }}
+                                      className="w-full accent-sky-600 cursor-pointer"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-0.5 pt-1 border-t border-slate-200/70">
+                                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                      <span title="f = (1 / 2π) · √(k / m)">
+                                        〰️ Συχνότητα f = <span className="font-serif italic">1/2π √(k/m)</span>:
+                                      </span>
+                                      <span className="text-indigo-700 font-extrabold">
+                                        {curFreqHz.toFixed(2)} Hz
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min={minFreqHz.toFixed(4)}
+                                      max={maxFreqHz.toFixed(4)}
+                                      step="0.005"
+                                      value={curFreqHz}
+                                      onChange={(e) => {
+                                        const nextFreq = parseFloat(e.target.value);
+                                        const targetRootRatio = Math.max(
+                                          0.4,
+                                          Math.min(2.5, nextFreq * 2 * Math.PI)
+                                        );
+                                        const r = targetRootRatio * targetRootRatio; // k / m
+                                        const prod = Math.max(0.75, Math.min(1.35, curK * curM));
+                                        const mLow = Math.max(0.4, 0.4 / r);
+                                        const mHigh = Math.min(2.5, 2.5 / r);
+                                        const nextM = Math.max(
+                                          mLow,
+                                          Math.min(mHigh, Math.sqrt(prod / r))
+                                        );
+                                        const nextK = Math.max(
+                                          0.4,
+                                          Math.min(2.5, nextM * r)
+                                        );
+                                        const oldRatio = Math.sqrt(curK / curM);
+                                        const newRatio = Math.sqrt(nextK / nextM);
+                                        if (isSpringSimulating && newRatio > 1e-4) {
+                                          springSimElapsedRef.current *= oldRatio / newRatio;
+                                        }
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          mass: Number(nextM.toFixed(3)),
+                                          stiffness: Number(nextK.toFixed(3)),
+                                        }));
+                                      }}
+                                      className="w-full accent-indigo-600 cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             {/* 5. Canvas Display Checkboxes (Amplitude +A/-A, Natural Length l₀, Force Vectors) */}
                             <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
