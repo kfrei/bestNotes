@@ -1123,7 +1123,7 @@ export default function App() {
   const draggingProposalCornerRef = useRef<'tl' | 'tr' | 'br' | 'bl' | null>(null);
   const proposalOverlayHitRef = useRef<{
     acceptBox: { x1: number; y1: number; x2: number; y2: number };
-    cancelPt: { x: number; y: number; r: number };
+    cancelBox: { x1: number; y1: number; x2: number; y2: number };
     corners: {
       tl: { x: number; y: number };
       tr: { x: number; y: number };
@@ -4121,7 +4121,12 @@ export default function App() {
         ) {
           return true;
         }
-        if (Math.hypot(ptX - hit.cancelPt.x, ptY - hit.cancelPt.y) <= hit.cancelPt.r + 10) {
+        if (
+          ptX >= hit.cancelBox.x1 - 8 &&
+          ptX <= hit.cancelBox.x2 + 8 &&
+          ptY >= hit.cancelBox.y1 - 8 &&
+          ptY <= hit.cancelBox.y2 + 8
+        ) {
           return true;
         }
         for (const cPt of [hit.corners.tl, hit.corners.tr, hit.corners.br, hit.corners.bl]) {
@@ -10690,27 +10695,39 @@ export default function App() {
           ctx.restore();
         }
 
-        // 4. Draw On-Diagram Check Button ("✓ Αποδοχή") + Cancel ("✕") inside the circuit loop
+        // 4. Draw Gently Blinking On-Diagram Pill Buttons ("✓ Αποδοχή" & "✕ Ακύρωση") inside the circuit loop
         const midX = (prop.xLeft + prop.xRight) / 2;
         const midY = (prop.yTop + prop.yBot) / 2;
-        const pillW = 116;
+        const pillW = 112;
+        const cancelPillW = 112;
         const pillH = 34;
-        const pillX = midX - (pillW + 38) / 2;
+        const pillGap = 10;
+        const totalBtnsW = pillW + pillGap + cancelPillW;
+        const pillX = midX - totalBtnsW / 2;
         const pillY = midY - pillH / 2;
-        const cancelX = pillX + pillW + 22;
-        const cancelY = midY;
-        const cancelR = 16;
+        const cancelPillX = pillX + pillW + pillGap;
 
         proposalOverlayHitRef.current = {
           acceptBox: { x1: pillX, y1: pillY, x2: pillX + pillW, y2: pillY + pillH },
-          cancelPt: { x: cancelX, y: cancelY, r: cancelR },
+          cancelBox: {
+            x1: cancelPillX,
+            y1: pillY,
+            x2: cancelPillX + cancelPillW,
+            y2: pillY + pillH,
+          },
           corners,
         };
 
+        // Gentle synchronous breathing/blinking wave until the user clicks either button
+        const btnBlink = 0.5 + 0.5 * Math.sin(elapsedSec * 4.2);
+        const btnAlpha = 0.72 + 0.28 * btnBlink;
+        const btnGlow = 6 + 9 * btnBlink;
+
         // Green Accept Pill ("✓ Αποδοχή")
         ctx.save();
-        ctx.shadowColor = 'rgba(22, 163, 74, 0.35)';
-        ctx.shadowBlur = 10;
+        ctx.globalAlpha = btnAlpha;
+        ctx.shadowColor = 'rgba(22, 163, 74, 0.55)';
+        ctx.shadowBlur = btnGlow;
         ctx.shadowOffsetY = 2;
         ctx.fillStyle = '#16a34a';
         ctx.strokeStyle = '#ffffff';
@@ -10728,28 +10745,26 @@ export default function App() {
         ctx.fillText('✓ Αποδοχή', pillX + pillW / 2, pillY + pillH / 2 + 0.5);
         ctx.restore();
 
-        // Cancel Circle ("✕")
+        // Red Cancel Pill ("✕ Ακύρωση")
         ctx.save();
-        ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
-        ctx.shadowBlur = 6;
-        ctx.shadowOffsetY = 1.5;
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 2.0;
+        ctx.globalAlpha = btnAlpha;
+        ctx.shadowColor = 'rgba(220, 38, 38, 0.55)';
+        ctx.shadowBlur = btnGlow;
+        ctx.shadowOffsetY = 2;
+        ctx.fillStyle = '#dc2626';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.arc(cancelX, cancelY, cancelR, 0, Math.PI * 2);
+        ctx.roundRect(cancelPillX, pillY, cancelPillW, pillH, 17);
         ctx.fill();
         ctx.stroke();
 
         ctx.shadowColor = 'transparent';
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(cancelX - 4.8, cancelY - 4.8);
-        ctx.lineTo(cancelX + 4.8, cancelY + 4.8);
-        ctx.moveTo(cancelX + 4.8, cancelY - 4.8);
-        ctx.lineTo(cancelX - 4.8, cancelY + 4.8);
-        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✕ Ακύρωση', cancelPillX + cancelPillW / 2, pillY + pillH / 2 + 0.5);
         ctx.restore();
 
         ctx.restore();
@@ -14262,7 +14277,12 @@ export default function App() {
         activePointerTypeRef.current = null;
         return;
       }
-      if (Math.hypot(pt.x - hit.cancelPt.x, pt.y - hit.cancelPt.y) <= hit.cancelPt.r + 8) {
+      if (
+        pt.x >= hit.cancelBox.x1 - 6 &&
+        pt.x <= hit.cancelBox.x2 + 6 &&
+        pt.y >= hit.cancelBox.y1 - 6 &&
+        pt.y <= hit.cancelBox.y2 + 6
+      ) {
         e.preventDefault();
         cancelCircuitCompletionProposal();
         isDrawingRef.current = false;
@@ -27439,7 +27459,7 @@ export default function App() {
                     <span>✨ Ολοκλήρωση</span>
                   </button>
                   {circuitProposal && circuitProposal.pageId === activePage.id && (
-                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    <div className="grid grid-cols-2 gap-1.5 pt-0.5 animate-pulse">
                       <button
                         type="button"
                         onClick={() => acceptCircuitCompletionProposal()}
@@ -27451,7 +27471,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => cancelCircuitCompletionProposal()}
-                        className="py-1.5 px-2 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-[10.5px] flex items-center justify-center gap-1 transition cursor-pointer"
+                        className="py-1.5 px-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
                         title="Ακύρωση πρότασης ολοκλήρωσης"
                       >
                         <span>✕ Ακύρωση</span>
