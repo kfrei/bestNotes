@@ -4672,8 +4672,20 @@ export function getCircuitComponentsWithTerminals(
       leftTerm = { x: minX, y: wireY };
       rightTerm = { x: maxX, y: wireY };
     } else if (entry.kind === 'battery') {
-      leftTerm = { x: minX + w * 0.14, y: cy };
-      rightTerm = { x: maxX - w * 0.14, y: cy };
+      const bodyStroke = entry.strokes.find((s) => s.points.length >= 6);
+      if (bodyStroke) {
+        let bMinX = Infinity;
+        let bMaxX = -Infinity;
+        for (const p of bodyStroke.points) {
+          if (p.x < bMinX) bMinX = p.x;
+          if (p.x > bMaxX) bMaxX = p.x;
+        }
+        leftTerm = { x: Number.isFinite(bMinX) ? bMinX : minX + w * 0.16, y: cy };
+        rightTerm = { x: Number.isFinite(bMaxX) ? bMaxX : maxX - w * 0.16, y: cy };
+      } else {
+        leftTerm = { x: minX + w * 0.16, y: cy };
+        rightTerm = { x: maxX - w * 0.16, y: cy };
+      }
     }
 
     const primaryStroke = entry.strokes[0];

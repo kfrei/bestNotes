@@ -1029,6 +1029,40 @@ export default function App() {
   const [simShowDarkWireTrack, setSimShowDarkWireTrack] = useState<boolean>(false);
   const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<number>(1.0);
   const [circuitAlignFlashStart, setCircuitAlignFlashStart] = useState<number | null>(null);
+  const [circuitProposal, setCircuitProposal] = useState<{
+    pageId: string;
+    simId: string;
+    simName: string;
+    colorMode: 'red' | 'green';
+    xLeft: number;
+    xRight: number;
+    yTop: number;
+    yBot: number;
+    initialYTop: number;
+    initialYBot: number;
+    minCompLeftX: number;
+    maxCompRightX: number;
+    componentStrokeIds: string[];
+    spans: {
+      id: string;
+      kind: 'h-top' | 'h-bot' | 'v-left' | 'v-right';
+      fixedX1?: number;
+      fixedX2?: number;
+      existingStrokeId?: string;
+    }[];
+    layerId: string;
+  } | null>(null);
+  const draggingProposalCornerRef = useRef<'tl' | 'tr' | 'br' | 'bl' | null>(null);
+  const proposalOverlayHitRef = useRef<{
+    acceptBox: { x1: number; y1: number; x2: number; y2: number };
+    cancelPt: { x: number; y: number; r: number };
+    corners: {
+      tl: { x: number; y: number };
+      tr: { x: number; y: number };
+      br: { x: number; y: number };
+      bl: { x: number; y: number };
+    };
+  } | null>(null);
   const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [simPanelPos, setSimPanelPos] = useState<{ x: number; y: number }>({ x: 16, y: 108 });
   const simPanelDragRef = useRef<{
@@ -4009,6 +4043,38 @@ export default function App() {
         }
       }
 
+      if (circuitProposal && circuitProposal.pageId === targetPageObj.id && proposalOverlayHitRef.current) {
+        const hit = proposalOverlayHitRef.current;
+        if (
+          ptX >= hit.acceptBox.x1 - 8 &&
+          ptX <= hit.acceptBox.x2 + 8 &&
+          ptY >= hit.acceptBox.y1 - 8 &&
+          ptY <= hit.acceptBox.y2 + 8
+        ) {
+          return true;
+        }
+        if (Math.hypot(ptX - hit.cancelPt.x, ptY - hit.cancelPt.y) <= hit.cancelPt.r + 10) {
+          return true;
+        }
+        for (const cPt of [hit.corners.tl, hit.corners.tr, hit.corners.br, hit.corners.bl]) {
+          if (Math.hypot(ptX - cPt.x, ptY - cPt.y) <= 32) {
+            return true;
+          }
+        }
+      }
+
+      if (isSimulating && autoSwitchHitRef.current) {
+        const sw = autoSwitchHitRef.current;
+        const knobX = sw.x + 17;
+        const knobY = sw.closed ? sw.yCenter : (sw.yBottom + sw.yTop + 4) / 2;
+        if (
+          Math.hypot(ptX - knobX, ptY - knobY) <= 36 ||
+          (Math.abs(ptX - sw.x) <= 32 && ptY >= sw.yTop - 16 && ptY <= sw.yBottom + 16)
+        ) {
+          return true;
+        }
+      }
+
       const waveCandIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
@@ -4057,6 +4123,8 @@ export default function App() {
       findSelectableObjectAtPagePoint,
       selectedTextId,
       editingTextId,
+      circuitProposal,
+      isSimulating,
     ]
   );
 
@@ -8098,7 +8166,11 @@ export default function App() {
 
       // If 1-finger drag-and-drop (or resize/rotate) of a Lasso-selected shape/image, Node handle, or Text Box is active, prevent page scroll!
       if (
-        (isDrawingRef.current && (selectionTransformRef.current || isDraggingSelectionRef.current || draggingNodeIdx !== null)) ||
+        (isDrawingRef.current &&
+          (selectionTransformRef.current ||
+            isDraggingSelectionRef.current ||
+            draggingNodeIdx !== null ||
+            draggingProposalCornerRef.current !== null)) ||
         draggingTextRef.current
       ) {
         if (e.cancelable) e.preventDefault();
@@ -8735,6 +8807,568 @@ export default function App() {
     return true;
   };
 
+  const evalCircuitProposalSpan = (
+    prop: NonNullable<typeof circuitProposal>,
+    span: NonNullable<typeof circuitProposal>['spans'][number]
+  ): { x1: number; y1: number; x2: number; y2: number } => {
+    if (span.kind === 'h-top') {
+      const x1 = span.fixedX1 !== undefined ? span.fixedX1 : prop.xLeft;
+      const x2 = span.fixedX2 !== undefined ? span.fixedX2 : prop.xRight;
+      return { x1, y1: prop.yTop, x2, y2: prop.yTop };
+    }
+    if (span.kind === 'h-bot') {
+      const x1 = span.fixedX1 !== undefined ? span.fixedX1 : prop.xLeft;
+      const x2 = span.fixedX2 !== undefined ? span.fixedX2 : prop.xRight;
+      return { x1, y1: prop.yBot, x2, y2: prop.yBot };
+    }
+    if (span.kind === 'v-left') {
+      return { x1: prop.xLeft, y1: prop.yTop, x2: prop.xLeft, y2: prop.yBot };
+    }
+    return { x1: prop.xRight, y1: prop.yTop, x2: prop.xRight, y2: prop.yBot };
+  };
+
+  const handleStartCircuitCompletion = () => {
+    const activeSim = getActiveCircuitSim(activePage);
+    const expandedIdSet = new Set<string>();
+
+    if (selectedStrokeIds.length > 0) {
+      const rawSelSet = new Set(selectedStrokeIds);
+      const selGroupIds = new Set(
+        activePage.strokes
+          .filter((s) => rawSelSet.has(s.id) && s.groupId)
+          .map((s) => s.groupId!)
+      );
+      for (const s of activePage.strokes) {
+        if (rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))) {
+          expandedIdSet.add(s.id);
+        }
+      }
+      const eligible = activePage.strokes.filter(
+        (s) => expandedIdSet.has(s.id) || isCircuitEligibleStroke(s)
+      );
+      let added = true;
+      while (added) {
+        added = false;
+        const members = eligible.filter((s) => expandedIdSet.has(s.id));
+        for (const cand of eligible) {
+          if (expandedIdSet.has(cand.id)) continue;
+          if (members.some((m) => areStrokesWithinCircuitTol(cand, m, 40))) {
+            expandedIdSet.add(cand.id);
+            added = true;
+            if (cand.groupId) {
+              for (const g of activePage.strokes) {
+                if (g.groupId === cand.groupId) expandedIdSet.add(g.id);
+              }
+            }
+          }
+        }
+      }
+    } else if (activeSim) {
+      const simSet = getSimExpandedStrokeSet(activePage, activeSim);
+      for (const id of simSet) expandedIdSet.add(id);
+    } else {
+      for (const s of activePage.strokes) {
+        if (isCircuitEligibleStroke(s)) expandedIdSet.add(s.id);
+      }
+    }
+
+    const rawSubset = activePage.strokes.filter((s) => expandedIdSet.has(s.id));
+    if (rawSubset.length === 0) {
+      showToast('🎯 Επιλέξτε πρώτα τα ηλεκτρικά στοιχεία ή το κύκλωμα με το Λάσο!');
+      return;
+    }
+
+    const preAligned = autoAlignAndConnectCircuit(rawSubset);
+    const comps = getCircuitComponentsWithTerminals(preAligned);
+    if (comps.length === 0) {
+      showToast('⚠️ Δεν βρέθηκαν ηλεκτρικά στοιχεία (Μπαταρία, Λάμπα, Φτερωτή, Αντίσταση) στην επιλογή!');
+      return;
+    }
+
+    const compStrokeSet = new Set<string>();
+    for (const c of comps) {
+      for (const id of c.strokeIds) compStrokeSet.add(id);
+    }
+
+    // Extract existing external wire segments (exploded into 2-point segments)
+    const rawExternalSegs: {
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      avgX: number;
+      avgY: number;
+      orientation: 'h' | 'v' | 'diag';
+      stroke: StrokeObject;
+      used: boolean;
+    }[] = [];
+
+    for (const s of preAligned) {
+      if (compStrokeSet.has(s.id)) continue;
+      if (s.tool === 'highlighter' || s.points.length < 2) continue;
+      if (s.shapeType && s.shapeType !== 'line') continue;
+      if (s.points[0]?.twist === 999) continue;
+      if (!s.isShape && s.points.length > 2) continue;
+      for (let k = 0; k < s.points.length - 1; k++) {
+        const p0 = s.points[k];
+        const p1 = s.points[k + 1];
+        const dx = Math.abs(p1.x - p0.x);
+        const dy = Math.abs(p1.y - p0.y);
+        if (Math.hypot(dx, dy) < 10) continue;
+        let orientation: 'h' | 'v' | 'diag' = 'diag';
+        if (dy <= Math.max(22, dx * 0.35)) orientation = 'h';
+        else if (dx <= Math.max(22, dy * 0.35)) orientation = 'v';
+        rawExternalSegs.push({
+          x1: p0.x,
+          y1: p0.y,
+          x2: p1.x,
+          y2: p1.y,
+          avgX: (p0.x + p1.x) / 2,
+          avgY: (p0.y + p1.y) / 2,
+          orientation,
+          stroke: s,
+          used: false,
+        });
+      }
+    }
+
+    // Case 1 (partial wires exist -> Red Dashed '#ef4444') vs Case 2 (only components selected -> Green Dashed '#16a34a')
+    const colorMode: 'red' | 'green' = rawExternalSegs.length > 0 ? 'red' : 'green';
+
+    // Partition components into Top Row and Bottom Row
+    const minTermY = Math.min(...comps.map((c) => c.leftTerm.y));
+    const maxTermY = Math.max(...comps.map((c) => c.leftTerm.y));
+    let topCompsInit: typeof comps = [];
+    let botCompsInit: typeof comps = [];
+
+    if (comps.length >= 2 && maxTermY - minTermY >= 35) {
+      const midY = (minTermY + maxTermY) / 2;
+      topCompsInit = comps.filter((c) => c.leftTerm.y < midY).sort((a, b) => a.cx - b.cx);
+      botCompsInit = comps.filter((c) => c.leftTerm.y >= midY).sort((a, b) => a.cx - b.cx);
+    } else if (
+      comps.some((c) => c.kind === 'battery' || c.kind === 'voltage-source') &&
+      comps.some((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
+    ) {
+      topCompsInit = comps
+        .filter((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
+        .sort((a, b) => a.cx - b.cx);
+      botCompsInit = comps
+        .filter((c) => c.kind === 'battery' || c.kind === 'voltage-source')
+        .sort((a, b) => a.cx - b.cx);
+    } else {
+      topCompsInit = [...comps].sort((a, b) => a.cx - b.cx);
+      botCompsInit = [];
+    }
+
+    let yTop =
+      topCompsInit.length > 0
+        ? Math.round(topCompsInit.reduce((acc, c) => acc + c.leftTerm.y, 0) / topCompsInit.length)
+        : 0;
+    let yBot =
+      botCompsInit.length > 0
+        ? Math.round(botCompsInit.reduce((acc, c) => acc + c.leftTerm.y, 0) / botCompsInit.length)
+        : 0;
+
+    if (topCompsInit.length === 0) {
+      const hSegsTop = rawExternalSegs.filter((s) => s.orientation === 'h' && s.avgY < yBot - 40);
+      yTop =
+        hSegsTop.length > 0
+          ? Math.round(hSegsTop.reduce((a, b) => a + b.avgY, 0) / hSegsTop.length)
+          : Math.max(40, yBot - 165);
+    }
+    if (botCompsInit.length === 0) {
+      const hSegsBot = rawExternalSegs.filter((s) => s.orientation === 'h' && s.avgY > yTop + 40);
+      yBot =
+        hSegsBot.length > 0
+          ? Math.round(hSegsBot.reduce((a, b) => a + b.avgY, 0) / hSegsBot.length)
+          : yTop + 165;
+    }
+    if (yBot - yTop < 85) {
+      yBot = yTop + 150;
+    }
+
+    // Align all Top Row components so their leftTerm.y === yTop, and all Bottom Row components so their leftTerm.y === yBot
+    const topKeySet = new Set(topCompsInit.map((c) => c.key));
+    const dyByStrokeId = new Map<string, number>();
+    for (const c of comps) {
+      const targetRowY = topKeySet.has(c.key) ? yTop : yBot;
+      const dy = targetRowY - c.leftTerm.y;
+      for (const sid of c.strokeIds) {
+        dyByStrokeId.set(sid, dy);
+      }
+    }
+
+    const shiftedCompStrokes = preAligned
+      .filter((s) => compStrokeSet.has(s.id))
+      .map((s) => {
+        const dy = dyByStrokeId.get(s.id) || 0;
+        if (Math.abs(dy) < 0.25) return s;
+        return {
+          ...s,
+          circuitBox: s.circuitBox
+            ? { ...s.circuitBox, termY: s.circuitBox.termY + dy }
+            : undefined,
+          points: s.points.map((pt) => ({
+            ...pt,
+            y: pt.y + dy,
+            cy: pt.cy !== undefined ? pt.cy + dy : undefined,
+          })),
+        };
+      });
+
+    const finalComps = getCircuitComponentsWithTerminals(shiftedCompStrokes);
+    const topComps = finalComps
+      .filter((c) => topKeySet.has(c.key))
+      .sort((a, b) => a.cx - b.cx);
+    const botComps = finalComps
+      .filter((c) => !topKeySet.has(c.key))
+      .sort((a, b) => a.cx - b.cx);
+
+    const minCompLeftX = Math.round(Math.min(...finalComps.map((c) => c.leftTerm.x)));
+    const maxCompRightX = Math.round(Math.max(...finalComps.map((c) => c.rightTerm.x)));
+
+    const leftVertSegs = rawExternalSegs.filter(
+      (s) => s.orientation === 'v' && s.avgX < minCompLeftX - 10
+    );
+    const rightVertSegs = rawExternalSegs.filter(
+      (s) => s.orientation === 'v' && s.avgX > maxCompRightX + 10
+    );
+    const hOuterLeftXs = rawExternalSegs
+      .filter((s) => s.orientation === 'h' && Math.min(s.x1, s.x2) < minCompLeftX - 20)
+      .map((s) => Math.min(s.x1, s.x2));
+    const hOuterRightXs = rawExternalSegs
+      .filter((s) => s.orientation === 'h' && Math.max(s.x1, s.x2) > maxCompRightX + 20)
+      .map((s) => Math.max(s.x1, s.x2));
+
+    const xLeft =
+      leftVertSegs.length > 0
+        ? Math.round(leftVertSegs.reduce((a, b) => a + b.avgX, 0) / leftVertSegs.length)
+        : hOuterLeftXs.length > 0
+        ? Math.round(Math.min(...hOuterLeftXs))
+        : Math.max(36, Math.round(minCompLeftX - 88));
+
+    const xRight =
+      rightVertSegs.length > 0
+        ? Math.round(rightVertSegs.reduce((a, b) => a + b.avgX, 0) / rightVertSegs.length)
+        : hOuterRightXs.length > 0
+        ? Math.round(Math.max(...hOuterRightXs))
+        : Math.round(maxCompRightX + 88);
+
+    // Build parameterized rectangular circuit spans
+    const spans: NonNullable<typeof circuitProposal>['spans'] = [];
+
+    if (topComps.length === 0) {
+      spans.push({ id: 'top-all', kind: 'h-top' });
+    } else {
+      spans.push({
+        id: 'top-0',
+        kind: 'h-top',
+        fixedX2: Math.round(topComps[0].leftTerm.x),
+      });
+      for (let i = 0; i < topComps.length - 1; i++) {
+        spans.push({
+          id: `top-mid-${i}`,
+          kind: 'h-top',
+          fixedX1: Math.round(topComps[i].rightTerm.x),
+          fixedX2: Math.round(topComps[i + 1].leftTerm.x),
+        });
+      }
+      spans.push({
+        id: 'top-last',
+        kind: 'h-top',
+        fixedX1: Math.round(topComps[topComps.length - 1].rightTerm.x),
+      });
+    }
+
+    if (botComps.length === 0) {
+      spans.push({ id: 'bot-all', kind: 'h-bot' });
+    } else {
+      spans.push({
+        id: 'bot-0',
+        kind: 'h-bot',
+        fixedX2: Math.round(botComps[0].leftTerm.x),
+      });
+      for (let i = 0; i < botComps.length - 1; i++) {
+        spans.push({
+          id: `bot-mid-${i}`,
+          kind: 'h-bot',
+          fixedX1: Math.round(botComps[i].rightTerm.x),
+          fixedX2: Math.round(botComps[i + 1].leftTerm.x),
+        });
+      }
+      spans.push({
+        id: 'bot-last',
+        kind: 'h-bot',
+        fixedX1: Math.round(botComps[botComps.length - 1].rightTerm.x),
+      });
+    }
+
+    spans.push({ id: 'v-left', kind: 'v-left' });
+    spans.push({ id: 'v-right', kind: 'v-right' });
+
+    const defaultLayerId = shiftedCompStrokes[0]?.layerId || activeLayerId;
+    const matchedWireStrokes: StrokeObject[] = [];
+
+    // Match existing solid wire segments to spans and snap them cleanly
+    for (const sp of spans) {
+      const targetCoords =
+        sp.kind === 'h-top'
+          ? {
+              x1: sp.fixedX1 !== undefined ? sp.fixedX1 : xLeft,
+              y1: yTop,
+              x2: sp.fixedX2 !== undefined ? sp.fixedX2 : xRight,
+              y2: yTop,
+            }
+          : sp.kind === 'h-bot'
+          ? {
+              x1: sp.fixedX1 !== undefined ? sp.fixedX1 : xLeft,
+              y1: yBot,
+              x2: sp.fixedX2 !== undefined ? sp.fixedX2 : xRight,
+              y2: yBot,
+            }
+          : sp.kind === 'v-left'
+          ? { x1: xLeft, y1: yTop, x2: xLeft, y2: yBot }
+          : { x1: xRight, y1: yTop, x2: xRight, y2: yBot };
+
+      if (sp.kind === 'h-top' || sp.kind === 'h-bot') {
+        const sMinX = Math.min(targetCoords.x1, targetCoords.x2);
+        const sMaxX = Math.max(targetCoords.x1, targetCoords.x2);
+        const sLen = Math.max(1, sMaxX - sMinX);
+        const targetY = targetCoords.y1;
+        const otherY = sp.kind === 'h-top' ? yBot : yTop;
+
+        const match = rawExternalSegs.find((seg) => {
+          if (seg.used || seg.orientation !== 'h') return false;
+          if (Math.abs(seg.avgY - targetY) > 68) return false;
+          if (Math.abs(seg.avgY - targetY) > Math.abs(seg.avgY - otherY) + 8) return false;
+          const wMinX = Math.min(seg.x1, seg.x2);
+          const wMaxX = Math.max(seg.x1, seg.x2);
+          const overlap = Math.max(0, Math.min(sMaxX, wMaxX) - Math.max(sMinX, wMinX));
+          return overlap >= Math.min(18, sLen * 0.25);
+        });
+
+        if (match) {
+          match.used = true;
+          const wireId = `st-wire-ex-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`;
+          sp.existingStrokeId = wireId;
+          matchedWireStrokes.push({
+            id: wireId,
+            tool: 'pen',
+            color: match.stroke.color || '#111827',
+            width: match.stroke.width || 2.8,
+            opacity: 1,
+            layerId: match.stroke.layerId || defaultLayerId,
+            isShape: true,
+            shapeType: 'line',
+            points: [
+              { x: targetCoords.x1, y: targetCoords.y1, pressure: 0.7 },
+              {
+                x: targetCoords.x2,
+                y: targetCoords.y2,
+                cx: (targetCoords.x1 + targetCoords.x2) / 2,
+                cy: (targetCoords.y1 + targetCoords.y2) / 2,
+                pressure: 0.7,
+              },
+            ],
+          });
+        }
+      } else {
+        const targetX = targetCoords.x1;
+        const otherX = sp.kind === 'v-left' ? xRight : xLeft;
+        const sMinY = Math.min(yTop, yBot);
+        const sMaxY = Math.max(yTop, yBot);
+        const sLen = Math.max(1, sMaxY - sMinY);
+
+        const match = rawExternalSegs.find((seg) => {
+          if (seg.used || seg.orientation !== 'v') return false;
+          if (Math.abs(seg.avgX - targetX) > 68) return false;
+          if (Math.abs(seg.avgX - targetX) > Math.abs(seg.avgX - otherX) + 8) return false;
+          const wMinY = Math.min(seg.y1, seg.y2);
+          const wMaxY = Math.max(seg.y1, seg.y2);
+          const overlap = Math.max(0, Math.min(sMaxY, wMaxY) - Math.max(sMinY, wMinY));
+          return overlap >= Math.min(20, sLen * 0.25);
+        });
+
+        if (match) {
+          match.used = true;
+          const wireId = `st-wire-ex-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`;
+          sp.existingStrokeId = wireId;
+          matchedWireStrokes.push({
+            id: wireId,
+            tool: 'pen',
+            color: match.stroke.color || '#111827',
+            width: match.stroke.width || 2.8,
+            opacity: 1,
+            layerId: match.stroke.layerId || defaultLayerId,
+            isShape: true,
+            shapeType: 'line',
+            points: [
+              { x: targetCoords.x1, y: targetCoords.y1, pressure: 0.7 },
+              {
+                x: targetCoords.x2,
+                y: targetCoords.y2,
+                cx: (targetCoords.x1 + targetCoords.x2) / 2,
+                cy: (targetCoords.y1 + targetCoords.y2) / 2,
+                pressure: 0.7,
+              },
+            ],
+          });
+        }
+      }
+    }
+
+    const validSims = getValidCircuitSims(activePage);
+    const matchingExisting = validSims.find((sim) => {
+      const overlap = sim.strokeIds.filter((id) => expandedIdSet.has(id)).length;
+      return overlap >= Math.max(1, Math.min(sim.strokeIds.length, expandedIdSet.size) * 0.4);
+    });
+    const targetSimId =
+      matchingExisting?.id || `sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const targetSimName = matchingExisting?.name || getNextDefaultSimName(activePage);
+
+    const newSubStrokes = [...shiftedCompStrokes, ...matchedWireStrokes];
+    const newSubIds = newSubStrokes.map((s) => s.id);
+
+    setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+    setRedoStack([]);
+
+    updateActivePage((page) => {
+      const nextStrokes: StrokeObject[] = [];
+      let inserted = false;
+      for (const s of page.strokes) {
+        if (expandedIdSet.has(s.id)) {
+          if (!inserted) {
+            nextStrokes.push(...newSubStrokes);
+            inserted = true;
+          }
+          continue;
+        }
+        nextStrokes.push(s);
+      }
+      if (!inserted) {
+        nextStrokes.push(...newSubStrokes);
+      }
+
+      const curValid = getValidCircuitSims(page);
+      const nextSims = matchingExisting
+        ? curValid.map((sim) =>
+            sim.id === matchingExisting.id ? { ...sim, strokeIds: newSubIds } : sim
+          )
+        : [...curValid, { id: targetSimId, name: targetSimName, strokeIds: newSubIds }];
+
+      return {
+        ...page,
+        strokes: nextStrokes,
+        circuitSims: nextSims,
+        activeCircuitSimId: targetSimId,
+      };
+    });
+
+    setSelectedStrokeIds([]);
+    setSelectedImageId(null);
+    setSelectedImageIds([]);
+    setActiveNodeStrokeId(null);
+    setIsSimulating(false);
+
+    setCircuitProposal({
+      pageId: activePage.id,
+      simId: targetSimId,
+      simName: targetSimName,
+      colorMode,
+      xLeft,
+      xRight,
+      yTop,
+      yBot,
+      initialYTop: yTop,
+      initialYBot: yBot,
+      minCompLeftX,
+      maxCompRightX,
+      componentStrokeIds: shiftedCompStrokes.map((s) => s.id),
+      spans,
+      layerId: defaultLayerId,
+    });
+
+    showToast(
+      '✨ Πρόταση Ολοκλήρωσης: Σύρε τους 4 κόμβους γωνίας για ρύθμιση καλωδίων ή πάτα «✓ Αποδοχή»!'
+    );
+  };
+
+  const acceptCircuitCompletionProposal = () => {
+    if (!circuitProposal) return;
+    const prop = circuitProposal;
+
+    const createdWires: StrokeObject[] = [];
+    for (const sp of prop.spans) {
+      if (sp.existingStrokeId) continue;
+      const c = evalCircuitProposalSpan(prop, sp);
+      if (Math.hypot(c.x2 - c.x1, c.y2 - c.y1) < 4) continue;
+      createdWires.push({
+        id: `st-wire-comp-${Date.now()}-${sp.id}-${Math.random().toString(36).slice(2, 5)}`,
+        tool: 'pen',
+        color: '#111827',
+        width: 2.8,
+        opacity: 1,
+        layerId: prop.layerId,
+        isShape: true,
+        shapeType: 'line',
+        points: [
+          { x: Math.round(c.x1), y: Math.round(c.y1), pressure: 0.7 },
+          {
+            x: Math.round(c.x2),
+            y: Math.round(c.y2),
+            cx: Math.round((c.x1 + c.x2) / 2),
+            cy: Math.round((c.y1 + c.y2) / 2),
+            pressure: 0.7,
+          },
+        ],
+      });
+    }
+
+    const existingWireIds = prop.spans
+      .map((sp) => sp.existingStrokeId)
+      .filter((id): id is string => Boolean(id));
+    const allCircuitStrokeIds = [
+      ...prop.componentStrokeIds,
+      ...existingWireIds,
+      ...createdWires.map((w) => w.id),
+    ];
+
+    updateActivePage((page) => {
+      const nextStrokes = [...page.strokes, ...createdWires];
+      const curValid = getValidCircuitSims(page);
+      const exists = curValid.some((s) => s.id === prop.simId);
+      const nextSims = exists
+        ? curValid.map((s) =>
+            s.id === prop.simId ? { ...s, strokeIds: allCircuitStrokeIds } : s
+          )
+        : [
+            ...curValid,
+            { id: prop.simId, name: prop.simName, strokeIds: allCircuitStrokeIds },
+          ];
+      return {
+        ...page,
+        strokes: nextStrokes,
+        circuitSims: nextSims,
+        activeCircuitSimId: prop.simId,
+      };
+    });
+
+    setCircuitProposal(null);
+    proposalOverlayHitRef.current = null;
+    draggingProposalCornerRef.current = null;
+    setSimCircuitSwitchClosed(false);
+    setIsSimulating(true);
+    setCircuitAlignFlashStart(performance.now());
+    showToast(`✅ [${prop.simName}] Το κύκλωμα ολοκληρώθηκε! Πάτησε τον διακόπτη για ροή ρεύματος.`);
+  };
+
+  const cancelCircuitCompletionProposal = () => {
+    setCircuitProposal(null);
+    proposalOverlayHitRef.current = null;
+    draggingProposalCornerRef.current = null;
+    showToast('✕ Η πρόταση ολοκλήρωσης ακυρώθηκε.');
+  };
+
   // ============================================================================
   // 60FPS / 120FPS INTERACTIVE CIRCUIT SIMULATION OVERLAY ENGINE
   // ============================================================================
@@ -8746,8 +9380,10 @@ export default function App() {
 
     const activeSim = getActiveCircuitSim(activePage);
     const hasAlignFlash = circuitAlignFlashStart !== null;
-    if ((!isSimulating && !hasAlignFlash) || !activeSim) {
+    const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
+    if (!hasProposal && ((!isSimulating && !hasAlignFlash) || !activeSim)) {
       autoSwitchHitRef.current = null;
+      proposalOverlayHitRef.current = null;
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
       return;
@@ -8756,13 +9392,13 @@ export default function App() {
     const visibleLayerIds = new Set(
       activePage.layers.filter((l) => l.visible).map((l) => l.id)
     );
-    const activeSimSet = getSimExpandedStrokeSet(activePage, activeSim);
+    const activeSimSet = activeSim ? getSimExpandedStrokeSet(activePage, activeSim) : new Set<string>();
     const visibleStrokes = activePage.strokes.filter(
       (s) => visibleLayerIds.has(s.layerId) && activeSimSet.has(s.id)
     );
     const simData = analyzeCircuitForSimulation(visibleStrokes, simCircuitSwitchClosed);
     autoSwitchHitRef.current =
-      isSimulating && simData.autoSwitch
+      !hasProposal && isSimulating && simData.autoSwitch
         ? {
             x: simData.autoSwitch.x,
             yCenter: simData.autoSwitch.yCenter,
@@ -8827,6 +9463,201 @@ export default function App() {
         } else {
           setCircuitAlignFlashStart(null);
         }
+      }
+
+      // 0B. Interactive Circuit Auto-Completion Proposal ("✨ Ολοκλήρωση"):
+      //     - Case 1 (partial wires exist): Red Dashed (#ef4444) missing wires + proposed Switch
+      //     - Case 2 (only components selected): Green Dashed (#16a34a) complete loop + proposed Switch
+      //     - 4 Draggable Corner Nodes (tl, tr, br, bl) that slide horizontal/vertical wires without moving components
+      //     - On-Diagram "✓ Αποδοχή" check button + "✕" cancel button
+      if (circuitProposal && circuitProposal.pageId === activePage.id) {
+        const prop = circuitProposal;
+        const dashColor = prop.colorMode === 'red' ? '#ef4444' : '#16a34a';
+        const swX = prop.xLeft;
+        const swYCenter = (prop.yTop + prop.yBot) / 2;
+        const swHalfGap = Math.min(21, Math.max(14, Math.abs(prop.yBot - prop.yTop) * 0.18));
+        const swYTop = swYCenter - swHalfGap;
+        const swYBot = swYCenter + swHalfGap;
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // 1. Draw proposed dashed wire spans (or if v-left is already an existing solid wire, mask its switch gap)
+        for (const sp of prop.spans) {
+          if (sp.existingStrokeId) {
+            if (sp.id === 'v-left') {
+              const paperBg = activePage.template === 'dark-grid' ? '#0f172a' : '#fffdf7';
+              ctx.save();
+              ctx.strokeStyle = paperBg;
+              ctx.lineWidth = 10;
+              ctx.lineCap = 'butt';
+              ctx.beginPath();
+              ctx.moveTo(swX, swYTop + 2);
+              ctx.lineTo(swX, swYBot - 2);
+              ctx.stroke();
+              ctx.restore();
+            }
+            continue;
+          }
+          const c = evalCircuitProposalSpan(prop, sp);
+          ctx.save();
+          ctx.strokeStyle = dashColor;
+          ctx.lineWidth = 3.2;
+          ctx.setLineDash([9, 7]);
+          ctx.beginPath();
+          if (sp.id === 'v-left') {
+            ctx.moveTo(c.x1, c.y1);
+            ctx.lineTo(c.x1, swYTop);
+            ctx.moveTo(c.x1, swYBot);
+            ctx.lineTo(c.x2, c.y2);
+          } else {
+            ctx.moveTo(c.x1, c.y1);
+            ctx.lineTo(c.x2, c.y2);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 2. Draw Proposed Switch on the Left Vertical Wire (with tilted blade & red knob 🔴)
+        for (const ty of [swYTop, swYBot]) {
+          ctx.beginPath();
+          ctx.arc(swX, ty, 5.8, 0, Math.PI * 2);
+          ctx.fillStyle = '#334155';
+          ctx.fill();
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        }
+        const bladeTipX = swX + 27;
+        const bladeTipY = swYTop + 4;
+        ctx.save();
+        ctx.strokeStyle = dashColor;
+        ctx.lineWidth = 3.6;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(swX, swYBot);
+        ctx.lineTo(bladeTipX, bladeTipY);
+        ctx.stroke();
+        ctx.restore();
+
+        const knobX = swX + 16.5;
+        const knobY = (swYBot + bladeTipY) / 2;
+        ctx.beginPath();
+        ctx.arc(knobX, knobY, 8.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#fecaca';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+
+        // 3. Draw 4 Draggable Corner Nodes (TL, TR, BR, BL) to slide horizontal/vertical wires
+        const corners = {
+          tl: { x: prop.xLeft, y: prop.yTop },
+          tr: { x: prop.xRight, y: prop.yTop },
+          br: { x: prop.xRight, y: prop.yBot },
+          bl: { x: prop.xLeft, y: prop.yBot },
+        };
+        for (const [cKey, cPt] of Object.entries(corners) as [
+          'tl' | 'tr' | 'br' | 'bl',
+          { x: number; y: number }
+        ][]) {
+          const isDraggingThis = draggingProposalCornerRef.current === cKey;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cPt.x, cPt.y, isDraggingThis ? 15 : 13, 0, Math.PI * 2);
+          ctx.fillStyle = isDraggingThis
+            ? 'rgba(37, 99, 235, 0.24)'
+            : prop.colorMode === 'red'
+            ? 'rgba(239, 68, 68, 0.16)'
+            : 'rgba(22, 163, 74, 0.16)';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(cPt.x, cPt.y, 9.2, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = isDraggingThis ? '#2563eb' : dashColor;
+          ctx.lineWidth = 2.6;
+          ctx.stroke();
+
+          // 4-way wire-sliding crosshair inside corner node
+          ctx.strokeStyle = isDraggingThis ? '#2563eb' : '#334155';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(cPt.x - 4.2, cPt.y);
+          ctx.lineTo(cPt.x + 4.2, cPt.y);
+          ctx.moveTo(cPt.x, cPt.y - 4.2);
+          ctx.lineTo(cPt.x, cPt.y + 4.2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 4. Draw On-Diagram Check Button ("✓ Αποδοχή") + Cancel ("✕") inside the circuit loop
+        const midX = (prop.xLeft + prop.xRight) / 2;
+        const midY = (prop.yTop + prop.yBot) / 2;
+        const pillW = 116;
+        const pillH = 34;
+        const pillX = midX - (pillW + 38) / 2;
+        const pillY = midY - pillH / 2;
+        const cancelX = pillX + pillW + 22;
+        const cancelY = midY;
+        const cancelR = 16;
+
+        proposalOverlayHitRef.current = {
+          acceptBox: { x1: pillX, y1: pillY, x2: pillX + pillW, y2: pillY + pillH },
+          cancelPt: { x: cancelX, y: cancelY, r: cancelR },
+          corners,
+        };
+
+        // Green Accept Pill ("✓ Αποδοχή")
+        ctx.save();
+        ctx.shadowColor = 'rgba(22, 163, 74, 0.35)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 2;
+        ctx.fillStyle = '#16a34a';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, 17);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✓ Αποδοχή', pillX + pillW / 2, pillY + pillH / 2 + 0.5);
+        ctx.restore();
+
+        // Cancel Circle ("✕")
+        ctx.save();
+        ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetY = 1.5;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.arc(cancelX, cancelY, cancelR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(cancelX - 4.8, cancelY - 4.8);
+        ctx.lineTo(cancelX + 4.8, cancelY + 4.8);
+        ctx.moveTo(cancelX + 4.8, cancelY - 4.8);
+        ctx.lineTo(cancelX - 4.8, cancelY + 4.8);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.restore();
+      } else {
+        proposalOverlayHitRef.current = null;
       }
 
       if (!isSimulating) {
@@ -9170,7 +10001,9 @@ export default function App() {
   }, [
     isSimulating,
     circuitAlignFlashStart,
+    circuitProposal,
     simCircuitSwitchClosed,
+    activePage.id,
     activePage.strokes,
     activePage.layers,
     activePage.template,
@@ -11776,6 +12609,50 @@ export default function App() {
       penTapTrackRef.current = null;
     }
 
+    // 0a-0. Interactive Circuit Completion Proposal ("✨ Ολοκλήρωση"):
+    //       1-Tap on "✓ Αποδοχή" check button, "✕" cancel button, or drag any of the 4 Corner Nodes (tl, tr, br, bl)!
+    if (circuitProposal && circuitProposal.pageId === targetPage.id && proposalOverlayHitRef.current) {
+      const hit = proposalOverlayHitRef.current;
+      if (
+        pt.x >= hit.acceptBox.x1 - 6 &&
+        pt.x <= hit.acceptBox.x2 + 6 &&
+        pt.y >= hit.acceptBox.y1 - 6 &&
+        pt.y <= hit.acceptBox.y2 + 6
+      ) {
+        e.preventDefault();
+        acceptCircuitCompletionProposal();
+        isDrawingRef.current = false;
+        activePointerIdRef.current = null;
+        activePointerTypeRef.current = null;
+        return;
+      }
+      if (Math.hypot(pt.x - hit.cancelPt.x, pt.y - hit.cancelPt.y) <= hit.cancelPt.r + 8) {
+        e.preventDefault();
+        cancelCircuitCompletionProposal();
+        isDrawingRef.current = false;
+        activePointerIdRef.current = null;
+        activePointerTypeRef.current = null;
+        return;
+      }
+      const cornerOrder: ('tl' | 'tr' | 'br' | 'bl')[] = ['tl', 'tr', 'br', 'bl'];
+      for (const cKey of cornerOrder) {
+        const cPt = hit.corners[cKey];
+        if (Math.hypot(pt.x - cPt.x, pt.y - cPt.y) <= 30) {
+          e.preventDefault();
+          draggingProposalCornerRef.current = cKey;
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
+          return;
+        }
+      }
+    }
+
     // 0a. Instant 1-Tap Circuit Switch Toggle on the Automatic Left Vertical Wire Switch (or any manual switch)!
     if (isSimulating && autoSwitchHitRef.current) {
       const sw = autoSwitchHitRef.current;
@@ -13424,6 +14301,105 @@ export default function App() {
       if (distFromStart > penTapTrackRef.current.maxDist) {
         penTapTrackRef.current.maxDist = distFromStart;
       }
+    }
+
+    // 0-prop. Interactive 4-Corner Wire Sliding for Circuit Completion Proposal ("✨ Ολοκλήρωση"):
+    //         Moves ONLY the horizontal/vertical wire lines (both proposed dashed & existing solid) while keeping components stationary!
+    if (draggingProposalCornerRef.current && circuitProposal && circuitProposal.pageId === activePage.id) {
+      const corner = draggingProposalCornerRef.current;
+      const prop = circuitProposal;
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+
+      let nextXLeft = prop.xLeft;
+      let nextXRight = prop.xRight;
+      let nextYTop = prop.yTop;
+      let nextYBot = prop.yBot;
+
+      if (corner === 'tl' || corner === 'bl') {
+        nextXLeft = Math.round(
+          Math.max(20, Math.min(prop.minCompLeftX - 24, latestPt.x))
+        );
+      }
+      if (corner === 'tr' || corner === 'br') {
+        nextXRight = Math.round(
+          Math.min(pW - 20, Math.max(prop.maxCompRightX + 24, latestPt.x))
+        );
+      }
+      if (corner === 'tl' || corner === 'tr') {
+        nextYTop = Math.round(
+          Math.max(
+            24,
+            Math.min(
+              prop.yBot - 60,
+              Math.max(prop.initialYTop - 36, Math.min(prop.initialYTop + 36, latestPt.y))
+            )
+          )
+        );
+      }
+      if (corner === 'bl' || corner === 'br') {
+        nextYBot = Math.round(
+          Math.min(
+            pH - 24,
+            Math.max(
+              prop.yTop + 60,
+              Math.max(prop.initialYBot - 36, Math.min(prop.initialYBot + 36, latestPt.y))
+            )
+          )
+        );
+      }
+
+      if (
+        nextXLeft === prop.xLeft &&
+        nextXRight === prop.xRight &&
+        nextYTop === prop.yTop &&
+        nextYBot === prop.yBot
+      ) {
+        return;
+      }
+
+      const nextProp = {
+        ...prop,
+        xLeft: nextXLeft,
+        xRight: nextXRight,
+        yTop: nextYTop,
+        yBot: nextYBot,
+      };
+      setCircuitProposal(nextProp);
+
+      // Update any existing solid wire strokes bound to the rectangle spans so they slide together with the dashed wires!
+      const spanMap = new Map<string, { x1: number; y1: number; x2: number; y2: number }>();
+      for (const sp of nextProp.spans) {
+        if (sp.existingStrokeId) {
+          spanMap.set(sp.existingStrokeId, evalCircuitProposalSpan(nextProp, sp));
+        }
+      }
+      if (spanMap.size > 0) {
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: page.strokes.map((s) => {
+              const coords = spanMap.get(s.id);
+              if (!coords) return s;
+              return {
+                ...s,
+                points: [
+                  { x: coords.x1, y: coords.y1, pressure: 0.7 },
+                  {
+                    x: coords.x2,
+                    y: coords.y2,
+                    cx: (coords.x1 + coords.x2) / 2,
+                    cy: (coords.y1 + coords.y2) / 2,
+                    pressure: 0.7,
+                  },
+                ],
+              };
+            }),
+          }),
+          false
+        );
+      }
+      return;
     }
 
     // 0. Wave Axes ('wave-axes') Interactive Dashed Guide Dragging:
@@ -15764,6 +16740,12 @@ export default function App() {
     cancelAddNodeLongPress();
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
+
+    if (draggingProposalCornerRef.current) {
+      draggingProposalCornerRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
 
     if (waveGuideDragRef.current) {
       waveGuideDragRef.current = null;
@@ -24193,6 +25175,34 @@ export default function App() {
                   >
                     <span>📐 Ένωση & Ευθυγράμμιση Αγωγών</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStartCircuitCompletion()}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[10.5px] flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                    title="Προτείνει αυτόματη ολοκλήρωση του κυκλώματος με διακεκομμένη γραμμή, διακόπτη και 4 κόμβους ρύθμισης καλωδίων"
+                  >
+                    <span>✨ Ολοκλήρωση</span>
+                  </button>
+                  {circuitProposal && circuitProposal.pageId === activePage.id && (
+                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => acceptCircuitCompletionProposal()}
+                        className="py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                        title="Αποδοχή του προτεινόμενου κυκλώματος"
+                      >
+                        <span>✓ Αποδοχή</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => cancelCircuitCompletionProposal()}
+                        className="py-1.5 px-2 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-[10.5px] flex items-center justify-center gap-1 transition cursor-pointer"
+                        title="Ακύρωση πρότασης ολοκλήρωσης"
+                      >
+                        <span>✕ Ακύρωση</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 1-Click Scoped Circuit View Conversion: "Σχήματα" <-> "Σύμβολα" */}
