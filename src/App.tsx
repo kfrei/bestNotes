@@ -23815,7 +23815,7 @@ export default function App() {
                       setIsSimulating(false);
                     }
                   }}
-                  className={`w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer ${
+                  className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
                     isSimulating && getActiveCircuitSim(activePage)
                       ? 'bg-rose-600 hover:bg-rose-700 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -23823,8 +23823,8 @@ export default function App() {
                 >
                   <span>
                     {isSimulating && getActiveCircuitSim(activePage)
-                      ? '⏹️ Διακοπή Προσομοίωσης (Stop)'
-                      : '▶️ Εκκίνηση Προσομοίωσης (Play)'}
+                      ? '⏹️ Διακοπή'
+                      : '▶️ Έναρξη'}
                   </span>
                 </button>
 
