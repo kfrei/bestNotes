@@ -4899,9 +4899,12 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     points: s.points.map((p) => ({ ...p })),
   }));
 
-  // 0. Auto-upgrade any legacy 4-point diamond 'fan' component on the page to the new round grey circle + solid blue blades fan!
+  // 0. Strip any legacy M-shaped bulb filament strokes ('-bulb-fil' or 5-point bulb filament) and auto-upgrade fan components
+  currentStrokes = currentStrokes.filter(
+    (s) => !(s.id.includes('-bulb-fil') || (s.shapeType === 'bulb' && s.points.length === 5))
+  );
   const preComps = getCircuitComponentsWithTerminals(currentStrokes);
-  if (preComps.length === 0) return strokes;
+  if (preComps.length === 0) return currentStrokes;
 
   for (const comp of preComps) {
     if (comp.kind === 'fan') {
@@ -5188,13 +5191,26 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     }
 
     // Re-snap merged interval endpoints to nearby component terminals (<= CLOSE_SNAP_TOL)
+    // and trim any endpoint that overlaps inside [c.leftTerm.x, c.rightTerm.x]
     for (let mIdx = 0; mIdx < merged.length; mIdx++) {
       const m = merged[mIdx];
       for (const c of rowComps) {
-        if (Math.abs(m.xL - c.rightTerm.x) <= CLOSE_SNAP_TOL && m.xR > c.rightTerm.x + 6) {
+        if (m.xL >= c.leftTerm.x - 4 && m.xR <= c.rightTerm.x + 4) {
+          m.xR = m.xL;
+          break;
+        }
+        if (
+          (Math.abs(m.xL - c.rightTerm.x) <= CLOSE_SNAP_TOL ||
+            (m.xL >= c.leftTerm.x - 4 && m.xL <= c.rightTerm.x)) &&
+          m.xR > c.rightTerm.x + 4
+        ) {
           m.xL = c.rightTerm.x;
         }
-        if (Math.abs(m.xR - c.leftTerm.x) <= CLOSE_SNAP_TOL && m.xL < c.leftTerm.x - 6) {
+        if (
+          (Math.abs(m.xR - c.leftTerm.x) <= CLOSE_SNAP_TOL ||
+            (m.xR >= c.leftTerm.x && m.xR <= c.rightTerm.x + 4)) &&
+          m.xL < c.leftTerm.x - 4
+        ) {
           m.xR = c.leftTerm.x;
         }
       }
@@ -5399,7 +5415,7 @@ export function convertCircuitComponents(
 
     let replacement: StrokeObject[] = [];
     if (targetKind === 'resistor') {
-      const rw = Math.max(72, comp.w * 1.15);
+      const rw = Math.max(84, Math.min(180, comp.w));
       const rh = Math.max(34, Math.min(48, comp.h * 0.48));
       const rx = comp.cx - rw / 2;
       const ry = comp.leftTerm.y - rh / 2;
@@ -5422,7 +5438,7 @@ export function convertCircuitComponents(
       };
       replacement = [resStroke];
     } else if (targetKind === 'fan') {
-      const fw = Math.max(92, comp.w * 1.15);
+      const fw = Math.max(96, Math.min(180, comp.w));
       const fh = Math.max(72, fw * 0.78);
       const fx = comp.cx - fw / 2;
       const fy = comp.leftTerm.y - fh / 2;
@@ -5436,8 +5452,8 @@ export function convertCircuitComponents(
         comp.layerId
       );
     } else if (targetKind === 'bulb') {
-      const bw = Math.max(54, comp.w * 0.74);
-      const bh = Math.max(78, bw * 1.35);
+      const bw = Math.max(68, Math.min(130, comp.w));
+      const bh = Math.max(84, bw * 1.32);
       const bx = comp.cx - bw / 2;
       const by = comp.leftTerm.y - bh * 0.8;
       replacement = createPhysicsStencilStrokes(
@@ -5450,8 +5466,8 @@ export function convertCircuitComponents(
         comp.layerId
       );
     } else if (targetKind === 'voltage-source') {
-      const vw = Math.max(110, comp.w * 0.82);
-      const vh = Math.max(66, comp.h * 1.15);
+      const vw = Math.max(120, Math.min(200, comp.w));
+      const vh = Math.max(66, Math.min(96, comp.h * 1.05));
       const vx = comp.cx - vw / 2;
       const vy = comp.leftTerm.y - vh / 2;
       replacement = createPhysicsStencilStrokes(
@@ -5464,8 +5480,8 @@ export function convertCircuitComponents(
         comp.layerId
       );
     } else if (targetKind === 'battery') {
-      const batW = Math.max(150, comp.w * 1.22);
-      const batH = Math.max(58, comp.h * 0.88);
+      const batW = Math.max(140, Math.min(200, comp.w));
+      const batH = Math.max(60, Math.min(86, comp.h * 0.95));
       const batX = comp.cx - batW / 2;
       const batY = comp.leftTerm.y - batH / 2;
       replacement = createPhysicsStencilStrokes(
@@ -6164,8 +6180,8 @@ export function analyzeCircuitForSimulation(
     }
   });
 
-  // Also add the built-in horizontal lead wires of active Fan, Voltage-Source, and Switch components
-  // so electrons flow all the way up to the Fan circle / Source plates / Switch pivots with zero gaps!
+  // Also add the built-in horizontal lead wires of active Fan, Voltage-Source, Resistor, Battery, and Switch components
+  // so electrons flow all the way across Resistors, next to the Fan circle, and next to the Voltage Source plates with zero gaps!
   if (anyClosedLoop) {
     const addComponentLeadSegment = (
       lx1: number,
@@ -6178,11 +6194,11 @@ export function analyzeCircuitForSimulation(
       if (len < 8) return;
       const midX = (lx1 + lx2) / 2;
       const midY = (ly1 + ly2) / 2;
-      // Avoid duplicating if a user-drawn wire already covers this lead segment
+      // Avoid duplicating if a wire segment already covers this exact midpoint
       const alreadyCovered = simulatedWires.some(
         (sw) =>
           sw.inClosedLoop &&
-          pointToSegmentDist(midX, midY, sw.x1, sw.y1, sw.x2, sw.y2) <= 10
+          pointToSegmentDist(midX, midY, sw.x1, sw.y1, sw.x2, sw.y2) <= 8
       );
       if (alreadyCovered) return;
       const active = circuitSwitchClosed;
@@ -6216,7 +6232,10 @@ export function analyzeCircuitForSimulation(
 
     for (const cn of compNodes) {
       const c = cn.comp;
-      if (c.kind === 'fan' && compInLoop.has(c.key)) {
+      if (c.kind === 'resistor' && compInLoop.has(c.key)) {
+        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
+        addComponentLeadSegment(c.minX, c.cy, c.maxX, c.cy, flow);
+      } else if (c.kind === 'fan' && compInLoop.has(c.key)) {
         const rOuter = Math.max(20, Math.min(c.w * 0.36, c.h * 0.45));
         const flow = compSignedFlowMap.get(c.key) ?? 0.85;
         addComponentLeadSegment(c.minX, c.cy, c.cx - rOuter, c.cy, flow);
@@ -6226,11 +6245,72 @@ export function analyzeCircuitForSimulation(
         // Conventional current leaves (+) on the left (cx - plateGap/2 -> minX) and enters (-) on the right (maxX -> cx + plateGap/2)
         addComponentLeadSegment(c.cx - plateGap / 2, c.cy, c.minX, c.cy, 0.85);
         addComponentLeadSegment(c.maxX, c.cy, c.cx + plateGap / 2, c.cy, 0.85);
+      } else if (c.kind === 'battery') {
+        const batCapLeftX = c.minX + c.w * 0.16;
+        const batBodyRightX = c.maxX - c.w * 0.16;
+        addComponentLeadSegment(batCapLeftX, c.cy, c.minX, c.cy, 0.85);
+        addComponentLeadSegment(c.maxX, c.cy, batBodyRightX, c.cy, 0.85);
       } else if (c.kind === 'switch' && compInLoop.has(c.key)) {
         const wireY = c.minY + c.h * 0.68;
         const flow = compSignedFlowMap.get(c.key) ?? 0.85;
         addComponentLeadSegment(c.minX, wireY, c.minX + c.w * 0.26, wireY, flow);
         addComponentLeadSegment(c.minX + c.w * 0.74, wireY, c.maxX, wireY, flow);
+      }
+    }
+
+    // Merge contiguous collinear horizontal segments that touch/overlap along the same row and flow in the same direction
+    // so electrons march at a 100% uniform 32px spacing across wires, fan leads, resistors, and source leads!
+    let mergedAny = true;
+    while (mergedAny) {
+      mergedAny = false;
+      for (let i = 0; i < simulatedWires.length; i++) {
+        const a = simulatedWires[i];
+        if (!a.inClosedLoop) continue;
+        const dax = a.x2 - a.x1;
+        const day = a.y2 - a.y1;
+        if (Math.abs(day) > Math.abs(dax) * 0.2 || Math.abs(dax) < 4) continue;
+        const dirA = dax >= 0 ? 1 : -1;
+        const yA = (a.y1 + a.y2) / 2;
+        const minAx = Math.min(a.x1, a.x2);
+        const maxAx = Math.max(a.x1, a.x2);
+
+        for (let j = i + 1; j < simulatedWires.length; j++) {
+          const b = simulatedWires[j];
+          if (!b.inClosedLoop) continue;
+          const dbx = b.x2 - b.x1;
+          const dby = b.y2 - b.y1;
+          if (Math.abs(dby) > Math.abs(dbx) * 0.2 || Math.abs(dbx) < 4) continue;
+          const dirB = dbx >= 0 ? 1 : -1;
+          if (dirA !== dirB) continue;
+          const yB = (b.y1 + b.y2) / 2;
+          if (Math.abs(yA - yB) > 8) continue;
+
+          const minBx = Math.min(b.x1, b.x2);
+          const maxBx = Math.max(b.x1, b.x2);
+          const gap = Math.max(minAx, minBx) - Math.min(maxAx, maxBx);
+          if (gap <= 14) {
+            const newMinX = Math.min(minAx, minBx);
+            const newMaxX = Math.max(maxAx, maxBx);
+            const newY = (yA + yB) / 2;
+            const newLen = newMaxX - newMinX;
+            const avgSpeed = (a.currentSpeed * a.length + b.currentSpeed * b.length) / Math.max(1, a.length + b.length);
+            simulatedWires[i] = {
+              x1: dirA > 0 ? newMinX : newMaxX,
+              y1: newY,
+              x2: dirA > 0 ? newMaxX : newMinX,
+              y2: newY,
+              length: newLen,
+              inClosedLoop: true,
+              active: a.active || b.active,
+              currentSpeed: avgSpeed,
+              highEnergy: a.highEnergy || b.highEnergy,
+            };
+            simulatedWires.splice(j, 1);
+            mergedAny = true;
+            break;
+          }
+        }
+        if (mergedAny) break;
       }
     }
   }

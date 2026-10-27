@@ -4793,6 +4793,10 @@ export default function App() {
           const s = entry.stroke;
           const layer = visibleLayerMap.get(s.layerId);
           if (layer && !layer.visible) continue;
+          // Never render legacy M-shaped bulb filament strokes ('-bulb-fil' or 5-point bulb filament)
+          if (s.id.includes('-bulb-fil') || (s.shapeType === 'bulb' && s.points.length === 5)) {
+            continue;
+          }
           // While simulation is running, hide all static Fan strokes so only the clean animated round Fan renders with zero background remnant!
           if (
             isSimulating &&
