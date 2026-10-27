@@ -1018,7 +1018,7 @@ export default function App() {
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
   const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(false);
-  const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs'>('circuits');
+  const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs' | null>(null);
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(false);
   const [editingSpringSimId, setEditingSpringSimId] = useState<string | null>(null);
@@ -24319,66 +24319,7 @@ export default function App() {
                   setShowSimulationPanel((v) => {
                     const next = !v;
                     if (next) {
-                      const existingSpringSim = getActiveSpringSim(activePage);
-                      const existingCircuitSim = getActiveCircuitSim(activePage);
-                      if (existingSpringSim && !existingCircuitSim) {
-                        setSimActiveCategory('springs');
-                        return next;
-                      }
-                      if (!isSimulating) {
-                        if (existingCircuitSim) {
-                          setSimCircuitSwitchClosed(false);
-                          setIsSimulating(true);
-                          updateActivePage((page) =>
-                            runScopedCircuitOperationOnPage(
-                              page,
-                              (sub) => autoAlignAndConnectCircuit(sub),
-                              existingCircuitSim.id
-                            )
-                          );
-                        } else {
-                          // If no sim is registered yet, check if there is a closed circuit on the page and auto-register sim01 without any selection box!
-                          const firstSource = activePage.strokes.find(
-                            (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
-                          );
-                          if (firstSource) {
-                            const seedSim: CircuitSimConfig = {
-                              id: `sim-${Date.now()}-auto`,
-                              name: getNextDefaultSimName(activePage),
-                              strokeIds: [firstSource.id],
-                            };
-                            const connectedSet = getSimExpandedStrokeSet(activePage, seedSim);
-                            const subStrokes = activePage.strokes.filter((s) => connectedSet.has(s.id));
-                            const alignedSub = autoAlignAndConnectCircuit(subStrokes);
-                            if (analyzeCircuitForSimulation(alignedSub, true).isCircuitClosed) {
-                              const alignedIds = alignedSub.map((s) => s.id);
-                              updateActivePage((page) => {
-                                const nextStrokes: StrokeObject[] = [];
-                                let inserted = false;
-                                for (const s of page.strokes) {
-                                  if (connectedSet.has(s.id)) {
-                                    if (!inserted) {
-                                      nextStrokes.push(...alignedSub);
-                                      inserted = true;
-                                    }
-                                    continue;
-                                  }
-                                  nextStrokes.push(s);
-                                }
-                                if (!inserted) nextStrokes.push(...alignedSub);
-                                return {
-                                  ...page,
-                                  strokes: nextStrokes,
-                                  circuitSims: [{ id: seedSim.id, name: seedSim.name, strokeIds: alignedIds }],
-                                  activeCircuitSimId: seedSim.id,
-                                };
-                              });
-                              setSimCircuitSwitchClosed(false);
-                              setIsSimulating(true);
-                            }
-                          }
-                        }
-                      }
+                      setSimActiveCategory(null);
                     }
                     return next;
                   });
@@ -27071,7 +27012,64 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200/80">
                   <button
                     type="button"
-                    onClick={() => setSimActiveCategory('circuits')}
+                    onClick={() => {
+                      const nextCat = simActiveCategory === 'circuits' ? null : 'circuits';
+                      setSimActiveCategory(nextCat);
+                      if (nextCat === 'circuits' && !isSimulating) {
+                        const existingCircuitSim = getActiveCircuitSim(activePage);
+                        if (existingCircuitSim) {
+                          setSimCircuitSwitchClosed(false);
+                          setIsSimulating(true);
+                          updateActivePage((page) =>
+                            runScopedCircuitOperationOnPage(
+                              page,
+                              (sub) => autoAlignAndConnectCircuit(sub),
+                              existingCircuitSim.id
+                            )
+                          );
+                        } else {
+                          const firstSource = activePage.strokes.find(
+                            (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+                          );
+                          if (firstSource) {
+                            const seedSim: CircuitSimConfig = {
+                              id: `sim-${Date.now()}-auto`,
+                              name: getNextDefaultSimName(activePage),
+                              strokeIds: [firstSource.id],
+                            };
+                            const connectedSet = getSimExpandedStrokeSet(activePage, seedSim);
+                            const subStrokes = activePage.strokes.filter((s) => connectedSet.has(s.id));
+                            const alignedSub = autoAlignAndConnectCircuit(subStrokes);
+                            if (analyzeCircuitForSimulation(alignedSub, true).isCircuitClosed) {
+                              const alignedIds = alignedSub.map((s) => s.id);
+                              updateActivePage((page) => {
+                                const nextStrokes: StrokeObject[] = [];
+                                let inserted = false;
+                                for (const s of page.strokes) {
+                                  if (connectedSet.has(s.id)) {
+                                    if (!inserted) {
+                                      nextStrokes.push(...alignedSub);
+                                      inserted = true;
+                                    }
+                                    continue;
+                                  }
+                                  nextStrokes.push(s);
+                                }
+                                if (!inserted) nextStrokes.push(...alignedSub);
+                                return {
+                                  ...page,
+                                  strokes: nextStrokes,
+                                  circuitSims: [{ id: seedSim.id, name: seedSim.name, strokeIds: alignedIds }],
+                                  activeCircuitSimId: seedSim.id,
+                                };
+                              });
+                              setSimCircuitSwitchClosed(false);
+                              setIsSimulating(true);
+                            }
+                          }
+                        }
+                      }
+                    }}
                     className={`py-1.5 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                       simActiveCategory === 'circuits'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
@@ -27083,7 +27081,9 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSimActiveCategory('springs')}
+                    onClick={() =>
+                      setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
+                    }
                     className={`py-1.5 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                       simActiveCategory === 'springs'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
@@ -27622,7 +27622,7 @@ export default function App() {
                   </div>
                 </div>
                   </>
-                ) : (
+                ) : simActiveCategory === 'springs' ? (
                   /* ==========================================================
                      TAB 2: "🌀 ΕΛΑΤΗΡΙΑ" (Harmonic Oscillation & Live Graphs)
                      ========================================================== */
@@ -28093,7 +28093,7 @@ export default function App() {
                       </div>
                     );
                   })()
-                )}
+                ) : null}
               </div>
             )}
 
