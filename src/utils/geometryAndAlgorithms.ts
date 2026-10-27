@@ -4618,25 +4618,113 @@ function classifyCircuitStrokeKind(s: StrokeObject): CircuitComponentKind | null
 export function getCircuitComponentsWithTerminals(
   strokes: StrokeObject[]
 ): CircuitComponentInfo[] {
-  const groups = new Map<
-    string,
-    { kind: CircuitComponentKind; strokes: StrokeObject[] }
-  >();
+  interface CompCandidate {
+    stroke: StrokeObject;
+    kind: CircuitComponentKind;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  }
 
+  // Detect whether a groupId is a dedicated single-component group or a macro "sim group" (shared across multiple component kinds or wires)
+  const groupKinds = new Map<string, Set<CircuitComponentKind>>();
+  const groupHasWire = new Set<string>();
   for (const s of strokes) {
+    if (!s.groupId) continue;
     const kind = classifyCircuitStrokeKind(s);
-    if (!kind) continue;
-    const key = s.groupId || s.id;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.strokes.push(s);
+    if (kind) {
+      let set = groupKinds.get(s.groupId);
+      if (!set) {
+        set = new Set();
+        groupKinds.set(s.groupId, set);
+      }
+      set.add(kind);
     } else {
-      groups.set(key, { kind, strokes: [s] });
+      groupHasWire.add(s.groupId);
     }
   }
 
+  const candidates: CompCandidate[] = [];
+  for (const s of strokes) {
+    const kind = classifyCircuitStrokeKind(s);
+    if (!kind) continue;
+    let sMinX = Infinity,
+      sMinY = Infinity,
+      sMaxX = -Infinity,
+      sMaxY = -Infinity;
+    for (const p of s.points) {
+      if (p.x < sMinX) sMinX = p.x;
+      if (p.y < sMinY) sMinY = p.y;
+      if (p.x > sMaxX) sMaxX = p.x;
+      if (p.y > sMaxY) sMaxY = p.y;
+    }
+    if (!Number.isFinite(sMinX)) continue;
+    candidates.push({
+      stroke: s,
+      kind,
+      minX: sMinX,
+      minY: sMinY,
+      maxX: sMaxX,
+      maxY: sMaxY,
+    });
+  }
+
+  const visited = new Uint8Array(candidates.length);
+  const clusters: { key: string; kind: CircuitComponentKind; strokes: StrokeObject[] }[] = [];
+
+  for (let i = 0; i < candidates.length; i++) {
+    if (visited[i]) continue;
+    visited[i] = 1;
+    const seed = candidates[i];
+    const clusterStrokes: StrokeObject[] = [seed.stroke];
+    let cMinX = seed.minX;
+    let cMinY = seed.minY;
+    let cMaxX = seed.maxX;
+    let cMaxY = seed.maxY;
+
+    const seedGrp = seed.stroke.groupId;
+    const isDedicatedCompGroup =
+      Boolean(seedGrp) &&
+      (groupKinds.get(seedGrp!)?.size ?? 0) === 1 &&
+      !groupHasWire.has(seedGrp!);
+
+    let added = true;
+    while (added) {
+      added = false;
+      for (let j = 0; j < candidates.length; j++) {
+        if (visited[j]) continue;
+        const cand = candidates[j];
+        // Never merge strokes of different component kinds (e.g. bulb vs fan vs battery), even when grouped as one "sim group"!
+        if (cand.kind !== seed.kind) continue;
+
+        const gapX = Math.max(0, cMinX - cand.maxX, cand.minX - cMaxX);
+        const gapY = Math.max(0, cMinY - cand.maxY, cand.minY - cMaxY);
+        const spatiallyClose = gapX <= 16 && gapY <= 16;
+
+        if (spatiallyClose) {
+          visited[j] = 1;
+          clusterStrokes.push(cand.stroke);
+          cMinX = Math.min(cMinX, cand.minX);
+          cMinY = Math.min(cMinY, cand.minY);
+          cMaxX = Math.max(cMaxX, cand.maxX);
+          cMaxY = Math.max(cMaxY, cand.maxY);
+          added = true;
+        }
+      }
+    }
+
+    const key =
+      isDedicatedCompGroup &&
+      !clusters.some((cl) => cl.key === seedGrp)
+        ? seedGrp!
+        : `comp-${seed.kind}-${seed.stroke.id}`;
+    clusters.push({ key, kind: seed.kind, strokes: clusterStrokes });
+  }
+
   const out: CircuitComponentInfo[] = [];
-  for (const [key, entry] of groups.entries()) {
+  for (const entry of clusters) {
+    const key = entry.key;
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -4778,7 +4866,7 @@ export function splitWiresUnderCircuitComponent(
               const wire1: StrokeObject = {
                 ...s,
                 id: `st-${Date.now()}-w1-${Math.random().toString(36).slice(2, 5)}`,
-                groupId: undefined,
+                groupId: s.groupId,
                 fillStyle: 'none',
                 fillColor: undefined,
                 originalCircuitType: undefined,
@@ -4799,7 +4887,7 @@ export function splitWiresUnderCircuitComponent(
               const wire2: StrokeObject = {
                 ...s,
                 id: `st-${Date.now()}-w2-${Math.random().toString(36).slice(2, 5)}`,
-                groupId: undefined,
+                groupId: s.groupId,
                 fillStyle: 'none',
                 fillColor: undefined,
                 originalCircuitType: undefined,
@@ -5223,7 +5311,7 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
   ): StrokeObject => ({
     ...templateStroke,
     id: `st-wire-${Date.now()}-${suffix}-${Math.random().toString(36).slice(2, 6)}`,
-    groupId: undefined,
+    groupId: templateStroke.groupId,
     fillStyle: 'none',
     fillColor: undefined,
     originalCircuitType: undefined,
@@ -5740,6 +5828,13 @@ export function convertCircuitComponents(
       };
     }
 
+    const compIdSet = new Set(comp.strokeIds);
+    const sharedMacroGroupId =
+      origStroke?.groupId &&
+      currentStrokes.some((st) => !compIdSet.has(st.id) && st.groupId === origStroke.groupId)
+        ? origStroke.groupId
+        : undefined;
+
     let replacement: StrokeObject[] = [];
     if (targetKind === 'resistor') {
       const rw = box.schematicW;
@@ -5748,6 +5843,7 @@ export function convertCircuitComponents(
       const ry = box.termY - rh / 2;
       const resStroke: StrokeObject = {
         id: `st-${Date.now()}-res-${Math.random().toString(36).slice(2, 6)}`,
+        groupId: sharedMacroGroupId,
         tool: 'pen',
         color: comp.color,
         width: 2.8,
@@ -5778,7 +5874,11 @@ export function convertCircuitComponents(
         fh,
         comp.color,
         comp.layerId
-      ).map((s) => ({ ...s, circuitBox: box }));
+      ).map((s) => ({
+        ...s,
+        groupId: sharedMacroGroupId || s.groupId,
+        circuitBox: box,
+      }));
     } else if (targetKind === 'bulb') {
       const bw = box.pictorialW;
       const bh = box.pictorialH;
@@ -5792,7 +5892,11 @@ export function convertCircuitComponents(
         bh,
         comp.color,
         comp.layerId
-      ).map((s) => ({ ...s, circuitBox: box }));
+      ).map((s) => ({
+        ...s,
+        groupId: sharedMacroGroupId || s.groupId,
+        circuitBox: box,
+      }));
     } else if (targetKind === 'voltage-source') {
       const vw = box.schematicW;
       const vh = box.schematicH;
@@ -5806,7 +5910,11 @@ export function convertCircuitComponents(
         vh,
         comp.color,
         comp.layerId
-      ).map((s) => ({ ...s, circuitBox: box }));
+      ).map((s) => ({
+        ...s,
+        groupId: sharedMacroGroupId || s.groupId,
+        circuitBox: box,
+      }));
     } else if (targetKind === 'battery') {
       const batW = box.pictorialW;
       const batH = box.pictorialH;
@@ -5820,7 +5928,11 @@ export function convertCircuitComponents(
         batH,
         comp.color,
         comp.layerId
-      ).map((s) => ({ ...s, circuitBox: box }));
+      ).map((s) => ({
+        ...s,
+        groupId: sharedMacroGroupId || s.groupId,
+        circuitBox: box,
+      }));
     }
 
     newIds.push(...replacement.map((s) => s.id));

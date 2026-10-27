@@ -4421,13 +4421,27 @@ export default function App() {
     // 0c. Battery '+' and '-' signs: if an existing battery has its 2-point '+' or '-' stroke centered at the wire line (cy),
     // automatically render it higher up (above the side horizontal wire leads) so it never collides with wires or electrons!
     if (s.shapeType === 'battery' && s.points.length === 2) {
-      const siblingBody = activePage.strokes.find(
-        (b) =>
-          b.shapeType === 'battery' &&
-          b.points.length >= 8 &&
-          ((s.groupId && b.groupId === s.groupId) ||
-            s.id.slice(0, 18) === b.id.slice(0, 18))
-      );
+      const sMidX = (s.points[0].x + s.points[1].x) / 2;
+      const sMidY = (s.points[0].y + s.points[1].y) / 2;
+      const siblingBody = activePage.strokes.find((b) => {
+        if (b.shapeType !== 'battery' || b.points.length < 6) return false;
+        let bMinX = Infinity,
+          bMaxX = -Infinity,
+          bMinY = Infinity,
+          bMaxY = -Infinity;
+        for (const bp of b.points) {
+          if (bp.x < bMinX) bMinX = bp.x;
+          if (bp.x > bMaxX) bMaxX = bp.x;
+          if (bp.y < bMinY) bMinY = bp.y;
+          if (bp.y > bMaxY) bMaxY = bp.y;
+        }
+        return (
+          sMidX >= bMinX - 40 &&
+          sMidX <= bMaxX + 40 &&
+          sMidY >= bMinY - 30 &&
+          sMidY <= bMaxY + 30
+        );
+      });
       if (siblingBody) {
         let minBy = Infinity;
         let maxBy = -Infinity;
@@ -17661,19 +17675,40 @@ export default function App() {
     for (const im of activePage.images || []) {
       if (effectiveImgIds.includes(im.id) && im.groupId) grpSet.add(im.groupId);
     }
-    updateActivePage((page) => ({
-      ...page,
-      strokes: page.strokes.map((s) =>
-        selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
-          ? { ...s, groupId: undefined }
-          : s
-      ),
-      images: (page.images || []).map((im) =>
-        effectiveImgIds.includes(im.id) || (im.groupId && grpSet.has(im.groupId))
-          ? { ...im, groupId: undefined }
-          : im
-      ),
-    }));
+    updateActivePage((page) => {
+      const targetStrokes = page.strokes.filter(
+        (s) => selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
+      );
+      const comps = getCircuitComponentsWithTerminals(targetStrokes);
+      const isMacroCircuitGroup =
+        comps.length > 1 ||
+        (comps.length === 1 &&
+          targetStrokes.some((s) => !comps[0].strokeIds.includes(s.id)));
+      const compGroupMap = new Map<string, string>();
+      if (isMacroCircuitGroup) {
+        for (const c of comps) {
+          if (c.strokeIds.length > 1) {
+            const subGrpId = `grp-comp-${c.kind}-${c.strokeIds[0]}`;
+            for (const sid of c.strokeIds) {
+              compGroupMap.set(sid, subGrpId);
+            }
+          }
+        }
+      }
+      return {
+        ...page,
+        strokes: page.strokes.map((s) =>
+          selectedStrokeIds.includes(s.id) || (s.groupId && grpSet.has(s.groupId))
+            ? { ...s, groupId: compGroupMap.get(s.id) }
+            : s
+        ),
+        images: (page.images || []).map((im) =>
+          effectiveImgIds.includes(im.id) || (im.groupId && grpSet.has(im.groupId))
+            ? { ...im, groupId: undefined }
+            : im
+        ),
+      };
+    });
     showToast('🔓 Ungroup ολοκληρώθηκε!');
   };
 
