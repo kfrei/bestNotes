@@ -11814,10 +11814,11 @@ export default function App() {
             };
           }
 
-          // 6B. Draw Black Dashed Equilibrium Line (Θ.Ι.) & 2 Blue Dashed Amplitude Lines (+A / -A) with Blue Square Handles (□)
+          // 6B. Draw Black Dashed Equilibrium Line (Θ.Ι.) & 2 Blue Dashed Amplitude Lines (+A / -A) with Double-Arrow Handles (↕)
           if (activeSpringSim.showAmplitudeLines) {
-            const eqStartDist = massW / 2 + 12;
-            const lineEndDist = massW / 2 + 196;
+            const perpHalfMass = (isVertSpring ? massW : massH) / 2;
+            const eqStartDist = perpHalfMass + 12;
+            const lineEndDist = perpHalfMass + 96;
             const blueStartDist = Math.max(8, spInfo.springWidth / 2 + 8);
 
             ctx.save();
@@ -12029,7 +12030,7 @@ export default function App() {
           const supBounds = supportStroke ? getStrokeBounds(supportStroke) : null;
           const ampRightEdge =
             isVertSpring && activeSpringSim.showAmplitudeLines
-              ? eqMassCx + massW / 2 + 256
+              ? eqMassCx + massW / 2 + 156
               : mb.maxX + (isVertSpring ? 44 : A + 52);
           const baseDefaultX = Math.max(
             20,
