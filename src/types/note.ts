@@ -196,7 +196,7 @@ export interface SpringSimConfig {
   mass: number; // Mass multiplier m (0.4 to 2.5, default 1.0)
   stiffness: number; // Spring constant k multiplier (0.5 to 2.5, default 1.0)
   amplitudePx: number; // Oscillation amplitude A in canvas px (default 55)
-  initialPhaseMode: 'eq' | 'plusA' | 'minusA' | 'custom'; // t=0 starting position
+  initialPhaseMode: 'eq' | 'eqDown' | 'plusA' | 'minusA' | 'custom'; // t=0 starting position & initial velocity direction
   customInitialPhaseRad?: number;
   showNaturalSpring: boolean; // Show/hide natural length l0 spring
   showAmplitudeLines: boolean; // Show black dashed Θ.Ι. + 2 blue dashed +A/-A lines with blue square handles

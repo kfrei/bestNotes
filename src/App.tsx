@@ -1033,6 +1033,7 @@ export default function App() {
     simId: string;
     fromDispPx: number;
     toDispPx: number;
+    nudgeDir?: 1 | -1;
     startTime: number;
   } | null>(null);
   const lastSpringRenderedDispRef = useRef<number>(0);
@@ -5125,7 +5126,8 @@ export default function App() {
               draggingSpringMassRef.current?.simId === activePageSpringSim.id ||
               springSettleAnim?.simId === activePageSpringSim.id ||
               springPhaseShiftAnim?.simId === activePageSpringSim.id ||
-              activePageSpringSim.initialPhaseMode !== 'eq') &&
+              (activePageSpringSim.initialPhaseMode !== 'eq' &&
+                activePageSpringSim.initialPhaseMode !== 'eqDown')) &&
             (s.id === activePageSpringSim.eqSpringStrokeId ||
               s.id === activePageSpringSim.massStrokeId)
           ) {
@@ -10529,7 +10531,8 @@ export default function App() {
         springSettleAnim !== null ||
         springPhaseShiftAnim !== null ||
         showSimulationPanel ||
-        activeSpringSim!.initialPhaseMode !== 'eq' ||
+        (activeSpringSim!.initialPhaseMode !== 'eq' &&
+          activeSpringSim!.initialPhaseMode !== 'eqDown') ||
         activeSpringSim!.showAmplitudeLines ||
         activeSpringSim!.showForceVectors ||
         activeSpringSim!.graphs.xt.visible ||
@@ -11199,6 +11202,8 @@ export default function App() {
           const phi0 =
             activeSpringSim.initialPhaseMode === 'eq'
               ? 0
+              : activeSpringSim.initialPhaseMode === 'eqDown'
+              ? Math.PI
               : activeSpringSim.initialPhaseMode === 'plusA'
               ? Math.PI / 2
               : activeSpringSim.initialPhaseMode === 'minusA'
@@ -11229,7 +11234,11 @@ export default function App() {
           }
           const springElapsedSec = springSimElapsedRef.current;
 
-          const targetInitDisp = A * Math.sin(phi0);
+          const targetInitDisp =
+            activeSpringSim.initialPhaseMode === 'eq' ||
+            activeSpringSim.initialPhaseMode === 'eqDown'
+              ? 0
+              : A * Math.sin(phi0);
           let xDisp = 0;
           let dispDx = 0;
           let dispDy = 0;
@@ -11241,9 +11250,18 @@ export default function App() {
           } else if (isPhaseShifting && springPhaseShiftAnim) {
             const u = Math.max(0, Math.min(1, (now - springPhaseShiftAnim.startTime) / 380));
             const ease = 1 - Math.pow(1 - u, 3);
-            xDisp =
-              springPhaseShiftAnim.fromDispPx +
-              (targetInitDisp - springPhaseShiftAnim.fromDispPx) * ease;
+            if (
+              springPhaseShiftAnim.nudgeDir &&
+              Math.abs(springPhaseShiftAnim.fromDispPx) < 2 &&
+              Math.abs(targetInitDisp) < 2
+            ) {
+              // Subtle directional pulse (+14px upwards for υ↑, -14px downwards for υ↓) settling back to 0
+              xDisp = springPhaseShiftAnim.nudgeDir * 14 * Math.sin(u * Math.PI) * (1 - u * 0.35);
+            } else {
+              xDisp =
+                springPhaseShiftAnim.fromDispPx +
+                (targetInitDisp - springPhaseShiftAnim.fromDispPx) * ease;
+            }
             dispDx = xDisp * oscUx;
             dispDy = xDisp * oscUy;
           } else if (isSpringSimulating) {
@@ -11288,7 +11306,8 @@ export default function App() {
             isSpringSimulating ||
             isSettlingToEq ||
             isPhaseShifting ||
-            activeSpringSim.initialPhaseMode !== 'eq' ||
+            (activeSpringSim.initialPhaseMode !== 'eq' &&
+              activeSpringSim.initialPhaseMode !== 'eqDown') ||
             draggingSpringMassRef.current?.simId === activeSpringSim.id
           ) {
             const curFreePt = {
@@ -11524,30 +11543,8 @@ export default function App() {
             const gCfg = activeSpringSim.graphs[gKey];
             const gW = gCfg.width || 368; // ~16 grid squares wide
 
-            const envHalfH =
-              gKey === 'xt'
-                ? A
-                : gKey === 'vt'
-                ? Math.max(
-                    44,
-                    Math.min(
-                      88,
-                      64 *
-                        Math.sqrt(
-                          activeSpringSim.stiffness /
-                            Math.max(0.25, activeSpringSim.mass)
-                        )
-                    )
-                  )
-                : Math.max(
-                    44,
-                    Math.min(
-                      88,
-                      64 *
-                        (activeSpringSim.stiffness /
-                          Math.max(0.25, activeSpringSim.mass))
-                    )
-                  );
+            // All 3 diagrams (x-t, u-t, a-t) share the exact same vertical height (A) as x-t and follow +A / -A!
+            const envHalfH = A;
 
             const topPad = 28;
             const botPad = 24;
@@ -28180,21 +28177,25 @@ export default function App() {
                                   ή τράβηξε το σώμα!
                                 </span>
                               </div>
-                              <div className="grid grid-cols-3 gap-1">
+                              <div className="grid grid-cols-4 gap-1">
                                 {(
                                   [
-                                    { id: 'minusA', label: 'Από -A' },
-                                    { id: 'eq', label: 'Από Θ.Ι. (0)' },
-                                    { id: 'plusA', label: 'Από +A' },
+                                    { id: 'minusA', label: 'Από -A', title: 'Αρχική θέση x₀ = -A (υ₀ = 0)' },
+                                    { id: 'eq', label: 'Από 0 (υ↑)', title: 'Από Θ.Ι. (x₀ = 0) με αρχική ταχύτητα προς τα πάνω (+A)' },
+                                    { id: 'eqDown', label: 'Από 0 (υ↓)', title: 'Από Θ.Ι. (x₀ = 0) με αρχική ταχύτητα προς τα κάτω (-A)' },
+                                    { id: 'plusA', label: 'Από +A', title: 'Αρχική θέση x₀ = +A (υ₀ = 0)' },
                                   ] as const
                                 ).map((opt) => (
                                   <button
                                     key={opt.id}
                                     type="button"
+                                    title={opt.title}
                                     onClick={() => {
                                       const amp = Math.max(16, activeSpring.amplitudePx || 55);
                                       const targetDisp =
                                         opt.id === 'minusA' ? -amp : opt.id === 'plusA' ? amp : 0;
+                                      const nudgeDir =
+                                        opt.id === 'eq' ? 1 : opt.id === 'eqDown' ? -1 : undefined;
                                       springSimElapsedRef.current = 0;
                                       springSimLastFrameTimeRef.current = null;
                                       setSpringGraphClearTick((t) => t + 1);
@@ -28202,6 +28203,7 @@ export default function App() {
                                         simId: activeSpring.id,
                                         fromDispPx: lastSpringRenderedDispRef.current,
                                         toDispPx: targetDisp,
+                                        nudgeDir,
                                         startTime: performance.now(),
                                       });
                                       updateActiveSpringSimConfig((sim) => ({
@@ -28209,7 +28211,7 @@ export default function App() {
                                         initialPhaseMode: opt.id,
                                       }));
                                     }}
-                                    className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                    className={`py-1 px-1 rounded-lg text-[9.5px] font-bold border transition cursor-pointer ${
                                       activeSpring.initialPhaseMode === opt.id
                                         ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
                                         : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
