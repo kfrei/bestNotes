@@ -1028,6 +1028,7 @@ export default function App() {
   );
   const [simShowDarkWireTrack, setSimShowDarkWireTrack] = useState<boolean>(false);
   const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<number>(1.0);
+  const [circuitAlignFlashStart, setCircuitAlignFlashStart] = useState<number | null>(null);
   const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [simPanelPos, setSimPanelPos] = useState<{ x: number; y: number }>({ x: 16, y: 108 });
   const simPanelDragRef = useRef<{
@@ -8704,7 +8705,8 @@ export default function App() {
     if (!ctx) return;
 
     const activeSim = getActiveCircuitSim(activePage);
-    if (!isSimulating || !activeSim) {
+    const hasAlignFlash = circuitAlignFlashStart !== null;
+    if ((!isSimulating && !hasAlignFlash) || !activeSim) {
       autoSwitchHitRef.current = null;
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
@@ -8719,15 +8721,16 @@ export default function App() {
       (s) => visibleLayerIds.has(s.layerId) && activeSimSet.has(s.id)
     );
     const simData = analyzeCircuitForSimulation(visibleStrokes, simCircuitSwitchClosed);
-    autoSwitchHitRef.current = simData.autoSwitch
-      ? {
-          x: simData.autoSwitch.x,
-          yCenter: simData.autoSwitch.yCenter,
-          yTop: simData.autoSwitch.yTop,
-          yBottom: simData.autoSwitch.yBottom,
-          closed: simData.autoSwitch.closed,
-        }
-      : null;
+    autoSwitchHitRef.current =
+      isSimulating && simData.autoSwitch
+        ? {
+            x: simData.autoSwitch.x,
+            yCenter: simData.autoSwitch.yCenter,
+            yTop: simData.autoSwitch.yTop,
+            yBottom: simData.autoSwitch.yBottom,
+            closed: simData.autoSwitch.closed,
+          }
+        : null;
 
     let rafId = 0;
     const startTime = performance.now();
@@ -8739,6 +8742,60 @@ export default function App() {
       ctx.save();
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.clearRect(0, 0, w, h);
+
+      // 0. 0.56s Wire Alignment Flash (triggered when clicking "📐 Ένωση & Ευθυγράμμιση Αγωγών")
+      if (circuitAlignFlashStart !== null) {
+        const flashElapsed = now - circuitAlignFlashStart;
+        if (flashElapsed <= 560) {
+          const tFlash = Math.max(0, Math.min(1, flashElapsed / 560));
+          const flashAlpha = Math.sin(tFlash * Math.PI);
+          const wireStrokes = visibleStrokes.filter(
+            (s) => s.shapeType === 'line' && s.points.length >= 2
+          );
+          if (wireStrokes.length > 0) {
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            // Outer electric cyan/indigo halo
+            ctx.strokeStyle = `rgba(56, 189, 248, ${(0.88 * flashAlpha).toFixed(3)})`;
+            ctx.shadowColor = '#0284c7';
+            ctx.shadowBlur = 18;
+            ctx.lineWidth = 9.5;
+            for (const ws of wireStrokes) {
+              ctx.beginPath();
+              ctx.moveTo(ws.points[0].x, ws.points[0].y);
+              for (let i = 1; i < ws.points.length; i++) {
+                ctx.lineTo(ws.points[i].x, ws.points[i].y);
+              }
+              ctx.stroke();
+            }
+            // Inner bright core pulse
+            ctx.strokeStyle = `rgba(224, 242, 254, ${(0.96 * flashAlpha).toFixed(3)})`;
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 3.8;
+            for (const ws of wireStrokes) {
+              ctx.beginPath();
+              ctx.moveTo(ws.points[0].x, ws.points[0].y);
+              for (let i = 1; i < ws.points.length; i++) {
+                ctx.lineTo(ws.points[i].x, ws.points[i].y);
+              }
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+        } else {
+          setCircuitAlignFlashStart(null);
+        }
+      }
+
+      if (!isSimulating) {
+        ctx.restore();
+        if (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560) {
+          rafId = window.requestAnimationFrame(renderSimFrame);
+        }
+        return;
+      }
 
       // 1. Optional PhET-style Dark Conductive Tube Track behind particles
       if (simShowDarkWireTrack && simData.wireSegments.length > 0) {
@@ -9060,6 +9117,7 @@ export default function App() {
     };
   }, [
     isSimulating,
+    circuitAlignFlashStart,
     simCircuitSwitchClosed,
     activePage.strokes,
     activePage.layers,
@@ -23912,7 +23970,52 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const activeSim = getActiveCircuitSim(activePage);
+                      let activeSim = getActiveCircuitSim(activePage);
+                      if (!activeSim && selectedStrokeIds.length > 0) {
+                        const rawSelSet = new Set(selectedStrokeIds);
+                        const selGroupIds = new Set(
+                          activePage.strokes
+                            .filter((s) => rawSelSet.has(s.id) && s.groupId)
+                            .map((s) => s.groupId!)
+                        );
+                        const expandedStrokes = activePage.strokes.filter(
+                          (s) => rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))
+                        );
+                        const expandedIdSet = new Set(expandedStrokes.map((s) => s.id));
+                        const alignedSubset = autoAlignAndConnectCircuit(expandedStrokes);
+                        const alignedIds = alignedSubset.map((s) => s.id);
+                        const newSimId = `sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                        const newSimName = getNextDefaultSimName(activePage);
+                        updateActivePage((page) => {
+                          const nextStrokes: StrokeObject[] = [];
+                          let inserted = false;
+                          for (const s of page.strokes) {
+                            if (expandedIdSet.has(s.id)) {
+                              if (!inserted) {
+                                nextStrokes.push(...alignedSubset);
+                                inserted = true;
+                              }
+                              continue;
+                            }
+                            nextStrokes.push(s);
+                          }
+                          if (!inserted) nextStrokes.push(...alignedSubset);
+                          const currentValid = getValidCircuitSims(page);
+                          return {
+                            ...page,
+                            strokes: nextStrokes,
+                            circuitSims: [
+                              ...currentValid,
+                              { id: newSimId, name: newSimName, strokeIds: alignedIds },
+                            ],
+                            activeCircuitSimId: newSimId,
+                          };
+                        });
+                        setSelectedStrokeIds([]);
+                        setCircuitAlignFlashStart(performance.now());
+                        showToast(`📐 [${newSimName}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
+                        return;
+                      }
                       if (!activeSim) {
                         showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
                         return;
@@ -23925,6 +24028,7 @@ export default function App() {
                         )
                       );
                       setSelectedStrokeIds([]);
+                      setCircuitAlignFlashStart(performance.now());
                       showToast(`📐 [${activeSim.name}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
                     }}
                     className="w-full py-1.5 px-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 font-bold text-[10.5px] flex items-center justify-center gap-1.5 transition cursor-pointer"
