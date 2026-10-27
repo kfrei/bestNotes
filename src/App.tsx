@@ -951,8 +951,14 @@ export default function App() {
 
   // Goodnotes 6 Toolbar State
   const [activeTool, setActiveTool] = useState<ToolType>('pen');
-  const [lassoMode, setLassoMode] = useState<'rect' | 'freehand'>('freehand');
-  const lassoModeRef = useRef<'rect' | 'freehand'>('freehand');
+  const [lassoMode, setLassoMode] = useState<'rect' | 'freehand'>('rect');
+  const lassoModeRef = useRef<'rect' | 'freehand'>('rect');
+  useEffect(() => {
+    if (activeTool !== 'lasso') {
+      lassoModeRef.current = 'rect';
+      setLassoMode('rect');
+    }
+  }, [activeTool]);
   const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
   const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
   const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>('medium');
@@ -18570,16 +18576,16 @@ export default function App() {
         return;
       }
 
-      // S / Σ / ς -> 1ο πάτημα: Ελεύθερο Λάσο ('freehand'), επόμενο πάτημα: εναλλαγή Λάσο <-> Ορθογώνια Επιλογή ('rect')
+      // S / Σ / ς -> 1ο πάτημα (από άλλο εργαλείο): Ορθογώνια Επιλογή ('rect'), επόμενο πάτημα: εναλλαγή Ορθογώνιο <-> Ελεύθερο Λάσο ('freehand')
       if (code === 'KeyS' || key === 's' || key === 'σ' || key === 'ς') {
-        if (activeTool === 'lasso' && !showAlignSubBar && lassoMode === 'freehand') {
-          lassoModeRef.current = 'rect';
-          setLassoMode('rect');
-          switchToTool('lasso', '⬚ Ορθογώνια Επιλογή (Διαγώνια Έλξη) — S / Σ (ξανά S για Λάσο)');
-        } else {
+        if (activeTool === 'lasso' && !showAlignSubBar && lassoMode === 'rect') {
           lassoModeRef.current = 'freehand';
           setLassoMode('freehand');
           switchToTool('lasso', '🪢 Select (Ελεύθερο Λάσο) — S / Σ (ξανά S για Ορθογώνιο)');
+        } else {
+          lassoModeRef.current = 'rect';
+          setLassoMode('rect');
+          switchToTool('lasso', '⬚ Ορθογώνια Επιλογή (Διαγώνια Έλξη) — S / Σ (ξανά S για Λάσο)');
         }
         return;
       }
@@ -22001,7 +22007,10 @@ export default function App() {
                         return;
                       }
                       if (tool.id === 'rect-lasso' || tool.id === 'lasso') {
-                        const targetMode = tool.id === 'rect-lasso' ? 'rect' : 'freehand';
+                        const targetMode =
+                          tool.id === 'rect-lasso' || activeTool !== 'lasso'
+                            ? 'rect'
+                            : 'freehand';
                         setShowAlignSubBar(false);
                         if (activeTool === 'lasso' && !showAlignSubBar && lassoMode === targetMode) {
                           setShowToolSubBar((s) => !s);
