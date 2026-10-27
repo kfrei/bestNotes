@@ -5951,12 +5951,9 @@ export function analyzeCircuitForSimulation(
   for (const s of strokes) {
     if (compStrokeSet.has(s.id)) continue;
     if (s.tool === 'highlighter' || s.points.length < 2) continue;
-    if (
-      s.shapeType &&
-      s.shapeType !== 'line' &&
-      s.shapeType !== 'rectangle' &&
-      s.shapeType !== 'parallelogram'
-    ) {
+    if (s.fillStyle && s.fillStyle !== 'none') continue;
+    if (s.points[0]?.twist === 999) continue;
+    if (s.shapeType && s.shapeType !== 'line') {
       continue;
     }
 
@@ -6638,7 +6635,8 @@ export function analyzeCircuitForSimulation(
     hasSource,
     isCircuitClosed: circuitSwitchClosed && anyClosedLoop,
     sourceCount: sources.length,
-    wireSegments: simulatedWires,
+    wireSegments:
+      hasSource && anyClosedLoop ? simulatedWires.filter((w) => w.inClosedLoop) : [],
     components: simulatedComps,
     autoSwitch,
   };

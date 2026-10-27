@@ -162,6 +162,12 @@ export interface LayerItem {
   opacity: number;
 }
 
+export interface CircuitSimConfig {
+  id: string;
+  name: string; // e.g. 'sim01', 'sim02'
+  strokeIds: string[]; // Strokes belonging to this circuit simulation
+}
+
 export interface NotePage {
   id: string;
   title: string;
@@ -178,6 +184,8 @@ export interface NotePage {
   texts: TextObject[];
   images: ImageObject[];
   tapes: TapeObject[];
+  circuitSims?: CircuitSimConfig[];
+  activeCircuitSimId?: string;
 }
 
 export interface Notebook {

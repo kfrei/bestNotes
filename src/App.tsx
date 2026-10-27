@@ -78,6 +78,7 @@ import { syncNotebookPdfToGoogleDrive, exportNotebookToPdfBlob } from './utils/g
 import {
   Notebook,
   NotePage,
+  CircuitSimConfig,
   StrokeObject,
   BezierPoint,
   ToolType,
@@ -4686,6 +4687,21 @@ export default function App() {
       // while within the same Layer items sort by their individual zOrder (-1 / +1 / Πίσω / Μπροστά).
       const imgList = pageObj.images || [];
       const strokeList = pageObj.strokes || [];
+      const pageValidSims = (pageObj.circuitSims || []).filter((sim) =>
+        sim.strokeIds.some((id) => strokeList.some((s) => s.id === id))
+      );
+      const activePageSim =
+        pageValidSims.find((sim) => sim.id === pageObj.activeCircuitSimId) ||
+        pageValidSims[0] ||
+        null;
+      const activeSimBaseSet = new Set(activePageSim?.strokeIds || []);
+      const activeSimGroupIds = new Set(
+        strokeList
+          .filter((s) => activeSimBaseSet.has(s.id) && s.groupId)
+          .map((s) => s.groupId!)
+      );
+      const isStrokeInActiveSim = (s: StrokeObject) =>
+        activeSimBaseSet.has(s.id) || Boolean(s.groupId && activeSimGroupIds.has(s.groupId));
       type RenderEntry =
         | { kind: 'image'; layerRank: number; z: number; img: ImageObject }
         | { kind: 'stroke'; layerRank: number; z: number; stroke: StrokeObject };
@@ -4806,9 +4822,11 @@ export default function App() {
           if (s.id.includes('-bulb-fil') || (s.shapeType === 'bulb' && s.points.length === 5)) {
             continue;
           }
-          // While simulation is running, hide all static Fan strokes so only the clean animated round Fan renders with zero background remnant!
+          // While simulation is running, hide static Fan strokes ONLY for the currently active simulated circuit!
           if (
+            isCurrentActivePage &&
             isSimulating &&
+            isStrokeInActiveSim(s) &&
             (s.shapeType === 'fan' ||
               s.shapeType === 'fan-blade' ||
               s.shapeType === 'fan-hub')
@@ -8371,6 +8389,204 @@ export default function App() {
   };
 
   // ============================================================================
+  // NAMED LASSO CIRCUIT SIMULATION HELPERS (sim01, sim02, ... — 1 Active at a Time)
+  // ============================================================================
+  const getValidCircuitSims = (page: NotePage): CircuitSimConfig[] => {
+    const strokeIdSet = new Set(page.strokes.map((s) => s.id));
+    return (page.circuitSims || []).filter((sim) =>
+      sim.strokeIds.some((id) => strokeIdSet.has(id))
+    );
+  };
+
+  const getActiveCircuitSim = (page: NotePage): CircuitSimConfig | null => {
+    const valid = getValidCircuitSims(page);
+    if (valid.length === 0) return null;
+    return valid.find((sim) => sim.id === page.activeCircuitSimId) || valid[0];
+  };
+
+  const getNextDefaultSimName = (page: NotePage): string => {
+    const valid = getValidCircuitSims(page);
+    const usedNames = new Set(valid.map((s) => s.name.trim().toLowerCase()));
+    for (let i = 1; i <= 99; i++) {
+      const candidate = `sim${String(i).padStart(2, '0')}`;
+      if (!usedNames.has(candidate)) return candidate;
+    }
+    return `sim${valid.length + 1}`;
+  };
+
+  const getSimExpandedStrokeSet = (page: NotePage, sim: CircuitSimConfig | null): Set<string> => {
+    if (!sim) return new Set();
+    const baseSet = new Set(sim.strokeIds);
+    const groupIds = new Set(
+      page.strokes.filter((s) => baseSet.has(s.id) && s.groupId).map((s) => s.groupId!)
+    );
+    const out = new Set<string>();
+    for (const s of page.strokes) {
+      if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
+        out.add(s.id);
+      }
+    }
+    return out;
+  };
+
+  const runScopedCircuitOperationOnPage = (
+    page: NotePage,
+    op: (subStrokes: StrokeObject[]) => StrokeObject[],
+    targetSimId?: string
+  ): NotePage => {
+    const validSims = getValidCircuitSims(page);
+    const targetSim =
+      (targetSimId ? validSims.find((s) => s.id === targetSimId) : null) ||
+      getActiveCircuitSim(page);
+    if (!targetSim) return page;
+
+    const simSet = getSimExpandedStrokeSet(page, targetSim);
+    const subStrokes = page.strokes.filter((s) => simSet.has(s.id));
+    if (subStrokes.length === 0) return page;
+
+    const nextSubStrokes = op(subStrokes);
+    const nextSubIds = nextSubStrokes.map((s) => s.id);
+    const nextStrokes: StrokeObject[] = [];
+    let inserted = false;
+    for (const s of page.strokes) {
+      if (simSet.has(s.id)) {
+        if (!inserted) {
+          nextStrokes.push(...nextSubStrokes);
+          inserted = true;
+        }
+        continue;
+      }
+      nextStrokes.push(s);
+    }
+    if (!inserted) {
+      nextStrokes.push(...nextSubStrokes);
+    }
+
+    const nextSims = validSims.map((sim) =>
+      sim.id === targetSim.id ? { ...sim, strokeIds: nextSubIds } : sim
+    );
+    return {
+      ...page,
+      strokes: nextStrokes,
+      circuitSims: nextSims,
+      activeCircuitSimId: targetSim.id,
+    };
+  };
+
+  const splitWiresAndSyncPageSims = (
+    page: NotePage,
+    strokesWithNewComp: StrokeObject[],
+    compStrokeIds: string[]
+  ): NotePage => {
+    const splitStrokes = splitWiresUnderCircuitComponent(strokesWithNewComp, compStrokeIds);
+    const beforeIds = new Set(strokesWithNewComp.map((s) => s.id));
+    const afterIds = new Set(splitStrokes.map((s) => s.id));
+    const removedWireIds = [...beforeIds].filter((id) => !afterIds.has(id));
+    const addedWireIds = [...afterIds].filter((id) => !beforeIds.has(id));
+
+    if (removedWireIds.length === 0 || !page.circuitSims || page.circuitSims.length === 0) {
+      return { ...page, strokes: splitStrokes };
+    }
+    const removedSet = new Set(removedWireIds);
+    const nextSims = page.circuitSims.map((sim) => {
+      if (!sim.strokeIds.some((id) => removedSet.has(id))) return sim;
+      const kept = sim.strokeIds.filter((id) => !removedSet.has(id));
+      const mergedIds = Array.from(new Set([...kept, ...addedWireIds, ...compStrokeIds]));
+      return { ...sim, strokeIds: mergedIds };
+    });
+    return { ...page, strokes: splitStrokes, circuitSims: nextSims };
+  };
+
+  const registerOrActivateSimFromLasso = (customName?: string): boolean => {
+    if (selectedStrokeIds.length === 0) {
+      showToast('🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!');
+      return false;
+    }
+    const rawSelSet = new Set(selectedStrokeIds);
+    const selGroupIds = new Set(
+      activePage.strokes
+        .filter((s) => rawSelSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId!)
+    );
+    const expandedStrokes = activePage.strokes.filter(
+      (s) => rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))
+    );
+    const expandedIdSet = new Set(expandedStrokes.map((s) => s.id));
+
+    const hasSource = expandedStrokes.some(
+      (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+    );
+    if (!hasSource) {
+      showToast('⚠️ Για προσομοίωση απαιτείται τουλάχιστον μία Μπαταρία ή Πηγή Τάσης στην επιλογή!');
+      return false;
+    }
+
+    const alignedSubset = autoAlignAndConnectCircuit(expandedStrokes);
+    const simCheck = analyzeCircuitForSimulation(alignedSubset, true);
+    if (!simCheck.isCircuitClosed) {
+      showToast('⚠️ Το επιλεγμένο κύκλωμα είναι ανοιχτό! Κλείστε τους αγωγούς σε κλειστό κύκλωμα.');
+      return false;
+    }
+
+    const alignedIds = alignedSubset.map((s) => s.id);
+    const validSims = getValidCircuitSims(activePage);
+    const matchingExisting = validSims.find((sim) => {
+      const overlap = sim.strokeIds.filter((id) => expandedIdSet.has(id)).length;
+      return overlap >= Math.max(1, Math.min(sim.strokeIds.length, expandedIdSet.size) * 0.5);
+    });
+
+    const targetSimId =
+      matchingExisting?.id || `sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const targetSimName =
+      customName?.trim() || matchingExisting?.name || getNextDefaultSimName(activePage);
+
+    updateActivePage((page) => {
+      const nextStrokes: StrokeObject[] = [];
+      let inserted = false;
+      for (const s of page.strokes) {
+        if (expandedIdSet.has(s.id)) {
+          if (!inserted) {
+            nextStrokes.push(...alignedSubset);
+            inserted = true;
+          }
+          continue;
+        }
+        nextStrokes.push(s);
+      }
+      if (!inserted) {
+        nextStrokes.push(...alignedSubset);
+      }
+
+      const currentValid = getValidCircuitSims(page);
+      const nextSims = matchingExisting
+        ? currentValid.map((sim) =>
+            sim.id === matchingExisting.id
+              ? { ...sim, name: targetSimName, strokeIds: alignedIds }
+              : sim
+          )
+        : [...currentValid, { id: targetSimId, name: targetSimName, strokeIds: alignedIds }];
+
+      return {
+        ...page,
+        strokes: nextStrokes,
+        circuitSims: nextSims,
+        activeCircuitSimId: targetSimId,
+      };
+    });
+
+    // Clear Lasso selection immediately so the dashed Lasso box does NOT stay and distract!
+    setSelectedStrokeIds([]);
+    setSelectedImageId(null);
+    setSelectedImageIds([]);
+    setActiveNodeStrokeId(null);
+    setSimCircuitSwitchClosed(false);
+    setIsSimulating(true);
+    setShowSimulationPanel(true);
+    showToast(`⚡ Ενεργή προσομοίωση: "${targetSimName}"`);
+    return true;
+  };
+
+  // ============================================================================
   // 60FPS / 120FPS INTERACTIVE CIRCUIT SIMULATION OVERLAY ENGINE
   // ============================================================================
   useEffect(() => {
@@ -8379,7 +8595,8 @@ export default function App() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (!isSimulating) {
+    const activeSim = getActiveCircuitSim(activePage);
+    if (!isSimulating || !activeSim) {
       autoSwitchHitRef.current = null;
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
@@ -8389,7 +8606,10 @@ export default function App() {
     const visibleLayerIds = new Set(
       activePage.layers.filter((l) => l.visible).map((l) => l.id)
     );
-    const visibleStrokes = activePage.strokes.filter((s) => visibleLayerIds.has(s.layerId));
+    const activeSimSet = getSimExpandedStrokeSet(activePage, activeSim);
+    const visibleStrokes = activePage.strokes.filter(
+      (s) => visibleLayerIds.has(s.layerId) && activeSimSet.has(s.id)
+    );
     const simData = analyzeCircuitForSimulation(visibleStrokes, simCircuitSwitchClosed);
     autoSwitchHitRef.current = simData.autoSwitch
       ? {
@@ -15431,28 +15651,10 @@ export default function App() {
               });
             }
           } else {
-            // Auto-split any wire under a newly dropped/moved circuit component & snap/align ONLY if circuit is complete!
-            updateActivePage((page) => {
-              const splitStrokes = splitWiresUnderCircuitComponent(page.strokes, selectedStrokeIds);
-              const movedIsCircuitComp = page.strokes.some(
-                (s) =>
-                  selectedStrokeIds.includes(s.id) &&
-                  (s.shapeType === 'bulb' ||
-                    s.shapeType === 'battery' ||
-                    s.shapeType === 'voltage-source' ||
-                    s.shapeType === 'resistor' ||
-                    s.shapeType === 'fan')
-              );
-              if (!movedIsCircuitComp) {
-                return { ...page, strokes: splitStrokes };
-              }
-              const aligned = autoAlignAndConnectCircuit(splitStrokes);
-              const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
-              return {
-                ...page,
-                strokes: isComplete ? aligned : splitStrokes,
-              };
-            });
+            // Auto-split any wire directly under a newly dropped/moved circuit component
+            updateActivePage((page) =>
+              splitWiresAndSyncPageSims(page, page.strokes, selectedStrokeIds)
+            );
           }
         }
         renderStaticSceneRef.current();
@@ -15638,10 +15840,7 @@ export default function App() {
           shapePreset === 'switch' ||
           shapePreset === 'fan'
         ) {
-          const split = splitWiresUnderCircuitComponent(combined, createdIds);
-          const aligned = autoAlignAndConnectCircuit(split);
-          const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
-          return { ...page, strokes: isComplete ? aligned : split };
+          return splitWiresAndSyncPageSims(page, combined, createdIds);
         }
         return { ...page, strokes: combined };
       });
@@ -16175,26 +16374,7 @@ export default function App() {
     updateActivePage((page) => {
       const combined = [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }];
       if (newStroke.shapeType === 'resistor') {
-        const split = splitWiresUnderCircuitComponent(combined, [newStroke.id]);
-        const aligned = autoAlignAndConnectCircuit(split);
-        const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
-        return { ...page, strokes: isComplete ? aligned : split };
-      }
-      // If the user just drew a wire on a page that has circuit components, check if the circuit is now a complete closed loop!
-      const hasCircuitSource = combined.some(
-        (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
-      );
-      if (hasCircuitSource && (newStroke.shapeType === 'line' || !newStroke.isShape)) {
-        const wasClosedBefore = analyzeCircuitForSimulation(page.strokes, true).isCircuitClosed;
-        const aligned = autoAlignAndConnectCircuit(combined);
-        const isClosedNow = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
-        if (isClosedNow) {
-          if (!wasClosedBefore) {
-            // Circuit just became complete! Keep left switch open so user can start movement from the left switch
-            setSimCircuitSwitchClosed(false);
-          }
-          return { ...page, strokes: aligned };
-        }
+        return splitWiresAndSyncPageSims(page, combined, [newStroke.id]);
       }
       return {
         ...page,
@@ -20665,26 +20845,37 @@ export default function App() {
               <button
                 data-popover-trigger="simulation"
                 onClick={() => {
-                  setShowSimulationPanel((v) => {
-                    const next = !v;
-                    if (next && !isSimulating) {
-                      setSimCircuitSwitchClosed(false);
-                      setIsSimulating(true);
-                      updateActivePage((page) => {
-                        const aligned = autoAlignAndConnectCircuit(page.strokes);
-                        const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
-                        return {
-                          ...page,
-                          strokes: isComplete ? aligned : page.strokes,
-                        };
-                      });
-                    }
-                    return next;
-                  });
                   setShowLayersPanel(false);
                   setShowShapeLibraryPanel(false);
                   setShowWidthPopover(false);
                   setShowColorPopover(false);
+
+                  if (selectedStrokeIds.length > 0) {
+                    const ok = registerOrActivateSimFromLasso();
+                    if (!ok) {
+                      setShowSimulationPanel(true);
+                    }
+                    return;
+                  }
+
+                  setShowSimulationPanel((v) => {
+                    const next = !v;
+                    if (next && !isSimulating) {
+                      const existingSim = getActiveCircuitSim(activePage);
+                      if (existingSim) {
+                        setSimCircuitSwitchClosed(false);
+                        setIsSimulating(true);
+                        updateActivePage((page) =>
+                          runScopedCircuitOperationOnPage(
+                            page,
+                            (sub) => autoAlignAndConnectCircuit(sub),
+                            existingSim.id
+                          )
+                        );
+                      }
+                    }
+                    return next;
+                  });
                 }}
                 className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
                   showSimulationPanel || isSimulating
@@ -21973,10 +22164,22 @@ export default function App() {
 
                         return (
                           <>
+                            {(hasBat || hasVs) && (
+                              <button
+                                onClick={() => {
+                                  registerOrActivateSimFromLasso();
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] cursor-pointer shadow-2xs transition"
+                                title="Δημιουργία/Ενεργοποίηση Προσομοίωσης από το επιλεγμένο κύκλωμα (αυτόματο κλείσιμο Λάσο)"
+                              >
+                                <span>⚡ Προσομοίωση ({getNextDefaultSimName(activePage)})</span>
+                              </button>
+                            )}
                             {(hasBat || hasVs || hasBulb || hasRes) && (
                               <button
                                 onClick={() => {
                                   updateActivePage((page) => {
+                                    const oldSet = new Set(selectedStrokeIds);
                                     const res = convertCircuitComponents(
                                       page.strokes,
                                       selectedStrokeIds,
@@ -21985,7 +22188,15 @@ export default function App() {
                                     if (res.newIds.length > 0) {
                                       setSelectedStrokeIds(res.newIds);
                                     }
-                                    return { ...page, strokes: res.strokes };
+                                    const nextSims = (page.circuitSims || []).map((sim) => {
+                                      if (!sim.strokeIds.some((id) => oldSet.has(id))) return sim;
+                                      const kept = sim.strokeIds.filter((id) => !oldSet.has(id));
+                                      return {
+                                        ...sim,
+                                        strokeIds: Array.from(new Set([...kept, ...res.newIds])),
+                                      };
+                                    });
+                                    return { ...page, strokes: res.strokes, circuitSims: nextSims };
                                   });
                                 }}
                                 className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] cursor-pointer transition"
@@ -23351,33 +23562,164 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Named Lasso Circuit Simulations Selector (sim01, sim02, ... — 1 Active at a Time) */}
+                {(() => {
+                  const validSims = getValidCircuitSims(activePage);
+                  const activeSim = getActiveCircuitSim(activePage);
+                  const nextSimLabel = getNextDefaultSimName(activePage);
+
+                  return (
+                    <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
+                      {selectedStrokeIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            registerOrActivateSimFromLasso();
+                          }}
+                          className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                          title="Προσθέτει το επιλεγμένο με Λάσο κύκλωμα ως προσομοίωση και κλείνει αυτόματα το πλαίσιο επιλογής"
+                        >
+                          <span>➕ Προσθήκη από Λάσο ({nextSimLabel})</span>
+                        </button>
+                      )}
+
+                      {validSims.length > 0 ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                              Ενεργό Κύκλωμα (1 κάθε φορά):
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {validSims.map((sim) => {
+                              const isCurrent = activeSim?.id === sim.id;
+                              return (
+                                <div
+                                  key={sim.id}
+                                  className={`inline-flex items-center rounded-lg border text-[11px] font-extrabold transition ${
+                                    isCurrent
+                                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      updateActivePage((page) => ({
+                                        ...page,
+                                        activeCircuitSimId: sim.id,
+                                      }));
+                                      setSelectedStrokeIds([]);
+                                      setSimCircuitSwitchClosed(false);
+                                      setIsSimulating(true);
+                                    }}
+                                    className="px-2 py-1 cursor-pointer flex items-center gap-1"
+                                    title={`Ενεργοποίηση μόνο του κυκλώματος "${sim.name}"`}
+                                  >
+                                    <span>{isCurrent ? '🟢' : '⚪'}</span>
+                                    <span>{sim.name}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      updateActivePage((page) => {
+                                        const remaining = (page.circuitSims || []).filter(
+                                          (s) => s.id !== sim.id
+                                        );
+                                        const nextActiveId =
+                                          page.activeCircuitSimId === sim.id
+                                            ? remaining[0]?.id
+                                            : page.activeCircuitSimId;
+                                        if (remaining.length === 0) {
+                                          setIsSimulating(false);
+                                        }
+                                        return {
+                                          ...page,
+                                          circuitSims: remaining,
+                                          activeCircuitSimId: nextActiveId,
+                                        };
+                                      });
+                                    }}
+                                    className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer ${
+                                      isCurrent
+                                        ? 'text-emerald-100 hover:text-white'
+                                        : 'text-slate-400 hover:text-rose-600'
+                                    }`}
+                                    title={`Αφαίρεση "${sim.name}" από τη λίστα προσομοιώσεων`}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {activeSim && (
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              <span className="text-[10.5px] font-bold text-slate-600 shrink-0">
+                                Όνομα:
+                              </span>
+                              <input
+                                type="text"
+                                value={activeSim.name}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  updateActivePage((page) => ({
+                                    ...page,
+                                    circuitSims: (page.circuitSims || []).map((s) =>
+                                      s.id === activeSim.id ? { ...s, name: val } : s
+                                    ),
+                                  }));
+                                }}
+                                placeholder="π.χ. sim01"
+                                className="w-full px-2 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-[10.5px] font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-snug text-center">
+                          🎯 Επιλέξτε με το <b>Λάσο</b> ένα κλειστό κύκλωμα (με Μπαταρία/Πηγή) και πατήστε <b>Sim</b> για να δημιουργηθεί το <b>{nextSimLabel}</b>.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Primary Play / Stop Button */}
                 <button
                   type="button"
                   onClick={() => {
                     if (!isSimulating) {
+                      if (selectedStrokeIds.length > 0) {
+                        registerOrActivateSimFromLasso();
+                        return;
+                      }
+                      const activeSim = getActiveCircuitSim(activePage);
+                      if (!activeSim) {
+                        showToast('🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!');
+                        return;
+                      }
                       setSimCircuitSwitchClosed(false);
                       setIsSimulating(true);
-                      updateActivePage((page) => {
-                        const aligned = autoAlignAndConnectCircuit(page.strokes);
-                        const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
-                        return {
-                          ...page,
-                          strokes: isComplete ? aligned : page.strokes,
-                        };
-                      });
+                      updateActivePage((page) =>
+                        runScopedCircuitOperationOnPage(
+                          page,
+                          (sub) => autoAlignAndConnectCircuit(sub),
+                          activeSim.id
+                        )
+                      );
                     } else {
                       setIsSimulating(false);
                     }
                   }}
                   className={`w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer ${
-                    isSimulating
+                    isSimulating && getActiveCircuitSim(activePage)
                       ? 'bg-rose-600 hover:bg-rose-700 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                   }`}
                 >
                   <span>
-                    {isSimulating
+                    {isSimulating && getActiveCircuitSim(activePage)
                       ? '⏹️ Διακοπή Προσομοίωσης (Stop)'
                       : '▶️ Εκκίνηση Προσομοίωσης (Play)'}
                   </span>
@@ -23387,14 +23729,18 @@ export default function App() {
                 <div className="grid grid-cols-1 gap-1.5">
                   {isSimulating &&
                     (() => {
+                      const activeSim = getActiveCircuitSim(activePage);
+                      if (!activeSim) return null;
+                      const simSet = getSimExpandedStrokeSet(activePage, activeSim);
+                      const simStrokes = activePage.strokes.filter((s) => simSet.has(s.id));
                       const hasCompleteLoop = analyzeCircuitForSimulation(
-                        activePage.strokes,
+                        simStrokes,
                         true
                       ).isCircuitClosed;
                       if (!hasCompleteLoop) {
                         return (
                           <div className="w-full py-1.5 px-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10.5px] leading-snug text-center">
-                            ⏳ Σχεδιάστε ολοκληρωμένο κλειστό κύκλωμα (Πηγή + Καταναλωτής + Κλειστοί αγωγοί) για να εμφανιστεί ο διακόπτης αριστερά.
+                            ⏳ Το κύκλωμα "{activeSim.name}" είναι ανοιχτό. Κλείστε τους αγωγούς για να εμφανιστεί ο διακόπτης αριστερά.
                           </div>
                         );
                       }
@@ -23406,8 +23752,8 @@ export default function App() {
                               const next = !prev;
                               showToast(
                                 next
-                                  ? '🟢 Διακόπτης ΚΛΕΙΣΤΟΣ — Το ρεύμα ρέει στο κύκλωμα!'
-                                  : '🔴 Διακόπτης ΑΝΟΙΧΤΟΣ — Διακοπή ρεύματος!'
+                                  ? `🟢 [${activeSim.name}] Διακόπτης ΚΛΕΙΣΤΟΣ — Το ρεύμα ρέει!`
+                                  : `🔴 [${activeSim.name}] Διακόπτης ΑΝΟΙΧΤΟΣ — Διακοπή ρεύματος!`
                               );
                               return next;
                             });
@@ -23433,56 +23779,73 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      updateActivePage((page) => ({
-                        ...page,
-                        strokes: autoAlignAndConnectCircuit(page.strokes),
-                      }));
-                      showToast('📐 Οι αγωγοί και οι ακροδέκτες ευθυγραμμίστηκαν & ενώθηκαν!');
+                      const activeSim = getActiveCircuitSim(activePage);
+                      if (!activeSim) {
+                        showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
+                        return;
+                      }
+                      updateActivePage((page) =>
+                        runScopedCircuitOperationOnPage(
+                          page,
+                          (sub) => autoAlignAndConnectCircuit(sub),
+                          activeSim.id
+                        )
+                      );
+                      setSelectedStrokeIds([]);
+                      showToast(`📐 [${activeSim.name}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
                     }}
                     className="w-full py-1.5 px-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 font-bold text-[10.5px] flex items-center justify-center gap-1.5 transition cursor-pointer"
-                    title="Ευθυγραμμίζει αυτόματα τους οριζόντιους/κάθετους αγωγούς και ενώνει τις άκρες τους στους πόλους"
+                    title="Ευθυγραμμίζει αυτόματα τους οριζόντιους/κάθετους αγωγούς του ενεργού κυκλώματος"
                   >
                     <span>📐 Ένωση & Ευθυγράμμιση Αγωγών</span>
                   </button>
                 </div>
 
-                {/* 1-Click Global Circuit View Conversion: "Σχήματα" <-> "Σύμβολα" */}
+                {/* 1-Click Scoped Circuit View Conversion: "Σχήματα" <-> "Σύμβολα" */}
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
-                      updateActivePage((page) => {
-                        const res = convertCircuitComponents(
-                          page.strokes,
-                          undefined,
-                          'pictorial'
-                        );
-                        return { ...page, strokes: res.strokes };
-                      });
+                      const activeSim = getActiveCircuitSim(activePage);
+                      if (!activeSim) {
+                        showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
+                        return;
+                      }
+                      updateActivePage((page) =>
+                        runScopedCircuitOperationOnPage(
+                          page,
+                          (sub) => convertCircuitComponents(sub, undefined, 'pictorial').strokes,
+                          activeSim.id
+                        )
+                      );
                       setSelectedStrokeIds([]);
-                      showToast('🔋💡 Σχήματα: Μπαταρία, Λαμπτήρες & Φτερωτή!');
+                      showToast(`🔋💡 [${activeSim.name}] Σχήματα: Μπαταρία, Λαμπτήρες & Φτερωτή!`);
                     }}
                     className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition"
-                    title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή"
+                    title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή στο ενεργό κύκλωμα"
                   >
                     🔋💡 Σχήματα
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      updateActivePage((page) => {
-                        const res = convertCircuitComponents(
-                          page.strokes,
-                          undefined,
-                          'schematic'
-                        );
-                        return { ...page, strokes: res.strokes };
-                      });
+                      const activeSim = getActiveCircuitSim(activePage);
+                      if (!activeSim) {
+                        showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
+                        return;
+                      }
+                      updateActivePage((page) =>
+                        runScopedCircuitOperationOnPage(
+                          page,
+                          (sub) => convertCircuitComponents(sub, undefined, 'schematic').strokes,
+                          activeSim.id
+                        )
+                      );
                       setSelectedStrokeIds([]);
-                      showToast('⚡〰️ Σύμβολα: Πηγή Τάσης & Αντιστάτες!');
+                      showToast(`⚡〰️ [${activeSim.name}] Σύμβολα: Πηγή Τάσης & Αντιστάτες!`);
                     }}
                     className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition"
-                    title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες"
+                    title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες στο ενεργό κύκλωμα"
                   >
                     ⚡〰️ Σύμβολα
                   </button>
