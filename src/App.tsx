@@ -1021,6 +1021,9 @@ export default function App() {
   const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs' | null>(null);
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(false);
+  const [isSpringPaused, setIsSpringPaused] = useState<boolean>(false);
+  const springSimElapsedRef = useRef<number>(0);
+  const springSimLastFrameTimeRef = useRef<number | null>(null);
   const [springSettleAnim, setSpringSettleAnim] = useState<{
     simId: string;
     startTime: number;
@@ -1057,6 +1060,8 @@ export default function App() {
     oscUx: number;
     oscUy: number;
     massBox: { minX: number; minY: number; maxX: number; maxY: number };
+    pauseBtnBox?: { x1: number; y1: number; x2: number; y2: number };
+    stopBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     ampHandles: { x: number; y: number }[];
     graphBoxes: {
       key: 'xt' | 'vt' | 'at';
@@ -4142,6 +4147,24 @@ export default function App() {
 
       if (springOverlayHitRef.current) {
         const spHit = springOverlayHitRef.current;
+        if (
+          spHit.pauseBtnBox &&
+          ptX >= spHit.pauseBtnBox.x1 - 6 &&
+          ptX <= spHit.pauseBtnBox.x2 + 6 &&
+          ptY >= spHit.pauseBtnBox.y1 - 6 &&
+          ptY <= spHit.pauseBtnBox.y2 + 6
+        ) {
+          return true;
+        }
+        if (
+          spHit.stopBtnBox &&
+          ptX >= spHit.stopBtnBox.x1 - 6 &&
+          ptX <= spHit.stopBtnBox.x2 + 6 &&
+          ptY >= spHit.stopBtnBox.y1 - 6 &&
+          ptY <= spHit.stopBtnBox.y2 + 6
+        ) {
+          return true;
+        }
         for (const hPt of spHit.ampHandles) {
           if (Math.hypot(ptX - hPt.x, ptY - hPt.y) <= 26) {
             return true;
@@ -11161,6 +11184,20 @@ export default function App() {
               : activeSpringSim.customInitialPhaseRad ?? -Math.PI / 2;
           const A = Math.max(16, activeSpringSim.amplitudePx || 55);
 
+          if (isSpringSimulating && !isSpringPaused) {
+            if (springSimLastFrameTimeRef.current !== null) {
+              const dt = Math.max(
+                0,
+                Math.min(0.1, (now - springSimLastFrameTimeRef.current) / 1000)
+              );
+              springSimElapsedRef.current += dt;
+            }
+            springSimLastFrameTimeRef.current = now;
+          } else {
+            springSimLastFrameTimeRef.current = null;
+          }
+          const springElapsedSec = springSimElapsedRef.current;
+
           const isSettlingToEq =
             springSettleAnim !== null &&
             springSettleAnim.simId === activeSpringSim.id &&
@@ -11175,7 +11212,7 @@ export default function App() {
             dispDx = xDisp * oscUx;
             dispDy = xDisp * oscUy;
           } else if (isSpringSimulating) {
-            xDisp = A * Math.sin(omega * elapsedSec + phi0);
+            xDisp = A * Math.sin(omega * springElapsedSec + phi0);
             dispDx = xDisp * oscUx;
             dispDy = xDisp * oscUy;
           } else if (isSettlingToEq && springSettleAnim) {
@@ -11589,11 +11626,11 @@ export default function App() {
               ctx.arc(axisLeftX, startY, 4.5, 0, Math.PI * 2);
               ctx.fill();
             } else {
-              // Live progressive / scrolling wave during Play!
+              // Live progressive / scrolling wave during Play (freezes at current instant when Paused)!
               const tStart =
-                elapsedSec > timeWindowSec ? elapsedSec - timeWindowSec : 0;
-              const tEnd = elapsedSec;
-              const activeFraction = Math.min(1, elapsedSec / timeWindowSec);
+                springElapsedSec > timeWindowSec ? springElapsedSec - timeWindowSec : 0;
+              const tEnd = springElapsedSec;
+              const activeFraction = Math.min(1, springElapsedSec / timeWindowSec);
               const activeSamples = Math.max(
                 2,
                 Math.round(numSamples * activeFraction)
@@ -11646,6 +11683,65 @@ export default function App() {
             ctx.restore();
           }
 
+          // 6E. On-Canvas Floating "⏸ Παύση / ▶ Συνέχεια" & "⏹" Pill Buttons right above the oscillating spring!
+          let pauseBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
+          let stopBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
+          if (isSpringSimulating) {
+            const pW = isSpringPaused ? 96 : 82;
+            const sW = 30;
+            const bH = 26;
+            const gap = 6;
+            const totW = pW + gap + sW;
+            const topAnchorY = Math.min(fixedPt.y, eqFreePt.y - A);
+            const bY = Math.max(12, topAnchorY - 38);
+            const pX = Math.max(12, Math.min(w - totW - 12, fixedPt.x - totW / 2));
+            const sX = pX + pW + gap;
+
+            pauseBtnBox = { x1: pX, y1: bY, x2: pX + pW, y2: bY + bH };
+            stopBtnBox = { x1: sX, y1: bY, x2: sX + sW, y2: bY + bH };
+
+            ctx.save();
+            // Pause / Resume Pill
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = isSpringPaused ? '#059669' : '#f59e0b';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(pX, bY, pW, bH, 13);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11.5px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              isSpringPaused ? '▶ Συνέχεια' : '⏸ Παύση',
+              pX + pW / 2,
+              bY + bH / 2 + 0.5
+            );
+
+            // Stop Pill ("⏹")
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+            ctx.shadowBlur = 6;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = '#e11d48';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(sX, bY, sW, bH, 13);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(sX + sW / 2 - 4.2, bY + bH / 2 - 4.2, 8.4, 8.4);
+            ctx.restore();
+          }
+
           springOverlayHitRef.current = {
             simId: activeSpringSim.id,
             eqCenterX: eqMassCx,
@@ -11658,6 +11754,8 @@ export default function App() {
               maxX: curMassCx + massW / 2,
               maxY: curMassCy + massH / 2,
             },
+            pauseBtnBox,
+            stopBtnBox,
             ampHandles,
             graphBoxes: graphBoxesHit,
           };
@@ -11671,7 +11769,7 @@ export default function App() {
       ctx.restore();
       if (
         isSimulating ||
-        isSpringSimulating ||
+        (isSpringSimulating && !isSpringPaused) ||
         hasProposal ||
         springSettleAnim !== null ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
@@ -11687,6 +11785,7 @@ export default function App() {
   }, [
     isSimulating,
     isSpringSimulating,
+    isSpringPaused,
     springSettleAnim,
     showSimulationPanel,
     simActiveCategory,
@@ -14356,6 +14455,39 @@ export default function App() {
     //            3) Direct Mass Block pulling along the oscillation axis to release into SHM!
     if (springOverlayHitRef.current) {
       const spHit = springOverlayHitRef.current;
+      // 0) Check On-Canvas "⏸ Παύση / ▶ Συνέχεια" & "⏹" Pill Buttons
+      if (
+        spHit.pauseBtnBox &&
+        pt.x >= spHit.pauseBtnBox.x1 - 6 &&
+        pt.x <= spHit.pauseBtnBox.x2 + 6 &&
+        pt.y >= spHit.pauseBtnBox.y1 - 6 &&
+        pt.y <= spHit.pauseBtnBox.y2 + 6
+      ) {
+        e.preventDefault();
+        setIsSpringPaused((p) => !p);
+        isDrawingRef.current = false;
+        activePointerIdRef.current = null;
+        activePointerTypeRef.current = null;
+        return;
+      }
+      if (
+        spHit.stopBtnBox &&
+        pt.x >= spHit.stopBtnBox.x1 - 6 &&
+        pt.x <= spHit.stopBtnBox.x2 + 6 &&
+        pt.y >= spHit.stopBtnBox.y1 - 6 &&
+        pt.y <= spHit.stopBtnBox.y2 + 6
+      ) {
+        e.preventDefault();
+        setIsSpringSimulating(false);
+        setIsSpringPaused(false);
+        springSimElapsedRef.current = 0;
+        springSimLastFrameTimeRef.current = null;
+        isDrawingRef.current = false;
+        activePointerIdRef.current = null;
+        activePointerTypeRef.current = null;
+        return;
+      }
+
       // 1) Check Blue Square Amplitude Handles (□)
       for (const hPt of spHit.ampHandles) {
         if (Math.hypot(pt.x - hPt.x, pt.y - hPt.y) <= 24) {
@@ -18884,6 +19016,9 @@ export default function App() {
       const pulledDisp = draggingSpringMassRef.current.currentDisplacementPx;
       draggingSpringMassRef.current = null;
       if (Math.abs(pulledDisp) >= 12) {
+        springSimElapsedRef.current = 0;
+        springSimLastFrameTimeRef.current = null;
+        setIsSpringPaused(false);
         setIsSpringSimulating(true);
       }
       renderStaticSceneRef.current();
@@ -27856,24 +27991,55 @@ export default function App() {
 
                         {activeSpring && (
                           <>
-                            {/* 2. Primary Play / Stop Oscillation Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsSpringSimulating((prev) => !prev);
-                              }}
-                              className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
-                                isSpringSimulating
-                                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                              }`}
-                            >
-                              <span>
-                                {isSpringSimulating
-                                  ? '⏹️ Διακοπή (Επιστροφή στη Θ.Ι.)'
-                                  : '▶️ Έναρξη Αμείωτης Ταλάντωσης'}
-                              </span>
-                            </button>
+                            {/* 2. Primary Play / Pause / Resume / Stop Oscillation Controls */}
+                            {!isSpringSimulating ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  springSimElapsedRef.current = 0;
+                                  springSimLastFrameTimeRef.current = null;
+                                  setIsSpringPaused(false);
+                                  setIsSpringSimulating(true);
+                                }}
+                                className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                              >
+                                <span>▶️ Έναρξη Αμείωτης Ταλάντωσης</span>
+                              </button>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsSpringPaused((p) => !p)}
+                                  className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer ${
+                                    isSpringPaused
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                      : 'bg-amber-500 hover:bg-amber-600 text-white'
+                                  }`}
+                                  title={
+                                    isSpringPaused
+                                      ? 'Συνέχιση ταλάντωσης και διαγραμμάτων από το σημείο παύσης'
+                                      : 'Προσωρινή παύση ταλάντωσης και διαγραμμάτων'
+                                  }
+                                >
+                                  <span>
+                                    {isSpringPaused ? '▶️ Συνέχεια' : '⏸️ Παύση'}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsSpringSimulating(false);
+                                    setIsSpringPaused(false);
+                                    springSimElapsedRef.current = 0;
+                                    springSimLastFrameTimeRef.current = null;
+                                  }}
+                                  className="py-1.5 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                                  title="Διακοπή ταλάντωσης και επιστροφή στη Θέση Ισορροπίας (Θ.Ι.)"
+                                >
+                                  <span>⏹️ Διακοπή</span>
+                                </button>
+                              </div>
+                            )}
 
                             {/* 3. Initial Phase / Starting Position Selector (x=0, +A, -A) */}
                             <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/80 space-y-1.5">
