@@ -4936,6 +4936,21 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     }
   }
 
+  // 0b. First split any wire that physically passes straight through a circuit component's body
+  const allCompStrokeIds = currentStrokes
+    .filter(
+      (s) =>
+        s.shapeType === 'bulb' ||
+        s.shapeType === 'battery' ||
+        s.shapeType === 'voltage-source' ||
+        s.shapeType === 'resistor' ||
+        s.shapeType === 'fan'
+    )
+    .map((s) => s.id);
+  if (allCompStrokeIds.length > 0) {
+    currentStrokes = splitWiresUnderCircuitComponent(currentStrokes, allCompStrokeIds);
+  }
+
   const initialComps = getCircuitComponentsWithTerminals(currentStrokes);
   if (initialComps.length === 0) return currentStrokes;
 
@@ -4969,8 +4984,8 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     const len = Math.hypot(dx, dy);
     if (len < 10) return;
     let orientation: 'h' | 'v' | 'diag' = 'diag';
-    if (dy <= Math.max(22, dx * 0.32)) orientation = 'h';
-    else if (dx <= Math.max(22, dy * 0.32)) orientation = 'v';
+    if (dy <= Math.max(20, dx * 0.28)) orientation = 'h';
+    else if (dx <= Math.max(20, dy * 0.28)) orientation = 'v';
     wireRefs.push({
       strokeIdx: idx,
       stroke: s,
@@ -4986,12 +5001,12 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
 
   if (wireRefs.length === 0) return currentStrokes;
 
-  // 2. Cluster horizontal rows (within 42px) & vertical columns (within 42px)
+  // 2. Cluster horizontal rows (within 36px) & vertical columns (within 36px)
   const hRows: { yValues: number[]; yRow: number; wireIndices: number[] }[] = [];
   for (let i = 0; i < wireRefs.length; i++) {
     const w = wireRefs[i];
     if (w.orientation !== 'h') continue;
-    const row = hRows.find((r) => Math.abs(r.yRow - w.avgY) <= 42);
+    const row = hRows.find((r) => Math.abs(r.yRow - w.avgY) <= 36);
     if (row) {
       row.yValues.push(w.avgY);
       row.yRow = row.yValues.reduce((a, b) => a + b, 0) / row.yValues.length;
@@ -5005,7 +5020,7 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
   for (let i = 0; i < wireRefs.length; i++) {
     const w = wireRefs[i];
     if (w.orientation !== 'v') continue;
-    const col = vCols.find((c) => Math.abs(c.xCol - w.avgX) <= 42);
+    const col = vCols.find((c) => Math.abs(c.xCol - w.avgX) <= 36);
     if (col) {
       col.xValues.push(w.avgX);
       col.xCol = col.xValues.reduce((a, b) => a + b, 0) / col.xValues.length;
@@ -5017,16 +5032,26 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
 
   for (const row of hRows) {
     row.yRow = Math.round(row.yRow);
+    for (const wi of row.wireIndices) {
+      wireRefs[wi].y1 = row.yRow;
+      wireRefs[wi].y2 = row.yRow;
+      wireRefs[wi].avgY = row.yRow;
+    }
   }
   for (const col of vCols) {
     col.xCol = Math.round(col.xCol);
+    for (const wi of col.wireIndices) {
+      wireRefs[wi].x1 = col.xCol;
+      wireRefs[wi].x2 = col.xCol;
+      wireRefs[wi].avgX = col.xCol;
+    }
   }
 
-  // 3. Vertically align each circuit component to its nearest horizontal wire row (within 52px)
+  // 3. Vertically align each circuit component to its nearest horizontal wire row ONLY if visibly close (<= 40px)
   for (const comp of initialComps) {
     const termY = comp.leftTerm.y;
     let bestRow: (typeof hRows)[number] | null = null;
-    let bestDist = 52;
+    let bestDist = 40;
     for (const row of hRows) {
       const d = Math.abs(row.yRow - termY);
       if (d <= bestDist) {
@@ -5055,8 +5080,10 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
 
   // Recompute component terminal positions after vertical alignment
   const alignedComps = getCircuitComponentsWithTerminals(currentStrokes);
+  const CLOSE_SNAP_TOL = 44;
 
-  // Track which old wire stroke IDs get replaced by clean reconstructed segments
+  // 4. Snap horizontal wire endpoints ONLY when visibly close (<= 44px) to a component terminal or vertical wire,
+  //    and merge collinear horizontal segments that nearly touch (gap <= 36px) with no component between them!
   const replacedWireStrokeIds = new Set<string>();
   const newWireStrokes: StrokeObject[] = [];
 
@@ -5084,147 +5111,181 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     ],
   });
 
-  // Sort vCols left-to-right and hRows top-to-bottom
-  vCols.sort((a, b) => a.xCol - b.xCol);
-  hRows.sort((a, b) => a.yRow - b.yRow);
-
-  // 4. Reconstruct each Horizontal Row cleanly from left rail -> component terminals -> right rail!
-  const activeRowYs: number[] = [];
   for (let rIdx = 0; rIdx < hRows.length; rIdx++) {
     const row = hRows[rIdx];
     const yRow = row.yRow;
     const rowComps = alignedComps
-      .filter((c) => Math.abs(c.leftTerm.y - yRow) <= 38)
+      .filter((c) => Math.abs(c.leftTerm.y - yRow) <= 34)
       .sort((a, b) => a.cx - b.cx);
 
-    const rowWires = row.wireIndices.map((wi) => wireRefs[wi]);
-    if (rowWires.length === 0) continue;
-    activeRowYs.push(yRow);
+    const intervals: { xL: number; xR: number; stroke: StrokeObject }[] = [];
+    for (const wi of row.wireIndices) {
+      const w = wireRefs[wi];
+      replacedWireStrokeIds.add(w.stroke.id);
+      let xL = Math.min(w.x1, w.x2);
+      let xR = Math.max(w.x1, w.x2);
 
-    const templateStroke = rowWires[0].stroke;
-    for (const rw of rowWires) {
-      replacedWireStrokeIds.add(rw.stroke.id);
-    }
-
-    let rowMinX = Math.min(
-      ...rowWires.map((w) => Math.min(w.x1, w.x2)),
-      ...(rowComps.length > 0 ? [rowComps[0].leftTerm.x] : [])
-    );
-    let rowMaxX = Math.max(
-      ...rowWires.map((w) => Math.max(w.x1, w.x2)),
-      ...(rowComps.length > 0 ? [rowComps[rowComps.length - 1].rightTerm.x] : [])
-    );
-
-    // Snap rowMinX to left vertical column if within 95px
-    for (const col of vCols) {
-      if (Math.abs(rowMinX - col.xCol) <= 95) {
-        rowMinX = col.xCol;
-        break;
-      }
-    }
-    // Snap rowMaxX to right vertical column if within 95px
-    for (let cIdx = vCols.length - 1; cIdx >= 0; cIdx--) {
-      const col = vCols[cIdx];
-      if (Math.abs(rowMaxX - col.xCol) <= 95) {
-        rowMaxX = col.xCol;
-        break;
-      }
-    }
-
-    if (rowComps.length === 0) {
-      if (rowMaxX - rowMinX >= 8) {
-        newWireStrokes.push(
-          makeCleanWireStroke(templateStroke, rowMinX, yRow, rowMaxX, yRow, `r${rIdx}-0`)
-        );
-      }
-    } else {
-      // Segment before first component
-      if (rowComps[0].leftTerm.x - rowMinX >= 6) {
-        newWireStrokes.push(
-          makeCleanWireStroke(
-            templateStroke,
-            rowMinX,
-            yRow,
-            rowComps[0].leftTerm.x,
-            yRow,
-            `r${rIdx}-L`
-          )
-        );
-      }
-      // Segments between consecutive components on the same horizontal branch
-      for (let i = 0; i < rowComps.length - 1; i++) {
-        const xStart = rowComps[i].rightTerm.x;
-        const xEnd = rowComps[i + 1].leftTerm.x;
-        if (xEnd - xStart >= 6) {
-          newWireStrokes.push(
-            makeCleanWireStroke(templateStroke, xStart, yRow, xEnd, yRow, `r${rIdx}-M${i}`)
-          );
+      // Trim or snap if wire overlaps a component's interior body
+      for (const c of rowComps) {
+        if (xL >= c.leftTerm.x - 10 && xL <= c.rightTerm.x + CLOSE_SNAP_TOL && xR > c.rightTerm.x + 6) {
+          xL = c.rightTerm.x;
+        }
+        if (xR <= c.rightTerm.x + 10 && xR >= c.leftTerm.x - CLOSE_SNAP_TOL && xL < c.leftTerm.x - 6) {
+          xR = c.leftTerm.x;
         }
       }
-      // Segment after last component
-      const lastRight = rowComps[rowComps.length - 1].rightTerm.x;
-      if (rowMaxX - lastRight >= 6) {
+
+      // Snap left endpoint xL to a vertical column ONLY if that column has a wire within CLOSE_SNAP_TOL of (xL, yRow)
+      for (const col of vCols) {
+        const colHasNearY = col.wireIndices.some((cwi) => {
+          const cw = wireRefs[cwi];
+          const minY = Math.min(cw.y1, cw.y2) - CLOSE_SNAP_TOL;
+          const maxY = Math.max(cw.y1, cw.y2) + CLOSE_SNAP_TOL;
+          return yRow >= minY && yRow <= maxY;
+        });
+        if (colHasNearY && Math.abs(xL - col.xCol) <= CLOSE_SNAP_TOL) {
+          xL = col.xCol;
+          break;
+        }
+      }
+
+      // Snap right endpoint xR to a vertical column ONLY if that column has a wire within CLOSE_SNAP_TOL of (xR, yRow)
+      for (const col of vCols) {
+        const colHasNearY = col.wireIndices.some((cwi) => {
+          const cw = wireRefs[cwi];
+          const minY = Math.min(cw.y1, cw.y2) - CLOSE_SNAP_TOL;
+          const maxY = Math.max(cw.y1, cw.y2) + CLOSE_SNAP_TOL;
+          return yRow >= minY && yRow <= maxY;
+        });
+        if (colHasNearY && Math.abs(xR - col.xCol) <= CLOSE_SNAP_TOL) {
+          xR = col.xCol;
+          break;
+        }
+      }
+
+      if (xR - xL >= 6) {
+        intervals.push({ xL, xR, stroke: w.stroke });
+      }
+    }
+
+    // Sort intervals left-to-right and merge collinear segments that touch or have a tiny gap (<= 38px) with no component between them
+    intervals.sort((a, b) => a.xL - b.xL);
+    const merged: { xL: number; xR: number; stroke: StrokeObject }[] = [];
+    for (const seg of intervals) {
+      if (merged.length === 0) {
+        merged.push({ ...seg });
+      } else {
+        const prev = merged[merged.length - 1];
+        const gap = seg.xL - prev.xR;
+        const compBetween = rowComps.some(
+          (c) => c.cx > prev.xR - 8 && c.cx < seg.xL + 8
+        );
+        if (gap <= 38 && !compBetween) {
+          prev.xR = Math.max(prev.xR, seg.xR);
+        } else {
+          merged.push({ ...seg });
+        }
+      }
+    }
+
+    // Re-snap merged interval endpoints to nearby component terminals (<= CLOSE_SNAP_TOL)
+    for (let mIdx = 0; mIdx < merged.length; mIdx++) {
+      const m = merged[mIdx];
+      for (const c of rowComps) {
+        if (Math.abs(m.xL - c.rightTerm.x) <= CLOSE_SNAP_TOL && m.xR > c.rightTerm.x + 6) {
+          m.xL = c.rightTerm.x;
+        }
+        if (Math.abs(m.xR - c.leftTerm.x) <= CLOSE_SNAP_TOL && m.xL < c.leftTerm.x - 6) {
+          m.xR = c.leftTerm.x;
+        }
+      }
+      if (m.xR - m.xL >= 6) {
         newWireStrokes.push(
-          makeCleanWireStroke(
-            templateStroke,
-            lastRight,
-            yRow,
-            rowMaxX,
-            yRow,
-            `r${rIdx}-R`
-          )
+          makeCleanWireStroke(m.stroke, m.xL, yRow, m.xR, yRow, `h${rIdx}-${mIdx}`)
         );
       }
     }
   }
 
-  // 5. Reconstruct each Vertical Column cleanly, splitting at every horizontal row T-junction!
+  // 5. Snap vertical wire endpoints ONLY when visibly close (<= 44px) to horizontal wire endpoints,
+  //    merge collinear vertical segments (gap <= 38px), and split at real T-junctions!
+  const hWireEndpoints: { x: number; y: number }[] = [];
+  for (const nw of newWireStrokes) {
+    if (nw.points.length >= 2) {
+      hWireEndpoints.push(nw.points[0], nw.points[1]);
+    }
+  }
+
   for (let cIdx = 0; cIdx < vCols.length; cIdx++) {
     const col = vCols[cIdx];
     const xCol = col.xCol;
-    const colWires = col.wireIndices.map((wi) => wireRefs[wi]);
-    if (colWires.length === 0) continue;
+    const vIntervals: { yT: number; yB: number; stroke: StrokeObject }[] = [];
 
-    const templateStroke = colWires[0].stroke;
-    for (const cw of colWires) {
-      replacedWireStrokeIds.add(cw.stroke.id);
-    }
+    for (const wi of col.wireIndices) {
+      const w = wireRefs[wi];
+      replacedWireStrokeIds.add(w.stroke.id);
+      let yT = Math.min(w.y1, w.y2);
+      let yB = Math.max(w.y1, w.y2);
 
-    let colMinY = Math.min(...colWires.map((w) => Math.min(w.y1, w.y2)));
-    let colMaxY = Math.max(...colWires.map((w) => Math.max(w.y1, w.y2)));
-
-    for (const yR of activeRowYs) {
-      if (Math.abs(colMinY - yR) <= 90) {
-        colMinY = yR;
-        break;
+      for (const hep of hWireEndpoints) {
+        if (Math.abs(hep.x - xCol) <= CLOSE_SNAP_TOL) {
+          if (Math.abs(yT - hep.y) <= CLOSE_SNAP_TOL && yB > hep.y + 8) {
+            yT = hep.y;
+          }
+          if (Math.abs(yB - hep.y) <= CLOSE_SNAP_TOL && yT < hep.y - 8) {
+            yB = hep.y;
+          }
+        }
+      }
+      if (yB - yT >= 6) {
+        vIntervals.push({ yT, yB, stroke: w.stroke });
       }
     }
-    for (let i = activeRowYs.length - 1; i >= 0; i--) {
-      const yR = activeRowYs[i];
-      if (Math.abs(colMaxY - yR) <= 90) {
-        colMaxY = yR;
-        break;
+
+    vIntervals.sort((a, b) => a.yT - b.yT);
+    const mergedV: { yT: number; yB: number; stroke: StrokeObject }[] = [];
+    for (const seg of vIntervals) {
+      if (mergedV.length === 0) {
+        mergedV.push({ ...seg });
+      } else {
+        const prev = mergedV[mergedV.length - 1];
+        if (seg.yT - prev.yB <= 38) {
+          prev.yB = Math.max(prev.yB, seg.yB);
+        } else {
+          mergedV.push({ ...seg });
+        }
       }
     }
 
-    // Collect all horizontal row Y coordinates along this vertical rail (for clean T-junctions & L-corners)
-    const yBreaks: number[] = [colMinY];
-    for (const yR of activeRowYs) {
-      if (yR > colMinY + 12 && yR < colMaxY - 12) {
-        yBreaks.push(yR);
+    for (let mIdx = 0; mIdx < mergedV.length; mIdx++) {
+      const mv = mergedV[mIdx];
+      const yBreaks: number[] = [mv.yT];
+      for (const hep of hWireEndpoints) {
+        if (
+          Math.abs(hep.x - xCol) <= CLOSE_SNAP_TOL &&
+          hep.y > mv.yT + 10 &&
+          hep.y < mv.yB - 10 &&
+          !yBreaks.some((yb) => Math.abs(yb - hep.y) <= 8)
+        ) {
+          yBreaks.push(hep.y);
+        }
       }
-    }
-    if (colMaxY > colMinY + 8) {
-      yBreaks.push(colMaxY);
-    }
+      yBreaks.push(mv.yB);
+      yBreaks.sort((a, b) => a - b);
 
-    for (let k = 0; k < yBreaks.length - 1; k++) {
-      const yA = yBreaks[k];
-      const yB = yBreaks[k + 1];
-      if (yB - yA >= 8) {
-        newWireStrokes.push(
-          makeCleanWireStroke(templateStroke, xCol, yA, xCol, yB, `c${cIdx}-${k}`)
-        );
+      for (let k = 0; k < yBreaks.length - 1; k++) {
+        if (yBreaks[k + 1] - yBreaks[k] >= 6) {
+          newWireStrokes.push(
+            makeCleanWireStroke(
+              mv.stroke,
+              xCol,
+              yBreaks[k],
+              xCol,
+              yBreaks[k + 1],
+              `v${cIdx}-${mIdx}-${k}`
+            )
+          );
+        }
       }
     }
   }
@@ -5396,6 +5457,7 @@ export interface SimulatedWireSegment {
   y2: number;
   length: number;
   active: boolean;
+  inClosedLoop: boolean;
   currentSpeed: number;
   highEnergy: boolean;
 }
@@ -5480,7 +5542,7 @@ export function analyzeCircuitForSimulation(
     allInterestPts.push(c.leftTerm, c.rightTerm);
   }
 
-  const TJUNCTION_TOL = 54;
+  const TJUNCTION_TOL = 38;
   for (let i = 0; i < rawWires.length; i++) {
     const w = rawWires[i];
     const dx = w.x2 - w.x1;
@@ -5540,8 +5602,9 @@ export function analyzeCircuitForSimulation(
     return { comp: c, u, v };
   });
 
-  const TERM_SNAP_TOL = 60;
-  const WIRE_JOIN_TOL = 54;
+  // Strict proximity tolerances so ONLY visibly close lines (<= 40px) form a closed circuit!
+  const TERM_SNAP_TOL = 40;
+  const WIRE_JOIN_TOL = 38;
 
   const resolveWireEndpointNode = (
     pt: { x: number; y: number },
@@ -5732,8 +5795,9 @@ export function analyzeCircuitForSimulation(
   const compPowerMap = new Map<string, number>();
   let anyClosedLoop = false;
 
-  // Only solve for active current flow when the automatic left-wire switch is CLOSED!
-  if (hasSource && circuitSwitchClosed && openSwitches.length === 0) {
+  // Solve topological paths from Source (+) to Source (-) to check if the drawn wires
+  // actually form at least one physically closed loop (with close/connected lines <= 40px).
+  if (hasSource && openSwitches.length === 0) {
     const primarySourceNode = compNodes.find(
       (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
     )!;
@@ -5787,67 +5851,15 @@ export function analyzeCircuitForSimulation(
     dfs(startNode, 0);
   }
 
-  // Tolerant Multi-Branch Fallback: if a parallel branch had a slightly larger hand-drawn gap (> 60px),
-  // ensure any horizontal branch row with loads & wires still lights up when the switch is CLOSED!
-  if (hasSource && circuitSwitchClosed && openSwitches.length === 0 && wires.length >= 2) {
-    const loadComps = comps.filter(
-      (c) => c.kind === 'bulb' || c.kind === 'resistor' || c.kind === 'fan'
-    );
-    const rows: CircuitComponentInfo[][] = [];
-    for (const lc of loadComps) {
-      const row = rows.find((r) => Math.abs(r[0].leftTerm.y - lc.leftTerm.y) < 55);
-      if (row) row.push(lc);
-      else rows.push([lc]);
-    }
-    for (const row of rows) {
-      const branchI = 1.0 / Math.max(1, row.length);
-      for (const lc of row) {
-        if (!compPowerMap.has(lc.key) || (compPowerMap.get(lc.key) || 0) < 0.05) {
-          // Check if there is at least one wire near this load
-          const hasWireNear = wires.some(
-            (w) =>
-              Math.hypot(w.x1 - lc.leftTerm.x, w.y1 - lc.leftTerm.y) < 85 ||
-              Math.hypot(w.x2 - lc.leftTerm.x, w.y2 - lc.leftTerm.y) < 85 ||
-              Math.hypot(w.x1 - lc.rightTerm.x, w.y1 - lc.rightTerm.y) < 85 ||
-              Math.hypot(w.x2 - lc.rightTerm.x, w.y2 - lc.rightTerm.y) < 85
-          );
-          if (hasWireNear) {
-            anyClosedLoop = true;
-            compPowerMap.set(lc.key, branchI);
-          }
-        }
-      }
-    }
-    if (anyClosedLoop) {
-      for (let i = 0; i < wires.length; i++) {
-        if (Math.abs(wireFlowSum[i]) < 0.01) {
-          const w = wires[i];
-          const isVerticalLeft = w.x1 < (sources[0]?.cx ?? 500) && Math.abs(w.y2 - w.y1) > Math.abs(w.x2 - w.x1);
-          const isVerticalRight = w.x1 >= (sources[0]?.cx ?? 500) && Math.abs(w.y2 - w.y1) > Math.abs(w.x2 - w.x1);
-          if (isVerticalLeft) {
-            // Upward from source (+) on the left
-            wireFlowSum[i] = w.y2 < w.y1 ? 0.85 : -0.85;
-            wireHighEnergy[i] = true;
-          } else if (isVerticalRight) {
-            // Downward to source (-) on the right
-            wireFlowSum[i] = w.y2 > w.y1 ? 0.85 : -0.85;
-          } else {
-            // Horizontal branch wire: flow left -> right (from + side on left to - side on right)
-            wireFlowSum[i] = w.x2 > w.x1 ? 0.75 : -0.75;
-            const rowLoads = loadComps.filter((lc) => Math.abs(lc.leftTerm.y - (w.y1 + w.y2) / 2) < 55);
-            const minLoadX = rowLoads.length > 0 ? Math.min(...rowLoads.map((l) => l.cx)) : Infinity;
-            if ((w.x1 + w.x2) / 2 < minLoadX) {
-              wireHighEnergy[i] = true;
-            }
-          }
-        }
-      }
-    }
+  // Only show the interactive wire switch if the drawn wires actually form a closed loop!
+  if (!anyClosedLoop) {
+    autoSwitch = null;
   }
 
   const simulatedWires: SimulatedWireSegment[] = wires.map((w, idx) => {
     const flow = wireFlowSum[idx];
-    const active = circuitSwitchClosed && Math.abs(flow) > 0.01;
+    const inClosedLoop = Math.abs(flow) > 0.01;
+    const active = circuitSwitchClosed && inClosedLoop;
     const speed = Math.min(2.2, Math.max(0.4, Math.abs(flow)));
     if (flow >= 0) {
       return {
@@ -5856,6 +5868,7 @@ export function analyzeCircuitForSimulation(
         x2: w.x2,
         y2: w.y2,
         length: w.length,
+        inClosedLoop,
         active,
         currentSpeed: active ? speed : 0,
         highEnergy: wireHighEnergy[idx],
@@ -5867,6 +5880,7 @@ export function analyzeCircuitForSimulation(
         x2: w.x1,
         y2: w.y1,
         length: w.length,
+        inClosedLoop,
         active,
         currentSpeed: active ? speed : 0,
         highEnergy: wireHighEnergy[idx],

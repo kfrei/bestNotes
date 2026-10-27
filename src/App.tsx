@@ -8408,6 +8408,7 @@ export default function App() {
         ctx.strokeStyle = '#1e293b';
         ctx.lineWidth = 11.5;
         for (const seg of simData.wireSegments) {
+          if (!seg.inClosedLoop) continue;
           ctx.beginPath();
           ctx.moveTo(seg.x1, seg.y1);
           ctx.lineTo(seg.x2, seg.y2);
@@ -8557,6 +8558,7 @@ export default function App() {
 
         for (let segIdx = 0; segIdx < simData.wireSegments.length; segIdx++) {
           const seg = simData.wireSegments[segIdx];
+          if (!seg.inClosedLoop) continue;
           const count = Math.max(1, Math.floor(seg.length / spacing));
           const stepDist = seg.length / count;
           const speedPxPerSec = seg.active
