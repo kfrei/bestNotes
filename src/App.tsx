@@ -1035,7 +1035,16 @@ export default function App() {
     origX: number;
     origY: number;
   } | null>(null);
-  const [isCleanProjectorMode, setIsCleanProjectorMode] = useState<boolean>(false);
+  const [isCleanProjectorMode] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('projector') === '1' || params.get('hdmi') === '1') return true;
+      if ((navigator as any).presentation?.receiver) return true;
+    } catch {
+      // ignore
+    }
+    return false;
+  });
   const [isExternalProjectorOpen, setIsExternalProjectorOpen] = useState<boolean>(false);
   const projectorWinRef = useRef<Window | null>(null);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
@@ -8703,65 +8712,71 @@ export default function App() {
     simSpeedMultiplier,
   ]);
 
-  // Open or Focus External HDMI / 2nd Screen Projector Window (shows ONLY the page + soft grey background, 0 toolbars!)
-  const openExternalProjectorWindow = useCallback(() => {
-    let win = projectorWinRef.current;
-    if (!win || win.closed) {
-      win = window.open(
-        '',
-        'ExplainBoardsHDMIProjector',
-        'width=1280,height=900,menubar=no,toolbar=no,location=no,status=no'
-      );
-      if (!win) {
-        // If popup is blocked or on single-screen iPad, toggle Clean Projector Mode directly!
-        setIsCleanProjectorMode(true);
-        showToast('📺 Ενεργοποιήθηκε η Καθαρή Οθόνη HDMI (Κρύφτηκαν οι μπάρες)!');
-        return;
+  // Automatic External HDMI / 2nd Screen Projector Sync (Presentation API + BroadcastChannel)
+  useEffect(() => {
+    try {
+      const PresReq = (window as any).PresentationRequest;
+      if (PresReq && (navigator as any).presentation && !isCleanProjectorMode) {
+        const projUrl = `${window.location.origin}${window.location.pathname}?hdmi=1`;
+        (navigator as any).presentation.defaultRequest = new PresReq([projUrl]);
       }
-      projectorWinRef.current = win;
-      win.document.open();
-      win.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Προβολή Σελίδας (HDMI / Προβολέας)</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100vw;
-      height: 100vh;
-      background: #e2e8f0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      user-select: none;
+    } catch {
+      // ignore
     }
-    #proj-canvas {
-      max-width: 96vw;
-      max-height: 96vh;
-      width: auto;
-      height: auto;
-      border-radius: 6px;
-      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
-      background: #fffdf7;
-    }
-  </style>
-</head>
-<body>
-  <canvas id="proj-canvas"></canvas>
-</body>
-</html>`);
-      win.document.close();
-      win.addEventListener('beforeunload', () => {
-        setIsExternalProjectorOpen(false);
+  }, [isCleanProjectorMode]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel('bestnotes_hdmi_live_v1');
+    if (!isCleanProjectorMode) {
+      ch.postMessage({
+        type: 'sync-state',
+        activeNotebookId,
+        activePageIndex,
+        isSimulating,
+        simCircuitSwitchClosed,
+        simShowElectrons,
+        simParticleStyle,
+        simFlowDirection,
+        simShowDarkWireTrack,
+        simSpeedMultiplier,
       });
     } else {
-      win.focus();
+      ch.onmessage = (ev) => {
+        const d = ev.data;
+        if (d?.type === 'sync-state') {
+          if (d.activeNotebookId) setActiveNotebookId(d.activeNotebookId);
+          if (typeof d.activePageIndex === 'number') setActivePageIndex(d.activePageIndex);
+          if (typeof d.isSimulating === 'boolean') setIsSimulating(d.isSimulating);
+          if (typeof d.simCircuitSwitchClosed === 'boolean') {
+            setSimCircuitSwitchClosed(d.simCircuitSwitchClosed);
+          }
+          if (typeof d.simShowElectrons === 'boolean') setSimShowElectrons(d.simShowElectrons);
+          if (d.simParticleStyle) setSimParticleStyle(d.simParticleStyle);
+          if (d.simFlowDirection) setSimFlowDirection(d.simFlowDirection);
+          if (typeof d.simShowDarkWireTrack === 'boolean') {
+            setSimShowDarkWireTrack(d.simShowDarkWireTrack);
+          }
+          if (typeof d.simSpeedMultiplier === 'number') {
+            setSimSpeedMultiplier(d.simSpeedMultiplier);
+          }
+          setViewMode('editor');
+        }
+      };
     }
-    setIsExternalProjectorOpen(true);
-    showToast('📺 Άνοιξε το Καθαρό Παράθυρο Προβολέα (Σύρε το στη 2η οθόνη/HDMI)!');
-  }, [showToast]);
+    return () => ch.close();
+  }, [
+    isCleanProjectorMode,
+    activeNotebookId,
+    activePageIndex,
+    isSimulating,
+    simCircuitSwitchClosed,
+    simShowElectrons,
+    simParticleStyle,
+    simFlowDirection,
+    simShowDarkWireTrack,
+    simSpeedMultiplier,
+  ]);
 
   useEffect(() => {
     if (!isExternalProjectorOpen) return;
@@ -18309,32 +18324,6 @@ export default function App() {
           1. AUTHENTIC GOODNOTES 6 TOP NAVY BAR & DOCUMENT TABS (#1B2A4A)
              Always Sticky / Pinned at the very top like a Native iPad App!
          ========================================================================= */}
-      {isCleanProjectorMode && viewMode === 'editor' && (
-        <div
-          data-ui-panel="true"
-          className="fixed top-2 right-2 z-50 flex items-center gap-1 opacity-25 hover:opacity-100 transition-opacity duration-200"
-        >
-          <button
-            type="button"
-            onClick={() => setShowSimulationPanel((v) => !v)}
-            className="px-2 py-1 rounded-full bg-emerald-600/90 text-white text-[10px] font-bold shadow-md cursor-pointer"
-            title="Άνοιγμα/Κλείσιμο Παραθύρου Προσομοίωσης"
-          >
-            ⚙️▶️ Sim
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsCleanProjectorMode(false);
-              showToast('🛠️ Εμφανίστηκαν ξανά οι μπάρες εργαλείων!');
-            }}
-            className="px-2.5 py-1 rounded-full bg-slate-800/85 text-white text-[10px] font-bold shadow-md cursor-pointer"
-            title="Επαναφορά άνω μπαρών εργαλείων"
-          >
-            📺 Εργαλεία
-          </button>
-        </div>
-      )}
       <header
         data-sticky-app-nav="true"
         style={{ touchAction: 'manipulation' }}
@@ -20705,21 +20694,6 @@ export default function App() {
                 {isSimulating && (
                   <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
                 )}
-              </button>
-
-              {/* Clean HDMI / Projector View Button (hides top bars so only page + soft grey background is sent to HDMI!) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsCleanProjectorMode(true);
-                  setShowSimulationPanel(false);
-                  showToast('📺 Καθαρή Προβολή HDMI: Φαίνεται μόνο η σελίδα & το γκρι φόντο!');
-                }}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-full font-bold text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
-                title="Καθαρή Προβολή HDMI / Προβολέα (Κρύβει τις πάνω μπάρες ώστε στην οθόνη να φαίνεται μόνο η σελίδα και το απαλό γκρι)"
-              >
-                <span>📺</span>
-                <span className="hidden md:inline">HDMI</span>
               </button>
             </div>
 
@@ -23585,41 +23559,6 @@ export default function App() {
                       className="w-28 accent-emerald-600 cursor-pointer"
                     />
                   </div>
-                </div>
-
-                {/* HDMI / External Projector Clean Screen Controls */}
-                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCleanProjectorMode((v) => !v);
-                      showToast(
-                        !isCleanProjectorMode
-                          ? '📺 Καθαρή Οθόνη HDMI: Κρύφτηκαν οι πάνω μπάρες!'
-                          : '🛠️ Εμφανίστηκαν ξανά οι πάνω μπάρες!'
-                      );
-                    }}
-                    className={`px-2 py-1.5 rounded-xl text-[10px] font-bold border transition cursor-pointer ${
-                      isCleanProjectorMode
-                        ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                    }`}
-                    title="Κρύβει όλες τις πάνω μπάρες ώστε στο HDMI να φαίνεται μόνο η σελίδα και το απαλό γκρι φόντο"
-                  >
-                    📺 Καθαρή Οθόνη HDMI
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openExternalProjectorWindow}
-                    className={`px-2 py-1.5 rounded-xl text-[10px] font-bold border transition cursor-pointer ${
-                      isExternalProjectorOpen
-                        ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                    }`}
-                    title="Ανοίγει 2ο καθαρό παράθυρο προβολέα (μόνο σελίδα & γκρι φόντο) για 2η οθόνη / Stage Manager"
-                  >
-                    🪟 2η Οθόνη Προβολέα
-                  </button>
                 </div>
               </div>
             )}
