@@ -5824,6 +5824,7 @@ export interface SimulatedWireSegment {
   inClosedLoop: boolean;
   currentSpeed: number;
   highEnergy: boolean;
+  pathPoints?: { x: number; y: number }[];
 }
 
 export interface SimulatedComponentState {
@@ -6602,6 +6603,103 @@ export function analyzeCircuitForSimulation(
           }
         }
         if (mergedAny) break;
+      }
+    }
+
+    // Splice exact zig-zag polyline vertices of active Resistors into the merged horizontal wire segments
+    // so electrons climb up and down every peak and valley of the resistor zig-zag seamlessly!
+    const activeResistors = comps.filter((c) => c.kind === 'resistor' && compInLoop.has(c.key));
+    if (activeResistors.length > 0) {
+      for (let i = 0; i < simulatedWires.length; i++) {
+        const sw = simulatedWires[i];
+        if (!sw.inClosedLoop) continue;
+        const dx = sw.x2 - sw.x1;
+        const dy = sw.y2 - sw.y1;
+        if (Math.abs(dy) > Math.abs(dx) * 0.25 || Math.abs(dx) < 8) continue;
+        const dir = dx >= 0 ? 1 : -1;
+        const yRow = (sw.y1 + sw.y2) / 2;
+        const segMinX = Math.min(sw.x1, sw.x2);
+        const segMaxX = Math.max(sw.x1, sw.x2);
+
+        const rowResistors = activeResistors
+          .filter(
+            (r) =>
+              Math.abs(r.cy - yRow) <= 14 &&
+              r.maxX > segMinX + 4 &&
+              r.minX < segMaxX - 4
+          )
+          .sort((a, b) => (dir > 0 ? a.cx - b.cx : b.cx - a.cx));
+
+        if (rowResistors.length === 0) continue;
+
+        const pathPts: { x: number; y: number }[] = [{ x: sw.x1, y: yRow }];
+        for (const r of rowResistors) {
+          const resStroke = strokes.find(
+            (s) => r.strokeIds.includes(s.id) && s.shapeType === 'resistor'
+          );
+          let zigPts: { x: number; y: number }[];
+          if (resStroke && resStroke.points.length >= 4) {
+            zigPts = computeResistorOrSpringPoints('resistor', resStroke.points).map((p) => ({
+              x: p.x,
+              y: p.y,
+            }));
+          } else {
+            const uStart = 0.12;
+            const uEnd = 0.88;
+            const numPeaks = 10;
+            zigPts = [
+              { x: r.minX, y: yRow },
+              { x: r.minX + uStart * r.w, y: yRow },
+            ];
+            for (let k = 0; k < numPeaks; k++) {
+              const u = uStart + ((k + 0.5) / numPeaks) * (uEnd - uStart);
+              const vy = k % 2 === 0 ? r.minY + 0.04 * r.h : r.minY + 0.96 * r.h;
+              zigPts.push({ x: r.minX + u * r.w, y: vy });
+            }
+            zigPts.push({ x: r.minX + uEnd * r.w, y: yRow });
+            zigPts.push({ x: r.maxX, y: yRow });
+          }
+
+          if (zigPts.length >= 4) {
+            if (zigPts[0].x > zigPts[zigPts.length - 1].x) {
+              zigPts.reverse();
+            }
+            zigPts[0].y = yRow;
+            zigPts[1].y = yRow;
+            zigPts[zigPts.length - 2].y = yRow;
+            zigPts[zigPts.length - 1].y = yRow;
+
+            const oriented = dir > 0 ? zigPts : zigPts.slice().reverse();
+            for (const pt of oriented) {
+              const prev = pathPts[pathPts.length - 1];
+              if (Math.hypot(pt.x - prev.x, pt.y - prev.y) >= 1.5) {
+                pathPts.push(pt);
+              }
+            }
+          }
+        }
+
+        const endPt = { x: sw.x2, y: yRow };
+        const lastPt = pathPts[pathPts.length - 1];
+        if (Math.hypot(endPt.x - lastPt.x, endPt.y - lastPt.y) >= 1.5) {
+          pathPts.push(endPt);
+        }
+
+        let effectiveLen = 0;
+        for (let k = 0; k < pathPts.length - 1; k++) {
+          const sdx = pathPts[k + 1].x - pathPts[k].x;
+          const sdy = pathPts[k + 1].y - pathPts[k].y;
+          const isDiagonalTooth = Math.abs(sdx) > 0.5 && Math.abs(sdy) > 2;
+          effectiveLen += isDiagonalTooth
+            ? Math.hypot(sdx, sdy * 0.35)
+            : Math.hypot(sdx, sdy);
+        }
+
+        simulatedWires[i] = {
+          ...sw,
+          length: Math.max(8, effectiveLen),
+          pathPoints: pathPts,
+        };
       }
     }
   }

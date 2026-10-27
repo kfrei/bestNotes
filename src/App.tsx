@@ -8717,8 +8717,15 @@ export default function App() {
         for (const seg of simData.wireSegments) {
           if (!seg.inClosedLoop) continue;
           ctx.beginPath();
-          ctx.moveTo(seg.x1, seg.y1);
-          ctx.lineTo(seg.x2, seg.y2);
+          if (seg.pathPoints && seg.pathPoints.length >= 2) {
+            ctx.moveTo(seg.pathPoints[0].x, seg.pathPoints[0].y);
+            for (let pIdx = 1; pIdx < seg.pathPoints.length; pIdx++) {
+              ctx.lineTo(seg.pathPoints[pIdx].x, seg.pathPoints[pIdx].y);
+            }
+          } else {
+            ctx.moveTo(seg.x1, seg.y1);
+            ctx.lineTo(seg.x2, seg.y2);
+          }
           ctx.stroke();
         }
         ctx.restore();
@@ -8871,15 +8878,39 @@ export default function App() {
             : 0;
           const rawOffset = ((elapsedSec * speedPxPerSec) % stepDist + stepDist) % stepDist;
 
-          const ux = (seg.x2 - seg.x1) / Math.max(1, seg.length);
-          const uy = (seg.y2 - seg.y1) / Math.max(1, seg.length);
+          const polyPts =
+            seg.pathPoints && seg.pathPoints.length >= 2
+              ? seg.pathPoints
+              : [
+                  { x: seg.x1, y: seg.y1 },
+                  { x: seg.x2, y: seg.y2 },
+                ];
+          const cumDist: number[] = [0];
+          for (let i = 0; i < polyPts.length - 1; i++) {
+            const sdx = polyPts[i + 1].x - polyPts[i].x;
+            const sdy = polyPts[i + 1].y - polyPts[i].y;
+            const isDiagonalTooth = Math.abs(sdx) > 0.5 && Math.abs(sdy) > 2;
+            const subStep = isDiagonalTooth
+              ? Math.hypot(sdx, sdy * 0.35)
+              : Math.hypot(sdx, sdy);
+            cumDist.push(cumDist[i] + subStep);
+          }
+          const totalPolyLen = Math.max(1, cumDist[cumDist.length - 1]);
 
           ctx.save();
           for (let k = 0; k < count; k++) {
             const d = rawOffset + k * stepDist;
-            if (d < 2 || d > seg.length - 2) continue;
-            const px = seg.x1 + ux * d;
-            const py = seg.y1 + uy * d;
+            if (d < 2 || d > totalPolyLen - 2) continue;
+            let subIdx = 0;
+            while (subIdx < cumDist.length - 2 && cumDist[subIdx + 1] < d) {
+              subIdx++;
+            }
+            const segLenSub = Math.max(1e-4, cumDist[subIdx + 1] - cumDist[subIdx]);
+            const tSub = Math.max(0, Math.min(1, (d - cumDist[subIdx]) / segLenSub));
+            const px =
+              polyPts[subIdx].x + tSub * (polyPts[subIdx + 1].x - polyPts[subIdx].x);
+            const py =
+              polyPts[subIdx].y + tSub * (polyPts[subIdx + 1].y - polyPts[subIdx].y);
 
             // If automatic switch on left vertical wire is OPEN, don't draw particles inside the open switch gap!
             if (
