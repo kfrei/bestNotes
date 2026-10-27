@@ -12018,12 +12018,32 @@ export default function App() {
             customMoved: boolean;
           }[] = [];
 
+          const eqSpBounds = getStrokeBounds(eqSpring);
+          const origSpringStroke = activePage.strokes.find(
+            (s) => s.id === activeSpringSim.naturalSpringStrokeId
+          );
+          const origSpBounds = origSpringStroke ? getStrokeBounds(origSpringStroke) : null;
+          const supportStroke = activePage.strokes.find(
+            (s) => s.id === activeSpringSim.supportStrokeId
+          );
+          const supBounds = supportStroke ? getStrokeBounds(supportStroke) : null;
+          const ampRightEdge =
+            isVertSpring && activeSpringSim.showAmplitudeLines
+              ? eqMassCx + massW / 2 + 256
+              : mb.maxX + (isVertSpring ? 44 : A + 52);
+          const baseDefaultX = Math.max(
+            20,
+            ampRightEdge,
+            eqSpBounds.maxX + 56,
+            origSpBounds ? origSpBounds.maxX + 56 : 0,
+            supBounds ? supBounds.maxX + 56 : 0
+          );
+
           let runningPrevBotY = 0;
           for (let gIdx = 0; gIdx < visibleGraphKeys.length; gIdx++) {
             const gKey = visibleGraphKeys[gIdx];
             const gCfg = activeSpringSim.graphs[gKey];
-            const baseDefaultX = Math.max(20, eqMassCx + massW / 2 + 224);
-            const defaultGraphW = Math.min(448, Math.max(320, w - baseDefaultX - 18));
+            const defaultGraphW = Math.min(448, Math.max(260, w - baseDefaultX - 14));
             const gW = gCfg.width || defaultGraphW;
 
             // All 3 diagrams (x-t, u-t, a-t) share the exact same vertical height (A) by default and follow +A / -A!
@@ -12033,7 +12053,7 @@ export default function App() {
             const botPad = 24;
             const halfAxisH = envHalfH + topPad;
 
-            const defaultX = Math.min(w - gW - 12, baseDefaultX);
+            const defaultX = baseDefaultX;
             let defaultMidY: number;
             if (gIdx === 0) {
               // 1st checked diagram is ALWAYS directly to the right of the spring, with its t-axis on Θ.Ι. (eqMassCy)!
