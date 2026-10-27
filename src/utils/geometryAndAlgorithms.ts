@@ -1993,9 +1993,28 @@ export function createPhysicsStencilStrokes(
   } else if (preset === 'fan') {
     const cx = x + w / 2;
     const cy = y + h / 2;
-    const rOuter = Math.max(16, Math.min(w * 0.32, h * 0.44));
-    const rHub = Math.max(4.5, rOuter * 0.22);
+    const rOuter = Math.max(18, Math.min(w * 0.34, h * 0.45));
+    const rHub = Math.max(5, rOuter * 0.22);
     const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+
+    const makeSmoothCirclePts = (ccx: number, ccy: number, rad: number, steps = 40): BezierPoint[] => {
+      const pts: BezierPoint[] = [];
+      for (let i = 0; i <= steps; i++) {
+        const ang = (i / steps) * Math.PI * 2;
+        const px = ccx + Math.cos(ang) * rad;
+        const py = ccy + Math.sin(ang) * rad;
+        const prev = pts.length > 0 ? pts[pts.length - 1] : null;
+        pts.push({
+          x: px,
+          y: py,
+          cx: prev ? (prev.x + px) / 2 : undefined,
+          cy: prev ? (prev.y + py) / 2 : undefined,
+          pressure: 0.7,
+          twist: i === 0 || i === steps ? 999 : undefined,
+        });
+      }
+      return pts;
+    };
 
     out.push({
       id: `st-${ts}-fan-wl`,
@@ -2028,50 +2047,59 @@ export function createPhysicsStencilStrokes(
       shapeType: 'fan',
     });
 
+    // Round grey-filled backplate circle
     out.push({
       id: `st-${ts}-fan-ring`,
       tool: 'pen',
-      color,
-      fillColor: 'rgba(226, 232, 240, 0.25)',
+      color: '#475569',
+      fillColor: '#cbd5e1',
       fillStyle: 'solid',
-      width: 2.5,
+      fillTransparency: 20,
+      width: 2.4,
       opacity: 1,
-      points: makeEllipseBezier(cx, cy, rOuter, rOuter),
+      points: makeSmoothCirclePts(cx, cy, rOuter, 44),
       layerId,
       groupId,
       isShape: true,
       shapeType: 'fan',
     });
 
+    // 3 Solid Blue Propeller Blades
     for (let b = 0; b < 3; b++) {
       const baseAng = (b * Math.PI * 2) / 3 - Math.PI / 2;
       const bladeLen = rOuter * 0.84;
-      const spread = 0.34;
-      const p0 = {
-        x: cx + Math.cos(baseAng) * rHub * 0.9,
-        y: cy + Math.sin(baseAng) * rHub * 0.9,
-      };
-      const p1 = {
-        x: cx + Math.cos(baseAng - spread) * bladeLen,
-        y: cy + Math.sin(baseAng - spread) * bladeLen,
-      };
-      const pTip = {
-        x: cx + Math.cos(baseAng) * (bladeLen * 1.04),
-        y: cy + Math.sin(baseAng) * (bladeLen * 1.04),
-      };
-      const p2 = {
-        x: cx + Math.cos(baseAng + spread) * bladeLen,
-        y: cy + Math.sin(baseAng + spread) * bladeLen,
-      };
+      const spread = 0.36;
+      const bladePts: { x: number; y: number }[] = [
+        {
+          x: cx + Math.cos(baseAng - 0.18) * rHub * 0.85,
+          y: cy + Math.sin(baseAng - 0.18) * rHub * 0.85,
+        },
+      ];
+      const arcSteps = 10;
+      for (let k = 0; k <= arcSteps; k++) {
+        const t = k / arcSteps;
+        const ang = baseAng - spread + t * (spread * 2);
+        const rCurve = bladeLen * (0.86 + 0.14 * Math.sin(t * Math.PI));
+        bladePts.push({
+          x: cx + Math.cos(ang) * rCurve,
+          y: cy + Math.sin(ang) * rCurve,
+        });
+      }
+      bladePts.push({
+        x: cx + Math.cos(baseAng + 0.18) * rHub * 0.85,
+        y: cy + Math.sin(baseAng + 0.18) * rHub * 0.85,
+      });
+
       out.push({
         id: `st-${ts}-fan-blade-${b}`,
         tool: 'pen',
-        color: '#0284c7',
-        fillColor: 'rgba(56, 189, 248, 0.35)',
+        color: '#0369a1',
+        fillColor: '#0284c7',
         fillStyle: 'solid',
-        width: 2.1,
+        fillTransparency: 0,
+        width: 2.0,
         opacity: 1,
-        points: makePolygonBezier([p0, p1, pTip, p2]),
+        points: makePolygonBezier(bladePts),
         layerId,
         groupId,
         isShape: true,
@@ -2079,15 +2107,17 @@ export function createPhysicsStencilStrokes(
       });
     }
 
+    // Center hub circle
     out.push({
       id: `st-${ts}-fan-hub`,
       tool: 'pen',
       color: '#0f172a',
-      fillColor: '#38bdf8',
+      fillColor: '#0ea5e9',
       fillStyle: 'solid',
+      fillTransparency: 0,
       width: 2.2,
       opacity: 1,
-      points: makeEllipseBezier(cx, cy, rHub, rHub),
+      points: makeSmoothCirclePts(cx, cy, rHub, 24),
       layerId,
       groupId,
       isShape: true,
@@ -4863,6 +4893,285 @@ export function toggleSwitchStrokeGroup(
   return { strokes: out, newClosedState: nextClosed };
 }
 
+export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObject[] {
+  const initialComps = getCircuitComponentsWithTerminals(strokes);
+  if (initialComps.length === 0) return strokes;
+
+  const compStrokeSet = new Set<string>();
+  for (const c of initialComps) {
+    for (const id of c.strokeIds) compStrokeSet.add(id);
+  }
+
+  let currentStrokes = strokes.map((s) => ({
+    ...s,
+    points: s.points.map((p) => ({ ...p })),
+  }));
+
+  // 1. Identify 2-point straight wire strokes (not belonging to any circuit component)
+  interface WireRef {
+    strokeIdx: number;
+    orientation: 'h' | 'v' | 'diag';
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    avgX: number;
+    avgY: number;
+  }
+
+  const wireRefs: WireRef[] = [];
+  currentStrokes.forEach((s, idx) => {
+    if (compStrokeSet.has(s.id)) return;
+    if (s.tool === 'highlighter' || s.points.length !== 2) return;
+    if (s.shapeType && s.shapeType !== 'line') return;
+    const p0 = s.points[0];
+    const p1 = s.points[1];
+    const dx = Math.abs(p1.x - p0.x);
+    const dy = Math.abs(p1.y - p0.y);
+    const len = Math.hypot(dx, dy);
+    if (len < 10) return;
+    let orientation: 'h' | 'v' | 'diag' = 'diag';
+    if (dy <= Math.max(18, dx * 0.28)) orientation = 'h';
+    else if (dx <= Math.max(18, dy * 0.28)) orientation = 'v';
+    wireRefs.push({
+      strokeIdx: idx,
+      orientation,
+      x1: p0.x,
+      y1: p0.y,
+      x2: p1.x,
+      y2: p1.y,
+      avgX: (p0.x + p1.x) / 2,
+      avgY: (p0.y + p1.y) / 2,
+    });
+  });
+
+  if (wireRefs.length === 0) return strokes;
+
+  // 2. Cluster horizontal rows (within 38px) & vertical columns (within 38px)
+  const hRows: { yValues: number[]; yRow: number; wireIndices: number[] }[] = [];
+  for (let i = 0; i < wireRefs.length; i++) {
+    const w = wireRefs[i];
+    if (w.orientation !== 'h') continue;
+    const row = hRows.find((r) => Math.abs(r.yRow - w.avgY) <= 38);
+    if (row) {
+      row.yValues.push(w.avgY);
+      row.yRow = row.yValues.reduce((a, b) => a + b, 0) / row.yValues.length;
+      row.wireIndices.push(i);
+    } else {
+      hRows.push({ yValues: [w.avgY], yRow: w.avgY, wireIndices: [i] });
+    }
+  }
+
+  const vCols: { xValues: number[]; xCol: number; wireIndices: number[] }[] = [];
+  for (let i = 0; i < wireRefs.length; i++) {
+    const w = wireRefs[i];
+    if (w.orientation !== 'v') continue;
+    const col = vCols.find((c) => Math.abs(c.xCol - w.avgX) <= 38);
+    if (col) {
+      col.xValues.push(w.avgX);
+      col.xCol = col.xValues.reduce((a, b) => a + b, 0) / col.xValues.length;
+      col.wireIndices.push(i);
+    } else {
+      vCols.push({ xValues: [w.avgX], xCol: w.avgX, wireIndices: [i] });
+    }
+  }
+
+  // Apply strict horizontal Y and vertical X to the clustered wires
+  for (const row of hRows) {
+    const ySnap = Math.round(row.yRow);
+    row.yRow = ySnap;
+    for (const wi of row.wireIndices) {
+      const w = wireRefs[wi];
+      w.y1 = ySnap;
+      w.y2 = ySnap;
+      w.avgY = ySnap;
+    }
+  }
+  for (const col of vCols) {
+    const xSnap = Math.round(col.xCol);
+    col.xCol = xSnap;
+    for (const wi of col.wireIndices) {
+      const w = wireRefs[wi];
+      w.x1 = xSnap;
+      w.x2 = xSnap;
+      w.avgX = xSnap;
+    }
+  }
+
+  // 3. Vertically align each circuit component to its nearest horizontal wire row (within 48px)
+  for (const comp of initialComps) {
+    const termY = comp.leftTerm.y;
+    let bestRow: (typeof hRows)[number] | null = null;
+    let bestDist = 48;
+    for (const row of hRows) {
+      const d = Math.abs(row.yRow - termY);
+      if (d <= bestDist) {
+        bestDist = d;
+        bestRow = row;
+      }
+    }
+    if (bestRow) {
+      const dy = bestRow.yRow - termY;
+      if (Math.abs(dy) >= 0.5) {
+        const idSet = new Set(comp.strokeIds);
+        currentStrokes = currentStrokes.map((s) => {
+          if (!idSet.has(s.id)) return s;
+          return {
+            ...s,
+            points: s.points.map((p) => ({
+              ...p,
+              y: p.y + dy,
+              cy: p.cy !== undefined ? p.cy + dy : undefined,
+            })),
+          };
+        });
+      }
+    }
+  }
+
+  // Recompute component terminal positions after vertical alignment
+  const alignedComps = getCircuitComponentsWithTerminals(currentStrokes);
+
+  // 4. Snap horizontal wire endpoints to component terminals AND vertical columns
+  for (const row of hRows) {
+    const yRow = row.yRow;
+    const rowComps = alignedComps.filter((c) => Math.abs(c.leftTerm.y - yRow) <= 36);
+
+    for (const wi of row.wireIndices) {
+      const w = wireRefs[wi];
+      const leftIsP1 = w.x1 <= w.x2;
+      let xL = Math.min(w.x1, w.x2);
+      let xR = Math.max(w.x1, w.x2);
+
+      // Snap left endpoint xL to a component's rightTerm (if component is to the left) OR to a vertical column
+      let snappedLeftToComp = false;
+      for (const c of rowComps) {
+        if (xL >= c.cx - 12 && Math.abs(xL - c.rightTerm.x) <= 78 && xR > c.rightTerm.x + 8) {
+          xL = c.rightTerm.x;
+          snappedLeftToComp = true;
+          break;
+        }
+      }
+      if (!snappedLeftToComp) {
+        for (const col of vCols) {
+          if (Math.abs(xL - col.xCol) <= 68) {
+            xL = col.xCol;
+            break;
+          }
+        }
+      }
+
+      // Snap right endpoint xR to a component's leftTerm (if component is to the right) OR to a vertical column
+      let snappedRightToComp = false;
+      for (const c of rowComps) {
+        if (xR <= c.cx + 12 && Math.abs(xR - c.leftTerm.x) <= 78 && xL < c.leftTerm.x - 8) {
+          xR = c.leftTerm.x;
+          snappedRightToComp = true;
+          break;
+        }
+      }
+      if (!snappedRightToComp) {
+        for (const col of vCols) {
+          if (Math.abs(xR - col.xCol) <= 68) {
+            xR = col.xCol;
+            break;
+          }
+        }
+      }
+
+      if (leftIsP1) {
+        w.x1 = xL;
+        w.x2 = xR;
+      } else {
+        w.x1 = xR;
+        w.x2 = xL;
+      }
+    }
+  }
+
+  // 5. Snap vertical wire endpoints to horizontal rows AND bridge collinear gaps on the same vertical column
+  for (const col of vCols) {
+    const xCol = col.xCol;
+    for (const wi of col.wireIndices) {
+      const w = wireRefs[wi];
+      const topIsP1 = w.y1 <= w.y2;
+      let yT = Math.min(w.y1, w.y2);
+      let yB = Math.max(w.y1, w.y2);
+
+      for (const row of hRows) {
+        if (Math.abs(yT - row.yRow) <= 68 && yB > row.yRow + 10) {
+          yT = row.yRow;
+          break;
+        }
+      }
+      for (const row of hRows) {
+        if (Math.abs(yB - row.yRow) <= 68 && yT < row.yRow - 10) {
+          yB = row.yRow;
+          break;
+        }
+      }
+
+      if (topIsP1) {
+        w.y1 = yT;
+        w.y2 = yB;
+      } else {
+        w.y1 = yB;
+        w.y2 = yT;
+      }
+    }
+
+    // If two vertical segments in the same column still have a small gap (<= 55px), join them cleanly
+    if (col.wireIndices.length >= 2) {
+      const sortedW = col.wireIndices
+        .map((wi) => wireRefs[wi])
+        .sort((a, b) => Math.min(a.y1, a.y2) - Math.min(b.y1, b.y2));
+      for (let k = 0; k < sortedW.length - 1; k++) {
+        const upper = sortedW[k];
+        const lower = sortedW[k + 1];
+        const uBot = Math.max(upper.y1, upper.y2);
+        const lTop = Math.min(lower.y1, lower.y2);
+        const gap = lTop - uBot;
+        if (gap > 0 && gap <= 55) {
+          const nearRow = hRows.find((r) => Math.abs(r.yRow - (uBot + lTop) / 2) <= 45);
+          const joinY = nearRow ? nearRow.yRow : Math.round((uBot + lTop) / 2);
+          if (upper.y1 >= upper.y2) upper.y1 = joinY;
+          else upper.y2 = joinY;
+          if (lower.y1 <= lower.y2) lower.y1 = joinY;
+          else lower.y2 = joinY;
+        }
+      }
+    }
+
+    //Ensure xCol is preserved
+    for (const wi of col.wireIndices) {
+      wireRefs[wi].x1 = xCol;
+      wireRefs[wi].x2 = xCol;
+    }
+  }
+
+  // Write updated wire endpoints back into currentStrokes
+  for (const w of wireRefs) {
+    const s = currentStrokes[w.strokeIdx];
+    currentStrokes[w.strokeIdx] = {
+      ...s,
+      isShape: true,
+      shapeType: 'line',
+      points: [
+        { x: w.x1, y: w.y1, pressure: 0.7 },
+        {
+          x: w.x2,
+          y: w.y2,
+          cx: (w.x1 + w.x2) / 2,
+          cy: (w.y1 + w.y2) / 2,
+          pressure: 0.7,
+        },
+      ],
+    };
+  }
+
+  return currentStrokes;
+}
+
 export function convertCircuitComponents(
   strokes: StrokeObject[],
   targetStrokeIds?: string[],
@@ -4888,7 +5197,7 @@ export function convertCircuitComponents(
   });
 
   if (compsToConvert.length === 0) {
-    return { strokes, convertedCount: 0, newIds: [] };
+    return { strokes: autoAlignAndConnectCircuit(strokes), convertedCount: 0, newIds: [] };
   }
 
   let currentStrokes = [...strokes];
@@ -4912,8 +5221,8 @@ export function convertCircuitComponents(
 
     let replacement: StrokeObject[] = [];
     if (targetKind === 'resistor') {
-      const rw = Math.max(76, comp.w * 1.35);
-      const rh = Math.max(36, Math.min(54, comp.h * 0.52));
+      const rw = Math.max(72, comp.w * 1.25);
+      const rh = Math.max(34, Math.min(48, comp.h * 0.48));
       const rx = comp.cx - rw / 2;
       const ry = comp.leftTerm.y - rh / 2;
       const resStroke: StrokeObject = {
@@ -4934,10 +5243,10 @@ export function convertCircuitComponents(
       };
       replacement = [resStroke];
     } else if (targetKind === 'bulb') {
-      const bw = Math.max(54, comp.w * 0.72);
+      const bw = Math.max(54, comp.w * 0.74);
       const bh = Math.max(78, bw * 1.35);
       const bx = comp.cx - bw / 2;
-      const by = comp.cy - bh * 0.8;
+      const by = comp.leftTerm.y - bh * 0.8;
       replacement = createPhysicsStencilStrokes(
         'bulb',
         bx,
@@ -4948,22 +5257,30 @@ export function convertCircuitComponents(
         comp.layerId
       );
     } else if (targetKind === 'voltage-source') {
+      const vw = Math.max(110, comp.w * 0.82);
+      const vh = Math.max(66, comp.h * 1.15);
+      const vx = comp.cx - vw / 2;
+      const vy = comp.leftTerm.y - vh / 2;
       replacement = createPhysicsStencilStrokes(
         'voltage-source',
-        comp.minX,
-        comp.minY,
-        comp.w,
-        comp.h,
+        vx,
+        vy,
+        vw,
+        vh,
         comp.color,
         comp.layerId
       );
     } else if (targetKind === 'battery') {
+      const batW = Math.max(150, comp.w * 1.22);
+      const batH = Math.max(58, comp.h * 0.88);
+      const batX = comp.cx - batW / 2;
+      const batY = comp.leftTerm.y - batH / 2;
       replacement = createPhysicsStencilStrokes(
         'battery',
-        comp.minX,
-        comp.minY,
-        comp.w,
-        comp.h,
+        batX,
+        batY,
+        batW,
+        batH,
         comp.color,
         comp.layerId
       );
@@ -4986,6 +5303,9 @@ export function convertCircuitComponents(
     currentStrokes = updated;
   }
 
+  // Automatically align & join all circuit wires to the newly converted components!
+  currentStrokes = autoAlignAndConnectCircuit(currentStrokes);
+
   return { strokes: currentStrokes, convertedCount, newIds };
 }
 
@@ -5006,16 +5326,27 @@ export interface SimulatedComponentState {
   powerFactor: number;
 }
 
+export interface AutoVerticalSwitchInfo {
+  x: number;
+  yCenter: number;
+  yTop: number;
+  yBottom: number;
+  wireIdx: number;
+  closed: boolean;
+}
+
 export interface CircuitSimulationData {
   hasSource: boolean;
   isCircuitClosed: boolean;
   sourceCount: number;
   wireSegments: SimulatedWireSegment[];
   components: SimulatedComponentState[];
+  autoSwitch: AutoVerticalSwitchInfo | null;
 }
 
 export function analyzeCircuitForSimulation(
-  strokes: StrokeObject[]
+  strokes: StrokeObject[],
+  circuitSwitchClosed = true
 ): CircuitSimulationData {
   const comps = getCircuitComponentsWithTerminals(strokes);
   const compStrokeSet = new Set<string>();
@@ -5069,7 +5400,7 @@ export function analyzeCircuitForSimulation(
     allInterestPts.push(c.leftTerm, c.rightTerm);
   }
 
-  const TJUNCTION_TOL = 42;
+  const TJUNCTION_TOL = 54;
   for (let i = 0; i < rawWires.length; i++) {
     const w = rawWires[i];
     const dx = w.x2 - w.x1;
@@ -5078,7 +5409,7 @@ export function analyzeCircuitForSimulation(
     if (lenSq < 100) continue;
     for (const pt of allInterestPts) {
       const t = ((pt.x - w.x1) * dx + (pt.y - w.y1) * dy) / lenSq;
-      if (t > 0.08 && t < 0.92) {
+      if (t > 0.06 && t < 0.94) {
         const projX = w.x1 + t * dx;
         const projY = w.y1 + t * dy;
         if (Math.hypot(pt.x - projX, pt.y - projY) <= TJUNCTION_TOL) {
@@ -5119,19 +5450,54 @@ export function analyzeCircuitForSimulation(
     }
   }
 
-  const NODE_TOL = 44;
-  const nodeCenters: { x: number; y: number }[] = [];
-  const getOrAddNode = (pt: { x: number; y: number }): number => {
-    let bestIdx = -1;
-    let bestD = NODE_TOL;
-    for (let i = 0; i < nodeCenters.length; i++) {
-      const d = Math.hypot(pt.x - nodeCenters[i].x, pt.y - nodeCenters[i].y);
-      if (d <= bestD) {
-        bestD = d;
-        bestIdx = i;
+  // Create dedicated terminal nodes for each component first so leftTerm and rightTerm NEVER merge into the same node!
+  const nodeCenters: { x: number; y: number; compKey?: string; side?: 'L' | 'R' }[] = [];
+  const compNodes = comps.map((c) => {
+    const u = nodeCenters.length;
+    nodeCenters.push({ x: c.leftTerm.x, y: c.leftTerm.y, compKey: c.key, side: 'L' });
+    const v = nodeCenters.length;
+    nodeCenters.push({ x: c.rightTerm.x, y: c.rightTerm.y, compKey: c.key, side: 'R' });
+    return { comp: c, u, v };
+  });
+
+  const TERM_SNAP_TOL = 60;
+  const WIRE_JOIN_TOL = 54;
+
+  const resolveWireEndpointNode = (
+    pt: { x: number; y: number },
+    otherEnd: { x: number; y: number }
+  ): number => {
+    // 1. Check if wire endpoint is connecting to a component terminal (prefer leftTerm if wire comes from left, rightTerm if wire comes from right)
+    let bestTermNode = -1;
+    let bestTermDist = TERM_SNAP_TOL;
+    for (const cn of compNodes) {
+      const c = cn.comp;
+      const dL = Math.hypot(pt.x - c.leftTerm.x, pt.y - c.leftTerm.y);
+      const dR = Math.hypot(pt.x - c.rightTerm.x, pt.y - c.rightTerm.y);
+      if (dL <= bestTermDist && (otherEnd.x <= c.cx + 15 || dL < dR)) {
+        bestTermDist = dL;
+        bestTermNode = cn.u;
+      }
+      if (dR <= bestTermDist && (otherEnd.x >= c.cx - 15 || dR < dL)) {
+        bestTermDist = dR;
+        bestTermNode = cn.v;
       }
     }
-    if (bestIdx >= 0) return bestIdx;
+    if (bestTermNode >= 0) return bestTermNode;
+
+    // 2. Otherwise match existing non-component wire junction node within WIRE_JOIN_TOL
+    let bestWireNode = -1;
+    let bestWireDist = WIRE_JOIN_TOL;
+    for (let i = 0; i < nodeCenters.length; i++) {
+      if (nodeCenters[i].compKey) continue;
+      const d = Math.hypot(pt.x - nodeCenters[i].x, pt.y - nodeCenters[i].y);
+      if (d <= bestWireDist) {
+        bestWireDist = d;
+        bestWireNode = i;
+      }
+    }
+    if (bestWireNode >= 0) return bestWireNode;
+
     nodeCenters.push({ x: pt.x, y: pt.y });
     return nodeCenters.length - 1;
   };
@@ -5140,18 +5506,58 @@ export function analyzeCircuitForSimulation(
   const hasSource = sources.length > 0;
   const openSwitches = comps.filter((c) => c.kind === 'switch' && c.switchClosed === false);
 
-  const compNodes = comps.map((c) => ({
-    comp: c,
-    u: getOrAddNode(c.leftTerm),
-    v: getOrAddNode(c.rightTerm),
-  }));
-
   const wireNodes = wires.map((w, idx) => ({
     idx,
     w,
-    u: getOrAddNode({ x: w.x1, y: w.y1 }),
-    v: getOrAddNode({ x: w.x2, y: w.y2 }),
+    u: resolveWireEndpointNode({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }),
+    v: resolveWireEndpointNode({ x: w.x2, y: w.y2 }, { x: w.x1, y: w.y1 }),
   }));
+
+  // Detect the Left Vertical Conductor for the automatic interactive switch!
+  let autoSwitch: AutoVerticalSwitchInfo | null = null;
+  if (wires.length > 0) {
+    let minCircuitX = Infinity;
+    let maxCircuitX = -Infinity;
+    for (const w of wires) {
+      minCircuitX = Math.min(minCircuitX, w.x1, w.x2);
+      maxCircuitX = Math.max(maxCircuitX, w.x1, w.x2);
+    }
+    const circuitSpanW = Math.max(100, maxCircuitX - minCircuitX);
+    const sourceY = sources.length > 0 ? sources[0].cy : Infinity;
+
+    let bestLeftVertIdx = -1;
+    let bestScore = Infinity;
+    for (let i = 0; i < wires.length; i++) {
+      const w = wires[i];
+      const dx = Math.abs(w.x2 - w.x1);
+      const dy = Math.abs(w.y2 - w.y1);
+      if (dy < 46 || dx > dy * 0.35) continue;
+      const midX = (w.x1 + w.x2) / 2;
+      const midY = (w.y1 + w.y2) / 2;
+      if (midX > minCircuitX + circuitSpanW * 0.38) continue;
+      // Prefer leftmost vertical wire segment closest to the source row (main left branch)
+      const score = (midX - minCircuitX) * 3 + Math.abs(midY - sourceY) * 0.5;
+      if (score < bestScore) {
+        bestScore = score;
+        bestLeftVertIdx = i;
+      }
+    }
+
+    if (bestLeftVertIdx >= 0) {
+      const swWire = wires[bestLeftVertIdx];
+      const x = (swWire.x1 + swWire.x2) / 2;
+      const yCenter = (swWire.y1 + swWire.y2) / 2;
+      const halfGap = Math.min(21, Math.max(14, swWire.length * 0.22));
+      autoSwitch = {
+        x,
+        yCenter,
+        yTop: yCenter - halfGap,
+        yBottom: yCenter + halfGap,
+        wireIdx: bestLeftVertIdx,
+        closed: circuitSwitchClosed,
+      };
+    }
+  }
 
   interface GraphEdge {
     to: number;
@@ -5246,7 +5652,8 @@ export function analyzeCircuitForSimulation(
   const compPowerMap = new Map<string, number>();
   let anyClosedLoop = false;
 
-  if (hasSource) {
+  // Only solve for active current flow when the automatic left-wire switch is CLOSED!
+  if (hasSource && circuitSwitchClosed && openSwitches.length === 0) {
     const primarySourceNode = compNodes.find(
       (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
     )!;
@@ -5263,7 +5670,7 @@ export function analyzeCircuitForSimulation(
     const voltageBoost = Math.min(2.2, 1 + (sources.length - 1) * 0.45);
 
     const dfs = (curr: number, depth: number) => {
-      if (depth > 28) return;
+      if (depth > 32) return;
       if (targetNodes.has(curr) && pathEdges.length >= 2) {
         anyClosedLoop = true;
         const loadCount = pathEdges.filter((e) => e.type === 'load').length;
@@ -5300,33 +5707,68 @@ export function analyzeCircuitForSimulation(
     dfs(startNode, 0);
   }
 
-  if (hasSource && !anyClosedLoop && openSwitches.length === 0 && wires.length >= 2) {
-    anyClosedLoop = true;
+  // Tolerant Multi-Branch Fallback: if a parallel branch had a slightly larger hand-drawn gap (> 60px),
+  // ensure any horizontal branch row with loads & wires still lights up when the switch is CLOSED!
+  if (hasSource && circuitSwitchClosed && openSwitches.length === 0 && wires.length >= 2) {
     const loadComps = comps.filter(
       (c) => c.kind === 'bulb' || c.kind === 'resistor' || c.kind === 'fan'
     );
     const rows: CircuitComponentInfo[][] = [];
     for (const lc of loadComps) {
-      const row = rows.find((r) => Math.abs(r[0].cy - lc.cy) < 55);
+      const row = rows.find((r) => Math.abs(r[0].leftTerm.y - lc.leftTerm.y) < 55);
       if (row) row.push(lc);
       else rows.push([lc]);
     }
     for (const row of rows) {
       const branchI = 1.0 / Math.max(1, row.length);
       for (const lc of row) {
-        compPowerMap.set(lc.key, branchI);
+        if (!compPowerMap.has(lc.key) || (compPowerMap.get(lc.key) || 0) < 0.05) {
+          // Check if there is at least one wire near this load
+          const hasWireNear = wires.some(
+            (w) =>
+              Math.hypot(w.x1 - lc.leftTerm.x, w.y1 - lc.leftTerm.y) < 85 ||
+              Math.hypot(w.x2 - lc.leftTerm.x, w.y2 - lc.leftTerm.y) < 85 ||
+              Math.hypot(w.x1 - lc.rightTerm.x, w.y1 - lc.rightTerm.y) < 85 ||
+              Math.hypot(w.x2 - lc.rightTerm.x, w.y2 - lc.rightTerm.y) < 85
+          );
+          if (hasWireNear) {
+            anyClosedLoop = true;
+            compPowerMap.set(lc.key, branchI);
+          }
+        }
       }
     }
-    for (let i = 0; i < wires.length; i++) {
-      wireFlowSum[i] = 1.0;
-      wireHighEnergy[i] = i < wires.length / 2;
+    if (anyClosedLoop) {
+      for (let i = 0; i < wires.length; i++) {
+        if (Math.abs(wireFlowSum[i]) < 0.01) {
+          const w = wires[i];
+          const isVerticalLeft = w.x1 < (sources[0]?.cx ?? 500) && Math.abs(w.y2 - w.y1) > Math.abs(w.x2 - w.x1);
+          const isVerticalRight = w.x1 >= (sources[0]?.cx ?? 500) && Math.abs(w.y2 - w.y1) > Math.abs(w.x2 - w.x1);
+          if (isVerticalLeft) {
+            // Upward from source (+) on the left
+            wireFlowSum[i] = w.y2 < w.y1 ? 0.85 : -0.85;
+            wireHighEnergy[i] = true;
+          } else if (isVerticalRight) {
+            // Downward to source (-) on the right
+            wireFlowSum[i] = w.y2 > w.y1 ? 0.85 : -0.85;
+          } else {
+            // Horizontal branch wire: flow left -> right (from + side on left to - side on right)
+            wireFlowSum[i] = w.x2 > w.x1 ? 0.75 : -0.75;
+            const rowLoads = loadComps.filter((lc) => Math.abs(lc.leftTerm.y - (w.y1 + w.y2) / 2) < 55);
+            const minLoadX = rowLoads.length > 0 ? Math.min(...rowLoads.map((l) => l.cx)) : Infinity;
+            if ((w.x1 + w.x2) / 2 < minLoadX) {
+              wireHighEnergy[i] = true;
+            }
+          }
+        }
+      }
     }
   }
 
   const simulatedWires: SimulatedWireSegment[] = wires.map((w, idx) => {
     const flow = wireFlowSum[idx];
-    const active = Math.abs(flow) > 0.01;
-    const speed = Math.min(2.2, Math.max(0.35, Math.abs(flow)));
+    const active = circuitSwitchClosed && Math.abs(flow) > 0.01;
+    const speed = Math.min(2.2, Math.max(0.4, Math.abs(flow)));
     if (flow >= 0) {
       return {
         x1: w.x1,
@@ -5354,16 +5796,20 @@ export function analyzeCircuitForSimulation(
 
   const simulatedComps: SimulatedComponentState[] = comps.map((c) => {
     if (c.kind === 'battery' || c.kind === 'voltage-source') {
-      return { comp: c, active: anyClosedLoop, powerFactor: anyClosedLoop ? 1 : 0 };
+      return {
+        comp: c,
+        active: circuitSwitchClosed && anyClosedLoop,
+        powerFactor: circuitSwitchClosed && anyClosedLoop ? 1 : 0,
+      };
     }
     if (c.kind === 'switch') {
       return {
         comp: c,
-        active: Boolean(c.switchClosed && anyClosedLoop),
-        powerFactor: c.switchClosed && anyClosedLoop ? 1 : 0,
+        active: Boolean(circuitSwitchClosed && c.switchClosed && anyClosedLoop),
+        powerFactor: circuitSwitchClosed && c.switchClosed && anyClosedLoop ? 1 : 0,
       };
     }
-    const pwr = compPowerMap.get(c.key) || 0;
+    const pwr = circuitSwitchClosed ? compPowerMap.get(c.key) || 0 : 0;
     return {
       comp: c,
       active: pwr > 0.01,
@@ -5373,10 +5819,11 @@ export function analyzeCircuitForSimulation(
 
   return {
     hasSource,
-    isCircuitClosed: anyClosedLoop,
+    isCircuitClosed: circuitSwitchClosed && anyClosedLoop,
     sourceCount: sources.length,
     wireSegments: simulatedWires,
     components: simulatedComps,
+    autoSwitch,
   };
 }
 
