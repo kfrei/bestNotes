@@ -1049,6 +1049,8 @@ export default function App() {
     minCompLeftX: number;
     maxCompRightX: number;
     componentStrokeIds: string[];
+    topCompStrokeIds: string[];
+    botCompStrokeIds: string[];
     spans: {
       id: string;
       kind: 'h-top' | 'h-bot' | 'v-left' | 'v-right';
@@ -8538,21 +8540,147 @@ export default function App() {
     );
   };
 
+  const getAllNotebookCircuitSims = (
+    nb: Notebook = activeNotebook
+  ): { pageId: string; pageIdx: number; sim: CircuitSimConfig }[] => {
+    const list: { pageId: string; pageIdx: number; sim: CircuitSimConfig }[] = [];
+    nb.pages.forEach((p, pageIdx) => {
+      const valid = getValidCircuitSims(p);
+      for (const sim of valid) {
+        list.push({ pageId: p.id, pageIdx, sim });
+      }
+    });
+    return list;
+  };
+
   const getActiveCircuitSim = (page: NotePage): CircuitSimConfig | null => {
     const valid = getValidCircuitSims(page);
     if (valid.length === 0) return null;
     return valid.find((sim) => sim.id === page.activeCircuitSimId) || valid[0];
   };
 
-  const getNextDefaultSimName = (page: NotePage): string => {
-    const valid = getValidCircuitSims(page);
-    const usedNames = new Set(valid.map((s) => s.name.trim().toLowerCase()));
+  const getNextDefaultSimName = (page?: NotePage): string => {
+    const allEntries = getAllNotebookCircuitSims(activeNotebook);
+    const usedNames = new Set(allEntries.map((e) => e.sim.name.trim().toLowerCase()));
+    if (page) {
+      for (const s of getValidCircuitSims(page)) {
+        usedNames.add(s.name.trim().toLowerCase());
+      }
+    }
     for (let i = 1; i <= 99; i++) {
       const candidate = `sim${String(i).padStart(2, '0')}`;
       if (!usedNames.has(candidate)) return candidate;
     }
-    return `sim${valid.length + 1}`;
+    return `sim${usedNames.size + 1}`;
   };
+
+  // Auto-deduplicate any identical default sim names (e.g. two pages both having 'sim01') across the active notebook
+  useEffect(() => {
+    const seen = new Set<string>();
+    let hasDuplicate = false;
+    for (const p of activeNotebook.pages) {
+      for (const sim of getValidCircuitSims(p)) {
+        const key = sim.name.trim().toLowerCase();
+        if (seen.has(key)) {
+          hasDuplicate = true;
+          break;
+        }
+        seen.add(key);
+      }
+      if (hasDuplicate) break;
+    }
+    if (!hasDuplicate) return;
+
+    setNotebooks((prev) =>
+      prev.map((nb) => {
+        if (nb.id !== activeNotebook.id) return nb;
+        const used = new Set<string>();
+        const nextPages = nb.pages.map((p) => {
+          const valid = getValidCircuitSims(p);
+          if (valid.length === 0) return p;
+          let pageChanged = false;
+          const nextSims = (p.circuitSims || []).map((sim) => {
+            const low = sim.name.trim().toLowerCase();
+            if (!used.has(low)) {
+              used.add(low);
+              return sim;
+            }
+            pageChanged = true;
+            for (let i = 1; i <= 99; i++) {
+              const cand = `sim${String(i).padStart(2, '0')}`;
+              if (!used.has(cand)) {
+                used.add(cand);
+                return { ...sim, name: cand };
+              }
+            }
+            const fallback = `sim${used.size + 1}`;
+            used.add(fallback);
+            return { ...sim, name: fallback };
+          });
+          return pageChanged ? { ...p, circuitSims: nextSims } : p;
+        });
+        return { ...nb, pages: nextPages };
+      })
+    );
+  }, [activeNotebook]);
+
+  const simScrollAnimRef = useRef<number | null>(null);
+
+  const scrollToCircuitSim = useCallback(
+    (targetPageIdx: number, sim: CircuitSimConfig) => {
+      const clampedIdx = Math.max(0, Math.min(activeNotebook.pages.length - 1, targetPageIdx));
+      const targetPage = activeNotebook.pages[clampedIdx];
+      if (!targetPage) return;
+
+      setActivePageIndex(clampedIdx);
+      activeDrawingPageIndexRef.current = clampedIdx;
+
+      const pageTopY = getPageTopOffset(clampedIdx);
+      const idSet = new Set(sim.strokeIds);
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const s of targetPage.strokes) {
+        if (!idSet.has(s.id)) continue;
+        for (const p of s.points) {
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+      }
+      const simCenterY = Number.isFinite(minY)
+        ? (minY + maxY) / 2
+        : getPageLogicalHeight(targetPage) * 0.45;
+      const docTargetY = pageTopY + simCenterY;
+      const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
+      const targetPanY = Math.min(40, Math.round(wsHeight * 0.44 - docTargetY * zoomRef.current));
+      const startPanY = panRef.current.y;
+
+      if (simScrollAnimRef.current !== null) {
+        cancelAnimationFrame(simScrollAnimRef.current);
+        simScrollAnimRef.current = null;
+      }
+
+      if (Math.abs(targetPanY - startPanY) < 2) {
+        applyPaperTransformDirect(zoomRef.current, 0, targetPanY, true);
+        return;
+      }
+
+      const startTime = performance.now();
+      const duration = 420;
+      const step = (now: number) => {
+        const t = Math.min(1, (now - startTime) / duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        const curPanY = startPanY + (targetPanY - startPanY) * ease;
+        applyPaperTransformDirect(zoomRef.current, 0, curPanY, t >= 1);
+        if (t < 1) {
+          simScrollAnimRef.current = requestAnimationFrame(step);
+        } else {
+          simScrollAnimRef.current = null;
+        }
+      };
+      simScrollAnimRef.current = requestAnimationFrame(step);
+    },
+    [activeNotebook.pages, getPageTopOffset, applyPaperTransformDirect]
+  );
 
   const isCircuitEligibleStroke = (s: StrokeObject): boolean => {
     if (!s.isShape) return false;
@@ -8852,6 +8980,14 @@ export default function App() {
 
   const handleStartCircuitCompletion = () => {
     const activeSim = getActiveCircuitSim(activePage);
+    const existingPageSims = getValidCircuitSims(activePage);
+    const registeredSimStrokeIds = new Set<string>();
+    for (const es of existingPageSims) {
+      for (const sid of getSimExpandedStrokeSet(activePage, es)) {
+        registeredSimStrokeIds.add(sid);
+      }
+    }
+
     const expandedIdSet = new Set<string>();
 
     if (selectedStrokeIds.length > 0) {
@@ -8866,8 +9002,14 @@ export default function App() {
           expandedIdSet.add(s.id);
         }
       }
+      const selectionTouchesExistingSim = [...expandedIdSet].some((id) =>
+        registeredSimStrokeIds.has(id)
+      );
       const eligible = activePage.strokes.filter(
-        (s) => expandedIdSet.has(s.id) || isCircuitEligibleStroke(s)
+        (s) =>
+          expandedIdSet.has(s.id) ||
+          (isCircuitEligibleStroke(s) &&
+            (selectionTouchesExistingSim || !registeredSimStrokeIds.has(s.id)))
       );
       let added = true;
       while (added) {
@@ -8886,12 +9028,20 @@ export default function App() {
           }
         }
       }
-    } else if (activeSim) {
-      const simSet = getSimExpandedStrokeSet(activePage, activeSim);
-      for (const id of simSet) expandedIdSet.add(id);
     } else {
-      for (const s of activePage.strokes) {
-        if (isCircuitEligibleStroke(s)) expandedIdSet.add(s.id);
+      // If nothing is selected with Lasso, first check if there are new unregistered circuit components on this page!
+      const unregisteredEligible = activePage.strokes.filter(
+        (s) => isCircuitEligibleStroke(s) && !registeredSimStrokeIds.has(s.id)
+      );
+      if (unregisteredEligible.length > 0) {
+        for (const s of unregisteredEligible) expandedIdSet.add(s.id);
+      } else if (activeSim) {
+        const simSet = getSimExpandedStrokeSet(activePage, activeSim);
+        for (const id of simSet) expandedIdSet.add(id);
+      } else {
+        for (const s of activePage.strokes) {
+          if (isCircuitEligibleStroke(s)) expandedIdSet.add(s.id);
+        }
       }
     }
 
@@ -9307,6 +9457,8 @@ export default function App() {
       minCompLeftX,
       maxCompRightX,
       componentStrokeIds: shiftedCompStrokes.map((s) => s.id),
+      topCompStrokeIds: topComps.flatMap((c) => c.strokeIds),
+      botCompStrokeIds: botComps.flatMap((c) => c.strokeIds),
       spans,
       layerId: defaultLayerId,
     });
@@ -14327,7 +14479,7 @@ export default function App() {
     }
 
     // 0-prop. Interactive 4-Corner Wire Sliding for Circuit Completion Proposal ("✨ Ολοκλήρωση"):
-    //         Moves ONLY the horizontal/vertical wire lines (both proposed dashed & existing solid) while keeping components stationary!
+    //         Moves horizontal/vertical wire lines AND grabs the components on that horizontal branch to move them up/down with the wire!
     if (draggingProposalCornerRef.current && circuitProposal && circuitProposal.pageId === activePage.id) {
       const corner = draggingProposalCornerRef.current;
       const prop = circuitProposal;
@@ -14351,24 +14503,12 @@ export default function App() {
       }
       if (corner === 'tl' || corner === 'tr') {
         nextYTop = Math.round(
-          Math.max(
-            24,
-            Math.min(
-              prop.yBot - 60,
-              Math.max(prop.initialYTop - 36, Math.min(prop.initialYTop + 36, latestPt.y))
-            )
-          )
+          Math.max(40, Math.min(prop.yBot - 70, latestPt.y))
         );
       }
       if (corner === 'bl' || corner === 'br') {
         nextYBot = Math.round(
-          Math.min(
-            pH - 24,
-            Math.max(
-              prop.yTop + 60,
-              Math.max(prop.initialYBot - 36, Math.min(prop.initialYBot + 36, latestPt.y))
-            )
-          )
+          Math.min(pH - 40, Math.max(prop.yTop + 70, latestPt.y))
         );
       }
 
@@ -14381,6 +14521,9 @@ export default function App() {
         return;
       }
 
+      const dyTop = nextYTop - prop.yTop;
+      const dyBot = nextYBot - prop.yBot;
+
       const nextProp = {
         ...prop,
         xLeft: nextXLeft,
@@ -14390,33 +14533,56 @@ export default function App() {
       };
       setCircuitProposal(nextProp);
 
-      // Update any existing solid wire strokes bound to the rectangle spans so they slide together with the dashed wires!
+      // Update any existing solid wire strokes bound to the rectangle spans AND move top/bottom branch components up/down with their horizontal wire!
       const spanMap = new Map<string, { x1: number; y1: number; x2: number; y2: number }>();
       for (const sp of nextProp.spans) {
         if (sp.existingStrokeId) {
           spanMap.set(sp.existingStrokeId, evalCircuitProposalSpan(nextProp, sp));
         }
       }
-      if (spanMap.size > 0) {
+      const topCompSet = new Set(prop.topCompStrokeIds);
+      const botCompSet = new Set(prop.botCompStrokeIds);
+
+      if (spanMap.size > 0 || dyTop !== 0 || dyBot !== 0) {
         updateActivePage(
           (page) => ({
             ...page,
             strokes: page.strokes.map((s) => {
               const coords = spanMap.get(s.id);
-              if (!coords) return s;
-              return {
-                ...s,
-                points: [
-                  { x: coords.x1, y: coords.y1, pressure: 0.7 },
-                  {
-                    x: coords.x2,
-                    y: coords.y2,
-                    cx: (coords.x1 + coords.x2) / 2,
-                    cy: (coords.y1 + coords.y2) / 2,
-                    pressure: 0.7,
-                  },
-                ],
-              };
+              if (coords) {
+                return {
+                  ...s,
+                  points: [
+                    { x: coords.x1, y: coords.y1, pressure: 0.7 },
+                    {
+                      x: coords.x2,
+                      y: coords.y2,
+                      cx: (coords.x1 + coords.x2) / 2,
+                      cy: (coords.y1 + coords.y2) / 2,
+                      pressure: 0.7,
+                    },
+                  ],
+                };
+              }
+              const compDy = topCompSet.has(s.id)
+                ? dyTop
+                : botCompSet.has(s.id)
+                ? dyBot
+                : 0;
+              if (compDy !== 0) {
+                return {
+                  ...s,
+                  circuitBox: s.circuitBox
+                    ? { ...s.circuitBox, termY: s.circuitBox.termY + compDy }
+                    : undefined,
+                  points: s.points.map((pt) => ({
+                    ...pt,
+                    y: pt.y + compDy,
+                    cy: pt.cy !== undefined ? pt.cy + compDy : undefined,
+                  })),
+                };
+              }
+              return s;
             }),
           }),
           false
@@ -24942,15 +25108,23 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Named Lasso Circuit Simulations Selector (sim01, sim02, ... — 1 Active at a Time) */}
+                {/* Named Lasso Circuit Simulations Selector (sim01, sim02, ... — 1 Active at a Time across the Notebook) */}
                 {(() => {
-                  const validSims = getValidCircuitSims(activePage);
+                  const allNotebookSims = getAllNotebookCircuitSims(activeNotebook);
+                  const validPageSims = getValidCircuitSims(activePage);
                   const activeSim = getActiveCircuitSim(activePage);
                   const nextSimLabel = getNextDefaultSimName(activePage);
+                  const isSelectionAlreadyRegisteredSim =
+                    selectedStrokeIds.length > 0 &&
+                    validPageSims.some((sim) => {
+                      const simSet = getSimExpandedStrokeSet(activePage, sim);
+                      const overlap = selectedStrokeIds.filter((id) => simSet.has(id)).length;
+                      return overlap >= Math.max(1, selectedStrokeIds.length * 0.45);
+                    });
 
                   return (
                     <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
-                      {selectedStrokeIds.length > 0 && (
+                      {selectedStrokeIds.length > 0 && !isSelectionAlreadyRegisteredSim && (
                         <button
                           type="button"
                           onClick={() => {
@@ -24963,7 +25137,7 @@ export default function App() {
                         </button>
                       )}
 
-                      {validSims.length > 0 ? (
+                      {allNotebookSims.length > 0 ? (
                         <>
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
@@ -24971,17 +25145,32 @@ export default function App() {
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-1">
-                            {validSims.map((sim) => {
-                              const isCurrent = activeSim?.id === sim.id;
+                            {allNotebookSims.map((entry) => {
+                              const { sim, pageId: simPageId, pageIdx: simPageIdx } = entry;
+                              const isCurrent =
+                                simPageId === activePage.id && activeSim?.id === sim.id;
                               const isEditingThis = editingSimId === sim.id;
                               const commitSimName = () => {
                                 const trimmed = editingSimName.trim() || sim.name;
-                                updateActivePage((page) => ({
-                                  ...page,
-                                  circuitSims: (page.circuitSims || []).map((s) =>
-                                    s.id === sim.id ? { ...s, name: trimmed } : s
-                                  ),
-                                }));
+                                setNotebooks((prev) =>
+                                  prev.map((nb) =>
+                                    nb.id !== activeNotebook.id
+                                      ? nb
+                                      : {
+                                          ...nb,
+                                          pages: nb.pages.map((p) =>
+                                            p.id !== simPageId
+                                              ? p
+                                              : {
+                                                  ...p,
+                                                  circuitSims: (p.circuitSims || []).map((s) =>
+                                                    s.id === sim.id ? { ...s, name: trimmed } : s
+                                                  ),
+                                                }
+                                          ),
+                                        }
+                                  )
+                                );
                                 setEditingSimId(null);
                               };
                               return (
@@ -25015,16 +25204,27 @@ export default function App() {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        updateActivePage((page) => ({
-                                          ...page,
-                                          activeCircuitSimId: sim.id,
-                                        }));
+                                        setNotebooks((prev) =>
+                                          prev.map((nb) =>
+                                            nb.id !== activeNotebook.id
+                                              ? nb
+                                              : {
+                                                  ...nb,
+                                                  pages: nb.pages.map((p) =>
+                                                    p.id === simPageId
+                                                      ? { ...p, activeCircuitSimId: sim.id }
+                                                      : p
+                                                  ),
+                                                }
+                                          )
+                                        );
                                         setSelectedStrokeIds([]);
                                         setSimCircuitSwitchClosed(false);
                                         setIsSimulating(true);
+                                        scrollToCircuitSim(simPageIdx, sim);
                                       }}
                                       className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1"
-                                      title={`Ενεργοποίηση μόνο του κυκλώματος "${sim.name}"`}
+                                      title={`Μετάβαση & Ενεργοποίηση κυκλώματος "${sim.name}"`}
                                     >
                                       <span>{sim.name}</span>
                                     </button>
@@ -25050,23 +25250,33 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      updateActivePage((page) => {
-                                        const remaining = (page.circuitSims || []).filter(
-                                          (s) => s.id !== sim.id
-                                        );
-                                        const nextActiveId =
-                                          page.activeCircuitSimId === sim.id
-                                            ? remaining[0]?.id
-                                            : page.activeCircuitSimId;
-                                        if (remaining.length === 0) {
-                                          setIsSimulating(false);
-                                        }
-                                        return {
-                                          ...page,
-                                          circuitSims: remaining,
-                                          activeCircuitSimId: nextActiveId,
-                                        };
-                                      });
+                                      setNotebooks((prev) =>
+                                        prev.map((nb) => {
+                                          if (nb.id !== activeNotebook.id) return nb;
+                                          const nextPages = nb.pages.map((p) => {
+                                            if (p.id !== simPageId) return p;
+                                            const remaining = (p.circuitSims || []).filter(
+                                              (s) => s.id !== sim.id
+                                            );
+                                            const nextActiveId =
+                                              p.activeCircuitSimId === sim.id
+                                                ? remaining[0]?.id
+                                                : p.activeCircuitSimId;
+                                            return {
+                                              ...p,
+                                              circuitSims: remaining,
+                                              activeCircuitSimId: nextActiveId,
+                                            };
+                                          });
+                                          const anyLeft = nextPages.some(
+                                            (p) => getValidCircuitSims(p).length > 0
+                                          );
+                                          if (!anyLeft) {
+                                            setIsSimulating(false);
+                                          }
+                                          return { ...nb, pages: nextPages };
+                                        })
+                                      );
                                     }}
                                     className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
                                       isCurrent
