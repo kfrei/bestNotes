@@ -15946,7 +15946,7 @@ export default function App() {
           }
         }
 
-        // Do not convert into a closed filled polygon if any vertex is attached to a circuit component
+        // Do not convert into a closed filled polygon if any vertex or edge is attached to / crosses a circuit component
         if (closeLoop && chainPts.length >= 3) {
           const attachedToCircuitComp = activePage.strokes.some((cs) => {
             if (
@@ -15960,9 +15960,28 @@ export default function App() {
             ) {
               return false;
             }
-            return chainPts.some((v) =>
-              cs.points.some((cp) => Math.hypot(cp.x - v.x, cp.y - v.y) <= 36)
-            );
+            if (
+              chainPts.some((v) =>
+                cs.points.some((cp) => Math.hypot(cp.x - v.x, cp.y - v.y) <= 42)
+              )
+            ) {
+              return true;
+            }
+            for (let k = 0; k < chainPts.length; k++) {
+              const a = chainPts[k];
+              const b = chainPts[(k + 1) % chainPts.length];
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              const lenSq = dx * dx + dy * dy;
+              if (lenSq < 1) continue;
+              for (const cp of cs.points) {
+                const t = Math.max(0, Math.min(1, ((cp.x - a.x) * dx + (cp.y - a.y) * dy) / lenSq));
+                const projX = a.x + t * dx;
+                const projY = a.y + t * dy;
+                if (Math.hypot(cp.x - projX, cp.y - projY) <= 42) return true;
+              }
+            }
+            return false;
           });
           if (attachedToCircuitComp) {
             closeLoop = false;

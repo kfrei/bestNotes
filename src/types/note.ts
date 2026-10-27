@@ -89,6 +89,14 @@ export interface StrokeObject {
   zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
   switchClosed?: boolean; // For circuit switches ('switch'): true = closed (green ON), false = open (red OFF)
   originalCircuitType?: 'bulb' | 'fan'; // Remembers if a converted 'resistor' originated from a 'bulb' or a 'fan'
+  circuitBox?: {
+    cx: number;
+    termY: number;
+    pictorialW: number;
+    pictorialH: number;
+    schematicW: number;
+    schematicH: number;
+  };
 }
 
 export type TextFontStyle =
