@@ -694,15 +694,62 @@ export default function App() {
   });
 
   const initialSession = (() => {
-    if (!initialAuthUid) return null;
     try {
-      const raw = localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${initialAuthUid}`);
+      const raw =
+        (initialAuthUid ? localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${initialAuthUid}`) : null) ||
+        localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_latest`);
       if (raw) {
         return JSON.parse(raw) as {
           viewMode?: 'landing' | 'editor' | 'library';
           openNotebookIds?: string[];
           activeNotebookId?: string;
           activePageIndex?: number;
+          zoom?: number;
+          panY?: number;
+          activeTool?: ToolType;
+          lassoMode?: 'rect' | 'freehand';
+          penSubType?: PenSubType;
+          eraserSubType?: EraserSubType;
+          eraserSize?: 'small' | 'medium' | 'large';
+          shapePreset?: ShapePresetType;
+          waveGuideColor?: string;
+          strokeColor?: string;
+          fillColor?: string;
+          fillStyle?: FillStyleType;
+          fillTransparency?: 25 | 45 | 90;
+          strokeWidth?: number;
+          widthSlots?: number[];
+          activeWidthSlotIdx?: number;
+          lineStyle?: LineStyleType;
+          arrowEnd?: boolean;
+          scribbleToEraseEnabled?: boolean;
+          holdToSnapEnabled?: boolean;
+          pencilOnlyMode?: boolean;
+          showToolSubBar?: boolean;
+          textFontSize?: number;
+          textBold?: boolean;
+          textFontFamily?: TextFontStyle;
+          activeLayerId?: string;
+          showLayersPanel?: boolean;
+          showSimulationPanel?: boolean;
+          simActiveCategory?: 'circuits' | 'springs' | null;
+          simPanelPos?: { x: number; y: number };
+          isSimulating?: boolean;
+          isSpringSimulating?: boolean;
+          isSpringPaused?: boolean;
+          springSimElapsed?: number;
+          simCircuitSwitchClosed?: boolean;
+          simShowElectrons?: boolean;
+          simParticleStyle?: 'green-energy' | 'blue-electrons';
+          simFlowDirection?: 'electrons' | 'conventional';
+          simShowDarkWireTrack?: boolean;
+          simSpeedMultiplier?: number;
+          showShapeLibraryPanel?: boolean;
+          libraryTab?: 'all' | 'educational' | 'stickers' | 'custom';
+          librarySubjectFilter?: 'Όλα' | MindMapSubject;
+          libraryGradeFilter?: 'Όλες' | MindMapGrade;
+          stickerCategoryFilter?: StickerCategory;
+          stickerColorStyleFilter?: StickerColorStyle;
         };
       }
     } catch {
@@ -712,10 +759,10 @@ export default function App() {
   })();
 
   const [viewMode, setViewMode] = useState<'landing' | 'editor' | 'library'>(() => {
+    if (initialSession?.viewMode === 'editor' || initialSession?.viewMode === 'library') {
+      return initialSession.viewMode;
+    }
     if (initialAuthUid) {
-      if (initialSession?.viewMode === 'editor' || initialSession?.viewMode === 'library') {
-        return initialSession.viewMode;
-      }
       return 'library';
     }
     return 'landing';
@@ -739,6 +786,30 @@ export default function App() {
   const [activePageIndex, setActivePageIndex] = useState<number>(() => {
     return typeof initialSession?.activePageIndex === 'number' ? initialSession.activePageIndex : 0;
   });
+
+  const initialZoom =
+    typeof initialSession?.zoom === 'number' && Number.isFinite(initialSession.zoom)
+      ? Math.min(3.5, Math.max(0.45, initialSession.zoom))
+      : 1;
+  const initialPanY = (() => {
+    if (typeof initialSession?.panY === 'number' && Number.isFinite(initialSession.panY)) {
+      return initialSession.panY;
+    }
+    const targetPageIdx =
+      typeof initialSession?.activePageIndex === 'number' ? Math.max(0, initialSession.activePageIndex) : 0;
+    if (targetPageIdx > 0) {
+      const targetNb =
+        notebooks.find((n) => n.id === initialSession?.activeNotebookId) || notebooks[0];
+      if (targetNb && Array.isArray(targetNb.pages)) {
+        let topY = 0;
+        for (let i = 0; i < targetPageIdx && i < targetNb.pages.length; i++) {
+          topY += getPageLogicalHeight(targetNb.pages[i]) + PAGE_GAP;
+        }
+        return -topY * initialZoom;
+      }
+    }
+    return 0;
+  })();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -771,18 +842,36 @@ export default function App() {
           let restoredOpenIds = finalNbs[0] ? [finalNbs[0].id] : [];
           let restoredPageIdx = 0;
           try {
-            const rawSession = localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${user.uid}`);
+            const rawSession =
+              localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${user.uid}`) ||
+              localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_latest`);
             if (rawSession) {
               const sess = JSON.parse(rawSession);
-              if (sess && typeof sess.activeNotebookId === 'string' && finalNbs.some((n) => n.id === sess.activeNotebookId)) {
+              if (
+                sess &&
+                typeof sess.activeNotebookId === 'string' &&
+                sess.activeNotebookId.length > 0 &&
+                sess.activeNotebookId !== 'nb-blank-1'
+              ) {
                 restoredActiveId = sess.activeNotebookId;
               }
               if (sess && Array.isArray(sess.openNotebookIds)) {
-                const validOpen = sess.openNotebookIds.filter((id: string) => finalNbs.some((n) => n.id === id));
+                const validOpen = sess.openNotebookIds.filter(
+                  (id: string) => typeof id === 'string' && id.length > 0 && id !== 'nb-blank-1'
+                );
                 if (validOpen.length > 0) restoredOpenIds = validOpen;
               }
               if (sess && typeof sess.activePageIndex === 'number') {
                 restoredPageIdx = Math.max(0, sess.activePageIndex);
+              }
+              if (sess && typeof sess.zoom === 'number' && Number.isFinite(sess.zoom)) {
+                const z = Math.min(3.5, Math.max(0.45, sess.zoom));
+                zoomRef.current = z;
+                setZoom(z);
+              }
+              if (sess && typeof sess.panY === 'number' && Number.isFinite(sess.panY)) {
+                panRef.current = { x: 0, y: sess.panY };
+                setPan({ x: 0, y: sess.panY });
               }
             }
           } catch {
@@ -791,6 +880,7 @@ export default function App() {
           setOpenNotebookIds(restoredOpenIds);
           setActiveNotebookId(restoredActiveId);
           setActivePageIndex(restoredPageIdx);
+          activeDrawingPageIndexRef.current = restoredPageIdx;
 
           // Also load from high-capacity IndexedDB (which never suffers from localStorage 5MB limit!)
           void loadNotebooksFromIndexedDB(user.uid).then((idbNbs) => {
@@ -876,26 +966,10 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (!currentUser) return; // Guests never persist session state!
-    try {
-      localStorage.setItem(
-        `${UI_SESSION_STORAGE_KEY}_${currentUser.uid}`,
-        JSON.stringify({
-          viewMode,
-          openNotebookIds,
-          activeNotebookId,
-          activePageIndex,
-        })
-      );
-    } catch {
-      // ignore
-    }
-  }, [currentUser, viewMode, openNotebookIds, activeNotebookId, activePageIndex]);
-  const [zoom, setZoom] = useState<number>(1);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const zoomRef = useRef<number>(1);
-  const panRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState<number>(initialZoom);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: initialPanY });
+  const zoomRef = useRef<number>(initialZoom);
+  const panRef = useRef<{ x: number; y: number }>({ x: 0, y: initialPanY });
   const paperTransformElRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const canvasRectRef = useRef<DOMRect | null>(null);
@@ -952,21 +1026,21 @@ export default function App() {
   } | null>(null);
 
   // Goodnotes 6 Toolbar State
-  const [activeTool, setActiveTool] = useState<ToolType>('pen');
-  const [lassoMode, setLassoMode] = useState<'rect' | 'freehand'>('rect');
-  const lassoModeRef = useRef<'rect' | 'freehand'>('rect');
+  const [activeTool, setActiveTool] = useState<ToolType>(() => initialSession?.activeTool || 'pen');
+  const [lassoMode, setLassoMode] = useState<'rect' | 'freehand'>(() => initialSession?.lassoMode || 'rect');
+  const lassoModeRef = useRef<'rect' | 'freehand'>(initialSession?.lassoMode || 'rect');
   useEffect(() => {
     if (activeTool !== 'lasso') {
       lassoModeRef.current = 'rect';
       setLassoMode('rect');
     }
   }, [activeTool]);
-  const [penSubType, setPenSubType] = useState<PenSubType>('fountain');
-  const [eraserSubType, setEraserSubType] = useState<EraserSubType>('stroke');
-  const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>('medium');
-  const [shapePreset, setShapePreset] = useState<ShapePresetType>('sine');
-  const [waveGuideColor, setWaveGuideColor] = useState<string>('#2563eb');
-  const [strokeColor, setStrokeColor] = useState<string>('#111827');
+  const [penSubType, setPenSubType] = useState<PenSubType>(() => initialSession?.penSubType || 'fountain');
+  const [eraserSubType, setEraserSubType] = useState<EraserSubType>(() => initialSession?.eraserSubType || 'stroke');
+  const [eraserSize, setEraserSize] = useState<'small' | 'medium' | 'large'>(() => initialSession?.eraserSize || 'medium');
+  const [shapePreset, setShapePreset] = useState<ShapePresetType>(() => initialSession?.shapePreset || 'sine');
+  const [waveGuideColor, setWaveGuideColor] = useState<string>(() => initialSession?.waveGuideColor || '#2563eb');
+  const [strokeColor, setStrokeColor] = useState<string>(() => initialSession?.strokeColor || '#111827');
   const [colorSlots, setColorSlots] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(COLOR_SLOTS_STORAGE_KEY);
@@ -1000,30 +1074,54 @@ export default function App() {
     });
   }, []);
   const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
-  const [fillColor, setFillColor] = useState<string>('#fef08a');
-  const [fillStyle, setFillStyle] = useState<FillStyleType>('none');
-  const [fillTransparency, setFillTransparency] = useState<25 | 45 | 90>(90);
-  const [strokeWidth, setStrokeWidth] = useState<number>(2.0);
-  const [widthSlots, setWidthSlots] = useState<number[]>([2.0, 3.5, 6.5]);
-  const [activeWidthSlotIdx, setActiveWidthSlotIdx] = useState<number>(0);
+  const [fillColor, setFillColor] = useState<string>(() => initialSession?.fillColor || '#fef08a');
+  const [fillStyle, setFillStyle] = useState<FillStyleType>(() => initialSession?.fillStyle || 'none');
+  const [fillTransparency, setFillTransparency] = useState<25 | 45 | 90>(() => initialSession?.fillTransparency || 90);
+  const [strokeWidth, setStrokeWidth] = useState<number>(() =>
+    typeof initialSession?.strokeWidth === 'number' ? initialSession.strokeWidth : 2.0
+  );
+  const [widthSlots, setWidthSlots] = useState<number[]>(() =>
+    Array.isArray(initialSession?.widthSlots) && initialSession.widthSlots.length === 3
+      ? initialSession.widthSlots
+      : [2.0, 3.5, 6.5]
+  );
+  const [activeWidthSlotIdx, setActiveWidthSlotIdx] = useState<number>(() =>
+    typeof initialSession?.activeWidthSlotIdx === 'number' ? initialSession.activeWidthSlotIdx : 0
+  );
   const [showWidthPopover, setShowWidthPopover] = useState<boolean>(false);
-  const [lineStyle, setLineStyle] = useState<LineStyleType>('solid');
-  const [arrowEnd, setArrowEnd] = useState<boolean>(false);
-  const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(true);
-  const [holdToSnapEnabled, setHoldToSnapEnabled] = useState<boolean>(true);
-  const [pencilOnlyMode, setPencilOnlyMode] = useState<boolean>(true);
-  const [showToolSubBar, setShowToolSubBar] = useState<boolean>(true);
+  const [lineStyle, setLineStyle] = useState<LineStyleType>(() => initialSession?.lineStyle || 'solid');
+  const [arrowEnd, setArrowEnd] = useState<boolean>(() => Boolean(initialSession?.arrowEnd));
+  const [scribbleToEraseEnabled, setScribbleToEraseEnabled] = useState<boolean>(() =>
+    typeof initialSession?.scribbleToEraseEnabled === 'boolean' ? initialSession.scribbleToEraseEnabled : true
+  );
+  const [holdToSnapEnabled, setHoldToSnapEnabled] = useState<boolean>(() =>
+    typeof initialSession?.holdToSnapEnabled === 'boolean' ? initialSession.holdToSnapEnabled : true
+  );
+  const [pencilOnlyMode, setPencilOnlyMode] = useState<boolean>(() =>
+    typeof initialSession?.pencilOnlyMode === 'boolean' ? initialSession.pencilOnlyMode : true
+  );
+  const [showToolSubBar, setShowToolSubBar] = useState<boolean>(() =>
+    typeof initialSession?.showToolSubBar === 'boolean' ? initialSession.showToolSubBar : true
+  );
 
   // Layers, Shape Library, Simulation & Selection
-  const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
-  const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
-  const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(false);
-  const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs' | null>(null);
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
-  const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(false);
-  const [isSpringPaused, setIsSpringPaused] = useState<boolean>(false);
+  const [activeLayerId, setActiveLayerId] = useState<string>(() => initialSession?.activeLayerId || 'layer-1');
+  const [showLayersPanel, setShowLayersPanel] = useState<boolean>(() => Boolean(initialSession?.showLayersPanel));
+  const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(() =>
+    Boolean(initialSession?.showSimulationPanel)
+  );
+  const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs' | null>(
+    () => initialSession?.simActiveCategory ?? null
+  );
+  const [isSimulating, setIsSimulating] = useState<boolean>(() => Boolean(initialSession?.isSimulating));
+  const [isSpringSimulating, setIsSpringSimulating] = useState<boolean>(() =>
+    Boolean(initialSession?.isSpringSimulating)
+  );
+  const [isSpringPaused, setIsSpringPaused] = useState<boolean>(() => Boolean(initialSession?.isSpringPaused));
   const [springGraphClearTick, setSpringGraphClearTick] = useState<number>(0);
-  const springSimElapsedRef = useRef<number>(0);
+  const springSimElapsedRef = useRef<number>(
+    typeof initialSession?.springSimElapsed === 'number' ? initialSession.springSimElapsed : 0
+  );
   const springSimLastFrameTimeRef = useRef<number | null>(null);
   const [springSettleAnim, setSpringSettleAnim] = useState<{
     simId: string;
@@ -1113,7 +1211,9 @@ export default function App() {
     targetY: number;
     startTime: number;
   } | null>(null);
-  const [simCircuitSwitchClosed, setSimCircuitSwitchClosed] = useState<boolean>(false);
+  const [simCircuitSwitchClosed, setSimCircuitSwitchClosed] = useState<boolean>(() =>
+    Boolean(initialSession?.simCircuitSwitchClosed)
+  );
   const autoSwitchHitRef = useRef<{
     x: number;
     yCenter: number;
@@ -1121,15 +1221,21 @@ export default function App() {
     yBottom: number;
     closed: boolean;
   } | null>(null);
-  const [simShowElectrons, setSimShowElectrons] = useState<boolean>(true);
+  const [simShowElectrons, setSimShowElectrons] = useState<boolean>(() =>
+    typeof initialSession?.simShowElectrons === 'boolean' ? initialSession.simShowElectrons : true
+  );
   const [simParticleStyle, setSimParticleStyle] = useState<'green-energy' | 'blue-electrons'>(
-    'green-energy'
+    () => initialSession?.simParticleStyle || 'green-energy'
   );
   const [simFlowDirection, setSimFlowDirection] = useState<'electrons' | 'conventional'>(
-    'electrons'
+    () => initialSession?.simFlowDirection || 'electrons'
   );
-  const [simShowDarkWireTrack, setSimShowDarkWireTrack] = useState<boolean>(false);
-  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<number>(1.0);
+  const [simShowDarkWireTrack, setSimShowDarkWireTrack] = useState<boolean>(() =>
+    Boolean(initialSession?.simShowDarkWireTrack)
+  );
+  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<number>(() =>
+    typeof initialSession?.simSpeedMultiplier === 'number' ? initialSession.simSpeedMultiplier : 1.0
+  );
   const [circuitAlignFlashStart, setCircuitAlignFlashStart] = useState<number | null>(null);
   const [circuitProposal, setCircuitProposal] = useState<{
     pageId: string;
@@ -1172,7 +1278,13 @@ export default function App() {
     };
   } | null>(null);
   const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [simPanelPos, setSimPanelPos] = useState<{ x: number; y: number }>({ x: 16, y: 108 });
+  const [simPanelPos, setSimPanelPos] = useState<{ x: number; y: number }>(() =>
+    initialSession?.simPanelPos &&
+    typeof initialSession.simPanelPos.x === 'number' &&
+    typeof initialSession.simPanelPos.y === 'number'
+      ? initialSession.simPanelPos
+      : { x: 16, y: 108 }
+  );
   const simPanelDragRef = useRef<{
     startClientX: number;
     startClientY: number;
@@ -1191,13 +1303,25 @@ export default function App() {
   });
   const [isExternalProjectorOpen, setIsExternalProjectorOpen] = useState<boolean>(false);
   const projectorWinRef = useRef<Window | null>(null);
-  const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
-  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'stickers' | 'custom'>('all');
-  const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>('Όλα');
-  const [libraryGradeFilter, setLibraryGradeFilter] = useState<'Όλες' | MindMapGrade>('Όλες');
+  const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(() =>
+    Boolean(initialSession?.showShapeLibraryPanel)
+  );
+  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'stickers' | 'custom'>(
+    () => initialSession?.libraryTab || 'all'
+  );
+  const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>(
+    () => initialSession?.librarySubjectFilter || 'Όλα'
+  );
+  const [libraryGradeFilter, setLibraryGradeFilter] = useState<'Όλες' | MindMapGrade>(
+    () => initialSession?.libraryGradeFilter || 'Όλες'
+  );
   const [shapeLibSearchQuery, setShapeLibSearchQuery] = useState<string>('');
-  const [stickerCategoryFilter, setStickerCategoryFilter] = useState<StickerCategory>('Όλα');
-  const [stickerColorStyleFilter, setStickerColorStyleFilter] = useState<StickerColorStyle>('all');
+  const [stickerCategoryFilter, setStickerCategoryFilter] = useState<StickerCategory>(
+    () => initialSession?.stickerCategoryFilter || 'Όλα'
+  );
+  const [stickerColorStyleFilter, setStickerColorStyleFilter] = useState<StickerColorStyle>(
+    () => initialSession?.stickerColorStyleFilter || 'all'
+  );
   const [stickerCustomColor, setStickerCustomColor] = useState<string | null>(null);
   const [stickerCustomWidth, setStickerCustomWidth] = useState<number | null>(null);
   const [stickerSearchQuery, setStickerSearchQuery] = useState<string>('');
@@ -1344,9 +1468,13 @@ export default function App() {
     strokeId: string;
     nodeIdx: number;
   } | null>(null);
-  const [textFontSize, setTextFontSize] = useState<number>(22);
-  const [textBold, setTextBold] = useState<boolean>(false);
-  const [textFontFamily, setTextFontFamily] = useState<TextFontStyle>('calligraphic');
+  const [textFontSize, setTextFontSize] = useState<number>(() =>
+    typeof initialSession?.textFontSize === 'number' ? initialSession.textFontSize : 22
+  );
+  const [textBold, setTextBold] = useState<boolean>(() => Boolean(initialSession?.textBold));
+  const [textFontFamily, setTextFontFamily] = useState<TextFontStyle>(
+    () => initialSession?.textFontFamily || 'calligraphic'
+  );
   const [isConvertingHandwriting, setIsConvertingHandwriting] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -1592,7 +1720,7 @@ export default function App() {
   const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeCtxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const activeDrawingPageIndexRef = useRef<number>(0);
+  const activeDrawingPageIndexRef = useRef<number>(activePageIndex);
 
   const currentStrokePtsRef = useRef<BezierPoint[]>([]);
   const lastRawCanvasPtRef = useRef<BezierPoint | null>(null);
@@ -1601,21 +1729,164 @@ export default function App() {
   const activePointerTypeRef = useRef<string | null>(null);
   const lastPenActivityTimeRef = useRef<number>(0);
   const [squeezePalettePos, setSqueezePalettePos] = useState<{ x: number; y: number } | null>(null);
-  const lastNonEraserToolRef = useRef<ToolType>('pen');
+  const lastNonEraserToolRef = useRef<ToolType>(activeTool !== 'eraser' ? activeTool : 'pen');
+  const prevActiveToolForWidthRef = useRef<ToolType>(activeTool);
   useEffect(() => {
     if (activeTool !== 'eraser') {
       lastNonEraserToolRef.current = activeTool;
     }
-    if (activeTool === 'pen' || activeTool === 'pencil') {
-      let minIdx = 0;
-      for (let i = 1; i < widthSlots.length; i++) {
-        if (widthSlots[i] < widthSlots[minIdx]) minIdx = i;
+    if (prevActiveToolForWidthRef.current !== activeTool) {
+      prevActiveToolForWidthRef.current = activeTool;
+      if (activeTool === 'pen' || activeTool === 'pencil') {
+        let minIdx = 0;
+        for (let i = 1; i < widthSlots.length; i++) {
+          if (widthSlots[i] < widthSlots[minIdx]) minIdx = i;
+        }
+        setActiveWidthSlotIdx(minIdx);
+        setStrokeWidth(widthSlots[minIdx] ?? 2.0);
       }
-      setActiveWidthSlotIdx(minIdx);
-      setStrokeWidth(widthSlots[minIdx] ?? 2.0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool]);
+
+  // Persist complete UI Session (Page, Scroll/Zoom, Tools, Tool Options, Simulation Windows) so Refresh restores everything identically
+  const buildCurrentSessionSnapshot = useCallback(
+    () => ({
+      viewMode,
+      openNotebookIds,
+      activeNotebookId,
+      activePageIndex,
+      zoom: zoomRef.current,
+      panY: panRef.current.y,
+      activeTool,
+      lassoMode,
+      penSubType,
+      eraserSubType,
+      eraserSize,
+      shapePreset,
+      waveGuideColor,
+      strokeColor,
+      fillColor,
+      fillStyle,
+      fillTransparency,
+      strokeWidth,
+      widthSlots,
+      activeWidthSlotIdx,
+      lineStyle,
+      arrowEnd,
+      scribbleToEraseEnabled,
+      holdToSnapEnabled,
+      pencilOnlyMode,
+      showToolSubBar,
+      textFontSize,
+      textBold,
+      textFontFamily,
+      activeLayerId,
+      showLayersPanel,
+      showSimulationPanel,
+      simActiveCategory,
+      simPanelPos,
+      isSimulating,
+      isSpringSimulating,
+      isSpringPaused,
+      springSimElapsed: springSimElapsedRef.current,
+      simCircuitSwitchClosed,
+      simShowElectrons,
+      simParticleStyle,
+      simFlowDirection,
+      simShowDarkWireTrack,
+      simSpeedMultiplier,
+      showShapeLibraryPanel,
+      libraryTab,
+      librarySubjectFilter,
+      libraryGradeFilter,
+      stickerCategoryFilter,
+      stickerColorStyleFilter,
+    }),
+    [
+      viewMode,
+      openNotebookIds,
+      activeNotebookId,
+      activePageIndex,
+      activeTool,
+      lassoMode,
+      penSubType,
+      eraserSubType,
+      eraserSize,
+      shapePreset,
+      waveGuideColor,
+      strokeColor,
+      fillColor,
+      fillStyle,
+      fillTransparency,
+      strokeWidth,
+      widthSlots,
+      activeWidthSlotIdx,
+      lineStyle,
+      arrowEnd,
+      scribbleToEraseEnabled,
+      holdToSnapEnabled,
+      pencilOnlyMode,
+      showToolSubBar,
+      textFontSize,
+      textBold,
+      textFontFamily,
+      activeLayerId,
+      showLayersPanel,
+      showSimulationPanel,
+      simActiveCategory,
+      simPanelPos,
+      isSimulating,
+      isSpringSimulating,
+      isSpringPaused,
+      simCircuitSwitchClosed,
+      simShowElectrons,
+      simParticleStyle,
+      simFlowDirection,
+      simShowDarkWireTrack,
+      simSpeedMultiplier,
+      showShapeLibraryPanel,
+      libraryTab,
+      librarySubjectFilter,
+      libraryGradeFilter,
+      stickerCategoryFilter,
+      stickerColorStyleFilter,
+    ]
+  );
+
+  useEffect(() => {
+    const uid = currentUser?.uid || initialAuthUid;
+    try {
+      const serialized = JSON.stringify(buildCurrentSessionSnapshot());
+      localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
+      if (uid) {
+        localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
+      }
+    } catch {
+      // ignore
+    }
+  }, [currentUser, zoom, pan.y, buildCurrentSessionSnapshot]);
+
+  useEffect(() => {
+    const flushSessionBeforeReload = () => {
+      const uid = currentUser?.uid || initialAuthUid;
+      try {
+        const serialized = JSON.stringify(buildCurrentSessionSnapshot());
+        localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
+        if (uid) {
+          localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('beforeunload', flushSessionBeforeReload);
+    window.addEventListener('pagehide', flushSessionBeforeReload);
+    return () => {
+      window.removeEventListener('beforeunload', flushSessionBeforeReload);
+      window.removeEventListener('pagehide', flushSessionBeforeReload);
+    };
+  }, [currentUser, buildCurrentSessionSnapshot]);
   const pencilHoverTwistRef = useRef<{
     baseTwist: number;
     baseTime: number;
@@ -2386,12 +2657,12 @@ export default function App() {
               continue;
             }
 
-            // On initial load (when prevSeenRemoteJson is undefined), if local (e.g. from IndexedDB) is strictly newer
-            // and has at least as much content as remote, push local to Cloud instead of overwriting!
+            // On initial load (when prevSeenRemoteJson is undefined), if local (e.g. from LocalStorage / IndexedDB) is strictly newer,
+            // push local to Cloud instead of overwriting with an older 30s-delayed Firestore snapshot!
             if (
               prevSeenRemoteJson === undefined &&
               (localNb.updatedAt || '') > (rem.updatedAt || '') &&
-              localScore >= remoteScore
+              (localScore > 0 || remoteScore === 0)
             ) {
               lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
               notebooksToPushBack.push(localNb);
@@ -2563,17 +2834,21 @@ export default function App() {
     if (!currentUser) return;
     const flushOnHide = () => {
       if (document.visibilityState === 'hidden') {
+        saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
         performCloudFirestoreSyncNow();
       }
     };
     const flushOnPageHide = () => {
+      saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
       performCloudFirestoreSyncNow();
     };
     document.addEventListener('visibilitychange', flushOnHide);
     window.addEventListener('pagehide', flushOnPageHide);
+    window.addEventListener('beforeunload', flushOnPageHide);
     return () => {
       document.removeEventListener('visibilitychange', flushOnHide);
       window.removeEventListener('pagehide', flushOnPageHide);
+      window.removeEventListener('beforeunload', flushOnPageHide);
     };
   }, [currentUser, performCloudFirestoreSyncNow]);
 
@@ -6113,6 +6388,7 @@ export default function App() {
     0
   );
 
+  const debouncedTransformCommitRef = useRef<number | null>(null);
   const applyPaperTransformDirect = useCallback(
     (nextZoom: number, _nextPanX: number, nextPanY: number, commitReactState = false) => {
       const clampedZoom = Math.min(3.5, Math.max(0.45, nextZoom));
@@ -6126,9 +6402,19 @@ export default function App() {
       if (didScrollVertically) {
         triggerPageControlsVisibility();
       }
+      if (debouncedTransformCommitRef.current !== null) {
+        window.clearTimeout(debouncedTransformCommitRef.current);
+        debouncedTransformCommitRef.current = null;
+      }
       if (commitReactState) {
         setZoom(clampedZoom);
         setPan({ x: 0, y: nextPanY });
+      } else {
+        debouncedTransformCommitRef.current = window.setTimeout(() => {
+          debouncedTransformCommitRef.current = null;
+          setZoom(zoomRef.current);
+          setPan({ x: 0, y: panRef.current.y });
+        }, 120);
       }
     },
     [triggerPageControlsVisibility]
