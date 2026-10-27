@@ -4072,7 +4072,8 @@ export default function App() {
       ctx.globalAlpha = s.opacity ?? 1;
     }
 
-    ctx.strokeStyle = s.color;
+    ctx.strokeStyle =
+      s.shapeType === 'fan' && s.points.length === 2 ? '#111827' : s.color;
     ctx.lineWidth = s.width;
     ctx.lineCap = s.tool === 'highlighter' ? 'butt' : 'round';
     ctx.lineJoin = 'round';
@@ -4488,46 +4489,59 @@ export default function App() {
     }
 
     // Allow filling both geometric shapes AND closed freehand/spline strokes!
+    const isFanRingBackplate = s.shapeType === 'fan' && s.points.length > 2;
     const isClosedSplineOrFreehand = s.points[0]?.twist === 999 || isFreehandLoopClosed(s.points, true);
     const canFillShape =
-      (s.shapeType !== 'line' || isClosedSplineOrFreehand) &&
-      s.shapeType !== 'arrow' &&
-      s.shapeType !== 'double-arrow' &&
-      s.shapeType !== 'resistor' &&
-      s.shapeType !== 'spring' &&
-      s.shapeType !== 'sine' &&
-      s.shapeType !== 'cosine' &&
-      s.fillStyle &&
-      s.fillStyle !== 'none' &&
-      s.points.length > 2 &&
-      (s.isShape || isClosedSplineOrFreehand);
+      isFanRingBackplate ||
+      ((s.shapeType !== 'line' || isClosedSplineOrFreehand) &&
+        s.shapeType !== 'arrow' &&
+        s.shapeType !== 'double-arrow' &&
+        s.shapeType !== 'resistor' &&
+        s.shapeType !== 'spring' &&
+        s.shapeType !== 'sine' &&
+        s.shapeType !== 'cosine' &&
+        s.fillStyle &&
+        s.fillStyle !== 'none' &&
+        s.points.length > 2 &&
+        (s.isShape || isClosedSplineOrFreehand));
     if (canFillShape) {
-      const isStencilCustomFill =
-        s.shapeType === 'fan' ||
-        s.shapeType === 'fan-blade' ||
-        s.shapeType === 'fan-hub' ||
-        s.shapeType === 'incline-wedge' ||
-        s.shapeType === 'incline-block' ||
-        s.shapeType === 'switch' ||
-        s.shapeType === 'switch-knob';
-      const shadeColor = isStencilCustomFill
-        ? s.fillColor || s.color || '#2563eb'
-        : s.color || s.fillColor || '#2563eb';
-      const fillTrans = s.fillTransparency ?? 90;
-      ctx.save();
-      ctx.fillStyle = shadeColor;
-      ctx.globalAlpha =
-        fillTrans === 0
-          ? 0.94
-          : fillTrans === 25 || fillTrans === 20
-          ? 0.75
-          : fillTrans === 45 || fillTrans === 50
-          ? 0.55
-          : isStencilCustomFill
-          ? 0.85
-          : 0.11;
-      ctx.fill();
-      ctx.restore();
+      if (isFanRingBackplate) {
+        // Fan circular backplate ALWAYS keeps its soft grey background (#cbd5e1), never overwritten by blade fill color!
+        ctx.save();
+        ctx.fillStyle = '#cbd5e1';
+        ctx.globalAlpha = 0.78;
+        ctx.fill();
+        ctx.restore();
+      } else {
+        const isStencilCustomFill =
+          s.shapeType === 'fan-blade' ||
+          s.shapeType === 'fan-hub' ||
+          s.shapeType === 'incline-wedge' ||
+          s.shapeType === 'incline-block' ||
+          s.shapeType === 'switch' ||
+          s.shapeType === 'switch-knob';
+        const shadeColor = isStencilCustomFill
+          ? s.fillColor || s.color || '#2563eb'
+          : s.color || s.fillColor || '#2563eb';
+        const fillTrans =
+          s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub'
+            ? 0
+            : s.fillTransparency ?? 90;
+        ctx.save();
+        ctx.fillStyle = shadeColor;
+        ctx.globalAlpha =
+          fillTrans === 0
+            ? 0.94
+            : fillTrans === 25 || fillTrans === 20
+            ? 0.75
+            : fillTrans === 45 || fillTrans === 50
+            ? 0.55
+            : isStencilCustomFill
+            ? 0.85
+            : 0.11;
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     ctx.stroke();
@@ -8885,9 +8899,19 @@ export default function App() {
             ? elapsedSec * 5.6 * cs.powerFactor * simSpeedMultiplier
             : 0;
 
+        const fanStrokes = visibleStrokes.filter((s) => f.strokeIds.includes(s.id));
+        const ringStroke = fanStrokes.find((s) => s.shapeType === 'fan' && s.points.length > 2);
+        const bladeStroke = fanStrokes.find((s) => s.shapeType === 'fan-blade');
+        const ringPerimeterColor = ringStroke?.color || '#1e293b';
+        const bladeFillColor =
+          bladeStroke?.fillStyle === 'none'
+            ? 'transparent'
+            : bladeStroke?.fillColor || bladeStroke?.color || '#0284c7';
+        const bladeBorderColor = bladeStroke?.color || '#0369a1';
+
         ctx.save();
-        // Horizontal left & right lead wires up to the circle edge
-        ctx.strokeStyle = f.color || '#1e293b';
+        // Horizontal left & right lead wires up to the circle edge (always dark wire color)
+        ctx.strokeStyle = '#1e293b';
         ctx.lineWidth = 2.8;
         ctx.lineCap = 'round';
         if (f.cx - rOuter > f.minX + 2) {
@@ -8903,16 +8927,16 @@ export default function App() {
           ctx.stroke();
         }
 
-        // Round grey-filled circle backplate
+        // Round grey-filled circle backplate + customizable perimeter color
         ctx.fillStyle = '#cbd5e1';
-        ctx.strokeStyle = '#1e293b';
+        ctx.strokeStyle = ringPerimeterColor;
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.arc(f.cx, f.cy, rOuter, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        // Draw 3 solid blue blades
+        // Draw 3 blades with customizable blade color
         for (let b = 0; b < 3; b++) {
           const baseAng = spinAng + (b * Math.PI * 2) / 3 - Math.PI / 2;
           const bladeLen = rOuter * 0.85;
@@ -8934,9 +8958,11 @@ export default function App() {
             f.cy + Math.sin(baseAng + 0.18) * rHub * 0.85
           );
           ctx.closePath();
-          ctx.fillStyle = '#0284c7';
-          ctx.fill();
-          ctx.strokeStyle = '#0369a1';
+          if (bladeFillColor !== 'transparent') {
+            ctx.fillStyle = bladeFillColor;
+            ctx.fill();
+          }
+          ctx.strokeStyle = bladeBorderColor;
           ctx.lineWidth = 1.9;
           ctx.stroke();
         }
@@ -8944,7 +8970,7 @@ export default function App() {
         // Central hub
         ctx.beginPath();
         ctx.arc(f.cx, f.cy, rHub, 0, Math.PI * 2);
-        ctx.fillStyle = '#0369a1';
+        ctx.fillStyle = bladeFillColor !== 'transparent' ? bladeFillColor : bladeBorderColor;
         ctx.fill();
         ctx.strokeStyle = '#0f172a';
         ctx.lineWidth = 2.2;
@@ -16878,6 +16904,27 @@ export default function App() {
                 }
                 return s;
               }
+              if (s.shapeType === 'fan') {
+                // Keep fan wire leads dark; for the round circle perimeter, change its border color `c` while keeping soft grey background!
+                if (s.points.length === 2) {
+                  return { ...s, color: '#111827', fillStyle: 'none', fillColor: undefined };
+                }
+                return {
+                  ...s,
+                  color: c,
+                  fillColor: '#cbd5e1',
+                  fillStyle: 'solid',
+                  fillTransparency: 20,
+                };
+              }
+              if (s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub') {
+                return {
+                  ...s,
+                  color: c,
+                  fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined,
+                  fillTransparency: 0,
+                };
+              }
               return {
                 ...s,
                 color: c,
@@ -17085,9 +17132,12 @@ export default function App() {
         (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
       );
 
-      // Determine next fill state: if a shape is selected, toggle relative to its current fill; otherwise toggle global fillStyle
+      // Determine next fill state: if a fan is selected, check its blades; otherwise check targetStrokes
+      const fanBladesInSelection = targetStrokes.filter((s) => s.shapeType === 'fan-blade');
       const currentlyFilled =
-        targetStrokes.length > 0
+        fanBladesInSelection.length > 0
+          ? fanBladesInSelection.some((s) => s.fillStyle && s.fillStyle !== 'none')
+          : targetStrokes.length > 0
           ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
           : fillStyle !== 'none';
       const nextFill: FillStyleType = currentlyFilled ? 'none' : 'solid';
@@ -17103,17 +17153,36 @@ export default function App() {
         }
         updateActivePage((page) => ({
           ...page,
-          strokes: page.strokes.map((s) =>
-            (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
-            (s.isShape || isFreehandLoopClosed(s.points, true))
-              ? {
-                  ...s,
-                  fillStyle: nextFill,
-                  fillColor: nextFill !== 'none' ? s.color : undefined,
-                  fillTransparency: s.fillTransparency ?? fillTransparency,
-                }
-              : s
-          ),
+          strokes: page.strokes.map((s) => {
+            if (!(baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))) return s;
+            if (s.shapeType === 'fan') {
+              // Never overwrite the soft grey circular background (#cbd5e1) or 2-point wire leads of a fan!
+              if (s.points.length === 2) return s;
+              return {
+                ...s,
+                fillStyle: 'solid',
+                fillColor: '#cbd5e1',
+                fillTransparency: 20,
+              };
+            }
+            if (s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub') {
+              return {
+                ...s,
+                fillStyle: nextFill,
+                fillColor: nextFill !== 'none' ? s.color : undefined,
+                fillTransparency: 0,
+              };
+            }
+            if (s.isShape || isFreehandLoopClosed(s.points, true)) {
+              return {
+                ...s,
+                fillStyle: nextFill,
+                fillColor: nextFill !== 'none' ? s.color : undefined,
+                fillTransparency: s.fillTransparency ?? fillTransparency,
+              };
+            }
+            return s;
+          }),
         }));
       }
 
@@ -17174,17 +17243,30 @@ export default function App() {
     if (targetStrokes.length > 0) {
       updateActivePage((page) => ({
         ...page,
-        strokes: page.strokes.map((s) =>
-          (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) &&
-          (s.isShape || isFreehandLoopClosed(s.points, true))
-            ? {
-                ...s,
-                fillStyle: s.fillStyle && s.fillStyle !== 'none' ? s.fillStyle : 'solid',
-                fillColor: s.color,
-                fillTransparency: nextTrans,
-              }
-            : s
-        ),
+        strokes: page.strokes.map((s) => {
+          if (!(baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))) return s;
+          if (s.shapeType === 'fan') {
+            if (s.points.length === 2) return s;
+            return { ...s, fillStyle: 'solid', fillColor: '#cbd5e1', fillTransparency: 20 };
+          }
+          if (s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub') {
+            return {
+              ...s,
+              fillStyle: 'solid',
+              fillColor: s.color,
+              fillTransparency: 0,
+            };
+          }
+          if (s.isShape || isFreehandLoopClosed(s.points, true)) {
+            return {
+              ...s,
+              fillStyle: s.fillStyle && s.fillStyle !== 'none' ? s.fillStyle : 'solid',
+              fillColor: s.color,
+              fillTransparency: nextTrans,
+            };
+          }
+          return s;
+        }),
       }));
     }
   }, [
