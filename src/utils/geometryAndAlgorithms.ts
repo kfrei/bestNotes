@@ -1215,21 +1215,28 @@ export function createPhysicsStencilStrokes(
     | 'bulb'
     | 'battery'
     | 'voltage-source'
-    | 'inclined-plane',
+    | 'inclined-plane'
+    | 'switch'
+    | 'fan',
   x: number,
   y: number,
   w: number,
   h: number,
   color: string,
   layerId: string,
-  guideColor = '#2563eb'
+  guideColor = '#2563eb',
+  switchClosed = true
 ): StrokeObject[] {
   const groupId =
     preset === 'wave-axes'
       ? `wave-axes-grp-${Date.now()}`
       : preset === 'inclined-plane'
         ? `incline-grp-${Date.now()}`
-        : `group-${Date.now()}`;
+        : preset === 'switch'
+          ? `switch-grp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+          : preset === 'fan'
+            ? `fan-grp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+            : `group-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
   const out: StrokeObject[] = [];
 
   if (preset === 'cylinder') {
@@ -1866,6 +1873,225 @@ export function createPhysicsStencilStrokes(
       groupId,
       isShape: true,
       shapeType: 'incline-block',
+    });
+  } else if (preset === 'switch') {
+    const cy = y + h * 0.68;
+    const leftPivotX = x + w * 0.26;
+    const rightPivotX = x + w * 0.74;
+    const pivotR = Math.max(4, Math.min(7.5, Math.min(w, h) * 0.1));
+    const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+
+    out.push({
+      id: `st-${ts}-sw-wl`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: [
+        { x, y: cy, pressure: 0.7 },
+        { x: leftPivotX - pivotR, y: cy, cx: (x + leftPivotX - pivotR) / 2, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'switch',
+      switchClosed,
+    });
+
+    out.push({
+      id: `st-${ts}-sw-wr`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: [
+        { x: rightPivotX + pivotR, y: cy, pressure: 0.7 },
+        { x: x + w, y: cy, cx: (rightPivotX + pivotR + x + w) / 2, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'switch',
+      switchClosed,
+    });
+
+    out.push({
+      id: `st-${ts}-sw-pl`,
+      tool: 'pen',
+      color: '#334155',
+      fillColor: '#94a3b8',
+      fillStyle: 'solid',
+      width: 2.2,
+      opacity: 1,
+      points: makeEllipseBezier(leftPivotX, cy, pivotR, pivotR),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'switch',
+      switchClosed,
+    });
+    out.push({
+      id: `st-${ts}-sw-pr`,
+      tool: 'pen',
+      color: '#334155',
+      fillColor: '#94a3b8',
+      fillStyle: 'solid',
+      width: 2.2,
+      opacity: 1,
+      points: makeEllipseBezier(rightPivotX, cy, pivotR, pivotR),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'switch',
+      switchClosed,
+    });
+
+    const span = rightPivotX - leftPivotX;
+    const bladeEndX = switchClosed ? rightPivotX : leftPivotX + span * 0.82;
+    const bladeEndY = switchClosed ? cy : cy - Math.max(18, Math.min(h * 0.56, span * 0.62));
+    out.push({
+      id: `st-${ts}-sw-blade`,
+      tool: 'pen',
+      color: '#1e293b',
+      width: 3.4,
+      opacity: 1,
+      points: [
+        { x: leftPivotX, y: cy, pressure: 0.7 },
+        {
+          x: bladeEndX,
+          y: bladeEndY,
+          cx: (leftPivotX + bladeEndX) / 2,
+          cy: (cy + bladeEndY) / 2,
+          pressure: 0.7,
+        },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'switch-blade',
+      switchClosed,
+    });
+
+    const knobCx = (leftPivotX + bladeEndX) / 2;
+    const knobCy = switchClosed ? cy - pivotR * 1.4 : (cy + bladeEndY) / 2;
+    const knobR = Math.max(6.5, Math.min(11, Math.min(w, h) * 0.16));
+    out.push({
+      id: `st-${ts}-sw-knob`,
+      tool: 'pen',
+      color: switchClosed ? '#16a34a' : '#dc2626',
+      fillColor: switchClosed ? '#22c55e' : '#ef4444',
+      fillStyle: 'solid',
+      width: 2.2,
+      opacity: 1,
+      points: makeEllipseBezier(knobCx, knobCy, knobR, knobR),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'switch-knob',
+      switchClosed,
+    });
+  } else if (preset === 'fan') {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const rOuter = Math.max(16, Math.min(w * 0.32, h * 0.44));
+    const rHub = Math.max(4.5, rOuter * 0.22);
+    const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+
+    out.push({
+      id: `st-${ts}-fan-wl`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: [
+        { x, y: cy, pressure: 0.7 },
+        { x: cx - rOuter, y: cy, cx: (x + cx - rOuter) / 2, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'fan',
+    });
+    out.push({
+      id: `st-${ts}-fan-wr`,
+      tool: 'pen',
+      color,
+      width: 2.8,
+      opacity: 1,
+      points: [
+        { x: cx + rOuter, y: cy, pressure: 0.7 },
+        { x: x + w, y: cy, cx: (cx + rOuter + x + w) / 2, cy, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'fan',
+    });
+
+    out.push({
+      id: `st-${ts}-fan-ring`,
+      tool: 'pen',
+      color,
+      fillColor: 'rgba(226, 232, 240, 0.25)',
+      fillStyle: 'solid',
+      width: 2.5,
+      opacity: 1,
+      points: makeEllipseBezier(cx, cy, rOuter, rOuter),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'fan',
+    });
+
+    for (let b = 0; b < 3; b++) {
+      const baseAng = (b * Math.PI * 2) / 3 - Math.PI / 2;
+      const bladeLen = rOuter * 0.84;
+      const spread = 0.34;
+      const p0 = {
+        x: cx + Math.cos(baseAng) * rHub * 0.9,
+        y: cy + Math.sin(baseAng) * rHub * 0.9,
+      };
+      const p1 = {
+        x: cx + Math.cos(baseAng - spread) * bladeLen,
+        y: cy + Math.sin(baseAng - spread) * bladeLen,
+      };
+      const pTip = {
+        x: cx + Math.cos(baseAng) * (bladeLen * 1.04),
+        y: cy + Math.sin(baseAng) * (bladeLen * 1.04),
+      };
+      const p2 = {
+        x: cx + Math.cos(baseAng + spread) * bladeLen,
+        y: cy + Math.sin(baseAng + spread) * bladeLen,
+      };
+      out.push({
+        id: `st-${ts}-fan-blade-${b}`,
+        tool: 'pen',
+        color: '#0284c7',
+        fillColor: 'rgba(56, 189, 248, 0.35)',
+        fillStyle: 'solid',
+        width: 2.1,
+        opacity: 1,
+        points: makePolygonBezier([p0, p1, pTip, p2]),
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'fan-blade',
+      });
+    }
+
+    out.push({
+      id: `st-${ts}-fan-hub`,
+      tool: 'pen',
+      color: '#0f172a',
+      fillColor: '#38bdf8',
+      fillStyle: 'solid',
+      width: 2.2,
+      opacity: 1,
+      points: makeEllipseBezier(cx, cy, rHub, rHub),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'fan-hub',
     });
   }
 
@@ -4312,6 +4538,848 @@ export function convertOpenStrokeToBezierSplinePoints(s: StrokeObject): BezierPo
   }
   return out;
 }
+
+// ============================================================================
+// CIRCUIT TERMINALS, AUTO-SPLIT WIRE ROUTING, 1-CLICK CONVERSION & SIMULATION
+// ============================================================================
+
+export type CircuitComponentKind =
+  | 'battery'
+  | 'voltage-source'
+  | 'bulb'
+  | 'resistor'
+  | 'switch'
+  | 'fan';
+
+export interface CircuitComponentInfo {
+  key: string; // groupId or stroke.id
+  kind: CircuitComponentKind;
+  strokeIds: string[];
+  color: string;
+  layerId: string;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  leftTerm: { x: number; y: number };
+  rightTerm: { x: number; y: number };
+  switchClosed?: boolean;
+}
+
+function classifyCircuitStrokeKind(s: StrokeObject): CircuitComponentKind | null {
+  const st = s.shapeType;
+  if (st === 'battery') return 'battery';
+  if (st === 'voltage-source') return 'voltage-source';
+  if (st === 'bulb') return 'bulb';
+  if (st === 'resistor') return 'resistor';
+  if (st === 'switch' || st === 'switch-blade' || st === 'switch-knob') return 'switch';
+  if (st === 'fan' || st === 'fan-blade' || st === 'fan-hub') return 'fan';
+  return null;
+}
+
+export function getCircuitComponentsWithTerminals(
+  strokes: StrokeObject[]
+): CircuitComponentInfo[] {
+  const groups = new Map<
+    string,
+    { kind: CircuitComponentKind; strokes: StrokeObject[] }
+  >();
+
+  for (const s of strokes) {
+    const kind = classifyCircuitStrokeKind(s);
+    if (!kind) continue;
+    const key = s.groupId || s.id;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.strokes.push(s);
+    } else {
+      groups.set(key, { kind, strokes: [s] });
+    }
+  }
+
+  const out: CircuitComponentInfo[] = [];
+  for (const [key, entry] of groups.entries()) {
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    let switchClosed: boolean | undefined;
+    for (const s of entry.strokes) {
+      if (s.switchClosed !== undefined) {
+        switchClosed = s.switchClosed;
+      }
+      for (const p of s.points) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+    if (!Number.isFinite(minX)) continue;
+    const w = Math.max(12, maxX - minX);
+    const h = Math.max(12, maxY - minY);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    let leftTerm = { x: minX, y: cy };
+    let rightTerm = { x: maxX, y: cy };
+
+    if (entry.kind === 'bulb') {
+      const baseY = minY + h * 0.8;
+      const baseHalfW = Math.max(8, w * 0.23);
+      leftTerm = { x: cx - baseHalfW, y: baseY };
+      rightTerm = { x: cx + baseHalfW, y: baseY };
+    } else if (entry.kind === 'switch') {
+      const wireY = minY + h * 0.68;
+      leftTerm = { x: minX, y: wireY };
+      rightTerm = { x: maxX, y: wireY };
+    } else if (entry.kind === 'battery') {
+      leftTerm = { x: minX + w * 0.14, y: cy };
+      rightTerm = { x: maxX - w * 0.14, y: cy };
+    }
+
+    const primaryStroke = entry.strokes[0];
+    out.push({
+      key,
+      kind: entry.kind,
+      strokeIds: entry.strokes.map((s) => s.id),
+      color: primaryStroke.color || '#111827',
+      layerId: primaryStroke.layerId,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      cx,
+      cy,
+      w,
+      h,
+      leftTerm,
+      rightTerm,
+      switchClosed: entry.kind === 'switch' ? (switchClosed ?? true) : undefined,
+    });
+  }
+
+  return out;
+}
+
+export function splitWiresUnderCircuitComponent(
+  strokes: StrokeObject[],
+  componentStrokeIds: string[]
+): StrokeObject[] {
+  if (componentStrokeIds.length === 0) return strokes;
+  const compSet = new Set(componentStrokeIds);
+  const targetStrokes = strokes.filter((s) => compSet.has(s.id));
+  if (targetStrokes.length === 0) return strokes;
+
+  const comps = getCircuitComponentsWithTerminals(targetStrokes);
+  if (comps.length === 0) return strokes;
+
+  let currentStrokes = [...strokes];
+
+  for (const comp of comps) {
+    const nextStrokes: StrokeObject[] = [];
+    const padX = Math.max(6, comp.w * 0.08);
+    const padY = Math.max(8, comp.h * 0.12);
+    const boxMinX = comp.minX - padX;
+    const boxMaxX = comp.maxX + padX;
+    const boxMinY = comp.minY - padY;
+    const boxMaxY = comp.maxY + padY;
+
+    for (const s of currentStrokes) {
+      if (compSet.has(s.id) || classifyCircuitStrokeKind(s) !== null) {
+        nextStrokes.push(s);
+        continue;
+      }
+
+      if (
+        (s.shapeType === 'line' || (!s.isShape && s.points.length >= 2)) &&
+        s.points.length >= 2
+      ) {
+        const pStart = s.points[0];
+        const pEnd = s.points[s.points.length - 1];
+        const segLen = Math.hypot(pEnd.x - pStart.x, pEnd.y - pStart.y);
+
+        const isNearlyStraight = s.points.length <= 3 && segLen > comp.w * 1.15;
+        if (isNearlyStraight) {
+          const midTermX = (comp.leftTerm.x + comp.rightTerm.x) / 2;
+          const midTermY = (comp.leftTerm.y + comp.rightTerm.y) / 2;
+          const dx = pEnd.x - pStart.x;
+          const dy = pEnd.y - pStart.y;
+          const lenSq = dx * dx + dy * dy;
+          const tProj =
+            lenSq > 1
+              ? ((midTermX - pStart.x) * dx + (midTermY - pStart.y) * dy) / lenSq
+              : -1;
+          if (tProj > 0.08 && tProj < 0.92) {
+            const projX = pStart.x + tProj * dx;
+            const projY = pStart.y + tProj * dy;
+            const perpDist = Math.hypot(midTermX - projX, midTermY - projY);
+            const crossesHorizontally =
+              Math.min(pStart.x, pEnd.x) < comp.leftTerm.x - 6 &&
+              Math.max(pStart.x, pEnd.x) > comp.rightTerm.x + 6 &&
+              perpDist <= Math.max(28, comp.h * 0.55);
+
+            if (crossesHorizontally) {
+              const leftEndPt = pStart.x <= pEnd.x ? pStart : pEnd;
+              const rightEndPt = pStart.x <= pEnd.x ? pEnd : pStart;
+              const wire1: StrokeObject = {
+                ...s,
+                id: `st-${Date.now()}-w1-${Math.random().toString(36).slice(2, 5)}`,
+                isShape: true,
+                shapeType: 'line',
+                points: [
+                  { x: leftEndPt.x, y: leftEndPt.y, pressure: 0.7 },
+                  {
+                    x: comp.leftTerm.x,
+                    y: leftEndPt.y,
+                    cx: (leftEndPt.x + comp.leftTerm.x) / 2,
+                    cy: leftEndPt.y,
+                    pressure: 0.7,
+                  },
+                ],
+              };
+              const wire2: StrokeObject = {
+                ...s,
+                id: `st-${Date.now()}-w2-${Math.random().toString(36).slice(2, 5)}`,
+                isShape: true,
+                shapeType: 'line',
+                points: [
+                  { x: comp.rightTerm.x, y: rightEndPt.y, pressure: 0.7 },
+                  {
+                    x: rightEndPt.x,
+                    y: rightEndPt.y,
+                    cx: (comp.rightTerm.x + rightEndPt.x) / 2,
+                    cy: rightEndPt.y,
+                    pressure: 0.7,
+                  },
+                ],
+              };
+              nextStrokes.push(wire1, wire2);
+              continue;
+            }
+          }
+        }
+
+        const dStartL = distance(pStart, comp.leftTerm);
+        const dStartR = distance(pStart, comp.rightTerm);
+        const dEndL = distance(pEnd, comp.leftTerm);
+        const dEndR = distance(pEnd, comp.rightTerm);
+        const SNAP_R = 34;
+
+        if (
+          (dStartL <= SNAP_R || dStartR <= SNAP_R || dEndL <= SNAP_R || dEndR <= SNAP_R) &&
+          s.points.length === 2 &&
+          !(
+            pStart.x >= boxMinX &&
+            pStart.x <= boxMaxX &&
+            pStart.y >= boxMinY &&
+            pStart.y <= boxMaxY &&
+            pEnd.x >= boxMinX &&
+            pEnd.x <= boxMaxX &&
+            pEnd.y >= boxMinY &&
+            pEnd.y <= boxMaxY
+          )
+        ) {
+          const newP0 = { ...pStart };
+          const newP1 = { ...pEnd };
+          if (dStartL <= SNAP_R && dStartL <= dStartR) {
+            newP0.x = comp.leftTerm.x;
+            if (Math.abs(newP1.y - comp.leftTerm.y) < 18) newP0.y = newP1.y;
+            else newP0.y = comp.leftTerm.y;
+          } else if (dStartR <= SNAP_R) {
+            newP0.x = comp.rightTerm.x;
+            if (Math.abs(newP1.y - comp.rightTerm.y) < 18) newP0.y = newP1.y;
+            else newP0.y = comp.rightTerm.y;
+          }
+          if (dEndL <= SNAP_R && dEndL <= dEndR) {
+            newP1.x = comp.leftTerm.x;
+            if (Math.abs(newP0.y - comp.leftTerm.y) < 18) newP1.y = newP0.y;
+            else newP1.y = comp.leftTerm.y;
+          } else if (dEndR <= SNAP_R) {
+            newP1.x = comp.rightTerm.x;
+            if (Math.abs(newP0.y - comp.rightTerm.y) < 18) newP1.y = newP0.y;
+            else newP1.y = comp.rightTerm.y;
+          }
+          newP1.cx = (newP0.x + newP1.x) / 2;
+          newP1.cy = (newP0.y + newP1.y) / 2;
+          nextStrokes.push({
+            ...s,
+            points: [newP0, newP1],
+          });
+          continue;
+        }
+      }
+
+      nextStrokes.push(s);
+    }
+    currentStrokes = nextStrokes;
+  }
+
+  return currentStrokes;
+}
+
+export function toggleSwitchStrokeGroup(
+  strokes: StrokeObject[],
+  switchKeyOrStrokeId: string
+): { strokes: StrokeObject[]; newClosedState: boolean } {
+  const comps = getCircuitComponentsWithTerminals(strokes);
+  const swComp = comps.find(
+    (c) =>
+      c.kind === 'switch' &&
+      (c.key === switchKeyOrStrokeId || c.strokeIds.includes(switchKeyOrStrokeId))
+  );
+  if (!swComp) return { strokes, newClosedState: true };
+
+  const nextClosed = !(swComp.switchClosed ?? true);
+  const replacementStrokes = createPhysicsStencilStrokes(
+    'switch',
+    swComp.minX,
+    swComp.minY,
+    swComp.w,
+    swComp.h,
+    swComp.color,
+    swComp.layerId,
+    '#2563eb',
+    nextClosed
+  ).map((s) => ({ ...s, groupId: swComp.key }));
+
+  const removeSet = new Set(swComp.strokeIds);
+  const out: StrokeObject[] = [];
+  let inserted = false;
+  for (const s of strokes) {
+    if (removeSet.has(s.id)) {
+      if (!inserted) {
+        out.push(...replacementStrokes);
+        inserted = true;
+      }
+      continue;
+    }
+    out.push(s);
+  }
+  return { strokes: out, newClosedState: nextClosed };
+}
+
+export function convertCircuitComponents(
+  strokes: StrokeObject[],
+  targetStrokeIds?: string[],
+  forceMode: 'toggle' | 'schematic' | 'pictorial' = 'toggle'
+): { strokes: StrokeObject[]; convertedCount: number; newIds: string[] } {
+  const allComps = getCircuitComponentsWithTerminals(strokes);
+  const targetSet =
+    targetStrokeIds && targetStrokeIds.length > 0 ? new Set(targetStrokeIds) : null;
+
+  const compsToConvert = allComps.filter((c) => {
+    if (
+      c.kind !== 'battery' &&
+      c.kind !== 'voltage-source' &&
+      c.kind !== 'bulb' &&
+      c.kind !== 'resistor'
+    ) {
+      return false;
+    }
+    if (targetSet) {
+      return c.strokeIds.some((id) => targetSet.has(id));
+    }
+    return true;
+  });
+
+  if (compsToConvert.length === 0) {
+    return { strokes, convertedCount: 0, newIds: [] };
+  }
+
+  let currentStrokes = [...strokes];
+  let convertedCount = 0;
+  const newIds: string[] = [];
+
+  for (const comp of compsToConvert) {
+    let targetKind: 'battery' | 'voltage-source' | 'bulb' | 'resistor' | null = null;
+    if (comp.kind === 'battery') {
+      if (forceMode === 'toggle' || forceMode === 'schematic') targetKind = 'voltage-source';
+    } else if (comp.kind === 'voltage-source') {
+      if (forceMode === 'toggle' || forceMode === 'pictorial') targetKind = 'battery';
+    } else if (comp.kind === 'bulb') {
+      if (forceMode === 'toggle' || forceMode === 'schematic') targetKind = 'resistor';
+    } else if (comp.kind === 'resistor') {
+      if (forceMode === 'toggle' || forceMode === 'pictorial') targetKind = 'bulb';
+    }
+
+    if (!targetKind) continue;
+    convertedCount++;
+
+    let replacement: StrokeObject[] = [];
+    if (targetKind === 'resistor') {
+      const rw = Math.max(76, comp.w * 1.35);
+      const rh = Math.max(36, Math.min(54, comp.h * 0.52));
+      const rx = comp.cx - rw / 2;
+      const ry = comp.leftTerm.y - rh / 2;
+      const resStroke: StrokeObject = {
+        id: `st-${Date.now()}-res-${Math.random().toString(36).slice(2, 5)}`,
+        tool: 'pen',
+        color: comp.color,
+        width: 2.8,
+        opacity: 1,
+        points: makePolygonBezier([
+          { x: rx, y: ry },
+          { x: rx + rw, y: ry },
+          { x: rx + rw, y: ry + rh },
+          { x: rx, y: ry + rh },
+        ]),
+        layerId: comp.layerId,
+        isShape: true,
+        shapeType: 'resistor',
+      };
+      replacement = [resStroke];
+    } else if (targetKind === 'bulb') {
+      const bw = Math.max(54, comp.w * 0.72);
+      const bh = Math.max(78, bw * 1.35);
+      const bx = comp.cx - bw / 2;
+      const by = comp.cy - bh * 0.8;
+      replacement = createPhysicsStencilStrokes(
+        'bulb',
+        bx,
+        by,
+        bw,
+        bh,
+        comp.color,
+        comp.layerId
+      );
+    } else if (targetKind === 'voltage-source') {
+      replacement = createPhysicsStencilStrokes(
+        'voltage-source',
+        comp.minX,
+        comp.minY,
+        comp.w,
+        comp.h,
+        comp.color,
+        comp.layerId
+      );
+    } else if (targetKind === 'battery') {
+      replacement = createPhysicsStencilStrokes(
+        'battery',
+        comp.minX,
+        comp.minY,
+        comp.w,
+        comp.h,
+        comp.color,
+        comp.layerId
+      );
+    }
+
+    newIds.push(...replacement.map((s) => s.id));
+    const removeSet = new Set(comp.strokeIds);
+    const updated: StrokeObject[] = [];
+    let inserted = false;
+    for (const s of currentStrokes) {
+      if (removeSet.has(s.id)) {
+        if (!inserted) {
+          updated.push(...replacement);
+          inserted = true;
+        }
+        continue;
+      }
+      updated.push(s);
+    }
+    currentStrokes = updated;
+  }
+
+  return { strokes: currentStrokes, convertedCount, newIds };
+}
+
+export interface SimulatedWireSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  length: number;
+  active: boolean;
+  currentSpeed: number;
+  highEnergy: boolean;
+}
+
+export interface SimulatedComponentState {
+  comp: CircuitComponentInfo;
+  active: boolean;
+  powerFactor: number;
+}
+
+export interface CircuitSimulationData {
+  hasSource: boolean;
+  isCircuitClosed: boolean;
+  sourceCount: number;
+  wireSegments: SimulatedWireSegment[];
+  components: SimulatedComponentState[];
+}
+
+export function analyzeCircuitForSimulation(
+  strokes: StrokeObject[]
+): CircuitSimulationData {
+  const comps = getCircuitComponentsWithTerminals(strokes);
+  const compStrokeSet = new Set<string>();
+  for (const c of comps) {
+    for (const id of c.strokeIds) compStrokeSet.add(id);
+  }
+
+  const rawWires: { x1: number; y1: number; x2: number; y2: number; length: number }[] = [];
+  for (const s of strokes) {
+    if (compStrokeSet.has(s.id)) continue;
+    if (s.tool === 'highlighter' || s.points.length < 2) continue;
+    if (
+      s.shapeType &&
+      s.shapeType !== 'line' &&
+      s.shapeType !== 'rectangle' &&
+      s.shapeType !== 'parallelogram'
+    ) {
+      continue;
+    }
+
+    if (s.shapeType === 'line' || s.points.length <= 6) {
+      for (let i = 0; i < s.points.length - 1; i++) {
+        const a = s.points[i];
+        const b = s.points[i + 1];
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len >= 6) {
+          rawWires.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, length: len });
+        }
+      }
+    } else {
+      let lastPt = s.points[0];
+      for (let i = 1; i < s.points.length; i++) {
+        const pt = s.points[i];
+        const len = Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y);
+        if (len >= 18 || i === s.points.length - 1) {
+          if (len >= 4) {
+            rawWires.push({ x1: lastPt.x, y1: lastPt.y, x2: pt.x, y2: pt.y, length: len });
+          }
+          lastPt = pt;
+        }
+      }
+    }
+  }
+
+  const splitPointsForWire: { x: number; y: number }[][] = rawWires.map(() => []);
+  const allInterestPts: { x: number; y: number }[] = [];
+  for (const w of rawWires) {
+    allInterestPts.push({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+  }
+  for (const c of comps) {
+    allInterestPts.push(c.leftTerm, c.rightTerm);
+  }
+
+  const TJUNCTION_TOL = 42;
+  for (let i = 0; i < rawWires.length; i++) {
+    const w = rawWires[i];
+    const dx = w.x2 - w.x1;
+    const dy = w.y2 - w.y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq < 100) continue;
+    for (const pt of allInterestPts) {
+      const t = ((pt.x - w.x1) * dx + (pt.y - w.y1) * dy) / lenSq;
+      if (t > 0.08 && t < 0.92) {
+        const projX = w.x1 + t * dx;
+        const projY = w.y1 + t * dy;
+        if (Math.hypot(pt.x - projX, pt.y - projY) <= TJUNCTION_TOL) {
+          splitPointsForWire[i].push({ x: projX, y: projY });
+        }
+      }
+    }
+  }
+
+  const wires: { x1: number; y1: number; x2: number; y2: number; length: number }[] = [];
+  for (let i = 0; i < rawWires.length; i++) {
+    const w = rawWires[i];
+    const splits = splitPointsForWire[i];
+    if (splits.length === 0) {
+      wires.push(w);
+      continue;
+    }
+    const dx = w.x2 - w.x1;
+    const dy = w.y2 - w.y1;
+    const lenSq = dx * dx + dy * dy;
+    const sorted = [
+      { x: w.x1, y: w.y1, t: 0 },
+      ...splits.map((p) => ({
+        x: p.x,
+        y: p.y,
+        t: ((p.x - w.x1) * dx + (p.y - w.y1) * dy) / lenSq,
+      })),
+      { x: w.x2, y: w.y2, t: 1 },
+    ].sort((a, b) => a.t - b.t);
+
+    for (let k = 0; k < sorted.length - 1; k++) {
+      const a = sorted[k];
+      const b = sorted[k + 1];
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+      if (segLen >= 6) {
+        wires.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, length: segLen });
+      }
+    }
+  }
+
+  const NODE_TOL = 44;
+  const nodeCenters: { x: number; y: number }[] = [];
+  const getOrAddNode = (pt: { x: number; y: number }): number => {
+    let bestIdx = -1;
+    let bestD = NODE_TOL;
+    for (let i = 0; i < nodeCenters.length; i++) {
+      const d = Math.hypot(pt.x - nodeCenters[i].x, pt.y - nodeCenters[i].y);
+      if (d <= bestD) {
+        bestD = d;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0) return bestIdx;
+    nodeCenters.push({ x: pt.x, y: pt.y });
+    return nodeCenters.length - 1;
+  };
+
+  const sources = comps.filter((c) => c.kind === 'battery' || c.kind === 'voltage-source');
+  const hasSource = sources.length > 0;
+  const openSwitches = comps.filter((c) => c.kind === 'switch' && c.switchClosed === false);
+
+  const compNodes = comps.map((c) => ({
+    comp: c,
+    u: getOrAddNode(c.leftTerm),
+    v: getOrAddNode(c.rightTerm),
+  }));
+
+  const wireNodes = wires.map((w, idx) => ({
+    idx,
+    w,
+    u: getOrAddNode({ x: w.x1, y: w.y1 }),
+    v: getOrAddNode({ x: w.x2, y: w.y2 }),
+  }));
+
+  interface GraphEdge {
+    to: number;
+    type: 'wire' | 'load' | 'closed-switch';
+    wireIdx?: number;
+    compKey?: string;
+    resistance: number;
+    forwardFromU: boolean;
+  }
+
+  const adj: GraphEdge[][] = Array.from({ length: nodeCenters.length }, () => []);
+  for (const wn of wireNodes) {
+    if (wn.u === wn.v) continue;
+    adj[wn.u].push({
+      to: wn.v,
+      type: 'wire',
+      wireIdx: wn.idx,
+      resistance: 0.02,
+      forwardFromU: true,
+    });
+    adj[wn.v].push({
+      to: wn.u,
+      type: 'wire',
+      wireIdx: wn.idx,
+      resistance: 0.02,
+      forwardFromU: false,
+    });
+  }
+
+  for (const cn of compNodes) {
+    if (cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source') {
+      continue;
+    }
+    if (cn.comp.kind === 'switch') {
+      if (cn.comp.switchClosed === false) continue;
+      adj[cn.u].push({
+        to: cn.v,
+        type: 'closed-switch',
+        compKey: cn.comp.key,
+        resistance: 0.01,
+        forwardFromU: true,
+      });
+      adj[cn.v].push({
+        to: cn.u,
+        type: 'closed-switch',
+        compKey: cn.comp.key,
+        resistance: 0.01,
+        forwardFromU: false,
+      });
+    } else {
+      adj[cn.u].push({
+        to: cn.v,
+        type: 'load',
+        compKey: cn.comp.key,
+        resistance: 1.0,
+        forwardFromU: true,
+      });
+      adj[cn.v].push({
+        to: cn.u,
+        type: 'load',
+        compKey: cn.comp.key,
+        resistance: 1.0,
+        forwardFromU: false,
+      });
+    }
+  }
+
+  if (sources.length > 1) {
+    for (let i = 1; i < compNodes.length; i++) {
+      const cn = compNodes[i];
+      if (cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source') {
+        adj[cn.u].push({
+          to: cn.v,
+          type: 'closed-switch',
+          compKey: cn.comp.key,
+          resistance: 0.01,
+          forwardFromU: true,
+        });
+        adj[cn.v].push({
+          to: cn.u,
+          type: 'closed-switch',
+          compKey: cn.comp.key,
+          resistance: 0.01,
+          forwardFromU: false,
+        });
+      }
+    }
+  }
+
+  const wireFlowSum = new Float64Array(wires.length);
+  const wireHighEnergy = new Array<boolean>(wires.length).fill(false);
+  const compPowerMap = new Map<string, number>();
+  let anyClosedLoop = false;
+
+  if (hasSource) {
+    const primarySourceNode = compNodes.find(
+      (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
+    )!;
+    const startNode = primarySourceNode.u;
+    const targetNodes = new Set<number>([primarySourceNode.v]);
+    for (const cn of compNodes) {
+      if (cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source') {
+        targetNodes.add(cn.v);
+      }
+    }
+
+    const visited = new Uint8Array(nodeCenters.length);
+    const pathEdges: GraphEdge[] = [];
+    const voltageBoost = Math.min(2.2, 1 + (sources.length - 1) * 0.45);
+
+    const dfs = (curr: number, depth: number) => {
+      if (depth > 28) return;
+      if (targetNodes.has(curr) && pathEdges.length >= 2) {
+        anyClosedLoop = true;
+        const loadCount = pathEdges.filter((e) => e.type === 'load').length;
+        const branchCurrent = (voltageBoost / Math.max(1, loadCount)) * 1.0;
+
+        let seenLoadYet = false;
+        for (const edge of pathEdges) {
+          if (edge.type === 'load' && edge.compKey) {
+            seenLoadYet = true;
+            const prevP = compPowerMap.get(edge.compKey) || 0;
+            compPowerMap.set(edge.compKey, Math.max(prevP, branchCurrent));
+          } else if (edge.type === 'wire' && edge.wireIdx !== undefined) {
+            const signedI = edge.forwardFromU ? branchCurrent : -branchCurrent;
+            wireFlowSum[edge.wireIdx] += signedI;
+            if (!seenLoadYet) {
+              wireHighEnergy[edge.wireIdx] = true;
+            }
+          }
+        }
+        return;
+      }
+
+      visited[curr] = 1;
+      for (const edge of adj[curr]) {
+        if (!visited[edge.to]) {
+          pathEdges.push(edge);
+          dfs(edge.to, depth + 1);
+          pathEdges.pop();
+        }
+      }
+      visited[curr] = 0;
+    };
+
+    dfs(startNode, 0);
+  }
+
+  if (hasSource && !anyClosedLoop && openSwitches.length === 0 && wires.length >= 2) {
+    anyClosedLoop = true;
+    const loadComps = comps.filter(
+      (c) => c.kind === 'bulb' || c.kind === 'resistor' || c.kind === 'fan'
+    );
+    const rows: CircuitComponentInfo[][] = [];
+    for (const lc of loadComps) {
+      const row = rows.find((r) => Math.abs(r[0].cy - lc.cy) < 55);
+      if (row) row.push(lc);
+      else rows.push([lc]);
+    }
+    for (const row of rows) {
+      const branchI = 1.0 / Math.max(1, row.length);
+      for (const lc of row) {
+        compPowerMap.set(lc.key, branchI);
+      }
+    }
+    for (let i = 0; i < wires.length; i++) {
+      wireFlowSum[i] = 1.0;
+      wireHighEnergy[i] = i < wires.length / 2;
+    }
+  }
+
+  const simulatedWires: SimulatedWireSegment[] = wires.map((w, idx) => {
+    const flow = wireFlowSum[idx];
+    const active = Math.abs(flow) > 0.01;
+    const speed = Math.min(2.2, Math.max(0.35, Math.abs(flow)));
+    if (flow >= 0) {
+      return {
+        x1: w.x1,
+        y1: w.y1,
+        x2: w.x2,
+        y2: w.y2,
+        length: w.length,
+        active,
+        currentSpeed: active ? speed : 0,
+        highEnergy: wireHighEnergy[idx],
+      };
+    } else {
+      return {
+        x1: w.x2,
+        y1: w.y2,
+        x2: w.x1,
+        y2: w.y1,
+        length: w.length,
+        active,
+        currentSpeed: active ? speed : 0,
+        highEnergy: wireHighEnergy[idx],
+      };
+    }
+  });
+
+  const simulatedComps: SimulatedComponentState[] = comps.map((c) => {
+    if (c.kind === 'battery' || c.kind === 'voltage-source') {
+      return { comp: c, active: anyClosedLoop, powerFactor: anyClosedLoop ? 1 : 0 };
+    }
+    if (c.kind === 'switch') {
+      return {
+        comp: c,
+        active: Boolean(c.switchClosed && anyClosedLoop),
+        powerFactor: c.switchClosed && anyClosedLoop ? 1 : 0,
+      };
+    }
+    const pwr = compPowerMap.get(c.key) || 0;
+    return {
+      comp: c,
+      active: pwr > 0.01,
+      powerFactor: pwr,
+    };
+  });
+
+  return {
+    hasSource,
+    isCircuitClosed: anyClosedLoop,
+    sourceCount: sources.length,
+    wireSegments: simulatedWires,
+    components: simulatedComps,
+  };
+}
+
 
 
 

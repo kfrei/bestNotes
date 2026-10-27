@@ -42,7 +42,9 @@ export type ShapePresetType =
   | 'bulb'
   | 'battery'
   | 'voltage-source'
-  | 'inclined-plane';
+  | 'inclined-plane'
+  | 'switch'
+  | 'fan';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
 export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';
@@ -85,6 +87,7 @@ export interface StrokeObject {
   keyNodeIndices?: number[]; // Sparse key-node indices (2 endpoints + distinct peaks/vertices) for freehand Direct-Node editing
   rotation?: number; // Rotation angle in radians for oriented selection bounding box
   zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
+  switchClosed?: boolean; // For circuit switches ('switch'): true = closed (green ON), false = open (red OFF)
 }
 
 export type TextFontStyle =

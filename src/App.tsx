@@ -106,6 +106,11 @@ import {
   isScribbleEraseGesture,
   createPhysicsStencilStrokes,
   computeInclinedPlaneBlockPoints,
+  getCircuitComponentsWithTerminals,
+  splitWiresUnderCircuitComponent,
+  toggleSwitchStrokeGroup,
+  convertCircuitComponents,
+  analyzeCircuitForSimulation,
   beautifyHandwritingStrokes,
   removeImageBackground,
   computeImageSobelEdgeMap,
@@ -999,9 +1004,23 @@ export default function App() {
   const [pencilOnlyMode, setPencilOnlyMode] = useState<boolean>(true);
   const [showToolSubBar, setShowToolSubBar] = useState<boolean>(true);
 
-  // Layers, Shape Library & Selection
+  // Layers, Shape Library, Simulation & Selection
   const [activeLayerId, setActiveLayerId] = useState<string>('layer-1');
   const [showLayersPanel, setShowLayersPanel] = useState<boolean>(false);
+  const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(false);
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [simShowElectrons, setSimShowElectrons] = useState<boolean>(true);
+  const [simParticleStyle, setSimParticleStyle] = useState<'green-energy' | 'blue-electrons'>(
+    'green-energy'
+  );
+  const [simFlowDirection, setSimFlowDirection] = useState<'electrons' | 'conventional'>(
+    'electrons'
+  );
+  const [simShowBulbGlow, setSimShowBulbGlow] = useState<boolean>(true);
+  const [simShowFanSpin, setSimShowFanSpin] = useState<boolean>(true);
+  const [simShowDarkWireTrack, setSimShowDarkWireTrack] = useState<boolean>(false);
+  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<number>(1.0);
+  const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
   const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'stickers' | 'custom'>('all');
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>('Όλα');
@@ -3152,7 +3171,13 @@ export default function App() {
       s.shapeType === 'battery' ||
       s.shapeType === 'voltage-source' ||
       s.shapeType === 'incline-wedge' ||
-      s.shapeType === 'incline-block'
+      s.shapeType === 'incline-block' ||
+      s.shapeType === 'switch' ||
+      s.shapeType === 'switch-blade' ||
+      s.shapeType === 'switch-knob' ||
+      s.shapeType === 'fan' ||
+      s.shapeType === 'fan-blade' ||
+      s.shapeType === 'fan-hub'
     );
   };
 
@@ -8288,6 +8313,254 @@ export default function App() {
     ctx.restore();
   };
 
+  // ============================================================================
+  // 60FPS / 120FPS INTERACTIVE CIRCUIT SIMULATION OVERLAY ENGINE
+  // ============================================================================
+  useEffect(() => {
+    const canvas = simCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (!isSimulating) {
+      ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+      ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
+      return;
+    }
+
+    const visibleLayerIds = new Set(
+      activePage.layers.filter((l) => l.visible).map((l) => l.id)
+    );
+    const visibleStrokes = activePage.strokes.filter((s) => visibleLayerIds.has(s.layerId));
+    const simData = analyzeCircuitForSimulation(visibleStrokes);
+
+    let rafId = 0;
+    const startTime = performance.now();
+
+    const renderSimFrame = (now: number) => {
+      const elapsedSec = (now - startTime) / 1000;
+      const w = canvas.width / CANVAS_DPR;
+      const h = canvas.height / CANVAS_DPR;
+      ctx.save();
+      ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      // 1. Optional PhET-style Dark Conductive Tube Track behind particles
+      if (simShowDarkWireTrack && simData.wireSegments.length > 0) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 11.5;
+        for (const seg of simData.wireSegments) {
+          ctx.beginPath();
+          ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 2. Bulb Glow, Corona Rays & Heated Filament (scaled by branch powerFactor!)
+      if (simShowBulbGlow) {
+        for (const cs of simData.components) {
+          if (cs.comp.kind !== 'bulb' || !cs.active || cs.powerFactor <= 0.01) continue;
+          const b = cs.comp;
+          const domeCx = b.cx;
+          const domeCy = b.minY + b.h * 0.36;
+          const domeR = Math.max(16, Math.min(b.w, b.h) * 0.42);
+          const pwr = Math.min(1.6, Math.max(0.35, cs.powerFactor));
+          const pulse = 1 + Math.sin(elapsedSec * 7.5) * 0.04;
+          const glowRadius = domeR * (1.85 + pwr * 1.15) * pulse;
+
+          ctx.save();
+          // Outer warm golden halo
+          const grad = ctx.createRadialGradient(
+            domeCx,
+            domeCy,
+            domeR * 0.15,
+            domeCx,
+            domeCy,
+            glowRadius
+          );
+          grad.addColorStop(0, `rgba(254, 240, 138, ${Math.min(0.88, 0.52 * pwr)})`);
+          grad.addColorStop(0.45, `rgba(250, 204, 21, ${Math.min(0.55, 0.32 * pwr)})`);
+          grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(domeCx, domeCy, glowRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Radiating light rays around the bulb dome (like user's 2nd screenshot!)
+          const numRays = 11;
+          const startAng = -Math.PI * 1.18;
+          const endAng = Math.PI * 0.18;
+          ctx.strokeStyle = `rgba(245, 158, 11, ${Math.min(0.9, 0.55 * pwr)})`;
+          ctx.lineWidth = 2.2;
+          ctx.lineCap = 'round';
+          for (let i = 0; i < numRays; i++) {
+            const ang = startAng + ((endAng - startAng) * i) / (numRays - 1);
+            const rInner = domeR * 1.14;
+            const rOuter = domeR * (1.42 + 0.38 * pwr * (i % 2 === 0 ? 1.08 : 0.92)) * pulse;
+            ctx.beginPath();
+            ctx.moveTo(domeCx + Math.cos(ang) * rInner, domeCy + Math.sin(ang) * rInner);
+            ctx.lineTo(domeCx + Math.cos(ang) * rOuter, domeCy + Math.sin(ang) * rOuter);
+            ctx.stroke();
+          }
+
+          // Glowing orange zigzag filament inside the bulb
+          const filW = domeR * 0.55;
+          const filY = domeCy + domeR * 0.18;
+          const filH = domeR * 0.34;
+          ctx.strokeStyle = '#f59e0b';
+          ctx.shadowColor = '#fbbf24';
+          ctx.shadowBlur = 8 * pwr;
+          ctx.lineWidth = 2.4;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(domeCx - filW * 0.65, domeCy + domeR * 0.62);
+          ctx.lineTo(domeCx - filW * 0.65, filY);
+          ctx.lineTo(domeCx - filW * 0.32, filY - filH);
+          ctx.lineTo(domeCx, filY + filH * 0.35);
+          ctx.lineTo(domeCx + filW * 0.32, filY - filH);
+          ctx.lineTo(domeCx + filW * 0.65, filY);
+          ctx.lineTo(domeCx + filW * 0.65, domeCy + domeR * 0.62);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // 3. Spinning Fan / Propeller Blades
+      if (simShowFanSpin) {
+        for (const cs of simData.components) {
+          if (cs.comp.kind !== 'fan' || !cs.active || cs.powerFactor <= 0.01) continue;
+          const f = cs.comp;
+          const rOuter = Math.max(16, Math.min(f.w * 0.32, f.h * 0.44));
+          const rHub = Math.max(4.5, rOuter * 0.22);
+          const spinAng = elapsedSec * 5.2 * cs.powerFactor * simSpeedMultiplier;
+
+          ctx.save();
+          // Mask static interior slightly so rotating blades stand out cleanly
+          ctx.fillStyle = 'rgba(248, 250, 252, 0.88)';
+          ctx.beginPath();
+          ctx.arc(f.cx, f.cy, rOuter * 0.9, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Draw 3 spinning blades
+          for (let b = 0; b < 3; b++) {
+            const baseAng = spinAng + (b * Math.PI * 2) / 3 - Math.PI / 2;
+            const bladeLen = rOuter * 0.84;
+            const spread = 0.34;
+            ctx.beginPath();
+            ctx.moveTo(
+              f.cx + Math.cos(baseAng) * rHub * 0.9,
+              f.cy + Math.sin(baseAng) * rHub * 0.9
+            );
+            ctx.lineTo(
+              f.cx + Math.cos(baseAng - spread) * bladeLen,
+              f.cy + Math.sin(baseAng - spread) * bladeLen
+            );
+            ctx.lineTo(
+              f.cx + Math.cos(baseAng) * (bladeLen * 1.04),
+              f.cy + Math.sin(baseAng) * (bladeLen * 1.04)
+            );
+            ctx.lineTo(
+              f.cx + Math.cos(baseAng + spread) * bladeLen,
+              f.cy + Math.sin(baseAng + spread) * bladeLen
+            );
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.55)';
+            ctx.fill();
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+          }
+
+          // Central hub
+          ctx.beginPath();
+          ctx.arc(f.cx, f.cy, rHub, 0, Math.PI * 2);
+          ctx.fillStyle = '#38bdf8';
+          ctx.fill();
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // 4. Moving Charge Carriers / Electrons along Wire Segments
+      if (simShowElectrons && simData.wireSegments.length > 0) {
+        const spacing = 32;
+        const dirSign = simFlowDirection === 'conventional' ? 1 : -1;
+
+        for (const seg of simData.wireSegments) {
+          const count = Math.max(1, Math.floor(seg.length / spacing));
+          const stepDist = seg.length / count;
+          const speedPxPerSec = seg.active
+            ? 64 * seg.currentSpeed * simSpeedMultiplier * dirSign
+            : 0;
+          const rawOffset = ((elapsedSec * speedPxPerSec) % stepDist + stepDist) % stepDist;
+
+          const ux = (seg.x2 - seg.x1) / Math.max(1, seg.length);
+          const uy = (seg.y2 - seg.y1) / Math.max(1, seg.length);
+
+          ctx.save();
+          for (let k = 0; k < count; k++) {
+            const d = rawOffset + k * stepDist;
+            if (d < 2 || d > seg.length - 2) continue;
+            const px = seg.x1 + ux * d;
+            const py = seg.y1 + uy * d;
+
+            if (simParticleStyle === 'green-energy') {
+              const isBright = seg.active && seg.highEnergy;
+              const r = isBright ? 5.2 : 3.9;
+              ctx.beginPath();
+              ctx.arc(px, py, r, 0, Math.PI * 2);
+              if (isBright) {
+                ctx.fillStyle = '#84cc16';
+                ctx.shadowColor = '#4ade80';
+                ctx.shadowBlur = 10;
+              } else {
+                ctx.fillStyle = seg.active ? '#6ee7b7' : '#94a3b8';
+                ctx.shadowBlur = 0;
+              }
+              ctx.fill();
+            } else {
+              // Blue electrons ('blue-electrons') matching user's 3rd screenshot!
+              const r = 4.8;
+              ctx.beginPath();
+              ctx.arc(px, py, r, 0, Math.PI * 2);
+              ctx.fillStyle = '#38bdf8';
+              ctx.shadowColor = '#0ea5e9';
+              ctx.shadowBlur = 9;
+              ctx.fill();
+            }
+          }
+          ctx.restore();
+        }
+      }
+
+      ctx.restore();
+      rafId = window.requestAnimationFrame(renderSimFrame);
+    };
+
+    rafId = window.requestAnimationFrame(renderSimFrame);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [
+    isSimulating,
+    activePage.strokes,
+    activePage.layers,
+    simShowElectrons,
+    simParticleStyle,
+    simFlowDirection,
+    simShowBulbGlow,
+    simShowFanSpin,
+    simShowDarkWireTrack,
+    simSpeedMultiplier,
+  ]);
+
   // Draw live wet ink on the top 2x Retina overlay canvas ONLY (Zero React State, Zero Lag!)
   const renderLiveOverlayStroke = () => {
     const c = activeCanvasRef.current;
@@ -8303,7 +8576,9 @@ export default function App() {
         shapePreset === 'bulb' ||
         shapePreset === 'battery' ||
         shapePreset === 'voltage-source' ||
-        shapePreset === 'inclined-plane') &&
+        shapePreset === 'inclined-plane' ||
+        shapePreset === 'switch' ||
+        shapePreset === 'fan') &&
       currentStrokePtsRef.current.length >= 2
     ) {
       let minX = Infinity,
@@ -8319,23 +8594,29 @@ export default function App() {
       const minW =
         shapePreset === 'bulb'
           ? 56
-          : shapePreset === 'battery' || shapePreset === 'voltage-source'
-            ? 96
-            : shapePreset === 'inclined-plane'
-              ? 130
-              : 120;
+          : shapePreset === 'switch' || shapePreset === 'fan'
+            ? 84
+            : shapePreset === 'battery' || shapePreset === 'voltage-source'
+              ? 96
+              : shapePreset === 'inclined-plane'
+                ? 130
+                : 120;
       const minH =
         shapePreset === 'bulb'
           ? 80
-          : shapePreset === 'battery'
-            ? 52
-            : shapePreset === 'voltage-source'
+          : shapePreset === 'switch'
+            ? 48
+            : shapePreset === 'fan'
               ? 68
-              : shapePreset === 'inclined-plane'
-                ? 90
-                : shapePreset === 'wave-axes'
-                  ? 110
-                  : 65;
+              : shapePreset === 'battery'
+                ? 52
+                : shapePreset === 'voltage-source'
+                  ? 68
+                  : shapePreset === 'inclined-plane'
+                    ? 90
+                    : shapePreset === 'wave-axes'
+                      ? 110
+                      : 65;
       const w = Math.max(minW, maxX - minX);
       const h = Math.max(minH, maxY - minY);
       const previewStencils = createPhysicsStencilStrokes(
@@ -8364,6 +8645,8 @@ export default function App() {
       shapePreset !== 'battery' &&
       shapePreset !== 'voltage-source' &&
       shapePreset !== 'inclined-plane' &&
+      shapePreset !== 'switch' &&
+      shapePreset !== 'fan' &&
       currentStrokePtsRef.current.length >= 2
         ? recognizeAndSnapShape(currentStrokePtsRef.current, shapePreset)
         : null;
@@ -10773,6 +11056,30 @@ export default function App() {
       penTapTrackRef.current = null;
     }
 
+    // 0a. Instant 1-Tap Circuit Switch Toggle when Simulation Panel or Live Simulation is active!
+    if (isSimulating || showSimulationPanel) {
+      const hitSwitchKnob = targetPage.strokes.find((s) => {
+        if (s.shapeType !== 'switch-knob' && s.shapeType !== 'switch-blade') return false;
+        const sb = getStrokeBounds(s);
+        const cx = (sb.minX + sb.maxX) / 2;
+        const cy = (sb.minY + sb.maxY) / 2;
+        return Math.hypot(pt.x - cx, pt.y - cy) <= 26;
+      });
+      if (hitSwitchKnob) {
+        const swKey = hitSwitchKnob.groupId || hitSwitchKnob.id;
+        updateActivePage((page) => {
+          const toggled = toggleSwitchStrokeGroup(page.strokes, swKey);
+          showToast(
+            toggled.newClosedState
+              ? '🟢 Διακόπτης ΚΛΕΙΣΤΟΣ (Ροή Ρεύματος ON)'
+              : '🔴 Διακόπτης ΑΝΟΙΧΤΟΣ (Κύκλωμα Ανοιχτό OFF)'
+          );
+          return { ...page, strokes: toggled.strokes };
+        });
+        return;
+      }
+    }
+
     // 0. Wave Axes ('wave-axes') Interactive Dashed Guide Handles ([ ↕ ] independent, [ ±A ] symmetric height, [ ⇅ ] parallel):
     // Allows moving the 2 dashed guide lines up/down independently, narrowing/widening height symmetrically (±A),
     // or shifting both together without changing the axes!
@@ -11890,6 +12197,21 @@ export default function App() {
         setSelectedImageIds(memberImgIds);
         setSelectedImageId(memberImgIds[0] || null);
         setActiveNodeStrokeId(memberImgIds.length === 0 ? tappedStroke.id : null);
+        if (
+          tappedStroke.shapeType === 'switch-knob' ||
+          tappedStroke.shapeType === 'switch-blade' ||
+          tappedStroke.shapeType === 'switch'
+        ) {
+          const swKey = tappedStroke.groupId || tappedStroke.id;
+          updateActivePage((page) => {
+            const toggled = toggleSwitchStrokeGroup(page.strokes, swKey);
+            const nextIds = toggled.strokes
+              .filter((s) => (s.groupId || s.id) === swKey)
+              .map((s) => s.id);
+            setSelectedStrokeIds(nextIds);
+            return { ...page, strokes: toggled.strokes };
+          });
+        }
         return;
       }
 
@@ -14373,19 +14695,57 @@ export default function App() {
             images: (page.images || []).map((im) =>
               targetImgIdList.includes(im.id) ? { ...im, x: im.x + dx, y: im.y + dy } : im
             ),
-            strokes: page.strokes.map((s) => {
-              if (!targetStrokeIdList.includes(s.id)) return s;
-              return {
-                ...s,
-                points: s.points.map((p) => ({
-                  ...p,
-                  x: p.x + dx,
-                  y: p.y + dy,
-                  cx: p.cx !== undefined ? p.cx + dx : undefined,
-                  cy: p.cy !== undefined ? p.cy + dy : undefined,
-                })),
-              };
-            }),
+            strokes: (() => {
+              const movingComps = getCircuitComponentsWithTerminals(
+                page.strokes.filter((s) => targetStrokeIdList.includes(s.id))
+              );
+              return page.strokes.map((s) => {
+                if (targetStrokeIdList.includes(s.id)) {
+                  return {
+                    ...s,
+                    points: s.points.map((p) => ({
+                      ...p,
+                      x: p.x + dx,
+                      y: p.y + dy,
+                      cx: p.cx !== undefined ? p.cx + dx : undefined,
+                      cy: p.cy !== undefined ? p.cy + dy : undefined,
+                    })),
+                  };
+                }
+                // Elastic Circuit Terminal Following: if an unselected straight wire endpoint is attached to a moving component terminal, move that endpoint too!
+                if (
+                  movingComps.length > 0 &&
+                  s.shapeType === 'line' &&
+                  s.points.length === 2
+                ) {
+                  const p0 = s.points[0];
+                  const p1 = s.points[1];
+                  const attached0 = movingComps.some(
+                    (mc) =>
+                      distance(p0, mc.leftTerm) <= 34 || distance(p0, mc.rightTerm) <= 34
+                  );
+                  const attached1 = movingComps.some(
+                    (mc) =>
+                      distance(p1, mc.leftTerm) <= 34 || distance(p1, mc.rightTerm) <= 34
+                  );
+                  if (attached0 || attached1) {
+                    const nextP0 = attached0
+                      ? { ...p0, x: p0.x + dx, y: p0.y + dy }
+                      : p0;
+                    const nextP1 = attached1
+                      ? { ...p1, x: p1.x + dx, y: p1.y + dy }
+                      : { ...p1 };
+                    nextP1.cx = (nextP0.x + nextP1.x) / 2;
+                    nextP1.cy = (nextP0.y + nextP1.y) / 2;
+                    return {
+                      ...s,
+                      points: [nextP0, nextP1],
+                    };
+                  }
+                }
+                return s;
+              });
+            })(),
           }),
           false
         );
@@ -14800,6 +15160,7 @@ export default function App() {
       clearActiveOverlay();
       if (selectionTransformRef.current || isDraggingSelectionRef.current) {
         const finishedTf = selectionTransformRef.current;
+        const dragOrigin = isDraggingSelectionRef.current;
         selectionTransformRef.current = null;
         isDraggingSelectionRef.current = null;
         if (finishedTf?.mode === 'crop-side' && finishedTf.cropEdge && (finishedTf.cropInsetPx || 0) >= 4) {
@@ -14807,6 +15168,37 @@ export default function App() {
           const imgObj = targetId ? activePage.images.find((im) => im.id === targetId) : undefined;
           if (imgObj) {
             applySideEdgeCropToImage(imgObj, finishedTf.cropEdge, finishedTf.cropInsetPx || 0);
+          }
+        } else if (finishedTf?.mode === 'move' && selectedStrokeIds.length > 0) {
+          const movedDist = dragOrigin
+            ? Math.hypot(finishedTf.startX - dragOrigin.startX, finishedTf.startY - dragOrigin.startY)
+            : 10;
+          if (movedDist < 6) {
+            // Check if the user tapped a Switch ('switch') to toggle it ON/OFF!
+            const swStroke = activePage.strokes.find(
+              (s) =>
+                selectedStrokeIds.includes(s.id) &&
+                (s.shapeType === 'switch' ||
+                  s.shapeType === 'switch-blade' ||
+                  s.shapeType === 'switch-knob')
+            );
+            if (swStroke) {
+              const swKey = swStroke.groupId || swStroke.id;
+              updateActivePage((page) => {
+                const toggled = toggleSwitchStrokeGroup(page.strokes, swKey);
+                const nextIds = toggled.strokes
+                  .filter((s) => (s.groupId || s.id) === swKey)
+                  .map((s) => s.id);
+                setSelectedStrokeIds(nextIds);
+                return { ...page, strokes: toggled.strokes };
+              });
+            }
+          } else {
+            // Auto-split any wire under a newly dropped/moved circuit component & snap terminals!
+            updateActivePage((page) => ({
+              ...page,
+              strokes: splitWiresUnderCircuitComponent(page.strokes, selectedStrokeIds),
+            }));
           }
         }
         renderStaticSceneRef.current();
@@ -14920,7 +15312,7 @@ export default function App() {
       }
     }
 
-    // 4. Physics Grouped Stencils ('axes', 'wave-axes', 'bulb', 'battery', 'voltage-source', 'inclined-plane')
+    // 4. Physics Grouped Stencils ('axes', 'wave-axes', 'bulb', 'battery', 'voltage-source', 'inclined-plane', 'switch', 'fan')
     if (
       activeTool === 'shape' &&
       (shapePreset === 'axes' ||
@@ -14928,7 +15320,9 @@ export default function App() {
         shapePreset === 'bulb' ||
         shapePreset === 'battery' ||
         shapePreset === 'voltage-source' ||
-        shapePreset === 'inclined-plane')
+        shapePreset === 'inclined-plane' ||
+        shapePreset === 'switch' ||
+        shapePreset === 'fan')
     ) {
       clearActiveOverlay();
       let minX = Infinity,
@@ -14944,23 +15338,29 @@ export default function App() {
       const minW =
         shapePreset === 'bulb'
           ? 56
-          : shapePreset === 'battery' || shapePreset === 'voltage-source'
-            ? 96
-            : shapePreset === 'inclined-plane'
-              ? 130
-              : 120;
+          : shapePreset === 'switch' || shapePreset === 'fan'
+            ? 84
+            : shapePreset === 'battery' || shapePreset === 'voltage-source'
+              ? 96
+              : shapePreset === 'inclined-plane'
+                ? 130
+                : 120;
       const minH =
         shapePreset === 'bulb'
           ? 80
-          : shapePreset === 'battery'
-            ? 52
-            : shapePreset === 'voltage-source'
+          : shapePreset === 'switch'
+            ? 48
+            : shapePreset === 'fan'
               ? 68
-              : shapePreset === 'inclined-plane'
-                ? 90
-                : shapePreset === 'wave-axes'
-                  ? 110
-                  : 65;
+              : shapePreset === 'battery'
+                ? 52
+                : shapePreset === 'voltage-source'
+                  ? 68
+                  : shapePreset === 'inclined-plane'
+                    ? 90
+                    : shapePreset === 'wave-axes'
+                      ? 110
+                      : 65;
       const w = Math.max(minW, maxX - minX);
       const h = Math.max(minH, maxY - minY);
       const stencilStrokes = createPhysicsStencilStrokes(
@@ -14975,7 +15375,18 @@ export default function App() {
       );
       const createdIds = stencilStrokes.map((s) => s.id);
       lastCreatedShapeIdsRef.current = createdIds;
-      updateActivePage((page) => ({ ...page, strokes: [...page.strokes, ...stencilStrokes] }));
+      updateActivePage((page) => {
+        const combined = [...page.strokes, ...stencilStrokes];
+        const nextStrokes =
+          shapePreset === 'bulb' ||
+          shapePreset === 'battery' ||
+          shapePreset === 'voltage-source' ||
+          shapePreset === 'switch' ||
+          shapePreset === 'fan'
+            ? splitWiresUnderCircuitComponent(combined, createdIds)
+            : combined;
+        return { ...page, strokes: nextStrokes };
+      });
       setSelectedStrokeIds(createdIds);
       setSelectedImageId(null);
       setSelectedImageIds([]);
@@ -15130,10 +15541,17 @@ export default function App() {
     }
     clearActiveOverlay();
 
-    updateActivePage((page) => ({
-      ...page,
-      strokes: [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }],
-    }));
+    updateActivePage((page) => {
+      const combined = [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }];
+      const nextStrokes =
+        newStroke.shapeType === 'resistor'
+          ? splitWiresUnderCircuitComponent(combined, [newStroke.id])
+          : combined;
+      return {
+        ...page,
+        strokes: nextStrokes,
+      };
+    });
 
     if (activeTool === 'shape' && isShape) {
       setSelectedStrokeIds([newStroke.id]);
@@ -19589,6 +20007,51 @@ export default function App() {
               >
                 <Layers className="w-4 h-4" />
               </button>
+
+              {/* Simulation Mode Button (Gear with Play Icon inside) right next to Layers! */}
+              <button
+                data-popover-trigger="simulation"
+                onClick={() => {
+                  setShowSimulationPanel((v) => {
+                    const next = !v;
+                    if (next && !isSimulating) {
+                      setIsSimulating(true);
+                    }
+                    return next;
+                  });
+                  setShowLayersPanel(false);
+                  setShowShapeLibraryPanel(false);
+                  setShowWidthPopover(false);
+                  setShowColorPopover(false);
+                }}
+                className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
+                  showSimulationPanel || isSimulating
+                    ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+                title="Προσομοίωση Ηλεκτρικών Κυκλωμάτων & Φυσικής (⚙️▶️)"
+              >
+                <svg
+                  className="w-4 h-4 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="8.2" strokeDasharray="3.2 2.0" />
+                  <polygon
+                    points="10,8.5 16,12 10,15.5"
+                    fill="currentColor"
+                    stroke="none"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Sim</span>
+                {isSimulating && (
+                  <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
+                )}
+              </button>
             </div>
 
             {/* Right: Authentic Goodnotes 6 Contextual 3 Stroke Slots (with 12-Step Popover!) + 3 Color Slots */}
@@ -20360,6 +20823,35 @@ export default function App() {
                             </svg>
                           ),
                         },
+                        {
+                          id: 'switch',
+                          title: 'Διακόπτης Κυκλώματος (ON / OFF με 1 tap)',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="2" y1="15" x2="10" y2="15" stroke="#111827" strokeWidth="2.0" />
+                              <line x1="24" y1="15" x2="32" y2="15" stroke="#111827" strokeWidth="2.0" />
+                              <circle cx="10.5" cy="15" r="2.2" fill="#94a3b8" stroke="#111827" strokeWidth="1.5" />
+                              <circle cx="23.5" cy="15" r="2.2" fill="#94a3b8" stroke="#111827" strokeWidth="1.5" />
+                              <line x1="10.5" y1="15" x2="21.5" y2="6" stroke="#111827" strokeWidth="2.2" />
+                              <circle cx="16.5" cy="10" r="3.2" fill="#ef4444" stroke="#b91c1c" strokeWidth="1.2" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'fan',
+                          title: 'Φτερωτή / Προπέλα (Ηλεκτρικός Κινητήρας)',
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="2" y1="11" x2="9" y2="11" stroke="#111827" strokeWidth="1.9" />
+                              <line x1="25" y1="11" x2="32" y2="11" stroke="#111827" strokeWidth="1.9" />
+                              <circle cx="17" cy="11" r="8" fill="rgba(226,232,240,0.35)" stroke="#111827" strokeWidth="1.7" />
+                              <polygon points="17,11 14.5,4.5 19.5,4.5" fill="#38bdf8" stroke="#0284c7" strokeWidth="1.1" />
+                              <polygon points="17,11 23,13.5 20.5,17" fill="#38bdf8" stroke="#0284c7" strokeWidth="1.1" />
+                              <polygon points="17,11 13.5,17 11,13.5" fill="#38bdf8" stroke="#0284c7" strokeWidth="1.1" />
+                              <circle cx="17" cy="11" r="2.0" fill="#0ea5e9" stroke="#0f172a" strokeWidth="1.2" />
+                            </svg>
+                          ),
+                        },
                       ] as const
                     ).map((sp) => (
                       <button
@@ -20813,6 +21305,85 @@ export default function App() {
 
                       return null;
                     })()}
+                    {/* 1-Click Circuit Component Conversion (Battery <-> Voltage Source, Bulb <-> Resistor) & Switch Toggle in Lasso! */}
+                    {selectedStrokeIds.length > 0 &&
+                      (() => {
+                        const selStrokes = activePage.strokes.filter((s) =>
+                          selectedStrokeIds.includes(s.id)
+                        );
+                        const hasBat = selStrokes.some((s) => s.shapeType === 'battery');
+                        const hasVs = selStrokes.some((s) => s.shapeType === 'voltage-source');
+                        const hasBulb = selStrokes.some((s) => s.shapeType === 'bulb');
+                        const hasRes = selStrokes.some((s) => s.shapeType === 'resistor');
+                        const swStroke = selStrokes.find(
+                          (s) =>
+                            s.shapeType === 'switch' ||
+                            s.shapeType === 'switch-blade' ||
+                            s.shapeType === 'switch-knob'
+                        );
+
+                        return (
+                          <>
+                            {(hasBat || hasVs || hasBulb || hasRes) && (
+                              <button
+                                onClick={() => {
+                                  updateActivePage((page) => {
+                                    const res = convertCircuitComponents(
+                                      page.strokes,
+                                      selectedStrokeIds,
+                                      'toggle'
+                                    );
+                                    if (res.newIds.length > 0) {
+                                      setSelectedStrokeIds(res.newIds);
+                                    }
+                                    return { ...page, strokes: res.strokes };
+                                  });
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] cursor-pointer transition"
+                                title="Μετατροπή Μπαταρίας ↔ Πηγής Τάσης και Λαμπτήρα ↔ Αντιστάτη με 1 κλικ!"
+                              >
+                                <span>
+                                  🔄{' '}
+                                  {hasBat
+                                    ? 'Σε Πηγή'
+                                    : hasVs
+                                      ? 'Σε Μπαταρία'
+                                      : hasBulb
+                                        ? 'Σε Αντιστάτη'
+                                        : 'Σε Λαμπτήρα'}
+                                </span>
+                              </button>
+                            )}
+                            {swStroke && (
+                              <button
+                                onClick={() => {
+                                  const swKey = swStroke.groupId || swStroke.id;
+                                  updateActivePage((page) => {
+                                    const toggled = toggleSwitchStrokeGroup(page.strokes, swKey);
+                                    const nextIds = toggled.strokes
+                                      .filter((s) => (s.groupId || s.id) === swKey)
+                                      .map((s) => s.id);
+                                    setSelectedStrokeIds(nextIds);
+                                    return { ...page, strokes: toggled.strokes };
+                                  });
+                                }}
+                                className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-bold text-[11px] cursor-pointer transition ${
+                                  swStroke.switchClosed !== false
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-rose-600 text-white'
+                                }`}
+                                title="Άνοιγμα / Κλείσιμο Διακόπτη Κυκλώματος"
+                              >
+                                <span>
+                                  {swStroke.switchClosed !== false
+                                    ? '🟢 Κλειστός (ON)'
+                                    : '🔴 Ανοιχτός (OFF)'}
+                                </span>
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     {(selectedStrokeIds.length > 0 || selectedImageIds.length > 1) && (
                       <button
                         onClick={() => {
@@ -22066,6 +22637,257 @@ export default function App() {
               </div>
             )}
 
+            {/* Left Vertical Interactive Physics & Circuit Simulation Sidebar (⚙️▶️) */}
+            {showSimulationPanel && (
+              <div
+                data-ui-panel="true"
+                data-popover-panel="simulation"
+                onPointerDown={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
+                className="fixed left-4 top-28 z-40 w-72 max-h-[80vh] overflow-y-auto rounded-2xl bg-white/95 backdrop-blur-md border border-emerald-200 shadow-2xl p-3.5 text-slate-800 space-y-3"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
+                      ⚡
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-extrabold text-[#1b2a4a]">
+                        Προσομοίωση Ηλεκτρισμού
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Ζωντανά Κυκλώματα πάνω στις Σημειώσεις
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSimulationPanel(false)}
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    title="Κλείσιμο μενού (η προσομοίωση μπορεί να συνεχίσει να τρέχει)"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Primary Play / Stop Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsSimulating((v) => !v)}
+                  className={`w-full py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer ${
+                    isSimulating
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                >
+                  <span>
+                    {isSimulating
+                      ? '⏹️ Διακοπή Προσομοίωσης (Stop)'
+                      : '▶️ Εκκίνηση Προσομοίωσης (Play)'}
+                  </span>
+                </button>
+
+                {/* 1-Click Global Circuit View Conversion: Pictorial (Battery & Bulb) <-> Schematic (Source & Resistor) */}
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5">
+                  <span className="text-[10.5px] font-bold text-slate-700 block">
+                    🔄 Μορφή Κυκλώματος (1-Κλικ Αλλαγή)
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActivePage((page) => {
+                          const res = convertCircuitComponents(
+                            page.strokes,
+                            selectedStrokeIds.length > 0 ? selectedStrokeIds : undefined,
+                            'pictorial'
+                          );
+                          return { ...page, strokes: res.strokes };
+                        });
+                        showToast('🔋💡 Εικόνες: Μπαταρία & Λαμπτήρας!');
+                      }}
+                      className="px-2 py-1.5 rounded-lg bg-white hover:bg-amber-50 border border-slate-200 text-[10.5px] font-bold text-slate-700 shadow-2xs cursor-pointer transition"
+                      title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες"
+                    >
+                      🔋💡 Μπαταρία & Λαμπτήρας
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateActivePage((page) => {
+                          const res = convertCircuitComponents(
+                            page.strokes,
+                            selectedStrokeIds.length > 0 ? selectedStrokeIds : undefined,
+                            'schematic'
+                          );
+                          return { ...page, strokes: res.strokes };
+                        });
+                        showToast('⚡〰️ Σύμβολα: Πηγή Τάσης & Αντιστάτης!');
+                      }}
+                      className="px-2 py-1.5 rounded-lg bg-white hover:bg-sky-50 border border-slate-200 text-[10.5px] font-bold text-slate-700 shadow-2xs cursor-pointer transition"
+                      title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες σε Αντιστάτες"
+                    >
+                      ⚡〰️ Πηγή & Αντιστάτης
+                    </button>
+                  </div>
+                </div>
+
+                {/* Simulation Visual Options */}
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                  <span className="text-[10.5px] font-bold text-slate-700 block">
+                    ⚙️ Επιλογές Οπτικοποίησης
+                  </span>
+
+                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                    <span>⚡ Κίνηση Ηλεκτρονίων / Φορτίων</span>
+                    <input
+                      type="checkbox"
+                      checked={simShowElectrons}
+                      onChange={(e) => setSimShowElectrons(e.target.checked)}
+                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                    />
+                  </label>
+
+                  {simShowElectrons && (
+                    <div className="grid grid-cols-2 gap-1 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setSimParticleStyle('green-energy')}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                          simParticleStyle === 'green-energy'
+                            ? 'bg-lime-600 text-white border-lime-600'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        🟢 Πράσινη Ενέργεια
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSimParticleStyle('blue-electrons')}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                          simParticleStyle === 'blue-electrons'
+                            ? 'bg-sky-600 text-white border-sky-600'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        🔵 Μπλε Ηλεκτρόνια
+                      </button>
+                    </div>
+                  )}
+
+                  {simShowElectrons && (
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSimFlowDirection('electrons')}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                          simFlowDirection === 'electrons'
+                            ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        Φορά e⁻ (- → +)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSimFlowDirection('conventional')}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                          simFlowDirection === 'conventional'
+                            ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                            : 'bg-white text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        Ρεύμα I (+ → -)
+                      </button>
+                    </div>
+                  )}
+
+                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                    <span>💡 Φωτοβολία Λαμπτήρα & Ακτίνες</span>
+                    <input
+                      type="checkbox"
+                      checked={simShowBulbGlow}
+                      onChange={(e) => setSimShowBulbGlow(e.target.checked)}
+                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                    <span>☢️ Περιστροφή Φτερωτής (Κινητήρας)</span>
+                    <input
+                      type="checkbox"
+                      checked={simShowFanSpin}
+                      onChange={(e) => setSimShowFanSpin(e.target.checked)}
+                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                    <span>⬛ Σκούρος Σωλήνας Καλωδίων</span>
+                    <input
+                      type="checkbox"
+                      checked={simShowDarkWireTrack}
+                      onChange={(e) => setSimShowDarkWireTrack(e.target.checked)}
+                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                    />
+                  </label>
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[10.5px] font-semibold text-slate-600">
+                      Ταχύτητα ({simSpeedMultiplier.toFixed(1)}x):
+                    </span>
+                    <input
+                      type="range"
+                      min="0.4"
+                      max="2.4"
+                      step="0.2"
+                      value={simSpeedMultiplier}
+                      onChange={(e) => setSimSpeedMultiplier(parseFloat(e.target.value))}
+                      className="w-28 accent-emerald-600 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Switch Toggle + Quick Circuit Component Picker */}
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5">
+                  <span className="text-[10.5px] font-bold text-slate-700 block">
+                    ➕ Εξαρτήματα Κυκλώματος (Αυτόματο Κόψιμο Γραμμής)
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(
+                      [
+                        { id: 'battery', label: '🔋 Μπαταρία' },
+                        { id: 'voltage-source', label: '⚡ Πηγή Τάσης' },
+                        { id: 'bulb', label: '💡 Λαμπτήρας' },
+                        { id: 'resistor', label: '〰️ Αντιστάτης' },
+                        { id: 'switch', label: '🎚️ Διακόπτης' },
+                        { id: 'fan', label: '☢️ Φτερωτή' },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveTool('shape');
+                          setShapePreset(item.id);
+                          setShowToolSubBar(true);
+                          showToast(`Επιλέχθηκε: ${item.label} — Σύρε πάνω σε γραμμή για τοποθέτηση!`);
+                        }}
+                        className={`px-2 py-1.5 rounded-lg text-[10.5px] font-bold border transition cursor-pointer ${
+                          activeTool === 'shape' && shapePreset === item.id
+                            ? 'bg-sky-600 text-white border-sky-600'
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Floating Layers Popover (Draggable Reordering, Up/Down Move, Lock, Visibility & Red Trash Can Delete!) */}
             {showLayersPanel && (
               <div
@@ -22457,6 +23279,19 @@ export default function App() {
                       style={{ width: pW, height: pH }}
                       className="absolute inset-0 pointer-events-none"
                     />
+
+                    {/* Layer 1.5: 60fps/120fps Interactive Physics & Circuit Simulation Overlay Canvas */}
+                    {isCurrentActive && (
+                      <canvas
+                        ref={(el) => {
+                          simCanvasRef.current = el;
+                        }}
+                        width={pW * CANVAS_DPR}
+                        height={pH * CANVAS_DPR}
+                        style={{ width: pW, height: pH }}
+                        className="absolute inset-0 pointer-events-none z-10"
+                      />
+                    )}
 
                     {/* Layer 2: 2x Retina Desynchronized 0ms Hardware Wet-Ink Canvas */}
                     <canvas
