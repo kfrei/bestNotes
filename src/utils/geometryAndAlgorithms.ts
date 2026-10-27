@@ -1616,8 +1616,9 @@ export function createPhysicsStencilStrokes(
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const cy = y + h / 2;
     const signSize = Math.max(8, Math.min(w * 0.075, h * 0.24));
-    const plusCx = x + signSize * 0.85;
-    const minusCx = x + w - signSize * 0.85;
+    const plusCx = x + signSize * 0.95;
+    const minusCx = x + w - signSize * 0.95;
+    const signCy = y + h * 0.22;
 
     const capLeftX = x + Math.max(signSize * 2.1, w * 0.16);
     const bodyLeftX = capLeftX + Math.max(10, w * 0.1);
@@ -1653,7 +1654,7 @@ export function createPhysicsStencilStrokes(
       shapeType: 'battery',
     });
 
-    // '+' sign on the left (horizontal + vertical strokes)
+    // '+' sign on the left (placed above the horizontal wire line so it never collides with wires/electrons!)
     out.push({
       id: `st-${uid}-bat-plus-h`,
       tool: 'pen',
@@ -1661,8 +1662,8 @@ export function createPhysicsStencilStrokes(
       width: 2.5,
       opacity: 1,
       points: [
-        { x: plusCx - signSize / 2, y: cy, pressure: 0.7 },
-        { x: plusCx + signSize / 2, y: cy, cx: plusCx, cy: cy, pressure: 0.7 },
+        { x: plusCx - signSize / 2, y: signCy, pressure: 0.7 },
+        { x: plusCx + signSize / 2, y: signCy, cx: plusCx, cy: signCy, pressure: 0.7 },
       ],
       layerId,
       groupId,
@@ -1676,8 +1677,8 @@ export function createPhysicsStencilStrokes(
       width: 2.5,
       opacity: 1,
       points: [
-        { x: plusCx, y: cy - signSize / 2, pressure: 0.7 },
-        { x: plusCx, y: cy + signSize / 2, cx: plusCx, cy, pressure: 0.7 },
+        { x: plusCx, y: signCy - signSize / 2, pressure: 0.7 },
+        { x: plusCx, y: signCy + signSize / 2, cx: plusCx, cy: signCy, pressure: 0.7 },
       ],
       layerId,
       groupId,
@@ -1685,7 +1686,7 @@ export function createPhysicsStencilStrokes(
       shapeType: 'battery',
     });
 
-    // '-' sign on the right
+    // '-' sign on the right (placed above the horizontal wire line so it never collides with wires/electrons!)
     out.push({
       id: `st-${uid}-bat-minus-h`,
       tool: 'pen',
@@ -1693,8 +1694,8 @@ export function createPhysicsStencilStrokes(
       width: 2.5,
       opacity: 1,
       points: [
-        { x: minusCx - signSize / 2, y: cy, pressure: 0.7 },
-        { x: minusCx + signSize / 2, y: cy, cx: minusCx, cy: cy, pressure: 0.7 },
+        { x: minusCx - signSize / 2, y: signCy, pressure: 0.7 },
+        { x: minusCx + signSize / 2, y: signCy, cx: minusCx, cy: signCy, pressure: 0.7 },
       ],
       layerId,
       groupId,
@@ -5018,6 +5019,25 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
         next.push(s);
       }
       currentStrokes = next;
+    } else if (comp.kind === 'battery') {
+      const targetSignY = comp.minY + comp.h * 0.22;
+      const idSet = new Set(comp.strokeIds);
+      currentStrokes = currentStrokes.map((s) => {
+        if (!idSet.has(s.id) || s.points.length !== 2) return s;
+        const midY = (s.points[0].y + s.points[1].y) / 2;
+        if (Math.abs(midY - comp.cy) <= comp.h * 0.16) {
+          const dy = targetSignY - midY;
+          return {
+            ...s,
+            points: s.points.map((pt) => ({
+              ...pt,
+              y: pt.y + dy,
+              cy: pt.cy !== undefined ? pt.cy + dy : undefined,
+            })),
+          };
+        }
+        return s;
+      });
     }
   }
 

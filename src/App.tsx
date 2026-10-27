@@ -4348,6 +4348,39 @@ export default function App() {
       return;
     }
 
+    // 0c. Battery '+' and '-' signs: if an existing battery has its 2-point '+' or '-' stroke centered at the wire line (cy),
+    // automatically render it higher up (above the side horizontal wire leads) so it never collides with wires or electrons!
+    if (s.shapeType === 'battery' && s.points.length === 2) {
+      const siblingBody = activePage.strokes.find(
+        (b) =>
+          b.shapeType === 'battery' &&
+          b.points.length >= 8 &&
+          ((s.groupId && b.groupId === s.groupId) ||
+            s.id.slice(0, 18) === b.id.slice(0, 18))
+      );
+      if (siblingBody) {
+        let minBy = Infinity;
+        let maxBy = -Infinity;
+        for (const bp of siblingBody.points) {
+          if (bp.y < minBy) minBy = bp.y;
+          if (bp.y > maxBy) maxBy = bp.y;
+        }
+        const bodyH = Math.max(12, maxBy - minBy);
+        const bodyCy = (minBy + maxBy) / 2;
+        const midY = (s.points[0].y + s.points[1].y) / 2;
+        const dy =
+          Math.abs(midY - bodyCy) <= bodyH * 0.16
+            ? minBy + bodyH * 0.22 - midY
+            : 0;
+        ctx.beginPath();
+        ctx.moveTo(s.points[0].x, s.points[0].y + dy);
+        ctx.lineTo(s.points[1].x, s.points[1].y + dy);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+    }
+
     ctx.beginPath();
     // 1. Circle / Ellipse (4 cardinal points every 90° by default, or >= 3 smooth cubic spline points when user adds/deletes nodes!)
     if (
@@ -21749,9 +21782,9 @@ export default function App() {
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 11 5.5 L 25 5.5 L 25 16.5 L 11 16.5 L 11 13.5 L 8 13.5 L 8 8.5 L 11 8.5 Z" />
-                              <line x1="2.2" y1="11" x2="5.4" y2="11" strokeWidth="1.7" />
-                              <line x1="3.8" y1="9.4" x2="3.8" y2="12.6" strokeWidth="1.7" />
-                              <line x1="28.2" y1="11" x2="31.4" y2="11" strokeWidth="1.7" />
+                              <line x1="2.2" y1="6.8" x2="5.4" y2="6.8" strokeWidth="1.7" />
+                              <line x1="3.8" y1="5.2" x2="3.8" y2="8.4" strokeWidth="1.7" />
+                              <line x1="28.2" y1="6.8" x2="31.4" y2="6.8" strokeWidth="1.7" />
                             </svg>
                           ),
                         },
