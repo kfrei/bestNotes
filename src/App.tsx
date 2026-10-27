@@ -23855,26 +23855,23 @@ export default function App() {
                               const next = !prev;
                               showToast(
                                 next
-                                  ? `🟢 [${activeSim.name}] Διακόπτης ΚΛΕΙΣΤΟΣ — Το ρεύμα ρέει!`
-                                  : `🔴 [${activeSim.name}] Διακόπτης ΑΝΟΙΧΤΟΣ — Διακοπή ρεύματος!`
+                                  ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
+                                  : `🔴 [${activeSim.name}] Διακόπτης: Ανοιχτός`
                               );
                               return next;
                             });
                           }}
-                          className={`w-full py-1.5 px-2.5 rounded-xl font-bold text-[11px] flex items-center justify-between border shadow-2xs transition cursor-pointer ${
+                          className={`w-full py-1 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-1.5 border shadow-2xs transition cursor-pointer ${
                             simCircuitSwitchClosed
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
-                              : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100'
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                              : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
                           }`}
-                          title="Κάνε κλικ στον αυτόματο διακόπτη στον αριστερό αγωγό ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
+                          title="Κάνε κλικ στον διακόπτη ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
                         >
                           <span>
                             {simCircuitSwitchClosed
-                              ? '🟢 Διακόπτης Αριστερά: ΚΛΕΙΣΤΟΣ'
-                              : '🔴 Διακόπτης Αριστερά: ΑΝΟΙΧΤΟΣ'}
-                          </span>
-                          <span className="text-[10px] underline font-extrabold">
-                            {simCircuitSwitchClosed ? 'Άνοιγμα' : 'Εκκίνηση'}
+                              ? '🟢 Διακόπτης: Κλειστός'
+                              : '🔴 Διακόπτης: Ανοιχτός'}
                           </span>
                         </button>
                       );
