@@ -4894,22 +4894,60 @@ export function toggleSwitchStrokeGroup(
 }
 
 export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObject[] {
-  const initialComps = getCircuitComponentsWithTerminals(strokes);
-  if (initialComps.length === 0) return strokes;
+  let currentStrokes = strokes.map((s) => ({
+    ...s,
+    points: s.points.map((p) => ({ ...p })),
+  }));
+
+  // 0. Auto-upgrade any legacy 4-point diamond 'fan' component on the page to the new round grey circle + solid blue blades fan!
+  const preComps = getCircuitComponentsWithTerminals(currentStrokes);
+  if (preComps.length === 0) return strokes;
+
+  for (const comp of preComps) {
+    if (comp.kind === 'fan') {
+      const hasModernBlades = currentStrokes.some(
+        (s) => comp.strokeIds.includes(s.id) && s.shapeType === 'fan-blade'
+      );
+      if (!hasModernBlades) {
+        const upgradedFan = createPhysicsStencilStrokes(
+          'fan',
+          comp.minX,
+          comp.minY,
+          Math.max(84, comp.w),
+          Math.max(68, comp.h),
+          comp.color,
+          comp.layerId
+        );
+        const removeSet = new Set(comp.strokeIds);
+        const next: StrokeObject[] = [];
+        let inserted = false;
+        for (const s of currentStrokes) {
+          if (removeSet.has(s.id)) {
+            if (!inserted) {
+              next.push(...upgradedFan);
+              inserted = true;
+            }
+            continue;
+          }
+          next.push(s);
+        }
+        currentStrokes = next;
+      }
+    }
+  }
+
+  const initialComps = getCircuitComponentsWithTerminals(currentStrokes);
+  if (initialComps.length === 0) return currentStrokes;
 
   const compStrokeSet = new Set<string>();
   for (const c of initialComps) {
     for (const id of c.strokeIds) compStrokeSet.add(id);
   }
 
-  let currentStrokes = strokes.map((s) => ({
-    ...s,
-    points: s.points.map((p) => ({ ...p })),
-  }));
-
   // 1. Identify 2-point straight wire strokes (not belonging to any circuit component)
   interface WireRef {
     strokeIdx: number;
+    stroke: StrokeObject;
     orientation: 'h' | 'v' | 'diag';
     x1: number;
     y1: number;
@@ -4931,10 +4969,11 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     const len = Math.hypot(dx, dy);
     if (len < 10) return;
     let orientation: 'h' | 'v' | 'diag' = 'diag';
-    if (dy <= Math.max(18, dx * 0.28)) orientation = 'h';
-    else if (dx <= Math.max(18, dy * 0.28)) orientation = 'v';
+    if (dy <= Math.max(22, dx * 0.32)) orientation = 'h';
+    else if (dx <= Math.max(22, dy * 0.32)) orientation = 'v';
     wireRefs.push({
       strokeIdx: idx,
+      stroke: s,
       orientation,
       x1: p0.x,
       y1: p0.y,
@@ -4945,14 +4984,14 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     });
   });
 
-  if (wireRefs.length === 0) return strokes;
+  if (wireRefs.length === 0) return currentStrokes;
 
-  // 2. Cluster horizontal rows (within 38px) & vertical columns (within 38px)
+  // 2. Cluster horizontal rows (within 42px) & vertical columns (within 42px)
   const hRows: { yValues: number[]; yRow: number; wireIndices: number[] }[] = [];
   for (let i = 0; i < wireRefs.length; i++) {
     const w = wireRefs[i];
     if (w.orientation !== 'h') continue;
-    const row = hRows.find((r) => Math.abs(r.yRow - w.avgY) <= 38);
+    const row = hRows.find((r) => Math.abs(r.yRow - w.avgY) <= 42);
     if (row) {
       row.yValues.push(w.avgY);
       row.yRow = row.yValues.reduce((a, b) => a + b, 0) / row.yValues.length;
@@ -4966,7 +5005,7 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
   for (let i = 0; i < wireRefs.length; i++) {
     const w = wireRefs[i];
     if (w.orientation !== 'v') continue;
-    const col = vCols.find((c) => Math.abs(c.xCol - w.avgX) <= 38);
+    const col = vCols.find((c) => Math.abs(c.xCol - w.avgX) <= 42);
     if (col) {
       col.xValues.push(w.avgX);
       col.xCol = col.xValues.reduce((a, b) => a + b, 0) / col.xValues.length;
@@ -4976,33 +5015,18 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     }
   }
 
-  // Apply strict horizontal Y and vertical X to the clustered wires
   for (const row of hRows) {
-    const ySnap = Math.round(row.yRow);
-    row.yRow = ySnap;
-    for (const wi of row.wireIndices) {
-      const w = wireRefs[wi];
-      w.y1 = ySnap;
-      w.y2 = ySnap;
-      w.avgY = ySnap;
-    }
+    row.yRow = Math.round(row.yRow);
   }
   for (const col of vCols) {
-    const xSnap = Math.round(col.xCol);
-    col.xCol = xSnap;
-    for (const wi of col.wireIndices) {
-      const w = wireRefs[wi];
-      w.x1 = xSnap;
-      w.x2 = xSnap;
-      w.avgX = xSnap;
-    }
+    col.xCol = Math.round(col.xCol);
   }
 
-  // 3. Vertically align each circuit component to its nearest horizontal wire row (within 48px)
+  // 3. Vertically align each circuit component to its nearest horizontal wire row (within 52px)
   for (const comp of initialComps) {
     const termY = comp.leftTerm.y;
     let bestRow: (typeof hRows)[number] | null = null;
-    let bestDist = 48;
+    let bestDist = 52;
     for (const row of hRows) {
       const d = Math.abs(row.yRow - termY);
       if (d <= bestDist) {
@@ -5032,144 +5056,181 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
   // Recompute component terminal positions after vertical alignment
   const alignedComps = getCircuitComponentsWithTerminals(currentStrokes);
 
-  // 4. Snap horizontal wire endpoints to component terminals AND vertical columns
-  for (const row of hRows) {
+  // Track which old wire stroke IDs get replaced by clean reconstructed segments
+  const replacedWireStrokeIds = new Set<string>();
+  const newWireStrokes: StrokeObject[] = [];
+
+  const makeCleanWireStroke = (
+    templateStroke: StrokeObject,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    suffix: string
+  ): StrokeObject => ({
+    ...templateStroke,
+    id: `st-wire-${Date.now()}-${suffix}-${Math.random().toString(36).slice(2, 6)}`,
+    isShape: true,
+    shapeType: 'line',
+    points: [
+      { x: Math.round(x1), y: Math.round(y1), pressure: 0.7 },
+      {
+        x: Math.round(x2),
+        y: Math.round(y2),
+        cx: Math.round((x1 + x2) / 2),
+        cy: Math.round((y1 + y2) / 2),
+        pressure: 0.7,
+      },
+    ],
+  });
+
+  // Sort vCols left-to-right and hRows top-to-bottom
+  vCols.sort((a, b) => a.xCol - b.xCol);
+  hRows.sort((a, b) => a.yRow - b.yRow);
+
+  // 4. Reconstruct each Horizontal Row cleanly from left rail -> component terminals -> right rail!
+  const activeRowYs: number[] = [];
+  for (let rIdx = 0; rIdx < hRows.length; rIdx++) {
+    const row = hRows[rIdx];
     const yRow = row.yRow;
-    const rowComps = alignedComps.filter((c) => Math.abs(c.leftTerm.y - yRow) <= 36);
+    const rowComps = alignedComps
+      .filter((c) => Math.abs(c.leftTerm.y - yRow) <= 38)
+      .sort((a, b) => a.cx - b.cx);
 
-    for (const wi of row.wireIndices) {
-      const w = wireRefs[wi];
-      const leftIsP1 = w.x1 <= w.x2;
-      let xL = Math.min(w.x1, w.x2);
-      let xR = Math.max(w.x1, w.x2);
+    const rowWires = row.wireIndices.map((wi) => wireRefs[wi]);
+    if (rowWires.length === 0) continue;
+    activeRowYs.push(yRow);
 
-      // Snap left endpoint xL to a component's rightTerm (if component is to the left) OR to a vertical column
-      let snappedLeftToComp = false;
-      for (const c of rowComps) {
-        if (xL >= c.cx - 12 && Math.abs(xL - c.rightTerm.x) <= 78 && xR > c.rightTerm.x + 8) {
-          xL = c.rightTerm.x;
-          snappedLeftToComp = true;
-          break;
+    const templateStroke = rowWires[0].stroke;
+    for (const rw of rowWires) {
+      replacedWireStrokeIds.add(rw.stroke.id);
+    }
+
+    let rowMinX = Math.min(
+      ...rowWires.map((w) => Math.min(w.x1, w.x2)),
+      ...(rowComps.length > 0 ? [rowComps[0].leftTerm.x] : [])
+    );
+    let rowMaxX = Math.max(
+      ...rowWires.map((w) => Math.max(w.x1, w.x2)),
+      ...(rowComps.length > 0 ? [rowComps[rowComps.length - 1].rightTerm.x] : [])
+    );
+
+    // Snap rowMinX to left vertical column if within 95px
+    for (const col of vCols) {
+      if (Math.abs(rowMinX - col.xCol) <= 95) {
+        rowMinX = col.xCol;
+        break;
+      }
+    }
+    // Snap rowMaxX to right vertical column if within 95px
+    for (let cIdx = vCols.length - 1; cIdx >= 0; cIdx--) {
+      const col = vCols[cIdx];
+      if (Math.abs(rowMaxX - col.xCol) <= 95) {
+        rowMaxX = col.xCol;
+        break;
+      }
+    }
+
+    if (rowComps.length === 0) {
+      if (rowMaxX - rowMinX >= 8) {
+        newWireStrokes.push(
+          makeCleanWireStroke(templateStroke, rowMinX, yRow, rowMaxX, yRow, `r${rIdx}-0`)
+        );
+      }
+    } else {
+      // Segment before first component
+      if (rowComps[0].leftTerm.x - rowMinX >= 6) {
+        newWireStrokes.push(
+          makeCleanWireStroke(
+            templateStroke,
+            rowMinX,
+            yRow,
+            rowComps[0].leftTerm.x,
+            yRow,
+            `r${rIdx}-L`
+          )
+        );
+      }
+      // Segments between consecutive components on the same horizontal branch
+      for (let i = 0; i < rowComps.length - 1; i++) {
+        const xStart = rowComps[i].rightTerm.x;
+        const xEnd = rowComps[i + 1].leftTerm.x;
+        if (xEnd - xStart >= 6) {
+          newWireStrokes.push(
+            makeCleanWireStroke(templateStroke, xStart, yRow, xEnd, yRow, `r${rIdx}-M${i}`)
+          );
         }
       }
-      if (!snappedLeftToComp) {
-        for (const col of vCols) {
-          if (Math.abs(xL - col.xCol) <= 68) {
-            xL = col.xCol;
-            break;
-          }
-        }
-      }
-
-      // Snap right endpoint xR to a component's leftTerm (if component is to the right) OR to a vertical column
-      let snappedRightToComp = false;
-      for (const c of rowComps) {
-        if (xR <= c.cx + 12 && Math.abs(xR - c.leftTerm.x) <= 78 && xL < c.leftTerm.x - 8) {
-          xR = c.leftTerm.x;
-          snappedRightToComp = true;
-          break;
-        }
-      }
-      if (!snappedRightToComp) {
-        for (const col of vCols) {
-          if (Math.abs(xR - col.xCol) <= 68) {
-            xR = col.xCol;
-            break;
-          }
-        }
-      }
-
-      if (leftIsP1) {
-        w.x1 = xL;
-        w.x2 = xR;
-      } else {
-        w.x1 = xR;
-        w.x2 = xL;
+      // Segment after last component
+      const lastRight = rowComps[rowComps.length - 1].rightTerm.x;
+      if (rowMaxX - lastRight >= 6) {
+        newWireStrokes.push(
+          makeCleanWireStroke(
+            templateStroke,
+            lastRight,
+            yRow,
+            rowMaxX,
+            yRow,
+            `r${rIdx}-R`
+          )
+        );
       }
     }
   }
 
-  // 5. Snap vertical wire endpoints to horizontal rows AND bridge collinear gaps on the same vertical column
-  for (const col of vCols) {
+  // 5. Reconstruct each Vertical Column cleanly, splitting at every horizontal row T-junction!
+  for (let cIdx = 0; cIdx < vCols.length; cIdx++) {
+    const col = vCols[cIdx];
     const xCol = col.xCol;
-    for (const wi of col.wireIndices) {
-      const w = wireRefs[wi];
-      const topIsP1 = w.y1 <= w.y2;
-      let yT = Math.min(w.y1, w.y2);
-      let yB = Math.max(w.y1, w.y2);
+    const colWires = col.wireIndices.map((wi) => wireRefs[wi]);
+    if (colWires.length === 0) continue;
 
-      for (const row of hRows) {
-        if (Math.abs(yT - row.yRow) <= 68 && yB > row.yRow + 10) {
-          yT = row.yRow;
-          break;
-        }
-      }
-      for (const row of hRows) {
-        if (Math.abs(yB - row.yRow) <= 68 && yT < row.yRow - 10) {
-          yB = row.yRow;
-          break;
-        }
-      }
+    const templateStroke = colWires[0].stroke;
+    for (const cw of colWires) {
+      replacedWireStrokeIds.add(cw.stroke.id);
+    }
 
-      if (topIsP1) {
-        w.y1 = yT;
-        w.y2 = yB;
-      } else {
-        w.y1 = yB;
-        w.y2 = yT;
+    let colMinY = Math.min(...colWires.map((w) => Math.min(w.y1, w.y2)));
+    let colMaxY = Math.max(...colWires.map((w) => Math.max(w.y1, w.y2)));
+
+    for (const yR of activeRowYs) {
+      if (Math.abs(colMinY - yR) <= 90) {
+        colMinY = yR;
+        break;
+      }
+    }
+    for (let i = activeRowYs.length - 1; i >= 0; i--) {
+      const yR = activeRowYs[i];
+      if (Math.abs(colMaxY - yR) <= 90) {
+        colMaxY = yR;
+        break;
       }
     }
 
-    // If two vertical segments in the same column still have a small gap (<= 55px), join them cleanly
-    if (col.wireIndices.length >= 2) {
-      const sortedW = col.wireIndices
-        .map((wi) => wireRefs[wi])
-        .sort((a, b) => Math.min(a.y1, a.y2) - Math.min(b.y1, b.y2));
-      for (let k = 0; k < sortedW.length - 1; k++) {
-        const upper = sortedW[k];
-        const lower = sortedW[k + 1];
-        const uBot = Math.max(upper.y1, upper.y2);
-        const lTop = Math.min(lower.y1, lower.y2);
-        const gap = lTop - uBot;
-        if (gap > 0 && gap <= 55) {
-          const nearRow = hRows.find((r) => Math.abs(r.yRow - (uBot + lTop) / 2) <= 45);
-          const joinY = nearRow ? nearRow.yRow : Math.round((uBot + lTop) / 2);
-          if (upper.y1 >= upper.y2) upper.y1 = joinY;
-          else upper.y2 = joinY;
-          if (lower.y1 <= lower.y2) lower.y1 = joinY;
-          else lower.y2 = joinY;
-        }
+    // Collect all horizontal row Y coordinates along this vertical rail (for clean T-junctions & L-corners)
+    const yBreaks: number[] = [colMinY];
+    for (const yR of activeRowYs) {
+      if (yR > colMinY + 12 && yR < colMaxY - 12) {
+        yBreaks.push(yR);
       }
     }
+    if (colMaxY > colMinY + 8) {
+      yBreaks.push(colMaxY);
+    }
 
-    //Ensure xCol is preserved
-    for (const wi of col.wireIndices) {
-      wireRefs[wi].x1 = xCol;
-      wireRefs[wi].x2 = xCol;
+    for (let k = 0; k < yBreaks.length - 1; k++) {
+      const yA = yBreaks[k];
+      const yB = yBreaks[k + 1];
+      if (yB - yA >= 8) {
+        newWireStrokes.push(
+          makeCleanWireStroke(templateStroke, xCol, yA, xCol, yB, `c${cIdx}-${k}`)
+        );
+      }
     }
   }
 
-  // Write updated wire endpoints back into currentStrokes
-  for (const w of wireRefs) {
-    const s = currentStrokes[w.strokeIdx];
-    currentStrokes[w.strokeIdx] = {
-      ...s,
-      isShape: true,
-      shapeType: 'line',
-      points: [
-        { x: w.x1, y: w.y1, pressure: 0.7 },
-        {
-          x: w.x2,
-          y: w.y2,
-          cx: (w.x1 + w.x2) / 2,
-          cy: (w.y1 + w.y2) / 2,
-          pressure: 0.7,
-        },
-      ],
-    };
-  }
-
-  return currentStrokes;
+  const keptStrokes = currentStrokes.filter((s) => !replacedWireStrokeIds.has(s.id));
+  return [...keptStrokes, ...newWireStrokes];
 }
 
 export function convertCircuitComponents(
@@ -5186,7 +5247,8 @@ export function convertCircuitComponents(
       c.kind !== 'battery' &&
       c.kind !== 'voltage-source' &&
       c.kind !== 'bulb' &&
-      c.kind !== 'resistor'
+      c.kind !== 'resistor' &&
+      c.kind !== 'fan'
     ) {
       return false;
     }
@@ -5205,15 +5267,18 @@ export function convertCircuitComponents(
   const newIds: string[] = [];
 
   for (const comp of compsToConvert) {
-    let targetKind: 'battery' | 'voltage-source' | 'bulb' | 'resistor' | null = null;
+    let targetKind: 'battery' | 'voltage-source' | 'bulb' | 'resistor' | 'fan' | null = null;
     if (comp.kind === 'battery') {
       if (forceMode === 'toggle' || forceMode === 'schematic') targetKind = 'voltage-source';
     } else if (comp.kind === 'voltage-source') {
       if (forceMode === 'toggle' || forceMode === 'pictorial') targetKind = 'battery';
-    } else if (comp.kind === 'bulb') {
+    } else if (comp.kind === 'bulb' || comp.kind === 'fan') {
       if (forceMode === 'toggle' || forceMode === 'schematic') targetKind = 'resistor';
     } else if (comp.kind === 'resistor') {
-      if (forceMode === 'toggle' || forceMode === 'pictorial') targetKind = 'bulb';
+      if (forceMode === 'toggle' || forceMode === 'pictorial') {
+        const origStroke = currentStrokes.find((s) => comp.strokeIds.includes(s.id));
+        targetKind = origStroke?.originalCircuitType === 'fan' ? 'fan' : 'bulb';
+      }
     }
 
     if (!targetKind) continue;
@@ -5221,7 +5286,7 @@ export function convertCircuitComponents(
 
     let replacement: StrokeObject[] = [];
     if (targetKind === 'resistor') {
-      const rw = Math.max(72, comp.w * 1.25);
+      const rw = Math.max(72, comp.w * 1.15);
       const rh = Math.max(34, Math.min(48, comp.h * 0.48));
       const rx = comp.cx - rw / 2;
       const ry = comp.leftTerm.y - rh / 2;
@@ -5240,8 +5305,23 @@ export function convertCircuitComponents(
         layerId: comp.layerId,
         isShape: true,
         shapeType: 'resistor',
+        originalCircuitType: comp.kind === 'fan' ? 'fan' : 'bulb',
       };
       replacement = [resStroke];
+    } else if (targetKind === 'fan') {
+      const fw = Math.max(92, comp.w * 1.15);
+      const fh = Math.max(72, fw * 0.78);
+      const fx = comp.cx - fw / 2;
+      const fy = comp.leftTerm.y - fh / 2;
+      replacement = createPhysicsStencilStrokes(
+        'fan',
+        fx,
+        fy,
+        fw,
+        fh,
+        comp.color,
+        comp.layerId
+      );
     } else if (targetKind === 'bulb') {
       const bw = Math.max(54, comp.w * 0.74);
       const bh = Math.max(78, bw * 1.35);

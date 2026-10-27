@@ -1025,11 +1025,19 @@ export default function App() {
   const [simFlowDirection, setSimFlowDirection] = useState<'electrons' | 'conventional'>(
     'electrons'
   );
-  const [simShowBulbGlow, setSimShowBulbGlow] = useState<boolean>(true);
-  const [simShowFanSpin, setSimShowFanSpin] = useState<boolean>(true);
   const [simShowDarkWireTrack, setSimShowDarkWireTrack] = useState<boolean>(false);
   const [simSpeedMultiplier, setSimSpeedMultiplier] = useState<number>(1.0);
   const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [simPanelPos, setSimPanelPos] = useState<{ x: number; y: number }>({ x: 16, y: 108 });
+  const simPanelDragRef = useRef<{
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const [isCleanProjectorMode, setIsCleanProjectorMode] = useState<boolean>(false);
+  const [isExternalProjectorOpen, setIsExternalProjectorOpen] = useState<boolean>(false);
+  const projectorWinRef = useRef<Window | null>(null);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(false);
   const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'stickers' | 'custom'>('all');
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>('Όλα');
@@ -4785,6 +4793,16 @@ export default function App() {
           const s = entry.stroke;
           const layer = visibleLayerMap.get(s.layerId);
           if (layer && !layer.visible) continue;
+          // While simulation is running on the active page, hide static Fan body/blades so only the clean animated round Fan renders!
+          if (
+            isCurrentActivePage &&
+            isSimulating &&
+            (s.shapeType === 'fan-blade' ||
+              s.shapeType === 'fan-hub' ||
+              (s.shapeType === 'fan' && s.points.length > 2))
+          ) {
+            continue;
+          }
           drawStrokeOnContext(ctx, s, false);
         }
       }
@@ -5667,7 +5685,7 @@ export default function App() {
         ctx.restore();
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds]);
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
@@ -8398,145 +8416,140 @@ export default function App() {
         ctx.restore();
       }
 
-      // 2. Bulb Glow, Blinking/Pulsing Light Rays & Heated Filament (scaled by branch powerFactor!)
-      if (simShowBulbGlow) {
-        for (const cs of simData.components) {
-          if (cs.comp.kind !== 'bulb' || !cs.active || cs.powerFactor <= 0.01) continue;
-          const b = cs.comp;
-          const domeCx = b.cx;
-          const domeCy = b.minY + b.h * 0.36;
-          const domeR = Math.max(16, Math.min(b.w, b.h) * 0.42);
-          const pwr = Math.min(1.6, Math.max(0.45, cs.powerFactor));
-          const blinkWave = 0.5 + 0.5 * Math.sin(elapsedSec * 9.5);
-          const pulse = 0.92 + 0.16 * blinkWave;
-          const glowRadius = domeR * (2.05 + pwr * 1.25) * pulse;
+      // 2. Bulb Glow, Blinking/Pulsing Light Rays & Heated Filament (Always active in simulation!)
+      for (const cs of simData.components) {
+        if (cs.comp.kind !== 'bulb' || !cs.active || cs.powerFactor <= 0.01) continue;
+        const b = cs.comp;
+        const domeCx = b.cx;
+        const domeCy = b.minY + b.h * 0.36;
+        const domeR = Math.max(16, Math.min(b.w, b.h) * 0.42);
+        const pwr = Math.min(1.6, Math.max(0.45, cs.powerFactor));
+        const blinkWave = 0.5 + 0.5 * Math.sin(elapsedSec * 9.5);
+        const pulse = 0.92 + 0.16 * blinkWave;
+        const glowRadius = domeR * (2.05 + pwr * 1.25) * pulse;
 
-          ctx.save();
-          // Outer warm golden halo (pulsing)
-          const grad = ctx.createRadialGradient(
-            domeCx,
-            domeCy,
-            domeR * 0.12,
-            domeCx,
-            domeCy,
-            glowRadius
-          );
-          grad.addColorStop(0, `rgba(254, 240, 138, ${Math.min(0.92, (0.58 + 0.22 * blinkWave) * pwr)})`);
-          grad.addColorStop(0.45, `rgba(250, 204, 21, ${Math.min(0.65, (0.34 + 0.16 * blinkWave) * pwr)})`);
-          grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(domeCx, domeCy, glowRadius, 0, Math.PI * 2);
-          ctx.fill();
+        ctx.save();
+        // Outer warm golden halo (pulsing)
+        const grad = ctx.createRadialGradient(
+          domeCx,
+          domeCy,
+          domeR * 0.12,
+          domeCx,
+          domeCy,
+          glowRadius
+        );
+        grad.addColorStop(0, `rgba(254, 240, 138, ${Math.min(0.92, (0.58 + 0.22 * blinkWave) * pwr)})`);
+        grad.addColorStop(0.45, `rgba(250, 204, 21, ${Math.min(0.65, (0.34 + 0.16 * blinkWave) * pwr)})`);
+        grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(domeCx, domeCy, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
 
-          // Blinking / Pulsing Radiating Light Rays around the bulb dome!
-          const numRays = 12;
-          const startAng = -Math.PI * 1.18;
-          const endAng = Math.PI * 0.18;
-          ctx.lineCap = 'round';
-          for (let i = 0; i < numRays; i++) {
-            const ang = startAng + ((endAng - startAng) * i) / (numRays - 1);
-            // Alternate odd/even rays so they visibly twinkle & pulse in/out!
-            const rayPhase = Math.sin(elapsedSec * 10.5 + (i % 2 === 0 ? 0 : Math.PI * 0.85));
-            const rayAlpha = Math.min(0.98, Math.max(0.28, (0.62 + 0.36 * rayPhase) * pwr));
-            const rInner = domeR * (1.12 + 0.06 * (1 - rayPhase));
-            const rOuter = domeR * (1.48 + (0.46 + 0.28 * rayPhase) * pwr);
-            ctx.strokeStyle = `rgba(245, 158, 11, ${rayAlpha})`;
-            ctx.shadowColor = '#fbbf24';
-            ctx.shadowBlur = 6;
-            ctx.lineWidth = 2.6 + (rayPhase > 0 ? 0.6 : 0);
-            ctx.beginPath();
-            ctx.moveTo(domeCx + Math.cos(ang) * rInner, domeCy + Math.sin(ang) * rInner);
-            ctx.lineTo(domeCx + Math.cos(ang) * rOuter, domeCy + Math.sin(ang) * rOuter);
-            ctx.stroke();
-          }
-
-          // Glowing orange zigzag filament inside the bulb
-          const filW = domeR * 0.55;
-          const filY = domeCy + domeR * 0.18;
-          const filH = domeR * 0.34;
-          ctx.strokeStyle = '#f59e0b';
+        // Blinking / Pulsing Radiating Light Rays around the bulb dome!
+        const numRays = 12;
+        const startAng = -Math.PI * 1.18;
+        const endAng = Math.PI * 0.18;
+        ctx.lineCap = 'round';
+        for (let i = 0; i < numRays; i++) {
+          const ang = startAng + ((endAng - startAng) * i) / (numRays - 1);
+          const rayPhase = Math.sin(elapsedSec * 10.5 + (i % 2 === 0 ? 0 : Math.PI * 0.85));
+          const rayAlpha = Math.min(0.98, Math.max(0.28, (0.62 + 0.36 * rayPhase) * pwr));
+          const rInner = domeR * (1.12 + 0.06 * (1 - rayPhase));
+          const rOuter = domeR * (1.48 + (0.46 + 0.28 * rayPhase) * pwr);
+          ctx.strokeStyle = `rgba(245, 158, 11, ${rayAlpha})`;
           ctx.shadowColor = '#fbbf24';
-          ctx.shadowBlur = 10 * pwr;
-          ctx.lineWidth = 2.6;
-          ctx.lineJoin = 'round';
+          ctx.shadowBlur = 6;
+          ctx.lineWidth = 2.6 + (rayPhase > 0 ? 0.6 : 0);
           ctx.beginPath();
-          ctx.moveTo(domeCx - filW * 0.65, domeCy + domeR * 0.62);
-          ctx.lineTo(domeCx - filW * 0.65, filY);
-          ctx.lineTo(domeCx - filW * 0.32, filY - filH);
-          ctx.lineTo(domeCx, filY + filH * 0.35);
-          ctx.lineTo(domeCx + filW * 0.32, filY - filH);
-          ctx.lineTo(domeCx + filW * 0.65, filY);
-          ctx.lineTo(domeCx + filW * 0.65, domeCy + domeR * 0.62);
+          ctx.moveTo(domeCx + Math.cos(ang) * rInner, domeCy + Math.sin(ang) * rInner);
+          ctx.lineTo(domeCx + Math.cos(ang) * rOuter, domeCy + Math.sin(ang) * rOuter);
           ctx.stroke();
-          ctx.restore();
         }
+
+        // Glowing orange zigzag filament inside the bulb
+        const filW = domeR * 0.55;
+        const filY = domeCy + domeR * 0.18;
+        const filH = domeR * 0.34;
+        ctx.strokeStyle = '#f59e0b';
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 10 * pwr;
+        ctx.lineWidth = 2.6;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(domeCx - filW * 0.65, domeCy + domeR * 0.62);
+        ctx.lineTo(domeCx - filW * 0.65, filY);
+        ctx.lineTo(domeCx - filW * 0.32, filY - filH);
+        ctx.lineTo(domeCx, filY + filH * 0.35);
+        ctx.lineTo(domeCx + filW * 0.32, filY - filH);
+        ctx.lineTo(domeCx + filW * 0.65, filY);
+        ctx.lineTo(domeCx + filW * 0.65, domeCy + domeR * 0.62);
+        ctx.stroke();
+        ctx.restore();
       }
 
-      // 3. Spinning Fan / Propeller Blades (Grey circle backplate + Solid Blue Blades!)
-      if (simShowFanSpin) {
-        for (const cs of simData.components) {
-          if (cs.comp.kind !== 'fan') continue;
-          const f = cs.comp;
-          const rOuter = Math.max(18, Math.min(f.w * 0.34, f.h * 0.45));
-          const rHub = Math.max(5, rOuter * 0.22);
-          const spinAng =
-            cs.active && cs.powerFactor > 0.01
-              ? elapsedSec * 5.6 * cs.powerFactor * simSpeedMultiplier
-              : 0;
+      // 3. Spinning Fan / Propeller Blades (Always active in simulation: Grey circle backplate + Solid Blue Blades!)
+      for (const cs of simData.components) {
+        if (cs.comp.kind !== 'fan') continue;
+        const f = cs.comp;
+        const rOuter = Math.max(20, Math.min(f.w * 0.36, f.h * 0.45));
+        const rHub = Math.max(5.5, rOuter * 0.22);
+        const spinAng =
+          cs.active && cs.powerFactor > 0.01
+            ? elapsedSec * 5.6 * cs.powerFactor * simSpeedMultiplier
+            : 0;
 
-          ctx.save();
-          // Round grey-filled circle backplate
-          ctx.fillStyle = '#cbd5e1';
-          ctx.strokeStyle = '#475569';
-          ctx.lineWidth = 2.4;
+        ctx.save();
+        // Round grey-filled circle backplate
+        ctx.fillStyle = '#cbd5e1';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(f.cx, f.cy, rOuter, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw 3 solid blue blades
+        for (let b = 0; b < 3; b++) {
+          const baseAng = spinAng + (b * Math.PI * 2) / 3 - Math.PI / 2;
+          const bladeLen = rOuter * 0.85;
+          const spread = 0.36;
           ctx.beginPath();
-          ctx.arc(f.cx, f.cy, rOuter, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-
-          // Draw 3 solid blue blades
-          for (let b = 0; b < 3; b++) {
-            const baseAng = spinAng + (b * Math.PI * 2) / 3 - Math.PI / 2;
-            const bladeLen = rOuter * 0.84;
-            const spread = 0.36;
-            ctx.beginPath();
-            ctx.moveTo(
-              f.cx + Math.cos(baseAng - 0.18) * rHub * 0.85,
-              f.cy + Math.sin(baseAng - 0.18) * rHub * 0.85
-            );
-            const arcSteps = 10;
-            for (let k = 0; k <= arcSteps; k++) {
-              const t = k / arcSteps;
-              const ang = baseAng - spread + t * (spread * 2);
-              const rCurve = bladeLen * (0.86 + 0.14 * Math.sin(t * Math.PI));
-              ctx.lineTo(f.cx + Math.cos(ang) * rCurve, f.cy + Math.sin(ang) * rCurve);
-            }
-            ctx.lineTo(
-              f.cx + Math.cos(baseAng + 0.18) * rHub * 0.85,
-              f.cy + Math.sin(baseAng + 0.18) * rHub * 0.85
-            );
-            ctx.closePath();
-            ctx.fillStyle = '#0284c7';
-            ctx.fill();
-            ctx.strokeStyle = '#0369a1';
-            ctx.lineWidth = 1.9;
-            ctx.stroke();
+          ctx.moveTo(
+            f.cx + Math.cos(baseAng - 0.18) * rHub * 0.85,
+            f.cy + Math.sin(baseAng - 0.18) * rHub * 0.85
+          );
+          const arcSteps = 10;
+          for (let k = 0; k <= arcSteps; k++) {
+            const t = k / arcSteps;
+            const ang = baseAng - spread + t * (spread * 2);
+            const rCurve = bladeLen * (0.86 + 0.14 * Math.sin(t * Math.PI));
+            ctx.lineTo(f.cx + Math.cos(ang) * rCurve, f.cy + Math.sin(ang) * rCurve);
           }
-
-          // Central hub
-          ctx.beginPath();
-          ctx.arc(f.cx, f.cy, rHub, 0, Math.PI * 2);
-          ctx.fillStyle = '#0ea5e9';
+          ctx.lineTo(
+            f.cx + Math.cos(baseAng + 0.18) * rHub * 0.85,
+            f.cy + Math.sin(baseAng + 0.18) * rHub * 0.85
+          );
+          ctx.closePath();
+          ctx.fillStyle = '#0284c7';
           ctx.fill();
-          ctx.strokeStyle = '#0f172a';
-          ctx.lineWidth = 2.2;
+          ctx.strokeStyle = '#0369a1';
+          ctx.lineWidth = 1.9;
           ctx.stroke();
-          ctx.restore();
         }
+
+        // Central hub
+        ctx.beginPath();
+        ctx.arc(f.cx, f.cy, rHub, 0, Math.PI * 2);
+        ctx.fillStyle = '#0369a1';
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+        ctx.restore();
       }
 
-      // 4. Moving Charge Carriers / Electrons along Wire Segments
+      // 4. Moving Charge Carriers / Electrons along Wire Segments (100% uniform size & color across all branches!)
       if (simShowElectrons && simData.wireSegments.length > 0) {
         const spacing = 32;
         const dirSign = simFlowDirection === 'conventional' ? 1 : -1;
@@ -8572,31 +8585,19 @@ export default function App() {
               continue;
             }
 
+            const r = 4.8;
+            ctx.beginPath();
+            ctx.arc(px, py, r, 0, Math.PI * 2);
             if (simParticleStyle === 'green-energy') {
-              const isBright = seg.active && seg.highEnergy;
-              const r = isBright ? 5.2 : 4.2;
-              ctx.beginPath();
-              ctx.arc(px, py, r, 0, Math.PI * 2);
-              if (isBright) {
-                ctx.fillStyle = '#84cc16';
-                ctx.shadowColor = '#4ade80';
-                ctx.shadowBlur = 10;
-              } else {
-                ctx.fillStyle = seg.active ? '#65a30d' : '#64748b';
-                ctx.shadowColor = seg.active ? '#84cc16' : 'transparent';
-                ctx.shadowBlur = seg.active ? 6 : 0;
-              }
-              ctx.fill();
+              ctx.fillStyle = '#84cc16';
+              ctx.shadowColor = '#4ade80';
+              ctx.shadowBlur = 9;
             } else {
-              // Blue electrons ('blue-electrons') matching user's 3rd screenshot!
-              const r = 4.8;
-              ctx.beginPath();
-              ctx.arc(px, py, r, 0, Math.PI * 2);
               ctx.fillStyle = '#38bdf8';
               ctx.shadowColor = '#0ea5e9';
               ctx.shadowBlur = 9;
-              ctx.fill();
             }
+            ctx.fill();
           }
           ctx.restore();
         }
@@ -8695,11 +8696,103 @@ export default function App() {
     simShowElectrons,
     simParticleStyle,
     simFlowDirection,
-    simShowBulbGlow,
-    simShowFanSpin,
     simShowDarkWireTrack,
     simSpeedMultiplier,
   ]);
+
+  // Open or Focus External HDMI / 2nd Screen Projector Window (shows ONLY the page + soft grey background, 0 toolbars!)
+  const openExternalProjectorWindow = useCallback(() => {
+    let win = projectorWinRef.current;
+    if (!win || win.closed) {
+      win = window.open(
+        '',
+        'ExplainBoardsHDMIProjector',
+        'width=1280,height=900,menubar=no,toolbar=no,location=no,status=no'
+      );
+      if (!win) {
+        // If popup is blocked or on single-screen iPad, toggle Clean Projector Mode directly!
+        setIsCleanProjectorMode(true);
+        showToast('📺 Ενεργοποιήθηκε η Καθαρή Οθόνη HDMI (Κρύφτηκαν οι μπάρες)!');
+        return;
+      }
+      projectorWinRef.current = win;
+      win.document.open();
+      win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Προβολή Σελίδας (HDMI / Προβολέας)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+    }
+    #proj-canvas {
+      max-width: 96vw;
+      max-height: 96vh;
+      width: auto;
+      height: auto;
+      border-radius: 6px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
+      background: #fffdf7;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="proj-canvas"></canvas>
+</body>
+</html>`);
+      win.document.close();
+      win.addEventListener('beforeunload', () => {
+        setIsExternalProjectorOpen(false);
+      });
+    } else {
+      win.focus();
+    }
+    setIsExternalProjectorOpen(true);
+    showToast('📺 Άνοιξε το Καθαρό Παράθυρο Προβολέα (Σύρε το στη 2η οθόνη/HDMI)!');
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!isExternalProjectorOpen) return;
+    let raf = 0;
+    const syncProjector = () => {
+      const win = projectorWinRef.current;
+      if (!win || win.closed) {
+        setIsExternalProjectorOpen(false);
+        return;
+      }
+      const projCanvas = win.document.getElementById('proj-canvas') as HTMLCanvasElement | null;
+      const stCanvas = staticCanvasRef.current;
+      if (projCanvas && stCanvas) {
+        if (projCanvas.width !== stCanvas.width || projCanvas.height !== stCanvas.height) {
+          projCanvas.width = stCanvas.width;
+          projCanvas.height = stCanvas.height;
+        }
+        const pCtx = projCanvas.getContext('2d');
+        if (pCtx) {
+          pCtx.clearRect(0, 0, projCanvas.width, projCanvas.height);
+          pCtx.drawImage(stCanvas, 0, 0);
+          if (simCanvasRef.current && isSimulating) {
+            pCtx.drawImage(simCanvasRef.current, 0, 0);
+          }
+          if (activeCanvasRef.current) {
+            pCtx.drawImage(activeCanvasRef.current, 0, 0);
+          }
+        }
+      }
+      raf = window.requestAnimationFrame(syncProjector);
+    };
+    raf = window.requestAnimationFrame(syncProjector);
+    return () => window.cancelAnimationFrame(raf);
+  }, [isExternalProjectorOpen, isSimulating]);
 
   // Draw live wet ink on the top 2x Retina overlay canvas ONLY (Zero React State, Zero Lag!)
   const renderLiveOverlayStroke = () => {
@@ -17834,10 +17927,38 @@ export default function App() {
           1. AUTHENTIC GOODNOTES 6 TOP NAVY BAR & DOCUMENT TABS (#1B2A4A)
              Always Sticky / Pinned at the very top like a Native iPad App!
          ========================================================================= */}
+      {isCleanProjectorMode && viewMode === 'editor' && (
+        <div
+          data-ui-panel="true"
+          className="fixed top-2 right-2 z-50 flex items-center gap-1 opacity-25 hover:opacity-100 transition-opacity duration-200"
+        >
+          <button
+            type="button"
+            onClick={() => setShowSimulationPanel((v) => !v)}
+            className="px-2 py-1 rounded-full bg-emerald-600/90 text-white text-[10px] font-bold shadow-md cursor-pointer"
+            title="Άνοιγμα/Κλείσιμο Παραθύρου Προσομοίωσης"
+          >
+            ⚙️▶️ Sim
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsCleanProjectorMode(false);
+              showToast('🛠️ Εμφανίστηκαν ξανά οι μπάρες εργαλείων!');
+            }}
+            className="px-2.5 py-1 rounded-full bg-slate-800/85 text-white text-[10px] font-bold shadow-md cursor-pointer"
+            title="Επαναφορά άνω μπαρών εργαλείων"
+          >
+            📺 Εργαλεία
+          </button>
+        </div>
+      )}
       <header
         data-sticky-app-nav="true"
         style={{ touchAction: 'manipulation' }}
-        className="sticky top-0 z-40 flex items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none bn-safe-top-header"
+        className={`${
+          isCleanProjectorMode && viewMode === 'editor' ? 'hidden' : 'sticky top-0 z-40 flex'
+        } items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none bn-safe-top-header`}
       >
         {/* Left Navigation Icons (BestNotes Logo -> Landing Page, Home -> Documents/Notes Library, Page Thumbnails Grid) */}
         <div className="flex items-center gap-1 pb-1.5">
@@ -19907,7 +20028,9 @@ export default function App() {
           <div
             data-sticky-app-nav="true"
             style={{ touchAction: 'manipulation' }}
-            className="sticky top-0 z-30 flex items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto overscroll-contain"
+            className={`${
+              isCleanProjectorMode ? 'hidden' : 'sticky top-0 z-30 flex'
+            } items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto overscroll-contain`}
           >
             {/* Left Quick Status: Pencil Only Mode + Tidy Handwriting + Paste */}
             <div className="flex items-center gap-1.5">
@@ -20196,6 +20319,21 @@ export default function App() {
                 {isSimulating && (
                   <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
                 )}
+              </button>
+
+              {/* Clean HDMI / Projector View Button (hides top bars so only page + soft grey background is sent to HDMI!) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCleanProjectorMode(true);
+                  setShowSimulationPanel(false);
+                  showToast('📺 Καθαρή Προβολή HDMI: Φαίνεται μόνο η σελίδα & το γκρι φόντο!');
+                }}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-full font-bold text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
+                title="Καθαρή Προβολή HDMI / Προβολέα (Κρύβει τις πάνω μπάρες ώστε στην οθόνη να φαίνεται μόνο η σελίδα και το απαλό γκρι)"
+              >
+                <span>📺</span>
+                <span className="hidden md:inline">HDMI</span>
               </button>
             </div>
 
@@ -20534,12 +20672,13 @@ export default function App() {
           )}
 
           {/* Contextual Sub-Bar (Appears for Shape, Text, Lasso Selection, or Eraser) */}
-          {(activeTool === 'shape' ||
-            activeTool === 'text' ||
-            selectedTextId !== null ||
-            (activeTool !== 'direct-node' &&
-              (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso')) ||
-            activeTool === 'eraser') &&
+          {!isCleanProjectorMode &&
+            (activeTool === 'shape' ||
+              activeTool === 'text' ||
+              selectedTextId !== null ||
+              (activeTool !== 'direct-node' &&
+                (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso')) ||
+              activeTool === 'eraser') &&
             showToolSubBar && (
               <div
                 data-sticky-app-nav="true"
@@ -22768,35 +22907,66 @@ export default function App() {
               </div>
             )}
 
-            {/* Left Vertical Interactive Physics & Circuit Simulation Sidebar (⚙️▶️) */}
+            {/* Draggable Interactive Physics Simulation Floating Window (⚙️▶️) */}
             {showSimulationPanel && (
               <div
                 data-ui-panel="true"
                 data-popover-panel="simulation"
+                style={{ left: simPanelPos.x, top: simPanelPos.y }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                className="fixed left-4 top-28 z-40 w-72 max-h-[80vh] overflow-y-auto rounded-2xl bg-white/95 backdrop-blur-md border border-emerald-200 shadow-2xl p-3.5 text-slate-800 space-y-3"
+                className="fixed z-40 w-68 max-h-[82vh] overflow-y-auto rounded-2xl bg-white/95 backdrop-blur-md border border-emerald-200 shadow-2xl p-3 text-slate-800 space-y-2.5 select-none"
               >
-                {/* Header */}
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                {/* Compact Draggable Header ("Προσομοίωση") */}
+                <div
+                  onPointerDown={(e) => {
+                    if ((e.target as HTMLElement).closest('button')) return;
+                    e.stopPropagation();
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    simPanelDragRef.current = {
+                      startClientX: e.clientX,
+                      startClientY: e.clientY,
+                      origX: simPanelPos.x,
+                      origY: simPanelPos.y,
+                    };
+                  }}
+                  onPointerMove={(e) => {
+                    const drag = simPanelDragRef.current;
+                    if (!drag) return;
+                    const nextX = Math.max(
+                      8,
+                      Math.min(window.innerWidth - 280, drag.origX + (e.clientX - drag.startClientX))
+                    );
+                    const nextY = Math.max(
+                      8,
+                      Math.min(window.innerHeight - 120, drag.origY + (e.clientY - drag.startClientY))
+                    );
+                    setSimPanelPos({ x: nextX, y: nextY });
+                  }}
+                  onPointerUp={() => {
+                    simPanelDragRef.current = null;
+                  }}
+                  onPointerCancel={() => {
+                    simPanelDragRef.current = null;
+                  }}
+                  style={{ touchAction: 'none' }}
+                  className="flex items-center justify-between pb-1.5 border-b border-slate-100 cursor-grab active:cursor-grabbing"
+                  title="Σύρε από εδώ για μετακίνηση του παραθύρου Προσομοίωσης"
+                >
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
                       ⚡
                     </span>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-extrabold text-[#1b2a4a]">
-                        Προσομοίωση Ηλεκτρισμού
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        Ζωντανά Κυκλώματα πάνω στις Σημειώσεις
-                      </span>
-                    </div>
+                    <span className="text-xs font-extrabold text-[#1b2a4a]">
+                      Προσομοίωση
+                    </span>
+                    <span className="text-[11px] text-slate-300 font-bold ml-0.5">⠿</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowSimulationPanel(false)}
                     className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
-                    title="Κλείσιμο μενού (η προσομοίωση μπορεί να συνεχίσει να τρέχει)"
+                    title="Κλείσιμο παραθύρου"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -22817,7 +22987,7 @@ export default function App() {
                       setIsSimulating(false);
                     }
                   }}
-                  className={`w-full py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer ${
+                  className={`w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer ${
                     isSimulating
                       ? 'bg-rose-600 hover:bg-rose-700 text-white'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -22846,7 +23016,7 @@ export default function App() {
                           return next;
                         });
                       }}
-                      className={`w-full py-2 px-2.5 rounded-xl font-bold text-[11px] flex items-center justify-between border shadow-2xs transition cursor-pointer ${
+                      className={`w-full py-1.5 px-2.5 rounded-xl font-bold text-[11px] flex items-center justify-between border shadow-2xs transition cursor-pointer ${
                         simCircuitSwitchClosed
                           ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
                           : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100'
@@ -22879,59 +23049,50 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* 1-Click Global Circuit View Conversion: Pictorial (Battery & Bulb) <-> Schematic (Source & Resistor) */}
-                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5">
-                  <span className="text-[10.5px] font-bold text-slate-700 block">
-                    🔄 Μορφή Κυκλώματος (1-Κλικ Αλλαγή Όλων)
-                  </span>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateActivePage((page) => {
-                          const res = convertCircuitComponents(
-                            page.strokes,
-                            undefined,
-                            'pictorial'
-                          );
-                          return { ...page, strokes: res.strokes };
-                        });
-                        setSelectedStrokeIds([]);
-                        showToast('🔋💡 Όλο το κύκλωμα: Μπαταρία & Λαμπτήρες!');
-                      }}
-                      className="px-2 py-1.5 rounded-lg bg-white hover:bg-amber-50 border border-slate-200 text-[10.5px] font-bold text-slate-700 shadow-2xs cursor-pointer transition"
-                      title="Μετατρέπει όλες τις Πηγές σε Μπαταρίες και όλους τους Αντιστάτες σε Λαμπτήρες και ευθυγραμμίζει τις γραμμές"
-                    >
-                      🔋💡 Μπαταρία & Λαμπτήρας
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateActivePage((page) => {
-                          const res = convertCircuitComponents(
-                            page.strokes,
-                            undefined,
-                            'schematic'
-                          );
-                          return { ...page, strokes: res.strokes };
-                        });
-                        setSelectedStrokeIds([]);
-                        showToast('⚡〰️ Όλο το κύκλωμα: Πηγή Τάσης & Αντιστάτες!');
-                      }}
-                      className="px-2 py-1.5 rounded-lg bg-white hover:bg-sky-50 border border-slate-200 text-[10.5px] font-bold text-slate-700 shadow-2xs cursor-pointer transition"
-                      title="Μετατρέπει όλες τις Μπαταρίες σε Πηγές Τάσης και όλους τους Λαμπτήρες σε Αντιστάτες και ευθυγραμμίζει τις γραμμές"
-                    >
-                      ⚡〰️ Πηγή & Αντιστάτης
-                    </button>
-                  </div>
+                {/* 1-Click Global Circuit View Conversion: "Σχήματα" <-> "Σύμβολα" */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateActivePage((page) => {
+                        const res = convertCircuitComponents(
+                          page.strokes,
+                          undefined,
+                          'pictorial'
+                        );
+                        return { ...page, strokes: res.strokes };
+                      });
+                      setSelectedStrokeIds([]);
+                      showToast('🔋💡 Σχήματα: Μπαταρία, Λαμπτήρες & Φτερωτή!');
+                    }}
+                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition"
+                    title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή"
+                  >
+                    🔋💡 Σχήματα
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateActivePage((page) => {
+                        const res = convertCircuitComponents(
+                          page.strokes,
+                          undefined,
+                          'schematic'
+                        );
+                        return { ...page, strokes: res.strokes };
+                      });
+                      setSelectedStrokeIds([]);
+                      showToast('⚡〰️ Σύμβολα: Πηγή Τάσης & Αντιστάτες!');
+                    }}
+                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition"
+                    title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες"
+                  >
+                    ⚡〰️ Σύμβολα
+                  </button>
                 </div>
 
                 {/* Simulation Visual Options */}
                 <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                  <span className="text-[10.5px] font-bold text-slate-700 block">
-                    ⚙️ Επιλογές Οπτικοποίησης
-                  </span>
-
                   <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
                     <span>⚡ Κίνηση Ηλεκτρονίων / Φορτίων</span>
                     <input
@@ -22980,7 +23141,7 @@ export default function App() {
                             : 'bg-white text-slate-600 border-slate-200'
                         }`}
                       >
-                        Φορά e⁻ (- → +)
+                        Πραγματική φορά
                       </button>
                       <button
                         type="button"
@@ -22991,30 +23152,10 @@ export default function App() {
                             : 'bg-white text-slate-600 border-slate-200'
                         }`}
                       >
-                        Ρεύμα I (+ → -)
+                        Συμβατική Φορά
                       </button>
                     </div>
                   )}
-
-                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                    <span>💡 Φωτοβολία Λαμπτήρα & Ακτίνες</span>
-                    <input
-                      type="checkbox"
-                      checked={simShowBulbGlow}
-                      onChange={(e) => setSimShowBulbGlow(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
-                    />
-                  </label>
-
-                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                    <span>☢️ Περιστροφή Φτερωτής (Κινητήρας)</span>
-                    <input
-                      type="checkbox"
-                      checked={simShowFanSpin}
-                      onChange={(e) => setSimShowFanSpin(e.target.checked)}
-                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
-                    />
-                  </label>
 
                   <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
                     <span>⬛ Σκούρος Σωλήνας Καλωδίων</span>
@@ -23042,40 +23183,39 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Quick Switch Toggle + Quick Circuit Component Picker */}
-                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5">
-                  <span className="text-[10.5px] font-bold text-slate-700 block">
-                    ➕ Εξαρτήματα Κυκλώματος (Αυτόματο Κόψιμο Γραμμής)
-                  </span>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {(
-                      [
-                        { id: 'battery', label: '🔋 Μπαταρία' },
-                        { id: 'voltage-source', label: '⚡ Πηγή Τάσης' },
-                        { id: 'bulb', label: '💡 Λαμπτήρας' },
-                        { id: 'resistor', label: '〰️ Αντιστάτης' },
-                        { id: 'fan', label: '☢️ Φτερωτή' },
-                      ] as const
-                    ).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveTool('shape');
-                          setShapePreset(item.id);
-                          setShowToolSubBar(true);
-                          showToast(`Επιλέχθηκε: ${item.label} — Σύρε πάνω σε γραμμή για τοποθέτηση!`);
-                        }}
-                        className={`px-2 py-1.5 rounded-lg text-[10.5px] font-bold border transition cursor-pointer ${
-                          activeTool === 'shape' && shapePreset === item.id
-                            ? 'bg-sky-600 text-white border-sky-600'
-                            : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
+                {/* HDMI / External Projector Clean Screen Controls */}
+                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCleanProjectorMode((v) => !v);
+                      showToast(
+                        !isCleanProjectorMode
+                          ? '📺 Καθαρή Οθόνη HDMI: Κρύφτηκαν οι πάνω μπάρες!'
+                          : '🛠️ Εμφανίστηκαν ξανά οι πάνω μπάρες!'
+                      );
+                    }}
+                    className={`px-2 py-1.5 rounded-xl text-[10px] font-bold border transition cursor-pointer ${
+                      isCleanProjectorMode
+                        ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                    }`}
+                    title="Κρύβει όλες τις πάνω μπάρες ώστε στο HDMI να φαίνεται μόνο η σελίδα και το απαλό γκρι φόντο"
+                  >
+                    📺 Καθαρή Οθόνη HDMI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openExternalProjectorWindow}
+                    className={`px-2 py-1.5 rounded-xl text-[10px] font-bold border transition cursor-pointer ${
+                      isExternalProjectorOpen
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                    }`}
+                    title="Ανοίγει 2ο καθαρό παράθυρο προβολέα (μόνο σελίδα & γκρι φόντο) για 2η οθόνη / Stage Manager"
+                  >
+                    🪟 2η Οθόνη Προβολέα
+                  </button>
                 </div>
               </div>
             )}

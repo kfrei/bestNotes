@@ -88,6 +88,7 @@ export interface StrokeObject {
   rotation?: number; // Rotation angle in radians for oriented selection bounding box
   zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
   switchClosed?: boolean; // For circuit switches ('switch'): true = closed (green ON), false = open (red OFF)
+  originalCircuitType?: 'bulb' | 'fan'; // Remembers if a converted 'resistor' originated from a 'bulb' or a 'fan'
 }
 
 export type TextFontStyle =
