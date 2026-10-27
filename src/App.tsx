@@ -11326,10 +11326,10 @@ export default function App() {
             }
           }
 
-          // 6D. Draw the 3 Independent Draggable Live Animated Graphs:
-          //     - x(t) [Red #ef4444] + Blue Dashed +A/-A lines synced with the spring's amplitude!
-          //     - υ(t) [Green #10b981]
-          //     - α(t) [Purple #8b5cf6]
+          // 6D. Draw the 3 Textbook Live Animated Diagrams directly on the grid paper:
+          //     - x - t [Red #ef4444] + Blue Dashed +A/-A lines aligned 1:1 with the spring's +A/-A lines!
+          //     - u - t [Green #16a34a] + Blue Dashed envelope lines
+          //     - a - t [Purple #9333ea] + Blue Dashed envelope lines
           const visibleGraphKeys = (['xt', 'vt', 'at'] as const).filter(
             (k) => activeSpringSim.graphs[k]?.visible
           );
@@ -11342,211 +11342,163 @@ export default function App() {
             closePt: { x: number; y: number; r: number };
           }[] = [];
 
-          let runningStackY = 0;
+          let runningPrevBotY = 0;
           for (let gIdx = 0; gIdx < visibleGraphKeys.length; gIdx++) {
             const gKey = visibleGraphKeys[gIdx];
             const gCfg = activeSpringSim.graphs[gKey];
-            const gW = gCfg.width || 292;
-            const gH =
-              gKey === 'xt'
-                ? Math.max(156, Math.min(256, A * 2 + 56))
-                : gCfg.height || 164;
+            const gW = gCfg.width || 368; // ~16 grid squares wide
 
+            const envHalfH =
+              gKey === 'xt'
+                ? A
+                : gKey === 'vt'
+                ? Math.max(
+                    44,
+                    Math.min(
+                      88,
+                      64 *
+                        Math.sqrt(
+                          activeSpringSim.stiffness /
+                            Math.max(0.25, activeSpringSim.mass)
+                        )
+                    )
+                  )
+                : Math.max(
+                    44,
+                    Math.min(
+                      88,
+                      64 *
+                        (activeSpringSim.stiffness /
+                          Math.max(0.25, activeSpringSim.mass))
+                    )
+                  );
+
+            const topPad = 28;
+            const botPad = 24;
+            const halfAxisH = envHalfH + topPad;
+            const gH = halfAxisH * 2;
+
+            // Default X: 2 grid squares (~46px) to the right of the blue square handles (□)
             const defaultX = Math.min(
-              w - gW - 14,
-              Math.max(20, eqMassCx + massW / 2 + 220)
+              w - gW - 12,
+              Math.max(20, eqMassCx + massW / 2 + 230)
             );
-            let defaultY: number;
+            let defaultMidY: number;
             if (gIdx === 0) {
-              // 1st checked diagram is always right next to the spring, centered on Θ.Ι. (eqMassCy)!
-              defaultY = Math.max(16, Math.min(h - gH - 16, eqMassCy - gH / 2));
-              runningStackY = defaultY + gH + 14;
+              // 1st checked diagram is ALWAYS directly to the right of the spring, with its t-axis on Θ.Ι. (eqMassCy)!
+              defaultMidY = eqMassCy;
+              runningPrevBotY = defaultMidY + envHalfH + botPad;
             } else {
-              defaultY = Math.min(h - gH - 14, runningStackY);
-              runningStackY = defaultY + gH + 14;
+              // 2nd and 3rd checked diagrams stack cleanly in a vertical column below the 1st diagram
+              const nextTopY = runningPrevBotY + 34;
+              defaultMidY = nextTopY + envHalfH + topPad;
+              runningPrevBotY = defaultMidY + envHalfH + botPad;
             }
 
+            const defaultY = defaultMidY - halfAxisH;
             const gx =
               gCfg.customMoved && gCfg.x !== undefined ? gCfg.x : defaultX;
             const gy =
               gCfg.customMoved && gCfg.y !== undefined ? gCfg.y : defaultY;
-            const axisLeftX = gx + 34;
-            const axisRightX = gx + gW - 18;
-            const axisMidY = gy + gH / 2 + 6;
-            const axisTopY = gy + 26;
-            const axisBotY = gy + gH - 12;
+
+            const axisLeftX = gx + 18;
+            const axisRightX = gx + gW - 14;
+            const axisMidY = gy + halfAxisH;
+            const axisTopY = axisMidY - envHalfH - topPad;
+            const axisBotY = axisMidY + envHalfH + botPad;
 
             const meta =
               gKey === 'xt'
                 ? {
-                    title: 'x(t) Θέση - Χρόνος',
                     yLabel: 'x',
                     curveColor: '#ef4444',
-                    envColor: '#2563eb',
-                    topLabel: '+A',
-                    botLabel: '-A',
-                    envHalfH: Math.min((axisBotY - axisTopY) * 0.44, A),
                   }
                 : gKey === 'vt'
                 ? {
-                    title: 'υ(t) Ταχύτητα - Χρόνος',
-                    yLabel: 'υ',
-                    curveColor: '#10b981',
-                    envColor: '#059669',
-                    topLabel: '+υ',
-                    botLabel: '-υ',
-                    envHalfH: Math.max(
-                      18,
-                      Math.min(
-                        (axisBotY - axisTopY) * 0.44,
-                        A *
-                          0.82 *
-                          Math.sqrt(
-                            activeSpringSim.stiffness /
-                              Math.max(0.2, activeSpringSim.mass)
-                          )
-                      )
-                    ),
+                    yLabel: 'u',
+                    curveColor: '#16a34a',
                   }
                 : {
-                    title: 'α(t) Επιτάχυνση - Χρόνος',
-                    yLabel: 'α',
-                    curveColor: '#8b5cf6',
-                    envColor: '#7c3aed',
-                    topLabel: '+α',
-                    botLabel: '-α',
-                    envHalfH: Math.max(
-                      18,
-                      Math.min(
-                        (axisBotY - axisTopY) * 0.44,
-                        A *
-                          0.82 *
-                          (activeSpringSim.stiffness /
-                            Math.max(0.2, activeSpringSim.mass))
-                      )
-                    ),
+                    yLabel: 'a',
+                    curveColor: '#9333ea',
                   };
 
+            const isDarkGrid = activePage.template === 'dark-grid';
+            const axisInk = isDarkGrid ? '#f8fafc' : '#0f172a';
+
             ctx.save();
-            // Card shadow & rounded background
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
-            ctx.shadowBlur = 10;
-            ctx.shadowOffsetY = 2;
-            ctx.fillStyle =
-              activePage.template === 'dark-grid'
-                ? 'rgba(15, 23, 42, 0.92)'
-                : 'rgba(255, 255, 255, 0.94)';
-            ctx.strokeStyle =
-              draggingSpringGraphRef.current?.graphKey === gKey
-                ? meta.curveColor
-                : '#cbd5e1';
-            ctx.lineWidth =
-              draggingSpringGraphRef.current?.graphKey === gKey ? 2.2 : 1.5;
-            ctx.beginPath();
-            ctx.roundRect(gx, gy, gW, gH, 12);
-            ctx.fill();
-            ctx.stroke();
-            ctx.shadowColor = 'transparent';
 
-            // Draggable Header Bar
-            ctx.fillStyle = '#f8fafc';
-            ctx.beginPath();
-            ctx.roundRect(gx + 2, gy + 2, gW - 4, 21, [10, 10, 0, 0]);
-            ctx.fill();
-            ctx.fillStyle = meta.curveColor;
-            ctx.font = 'bold 10.5px system-ui, -apple-system, sans-serif';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(`⠿ ${meta.title}`, gx + 10, gy + 12.5);
+            // Subtle dashed outline only while actively dragging this diagram
+            if (draggingSpringGraphRef.current?.graphKey === gKey) {
+              ctx.save();
+              ctx.strokeStyle = meta.curveColor;
+              ctx.lineWidth = 1.5;
+              ctx.setLineDash([5, 4]);
+              ctx.strokeRect(gx - 4, axisTopY - 8, gW + 8, axisBotY - axisTopY + 16);
+              ctx.restore();
+            }
 
-            // Close ('✕') button on top-right of card
-            const closeX = gx + gW - 13;
-            const closeY = gy + 12.5;
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('✕', closeX, closeY);
-
+            // Register hit box around the vertical axis & origin so user can drag any diagram without blocking pen writing on the grid
             graphBoxesHit.push({
               key: gKey,
               x: gx,
-              y: gy,
-              width: gW,
-              height: gH,
-              closePt: { x: closeX, y: closeY, r: 10 },
+              y: axisTopY - 6,
+              width: activeTool === 'lasso' ? gW : 54,
+              height: axisBotY - axisTopY + 12,
+              closePt: { x: -9999, y: -9999, r: -1 },
             });
 
-            // Axes (Vertical axis + Horizontal time axis t)
-            ctx.strokeStyle = '#1e293b';
-            ctx.fillStyle = '#1e293b';
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            // Vertical axis
-            ctx.moveTo(axisLeftX, axisBotY);
-            ctx.lineTo(axisLeftX, axisTopY);
-            // Horizontal t-axis
-            ctx.moveTo(axisLeftX - 4, axisMidY);
-            ctx.lineTo(axisRightX, axisMidY);
-            ctx.stroke();
-
-            // Arrowheads on axes
-            ctx.beginPath();
-            ctx.moveTo(axisLeftX, axisTopY - 2);
-            ctx.lineTo(axisLeftX - 3.8, axisTopY + 5);
-            ctx.lineTo(axisLeftX + 3.8, axisTopY + 5);
-            ctx.closePath();
-            ctx.moveTo(axisRightX + 2, axisMidY);
-            ctx.lineTo(axisRightX - 5, axisMidY - 3.8);
-            ctx.lineTo(axisRightX - 5, axisMidY + 3.8);
-            ctx.closePath();
-            ctx.fill();
-
-            // Axis Labels
-            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-            ctx.textAlign = 'right';
-            ctx.fillText(meta.yLabel, axisLeftX - 6, axisTopY + 4);
-            ctx.fillText('0', axisLeftX - 5, axisMidY + 1);
-            ctx.textAlign = 'left';
-            ctx.fillText('t', axisRightX - 4, axisMidY + 11);
-
-            // Upper & Lower Envelope Dashed Lines (+A/-A in Blue for x(t)!)
-            const yEnvTop = axisMidY - meta.envHalfH;
-            const yEnvBot = axisMidY + meta.envHalfH;
+            // 1. Upper & Lower Blue Dashed Envelope Lines (#2563eb) on all 3 diagrams (matching user's textbook screenshot)
+            const yEnvTop = axisMidY - envHalfH;
+            const yEnvBot = axisMidY + envHalfH;
             ctx.save();
-            ctx.strokeStyle = meta.envColor;
-            ctx.lineWidth = gKey === 'xt' ? 2.0 : 1.5;
-            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = '#2563eb';
+            ctx.lineWidth = 2.3;
+            ctx.lineCap = 'round';
+            ctx.setLineDash([7, 5]);
             ctx.beginPath();
             ctx.moveTo(axisLeftX, yEnvTop);
-            ctx.lineTo(axisRightX - 4, yEnvTop);
+            ctx.lineTo(axisRightX - 16, yEnvTop);
             ctx.moveTo(axisLeftX, yEnvBot);
-            ctx.lineTo(axisRightX - 4, yEnvBot);
+            ctx.lineTo(axisRightX - 16, yEnvBot);
             ctx.stroke();
             ctx.restore();
 
-            ctx.fillStyle = meta.envColor;
-            ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+            // 2. Vertical Axis (x, u, a) & Horizontal Time Axis (t) with open V-shaped arrowheads (^ and >)
+            ctx.save();
+            ctx.strokeStyle = axisInk;
+            ctx.fillStyle = axisInk;
+            ctx.lineWidth = 2.4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            // Vertical axis line
+            ctx.moveTo(axisLeftX, axisBotY);
+            ctx.lineTo(axisLeftX, axisTopY);
+            // Open '^' arrowhead at top of vertical axis
+            ctx.moveTo(axisLeftX - 5.5, axisTopY + 8);
+            ctx.lineTo(axisLeftX, axisTopY);
+            ctx.lineTo(axisLeftX + 5.5, axisTopY + 8);
+            // Horizontal t-axis line
+            ctx.moveTo(axisLeftX, axisMidY);
+            ctx.lineTo(axisRightX, axisMidY);
+            // Open '>' arrowhead at right of horizontal t-axis
+            ctx.moveTo(axisRightX - 8, axisMidY - 5.5);
+            ctx.lineTo(axisRightX, axisMidY);
+            ctx.lineTo(axisRightX - 8, axisMidY + 5.5);
+            ctx.stroke();
+
+            // Bold italic textbook axis labels: 'x', 'u', 'a' at top-left of vertical arrow, 't' above right arrow
+            ctx.font = 'italic bold 17px Georgia, "Times New Roman", serif';
             ctx.textAlign = 'right';
-            ctx.fillText(meta.topLabel, axisLeftX - 4, yEnvTop);
-            ctx.fillText(meta.botLabel, axisLeftX - 4, yEnvBot);
+            ctx.textBaseline = 'middle';
+            ctx.fillText(meta.yLabel, axisLeftX - 8, axisTopY + 6);
+            ctx.textAlign = 'center';
+            ctx.fillText('t', axisRightX - 2, axisMidY - 14);
+            ctx.restore();
 
-            // For x(t), also draw the interactive Blue Square Handles (□) on the right ends of its +A/-A blue dashed lines!
-            if (gKey === 'xt') {
-              const hs = 11;
-              for (const ey of [yEnvTop, yEnvBot]) {
-                const ehx = axisRightX - 4;
-                ctx.save();
-                ctx.fillStyle = 'rgba(59, 130, 246, 0.18)';
-                ctx.strokeStyle = '#2563eb';
-                ctx.lineWidth = 1.8;
-                ctx.fillRect(ehx - hs / 2, ey - hs / 2, hs, hs);
-                ctx.strokeRect(ehx - hs / 2, ey - hs / 2, hs, hs);
-                ctx.restore();
-              }
-            }
-
-            // Sine / Cosine Wave Curve (Red for x-t, Green for υ-t, Purple for α-t)
-            const waveSpanW = axisRightX - axisLeftX - 10;
+            // 3. Sine / Cosine Wave Curve (Red #ef4444 for x-t, Green #16a34a for u-t, Purple #9333ea for a-t)
+            const waveSpanW = axisRightX - axisLeftX - 20;
             const timeWindowSec = 4.6; // ~2 periods on the horizontal t-axis
             const evalWaveNorm = (theta: number): number => {
               if (gKey === 'xt') return Math.sin(theta);
@@ -11556,14 +11508,14 @@ export default function App() {
 
             ctx.save();
             ctx.strokeStyle = meta.curveColor;
-            ctx.lineWidth = 2.6;
+            ctx.lineWidth = 2.8;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
 
-            const numSamples = 140;
+            const numSamples = 150;
             if (!isSpringSimulating) {
-              // Static preview when paused so teacher can show phase relations
-              ctx.globalAlpha = 0.62;
+              // Static preview curve when paused so user can see phase & amplitude changes immediately
+              ctx.globalAlpha = 0.65;
               ctx.beginPath();
               for (let i = 0; i <= numSamples; i++) {
                 const u = i / numSamples;
@@ -11571,14 +11523,14 @@ export default function App() {
                 const theta = omega * tau + phi0;
                 const val = evalWaveNorm(theta);
                 const wx = axisLeftX + u * waveSpanW;
-                const wy = axisMidY - val * meta.envHalfH;
+                const wy = axisMidY - val * envHalfH;
                 if (i === 0) ctx.moveTo(wx, wy);
                 else ctx.lineTo(wx, wy);
               }
               ctx.stroke();
               ctx.globalAlpha = 1;
               const startVal = evalWaveNorm(phi0);
-              const startY = axisMidY - startVal * meta.envHalfH;
+              const startY = axisMidY - startVal * envHalfH;
               ctx.fillStyle = meta.curveColor;
               ctx.beginPath();
               ctx.arc(axisLeftX, startY, 4.5, 0, Math.PI * 2);
@@ -11603,7 +11555,7 @@ export default function App() {
                 const theta = omega * tau + phi0;
                 const val = evalWaveNorm(theta);
                 const wx = axisLeftX + frac * activeFraction * waveSpanW;
-                const wy = axisMidY - val * meta.envHalfH;
+                const wy = axisMidY - val * envHalfH;
                 if (i === 0) ctx.moveTo(wx, wy);
                 else ctx.lineTo(wx, wy);
                 if (i === activeSamples) {
