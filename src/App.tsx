@@ -15415,7 +15415,7 @@ export default function App() {
               });
             }
           } else {
-            // Auto-split any wire under a newly dropped/moved circuit component & snap/align terminals!
+            // Auto-split any wire under a newly dropped/moved circuit component & snap/align ONLY if circuit is complete!
             updateActivePage((page) => {
               const splitStrokes = splitWiresUnderCircuitComponent(page.strokes, selectedStrokeIds);
               const movedIsCircuitComp = page.strokes.some(
@@ -15427,11 +15427,14 @@ export default function App() {
                     s.shapeType === 'resistor' ||
                     s.shapeType === 'fan')
               );
+              if (!movedIsCircuitComp) {
+                return { ...page, strokes: splitStrokes };
+              }
+              const aligned = autoAlignAndConnectCircuit(splitStrokes);
+              const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
               return {
                 ...page,
-                strokes: movedIsCircuitComp
-                  ? autoAlignAndConnectCircuit(splitStrokes)
-                  : splitStrokes,
+                strokes: isComplete ? aligned : splitStrokes,
               };
             });
           }
@@ -15612,15 +15615,19 @@ export default function App() {
       lastCreatedShapeIdsRef.current = createdIds;
       updateActivePage((page) => {
         const combined = [...page.strokes, ...stencilStrokes];
-        const nextStrokes =
+        if (
           shapePreset === 'bulb' ||
           shapePreset === 'battery' ||
           shapePreset === 'voltage-source' ||
           shapePreset === 'switch' ||
           shapePreset === 'fan'
-            ? autoAlignAndConnectCircuit(splitWiresUnderCircuitComponent(combined, createdIds))
-            : combined;
-        return { ...page, strokes: nextStrokes };
+        ) {
+          const split = splitWiresUnderCircuitComponent(combined, createdIds);
+          const aligned = autoAlignAndConnectCircuit(split);
+          const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
+          return { ...page, strokes: isComplete ? aligned : split };
+        }
+        return { ...page, strokes: combined };
       });
       setSelectedStrokeIds(createdIds);
       setSelectedImageId(null);
@@ -15778,13 +15785,31 @@ export default function App() {
 
     updateActivePage((page) => {
       const combined = [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }];
-      const nextStrokes =
-        newStroke.shapeType === 'resistor'
-          ? autoAlignAndConnectCircuit(splitWiresUnderCircuitComponent(combined, [newStroke.id]))
-          : combined;
+      if (newStroke.shapeType === 'resistor') {
+        const split = splitWiresUnderCircuitComponent(combined, [newStroke.id]);
+        const aligned = autoAlignAndConnectCircuit(split);
+        const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
+        return { ...page, strokes: isComplete ? aligned : split };
+      }
+      // If the user just drew a wire on a page that has circuit components, check if the circuit is now a complete closed loop!
+      const hasCircuitSource = combined.some(
+        (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+      );
+      if (hasCircuitSource && (newStroke.shapeType === 'line' || !newStroke.isShape)) {
+        const wasClosedBefore = analyzeCircuitForSimulation(page.strokes, true).isCircuitClosed;
+        const aligned = autoAlignAndConnectCircuit(combined);
+        const isClosedNow = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
+        if (isClosedNow) {
+          if (!wasClosedBefore) {
+            // Circuit just became complete! Keep left switch open so user can start movement from the left switch
+            setSimCircuitSwitchClosed(false);
+          }
+          return { ...page, strokes: aligned };
+        }
+      }
       return {
         ...page,
-        strokes: nextStrokes,
+        strokes: combined,
       };
     });
 
@@ -20282,10 +20307,14 @@ export default function App() {
                     if (next && !isSimulating) {
                       setSimCircuitSwitchClosed(false);
                       setIsSimulating(true);
-                      updateActivePage((page) => ({
-                        ...page,
-                        strokes: autoAlignAndConnectCircuit(page.strokes),
-                      }));
+                      updateActivePage((page) => {
+                        const aligned = autoAlignAndConnectCircuit(page.strokes);
+                        const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
+                        return {
+                          ...page,
+                          strokes: isComplete ? aligned : page.strokes,
+                        };
+                      });
                     }
                     return next;
                   });
@@ -22981,10 +23010,14 @@ export default function App() {
                     if (!isSimulating) {
                       setSimCircuitSwitchClosed(false);
                       setIsSimulating(true);
-                      updateActivePage((page) => ({
-                        ...page,
-                        strokes: autoAlignAndConnectCircuit(page.strokes),
-                      }));
+                      updateActivePage((page) => {
+                        const aligned = autoAlignAndConnectCircuit(page.strokes);
+                        const isComplete = analyzeCircuitForSimulation(aligned, true).isCircuitClosed;
+                        return {
+                          ...page,
+                          strokes: isComplete ? aligned : page.strokes,
+                        };
+                      });
                     } else {
                       setIsSimulating(false);
                     }
@@ -23004,37 +23037,51 @@ export default function App() {
 
                 {/* Automatic Left-Wire Switch Toggle & Wire Alignment */}
                 <div className="grid grid-cols-1 gap-1.5">
-                  {isSimulating && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSimCircuitSwitchClosed((prev) => {
-                          const next = !prev;
-                          showToast(
-                            next
-                              ? '🟢 Διακόπτης ΚΛΕΙΣΤΟΣ — Το ρεύμα ρέει στο κύκλωμα!'
-                              : '🔴 Διακόπτης ΑΝΟΙΧΤΟΣ — Διακοπή ρεύματος!'
-                          );
-                          return next;
-                        });
-                      }}
-                      className={`w-full py-1.5 px-2.5 rounded-xl font-bold text-[11px] flex items-center justify-between border shadow-2xs transition cursor-pointer ${
-                        simCircuitSwitchClosed
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
-                          : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100'
-                      }`}
-                      title="Κάνε κλικ στον αυτόματο διακόπτη στον αριστερό αγωγό ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
-                    >
-                      <span>
-                        {simCircuitSwitchClosed
-                          ? '🟢 Διακόπτης: ΚΛΕΙΣΤΟΣ (ON)'
-                          : '🔴 Διακόπτης: ΑΝΟΙΧΤΟΣ (OFF)'}
-                      </span>
-                      <span className="text-[10px] underline font-extrabold">
-                        {simCircuitSwitchClosed ? 'Άνοιγμα' : 'Κλείσιμο'}
-                      </span>
-                    </button>
-                  )}
+                  {isSimulating &&
+                    (() => {
+                      const hasCompleteLoop = analyzeCircuitForSimulation(
+                        activePage.strokes,
+                        true
+                      ).isCircuitClosed;
+                      if (!hasCompleteLoop) {
+                        return (
+                          <div className="w-full py-1.5 px-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10.5px] leading-snug text-center">
+                            ⏳ Σχεδιάστε ολοκληρωμένο κλειστό κύκλωμα (Πηγή + Καταναλωτής + Κλειστοί αγωγοί) για να εμφανιστεί ο διακόπτης αριστερά.
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSimCircuitSwitchClosed((prev) => {
+                              const next = !prev;
+                              showToast(
+                                next
+                                  ? '🟢 Διακόπτης ΚΛΕΙΣΤΟΣ — Το ρεύμα ρέει στο κύκλωμα!'
+                                  : '🔴 Διακόπτης ΑΝΟΙΧΤΟΣ — Διακοπή ρεύματος!'
+                              );
+                              return next;
+                            });
+                          }}
+                          className={`w-full py-1.5 px-2.5 rounded-xl font-bold text-[11px] flex items-center justify-between border shadow-2xs transition cursor-pointer ${
+                            simCircuitSwitchClosed
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                              : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100'
+                          }`}
+                          title="Κάνε κλικ στον αυτόματο διακόπτη στον αριστερό αγωγό ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
+                        >
+                          <span>
+                            {simCircuitSwitchClosed
+                              ? '🟢 Διακόπτης Αριστερά: ΚΛΕΙΣΤΟΣ'
+                              : '🔴 Διακόπτης Αριστερά: ΑΝΟΙΧΤΟΣ'}
+                          </span>
+                          <span className="text-[10px] underline font-extrabold">
+                            {simCircuitSwitchClosed ? 'Άνοιγμα' : 'Εκκίνηση'}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   <button
                     type="button"
                     onClick={() => {

@@ -5486,6 +5486,93 @@ export interface CircuitSimulationData {
   autoSwitch: AutoVerticalSwitchInfo | null;
 }
 
+function pointToSegmentDist(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-6) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+function distanceToComponentSide(
+  pt: { x: number; y: number },
+  c: CircuitComponentInfo,
+  side: 'L' | 'R'
+): number {
+  if (c.kind === 'battery') {
+    if (side === 'L') {
+      return pointToSegmentDist(
+        pt.x,
+        pt.y,
+        c.minX - 6,
+        c.cy,
+        c.minX + c.w * 0.28,
+        c.cy
+      );
+    }
+    return pointToSegmentDist(
+      pt.x,
+      pt.y,
+      c.maxX - c.w * 0.22,
+      c.cy,
+      c.maxX + 6,
+      c.cy
+    );
+  }
+  if (c.kind === 'bulb') {
+    const yTop = c.minY + c.h * 0.58;
+    const yBot = c.maxY + 4;
+    if (side === 'L') {
+      return Math.min(
+        pointToSegmentDist(pt.x, pt.y, c.cx - c.w * 0.25, yTop, c.cx - c.w * 0.15, yBot),
+        Math.hypot(pt.x - c.leftTerm.x, pt.y - c.leftTerm.y)
+      );
+    }
+    return Math.min(
+      pointToSegmentDist(pt.x, pt.y, c.cx + c.w * 0.25, yTop, c.cx + c.w * 0.15, yBot),
+      Math.hypot(pt.x - c.rightTerm.x, pt.y - c.rightTerm.y)
+    );
+  }
+  if (c.kind === 'fan') {
+    const rOuter = Math.max(18, Math.min(c.w * 0.36, c.h * 0.45));
+    if (side === 'L') {
+      return pointToSegmentDist(pt.x, pt.y, c.minX, c.cy, c.cx - rOuter * 0.75, c.cy);
+    }
+    return pointToSegmentDist(pt.x, pt.y, c.cx + rOuter * 0.75, c.cy, c.maxX, c.cy);
+  }
+  if (c.kind === 'voltage-source') {
+    const plateGap = Math.max(10, Math.min(26, c.w * 0.11));
+    if (side === 'L') {
+      return pointToSegmentDist(pt.x, pt.y, c.minX, c.cy, c.cx - plateGap / 2, c.cy);
+    }
+    return pointToSegmentDist(pt.x, pt.y, c.cx + plateGap / 2, c.cy, c.maxX, c.cy);
+  }
+  if (c.kind === 'switch') {
+    const wireY = c.minY + c.h * 0.68;
+    if (side === 'L') {
+      return pointToSegmentDist(pt.x, pt.y, c.minX, wireY, c.minX + c.w * 0.28, wireY);
+    }
+    return pointToSegmentDist(pt.x, pt.y, c.minX + c.w * 0.72, wireY, c.maxX, wireY);
+  }
+  if (c.kind === 'resistor') {
+    if (side === 'L') {
+      return pointToSegmentDist(pt.x, pt.y, c.minX, c.minY + c.h * 0.15, c.minX, c.maxY - c.h * 0.15);
+    }
+    return pointToSegmentDist(pt.x, pt.y, c.maxX, c.minY + c.h * 0.15, c.maxX, c.maxY - c.h * 0.15);
+  }
+  return side === 'L'
+    ? Math.hypot(pt.x - c.leftTerm.x, pt.y - c.leftTerm.y)
+    : Math.hypot(pt.x - c.rightTerm.x, pt.y - c.rightTerm.y);
+}
+
 export function analyzeCircuitForSimulation(
   strokes: StrokeObject[],
   circuitSwitchClosed = true
@@ -5539,10 +5626,16 @@ export function analyzeCircuitForSimulation(
     allInterestPts.push({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
   }
   for (const c of comps) {
-    allInterestPts.push(c.leftTerm, c.rightTerm);
+    allInterestPts.push(
+      c.leftTerm,
+      c.rightTerm,
+      { x: c.minX, y: c.leftTerm.y },
+      { x: c.maxX, y: c.rightTerm.y }
+    );
   }
 
-  const TJUNCTION_TOL = 38;
+  // 1a. Split wires where another wire's endpoint or component terminal touches the wire's interior (T-junction)
+  const TJUNCTION_TOL = 40;
   for (let i = 0; i < rawWires.length; i++) {
     const w = rawWires[i];
     const dx = w.x2 - w.x1;
@@ -5551,11 +5644,39 @@ export function analyzeCircuitForSimulation(
     if (lenSq < 100) continue;
     for (const pt of allInterestPts) {
       const t = ((pt.x - w.x1) * dx + (pt.y - w.y1) * dy) / lenSq;
-      if (t > 0.06 && t < 0.94) {
+      if (t > 0.04 && t < 0.96) {
         const projX = w.x1 + t * dx;
         const projY = w.y1 + t * dy;
         if (Math.hypot(pt.x - projX, pt.y - projY) <= TJUNCTION_TOL) {
           splitPointsForWire[i].push({ x: projX, y: projY });
+        }
+      }
+    }
+  }
+
+  // 1b. Also split wires at wire-wire crossings (e.g. L-corners where both wires slightly overhang past the corner)
+  for (let i = 0; i < rawWires.length; i++) {
+    const a = rawWires[i];
+    const dax = a.x2 - a.x1;
+    const day = a.y2 - a.y1;
+    for (let j = i + 1; j < rawWires.length; j++) {
+      const b = rawWires[j];
+      const dbx = b.x2 - b.x1;
+      const dby = b.y2 - b.y1;
+      const denom = dax * dby - day * dbx;
+      if (Math.abs(denom) < 1e-4) continue;
+      const t = ((b.x1 - a.x1) * dby - (b.y1 - a.y1) * dbx) / denom;
+      const u = ((b.x1 - a.x1) * day - (b.y1 - a.y1) * dax) / denom;
+      if (t >= -0.05 && t <= 1.05 && u >= -0.05 && u <= 1.05) {
+        const tc = Math.max(0, Math.min(1, t));
+        const uc = Math.max(0, Math.min(1, u));
+        const ix = a.x1 + tc * dax;
+        const iy = a.y1 + tc * day;
+        if (tc > 0.04 && tc < 0.96) {
+          splitPointsForWire[i].push({ x: ix, y: iy });
+        }
+        if (uc > 0.04 && uc < 0.96) {
+          splitPointsForWire[j].push({ x: ix, y: iy });
         }
       }
     }
@@ -5602,26 +5723,31 @@ export function analyzeCircuitForSimulation(
     return { comp: c, u, v };
   });
 
-  // Strict proximity tolerances so ONLY visibly close lines (<= 40px) form a closed circuit!
-  const TERM_SNAP_TOL = 40;
-  const WIRE_JOIN_TOL = 38;
+  // Strict proximity tolerances so ONLY visibly close lines (<= 42px) form a closed circuit!
+  const TERM_SNAP_TOL = 42;
+  const WIRE_JOIN_TOL = 40;
 
   const resolveWireEndpointNode = (
     pt: { x: number; y: number },
     otherEnd: { x: number; y: number }
   ): number => {
-    // 1. Check if wire endpoint is connecting to a component terminal (prefer leftTerm if wire comes from left, rightTerm if wire comes from right)
+    // 1. Check if wire endpoint is connecting to a component terminal zone
     let bestTermNode = -1;
     let bestTermDist = TERM_SNAP_TOL;
     for (const cn of compNodes) {
       const c = cn.comp;
-      const dL = Math.hypot(pt.x - c.leftTerm.x, pt.y - c.leftTerm.y);
-      const dR = Math.hypot(pt.x - c.rightTerm.x, pt.y - c.rightTerm.y);
-      if (dL <= bestTermDist && (otherEnd.x <= c.cx + 15 || dL < dR)) {
+      const dL = distanceToComponentSide(pt, c, 'L');
+      const dR = distanceToComponentSide(pt, c, 'R');
+      if (dL <= dR && dL <= bestTermDist && otherEnd.x <= c.cx + c.w * 0.25) {
         bestTermDist = dL;
         bestTermNode = cn.u;
-      }
-      if (dR <= bestTermDist && (otherEnd.x >= c.cx - 15 || dR < dL)) {
+      } else if (dR < dL && dR <= bestTermDist && otherEnd.x >= c.cx - c.w * 0.25) {
+        bestTermDist = dR;
+        bestTermNode = cn.v;
+      } else if (dL <= bestTermDist && dL <= dR) {
+        bestTermDist = dL;
+        bestTermNode = cn.u;
+      } else if (dR <= bestTermDist && dR < dL) {
         bestTermDist = dR;
         bestTermNode = cn.v;
       }
@@ -5646,6 +5772,9 @@ export function analyzeCircuitForSimulation(
   };
 
   const sources = comps.filter((c) => c.kind === 'battery' || c.kind === 'voltage-source');
+  const loadCompsList = comps.filter(
+    (c) => c.kind === 'bulb' || c.kind === 'resistor' || c.kind === 'fan'
+  );
   const hasSource = sources.length > 0;
   const openSwitches = comps.filter((c) => c.kind === 'switch' && c.switchClosed === false);
 
@@ -5655,52 +5784,6 @@ export function analyzeCircuitForSimulation(
     u: resolveWireEndpointNode({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }),
     v: resolveWireEndpointNode({ x: w.x2, y: w.y2 }, { x: w.x1, y: w.y1 }),
   }));
-
-  // Detect the Left Vertical Conductor for the automatic interactive switch!
-  let autoSwitch: AutoVerticalSwitchInfo | null = null;
-  if (wires.length > 0) {
-    let minCircuitX = Infinity;
-    let maxCircuitX = -Infinity;
-    for (const w of wires) {
-      minCircuitX = Math.min(minCircuitX, w.x1, w.x2);
-      maxCircuitX = Math.max(maxCircuitX, w.x1, w.x2);
-    }
-    const circuitSpanW = Math.max(100, maxCircuitX - minCircuitX);
-    const sourceY = sources.length > 0 ? sources[0].cy : Infinity;
-
-    let bestLeftVertIdx = -1;
-    let bestScore = Infinity;
-    for (let i = 0; i < wires.length; i++) {
-      const w = wires[i];
-      const dx = Math.abs(w.x2 - w.x1);
-      const dy = Math.abs(w.y2 - w.y1);
-      if (dy < 46 || dx > dy * 0.35) continue;
-      const midX = (w.x1 + w.x2) / 2;
-      const midY = (w.y1 + w.y2) / 2;
-      if (midX > minCircuitX + circuitSpanW * 0.38) continue;
-      // Prefer leftmost vertical wire segment closest to the source row (main left branch)
-      const score = (midX - minCircuitX) * 3 + Math.abs(midY - sourceY) * 0.5;
-      if (score < bestScore) {
-        bestScore = score;
-        bestLeftVertIdx = i;
-      }
-    }
-
-    if (bestLeftVertIdx >= 0) {
-      const swWire = wires[bestLeftVertIdx];
-      const x = (swWire.x1 + swWire.x2) / 2;
-      const yCenter = (swWire.y1 + swWire.y2) / 2;
-      const halfGap = Math.min(21, Math.max(14, swWire.length * 0.22));
-      autoSwitch = {
-        x,
-        yCenter,
-        yTop: yCenter - halfGap,
-        yBottom: yCenter + halfGap,
-        wireIdx: bestLeftVertIdx,
-        closed: circuitSwitchClosed,
-      };
-    }
-  }
 
   interface GraphEdge {
     to: number;
@@ -5718,14 +5801,14 @@ export function analyzeCircuitForSimulation(
       to: wn.v,
       type: 'wire',
       wireIdx: wn.idx,
-      resistance: 0.02,
+      resistance: 0.04,
       forwardFromU: true,
     });
     adj[wn.v].push({
       to: wn.u,
       type: 'wire',
       wireIdx: wn.idx,
-      resistance: 0.02,
+      resistance: 0.04,
       forwardFromU: false,
     });
   }
@@ -5740,14 +5823,14 @@ export function analyzeCircuitForSimulation(
         to: cn.v,
         type: 'closed-switch',
         compKey: cn.comp.key,
-        resistance: 0.01,
+        resistance: 0.02,
         forwardFromU: true,
       });
       adj[cn.v].push({
         to: cn.u,
         type: 'closed-switch',
         compKey: cn.comp.key,
-        resistance: 0.01,
+        resistance: 0.02,
         forwardFromU: false,
       });
     } else {
@@ -5776,28 +5859,28 @@ export function analyzeCircuitForSimulation(
           to: cn.v,
           type: 'closed-switch',
           compKey: cn.comp.key,
-          resistance: 0.01,
+          resistance: 0.02,
           forwardFromU: true,
         });
         adj[cn.v].push({
           to: cn.u,
           type: 'closed-switch',
           compKey: cn.comp.key,
-          resistance: 0.01,
+          resistance: 0.02,
           forwardFromU: false,
         });
       }
     }
   }
 
-  const wireFlowSum = new Float64Array(wires.length);
-  const wireHighEnergy = new Array<boolean>(wires.length).fill(false);
-  const compPowerMap = new Map<string, number>();
+  // Step 1: Identify all edges and nodes that belong to a genuine complete closed loop
+  // starting at Source (+), passing through AT LEAST ONE load (bulb/fan/resistor), and returning to Source (-)!
+  const wireInLoop = new Uint8Array(wires.length);
+  const compInLoop = new Set<string>();
+  const nodeInLoop = new Uint8Array(nodeCenters.length);
   let anyClosedLoop = false;
 
-  // Solve topological paths from Source (+) to Source (-) to check if the drawn wires
-  // actually form at least one physically closed loop (with close/connected lines <= 40px).
-  if (hasSource && openSwitches.length === 0) {
+  if (hasSource && loadCompsList.length > 0 && openSwitches.length === 0) {
     const primarySourceNode = compNodes.find(
       (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
     )!;
@@ -5810,29 +5893,19 @@ export function analyzeCircuitForSimulation(
     }
 
     const visited = new Uint8Array(nodeCenters.length);
+    const pathNodes: number[] = [startNode];
     const pathEdges: GraphEdge[] = [];
-    const voltageBoost = Math.min(2.2, 1 + (sources.length - 1) * 0.45);
 
     const dfs = (curr: number, depth: number) => {
       if (depth > 32) return;
       if (targetNodes.has(curr) && pathEdges.length >= 2) {
-        anyClosedLoop = true;
         const loadCount = pathEdges.filter((e) => e.type === 'load').length;
-        const branchCurrent = (voltageBoost / Math.max(1, loadCount)) * 1.0;
-
-        let seenLoadYet = false;
+        if (loadCount < 1) return; // Require at least 1 load in the closed loop!
+        anyClosedLoop = true;
+        for (const nIdx of pathNodes) nodeInLoop[nIdx] = 1;
         for (const edge of pathEdges) {
-          if (edge.type === 'load' && edge.compKey) {
-            seenLoadYet = true;
-            const prevP = compPowerMap.get(edge.compKey) || 0;
-            compPowerMap.set(edge.compKey, Math.max(prevP, branchCurrent));
-          } else if (edge.type === 'wire' && edge.wireIdx !== undefined) {
-            const signedI = edge.forwardFromU ? branchCurrent : -branchCurrent;
-            wireFlowSum[edge.wireIdx] += signedI;
-            if (!seenLoadYet) {
-              wireHighEnergy[edge.wireIdx] = true;
-            }
-          }
+          if (edge.wireIdx !== undefined) wireInLoop[edge.wireIdx] = 1;
+          if (edge.compKey) compInLoop.add(edge.compKey);
         }
         return;
       }
@@ -5840,9 +5913,11 @@ export function analyzeCircuitForSimulation(
       visited[curr] = 1;
       for (const edge of adj[curr]) {
         if (!visited[edge.to]) {
+          pathNodes.push(edge.to);
           pathEdges.push(edge);
           dfs(edge.to, depth + 1);
           pathEdges.pop();
+          pathNodes.pop();
         }
       }
       visited[curr] = 0;
@@ -5851,23 +5926,154 @@ export function analyzeCircuitForSimulation(
     dfs(startNode, 0);
   }
 
-  // Only show the interactive wire switch if the drawn wires actually form a closed loop!
-  if (!anyClosedLoop) {
-    autoSwitch = null;
+  // Step 2: Solve exact physical Kirchhoff Nodal Potentials (V_i in [0, 1]) on the closed-loop subgraph!
+  // Source (+) is fixed at V = 1.0, Source (-) is fixed at V = 0.0.
+  // Because current I = g * (V_u - V_v) is derived from a single-valued node potential V,
+  // current is 100% guaranteed to flow in ONE consistent direction around every branch & corner!
+  const wireFlowSum = new Float64Array(wires.length);
+  const wireHighEnergy = new Array<boolean>(wires.length).fill(false);
+  const compPowerMap = new Map<string, number>();
+  const compSignedFlowMap = new Map<string, number>();
+
+  if (anyClosedLoop) {
+    const primarySourceNode = compNodes.find(
+      (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
+    )!;
+    const V = new Float64Array(nodeCenters.length).fill(0.5);
+    const isFixed = new Uint8Array(nodeCenters.length);
+    V[primarySourceNode.u] = 1.0;
+    isFixed[primarySourceNode.u] = 1;
+    V[primarySourceNode.v] = 0.0;
+    isFixed[primarySourceNode.v] = 1;
+
+    for (let iter = 0; iter < 120; iter++) {
+      for (let u = 0; u < nodeCenters.length; u++) {
+        if (isFixed[u] || !nodeInLoop[u]) continue;
+        let sumGV = 0;
+        let sumG = 0;
+        for (const edge of adj[u]) {
+          if (!nodeInLoop[edge.to]) continue;
+          if (edge.wireIdx !== undefined && !wireInLoop[edge.wireIdx]) continue;
+          if (edge.compKey && !compInLoop.has(edge.compKey)) continue;
+          const g = 1.0 / Math.max(0.01, edge.resistance);
+          sumGV += g * V[edge.to];
+          sumG += g;
+        }
+        if (sumG > 0) {
+          V[u] = sumGV / sumG;
+        }
+      }
+    }
+
+    const voltageBoost = Math.min(2.2, 1 + (sources.length - 1) * 0.45);
+
+    for (const wn of wireNodes) {
+      if (!wireInLoop[wn.idx] || wn.u === wn.v) continue;
+      const dV = V[wn.u] - V[wn.v];
+      // Normalize wire speed smoothly while preserving exact sign of (V[u] - V[v])
+      const sign = dV >= 0 ? 1 : -1;
+      const mag = Math.abs(dV) > 1e-5 ? Math.max(0.75, Math.min(1.6, Math.abs(dV) * 18 * voltageBoost)) : 0.75;
+      wireFlowSum[wn.idx] = sign * mag;
+      wireHighEnergy[wn.idx] = (V[wn.u] + V[wn.v]) / 2 >= 0.5;
+    }
+
+    for (const cn of compNodes) {
+      if (!compInLoop.has(cn.comp.key)) continue;
+      const dV = V[cn.u] - V[cn.v];
+      const pwr = Math.max(0.5, Math.min(1.8, Math.abs(dV) * 1.15 * voltageBoost));
+      compPowerMap.set(cn.comp.key, pwr);
+      compSignedFlowMap.set(cn.comp.key, (dV >= 0 ? 1 : -1) * Math.max(0.75, pwr));
+    }
+  }
+
+  // Detect the Left Vertical Conductor (among active closed-loop wires!) for the automatic interactive switch!
+  let autoSwitch: AutoVerticalSwitchInfo | null = null;
+  if (anyClosedLoop && wires.length > 0) {
+    let minCircuitX = Infinity;
+    let maxCircuitX = -Infinity;
+    for (let i = 0; i < wires.length; i++) {
+      if (!wireInLoop[i]) continue;
+      const w = wires[i];
+      minCircuitX = Math.min(minCircuitX, w.x1, w.x2);
+      maxCircuitX = Math.max(maxCircuitX, w.x1, w.x2);
+    }
+    const circuitSpanW = Math.max(100, maxCircuitX - minCircuitX);
+    const sourceY = sources.length > 0 ? sources[0].cy : Infinity;
+
+    let bestLeftVertIdx = -1;
+    let bestScore = Infinity;
+    for (let i = 0; i < wires.length; i++) {
+      if (!wireInLoop[i]) continue;
+      const w = wires[i];
+      const dx = Math.abs(w.x2 - w.x1);
+      const dy = Math.abs(w.y2 - w.y1);
+      if (dy < 42 || dx > dy * 0.4) continue;
+      const midX = (w.x1 + w.x2) / 2;
+      const midY = (w.y1 + w.y2) / 2;
+      if (midX > minCircuitX + circuitSpanW * 0.42) continue;
+      const score = (midX - minCircuitX) * 3 + Math.abs(midY - sourceY) * 0.5;
+      if (score < bestScore) {
+        bestScore = score;
+        bestLeftVertIdx = i;
+      }
+    }
+
+    if (bestLeftVertIdx >= 0) {
+      const swWire = wires[bestLeftVertIdx];
+      const x = (swWire.x1 + swWire.x2) / 2;
+      const yCenter = (swWire.y1 + swWire.y2) / 2;
+      const halfGap = Math.min(21, Math.max(14, swWire.length * 0.22));
+      autoSwitch = {
+        x,
+        yCenter,
+        yTop: yCenter - halfGap,
+        yBottom: yCenter + halfGap,
+        wireIdx: bestLeftVertIdx,
+        closed: circuitSwitchClosed,
+      };
+    }
   }
 
   const simulatedWires: SimulatedWireSegment[] = wires.map((w, idx) => {
     const flow = wireFlowSum[idx];
-    const inClosedLoop = Math.abs(flow) > 0.01;
+    const inClosedLoop = Boolean(wireInLoop[idx]) && Math.abs(flow) > 0.01;
     const active = circuitSwitchClosed && inClosedLoop;
     const speed = Math.min(2.2, Math.max(0.4, Math.abs(flow)));
+
+    // Extend wire endpoints that connect to a Battery's (+) or (-) zone right up to the battery cap/wall
+    // so electrons never stop in mid-air outside the '+' or '-' symbol!
+    let wx1 = w.x1;
+    let wy1 = w.y1;
+    let wx2 = w.x2;
+    let wy2 = w.y2;
+    const wn = wireNodes[idx];
+    if (inClosedLoop && Math.abs(w.y2 - w.y1) <= Math.abs(w.x2 - w.x1) * 0.35) {
+      for (const cn of compNodes) {
+        if (cn.comp.kind === 'battery') {
+          const batCapLeftX = cn.comp.minX + cn.comp.w * 0.16;
+          const batBodyRightX = cn.comp.maxX - cn.comp.w * 0.16;
+          if (wn.u === cn.u && wx1 < batCapLeftX && wx2 < wx1) {
+            wx1 = batCapLeftX;
+          } else if (wn.v === cn.u && wx2 < batCapLeftX && wx1 < wx2) {
+            wx2 = batCapLeftX;
+          }
+          if (wn.u === cn.v && wx1 > batBodyRightX && wx2 > wx1) {
+            wx1 = batBodyRightX;
+          } else if (wn.v === cn.v && wx2 > batBodyRightX && wx1 > wx2) {
+            wx2 = batBodyRightX;
+          }
+        }
+      }
+    }
+    const adjLen = Math.hypot(wx2 - wx1, wy2 - wy1);
+
     if (flow >= 0) {
       return {
-        x1: w.x1,
-        y1: w.y1,
-        x2: w.x2,
-        y2: w.y2,
-        length: w.length,
+        x1: wx1,
+        y1: wy1,
+        x2: wx2,
+        y2: wy2,
+        length: adjLen,
         inClosedLoop,
         active,
         currentSpeed: active ? speed : 0,
@@ -5875,11 +6081,11 @@ export function analyzeCircuitForSimulation(
       };
     } else {
       return {
-        x1: w.x2,
-        y1: w.y2,
-        x2: w.x1,
-        y2: w.y1,
-        length: w.length,
+        x1: wx2,
+        y1: wy2,
+        x2: wx1,
+        y2: wy1,
+        length: adjLen,
         inClosedLoop,
         active,
         currentSpeed: active ? speed : 0,
@@ -5887,6 +6093,77 @@ export function analyzeCircuitForSimulation(
       };
     }
   });
+
+  // Also add the built-in horizontal lead wires of active Fan, Voltage-Source, and Switch components
+  // so electrons flow all the way up to the Fan circle / Source plates / Switch pivots with zero gaps!
+  if (anyClosedLoop) {
+    const addComponentLeadSegment = (
+      lx1: number,
+      ly1: number,
+      lx2: number,
+      ly2: number,
+      signedFlow: number
+    ) => {
+      const len = Math.hypot(lx2 - lx1, ly2 - ly1);
+      if (len < 8) return;
+      const midX = (lx1 + lx2) / 2;
+      const midY = (ly1 + ly2) / 2;
+      // Avoid duplicating if a user-drawn wire already covers this lead segment
+      const alreadyCovered = simulatedWires.some(
+        (sw) =>
+          sw.inClosedLoop &&
+          pointToSegmentDist(midX, midY, sw.x1, sw.y1, sw.x2, sw.y2) <= 10
+      );
+      if (alreadyCovered) return;
+      const active = circuitSwitchClosed;
+      const speed = Math.min(2.2, Math.max(0.4, Math.abs(signedFlow)));
+      if (signedFlow >= 0) {
+        simulatedWires.push({
+          x1: lx1,
+          y1: ly1,
+          x2: lx2,
+          y2: ly2,
+          length: len,
+          inClosedLoop: true,
+          active,
+          currentSpeed: active ? speed : 0,
+          highEnergy: true,
+        });
+      } else {
+        simulatedWires.push({
+          x1: lx2,
+          y1: ly2,
+          x2: lx1,
+          y2: ly1,
+          length: len,
+          inClosedLoop: true,
+          active,
+          currentSpeed: active ? speed : 0,
+          highEnergy: true,
+        });
+      }
+    };
+
+    for (const cn of compNodes) {
+      const c = cn.comp;
+      if (c.kind === 'fan' && compInLoop.has(c.key)) {
+        const rOuter = Math.max(20, Math.min(c.w * 0.36, c.h * 0.45));
+        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
+        addComponentLeadSegment(c.minX, c.cy, c.cx - rOuter, c.cy, flow);
+        addComponentLeadSegment(c.cx + rOuter, c.cy, c.maxX, c.cy, flow);
+      } else if (c.kind === 'voltage-source') {
+        const plateGap = Math.max(10, Math.min(26, c.w * 0.11));
+        // Conventional current leaves (+) on the left (cx - plateGap/2 -> minX) and enters (-) on the right (maxX -> cx + plateGap/2)
+        addComponentLeadSegment(c.cx - plateGap / 2, c.cy, c.minX, c.cy, 0.85);
+        addComponentLeadSegment(c.maxX, c.cy, c.cx + plateGap / 2, c.cy, 0.85);
+      } else if (c.kind === 'switch' && compInLoop.has(c.key)) {
+        const wireY = c.minY + c.h * 0.68;
+        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
+        addComponentLeadSegment(c.minX, wireY, c.minX + c.w * 0.26, wireY, flow);
+        addComponentLeadSegment(c.minX + c.w * 0.74, wireY, c.maxX, wireY, flow);
+      }
+    }
+  }
 
   const simulatedComps: SimulatedComponentState[] = comps.map((c) => {
     if (c.kind === 'battery' || c.kind === 'voltage-source') {
