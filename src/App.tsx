@@ -8807,6 +8807,9 @@ export default function App() {
     return true;
   };
 
+  const [editingSimId, setEditingSimId] = useState<string | null>(null);
+  const [editingSimName, setEditingSimName] = useState<string>('');
+
   const evalCircuitProposalSpan = (
     prop: NonNullable<typeof circuitProposal>,
     span: NonNullable<typeof circuitProposal>['spans'][number]
@@ -24926,32 +24929,80 @@ export default function App() {
                           <div className="flex flex-wrap gap-1">
                             {validSims.map((sim) => {
                               const isCurrent = activeSim?.id === sim.id;
+                              const isEditingThis = editingSimId === sim.id;
+                              const commitSimName = () => {
+                                const trimmed = editingSimName.trim() || sim.name;
+                                updateActivePage((page) => ({
+                                  ...page,
+                                  circuitSims: (page.circuitSims || []).map((s) =>
+                                    s.id === sim.id ? { ...s, name: trimmed } : s
+                                  ),
+                                }));
+                                setEditingSimId(null);
+                              };
                               return (
                                 <div
                                   key={sim.id}
                                   className={`inline-flex items-center rounded-lg border text-[11px] font-extrabold transition ${
                                     isCurrent
-                                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
-                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                      ? 'bg-slate-200 text-slate-800 border-slate-400 shadow-2xs'
+                                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
                                   }`}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      updateActivePage((page) => ({
-                                        ...page,
-                                        activeCircuitSimId: sim.id,
-                                      }));
-                                      setSelectedStrokeIds([]);
-                                      setSimCircuitSwitchClosed(false);
-                                      setIsSimulating(true);
-                                    }}
-                                    className="px-2 py-1 cursor-pointer flex items-center gap-1"
-                                    title={`Ενεργοποίηση μόνο του κυκλώματος "${sim.name}"`}
-                                  >
-                                    <span>{isCurrent ? '🟢' : '⚪'}</span>
-                                    <span>{sim.name}</span>
-                                  </button>
+                                  {isEditingThis ? (
+                                    <input
+                                      type="text"
+                                      value={editingSimName}
+                                      autoFocus
+                                      onChange={(e) => setEditingSimName(e.target.value)}
+                                      onBlur={commitSimName}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          commitSimName();
+                                        } else if (e.key === 'Escape') {
+                                          e.preventDefault();
+                                          setEditingSimId(null);
+                                        }
+                                      }}
+                                      className="w-16 px-1.5 py-0.5 m-0.5 rounded bg-white border border-slate-400 text-[11px] font-extrabold text-slate-800 focus:outline-none"
+                                    />
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          activeCircuitSimId: sim.id,
+                                        }));
+                                        setSelectedStrokeIds([]);
+                                        setSimCircuitSwitchClosed(false);
+                                        setIsSimulating(true);
+                                      }}
+                                      className="pl-2 pr-1 py-1 cursor-pointer flex items-center gap-1"
+                                      title={`Ενεργοποίηση μόνο του κυκλώματος "${sim.name}"`}
+                                    >
+                                      <span>{sim.name}</span>
+                                    </button>
+                                  )}
+                                  {!isEditingThis && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingSimId(sim.id);
+                                        setEditingSimName(sim.name);
+                                      }}
+                                      className={`px-1 py-1 text-[10px] cursor-pointer transition ${
+                                        isCurrent
+                                          ? 'text-slate-600 hover:text-slate-950'
+                                          : 'text-slate-400 hover:text-slate-700'
+                                      }`}
+                                      title={`Μετονομασία "${sim.name}"`}
+                                    >
+                                      ✎
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -24973,9 +25024,9 @@ export default function App() {
                                         };
                                       });
                                     }}
-                                    className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer ${
+                                    className={`pr-1.5 pl-0.5 py-1 text-[10px] cursor-pointer transition ${
                                       isCurrent
-                                        ? 'text-emerald-100 hover:text-white'
+                                        ? 'text-slate-600 hover:text-rose-600'
                                         : 'text-slate-400 hover:text-rose-600'
                                     }`}
                                     title={`Αφαίρεση "${sim.name}" από τη λίστα προσομοιώσεων`}
@@ -24986,28 +25037,6 @@ export default function App() {
                               );
                             })}
                           </div>
-                          {activeSim && (
-                            <div className="flex items-center gap-1.5 pt-0.5">
-                              <span className="text-[10.5px] font-bold text-slate-600 shrink-0">
-                                Όνομα:
-                              </span>
-                              <input
-                                type="text"
-                                value={activeSim.name}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  updateActivePage((page) => ({
-                                    ...page,
-                                    circuitSims: (page.circuitSims || []).map((s) =>
-                                      s.id === activeSim.id ? { ...s, name: val } : s
-                                    ),
-                                  }));
-                                }}
-                                placeholder="π.χ. sim01"
-                                className="w-full px-2 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                              />
-                            </div>
-                          )}
                         </>
                       ) : (
                         <div className="text-[10.5px] font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-snug text-center">
