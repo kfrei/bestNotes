@@ -27110,7 +27110,7 @@ export default function App() {
                         <>
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                              Ενεργό Κύκλωμα (1 κάθε φορά):
+                              Ενεργό Κύκλωμα:
                             </span>
                           </div>
                           <div className="flex flex-wrap gap-1">
@@ -27637,7 +27637,7 @@ export default function App() {
                             <>
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                                  Ενεργό Ελατήριο (1 κάθε φορά):
+                                  Ενεργό Ελατήριο:
                                 </span>
                               </div>
                               <div className="flex flex-wrap gap-1">
