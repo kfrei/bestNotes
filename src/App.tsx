@@ -1391,7 +1391,19 @@ export default function App() {
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
+  const [selectedLassoTextIds, setSelectedLassoTextIds] = useState<string[]>([]);
   const [showAlignSubBar, setShowAlignSubBar] = useState<boolean>(false);
+  const isMoveOnlyLassoSelection =
+    selectedLassoTextIds.length > 0 &&
+    (selectedStrokeIds.length > 0 ||
+      selectedImageIds.length > 0 ||
+      Boolean(selectedImageId) ||
+      selectedLassoTextIds.length >= 2);
+  useEffect(() => {
+    if (activeTool !== 'lasso') {
+      setSelectedLassoTextIds((prev) => (prev.length > 0 ? [] : prev));
+    }
+  }, [activeTool]);
   useEffect(() => {
     if (selectedImageId === null) {
       setSelectedImageIds((prev) => (prev.length > 0 ? [] : prev));
@@ -4106,6 +4118,65 @@ export default function App() {
     const effectiveImgIds =
       selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
 
+    // 0. Unified Move-Only Selection containing standalone Text/Math boxes + Strokes/Diagrams/Images (or multiple Text/Math boxes)
+    if (selectedLassoTextIds.length > 0) {
+      const selImgs = (activePage.images || []).filter((i) => effectiveImgIds.includes(i.id));
+      const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+      const selMathGrpIds = new Set(
+        selStrokes
+          .filter((s) => s.groupId?.startsWith('math-graph-grp-'))
+          .map((s) => s.groupId as string)
+      );
+      const selTexts = (activePage.texts || []).filter(
+        (t) => selectedLassoTextIds.includes(t.id) || (t.groupId && selMathGrpIds.has(t.groupId))
+      );
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const im of selImgs) {
+        if (im.x < minX) minX = im.x;
+        if (im.y < minY) minY = im.y;
+        if (im.x + im.width > maxX) maxX = im.x + im.width;
+        if (im.y + im.height > maxY) maxY = im.y + im.height;
+      }
+      for (const s of selStrokes) {
+        const samplePts = getStrokeSamplePoints(s);
+        for (const p of samplePts) {
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+        }
+      }
+      for (const t of selTexts) {
+        const domEl = document.querySelector(`[data-text-id="${t.id}"]`) as HTMLElement | null;
+        const boxW = t.boxWidth || domEl?.offsetWidth || (t.groupId?.startsWith('math-graph-grp-') ? 36 : 160);
+        const boxH = t.boxHeight || domEl?.offsetHeight || (t.groupId?.startsWith('math-graph-grp-') ? 24 : 48);
+        if (t.x < minX) minX = t.x;
+        if (t.y < minY) minY = t.y;
+        if (t.x + boxW > maxX) maxX = t.x + boxW;
+        if (t.y + boxH > maxY) maxY = t.y + boxH;
+      }
+      if (minX < Infinity) {
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const hw = Math.max(8, (maxX - minX) / 2);
+        const hh = Math.max(8, (maxY - minY) / 2);
+        return {
+          minX,
+          minY,
+          maxX,
+          maxY,
+          cx,
+          cy,
+          hw,
+          hh,
+          angle: 0,
+        };
+      }
+    }
+
     // 1. Single Image Only -> preserve exact oriented bounding box & crop handles
     if (effectiveImgIds.length === 1 && selectedStrokeIds.length === 0) {
       const im = activePage.images?.find((i) => i.id === effectiveImgIds[0]);
@@ -4215,7 +4286,15 @@ export default function App() {
       }
     }
     return null;
-  }, [selectedImageId, selectedImageIds, selectedStrokeIds, activePage.images, activePage.strokes]);
+  }, [
+    selectedImageId,
+    selectedImageIds,
+    selectedStrokeIds,
+    selectedLassoTextIds,
+    activePage.images,
+    activePage.strokes,
+    activePage.texts,
+  ]);
 
   // Checks if a screen touch point (clientX, clientY) lands inside or on a handle of the active Lasso selection box
   // OR on an active Direct Node handle, allowing 1-finger drag-and-drop even when Pencil-Only Mode is ON!
@@ -5748,6 +5827,7 @@ export default function App() {
           ctx.setLineDash([6, 4]);
           ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
 
+          if (!isMoveOnlyLassoSelection) {
           // Rotation Stem
           ctx.setLineDash([]);
           ctx.beginPath();
@@ -6125,12 +6205,13 @@ export default function App() {
             );
             ctx.restore();
           }
+          }
 
           ctx.restore();
         }
 
         // 4b. When a single Sine or Cosine wave is selected in Lasso mode, highlight open endpoints of other matching waves on the page!
-        if (activeTool === 'lasso' && selectedStrokeIds.length === 1 && selectedImageIds.length === 0) {
+        if (!isMoveOnlyLassoSelection && activeTool === 'lasso' && selectedStrokeIds.length === 1 && selectedImageIds.length === 0) {
           const selWave = pageObj.strokes.find((s) => s.id === selectedStrokeIds[0]);
           if (
             selWave &&
@@ -6175,7 +6256,9 @@ export default function App() {
             : activeTool === 'shape'
             ? lastCreatedShapeIdsRef.current
             : [];
-        const activeWaveDiag = resolveWaveAxesDiagram(pageObj, waveCandIds);
+        const activeWaveDiag = !isMoveOnlyLassoSelection
+          ? resolveWaveAxesDiagram(pageObj, waveCandIds)
+          : null;
         if (activeWaveDiag) {
           const guideCol =
             activeWaveDiag.guideTop?.color || activeWaveDiag.guideBottom?.color || '#2563eb';
@@ -6290,7 +6373,9 @@ export default function App() {
         }
 
         // 4d. Generated Math & Oscillation Diagram Interactive Extrema Handles (`[ ↕ ]` vertical amplitude/K_max, `[ ↔ ]` horizontal ±u_max/±A, `[ ±A ]` both)
-        const activeMathDiag = resolveMathGraphDiagram(pageObj, waveCandIds);
+        const activeMathDiag = !isMoveOnlyLassoSelection
+          ? resolveMathGraphDiagram(pageObj, waveCandIds)
+          : null;
         if (activeMathDiag) {
           const hCol = activeMathDiag.handleColor;
           ctx.save();
@@ -6705,7 +6790,7 @@ export default function App() {
         ctx.restore();
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim]);
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
@@ -15808,9 +15893,10 @@ export default function App() {
     // Allows moving the 2 dashed guide lines up/down independently, narrowing/widening height symmetrically (±A),
     // or shifting both together without changing the axes!
     if (
-      effectiveTool === 'lasso' ||
-      effectiveTool === 'direct-node' ||
-      (effectiveTool === 'shape' && (shapePreset === 'wave-axes' || lastCreatedShapeIdsRef.current.length > 0))
+      !isMoveOnlyLassoSelection &&
+      (effectiveTool === 'lasso' ||
+        effectiveTool === 'direct-node' ||
+        (effectiveTool === 'shape' && (shapePreset === 'wave-axes' || lastCreatedShapeIdsRef.current.length > 0)))
     ) {
       const candidateIds =
         selectedStrokeIds.length > 0
@@ -16581,7 +16667,7 @@ export default function App() {
         const totalSelCount = selStrokesList.length + selImagesList.length;
 
         // 0. Check Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill below Selection Frame!
-        if (totalSelCount >= 2 && Math.abs(localX) <= 72 && Math.abs(localY - (hh + 26)) <= 16) {
+        if (!isMoveOnlyLassoSelection && totalSelCount >= 2 && Math.abs(localX) <= 72 && Math.abs(localY - (hh + 26)) <= 16) {
           const firstGrpId = selStrokesList[0]?.groupId || selImagesList[0]?.groupId;
           const allSameGroup =
             Boolean(firstGrpId) &&
@@ -16596,6 +16682,7 @@ export default function App() {
         }
 
         if (!isAdditiveSelect) {
+          if (!isMoveOnlyLassoSelection) {
           // A. Check Top Semicircular Rotation Arrow Handle (↻)
           if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
             clearActiveOverlay();
@@ -16819,6 +16906,7 @@ export default function App() {
               }
             }
           }
+          }
 
           // C. Check inside rotated selection bounding box -> Move
           if (Math.abs(localX) <= hw + 6 && Math.abs(localY) <= hh + 6) {
@@ -17033,6 +17121,7 @@ export default function App() {
           return;
         }
 
+        setSelectedLassoTextIds([]);
         setSelectedStrokeIds(memberStrokeIds);
         setSelectedImageIds(memberImgIds);
         setSelectedImageId(memberImgIds[0] || null);
@@ -17092,6 +17181,7 @@ export default function App() {
           return;
         }
 
+        setSelectedLassoTextIds([]);
         setSelectedImageIds(memberImgIds);
         setSelectedImageId(memberImgIds[0] || null);
         setSelectedStrokeIds(memberStrokeIds);
@@ -17104,6 +17194,7 @@ export default function App() {
       }
 
       lastLassoEmptyTapPtRef.current = { x: pt.x, y: pt.y };
+      setSelectedLassoTextIds([]);
       setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
@@ -17225,16 +17316,66 @@ export default function App() {
     const curImgIds =
       selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
 
-    if (finalStrokeIds.length > 0 || finalImgIds.length > 0) {
-      const nextStrokeIds =
-        isAdditive && selectedStrokeIds.length > 0
-          ? Array.from(new Set([...selectedStrokeIds, ...finalStrokeIds]))
-          : finalStrokeIds;
-      const nextImgIds =
-        isAdditive && curImgIds.length > 0
-          ? Array.from(new Set([...curImgIds, ...finalImgIds]))
-          : finalImgIds;
+    // Also check if the Lasso loop / Rectangular Marquee enclosed or crossed any standalone Text / MathOCR equation boxes!
+    const matchedStandaloneTexts = (activePage.texts || []).filter((txt) => {
+      if (lockedLayers.has(txt.layerId)) return false;
+      if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) {
+        return false;
+      }
+      const domEl = document.querySelector(`[data-text-id="${txt.id}"]`) as HTMLElement | null;
+      const boxW = txt.boxWidth || domEl?.offsetWidth || 160;
+      const boxH = txt.boxHeight || domEl?.offsetHeight || 48;
+      const checkPts = [
+        { x: txt.x + boxW / 2, y: txt.y + boxH / 2 },
+        { x: txt.x + 8, y: txt.y + 8 },
+        { x: txt.x + boxW - 8, y: txt.y + 8 },
+        { x: txt.x + boxW - 8, y: txt.y + boxH - 8 },
+        { x: txt.x + 8, y: txt.y + boxH - 8 },
+        { x: txt.x + boxW / 2, y: txt.y + 4 },
+        { x: txt.x + boxW / 2, y: txt.y + boxH - 4 },
+        { x: txt.x + 4, y: txt.y + boxH / 2 },
+        { x: txt.x + boxW - 4, y: txt.y + boxH / 2 },
+      ];
+      if (checkPts.some((p) => isPointInPolygon(p, poly))) return true;
+      return densePoly.some(
+        (lp) => lp.x >= txt.x && lp.x <= txt.x + boxW && lp.y >= txt.y && lp.y <= txt.y + boxH
+      );
+    });
+    const matchedStandaloneTextIds = matchedStandaloneTexts.map((t) => t.id);
 
+    const nextStrokeIds =
+      isAdditive && selectedStrokeIds.length > 0
+        ? Array.from(new Set([...selectedStrokeIds, ...finalStrokeIds]))
+        : finalStrokeIds;
+    const nextImgIds =
+      isAdditive && curImgIds.length > 0
+        ? Array.from(new Set([...curImgIds, ...finalImgIds]))
+        : finalImgIds;
+    const nextLassoTextIds =
+      isAdditive && selectedLassoTextIds.length > 0
+        ? Array.from(new Set([...selectedLassoTextIds, ...matchedStandaloneTextIds]))
+        : matchedStandaloneTextIds;
+
+    // 1. Mixed selection (Text/Math box + Strokes/Diagram/Images) OR 2+ Text/Math boxes -> Unified Move-Only Selection!
+    if (
+      nextLassoTextIds.length > 0 &&
+      (nextStrokeIds.length > 0 || nextImgIds.length > 0 || nextLassoTextIds.length >= 2)
+    ) {
+      setSelectedLassoTextIds(nextLassoTextIds);
+      setSelectedTextId(null);
+      setEditingTextId(null);
+      setSelectedStrokeIds(nextStrokeIds);
+      setSelectedImageIds(nextImgIds);
+      setSelectedImageId(nextImgIds[0] || null);
+      setActiveNodeStrokeId(null);
+      return;
+    }
+
+    // 2. Strokes / Images only (no standalone Text/Math box enclosed)
+    if (nextStrokeIds.length > 0 || nextImgIds.length > 0) {
+      setSelectedLassoTextIds([]);
+      setSelectedTextId(null);
+      setEditingTextId(null);
       setSelectedStrokeIds(nextStrokeIds);
       setSelectedImageIds(nextImgIds);
       setSelectedImageId(nextImgIds[0] || null);
@@ -17250,32 +17391,20 @@ export default function App() {
       return;
     }
 
-    // Also check if the Lasso loop enclosed or crossed a Text / MathOCR equation box on the page!
-    const matchedTxt = (activePage.texts || []).find((txt) => {
-      if (lockedLayers.has(txt.layerId)) return false;
-      const domEl = document.querySelector(`[data-text-id="${txt.id}"]`) as HTMLElement | null;
-      const boxW = txt.boxWidth || domEl?.offsetWidth || 160;
-      const boxH = txt.boxHeight || domEl?.offsetHeight || 48;
-      const checkPts = [
-        { x: txt.x + boxW / 2, y: txt.y + boxH / 2 },
-        { x: txt.x + 8, y: txt.y + 8 },
-        { x: txt.x + boxW - 8, y: txt.y + 8 },
-        { x: txt.x + boxW - 8, y: txt.y + boxH - 8 },
-        { x: txt.x + 8, y: txt.y + boxH - 8 },
-      ];
-      return checkPts.some((p) => isPointInPolygon(p, poly));
-    });
-    if (matchedTxt) {
+    // 3. Single standalone Text / MathOCR equation box only
+    if (matchedStandaloneTexts.length === 1) {
+      setSelectedLassoTextIds([]);
       setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
-      setSelectedTextId(matchedTxt.id);
+      setSelectedTextId(matchedStandaloneTexts[0].id);
       setShowToolSubBar(true);
       return;
     }
 
     if (!isAdditive) {
+      setSelectedLassoTextIds([]);
       setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
@@ -20329,9 +20458,10 @@ export default function App() {
             return {
               ...page,
               texts:
-                selMathGroupIds.size > 0
+                selMathGroupIds.size > 0 || selectedLassoTextIds.length > 0
                   ? (page.texts || []).map((t) =>
-                      t.groupId && selMathGroupIds.has(t.groupId)
+                      (t.groupId && selMathGroupIds.has(t.groupId)) ||
+                      selectedLassoTextIds.includes(t.id)
                         ? { ...t, x: t.x + dx, y: t.y + dy }
                         : t
                     )
@@ -27435,6 +27565,7 @@ export default function App() {
 
           {/* Contextual Sub-Bar (Appears for Shape, Text, Lasso Selection, or Eraser) */}
           {!isCleanProjectorMode &&
+            !isMoveOnlyLassoSelection &&
             (activeTool === 'shape' ||
               activeTool === 'text' ||
               selectedTextId !== null ||
@@ -31824,6 +31955,7 @@ export default function App() {
                             setTextFontSize(txt.fontSize);
                             setTextBold(Boolean(txt.bold));
                             setTextFontFamily(txt.fontFamily || 'sans');
+                            setSelectedLassoTextIds([]);
                             setSelectedStrokeIds([]);
                             setSelectedImageId(null);
                             setActiveNodeStrokeId(null);
@@ -31852,6 +31984,7 @@ export default function App() {
                           onDoubleClick={(ev) => {
                             if (isLocked) return;
                             ev.stopPropagation();
+                            setSelectedLassoTextIds([]);
                             setSelectedTextId(txt.id);
                             setEditingTextId(txt.id);
                           }}
@@ -31863,7 +31996,9 @@ export default function App() {
                               ? 'px-1 py-0 leading-none rounded'
                               : 'px-3 py-1.5 rounded-lg'
                           } select-none z-10 transition-shadow ${
-                            isSelectedTxt || isEditingTxt
+                            selectedLassoTextIds.includes(txt.id)
+                              ? 'pointer-events-none'
+                              : isSelectedTxt || isEditingTxt
                               ? 'ring-2 ring-[#0066ff] bg-white/90 shadow-md cursor-grab active:cursor-grabbing'
                               : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
                           }`}
