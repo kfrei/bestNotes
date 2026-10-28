@@ -6885,6 +6885,268 @@ export function analyzeCircuitForSimulation(
 }
 
 /**
+ * Converts plain-text mathematical expressions typed in a Text Box (without requiring LaTeX syntax)
+ * into clean KaTeX LaTeX so `(x^2)/9 + y^3 = 1/8` renders as `\frac{x^{2}}{9} + y^{3} = \frac{1}{8}`,
+ * while preserving the user's original plain text for inline editing.
+ */
+export function convertPlainTextToMathLatex(rawText: string): string {
+  if (!rawText || !rawText.trim()) return '';
+
+  const isAtomChar = (ch: string) => /[a-zA-Zα-ωΑ-Ω0-9.^_]/.test(ch);
+
+  const convertSingleExpr = (input: string, depth = 0): string => {
+    if (!input || depth > 12) return input;
+    let s = input
+      .replace(/[−–—]/g, '-')
+      .replace(/²/g, '^2')
+      .replace(/³/g, '^3')
+      .replace(/⁴/g, '^4');
+
+    // 1. Convert sqrt(...) or √(...)
+    let sqrtSafety = 0;
+    while (sqrtSafety++ < 16) {
+      const m = s.match(/(?:sqrt|√)\s*\(/i);
+      if (!m || m.index === undefined) break;
+      const openIdx = s.indexOf('(', m.index);
+      let d = 0;
+      let closeIdx = -1;
+      for (let i = openIdx; i < s.length; i++) {
+        if (s[i] === '(') d++;
+        else if (s[i] === ')') {
+          d--;
+          if (d === 0) {
+            closeIdx = i;
+            break;
+          }
+        }
+      }
+      if (closeIdx === -1) break;
+      const inside = s.slice(openIdx + 1, closeIdx);
+      s = `${s.slice(0, m.index)}\\sqrt{${convertSingleExpr(inside, depth + 1)}}${s.slice(closeIdx + 1)}`;
+    }
+    s = s.replace(/√([a-zA-Zα-ωΑ-Ω0-9.]+)/g, '\\sqrt{$1}');
+
+    // 2. Convert fractions `/` into `\frac{num}{den}`
+    let fracSafety = 0;
+    while (fracSafety++ < 24) {
+      const slashIdx = s.indexOf('/');
+      if (slashIdx === -1) break;
+
+      // Find numerator end (skip spaces to the left of `/`)
+      let numEnd = slashIdx - 1;
+      while (numEnd >= 0 && /\s/.test(s[numEnd])) numEnd--;
+      if (numEnd < 0) {
+        s = `${s.slice(0, slashIdx)}\\div ${s.slice(slashIdx + 1)}`;
+        continue;
+      }
+
+      let numStart = numEnd;
+      let stripOuterNumParens = false;
+
+      if (s[numEnd] === ')') {
+        // Walk back to matching '('
+        let d = 0;
+        let openIdx = -1;
+        for (let i = numEnd; i >= 0; i--) {
+          if (s[i] === ')') d++;
+          else if (s[i] === '(') {
+            d--;
+            if (d === 0) {
+              openIdx = i;
+              break;
+            }
+          }
+        }
+        if (openIdx !== -1) {
+          // Check if preceded by `^` or `_` or a function name (e.g. `x^(2n)/9` or `(x+1)^2` handled below)
+          let prevIdx = openIdx - 1;
+          while (prevIdx >= 0 && /\s/.test(s[prevIdx])) prevIdx--;
+          if (prevIdx >= 0 && (s[prevIdx] === '^' || s[prevIdx] === '_')) {
+            numStart = prevIdx;
+            while (numStart > 0 && isAtomChar(s[numStart - 1])) numStart--;
+          } else {
+            numStart = openIdx;
+            stripOuterNumParens = true;
+          }
+        }
+      } else {
+        // Walk backwards across atom chars (`x^2`, `3x^2`, `u_max`, `(x+1)^2`, `\frac{...}{...}`, `\sqrt{...}`)
+        let i = numEnd;
+        while (i >= 0) {
+          if (s[i] === ')' || s[i] === '}') {
+            const closeCh = s[i];
+            const openCh = closeCh === ')' ? '(' : '{';
+            let d = 0;
+            let openPos = -1;
+            for (let j = i; j >= 0; j--) {
+              if (s[j] === closeCh) d++;
+              else if (s[j] === openCh) {
+                d--;
+                if (d === 0) {
+                  openPos = j;
+                  break;
+                }
+              }
+            }
+            if (openPos !== -1) {
+              i = openPos - 1;
+              continue;
+            }
+          }
+          if (isAtomChar(s[i]) || s[i] === '\\') {
+            i--;
+          } else {
+            break;
+          }
+        }
+        numStart = i + 1;
+      }
+
+      // Find denominator start (skip spaces to the right of `/`)
+      let denStart = slashIdx + 1;
+      while (denStart < s.length && /\s/.test(s[denStart])) denStart++;
+      if (denStart >= s.length) {
+        s = `${s.slice(0, slashIdx)}\\div ${s.slice(slashIdx + 1)}`;
+        continue;
+      }
+
+      let denEnd = denStart;
+      let stripOuterDenParens = false;
+
+      if (s[denStart] === '(') {
+        let d = 0;
+        let closeIdx = -1;
+        for (let i = denStart; i < s.length; i++) {
+          if (s[i] === '(') d++;
+          else if (s[i] === ')') {
+            d--;
+            if (d === 0) {
+              closeIdx = i;
+              break;
+            }
+          }
+        }
+        if (closeIdx !== -1) {
+          // Check if followed by `^` or `_` (e.g. `1/(x+1)^2`)
+          let afterIdx = closeIdx + 1;
+          while (afterIdx < s.length && /\s/.test(s[afterIdx])) afterIdx++;
+          if (afterIdx < s.length && (s[afterIdx] === '^' || s[afterIdx] === '_')) {
+            let i = afterIdx + 1;
+            while (i < s.length && /\s/.test(s[i])) i++;
+            if (i < s.length && s[i] === '(') {
+              let d2 = 0;
+              for (let j = i; j < s.length; j++) {
+                if (s[j] === '(') d2++;
+                else if (s[j] === ')') {
+                  d2--;
+                  if (d2 === 0) {
+                    i = j + 1;
+                    break;
+                  }
+                }
+              }
+            } else {
+              if (i < s.length && (s[i] === '-' || s[i] === '+')) i++;
+              while (i < s.length && isAtomChar(s[i])) i++;
+            }
+            denEnd = i - 1;
+          } else {
+            denEnd = closeIdx;
+            stripOuterDenParens = true;
+          }
+        }
+      } else {
+        let i = denStart;
+        if (s[i] === '-' || s[i] === '+') i++;
+        while (i < s.length) {
+          if ((s[i] === '^' || s[i] === '_') && i + 1 < s.length) {
+            i++;
+            while (i < s.length && /\s/.test(s[i])) i++;
+            if (i < s.length && s[i] === '(') {
+              let d = 0;
+              for (let j = i; j < s.length; j++) {
+                if (s[j] === '(') d++;
+                else if (s[j] === ')') {
+                  d--;
+                  if (d === 0) {
+                    i = j + 1;
+                    break;
+                  }
+                }
+              }
+              continue;
+            }
+            if (i < s.length && (s[i] === '-' || s[i] === '+')) i++;
+          }
+          if (isAtomChar(s[i])) {
+            i++;
+          } else {
+            break;
+          }
+        }
+        denEnd = Math.max(denStart, i - 1);
+      }
+
+      const rawNum = stripOuterNumParens
+        ? s.slice(numStart + 1, numEnd).trim()
+        : s.slice(numStart, numEnd + 1).trim();
+      const rawDen = stripOuterDenParens
+        ? s.slice(denStart + 1, denEnd).trim()
+        : s.slice(denStart, denEnd + 1).trim();
+
+      const convNum = convertSingleExpr(rawNum, depth + 1);
+      const convDen = convertSingleExpr(rawDen, depth + 1);
+      s = `${s.slice(0, numStart)}\\frac{${convNum}}{${convDen}}${s.slice(denEnd + 1)}`;
+    }
+
+    // 3. Convert parenthesized exponents `^(...)` and subscripts `_(...)`
+    let expSafety = 0;
+    while (expSafety++ < 24) {
+      const m = s.match(/([\^_])\s*\(/);
+      if (!m || m.index === undefined) break;
+      const op = m[1];
+      const openIdx = s.indexOf('(', m.index);
+      let d = 0;
+      let closeIdx = -1;
+      for (let i = openIdx; i < s.length; i++) {
+        if (s[i] === '(') d++;
+        else if (s[i] === ')') {
+          d--;
+          if (d === 0) {
+            closeIdx = i;
+            break;
+          }
+        }
+      }
+      if (closeIdx === -1) break;
+      const inside = s.slice(openIdx + 1, closeIdx).trim();
+      s = `${s.slice(0, m.index)}${op}{${convertSingleExpr(inside, depth + 1)}}${s.slice(closeIdx + 1)}`;
+    }
+
+    // 4. Convert simple exponents `^2`, `^-2`, `^2n` and subscripts `_max`, `_0`
+    s = s.replace(/\^\s*(-?[a-zA-Zα-ωΑ-Ω0-9.]+)/g, '^{$1}');
+    s = s.replace(/_\s*([a-zA-Zα-ωΑ-Ω0-9.]+)/g, '_{$1}');
+
+    // 5. Convert common operators & arrows
+    s = s
+      .replace(/<=>/g, ' \\Leftrightarrow ')
+      .replace(/=>|->/g, ' \\Rightarrow ')
+      .replace(/<=/g, ' \\le ')
+      .replace(/>=/g, ' \\ge ')
+      .replace(/!=/g, ' \\ne ')
+      .replace(/\+-|±/g, ' \\pm ')
+      .replace(/\*/g, ' \\cdot ');
+
+    return s.trim();
+  };
+
+  return rawText
+    .split('\n')
+    .map((line) => convertSingleExpr(line, 0))
+    .join('\n');
+}
+
+/**
  * Uses Gemini Flash Vision to recognize a handwritten mathematical equation or function
  * selected with the Lasso tool so we can plot its 2D diagram right next to it.
  */

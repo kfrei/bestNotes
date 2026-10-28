@@ -135,6 +135,7 @@ import {
   transcribeHandwrittenStrokesWithGemini,
   transcribeHandwrittenMathWithGemini,
   transcribeEquationForGraphWithGemini,
+  convertPlainTextToMathLatex,
   buildMathGraphStrokesFromEquation,
   splitAndCleanMathLatexLines,
   renderPageStrokesToSnapshotDataUrl,
@@ -22474,6 +22475,56 @@ export default function App() {
     ]
   );
 
+  // 6. Convert Plain Text equation (e.g. `(x^2)/9 + y^3 = 1/8`) into rendered 2D Math (`\frac{x^2}{9} + y^3 = \frac{1}{8}`)
+  //    without writing LaTeX, while keeping `text` in its original plain-text form for inline editing!
+  const handleConvertTextToMath = useCallback(
+    (targetTxtId?: string) => {
+      const txtId = targetTxtId || editingTextId || selectedTextId;
+      const txtObj = (activePage.texts || []).find((t) => t.id === txtId);
+      if (!txtObj) {
+        showToast('ℹ️ Γράψε πρώτα μια εξίσωση στο πλαίσιο κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) και πάτησε Text2Math!');
+        return;
+      }
+      const rawPlain = (txtObj.text || '').trim();
+      if (!rawPlain) {
+        showToast('ℹ️ Το πλαίσιο κειμένου είναι κενό — γράψε π.χ. (x^2)/9 + y^3 = 1/8!');
+        return;
+      }
+
+      const wasEditing = editingTextId === txtObj.id;
+      if (txtObj.isMath && !wasEditing) {
+        // Toggle back to plain text view if already in rendered Math mode and not editing
+        updateActivePage((page) => ({
+          ...page,
+          texts: (page.texts || []).map((t) =>
+            t.id === txtObj.id ? { ...t, isMath: false } : t
+          ),
+        }));
+        showToast('🔤 Επιστροφή σε απλή μορφή κειμένου.');
+        return;
+      }
+
+      const convertedLatex = convertPlainTextToMathLatex(rawPlain);
+      updateActivePage((page) => ({
+        ...page,
+        texts: (page.texts || []).map((t) =>
+          t.id === txtObj.id
+            ? {
+                ...t,
+                text: rawPlain,
+                latex: convertedLatex,
+                isMath: true,
+              }
+            : t
+        ),
+      }));
+      setSelectedTextId(txtObj.id);
+      setEditingTextId(null);
+      showToast('∑ Text2Math: Μετατράπηκε σε μαθηματική εξίσωση! (Κάνε διπλό κλικ ή πάτησε ✏️ για Edit στην αρχική μορφή)');
+    },
+    [editingTextId, selectedTextId, activePage.texts, updateActivePage, showToast]
+  );
+
   // Convert Lasso-selected discrete straight lines / open polylines into the closest closed geometric Polygon!
   // Handles corner gaps, T-overshoots (by intersecting consecutive infinite edge lines), and snaps nearly horizontal/vertical edges to 0°/90°.
   const handleConvertSelectedStrokesToPolygon = useCallback(() => {
@@ -26249,8 +26300,8 @@ export default function App() {
 
                       <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
 
-                      {/* Power Caret (^) Button & 1-Click Equation Diagram Plotter in Text Bar */}
-                      {(!selTxt || !selTxt.isMath) && (
+                      {/* Power Caret (^), Text2Math (∑), & 1-Click Equation Diagram Plotter in Text Bar */}
+                      {(!selTxt || !selTxt.isMath || editingTextId === selTxt.id) && (
                         <button
                           onMouseDown={(ev) => ev.preventDefault()}
                           onClick={() => handleInsertPowerCaretInText(selTxt?.id)}
@@ -26258,6 +26309,21 @@ export default function App() {
                           title="Εισαγωγή συμβόλου δύναμης (^) στο κείμενο — π.χ. (x^2)/9 + (y^2)/16 = 25"
                         >
                           <span>xⁿ (^)</span>
+                        </button>
+                      )}
+
+                      {selTxt && (
+                        <button
+                          onMouseDown={(ev) => ev.preventDefault()}
+                          onClick={() => handleConvertTextToMath(selTxt.id)}
+                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-bold transition cursor-pointer ${
+                            selTxt.isMath && editingTextId !== selTxt.id
+                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs'
+                              : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300'
+                          }`}
+                          title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
+                        >
+                          <span>∑ Text2Math</span>
                         </button>
                       )}
 
@@ -30328,7 +30394,7 @@ export default function App() {
                             finishTextDrag();
                           }}
                           onDoubleClick={(ev) => {
-                            if (isLocked || txt.isMath) return;
+                            if (isLocked) return;
                             ev.stopPropagation();
                             setSelectedTextId(txt.id);
                             setEditingTextId(txt.id);
@@ -30565,7 +30631,7 @@ export default function App() {
                               >
                                 A+
                               </button>
-                              {!txt.isMath && (
+                              {(!txt.isMath || isEditingTxt) && (
                                 <button
                                   type="button"
                                   onMouseDown={(ev) => ev.preventDefault()}
@@ -30576,6 +30642,19 @@ export default function App() {
                                   xⁿ (^)
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => handleConvertTextToMath(txt.id)}
+                                className={`px-2 py-0.5 rounded font-extrabold cursor-pointer ${
+                                  txt.isMath && !isEditingTxt
+                                    ? 'bg-indigo-500 hover:bg-indigo-400 text-white ring-1 ring-white/40'
+                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                }`}
+                                title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
+                              >
+                                ∑ Text2Math
+                              </button>
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
@@ -30625,22 +30704,22 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => {
-                                  if (txt.isMath) {
-                                    setMathInput(
-                                      splitAndCleanMathLatexLines(txt.latex || txt.text || '').join('\n')
-                                    );
-                                    setShowMathModal(true);
-                                  } else {
-                                    setEditingTextId(isEditingTxt ? null : txt.id);
+                                  if (isEditingTxt && txt.isMath) {
+                                    const updatedLatex = convertPlainTextToMathLatex(txt.text || '');
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).map((t) =>
+                                        t.id === txt.id ? { ...t, latex: updatedLatex } : t
+                                      ),
+                                    }));
                                   }
+                                  setEditingTextId(isEditingTxt ? null : txt.id);
                                 }}
                                 className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 cursor-pointer"
                                 title={
-                                  txt.isMath
-                                    ? 'Επεξεργασία εξίσωσης LaTeX (υποστηρίζει πολλαπλές σειρές με Enter)'
-                                    : isEditingTxt
-                                    ? 'Ολοκλήρωση επεξεργασίας'
-                                    : 'Επεξεργασία κειμένου'
+                                  isEditingTxt
+                                    ? 'Ολοκλήρωση επεξεργασίας (επιστροφή στη μαθηματική μορφή)'
+                                    : 'Επεξεργασία στην αρχική μορφή κειμένου'
                                 }
                               >
                                 {isEditingTxt ? '✓' : '✏️'}
@@ -30664,28 +30743,7 @@ export default function App() {
                             </div>
                           )}
 
-                          {txt.isMath && txt.latex ? (
-                            <div
-                              style={{ fontSize: `${txt.fontSize}px`, color: txt.color }}
-                              className="flex flex-col items-start gap-2 [&_.katex-display]:!my-0 [&_.katex-display]:!text-left"
-                            >
-                              {(() => {
-                                const mathRows = splitAndCleanMathLatexLines(txt.latex);
-                                const rowsToRender = mathRows.length > 0 ? mathRows : [txt.latex];
-                                return rowsToRender.map((rowLatex, rIdx) => (
-                                  <div
-                                    key={rIdx}
-                                    dangerouslySetInnerHTML={{
-                                      __html: katex.renderToString(rowLatex, {
-                                        throwOnError: false,
-                                        displayMode: true,
-                                      }),
-                                    }}
-                                  />
-                                ));
-                              })()}
-                            </div>
-                          ) : isEditingTxt ? (
+                          {isEditingTxt ? (
                             <textarea
                               autoFocus
                               {...({ writingsuggestions: 'false' } as any)}
@@ -30714,7 +30772,12 @@ export default function App() {
                                             )
                                           : t.fontSize;
                                       if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                                      return { ...t, text: val, fontSize: nextFs };
+                                      return {
+                                        ...t,
+                                        text: val,
+                                        latex: t.isMath ? convertPlainTextToMathLatex(val) : t.latex,
+                                        fontSize: nextFs,
+                                      };
                                     }),
                                   }),
                                   false
@@ -30780,6 +30843,31 @@ export default function App() {
                               } as React.CSSProperties}
                               className="bg-transparent outline-none resize-none border-0 p-0 m-0 block cursor-grab active:cursor-grabbing"
                             />
+                          ) : txt.isMath && txt.latex ? (
+                            <div
+                              style={{ fontSize: `${txt.fontSize}px`, color: txt.color, ...fontCss }}
+                              className={`flex flex-col items-start gap-2 [&_.katex-display]:!my-0 [&_.katex-display]:!text-left ${
+                                txt.fontFamily && txt.fontFamily !== 'sans'
+                                  ? '[&_.katex]:![font-family:inherit] [&_.katex_*]:![font-family:inherit] [&_.katex_*]:!font-normal'
+                                  : ''
+                              }`}
+                            >
+                              {(() => {
+                                const mathRows = splitAndCleanMathLatexLines(txt.latex);
+                                const rowsToRender = mathRows.length > 0 ? mathRows : [txt.latex];
+                                return rowsToRender.map((rowLatex, rIdx) => (
+                                  <div
+                                    key={rIdx}
+                                    dangerouslySetInnerHTML={{
+                                      __html: katex.renderToString(rowLatex, {
+                                        throwOnError: false,
+                                        displayMode: true,
+                                      }),
+                                    }}
+                                  />
+                                ));
+                              })()}
+                            </div>
                           ) : (
                             <div
                               style={{
