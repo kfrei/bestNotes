@@ -1324,11 +1324,12 @@ export function createPhysicsStencilStrokes(
       arrowEnd: true,
       points: [
         { x, y: y + h, pressure: 0.7 },
-        { x: x + w, y: y + h, cx: x + w / 2, cy: y + h, pressure: 0.7 },
+        { x: x + w, y: y + h, pressure: 0.7 },
       ],
       layerId,
       groupId,
       isShape: true,
+      shapeType: 'wave-axis-x',
     });
     out.push({
       id: `st-${Date.now()}-ax2`,
@@ -1339,11 +1340,12 @@ export function createPhysicsStencilStrokes(
       arrowEnd: true,
       points: [
         { x, y: y + h, pressure: 0.7 },
-        { x, y, cx: x, cy: y + h / 2, pressure: 0.7 },
+        { x, y, pressure: 0.7 },
       ],
       layerId,
       groupId,
       isShape: true,
+      shapeType: 'wave-axis-y',
     });
   } else if (preset === 'wave-axes') {
     // Oscillation / Wave Axes Diagram:

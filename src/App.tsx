@@ -14002,6 +14002,8 @@ export default function App() {
         { ux: 1, uy: 0, nx: 0, ny: 1 },
         { ux: 0, uy: 1, nx: -1, ny: 0 },
       ];
+      const maxPerpSnap = M === 2 ? 18 : 10;
+      const maxSinSnap = M === 2 ? 0.18 : 0.11;
       for (const ax of cardinalAxes) {
         const alreadyCovered = nonIncidentEdges.some(
           (e) => Math.abs(e.ux * ax.ny - e.uy * ax.nx) < 0.02
@@ -14009,7 +14011,7 @@ export default function App() {
         if (alreadyCovered) continue;
         const dPerp = Math.abs(vx * ax.nx + vy * ax.ny);
         const sinDelta = dPerp / segLen;
-        if (dPerp <= 10 && sinDelta <= 0.11) {
+        if (dPerp <= maxPerpSnap && sinDelta <= maxSinSnap) {
           const score = dPerp + 2.5;
           if (!bestForNeighbor || score < bestForNeighbor.score) {
             bestForNeighbor = {
@@ -17978,16 +17980,28 @@ export default function App() {
               }
             }
           }
-          const hasBezierCurvedHandles = activeTargetStroke.points.some(
-            (p) =>
+          const hasBezierCurvedHandles = activeTargetStroke.points.some((p, pIdx, arr) => {
+            if (
               Boolean(p.smooth) ||
               p.inDx !== undefined ||
               p.inDy !== undefined ||
               p.outDx !== undefined ||
-              p.outDy !== undefined ||
-              p.cx !== undefined ||
-              p.cy !== undefined
-          );
+              p.outDy !== undefined
+            ) {
+              return true;
+            }
+            if (p.cx !== undefined && p.cy !== undefined && pIdx > 0) {
+              const prev = arr[pIdx - 1];
+              const dxSeg = p.x - prev.x;
+              const dySeg = p.y - prev.y;
+              const lenSeg = Math.hypot(dxSeg, dySeg);
+              if (lenSeg > 1) {
+                const crossDist = Math.abs((p.cx - prev.x) * dySeg - (p.cy - prev.y) * dxSeg) / lenSeg;
+                return crossDist > 1.5;
+              }
+            }
+            return false;
+          });
           const isCurvedSpecial =
             st === 'ellipse' ||
             st === 'circle' ||
@@ -18093,19 +18107,27 @@ export default function App() {
               const dy = targetY - targetPt.y;
               targetPt.x = targetX;
               targetPt.y = targetY;
-              if (targetPt.cx !== undefined && targetPt.cy !== undefined) {
-                targetPt.cx += dx * 0.5;
-                targetPt.cy += dy * 0.5;
-              }
-              const nextSegIdx = draggingNodeIdx.index + 1;
-              if (nextSegIdx < newPts.length) {
-                const nextPt = newPts[nextSegIdx];
-                if (nextPt.cx !== undefined && nextPt.cy !== undefined) {
-                  newPts[nextSegIdx] = {
-                    ...nextPt,
-                    cx: nextPt.cx + dx * 0.5,
-                    cy: nextPt.cy + dy * 0.5,
-                  };
+              if (newPts.length === 2 && (s.arrowEnd || s.shapeType === 'wave-axis-x' || s.shapeType === 'wave-axis-y' || s.shapeType === 'line' || s.shapeType === 'arrow')) {
+                targetPt.cx = undefined;
+                targetPt.cy = undefined;
+                if (newPts[1]) {
+                  newPts[1] = { ...newPts[1], cx: undefined, cy: undefined };
+                }
+              } else {
+                if (targetPt.cx !== undefined && targetPt.cy !== undefined) {
+                  targetPt.cx += dx * 0.5;
+                  targetPt.cy += dy * 0.5;
+                }
+                const nextSegIdx = draggingNodeIdx.index + 1;
+                if (nextSegIdx < newPts.length) {
+                  const nextPt = newPts[nextSegIdx];
+                  if (nextPt.cx !== undefined && nextPt.cy !== undefined) {
+                    newPts[nextSegIdx] = {
+                      ...nextPt,
+                      cx: nextPt.cx + dx * 0.5,
+                      cy: nextPt.cy + dy * 0.5,
+                    };
+                  }
                 }
               }
             }
