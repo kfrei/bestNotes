@@ -4071,10 +4071,18 @@ export async function generateSmartGreekTagsFromImages(
   const parts: any[] = [
     {
       text: `Δες το περιεχόμενο της σχολικής σημείωσης${
-        !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim()) ? ` με τίτλο "${notebookTitle}"` : ''
+        !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim()) &&
+        !/^[a-zA-Zα-ωΑ-Ωά-ώ]+\s*\d+\s*[-_]?$/i.test(notebookTitle.trim())
+          ? ` με τίτλο "${notebookTitle}"`
+          : ''
       }${
         pageTexts.length > 0 ? ` και κείμενα: "${pageTexts.join(' | ').slice(0, 400)}"` : ''
-      }. Διάβασε προσεκτικά το ΕΛΛΗΝΙΚΟ ΧΕΙΡΟΓΡΑΦΟ ή τυπωμένο κείμενο, τους τύπους και τα σχήματα μέσα στις εικόνες και επέστρεψε ΑΥΣΤΗΡΑ ένα JSON array με τις 3 έως 4 πιο σημαντικές ελληνικές λέξεις-κλειδιά (tags) στην ονομαστική ενικού (π.χ. ["νεύτωνας", "ισορροπία", "νόμος", "δύναμη"] ή ["φωτοσύνθεση", "γλυκόζη", "οξυγόνο", "φως"]). Μόνο 3 έως 4 ουσιαστικές ελληνικές λέξεις!`,
+      }.
+ΚΑΝΟΝΕΣ:
+1. ΠΡΟΤΕΡΑΙΟΤΗΤΑ ΣΤΑ ΧΕΙΡΟΓΡΑΦΑ (χωρίς να έχει πατηθεί OCR): Διάβασε ΠΡΩΤΑ και με απόλυτη προσοχή όλες τις ΕΛΛΗΝΙΚΕΣ ΧΕΙΡΟΓΡΑΦΕΣ ΛΕΞΕΙΣ που είναι γραμμένες με το χέρι πάνω στη σελίδα (π.χ. αν γράφει χειρόγραφα "Αγωγός - Φορτίο", πρέπει ΟΠΩΣΔΗΠΟΤΕ τα πρώτα tags να είναι "αγωγός", "φορτίο"!).
+2. Μετά από τις χειρόγραφες λέξεις, συμπλήρωσε (αν χρειάζεται μέχρι τα 3-4 tags) με τις βασικές έννοιες από τυχόν εξισώσεις, κείμενα ή όργανα/σχήματα της σελίδας.
+3. ΜΗΝ βάζεις γενικές/αόριστες λέξεις όπως "σχήμα", "γωνία", "γραμμή", "σχέδιο", "σημείωση" όταν υπάρχουν χειρόγραφες λέξεις ή επιστημονικοί όροι!
+Επέστρεψε ΑΥΣΤΗΡΑ ένα JSON array με 2 έως 4 ελληνικές λέξεις-κλειδιά (tags) στην ονομαστική ενικού (π.χ. ["αγωγός", "φορτίο", "ηλεκτρισμός"] ή ["νεύτωνας", "ισορροπία", "δύναμη"]).`,
     },
   ];
 
@@ -4090,39 +4098,50 @@ export async function generateSmartGreekTagsFromImages(
     }
   }
 
-  const candidateModels = Array.from(
-    new Set([
-      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-flash-latest',
-      'gemini-3.8-flash',
-      'gemini-3.5-flash',
-      'gemini-flash-lite-latest',
-    ])
-  );
+  const candidateModels = getPrioritizedVisionModels();
 
-  const tryGenerateWithModel = async (modelName: string): Promise<string[] | null> => {
+  const tryGenerateWithModel = async (
+    modelName: string,
+    timeoutMs = 15000
+  ): Promise<string[] | null> => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
+      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: { responseMimeType: 'application/json' },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
+            },
           }),
         }
       );
-      if (!res.ok) return null;
+      if (!res.ok) {
+        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
+        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        return null;
+      }
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
-      const parsed = JSON.parse(rawText);
-      if (Array.isArray(parsed)) {
-        const tags = parsed
-          .map((t) => String(t || '').replace(/^#+/, '').trim().toLowerCase())
-          .filter((t) => t.length >= 2)
+      const parsed = safeParseVisionJson(rawText);
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.tags)
+        ? parsed.tags
+        : null;
+      if (Array.isArray(arr)) {
+        const tags = arr
+          .map((t: any) => String(t || '').replace(/^#+/, '').trim().toLowerCase())
+          .filter((t: string) => t.length >= 2)
           .slice(0, 4);
         if (tags.length > 0) {
           cachedWorkingVisionModel = cleanName;
@@ -4130,15 +4149,22 @@ export async function generateSmartGreekTagsFromImages(
         }
       }
     } catch {
-      // try next model
+      if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
+        cachedWorkingVisionModel = null;
+      }
+    } finally {
+      window.clearTimeout(timer);
     }
     return null;
   };
 
-  for (const modelName of candidateModels) {
-    const tags = await tryGenerateWithModel(modelName);
-    if (tags && tags.length > 0) return tags;
-  }
+  const hedgedTags = await runVisionWithStaggeredHedge(
+    candidateModels,
+    tryGenerateWithModel,
+    1300,
+    15000
+  );
+  if (hedgedTags && hedgedTags.length > 0) return hedgedTags;
 
   // Automatic Future-Proof Discovery: query /v1beta/models dynamically if all known aliases/versions rotated
   try {

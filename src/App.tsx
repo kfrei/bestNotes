@@ -2108,20 +2108,42 @@ export default function App() {
       if (silent && (targetNb.pages?.length || 0) > 3) {
         return;
       }
+      const genericShapeTagNorms = new Set([
+        'σχημα',
+        'γωνια',
+        'γραμμη',
+        'σχεδιο',
+        'σημειωση',
+        'πολυγωνο',
+      ]);
       const collectedUrls: string[] = [...extraImageDataUrls];
       for (const p of targetNb.pages || []) {
+        if (p.strokes && p.strokes.length > 0) {
+          // 1) Prioritize a tight close-up snapshot of FREEHAND handwritten strokes (!s.isShape)
+          // so handwritten words like "Αγωγός - Φορτίο" are crystal-clear even without OCR!
+          const freehandStrokes = p.strokes.filter(
+            (s) => !s.isShape && s.points && s.points.length >= 2
+          );
+          if (freehandStrokes.length > 0) {
+            const freehandSnap = renderPageStrokesToSnapshotDataUrl(freehandStrokes);
+            if (freehandSnap) {
+              collectedUrls.push(freehandSnap);
+            }
+          }
+          // 2) Full page strokes snapshot if shapes are also present
+          if (freehandStrokes.length < p.strokes.length) {
+            const strokeSnap = renderPageStrokesToSnapshotDataUrl(p.strokes);
+            if (strokeSnap) {
+              collectedUrls.push(strokeSnap);
+            }
+          }
+        }
         if (p.backgroundDataUrl && p.backgroundDataUrl.startsWith('data:image/')) {
           collectedUrls.push(p.backgroundDataUrl);
         }
         for (const im of p.images || []) {
           if (im.dataUrl && im.dataUrl.startsWith('data:image/')) {
             collectedUrls.push(im.dataUrl);
-          }
-        }
-        if (p.strokes && p.strokes.length > 0) {
-          const strokeSnap = renderPageStrokesToSnapshotDataUrl(p.strokes);
-          if (strokeSnap) {
-            collectedUrls.push(strokeSnap);
           }
         }
       }
@@ -2154,22 +2176,39 @@ export default function App() {
           return;
         }
 
+        const hasNonGenericAiTag = aiTags.some(
+          (nt) => !genericShapeTagNorms.has(normalizeGreekSearchText(nt))
+        );
+
         const addedList: string[] = [];
         setNotebooks((prev) =>
           prev.map((nb) => {
             if (nb.id !== targetNb.id) return nb;
-            const existing = nb.tags || [];
+            const rawExisting = nb.tags || [];
+            // If Gemini found real handwritten/subject tags (e.g. "αγωγός", "φορτίο"),
+            // drop any earlier generic geometric placeholder tags ("γωνία", "σχήμα")!
+            const existing = hasNonGenericAiTag
+              ? rawExisting.filter(
+                  (e) => !genericShapeTagNorms.has(normalizeGreekSearchText(e))
+                )
+              : rawExisting;
             const existingNorm = new Set(existing.map((e) => normalizeGreekSearchText(e)));
             const merged = [...existing];
             for (const nt of aiTags) {
               const norm = normalizeGreekSearchText(nt);
+              if (hasNonGenericAiTag && genericShapeTagNorms.has(norm)) continue;
               if (norm && !existingNorm.has(norm) && merged.length < 6) {
                 existingNorm.add(norm);
                 merged.push(nt);
                 addedList.push(nt);
               }
             }
-            if (merged.length === existing.length) return nb;
+            if (
+              merged.length === rawExisting.length &&
+              merged.every((m, idx) => m === rawExisting[idx])
+            ) {
+              return nb;
+            }
             return { ...nb, tags: merged, updatedAt: new Date().toISOString() };
           })
         );
@@ -2188,25 +2227,51 @@ export default function App() {
     [showToast]
   );
 
-  // Automatically extract #tags for untagged notebooks (<= 3 pages) that contain handwritten strokes, images, or text
+  // Automatically extract #tags for notebooks (<= 3 pages) when untagged OR when handwritten strokes are added
   useEffect(() => {
+    const genericShapeTagNorms = new Set([
+      'σχημα',
+      'γωνια',
+      'γραμμη',
+      'σχεδιο',
+      'σημειωση',
+      'πολυγωνο',
+    ]);
     const untaggedCandidate = notebooks.find((nb) => {
-      if (nb.tags && nb.tags.length > 0) return false;
       if ((nb.pages?.length || 0) > 3) return false;
       const strokeCount = (nb.pages || []).reduce((acc, p) => acc + (p.strokes?.length || 0), 0);
+      const freehandCount = (nb.pages || []).reduce(
+        (acc, p) => acc + (p.strokes || []).filter((s) => !s.isShape).length,
+        0
+      );
       const imageCount = (nb.pages || []).reduce(
         (acc, p) => acc + (p.images?.length || 0) + (p.backgroundDataUrl ? 1 : 0),
         0
       );
       const textCount = (nb.pages || []).reduce((acc, p) => acc + (p.texts?.length || 0), 0);
       if (strokeCount < 3 && imageCount === 0 && textCount === 0) return false;
-      const sig = `${nb.id}:${strokeCount}:${imageCount}:${textCount}`;
+
+      const existingTags = nb.tags || [];
+      const onlyGenericTags =
+        existingTags.length > 0 &&
+        existingTags.every((t) => genericShapeTagNorms.has(normalizeGreekSearchText(t)));
+
+      // Skip if notebook already has >= 4 non-generic tags, or has non-generic tags with no freehand writing
+      if (existingTags.length > 0 && !onlyGenericTags) {
+        if (existingTags.length >= 4 || freehandCount < 3) return false;
+      }
+
+      const sig = `${nb.id}:${freehandCount}:${strokeCount}:${imageCount}:${textCount}`;
       return !autoTaggedSigSetRef.current.has(sig);
     });
     if (!untaggedCandidate) return;
 
     const strokeCount = (untaggedCandidate.pages || []).reduce(
       (acc, p) => acc + (p.strokes?.length || 0),
+      0
+    );
+    const freehandCount = (untaggedCandidate.pages || []).reduce(
+      (acc, p) => acc + (p.strokes || []).filter((s) => !s.isShape).length,
       0
     );
     const imageCount = (untaggedCandidate.pages || []).reduce(
@@ -2217,7 +2282,7 @@ export default function App() {
       (acc, p) => acc + (p.texts?.length || 0),
       0
     );
-    const sig = `${untaggedCandidate.id}:${strokeCount}:${imageCount}:${textCount}`;
+    const sig = `${untaggedCandidate.id}:${freehandCount}:${strokeCount}:${imageCount}:${textCount}`;
 
     const delayMs = viewMode === 'library' ? 600 : 3500;
     const timer = window.setTimeout(() => {
