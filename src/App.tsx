@@ -22399,7 +22399,9 @@ export default function App() {
         showToast('ℹ️ Γράψε πρώτα μια εξίσωση στο πλαίσιο κειμένου (π.χ. (x^2)/9 + (y^2)/16 = 25 ή y = ax + b)!');
         return;
       }
-      const rawEq = (txtObj.latex || txtObj.text || '').trim();
+      const rawEq = (
+        (!txtObj.isMath && txtObj.text ? txtObj.text : txtObj.text || txtObj.latex) || ''
+      ).trim();
       if (!rawEq) {
         showToast('ℹ️ Το πλαίσιο κειμένου είναι κενό — γράψε πρώτα την εξίσωση (π.χ. x^2 + y^2 = 1)!');
         return;
@@ -22543,7 +22545,7 @@ export default function App() {
         updateActivePage((page) => ({
           ...page,
           texts: (page.texts || []).map((t) =>
-            t.id === txtObj.id ? { ...t, isMath: false } : t
+            t.id === txtObj.id ? { ...t, isMath: false, latex: undefined } : t
           ),
         }));
         showToast('🔤 Επιστροφή σε απλή μορφή κειμένου.');

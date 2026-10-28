@@ -7398,6 +7398,9 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     if (lastPart) line = lastPart;
   }
 
+  // Repair any legacy `x^{2y}^{3}` (where a digit and a variable were merged inside `^{...}` before another `^`)
+  line = line.replace(/\^\{(-?\d+(?:\.\d+)?)([a-zA-Zα-ωΑ-Ω])\}\s*\^/g, '^{$1}*$2^');
+
   let s = expandLatexConstructs(line);
 
   // Strip LaTeX formatting wrappers
