@@ -23004,7 +23004,7 @@ export default function App() {
         cancelAnimationFrame(mathGraphAnimRafRef.current);
         mathGraphAnimRafRef.current = null;
       }
-      const totalDurationMs = 1820;
+      const totalDurationMs = 2440;
       const prepared = prepareMathGraphStrokesForAnimation(graphBuilt.strokes);
       const allTexts = graphBuilt.texts || [];
       const axisTipTexts = allTexts.filter((t) => t.id.endsWith('-lx') || t.id.endsWith('-ly'));
@@ -23049,11 +23049,11 @@ export default function App() {
         }
         const frame = computeMathGraphAnimationFrameWithPen(prepared, elapsed, totalDurationMs);
         setMathGraphDrawingHand(frame.penTip);
-        const shouldCommitAxisTipsNow = !axisTipsAdded && elapsed >= 360;
+        const shouldCommitAxisTipsNow = !axisTipsAdded && elapsed >= 580;
         if (shouldCommitAxisTipsNow) {
           axisTipsAdded = true;
         }
-        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 1320;
+        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 2050;
         if (shouldCommitAllTextsNow) {
           allTextsAdded = true;
         }

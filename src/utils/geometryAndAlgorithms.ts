@@ -10987,28 +10987,28 @@ export interface MathGraphPenTipState {
 
 /**
  * Computes both the intermediate `StrokeObject[]` frame and the synchronized hand-pen nib position
- * (`penTip`) at `elapsedMs` (out of `totalDurationMs`, default 1820ms):
- * 1. 0ms - 190ms: Hand draws the horizontal X-axis (`-axx`) from left to right.
- * 2. 190ms - 380ms: Hand draws the vertical Y-axis (`-axy`) from bottom to top.
- * 3. 380ms - 1680ms: Hand draws each curve stroke (`-crv-`) sequentially from start to end so the pen nib
- *    coincides with the exact point being drawn at every instant.
- * 4. 1320ms - 1820ms: Smooth fade-in of dashed projection guides and quantitative tick marks, while the hand lifts off.
+ * (`penTip`) at `elapsedMs` (out of `totalDurationMs`, default 2440ms):
+ * 1. 0ms - 300ms: Hand draws the horizontal X-axis (`-axx`) from left to right.
+ * 2. 300ms - 600ms: Hand draws the vertical Y-axis (`-axy`) from bottom to top (total axes = 0.6s).
+ * 3. 600ms - 2300ms: Hand draws each curve stroke (`-crv-`) sequentially from start to end (total graph = 1.7s)
+ *    so the pen nib coincides with the exact point being drawn at every instant.
+ * 4. 1950ms - 2440ms: Smooth fade-in of dashed projection guides and quantitative tick marks, while the hand lifts off.
  */
 export function computeMathGraphAnimationFrameWithPen(
   preparedStrokes: StrokeObject[],
   elapsedMs: number,
-  totalDurationMs = 1820
+  totalDurationMs = 2440
 ): { strokes: StrokeObject[]; penTip: MathGraphPenTipState | null } {
   if (elapsedMs >= totalDurationMs) {
     return { strokes: preparedStrokes, penTip: null };
   }
 
-  const xAxisEndMs = 190;
-  const yAxisEndMs = 380;
-  const curveStartMs = 380;
-  const curveEndMs = 1680;
+  const xAxisEndMs = 300;
+  const yAxisEndMs = 600;
+  const curveStartMs = 600;
+  const curveEndMs = 2300;
   const curveDrawDuration = curveEndMs - curveStartMs;
-  const guidesStartMs = 1320;
+  const guidesStartMs = 1950;
   const guidesFadeDuration = Math.max(1, totalDurationMs - guidesStartMs);
 
   const easeInOut = (u: number) => {
