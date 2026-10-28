@@ -1035,6 +1035,25 @@ function buildPresetShape(
       ],
     };
   }
+  if (preset === 'hooked-weight') {
+    const rawW = maxX - minX;
+    const rawH = maxY - minY;
+    const finalW = rawW < 18 ? 30 : Math.max(22, rawW);
+    const finalH = rawH < 28 ? 58 : Math.max(40, rawH);
+    const cx = minX + rawW / 2;
+    const cy = minY + rawH / 2;
+    const halfW = finalW / 2;
+    const halfH = finalH / 2;
+    return {
+      shapeType: 'hooked-weight',
+      points: makePolygonBezier([
+        { x: cx - halfW, y: cy - halfH },
+        { x: cx + halfW, y: cy - halfH },
+        { x: cx + halfW, y: cy + halfH },
+        { x: cx - halfW, y: cy + halfH },
+      ]),
+    };
+  }
   if (preset === 'cuboid' || preset === 'cylinder' || preset === 'sphere' || preset === 'pyramid') {
     const w3d = Math.max(72, maxX - minX);
     const h3d = Math.max(72, maxY - minY);
@@ -3189,7 +3208,8 @@ export function get3DShapeSubPaths(s: StrokeObject): BezierPoint[][] {
     (s.shapeType !== 'cuboid' &&
       s.shapeType !== 'cylinder' &&
       s.shapeType !== 'sphere' &&
-      s.shapeType !== 'pyramid') ||
+      s.shapeType !== 'pyramid' &&
+      s.shapeType !== 'hooked-weight') ||
     s.points.length < 4
   ) {
     return [];
@@ -3219,6 +3239,24 @@ export function get3DShapeSubPaths(s: StrokeObject): BezierPoint[][] {
     }
     return pts;
   };
+
+  if (s.shapeType === 'hooked-weight') {
+    const bTL = bilerp(0.10, 0.20);
+    const bTR = bilerp(0.90, 0.20);
+    const bBR = bilerp(0.90, 0.80);
+    const bBL = bilerp(0.10, 0.80);
+    const topStemBot = bilerp(0.5, 0.20);
+    const topStemTop = bilerp(0.5, 0.13);
+    const botStemTop = bilerp(0.5, 0.80);
+    const botStemBot = bilerp(0.5, 0.87);
+    return [
+      [bTL, bTR, bBR, bBL, bTL],
+      [topStemBot, topStemTop],
+      sampleEllipseBilerp(0.5, 0.068, 0.19, 0.064, Math.PI * 0.5, Math.PI * 2.15, 24),
+      [botStemTop, botStemBot],
+      sampleEllipseBilerp(0.5, 0.932, 0.19, 0.064, -Math.PI * 0.5, Math.PI * 1.15, 24),
+    ];
+  }
 
   if (s.shapeType === 'sphere') {
     return [

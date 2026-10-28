@@ -39,6 +39,7 @@ export type ShapePresetType =
   | 'wave-axes'
   | 'resistor'
   | 'spring'
+  | 'hooked-weight'
   | 'bulb'
   | 'battery'
   | 'voltage-source'
@@ -101,6 +102,7 @@ export interface StrokeObject {
     supportStrokeId: string;
     fixedEnd: 'start' | 'end';
   };
+  attachedToWeightId?: string; // ID of the parent weight directly above this weight in a vertical hook-to-hook chain
 }
 
 export type TextFontStyle =

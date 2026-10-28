@@ -1208,11 +1208,13 @@ export default function App() {
     }[];
   } | null>(null);
   const pendingPhysicsMagnetRef = useRef<{
-    kind: 'spring-to-support' | 'mass-to-spring';
+    kind: 'spring-to-support' | 'mass-to-spring' | 'weight-to-weight';
     springStrokeId: string;
     supportStrokeId?: string;
     fixedEnd?: 'start' | 'end';
     massStrokeId?: string;
+    parentWeightId?: string;
+    childWeightId?: string;
     targetX: number;
     targetY: number;
     startTime: number;
@@ -1525,11 +1527,18 @@ export default function App() {
   const edgeMapRef = useRef<{ id: string; map: Float32Array; w: number; h: number } | null>(null);
 
   // Ruler (centered on A4 page: x = 460, y = 420)
-  const [rulerState, setRulerState] = useState<{ visible: boolean; x: number; y: number; angle: number }>({
+  const [rulerState, setRulerState] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    angle: number;
+    showMm?: boolean;
+  }>({
     visible: false,
     x: 460,
     y: 420,
     angle: 0,
+    showMm: false,
   });
   const rulerDragRef = useRef<{
     mode: 'move' | 'rotate';
@@ -3730,6 +3739,7 @@ export default function App() {
     if (!s.isShape) return false;
     return (
       s.shapeType === 'spring' ||
+      s.shapeType === 'hooked-weight' ||
       s.shapeType === 'resistor' ||
       s.shapeType === 'cuboid' ||
       s.shapeType === 'cylinder' ||
@@ -4016,7 +4026,8 @@ export default function App() {
       (s.shapeType === 'cuboid' ||
         s.shapeType === 'cylinder' ||
         s.shapeType === 'sphere' ||
-        s.shapeType === 'pyramid') &&
+        s.shapeType === 'pyramid' ||
+        s.shapeType === 'hooked-weight') &&
       s.points.length >= 4
     ) {
       const subPaths = get3DShapeSubPaths(s);
@@ -4960,7 +4971,8 @@ export default function App() {
       (s.shapeType === 'cuboid' ||
         s.shapeType === 'cylinder' ||
         s.shapeType === 'sphere' ||
-        s.shapeType === 'pyramid') &&
+        s.shapeType === 'pyramid' ||
+        s.shapeType === 'hooked-weight') &&
       s.points.length >= 4
     ) {
       const [q0, q1, q2, q3] = s.points;
@@ -4995,6 +5007,49 @@ export default function App() {
           else ctx.lineTo(pt.x, pt.y);
         }
       };
+
+      if (s.shapeType === 'hooked-weight') {
+        const bTL = bilerp(0.10, 0.20);
+        const bTR = bilerp(0.90, 0.20);
+        const bBR = bilerp(0.90, 0.80);
+        const bBL = bilerp(0.10, 0.80);
+
+        ctx.save();
+        ctx.fillStyle = isFilled3D ? s.fillColor || '#94a3b8' : '#cbd5e1';
+        ctx.globalAlpha = isFilled3D ? Math.min(0.92, 0.30 * alphaScale3D) : 0.65;
+        ctx.beginPath();
+        ctx.moveTo(bTL.x, bTL.y);
+        ctx.lineTo(bTR.x, bTR.y);
+        ctx.lineTo(bBR.x, bBR.y);
+        ctx.lineTo(bBL.x, bBL.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        const topStemBot = bilerp(0.5, 0.20);
+        const topStemTop = bilerp(0.5, 0.13);
+        const botStemTop = bilerp(0.5, 0.80);
+        const botStemBot = bilerp(0.5, 0.87);
+
+        ctx.beginPath();
+        // Weight rectangular body
+        ctx.moveTo(bTL.x, bTL.y);
+        ctx.lineTo(bTR.x, bTR.y);
+        ctx.lineTo(bBR.x, bBR.y);
+        ctx.lineTo(bBL.x, bBL.y);
+        ctx.closePath();
+        // Top hook (τσιγκελάκι πάνω)
+        ctx.moveTo(topStemBot.x, topStemBot.y);
+        ctx.lineTo(topStemTop.x, topStemTop.y);
+        traceEllipseBilerp(0.5, 0.068, 0.19, 0.064, Math.PI * 0.5, Math.PI * 2.15, true);
+        // Bottom hook (τσιγκελάκι κάτω)
+        ctx.moveTo(botStemTop.x, botStemTop.y);
+        ctx.lineTo(botStemBot.x, botStemBot.y);
+        traceEllipseBilerp(0.5, 0.932, 0.19, 0.064, -Math.PI * 0.5, Math.PI * 1.15, true);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
 
       if (s.shapeType === 'cuboid') {
         // 3D Cuboid / Cube matching textbook -90° orientation (Front face + Top slanted face + Right slanted face):
@@ -5642,6 +5697,20 @@ export default function App() {
         pageValidSpringSims.find((sm) => sm.id === pageObj.activeSpringSimId) ||
         pageValidSpringSims[0] ||
         null;
+      const activeSpringChainSet = new Set<string>();
+      if (activePageSpringSim) {
+        const q = [activePageSpringSim.massStrokeId];
+        while (q.length > 0) {
+          const cid = q.shift()!;
+          if (activeSpringChainSet.has(cid)) continue;
+          activeSpringChainSet.add(cid);
+          for (const st of strokeList) {
+            if (st.attachedToWeightId === cid && !activeSpringChainSet.has(st.id)) {
+              q.push(st.id);
+            }
+          }
+        }
+      }
       type RenderEntry =
         | { kind: 'image'; layerRank: number; z: number; img: ImageObject }
         | { kind: 'stroke'; layerRank: number; z: number; stroke: StrokeObject };
@@ -5777,7 +5846,7 @@ export default function App() {
               (activePageSpringSim.initialPhaseMode !== 'eq' &&
                 activePageSpringSim.initialPhaseMode !== 'eqDown')) &&
             (s.id === activePageSpringSim.eqSpringStrokeId ||
-              s.id === activePageSpringSim.massStrokeId)
+              activeSpringChainSet.has(s.id))
           ) {
             continue;
           }
@@ -6128,6 +6197,8 @@ export default function App() {
           } else {
             const mathDiagForFrame = resolveMathGraphDiagram(pageObj, selectedStrokeIds);
             const hide1DStretchForOrthonormalXY = Boolean(mathDiagForFrame?.isOrthonormalXY);
+            const isSmallSelForHandles = selBounds.hw < 30 || selBounds.hh < 30;
+            const sideDotR = isSmallSelForHandles ? 5.2 : 6.8;
             if (!hide1DStretchForOrthonormalXY) {
               // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows on Top ↕ & Right ↔!)
               const localSideMidpoints = [
@@ -6142,9 +6213,9 @@ export default function App() {
                 }
                 ctx.fillStyle = '#f97316';
                 ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2.2;
+                ctx.lineWidth = 2.0;
                 ctx.beginPath();
-                ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
+                ctx.arc(m.x, m.y, sideDotR, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
               }
@@ -6152,6 +6223,7 @@ export default function App() {
           }
 
           // 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots!)
+          const cornerDotR = selBounds.hw < 30 || selBounds.hh < 30 ? 5.8 : 7.5;
           const localCorners = [
             { x: -hw, y: -hh },
             { x: hw, y: -hh },
@@ -6161,11 +6233,108 @@ export default function App() {
           for (const c of localCorners) {
             ctx.fillStyle = '#0066ff';
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2.2;
+            ctx.lineWidth = 2.0;
             ctx.beginPath();
-            ctx.arc(c.x, c.y, 7.5, 0, Math.PI * 2);
+            ctx.arc(c.x, c.y, cornerDotR, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
+          }
+
+          // Dedicated Bottom 4-Way Move Handle (✥) for Small Single Objects so moving tiny shapes is always effortless!
+          if (totalSelObjects === 1 && (selBounds.hw < 32 || selBounds.hh < 32)) {
+            const moveBadgeY = hh + 24;
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(0, hh + 5);
+            ctx.lineTo(0, moveBadgeY - 11);
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.arc(0, moveBadgeY, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw 4-way Move Cross Arrows (✥) inside the badge
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 1.75;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            const rA = 5.6;
+            const hd = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(-rA, moveBadgeY);
+            ctx.lineTo(rA, moveBadgeY);
+            ctx.moveTo(0, moveBadgeY - rA);
+            ctx.lineTo(0, moveBadgeY + rA);
+            // Left & Right arrowheads
+            ctx.moveTo(-rA + hd, moveBadgeY - hd);
+            ctx.lineTo(-rA, moveBadgeY);
+            ctx.lineTo(-rA + hd, moveBadgeY + hd);
+            ctx.moveTo(rA - hd, moveBadgeY - hd);
+            ctx.lineTo(rA, moveBadgeY);
+            ctx.lineTo(rA - hd, moveBadgeY + hd);
+            // Top & Bottom arrowheads
+            ctx.moveTo(-hd, moveBadgeY - rA + hd);
+            ctx.lineTo(0, moveBadgeY - rA);
+            ctx.lineTo(hd, moveBadgeY - rA + hd);
+            ctx.moveTo(-hd, moveBadgeY + rA - hd);
+            ctx.lineTo(0, moveBadgeY + rA);
+            ctx.lineTo(hd, moveBadgeY + rA - hd);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Millimeter (mm) Precision Readout Badge on Selected Object when Ruler "mm" mode is enabled!
+          if (rulerState.showMm) {
+            const ONE_MM_PX = 920 / 200; // 4.6px per 1mm
+            let mmLabel = '';
+            const singleSt = selStrokesList.length === 1 && selImagesList.length === 0 ? selStrokesList[0] : null;
+            if (singleSt && singleSt.shapeType === 'spring') {
+              const spLen = getSpringTerminalsAndWidthVec(singleSt).length;
+              mmLabel = `${Math.max(1, Math.round(spLen / ONE_MM_PX))} mm`;
+            } else if (
+              singleSt &&
+              (singleSt.shapeType === 'line' ||
+                singleSt.shapeType === 'arrow' ||
+                singleSt.shapeType === 'double-arrow') &&
+              singleSt.points.length >= 2 &&
+              singleSt.points[0]?.twist !== 999
+            ) {
+              const p0 = singleSt.points[0];
+              const pN = singleSt.points[singleSt.points.length - 1];
+              const lPx = Math.hypot(pN.x - p0.x, pN.y - p0.y);
+              mmLabel = `${Math.max(1, Math.round(lPx / ONE_MM_PX))} mm`;
+            } else {
+              const wMm = Math.max(1, Math.round((selBounds.hw * 2) / ONE_MM_PX));
+              const hMm = Math.max(1, Math.round((selBounds.hh * 2) / ONE_MM_PX));
+              mmLabel = `${wMm} × ${hMm} mm`;
+            }
+
+            ctx.save();
+            ctx.translate(-Math.max(46, hw * 0.45), rotStemTopY);
+            ctx.rotate(-angle);
+            ctx.font = 'bold 11px sans-serif';
+            const tw = ctx.measureText(mmLabel).width;
+            const pw = Math.max(54, tw + 16);
+            const ph = 20;
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 10);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#38bdf8';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(mmLabel, 0, 0.5);
+            ctx.restore();
           }
 
           // 4b. Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill right below the Selection Frame!
@@ -6208,6 +6377,76 @@ export default function App() {
           }
 
           ctx.restore();
+        }
+
+        // 4a-mm. When Ruler "mm" mode is enabled, also display millimeter (mm) dimensions on unselected standalone shapes on the active page!
+        if (rulerState.visible && rulerState.showMm) {
+          const ONE_MM_PX = 920 / 200; // 4.6px per 1mm
+          for (const st of pageObj.strokes) {
+            if (!st.isShape || st.groupId || selectedStrokeIds.includes(st.id) || st.points.length < 2) continue;
+            let mmText = '';
+            let badgeX = 0;
+            let badgeY = 0;
+            if (st.shapeType === 'spring') {
+              const spInfo = getSpringTerminalsAndWidthVec(st);
+              mmText = `${Math.max(1, Math.round(spInfo.length / ONE_MM_PX))} mm`;
+              badgeX =
+                (spInfo.startTerm.x + spInfo.endTerm.x) / 2 -
+                spInfo.uy * (spInfo.springWidth / 2 + 24);
+              badgeY =
+                (spInfo.startTerm.y + spInfo.endTerm.y) / 2 +
+                spInfo.ux * (spInfo.springWidth / 2 + 24);
+            } else if (
+              (st.shapeType === 'line' || st.shapeType === 'arrow' || st.shapeType === 'double-arrow') &&
+              st.points[0]?.twist !== 999
+            ) {
+              const p0 = st.points[0];
+              const pN = st.points[st.points.length - 1];
+              const lPx = Math.hypot(pN.x - p0.x, pN.y - p0.y);
+              if (lPx < 14) continue;
+              mmText = `${Math.max(1, Math.round(lPx / ONE_MM_PX))} mm`;
+              badgeX = (p0.x + pN.x) / 2;
+              badgeY = (p0.y + pN.y) / 2 - 14;
+            } else {
+              let minX = Infinity;
+              let minY = Infinity;
+              let maxX = -Infinity;
+              let maxY = -Infinity;
+              for (const pt of st.points) {
+                if (pt.x < minX) minX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y > maxY) maxY = pt.y;
+              }
+              const wPx = maxX - minX;
+              const hPx = maxY - minY;
+              if (wPx < 6 && hPx < 6) continue;
+              const wMm = Math.max(1, Math.round(wPx / ONE_MM_PX));
+              const hMm = Math.max(1, Math.round(hPx / ONE_MM_PX));
+              mmText = `${wMm} × ${hMm} mm`;
+              badgeX = (minX + maxX) / 2;
+              badgeY = maxY + 14;
+            }
+            if (mmText) {
+              ctx.save();
+              ctx.font = 'bold 10px sans-serif';
+              const tw = ctx.measureText(mmText).width;
+              const pw = Math.max(44, tw + 12);
+              const ph = 17;
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.roundRect(badgeX - pw / 2, badgeY - ph / 2, pw, ph, 8.5);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#38bdf8';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(mmText, badgeX, badgeY + 0.5);
+              ctx.restore();
+            }
+          }
         }
 
         // 4b. When a single Sine or Cosine wave is selected in Lasso mode, highlight open endpoints of other matching waves on the page!
@@ -6790,7 +7029,7 @@ export default function App() {
         ctx.restore();
       }
     });
-  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim]);
+  }, [activeNotebook.pages, activePageIndex, activeTool, activeNodeStrokeId, selectedStrokeIds, selectedImageId, selectedImageIds, isMoveOnlyLassoSelection, getSelectionBounds, isSimulating, isSpringSimulating, springSettleAnim, springPhaseShiftAnim, rulerState.visible, rulerState.showMm]);
   renderStaticSceneRef.current = renderStaticScene;
 
   // Run synchronously before paint whenever entering editor or switching notebooks so there is NEVER a blank white page flash!
@@ -9902,6 +10141,40 @@ export default function App() {
     return naturalLengthPx * Math.max(0.4, 1 + 0.28 * uy * ratio);
   };
 
+  const getWeightChainIds = (page: NotePage, rootWeightId: string): string[] => {
+    const chain: string[] = [];
+    const visited = new Set<string>();
+    const queue = [rootWeightId];
+    while (queue.length > 0) {
+      const currId = queue.shift()!;
+      if (visited.has(currId)) continue;
+      const st = page.strokes.find((s) => s.id === currId);
+      if (!st) continue;
+      visited.add(currId);
+      chain.push(currId);
+      for (const s of page.strokes) {
+        if (s.attachedToWeightId === currId && !visited.has(s.id)) {
+          queue.push(s.id);
+        }
+      }
+    }
+    return chain;
+  };
+
+  const getWeightChainRootId = (page: NotePage, weightId: string): string => {
+    const visited = new Set<string>();
+    let currId = weightId;
+    while (!visited.has(currId)) {
+      visited.add(currId);
+      const st = page.strokes.find((s) => s.id === currId);
+      if (!st || !st.attachedToWeightId) break;
+      const parent = page.strokes.find((s) => s.id === st.attachedToWeightId);
+      if (!parent) break;
+      currId = parent.id;
+    }
+    return currId;
+  };
+
   const applySpringSimParametersToStrokes = (
     page: NotePage,
     updatedSim: SpringSimConfig
@@ -9935,11 +10208,14 @@ export default function App() {
     const wVec = orientSpringWidthVec(ux, uy, updatedSim.baseSpringWidthPx, info.widthVec);
     const nextSpringCorners = buildSpringQuadCorners(newStartTerm, newEndTerm, wVec);
 
-    const scaleM = Math.pow(updatedSim.mass, 0.38);
-    const newMassW = Math.max(18, updatedSim.baseMassWidthPx * scaleM);
-    const newMassH = Math.max(18, updatedSim.baseMassHeightPx * scaleM);
+    const chainIds = getWeightChainIds(page, massStroke.id);
+    const isHookedOrChained =
+      massStroke.shapeType === 'hooked-weight' || chainIds.length > 1;
+    const scaleM = isHookedOrChained ? 1.0 : Math.pow(updatedSim.mass, 0.38);
+    const newMassW = Math.max(16, updatedSim.baseMassWidthPx * scaleM);
+    const newMassH = Math.max(16, updatedSim.baseMassHeightPx * scaleM);
     // Floor spring has a slight 4px visual breathing gap or direct contact at the top terminal
-    const floorGap = uy < -0.45 ? 4 : 0;
+    const floorGap = uy < -0.45 ? 4 : massStroke.shapeType === 'hooked-weight' ? -2 : 0;
     const newMassCx = newFreePt.x + ux * (newMassW / 2 + floorGap);
     const newMassCy = newFreePt.y + uy * (newMassH / 2 + floorGap);
     const nextMassStroke = scaleAndMoveMassStrokeToBox(
@@ -9950,6 +10226,26 @@ export default function App() {
       newMassH
     );
 
+    const updatedChainMap = new Map<string, StrokeObject>();
+    updatedChainMap.set(massStroke.id, nextMassStroke);
+    let prevBottomX = newMassCx + ux * (newMassW / 2);
+    let prevBottomY = newMassCy + uy * (newMassH / 2);
+
+    for (let k = 1; k < chainIds.length; k++) {
+      const childSt = page.strokes.find((s) => s.id === chainIds[k]);
+      if (!childSt) continue;
+      const cb = getStrokeBounds(childSt);
+      const cw = Math.max(14, cb.maxX - cb.minX);
+      const ch = Math.max(14, cb.maxY - cb.minY);
+      const hookOverlap = childSt.shapeType === 'hooked-weight' ? -4 : 0;
+      const childCx = prevBottomX + ux * (cw / 2 + hookOverlap);
+      const childCy = prevBottomY + uy * (ch / 2 + hookOverlap);
+      const movedChild = scaleAndMoveMassStrokeToBox(childSt, childCx, childCy, cw, ch);
+      updatedChainMap.set(childSt.id, movedChild);
+      prevBottomX = childCx + ux * (cw / 2);
+      prevBottomY = childCy + uy * (ch / 2);
+    }
+
     const nextStrokes = page.strokes.map((s) => {
       if (s.id === eqSpring.id) {
         return {
@@ -9957,8 +10253,9 @@ export default function App() {
           points: nextSpringCorners,
         };
       }
-      if (s.id === massStroke.id) {
-        return nextMassStroke;
+      const chainedUpdated = updatedChainMap.get(s.id);
+      if (chainedUpdated) {
+        return chainedUpdated;
       }
       return s;
     });
@@ -10115,6 +10412,9 @@ export default function App() {
       const ux = (freePt.x - fixedPt.x) / info.length;
       const uy = (freePt.y - fixedPt.y) / info.length;
 
+      const chainIds = getWeightChainIds(page, mass.id);
+      const totalMass = Math.max(1.0, chainIds.length * 1.0);
+
       // Check if sp is ALREADY an equilibrium spring of an existing SpringSimConfig
       const existingSim = getValidSpringSims(page).find(
         (sm) => sm.eqSpringStrokeId === sp.id || sm.naturalSpringStrokeId === sp.id
@@ -10122,11 +10422,13 @@ export default function App() {
 
       if (existingSim && existingSim.eqSpringStrokeId === sp.id) {
         createdOrUpdatedName = existingSim.name;
+        createdSimId = existingSim.id;
         const updatedSim: SpringSimConfig = {
           ...existingSim,
           massStrokeId: mass.id,
           baseMassWidthPx: massW,
           baseMassHeightPx: massH,
+          mass: totalMass,
         };
         return applySpringSimParametersToStrokes(page, updatedSim);
       }
@@ -10147,7 +10449,7 @@ export default function App() {
         x: fixedPt.x + cloneOffsetX,
         y: fixedPt.y + cloneOffsetY,
       };
-      const eqLen = computeEquilibriumLengthPx(info.length, ux, uy, 1.0, 1.0);
+      const eqLen = computeEquilibriumLengthPx(info.length, ux, uy, totalMass, 1.0);
       const eqFreePt = {
         x: eqFixedPt.x + ux * eqLen,
         y: eqFixedPt.y + uy * eqLen,
@@ -10165,7 +10467,7 @@ export default function App() {
         springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : undefined,
       };
 
-      const floorGap = uy < -0.45 ? 4 : 0;
+      const floorGap = uy < -0.45 ? 4 : mass.shapeType === 'hooked-weight' ? -2 : 0;
       const newMassCx = eqFreePt.x + ux * (massW / 2 + floorGap);
       const newMassCy = eqFreePt.y + uy * (massH / 2 + floorGap);
       const movedMassStroke = scaleAndMoveMassStrokeToBox(
@@ -10176,6 +10478,25 @@ export default function App() {
         massH
       );
 
+      const updatedChainMap = new Map<string, StrokeObject>();
+      updatedChainMap.set(mass.id, movedMassStroke);
+      let prevBottomX = newMassCx + ux * (massW / 2);
+      let prevBottomY = newMassCy + uy * (massH / 2);
+      for (let k = 1; k < chainIds.length; k++) {
+        const childSt = page.strokes.find((s) => s.id === chainIds[k]);
+        if (!childSt) continue;
+        const cb = getStrokeBounds(childSt);
+        const cw = Math.max(14, cb.maxX - cb.minX);
+        const ch = Math.max(14, cb.maxY - cb.minY);
+        const hookOverlap = childSt.shapeType === 'hooked-weight' ? -4 : 0;
+        const childCx = prevBottomX + ux * (cw / 2 + hookOverlap);
+        const childCy = prevBottomY + uy * (ch / 2 + hookOverlap);
+        const movedChild = scaleAndMoveMassStrokeToBox(childSt, childCx, childCy, cw, ch);
+        updatedChainMap.set(childSt.id, movedChild);
+        prevBottomX = childCx + ux * (cw / 2);
+        prevBottomY = childCy + uy * (ch / 2);
+      }
+
       // Auto-extend horizontal ceiling/floor support line to the right so it covers the cloned equilibrium spring!
       const nextStrokes = page.strokes.map((s) => {
         if (s.id === sp.id) {
@@ -10184,8 +10505,9 @@ export default function App() {
             springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : s.springSupport,
           };
         }
-        if (s.id === mass.id) {
-          return movedMassStroke;
+        const chainedUpd = updatedChainMap.get(s.id);
+        if (chainedUpd) {
+          return chainedUpd;
         }
         if (supportStrokeId && s.id === supportStrokeId && s.points.length >= 2) {
           const p0 = s.points[0];
@@ -10227,7 +10549,7 @@ export default function App() {
         baseSpringWidthPx: info.springWidth,
         baseMassWidthPx: massW,
         baseMassHeightPx: massH,
-        mass: 1.0,
+        mass: totalMass,
         stiffness: 1.0,
         amplitudePx: defaultAmp,
         initialPhaseMode: 'eq',
@@ -10264,6 +10586,73 @@ export default function App() {
     }
   };
 
+  const attachWeightToWeightChain = (parentWeightId: string, childWeightId: string) => {
+    let totalChainedCount = 2;
+    let settledSimId = '';
+    updateActivePage((page) => {
+      const parentSt = page.strokes.find((s) => s.id === parentWeightId);
+      const childSt = page.strokes.find((s) => s.id === childWeightId);
+      if (!parentSt || !childSt || parentSt.id === childSt.id) return page;
+
+      // Prevent circular attachment
+      const childSubChain = getWeightChainIds(page, childSt.id);
+      if (childSubChain.includes(parentSt.id)) return page;
+
+      const pb = getStrokeBounds(parentSt);
+      const parentCx = (pb.minX + pb.maxX) / 2;
+      let prevBottomY = pb.maxY;
+
+      const updatedMap = new Map<string, StrokeObject>();
+      for (let k = 0; k < childSubChain.length; k++) {
+        const subId = childSubChain[k];
+        const subSt = page.strokes.find((s) => s.id === subId);
+        if (!subSt) continue;
+        const sb = getStrokeBounds(subSt);
+        const sw = Math.max(14, sb.maxX - sb.minX);
+        const sh = Math.max(14, sb.maxY - sb.minY);
+        const hookOverlap = subSt.shapeType === 'hooked-weight' ? -4 : 0;
+        const targetCx = parentCx;
+        const targetCy = prevBottomY + sh / 2 + hookOverlap;
+        const movedSub = scaleAndMoveMassStrokeToBox(subSt, targetCx, targetCy, sw, sh);
+        updatedMap.set(subId, {
+          ...movedSub,
+          attachedToWeightId: k === 0 ? parentSt.id : subSt.attachedToWeightId,
+        });
+        prevBottomY = targetCy + sh / 2;
+      }
+
+      const nextPage: NotePage = {
+        ...page,
+        strokes: page.strokes.map((s) => updatedMap.get(s.id) || s),
+      };
+
+      const rootId = getWeightChainRootId(nextPage, parentSt.id);
+      const fullChain = getWeightChainIds(nextPage, rootId);
+      totalChainedCount = fullChain.length;
+
+      // Check if the root weight of this chain is attached to a SpringSimConfig!
+      const attachedSim = getValidSpringSims(nextPage).find((sm) => sm.massStrokeId === rootId);
+      if (attachedSim) {
+        settledSimId = attachedSim.id;
+        const updatedSim: SpringSimConfig = {
+          ...attachedSim,
+          mass: Math.max(1.0, fullChain.length * 1.0),
+        };
+        return applySpringSimParametersToStrokes(nextPage, updatedSim);
+      }
+
+      return nextPage;
+    }, true);
+
+    setSelectedStrokeIds([]);
+    if (settledSimId) {
+      setSpringSettleAnim({ simId: settledSimId, startTime: performance.now() });
+    }
+    showToast(
+      `🪝 Συνδέθηκαν ${totalChainedCount} βαρίδια σε σειρά${settledSimId ? ` (m = ${totalChainedCount} kg — νέα επιμήκυνση ελατηρίου!)` : '!'}`
+    );
+  };
+
   const registerOrActivateSpringSimFromLasso = (): boolean => {
     const rawSelSet = new Set(selectedStrokeIds);
     const selStrokes = activePage.strokes.filter((s) => rawSelSet.has(s.id));
@@ -10288,7 +10677,7 @@ export default function App() {
     // Look for a mass block in the selection or near the spring's free end
     const sp = springsInSel[springsInSel.length - 1];
     const info = getSpringTerminalsAndWidthVec(sp);
-    const massShapes = ['rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere'];
+    const massShapes = ['hooked-weight', 'rectangle', 'ellipse', 'circle', 'parallelogram', 'trapezoid', 'cuboid', 'sphere'];
     let mass = selStrokes.find((s) => s.id !== sp.id && massShapes.includes(s.shapeType || ''));
     if (!mass) {
       mass = activePage.strokes.find((s) => {
@@ -12146,18 +12535,24 @@ export default function App() {
               ...eqSpring,
               points: oscCorners,
             };
-            const oscMassStroke: StrokeObject = {
-              ...massStroke,
-              points: massStroke.points.map((p) => ({
-                ...p,
-                x: p.x + dispDx,
-                y: p.y + dispDy,
-                cx: p.cx !== undefined ? p.cx + dispDx : undefined,
-                cy: p.cy !== undefined ? p.cy + dispDy : undefined,
-              })),
-            };
             drawStrokeOnContext(ctx, oscSpringStroke, false);
-            drawStrokeOnContext(ctx, oscMassStroke, false);
+
+            const chainIdsForOsc = getWeightChainIds(activePage, activeSpringSim.massStrokeId);
+            for (const cId of chainIdsForOsc) {
+              const cSt = activePage.strokes.find((s) => s.id === cId);
+              if (!cSt) continue;
+              const oscWeightStroke: StrokeObject = {
+                ...cSt,
+                points: cSt.points.map((p) => ({
+                  ...p,
+                  x: p.x + dispDx,
+                  y: p.y + dispDy,
+                  cx: p.cx !== undefined ? p.cx + dispDx : undefined,
+                  cy: p.cy !== undefined ? p.cy + dispDy : undefined,
+                })),
+              };
+              drawStrokeOnContext(ctx, oscWeightStroke, false);
+            }
           }
 
           const ampHandles: { x: number; y: number }[] = [];
@@ -16705,6 +17100,41 @@ export default function App() {
             return;
           }
 
+          // A2. Check Dedicated Bottom 4-Way Move Handle (✥ at y = hh + 24) for Small Single Objects!
+          if (
+            totalSelCount === 1 &&
+            (selBounds.hw < 32 || selBounds.hh < 32) &&
+            Math.hypot(localX, localY - (hh + 24)) < 19
+          ) {
+            clearActiveOverlay();
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
+            setRedoStack([]);
+            selectionTransformRef.current = {
+              mode: 'move',
+              startX: pt.x,
+              startY: pt.y,
+              centerX: bcx,
+              centerY: bcy,
+              anchorX: bcx,
+              anchorY: bcy,
+              initialDist: 1,
+              initialAngle: 0,
+            };
+            isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+            isDrawingRef.current = true;
+            return;
+          }
+
+          // Inner Core Move Priority: if clicking strictly inside the inner core of the object (away from the outer pad=8 frame),
+          // prioritize Move over corner/side resize handles so tiny objects can always be dragged from their center!
+          const innerMoveHw = Math.max(6, selBounds.hw - 2.5);
+          const innerMoveHh = Math.max(6, selBounds.hh - 2.5);
+          const isInsideInnerMoveCore =
+            Math.abs(localX) <= innerMoveHw && Math.abs(localY) <= innerMoveHh;
+          const adaptiveCornerHitR = Math.min(18, Math.max(9.5, Math.min(hw, hh) * 0.46));
+          const adaptiveSideHitR = Math.min(20, Math.max(8.5, Math.min(hw, hh) * 0.40));
+
+          if (!isInsideInnerMoveCore) {
           // B1. Check 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots)
           const localCorners = [
             { lx: -hw, ly: -hh, oppLx: hw, oppLy: hh, sx: -1, sy: -1 },
@@ -16713,7 +17143,7 @@ export default function App() {
             { lx: -hw, ly: hh, oppLx: hw, oppLy: -hh, sx: -1, sy: 1 },
           ];
           for (const c of localCorners) {
-            if (Math.hypot(localX - c.lx, localY - c.ly) < 18) {
+            if (Math.hypot(localX - c.lx, localY - c.ly) < adaptiveCornerHitR) {
               clearActiveOverlay();
               setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
               setRedoStack([]);
@@ -16871,8 +17301,8 @@ export default function App() {
                 ];
             for (const m of localSides) {
               if (
-                Math.hypot(localX - m.lx, localY - m.ly) < 22 ||
-                Math.hypot(localX - m.ax, localY - m.ay) < 18
+                Math.hypot(localX - m.lx, localY - m.ly) < adaptiveSideHitR ||
+                Math.hypot(localX - m.ax, localY - m.ay) < 15
               ) {
                 clearActiveOverlay();
                 setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
@@ -16905,6 +17335,7 @@ export default function App() {
                 return;
               }
             }
+          }
           }
           }
 
@@ -19807,11 +20238,13 @@ export default function App() {
         // 2) Mass Body <-> Free End of Spring (creates Equilibrium Clone next to l₀)
         // ======================================================================
         let matchedPhysicsMagnet: {
-          kind: 'spring-to-support' | 'mass-to-spring';
+          kind: 'spring-to-support' | 'mass-to-spring' | 'weight-to-weight';
           springStrokeId: string;
           supportStrokeId?: string;
           fixedEnd?: 'start' | 'end';
           massStrokeId?: string;
+          parentWeightId?: string;
+          childWeightId?: string;
           targetX: number;
           targetY: number;
           snapDx: number;
@@ -19825,6 +20258,7 @@ export default function App() {
             activePage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
           );
           const massShapeTypes = [
+            'hooked-weight',
             'rectangle',
             'ellipse',
             'circle',
@@ -19902,45 +20336,76 @@ export default function App() {
             massShapeTypes.includes(draggedSt.shapeType || '')
           ) {
             const mb = getStrokeBounds(draggedSt);
-            const mW = Math.max(20, mb.maxX - mb.minX);
-            const mH = Math.max(20, mb.maxY - mb.minY);
+            const mW = Math.max(16, mb.maxX - mb.minX);
+            const mH = Math.max(16, mb.maxY - mb.minY);
             const candCx = (mb.minX + mb.maxX) / 2 + rawDx;
             const candCy = (mb.minY + mb.maxY) / 2 + rawDy;
+            const draggedDescendants = new Set(getWeightChainIds(activePage, draggedSt.id));
 
             for (const other of activePage.strokes) {
               if (
                 other.id === draggedSt.id ||
-                hiddenOrLockedLayerIds.has(other.layerId) ||
-                other.shapeType !== 'spring'
+                hiddenOrLockedLayerIds.has(other.layerId)
               ) {
                 continue;
               }
-              const spInfo = getSpringTerminalsAndWidthVec(other);
-              // Determine which terminal of the spring is the free end
-              let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
-              if (!other.springSupport) {
-                const dStart = Math.hypot(spInfo.startTerm.x - candCx, spInfo.startTerm.y - candCy);
-                const dEnd = Math.hypot(spInfo.endTerm.x - candCx, spInfo.endTerm.y - candCy);
-                fixedEnd = dStart >= dEnd ? 'start' : 'end';
-              }
-              const fixedPt = fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
-              const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-              const ux = (freePt.x - fixedPt.x) / spInfo.length;
-              const uy = (freePt.y - fixedPt.y) / spInfo.length;
-              const candAttachX = candCx - ux * (mW / 2);
-              const candAttachY = candCy - uy * (mH / 2);
-              const d = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
-              if (d <= 46 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
-                matchedPhysicsMagnet = {
-                  kind: 'mass-to-spring',
-                  springStrokeId: other.id,
-                  massStrokeId: draggedSt.id,
-                  targetX: freePt.x,
-                  targetY: freePt.y,
-                  snapDx: freePt.x - candAttachX,
-                  snapDy: freePt.y - candAttachY,
-                  dist: d,
-                };
+              if (other.shapeType === 'spring') {
+                const spInfo = getSpringTerminalsAndWidthVec(other);
+                // Determine which terminal of the spring is the free end
+                let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
+                if (!other.springSupport) {
+                  const dStart = Math.hypot(spInfo.startTerm.x - candCx, spInfo.startTerm.y - candCy);
+                  const dEnd = Math.hypot(spInfo.endTerm.x - candCx, spInfo.endTerm.y - candCy);
+                  fixedEnd = dStart >= dEnd ? 'start' : 'end';
+                }
+                const fixedPt = fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+                const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                const ux = (freePt.x - fixedPt.x) / spInfo.length;
+                const uy = (freePt.y - fixedPt.y) / spInfo.length;
+                const candAttachX = candCx - ux * (mW / 2);
+                const candAttachY = candCy - uy * (mH / 2);
+                const d = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
+                if (d <= 46 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                  matchedPhysicsMagnet = {
+                    kind: 'mass-to-spring',
+                    springStrokeId: other.id,
+                    massStrokeId: draggedSt.id,
+                    targetX: freePt.x,
+                    targetY: freePt.y,
+                    snapDx: freePt.x - candAttachX,
+                    snapDy: freePt.y - candAttachY,
+                    dist: d,
+                  };
+                }
+              } else if (
+                other.isShape &&
+                massShapeTypes.includes(other.shapeType || '') &&
+                !draggedDescendants.has(other.id) &&
+                // Only hook to a weight that doesn't already have ANOTHER weight hanging from its bottom hook!
+                !activePage.strokes.some(
+                  (s) => s.id !== draggedSt.id && s.attachedToWeightId === other.id
+                )
+              ) {
+                const ob = getStrokeBounds(other);
+                const otherBottomHookX = (ob.minX + ob.maxX) / 2;
+                const otherBottomHookY = ob.maxY;
+                const candTopHookX = candCx;
+                const candTopHookY = mb.minY + rawDy;
+                const d = Math.hypot(candTopHookX - otherBottomHookX, candTopHookY - otherBottomHookY);
+                const hookOverlap = draggedSt.shapeType === 'hooked-weight' ? -4 : 0;
+                if (d <= 36 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                  matchedPhysicsMagnet = {
+                    kind: 'weight-to-weight',
+                    springStrokeId: other.id,
+                    parentWeightId: other.id,
+                    childWeightId: draggedSt.id,
+                    targetX: otherBottomHookX,
+                    targetY: otherBottomHookY,
+                    snapDx: otherBottomHookX - candTopHookX,
+                    snapDy: otherBottomHookY + hookOverlap - candTopHookY,
+                    dist: d,
+                  };
+                }
               }
             }
           }
@@ -20039,7 +20504,9 @@ export default function App() {
             curPhys.springStrokeId === matchedPhysicsMagnet.springStrokeId &&
             curPhys.supportStrokeId === matchedPhysicsMagnet.supportStrokeId &&
             curPhys.fixedEnd === matchedPhysicsMagnet.fixedEnd &&
-            curPhys.massStrokeId === matchedPhysicsMagnet.massStrokeId;
+            curPhys.massStrokeId === matchedPhysicsMagnet.massStrokeId &&
+            curPhys.parentWeightId === matchedPhysicsMagnet.parentWeightId &&
+            curPhys.childWeightId === matchedPhysicsMagnet.childWeightId;
 
           if (!isSameTarget) {
             cancelNodeMagnetTimer();
@@ -20049,6 +20516,8 @@ export default function App() {
               supportStrokeId: matchedPhysicsMagnet.supportStrokeId,
               fixedEnd: matchedPhysicsMagnet.fixedEnd,
               massStrokeId: matchedPhysicsMagnet.massStrokeId,
+              parentWeightId: matchedPhysicsMagnet.parentWeightId,
+              childWeightId: matchedPhysicsMagnet.childWeightId,
               targetX: matchedPhysicsMagnet.targetX,
               targetY: matchedPhysicsMagnet.targetY,
               startTime: performance.now(),
@@ -20058,7 +20527,8 @@ export default function App() {
               strokeId: physObj.springStrokeId,
               draggedKeyPosIdx: 0,
               draggedEndSide: 'start' as const,
-              targetStrokeId: physObj.supportStrokeId || physObj.massStrokeId || '',
+              targetStrokeId:
+                physObj.supportStrokeId || physObj.massStrokeId || physObj.childWeightId || '',
               targetEndSide: 'end' as const,
               targetX: physObj.targetX,
               targetY: physObj.targetY,
@@ -20109,6 +20579,12 @@ export default function App() {
                     physObj.springStrokeId,
                     physObj.massStrokeId
                   );
+                } else if (
+                  physObj.kind === 'weight-to-weight' &&
+                  physObj.parentWeightId &&
+                  physObj.childWeightId
+                ) {
+                  attachWeightToWeightChain(physObj.parentWeightId, physObj.childWeightId);
                 }
                 return;
               }
@@ -20447,15 +20923,60 @@ export default function App() {
 
         updateActivePage(
           (page) => {
+            const movingStrokeSet = new Set<string>(targetStrokeIdList);
+            for (const sid of targetStrokeIdList) {
+              for (const cid of getWeightChainIds(page, sid)) {
+                movingStrokeSet.add(cid);
+              }
+            }
+
+            let unhookedRootId: string | null = null;
+            const movedStrokes = page.strokes.map((s) => {
+              if (!movingStrokeSet.has(s.id)) return s;
+              let nextAttachedToWeightId = s.attachedToWeightId;
+              if (
+                s.attachedToWeightId &&
+                !movingStrokeSet.has(s.attachedToWeightId)
+              ) {
+                const parentSt = page.strokes.find((p) => p.id === s.attachedToWeightId);
+                if (parentSt) {
+                  const pb = getStrokeBounds(parentSt);
+                  const sb = getStrokeBounds(s);
+                  const dHook = Math.hypot(
+                    (sb.minX + sb.maxX) / 2 + dx - (pb.minX + pb.maxX) / 2,
+                    sb.minY + dy - pb.maxY
+                  );
+                  if (dHook > 26) {
+                    unhookedRootId = getWeightChainRootId(page, parentSt.id);
+                    nextAttachedToWeightId = undefined;
+                  }
+                } else {
+                  nextAttachedToWeightId = undefined;
+                }
+              }
+              return {
+                ...s,
+                attachedToWeightId: nextAttachedToWeightId,
+                points: s.points.map((p) => ({
+                  ...p,
+                  x: p.x + dx,
+                  y: p.y + dy,
+                  cx: p.cx !== undefined ? p.cx + dx : undefined,
+                  cy: p.cy !== undefined ? p.cy + dy : undefined,
+                })),
+              };
+            });
+
             const selMathGroupIds = new Set(
               page.strokes
                 .filter(
                   (s) =>
-                    targetStrokeIdList.includes(s.id) && s.groupId?.startsWith('math-graph-grp-')
+                    movingStrokeSet.has(s.id) && s.groupId?.startsWith('math-graph-grp-')
                 )
                 .map((s) => s.groupId as string)
             );
-            return {
+
+            let nextPage: NotePage = {
               ...page,
               texts:
                 selMathGroupIds.size > 0 || selectedLassoTextIds.length > 0
@@ -20469,21 +20990,24 @@ export default function App() {
               images: (page.images || []).map((im) =>
                 targetImgIdList.includes(im.id) ? { ...im, x: im.x + dx, y: im.y + dy } : im
               ),
-              strokes: page.strokes.map((s) =>
-                targetStrokeIdList.includes(s.id)
-                  ? {
-                      ...s,
-                      points: s.points.map((p) => ({
-                        ...p,
-                        x: p.x + dx,
-                        y: p.y + dy,
-                        cx: p.cx !== undefined ? p.cx + dx : undefined,
-                        cy: p.cy !== undefined ? p.cy + dy : undefined,
-                      })),
-                    }
-                  : s
-              ),
+              strokes: movedStrokes,
             };
+
+            if (unhookedRootId) {
+              const remainingChain = getWeightChainIds(nextPage, unhookedRootId);
+              const attachedSim = getValidSpringSims(nextPage).find(
+                (sm) => sm.massStrokeId === unhookedRootId
+              );
+              if (attachedSim) {
+                const updatedSim: SpringSimConfig = {
+                  ...attachedSim,
+                  mass: Math.max(1.0, remainingChain.length * 1.0),
+                };
+                nextPage = applySpringSimParametersToStrokes(nextPage, updatedSim);
+              }
+            }
+
+            return nextPage;
           },
           false
         );
@@ -21670,18 +22194,27 @@ export default function App() {
     // When drawing with Pen ('pen' or 'pencil'), if the stroke snapped into a shape by holding the pencil (isShape === true),
     // automatically fill that shape with color while keeping the Pen tool itself in 'none' (unfilled)!
     const commitFillStyle: FillStyleType =
-      canAutoFillStroke && isShape && (activeTool === 'pen' || activeTool === 'pencil')
-        ? 'solid'
-        : canAutoFillStroke
-        ? fillStyle
-        : 'none';
+      shapeType === 'hooked-weight'
+        ? fillStyle !== 'none'
+          ? fillStyle
+          : 'solid'
+        : canAutoFillStroke && isShape && (activeTool === 'pen' || activeTool === 'pencil')
+          ? 'solid'
+          : canAutoFillStroke
+            ? fillStyle
+            : 'none';
 
     const newStroke: StrokeObject = {
       id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       penType: penSubType,
       color: strokeColor,
-      fillColor: commitFillStyle !== 'none' ? strokeColor : undefined,
+      fillColor:
+        commitFillStyle !== 'none'
+          ? shapeType === 'hooked-weight' && fillStyle === 'none'
+            ? '#94a3b8'
+            : strokeColor
+          : undefined,
       fillStyle: commitFillStyle,
       fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
@@ -21729,6 +22262,50 @@ export default function App() {
       setActiveNodeStrokeId(isShapeWithoutNodes(newStroke) ? null : newStroke.id);
       setActiveTool('lasso');
       setShowToolSubBar(true);
+
+      // If a hooked-weight was drawn/tapped directly beneath a spring's free end or another weight's bottom hook, snap & attach immediately!
+      if (newStroke.shapeType === 'hooked-weight') {
+        const nb = getStrokeBounds(newStroke);
+        const topHookX = (nb.minX + nb.maxX) / 2;
+        const topHookY = nb.minY;
+        let matchedParentWeightId: string | null = null;
+        let matchedSpringId: string | null = null;
+        let bestDist = 38;
+        for (const other of activePage.strokes) {
+          if (other.id === newStroke.id) continue;
+          if (other.shapeType === 'spring') {
+            const spInfo = getSpringTerminalsAndWidthVec(other);
+            const fixedEnd = other.springSupport?.fixedEnd || 'start';
+            const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+            const dSp = Math.hypot(topHookX - freePt.x, topHookY - freePt.y);
+            if (dSp < bestDist) {
+              bestDist = dSp;
+              matchedSpringId = other.id;
+              matchedParentWeightId = null;
+            }
+          } else if (
+            other.shapeType === 'hooked-weight' &&
+            !activePage.strokes.some((s) => s.attachedToWeightId === other.id)
+          ) {
+            const ob = getStrokeBounds(other);
+            const botHookX = (ob.minX + ob.maxX) / 2;
+            const botHookY = ob.maxY;
+            const dW = Math.hypot(topHookX - botHookX, topHookY - botHookY);
+            if (dW < bestDist) {
+              bestDist = dW;
+              matchedParentWeightId = other.id;
+              matchedSpringId = null;
+            }
+          }
+        }
+        if (matchedParentWeightId) {
+          const pid = matchedParentWeightId;
+          window.setTimeout(() => attachWeightToWeightChain(pid, newStroke.id), 10);
+        } else if (matchedSpringId) {
+          const sid = matchedSpringId;
+          window.setTimeout(() => attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id), 10);
+        }
+      }
     }
 
     if (isStationaryPenMicroTap && tapTrack) {
@@ -28026,6 +28603,17 @@ export default function App() {
                           ),
                         },
                         {
+                          id: 'hooked-weight',
+                          title: 'Βαρίδιο με τσιγκελάκι πάνω & κάτω (κρεμιούνται σε σειρά)',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 16 5.5 L 16 4 C 16 1.5, 19.5 1.5, 19.5 3.5" />
+                              <rect x="11" y="5.5" width="10" height="11" rx="1" fill="rgba(148,163,184,0.45)" />
+                              <path d="M 16 16.5 L 16 18 C 16 20.5, 12.5 20.5, 12.5 18.5" />
+                            </svg>
+                          ),
+                        },
+                        {
                           id: 'bulb',
                           title: 'Λαμπτήρας',
                           icon: (
@@ -32911,7 +33499,7 @@ export default function App() {
                             }}
                             onPointerDown={(e) => {
                               if (e.pointerType === 'mouse' && e.button !== 0) return;
-                              if ((e.target as HTMLElement).closest('[data-ruler-rotate="true"]')) return;
+                              if ((e.target as HTMLElement).closest('[data-ruler-rotate="true"], [data-ruler-mm="true"]')) return;
                               e.stopPropagation();
                               try {
                                 e.currentTarget.setPointerCapture(e.pointerId);
@@ -33041,42 +33629,120 @@ export default function App() {
                               <div className="w-[1.5px] h-2 bg-slate-400/80" />
                             </div>
 
-                            {/* Soft 1cm (46px) & 0.5cm (23px) Tick Lines Along Top and Bottom Edges (No text/numbers) */}
+                            {/* Millimeter Precision Toggle Button Next to Rotation Handle */}
+                            <button
+                              type="button"
+                              data-ui-panel="true"
+                              data-ruler-mm="true"
+                              title="Εμφάνιση υποδιαιρέσεων & τιμών με ακρίβεια χιλιοστού (mm) στον χάρακα και στα αντικείμενα"
+                              onPointerDown={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRulerState((prev) => ({ ...prev, showMm: !prev.showMm }));
+                              }}
+                              className="absolute left-[calc(50%+30px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-pointer outline-none"
+                            >
+                              <div
+                                className={`h-7 px-2 rounded-full border shadow-md flex items-center justify-center text-[10px] font-extrabold tracking-tight transition ${
+                                  rulerState.showMm
+                                    ? 'bg-[#0066ff] text-white border-[#0052cc] ring-2 ring-[#0066ff]/30'
+                                    : 'bg-white/95 text-slate-600 border-slate-400/80 hover:text-slate-900'
+                                }`}
+                              >
+                                mm
+                              </div>
+                              <div className={`w-[1.5px] h-2 ${rulerState.showMm ? 'bg-[#0066ff]/80' : 'bg-slate-400/80'}`} />
+                            </button>
+
+                            {/* Tick Lines & Optional mm Precision Labels Along Top and Bottom Edges */}
                             <div className="relative w-full h-full pointer-events-none overflow-hidden rounded-md">
                               {/* Subtle center groove */}
                               <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 h-px bg-slate-400/30" />
 
-                              {Array.from({ length: totalHalfCmSteps - 1 }, (_, i) => {
-                                const stepIdx = i + 1;
-                                const isFullCm = stepIdx % 2 === 0;
-                                const xPos = stepIdx * halfCmPx;
-                                return (
-                                  <React.Fragment key={stepIdx}>
-                                    {/* Top edge tick */}
-                                    <div
-                                      style={{
-                                        left: xPos,
-                                        height: isFullCm ? 12 : 6,
-                                        width: isFullCm ? 1.5 : 1,
-                                      }}
-                                      className={`absolute top-0 -translate-x-1/2 ${
-                                        isFullCm ? 'bg-slate-500/55' : 'bg-slate-400/40'
-                                      }`}
-                                    />
-                                    {/* Bottom edge tick */}
-                                    <div
-                                      style={{
-                                        left: xPos,
-                                        height: isFullCm ? 12 : 6,
-                                        width: isFullCm ? 1.5 : 1,
-                                      }}
-                                      className={`absolute bottom-0 -translate-x-1/2 ${
-                                        isFullCm ? 'bg-slate-500/55' : 'bg-slate-400/40'
-                                      }`}
-                                    />
-                                  </React.Fragment>
-                                );
-                              })}
+                              {rulerState.showMm ? (
+                                <>
+                                  {/* 0 mm origin label */}
+                                  <span
+                                    style={{ left: 3 }}
+                                    className="absolute top-1/2 -translate-y-1/2 text-[8.5px] font-mono font-bold text-slate-700/90 bg-slate-200/80 px-0.5 rounded select-none"
+                                  >
+                                    0
+                                  </span>
+                                  {Array.from(
+                                    { length: Math.floor(rulerW / (oneCmPx / 10)) - 1 },
+                                    (_, i) => {
+                                      const mmIdx = i + 1;
+                                      const isFullCm = mmIdx % 10 === 0;
+                                      const isHalfCm = mmIdx % 5 === 0 && !isFullCm;
+                                      const xPos = mmIdx * (oneCmPx / 10);
+                                      const tickH = isFullCm ? 13 : isHalfCm ? 8.5 : 4.5;
+                                      const tickW = isFullCm ? 1.5 : isHalfCm ? 1.15 : 0.85;
+                                      const tickCls = isFullCm
+                                        ? 'bg-slate-700/80'
+                                        : isHalfCm
+                                          ? 'bg-slate-600/65'
+                                          : 'bg-slate-500/45';
+                                      return (
+                                        <React.Fragment key={mmIdx}>
+                                          {/* Top edge tick */}
+                                          <div
+                                            style={{ left: xPos, height: tickH, width: tickW }}
+                                            className={`absolute top-0 -translate-x-1/2 ${tickCls}`}
+                                          />
+                                          {/* Bottom edge tick */}
+                                          <div
+                                            style={{ left: xPos, height: tickH, width: tickW }}
+                                            className={`absolute bottom-0 -translate-x-1/2 ${tickCls}`}
+                                          />
+                                          {/* Numeric mm value every 10 mm (1 cm) */}
+                                          {isFullCm && xPos < rulerW - 14 && (
+                                            <span
+                                              style={{ left: xPos }}
+                                              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-[8.5px] font-mono font-bold text-slate-700/95 bg-slate-200/85 px-0.5 rounded select-none"
+                                            >
+                                              {mmIdx}
+                                            </span>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    }
+                                  )}
+                                </>
+                              ) : (
+                                Array.from({ length: totalHalfCmSteps - 1 }, (_, i) => {
+                                  const stepIdx = i + 1;
+                                  const isFullCm = stepIdx % 2 === 0;
+                                  const xPos = stepIdx * halfCmPx;
+                                  return (
+                                    <React.Fragment key={stepIdx}>
+                                      {/* Top edge tick */}
+                                      <div
+                                        style={{
+                                          left: xPos,
+                                          height: isFullCm ? 12 : 6,
+                                          width: isFullCm ? 1.5 : 1,
+                                        }}
+                                        className={`absolute top-0 -translate-x-1/2 ${
+                                          isFullCm ? 'bg-slate-500/55' : 'bg-slate-400/40'
+                                        }`}
+                                      />
+                                      {/* Bottom edge tick */}
+                                      <div
+                                        style={{
+                                          left: xPos,
+                                          height: isFullCm ? 12 : 6,
+                                          width: isFullCm ? 1.5 : 1,
+                                        }}
+                                        className={`absolute bottom-0 -translate-x-1/2 ${
+                                          isFullCm ? 'bg-slate-500/55' : 'bg-slate-400/40'
+                                        }`}
+                                      />
+                                    </React.Fragment>
+                                  );
+                                })
+                              )}
                             </div>
                           </div>
                         );

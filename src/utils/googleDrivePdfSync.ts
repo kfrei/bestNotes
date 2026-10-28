@@ -110,12 +110,13 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     ctx.setLineDash([]);
   }
 
-  // 3D Shapes
+  // 3D Shapes & Hooked Lab Weight
   if (
     (s.shapeType === 'cuboid' ||
       s.shapeType === 'cylinder' ||
       s.shapeType === 'sphere' ||
-      s.shapeType === 'pyramid') &&
+      s.shapeType === 'pyramid' ||
+      s.shapeType === 'hooked-weight') &&
     s.points.length >= 4
   ) {
     const [q0, q1, q2, q3] = s.points;
@@ -150,6 +151,44 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
         else ctx.lineTo(pt.x, pt.y);
       }
     };
+
+    if (s.shapeType === 'hooked-weight') {
+      const bTL = bilerp(0.10, 0.20);
+      const bTR = bilerp(0.90, 0.20);
+      const bBR = bilerp(0.90, 0.80);
+      const bBL = bilerp(0.10, 0.80);
+      ctx.save();
+      ctx.fillStyle = isFilled3D ? s.fillColor || '#cbd5e1' : '#cbd5e1';
+      ctx.globalAlpha = isFilled3D ? Math.min(0.92, 0.28 * alphaScale3D) : 0.68;
+      ctx.beginPath();
+      ctx.moveTo(bTL.x, bTL.y);
+      ctx.lineTo(bTR.x, bTR.y);
+      ctx.lineTo(bBR.x, bBR.y);
+      ctx.lineTo(bBL.x, bBL.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      const topStemBot = bilerp(0.5, 0.20);
+      const topStemTop = bilerp(0.5, 0.13);
+      const botStemTop = bilerp(0.5, 0.80);
+      const botStemBot = bilerp(0.5, 0.87);
+      ctx.beginPath();
+      ctx.moveTo(bTL.x, bTL.y);
+      ctx.lineTo(bTR.x, bTR.y);
+      ctx.lineTo(bBR.x, bBR.y);
+      ctx.lineTo(bBL.x, bBL.y);
+      ctx.closePath();
+      ctx.moveTo(topStemBot.x, topStemBot.y);
+      ctx.lineTo(topStemTop.x, topStemTop.y);
+      traceEllipseBilerp(0.5, 0.068, 0.19, 0.064, Math.PI * 0.5, Math.PI * 2.15, true);
+      ctx.moveTo(botStemTop.x, botStemTop.y);
+      ctx.lineTo(botStemBot.x, botStemBot.y);
+      traceEllipseBilerp(0.5, 0.932, 0.19, 0.064, -Math.PI * 0.5, Math.PI * 1.15, true);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
 
     if (s.shapeType === 'cuboid') {
       const fTL = bilerp(0, 0.26);
