@@ -4470,30 +4470,43 @@ export default function App() {
     const hasTopPeak = originY - cMinY >= 16;
     const hasBotPeak = cMaxY - originY >= 18;
 
-    const topHandle = hasTopPeak
-      ? {
-          x: hasLeftSpan ? (cMinX + originX) / 2 : (originX + cMaxX) / 2,
-          y: cMinY,
-        }
-      : null;
-    const botHandle = hasBotPeak
-      ? {
-          x: hasLeftSpan ? (cMinX + originX) / 2 : (originX + cMaxX) / 2,
-          y: cMaxY,
-        }
-      : null;
-    const leftHandle = hasLeftSpan
-      ? {
-          x: cMinX,
-          y: (cMinY + cMaxY) / 2,
-        }
-      : null;
-    const rightHandle = hasRightSpan
-      ? {
-          x: cMaxX,
-          y: (cMinY + cMaxY) / 2,
-        }
-      : null;
+    const grpTexts = (page.texts || []).filter((t) => t.groupId === grpId);
+    const lyTxt = grpTexts.find((t) => t.id.endsWith('-ly'));
+    const lxTxt = grpTexts.find((t) => t.id.endsWith('-lx'));
+    const hasBlueGuides = members.some((s) => s.id.includes('-gd-'));
+    const isOrthonormalXY =
+      !hasBlueGuides &&
+      (!lyTxt || lyTxt.text.trim().toLowerCase() === 'y') &&
+      (!lxTxt || lxTxt.text.trim().toLowerCase() === 'x');
+
+    const topHandle =
+      !isOrthonormalXY && hasTopPeak
+        ? {
+            x: hasLeftSpan ? (cMinX + originX) / 2 : (originX + cMaxX) / 2,
+            y: cMinY,
+          }
+        : null;
+    const botHandle =
+      !isOrthonormalXY && hasBotPeak
+        ? {
+            x: hasLeftSpan ? (cMinX + originX) / 2 : (originX + cMaxX) / 2,
+            y: cMaxY,
+          }
+        : null;
+    const leftHandle =
+      !isOrthonormalXY && hasLeftSpan
+        ? {
+            x: cMinX,
+            y: (cMinY + cMaxY) / 2,
+          }
+        : null;
+    const rightHandle =
+      !isOrthonormalXY && hasRightSpan
+        ? {
+            x: cMaxX,
+            y: (cMinY + cMaxY) / 2,
+          }
+        : null;
     const symCornerHandle = {
       x: hasLeftSpan ? cMinX - 22 : cMaxX + 22,
       y: cMinY,
@@ -4513,6 +4526,7 @@ export default function App() {
       cMaxX,
       cMinY,
       cMaxY,
+      isOrthonormalXY,
       topHandle,
       botHandle,
       leftHandle,
@@ -5967,24 +5981,28 @@ export default function App() {
               ctx.stroke();
             }
           } else {
-            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows on Top ↕ & Right ↔!)
-            const localSideMidpoints = [
-              { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: true },  // Top (height stretch ↕)
-              { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true },   // Right (width stretch ↔)
-              { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true, showIcon: false },   // Bottom (height stretch)
-              { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false, showIcon: false }, // Left (width stretch)
-            ];
-            for (const m of localSideMidpoints) {
-              if (m.showIcon) {
-                drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
+            const mathDiagForFrame = resolveMathGraphDiagram(pageObj, selectedStrokeIds);
+            const hide1DStretchForOrthonormalXY = Boolean(mathDiagForFrame?.isOrthonormalXY);
+            if (!hide1DStretchForOrthonormalXY) {
+              // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows on Top ↕ & Right ↔!)
+              const localSideMidpoints = [
+                { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: true },  // Top (height stretch ↕)
+                { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true },   // Right (width stretch ↔)
+                { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true, showIcon: false },   // Bottom (height stretch)
+                { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false, showIcon: false }, // Left (width stretch)
+              ];
+              for (const m of localSideMidpoints) {
+                if (m.showIcon) {
+                  drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
+                }
+                ctx.fillStyle = '#f97316';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2.2;
+                ctx.beginPath();
+                ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
               }
-              ctx.fillStyle = '#f97316';
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 2.2;
-              ctx.beginPath();
-              ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
             }
           }
 
@@ -6270,12 +6288,12 @@ export default function App() {
             drawMathArrowPill(activeMathDiag.rightHandle.x, activeMathDiag.rightHandle.y, false);
           }
 
-          // Corner Symmetric Extrema Pill (`±A`)
+          // Corner Diagonal Proportional Resize Pill (double diagonal arrow `⤡` inside dark button)
           {
             const hx = activeMathDiag.symCornerHandle.x;
             const hy = activeMathDiag.symCornerHandle.y;
-            const pw = 34;
-            const ph = 19;
+            const pw = 32;
+            const ph = 20;
             ctx.save();
             ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
             ctx.shadowBlur = 5;
@@ -6284,16 +6302,28 @@ export default function App() {
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 1.8;
             ctx.beginPath();
-            ctx.roundRect(hx - pw / 2, hy - ph / 2, pw, ph, 9.5);
+            ctx.roundRect(hx - pw / 2, hy - ph / 2, pw, ph, 10);
             ctx.fill();
             ctx.stroke();
 
             ctx.shadowColor = 'transparent';
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10.5px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('±A', hx, hy + 0.5);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.85;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            // Diagonal shaft from top-left (hx - 4.8, hy - 4.8) to bottom-right (hx + 4.8, hy + 4.8)
+            ctx.moveTo(hx - 4.8, hy - 4.8);
+            ctx.lineTo(hx + 4.8, hy + 4.8);
+            // Top-left arrowhead
+            ctx.moveTo(hx - 4.8, hy - 1.1);
+            ctx.lineTo(hx - 4.8, hy - 4.8);
+            ctx.lineTo(hx - 1.1, hy - 4.8);
+            // Bottom-right arrowhead
+            ctx.moveTo(hx + 4.8, hy + 1.1);
+            ctx.lineTo(hx + 4.8, hy + 4.8);
+            ctx.lineTo(hx + 1.1, hy + 4.8);
+            ctx.stroke();
             ctx.restore();
           }
 
@@ -16633,6 +16663,8 @@ export default function App() {
               }
             }
           } else {
+            const mathDiagForSides = resolveMathGraphDiagram(targetPage, selectedStrokeIds);
+            const hide1DStretchForOrthonormalXY = Boolean(mathDiagForSides?.isOrthonormalXY);
             const localSides: {
               lx: number;
               ly: number;
@@ -16643,12 +16675,14 @@ export default function App() {
               mode: 'scale-x' | 'scale-y';
               sx: number;
               sy: number;
-            }[] = [
-              { lx: 0, ly: -hh, ax: 0, ay: -hh - 14, oppLx: 0, oppLy: selBounds.hh, mode: 'scale-y', sx: 0, sy: -1 },
-              { lx: hw, ly: 0, ax: hw + 14, ay: 0, oppLx: -selBounds.hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
-              { lx: 0, ly: hh, ax: 0, ay: hh + 14, oppLx: 0, oppLy: -selBounds.hh, mode: 'scale-y', sx: 0, sy: 1 },
-              { lx: -hw, ly: 0, ax: -hw - 14, ay: 0, oppLx: selBounds.hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
-            ];
+            }[] = hide1DStretchForOrthonormalXY
+              ? []
+              : [
+                  { lx: 0, ly: -hh, ax: 0, ay: -hh - 14, oppLx: 0, oppLy: selBounds.hh, mode: 'scale-y', sx: 0, sy: -1 },
+                  { lx: hw, ly: 0, ax: hw + 14, ay: 0, oppLx: -selBounds.hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+                  { lx: 0, ly: hh, ax: 0, ay: hh + 14, oppLx: 0, oppLy: -selBounds.hh, mode: 'scale-y', sx: 0, sy: 1 },
+                  { lx: -hw, ly: 0, ax: -hw - 14, ay: 0, oppLx: selBounds.hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+                ];
             for (const m of localSides) {
               if (
                 Math.hypot(localX - m.lx, localY - m.ly) < 22 ||
@@ -17669,13 +17703,33 @@ export default function App() {
     // Stretches the curve, dashed guides, ticks, and extrema labels relative to the axes origin without distorting glyph aspect ratio!
     if (mathGraphDragRef.current) {
       const mg = mathGraphDragRef.current;
+      const rawScaleX = Math.max(
+        0.32,
+        Math.min(2.4, Math.abs(latestPt.x - mg.originX) / mg.startDistX)
+      );
+      const rawScaleY = Math.max(
+        0.32,
+        Math.min(2.4, Math.abs(latestPt.y - mg.originY) / mg.startDistY)
+      );
+      const uniformScale = Math.max(
+        0.32,
+        Math.min(
+          2.4,
+          Math.hypot(latestPt.x - mg.originX, latestPt.y - mg.originY) /
+            Math.max(12, Math.hypot(mg.startDistX, mg.startDistY))
+        )
+      );
       const scaleX =
-        mg.mode === 'scale-x' || mg.mode === 'both'
-          ? Math.max(0.32, Math.min(2.4, Math.abs(latestPt.x - mg.originX) / mg.startDistX))
+        mg.mode === 'both'
+          ? uniformScale
+          : mg.mode === 'scale-x'
+          ? rawScaleX
           : 1;
       const scaleY =
-        mg.mode === 'scale-y' || mg.mode === 'both'
-          ? Math.max(0.32, Math.min(2.4, Math.abs(latestPt.y - mg.originY) / mg.startDistY))
+        mg.mode === 'both'
+          ? uniformScale
+          : mg.mode === 'scale-y'
+          ? rawScaleY
           : 1;
 
       updateActivePage(
@@ -17690,7 +17744,10 @@ export default function App() {
             let dy = 0;
             const approxCx = baseT.x + 12;
             const approxCy = baseT.y + 8;
-            if (
+            if (t.id.includes('-clbl-')) {
+              dx = (approxCx - mg.originX) * (scaleX - 1);
+              dy = (approxCy - mg.originY) * (scaleY - 1);
+            } else if (
               t.id.endsWith('-ll') ||
               t.id.endsWith('-lr') ||
               t.id.endsWith('-la1') ||
