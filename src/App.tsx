@@ -28207,7 +28207,7 @@ export default function App() {
                           className="flex items-center gap-1 px-3 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-2xs transition cursor-pointer"
                           title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
                         >
-                          <span>⬠ Πολύγωνο</span>
+                          <span>Πολύγωνο</span>
                         </button>
                         <button
                           onClick={() => void handleConvertLassoToCalligraphic()}
@@ -28219,8 +28219,7 @@ export default function App() {
                           }`}
                           title="Κείμενο OCR: Μετατροπή χειρόγραφου ελληνικού κειμένου σε κείμενο με επιλογή γραμματοσειράς (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
                         >
-                          <Wand2 className="w-3.5 h-3.5" />
-                          <span>{isConvertingHandwriting ? 'OCR...' : '✍️ Κείμενο OCR'}</span>
+                          <span>{isConvertingHandwriting ? 'OCR...' : 'Κείμενο OCR'}</span>
                         </button>
                         <button
                           onClick={() => void handleConvertLassoToMathOCR()}
@@ -28232,8 +28231,7 @@ export default function App() {
                           }`}
                           title="MathOCR: Αναγνώριση χειρόγραφων εξισώσεων, κλασμάτων, συνεπαγωγών (⇒), ίσον (=) και μονάδων μέτρησης"
                         >
-                          <Calculator className="w-3.5 h-3.5" />
-                          <span>{isConvertingHandwriting ? 'MathOCR...' : '∑ MathOCR'}</span>
+                          <span>{isConvertingHandwriting ? 'MathOCR...' : 'MathOCR'}</span>
                         </button>
                         <button
                           onClick={() => void handleConvertLassoToMathGraph()}
@@ -28245,7 +28243,7 @@ export default function App() {
                           }`}
                           title="Διάγραμμα OCR: Αναγνώριση 1 ή περισσότερων χειρόγραφων εξισώσεων (π.χ. y₁ = x² - 9 και y₂ = x² - 16) και σχεδίαση σε κοινό σύστημα αξόνων!"
                         >
-                          <span>{isConvertingHandwriting ? 'Διάγραμμα...' : '📈 Διάγραμμα'}</span>
+                          <span>{isConvertingHandwriting ? 'Διάγραμμα...' : 'Διάγραμμα'}</span>
                         </button>
                       </>
                     )}
@@ -28320,19 +28318,6 @@ export default function App() {
 
                         return (
                           <div className="flex items-center gap-1 bg-rose-50/90 px-1.5 py-0.5 rounded-full border border-rose-200/90">
-                            <button
-                              onClick={() => {
-                                setSelectedStrokeIds(allGrpStrokes.map((s) => s.id));
-                              }}
-                              className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition cursor-pointer ${
-                                hasAxesSelected
-                                  ? 'bg-slate-800 text-white shadow-2xs'
-                                  : 'hover:bg-white text-slate-700'
-                              }`}
-                              title="Επιλογή ολόκληρου του διαγράμματος (άξονες + όλες οι καμπύλες)"
-                            >
-                              📐 Όλο
-                            </button>
                             {sortedCurves.map(([fnIdx, info]) => {
                               const isThisCurveOnly =
                                 !hasAxesSelected &&
@@ -28342,7 +28327,11 @@ export default function App() {
                                 <button
                                   key={fnIdx}
                                   onClick={() => {
-                                    setSelectedStrokeIds(info.ids);
+                                    setSelectedStrokeIds(
+                                      isThisCurveOnly
+                                        ? allGrpStrokes.map((s) => s.id)
+                                        : info.ids
+                                    );
                                   }}
                                   className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold transition cursor-pointer ${
                                     isThisCurveOnly
@@ -32443,7 +32432,7 @@ export default function App() {
                               className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1b2a4a]/95 hover:bg-sky-600 text-white text-xs font-bold shadow-lg border border-sky-400/60 transition cursor-pointer whitespace-nowrap"
                               title="Ένωση των επιλεγμένων διακριτών ευθειών στο πιο κοντινό κλειστό Πολύγωνο"
                             >
-                              <span>⬠ Πολύγωνο</span>
+                              <span>Πολύγωνο</span>
                             </button>
                           </div>
                         );
