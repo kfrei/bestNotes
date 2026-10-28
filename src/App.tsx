@@ -138,7 +138,8 @@ import {
   convertPlainTextToMathLatex,
   buildMathGraphStrokesFromEquation,
   prepareMathGraphStrokesForAnimation,
-  computeMathGraphAnimationFrame,
+  computeMathGraphAnimationFrameWithPen,
+  type MathGraphPenTipState,
   splitAndCleanMathLatexLines,
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
@@ -22898,6 +22899,11 @@ export default function App() {
   // 2) Progressive drawing of the plotted curve from left-to-right or from the top peak around the circumference (200..1620ms)
   // 3) Smooth fade-in of projection guides & quantitative ticks (1180..1750ms), then final editable selection
   const mathGraphAnimRafRef = useRef<number | null>(null);
+  const [mathGraphDrawingHand, setMathGraphDrawingHand] = useState<MathGraphPenTipState | null>(null);
+  useEffect(() => {
+    const preloadImg = new Image();
+    preloadImg.src = '/drawing-hand.png';
+  }, []);
   const animateAndCommitMathGraph = useCallback(
     (
       graphBuilt: {
@@ -22912,33 +22918,36 @@ export default function App() {
         cancelAnimationFrame(mathGraphAnimRafRef.current);
         mathGraphAnimRafRef.current = null;
       }
-      const totalDurationMs = 1750;
+      const totalDurationMs = 1820;
       const prepared = prepareMathGraphStrokesForAnimation(graphBuilt.strokes);
       const allTexts = graphBuilt.texts || [];
       const axisTipTexts = allTexts.filter((t) => t.id.endsWith('-lx') || t.id.endsWith('-ly'));
       const targetGroupId = graphBuilt.groupId;
-      const initialFrame = computeMathGraphAnimationFrame(prepared, 0, totalDurationMs);
+      const initialFrame = computeMathGraphAnimationFrameWithPen(prepared, 0, totalDurationMs);
 
       setEditingTextId(null);
       setSelectedTextId(null);
       setActiveNodeStrokeId(null);
       setSelectedStrokeIds([]);
+      setMathGraphDrawingHand(initialFrame.penTip);
 
       updateActivePage((page) => {
         const basePage = extraUpdater ? extraUpdater(page) : page;
         return {
           ...basePage,
-          strokes: [...basePage.strokes, ...initialFrame],
-          texts: [...(basePage.texts || []), ...axisTipTexts],
+          strokes: [...basePage.strokes, ...initialFrame.strokes],
+          texts: [...(basePage.texts || [])],
         };
       }, true);
 
       const startTime = performance.now();
+      let axisTipsAdded = false;
       let allTextsAdded = false;
       const step = (now: number) => {
         const elapsed = now - startTime;
         if (elapsed >= totalDurationMs) {
           mathGraphAnimRafRef.current = null;
+          setMathGraphDrawingHand(null);
           updateActivePage(
             (page) => ({
               ...page,
@@ -22952,17 +22961,24 @@ export default function App() {
           setShowToolSubBar(true);
           return;
         }
-        const frameStrokes = computeMathGraphAnimationFrame(prepared, elapsed, totalDurationMs);
-        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 1220;
+        const frame = computeMathGraphAnimationFrameWithPen(prepared, elapsed, totalDurationMs);
+        setMathGraphDrawingHand(frame.penTip);
+        const shouldCommitAxisTipsNow = !axisTipsAdded && elapsed >= 360;
+        if (shouldCommitAxisTipsNow) {
+          axisTipsAdded = true;
+        }
+        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 1320;
         if (shouldCommitAllTextsNow) {
           allTextsAdded = true;
         }
         updateActivePage(
           (page) => ({
             ...page,
-            strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...frameStrokes],
+            strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...frame.strokes],
             texts: shouldCommitAllTextsNow
               ? [...(page.texts || []).filter((t) => t.groupId !== targetGroupId), ...allTexts]
+              : shouldCommitAxisTipsNow
+              ? [...(page.texts || []).filter((t) => t.groupId !== targetGroupId), ...axisTipTexts]
               : page.texts,
           }),
           false
@@ -32091,6 +32107,29 @@ export default function App() {
                           </div>
                         );
                       })()}
+
+                    {/* Synchronized Hand-with-Pen Overlay when animating a newly created Math Diagram (`📈 Διάγραμμα`) */}
+                    {isCurrentActive && mathGraphDrawingHand && (
+                      <img
+                        src="/drawing-hand.png"
+                        alt=""
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          left: mathGraphDrawingHand.x - 3.71,
+                          top: mathGraphDrawingHand.y - 18.17,
+                          width: 112,
+                          height: 84.56,
+                          transformOrigin: '3.71px 18.17px',
+                          transform: `rotate(${mathGraphDrawingHand.tiltDeg.toFixed(1)}deg)`,
+                          opacity: mathGraphDrawingHand.opacity,
+                          pointerEvents: 'none',
+                          userSelect: 'none',
+                          zIndex: 45,
+                          filter: 'drop-shadow(2px 4px 5px rgba(15, 23, 42, 0.24))',
+                        }}
+                      />
+                    )}
 
                     {/* 1-Second (1000ms) Filling Magnet Indicator when uniting 2 Freehand Endpoints into 1 Node! */}
                     {isCurrentActive && nodeMagnetState && (

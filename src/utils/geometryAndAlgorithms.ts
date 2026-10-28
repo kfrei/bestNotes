@@ -10761,147 +10761,289 @@ export function prepareMathGraphStrokesForAnimation(strokes: StrokeObject[]): St
   });
 }
 
+export interface MathGraphPenTipState {
+  x: number;
+  y: number;
+  tiltDeg: number;
+  opacity: number;
+}
+
 /**
- * Computes an intermediate frame of `StrokeObject[]` at `elapsedMs` (out of `totalDurationMs`, default 1750ms):
- * 1. 0ms - 260ms: Fast fade-in of coordinate axes and axis tip labels (`x`, `y`, `K`, `U`, `u`, `t`, etc.)
- * 2. 200ms - 1620ms: Progressive drawing of the curve from one side to the other, or from the top peak around the circumference for circles/ellipses/closed loops
- * 3. 1200ms - 1750ms: Smooth fade-in of dashed projection guides and quantitative tick marks / numbers
+ * Computes both the intermediate `StrokeObject[]` frame and the synchronized hand-pen nib position
+ * (`penTip`) at `elapsedMs` (out of `totalDurationMs`, default 1820ms):
+ * 1. 0ms - 190ms: Hand draws the horizontal X-axis (`-axx`) from left to right.
+ * 2. 190ms - 380ms: Hand draws the vertical Y-axis (`-axy`) from bottom to top.
+ * 3. 380ms - 1680ms: Hand draws each curve stroke (`-crv-`) sequentially from start to end so the pen nib
+ *    coincides with the exact point being drawn at every instant.
+ * 4. 1320ms - 1820ms: Smooth fade-in of dashed projection guides and quantitative tick marks, while the hand lifts off.
  */
-export function computeMathGraphAnimationFrame(
+export function computeMathGraphAnimationFrameWithPen(
   preparedStrokes: StrokeObject[],
   elapsedMs: number,
-  totalDurationMs = 1750
-): StrokeObject[] {
+  totalDurationMs = 1820
+): { strokes: StrokeObject[]; penTip: MathGraphPenTipState | null } {
   if (elapsedMs >= totalDurationMs) {
-    return preparedStrokes;
+    return { strokes: preparedStrokes, penTip: null };
   }
 
-  const axisFadeDuration = 260;
-  const curveStartMs = 200;
-  const curveDrawDuration = 1420;
-  const guidesStartMs = 1180;
-  const guidesFadeDuration = totalDurationMs - guidesStartMs;
+  const xAxisEndMs = 190;
+  const yAxisEndMs = 380;
+  const curveStartMs = 380;
+  const curveEndMs = 1680;
+  const curveDrawDuration = curveEndMs - curveStartMs;
+  const guidesStartMs = 1320;
+  const guidesFadeDuration = Math.max(1, totalDurationMs - guidesStartMs);
 
-  const axisAlpha = Math.min(1, Math.max(0.05, elapsedMs / axisFadeDuration));
-  const rawCurveU = Math.min(1, Math.max(0, (elapsedMs - curveStartMs) / curveDrawDuration));
-  // Smooth ease-in-out cubic progression for the curve sweep
-  const curveProgress =
-    rawCurveU < 0.5
-      ? 2 * rawCurveU * rawCurveU
-      : 1 - Math.pow(-2 * rawCurveU + 2, 2) / 2;
+  const easeInOut = (u: number) => {
+    const c = Math.min(1, Math.max(0, u));
+    return c < 0.5 ? 2 * c * c : 1 - Math.pow(-2 * c + 2, 2) / 2;
+  };
+
+  const xAxisU = easeInOut(elapsedMs / xAxisEndMs);
+  const yAxisU = easeInOut((elapsedMs - xAxisEndMs) / (yAxisEndMs - xAxisEndMs));
+  const rawCurveTotalU = Math.min(1, Math.max(0, (elapsedMs - curveStartMs) / curveDrawDuration));
   const guidesAlpha = Math.min(1, Math.max(0, (elapsedMs - guidesStartMs) / guidesFadeDuration));
 
+  const curveStrokes = preparedStrokes.filter((s) => s.id.includes('-crv-'));
+  const numCurves = Math.max(1, curveStrokes.length);
+  const curveIndexMap = new Map<string, number>();
+  curveStrokes.forEach((cs, idx) => curveIndexMap.set(cs.id, idx));
+
   const out: StrokeObject[] = [];
+  let penTip: MathGraphPenTipState | null = null;
+  let lastCurveEndPt: { x: number; y: number } | null = null;
 
-  for (const s of preparedStrokes) {
-    const isPrimaryAxisOrTip = /-axx|-axy|-lblx|-lbly|-ly-|-lx-|-lt-/.test(s.id);
-    const isCurve = s.id.includes('-crv-');
+  const sliceStrokeWithTip = (
+    s: StrokeObject,
+    progress: number
+  ): { stroke: StrokeObject | null; tip: { x: number; y: number; dx: number; dy: number } | null } => {
+    if (progress <= 0.004) return { stroke: null, tip: null };
 
-    if (isPrimaryAxisOrTip) {
-      out.push(axisAlpha >= 0.995 ? s : { ...s, opacity: (s.opacity ?? 1) * axisAlpha });
-      continue;
-    }
-
-    if (isCurve) {
-      if (curveProgress <= 0.005) continue;
-      if (curveProgress >= 0.998) {
-        out.push(s);
-        continue;
+    // Circle or Ellipse: sweep clockwise starting from top peak (theta = -pi/2)
+    if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 4) {
+      const topPt = s.points[0];
+      const rightPt = s.points[1];
+      const botPt = s.points[2];
+      const leftPt = s.points[3];
+      const cx = (rightPt.x + leftPt.x) / 2;
+      const cy = (botPt.y + topPt.y) / 2;
+      const rx = Math.abs(rightPt.x - leftPt.x) / 2;
+      const ry = Math.abs(botPt.y - topPt.y) / 2;
+      if (progress >= 0.998) {
+        return {
+          stroke: s,
+          tip: { x: topPt.x, y: topPt.y, dx: 1, dy: 0 },
+        };
       }
-
-      // Circle or Ellipse: sweep clockwise starting from the top peak (theta = -pi/2) around the perimeter
-      if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 4) {
-        const topPt = s.points[0];
-        const rightPt = s.points[1];
-        const botPt = s.points[2];
-        const leftPt = s.points[3];
-        const cx = (rightPt.x + leftPt.x) / 2;
-        const cy = (botPt.y + topPt.y) / 2;
-        const rx = Math.abs(rightPt.x - leftPt.x) / 2;
-        const ry = Math.abs(botPt.y - topPt.y) / 2;
-        const steps = Math.max(4, Math.ceil(76 * curveProgress));
-        const maxAngle = Math.PI * 2 * curveProgress;
-        const arcPts: BezierPoint[] = [];
-        for (let i = 0; i <= steps; i++) {
-          const theta = -Math.PI / 2 + (maxAngle * i) / steps;
-          arcPts.push({
-            x: cx + rx * Math.cos(theta),
-            y: cy + ry * Math.sin(theta),
-            pressure: 0.7,
-          });
-        }
-        out.push({
+      const steps = Math.max(4, Math.ceil(76 * progress));
+      const maxAngle = Math.PI * 2 * progress;
+      const arcPts: BezierPoint[] = [];
+      for (let i = 0; i <= steps; i++) {
+        const theta = -Math.PI / 2 + (maxAngle * i) / steps;
+        arcPts.push({
+          x: cx + rx * Math.cos(theta),
+          y: cy + ry * Math.sin(theta),
+          pressure: 0.7,
+        });
+      }
+      const last = arcPts[arcPts.length - 1];
+      const prev = arcPts[Math.max(0, arcPts.length - 2)];
+      return {
+        stroke: {
           ...s,
           isShape: false,
           shapeType: undefined,
           points: arcPts,
-        });
-        continue;
-      }
+        },
+        tip: {
+          x: last.x,
+          y: last.y,
+          dx: last.x - prev.x,
+          dy: last.y - prev.y,
+        },
+      };
+    }
 
-      // Polyline or 2-point Line: slice progressively by arc length from start to end
-      const pts = s.points;
-      if (pts.length === 2) {
-        const p0 = pts[0];
-        const p1 = pts[1];
-        out.push({
+    const pts = s.points;
+    if (pts.length === 2) {
+      const p0 = pts[0];
+      const p1 = pts[1];
+      if (progress >= 0.998) {
+        return {
+          stroke: s,
+          tip: { x: p1.x, y: p1.y, dx: p1.x - p0.x, dy: p1.y - p0.y },
+        };
+      }
+      const tx = p0.x + (p1.x - p0.x) * progress;
+      const ty = p0.y + (p1.y - p0.y) * progress;
+      return {
+        stroke: {
           ...s,
+          arrowEnd: progress > 0.88 ? s.arrowEnd : false,
           points: [
             p0,
             {
-              x: p0.x + (p1.x - p0.x) * curveProgress,
-              y: p0.y + (p1.y - p0.y) * curveProgress,
+              x: tx,
+              y: ty,
               pressure: 0.7,
             },
           ],
-        });
-        continue;
-      }
+        },
+        tip: { x: tx, y: ty, dx: p1.x - p0.x, dy: p1.y - p0.y },
+      };
+    }
 
-      if (pts.length > 2) {
-        const cumLen: number[] = [0];
-        let totalLen = 0;
-        for (let i = 1; i < pts.length; i++) {
-          totalLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-          cumLen.push(totalLen);
-        }
-        if (totalLen <= 1e-4) {
-          out.push(s);
-          continue;
-        }
-        const targetLen = totalLen * curveProgress;
-        const slicedPts: BezierPoint[] = [pts[0]];
-        for (let i = 1; i < pts.length; i++) {
-          if (cumLen[i] <= targetLen) {
-            slicedPts.push(pts[i]);
-          } else {
-            const segLen = cumLen[i] - cumLen[i - 1];
-            const frac = segLen > 1e-5 ? (targetLen - cumLen[i - 1]) / segLen : 1;
-            slicedPts.push({
-              x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * frac,
-              y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * frac,
-              pressure: 0.7,
-            });
-            break;
-          }
-        }
-        if (slicedPts.length >= 2) {
-          out.push({
-            ...s,
-            points: slicedPts,
+    if (pts.length > 2) {
+      const cumLen: number[] = [0];
+      let totalLen = 0;
+      for (let i = 1; i < pts.length; i++) {
+        totalLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        cumLen.push(totalLen);
+      }
+      if (totalLen <= 1e-4 || progress >= 0.998) {
+        const last = pts[pts.length - 1];
+        const prev = pts[Math.max(0, pts.length - 2)];
+        return {
+          stroke: s,
+          tip: { x: last.x, y: last.y, dx: last.x - prev.x, dy: last.y - prev.y },
+        };
+      }
+      const targetLen = totalLen * progress;
+      const slicedPts: BezierPoint[] = [pts[0]];
+      for (let i = 1; i < pts.length; i++) {
+        if (cumLen[i] <= targetLen) {
+          slicedPts.push(pts[i]);
+        } else {
+          const segLen = cumLen[i] - cumLen[i - 1];
+          const frac = segLen > 1e-5 ? (targetLen - cumLen[i - 1]) / segLen : 1;
+          slicedPts.push({
+            x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * frac,
+            y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * frac,
+            pressure: 0.7,
           });
+          break;
         }
+      }
+      const last = slicedPts[slicedPts.length - 1];
+      const prev = slicedPts[Math.max(0, slicedPts.length - 2)];
+      return {
+        stroke: slicedPts.length >= 2 ? { ...s, points: slicedPts } : null,
+        tip: {
+          x: last.x,
+          y: last.y,
+          dx: last.x - prev.x,
+          dy: last.y - prev.y,
+        },
+      };
+    }
+
+    return { stroke: s, tip: null };
+  };
+
+  for (const s of preparedStrokes) {
+    const isXAxis = s.id.includes('-axx');
+    const isYAxis = s.id.includes('-axy');
+    const isLegacyAxisLabel = /-lblx|-lbly|-ly-|-lx-|-lt-/.test(s.id);
+    const isCurve = s.id.includes('-crv-');
+
+    if (isXAxis) {
+      const { stroke, tip } = sliceStrokeWithTip(s, xAxisU);
+      if (stroke) out.push(stroke);
+      if (elapsedMs < xAxisEndMs && tip) {
+        penTip = {
+          x: tip.x,
+          y: tip.y,
+          tiltDeg: 0,
+          opacity: Math.min(1, Math.max(0.2, elapsedMs / 55)),
+        };
       }
       continue;
     }
 
-    // Dashed Projection Guides & Quantitative Tick Marks / Numbers
+    if (isYAxis) {
+      if (elapsedMs < xAxisEndMs) continue;
+      const { stroke, tip } = sliceStrokeWithTip(s, yAxisU);
+      if (stroke) out.push(stroke);
+      if (elapsedMs >= xAxisEndMs && elapsedMs < yAxisEndMs && tip) {
+        penTip = {
+          x: tip.x,
+          y: tip.y,
+          tiltDeg: -4,
+          opacity: 1,
+        };
+      }
+      continue;
+    }
+
+    if (isLegacyAxisLabel) {
+      if (elapsedMs >= xAxisEndMs) {
+        out.push(s);
+      }
+      continue;
+    }
+
+    if (isCurve) {
+      if (elapsedMs < curveStartMs) continue;
+      const cIdx = curveIndexMap.get(s.id) ?? 0;
+      const segStart = cIdx / numCurves;
+      const segEnd = (cIdx + 1) / numCurves;
+
+      if (rawCurveTotalU <= segStart) {
+        continue;
+      }
+      if (rawCurveTotalU >= segEnd) {
+        out.push(s);
+        const { tip } = sliceStrokeWithTip(s, 1);
+        if (tip) lastCurveEndPt = { x: tip.x, y: tip.y };
+        continue;
+      }
+
+      const localRawU = (rawCurveTotalU - segStart) / Math.max(1e-5, segEnd - segStart);
+      const localProgress = easeInOut(localRawU);
+      const { stroke, tip } = sliceStrokeWithTip(s, localProgress);
+      if (stroke) out.push(stroke);
+      if (tip) {
+        lastCurveEndPt = { x: tip.x, y: tip.y };
+        const rawTilt = Math.atan2(tip.dy, Math.abs(tip.dx) + 14) * (180 / Math.PI) * 0.26;
+        const tiltDeg = Math.max(-7, Math.min(7, rawTilt));
+        penTip = {
+          x: tip.x,
+          y: tip.y,
+          tiltDeg,
+          opacity: 1,
+        };
+      }
+      continue;
+    }
+
+    // Dashed Projection Guides & Quantitative Tick Marks
     if (guidesAlpha > 0.01) {
       out.push(guidesAlpha >= 0.995 ? s : { ...s, opacity: (s.opacity ?? 1) * guidesAlpha });
     }
   }
 
-  return out;
+  // Smooth lift-off fade after the curve finishes (1680ms .. 1820ms)
+  if (!penTip && elapsedMs >= curveEndMs && elapsedMs < totalDurationMs && lastCurveEndPt) {
+    const fadeOut = Math.max(0, 1 - (elapsedMs - curveEndMs) / Math.max(1, totalDurationMs - curveEndMs));
+    if (fadeOut > 0.02) {
+      penTip = {
+        x: lastCurveEndPt.x + (1 - fadeOut) * 6,
+        y: lastCurveEndPt.y - (1 - fadeOut) * 6,
+        tiltDeg: -2,
+        opacity: fadeOut,
+      };
+    }
+  }
+
+  return { strokes: out, penTip };
+}
+
+export function computeMathGraphAnimationFrame(
+  preparedStrokes: StrokeObject[],
+  elapsedMs: number,
+  totalDurationMs = 1820
+): StrokeObject[] {
+  return computeMathGraphAnimationFrameWithPen(preparedStrokes, elapsedMs, totalDurationMs).strokes;
 }
 
 
