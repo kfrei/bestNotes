@@ -8948,8 +8948,8 @@ export function buildMathGraphStrokesFromEquation(
 
   const halfW = Math.max(70, width / 2);
   const halfH = Math.max(70, height / 2);
-  const plotHalfW = halfW * 0.82;
-  const plotHalfH = halfH * 0.82;
+  const plotHalfW = halfW * 0.85;
+  const plotHalfH = halfH * 0.85;
   const groupId = `math-graph-grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const nowId = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
 
@@ -9270,9 +9270,9 @@ export function buildMathGraphStrokesFromEquation(
         const xInt = Math.abs(D) > eps ? -G / D : 0;
         const yInt = Math.abs(E) > eps ? -G / E : 0;
         const maxIntercept = Math.max(
-          1.5,
-          Math.abs(xInt) > eps ? Math.abs(xInt) * 1.85 : 0,
-          Math.abs(yInt) > eps ? Math.abs(yInt) * 1.85 : 0
+          1.25,
+          Math.abs(xInt) > eps ? Math.abs(xInt) * 1.35 : 0,
+          Math.abs(yInt) > eps ? Math.abs(yInt) * 1.35 : 0
         );
         const wSpan = maxIntercept;
         const hSpan = maxIntercept;
@@ -9346,7 +9346,7 @@ export function buildMathGraphStrokesFromEquation(
         kindLabel = isCircle ? 'Κύκλος' : 'Έλλειψη';
 
         const maxCenterOffset = Math.max(Math.abs(x0), Math.abs(y0));
-        const baseRadiusPx = Math.min(plotHalfW, plotHalfH) * (maxCenterOffset > 0.05 ? 0.52 : 0.72);
+        const baseRadiusPx = Math.min(plotHalfW, plotHalfH) * (maxCenterOffset > 0.05 ? 0.58 : 0.80);
         let rxPx = baseRadiusPx;
         let ryPx = baseRadiusPx;
 
@@ -9430,10 +9430,10 @@ export function buildMathGraphStrokesFromEquation(
         const yv = pa * xv * xv + pb * xv + pc;
         const disc = pb * pb - 4 * pa * pc;
         const rootSpan = disc > 0 ? Math.sqrt(disc) / Math.abs(2 * pa) : 0;
-        const halfDomainX = Math.max(1.8, rootSpan * 1.55, Math.abs(xv) * 0.8 + 1.6);
-        const xSpan = Math.max(Math.abs(xv) + halfDomainX, 2.2);
+        const halfDomainX = Math.max(1.45, rootSpan * 1.4, Math.abs(xv) * 0.6 + 1.35);
+        const xSpan = Math.max(Math.abs(xv) + halfDomainX, 1.55);
         const yAtEdge1 = pa * (xv + halfDomainX) * (xv + halfDomainX) + pb * (xv + halfDomainX) + pc;
-        const ySpan = Math.max(Math.abs(yv) * 1.45, Math.abs(yAtEdge1), Math.abs(pc) * 1.3, 2.0);
+        const ySpan = Math.max(Math.abs(yv) * 1.3, Math.abs(yAtEdge1) * 0.96, Math.abs(pc) * 1.25, 1.25);
 
         const pts: { x: number; y: number }[] = [];
         const steps = 80;
@@ -9496,10 +9496,10 @@ export function buildMathGraphStrokesFromEquation(
         const xv = pa * yv * yv + pb * yv + pc;
         const disc = pb * pb - 4 * pa * pc;
         const rootSpan = disc > 0 ? Math.sqrt(disc) / Math.abs(2 * pa) : 0;
-        const halfDomainY = Math.max(1.8, rootSpan * 1.55, Math.abs(yv) * 0.8 + 1.6);
-        const ySpan = Math.max(Math.abs(yv) + halfDomainY, 2.2);
+        const halfDomainY = Math.max(1.45, rootSpan * 1.4, Math.abs(yv) * 0.6 + 1.35);
+        const ySpan = Math.max(Math.abs(yv) + halfDomainY, 1.55);
         const xAtEdge = pa * (yv + halfDomainY) * (yv + halfDomainY) + pb * (yv + halfDomainY) + pc;
-        const xSpan = Math.max(Math.abs(xv) * 1.45, Math.abs(xAtEdge), Math.abs(pc) * 1.3, 2.0);
+        const xSpan = Math.max(Math.abs(xv) * 1.3, Math.abs(xAtEdge) * 0.96, Math.abs(pc) * 1.25, 1.25);
 
         const pts: { x: number; y: number }[] = [];
         const steps = 80;
@@ -9549,8 +9549,8 @@ export function buildMathGraphStrokesFromEquation(
         const bSemi = Math.sqrt(Math.abs(effK / C));
         const opensEastWest = effK / A > 0;
 
-        const xSpan = Math.max(aSemi * 2.8, Math.abs(x0) + aSemi * 2.4, 2.0);
-        const ySpan = Math.max(bSemi * 2.8, Math.abs(y0) + bSemi * 2.4, 2.0);
+        const xSpan = Math.max(aSemi * 2.15, Math.abs(x0) + aSemi * 1.95, 1.5);
+        const ySpan = Math.max(bSemi * 2.15, Math.abs(y0) + bSemi * 1.95, 1.5);
         const steps = 72;
 
         if (opensEastWest) {
@@ -9709,7 +9709,10 @@ export function buildMathGraphStrokesFromEquation(
     }
     validAbsY.sort((a, b) => a - b);
     const p75 = validAbsY.length > 0 ? validAbsY[Math.floor(validAbsY.length * 0.75)] : 2.5;
-    const ySpan = Math.max(1.8, maxExtremaY * 1.45, Math.min(18, p75 * 1.35));
+    const ySpan =
+      /SIN|COS/i.test(fnStr) && maxExtremaY > 1e-4
+        ? maxExtremaY * 1.18
+        : Math.max(1.1, maxExtremaY * 1.25, Math.min(18, p75 * 1.18));
 
     // Sample continuous branches, splitting across vertical asymptotes or domain gaps
     const numSteps = 160;
@@ -9851,10 +9854,72 @@ export function buildMathGraphStrokesFromEquation(
     }
   }
 
-  // Step C: General Implicit Contour Plotter (Marching Squares on F(x, y) = 0)
-  const gridN = 56;
-  const wSpan = 3.5;
-  const hSpan = 3.5;
+  // Step C: General Implicit Contour Plotter (2-Pass Adaptive Marching Squares on F(x, y) = 0 so the curve fills ~80% of the axes!)
+  const findContourExtent = (testSpan: number, nSteps: number) => {
+    let maxAbsX = 0;
+    let maxAbsY = 0;
+    let count = 0;
+    const vals: number[][] = [];
+    for (let r = 0; r <= nSteps; r++) {
+      const row: number[] = [];
+      const wy = testSpan - (2 * testSpan * r) / nSteps;
+      for (let c = 0; c <= nSteps; c++) {
+        const wx = -testSpan + (2 * testSpan * c) / nSteps;
+        row.push(evalF(wx, wy));
+      }
+      vals.push(row);
+    }
+    const updatePt = (x1: number, y1: number, v1: number, x2: number, y2: number, v2: number) => {
+      const denom = v1 - v2;
+      const t = Math.abs(denom) > 1e-9 ? Math.max(0, Math.min(1, v1 / denom)) : 0.5;
+      const wx = x1 + (x2 - x1) * t;
+      const wy = y1 + (y2 - y1) * t;
+      maxAbsX = Math.max(maxAbsX, Math.abs(wx));
+      maxAbsY = Math.max(maxAbsY, Math.abs(wy));
+      count++;
+    };
+    for (let r = 0; r < nSteps; r++) {
+      const wyTop = testSpan - (2 * testSpan * r) / nSteps;
+      const wyBot = testSpan - (2 * testSpan * (r + 1)) / nSteps;
+      for (let c = 0; c < nSteps; c++) {
+        const wxLeft = -testSpan + (2 * testSpan * c) / nSteps;
+        const wxRight = -testSpan + (2 * testSpan * (c + 1)) / nSteps;
+        const vTL = vals[r][c];
+        const vTR = vals[r][c + 1];
+        const vBR = vals[r + 1][c + 1];
+        const vBL = vals[r + 1][c];
+        if (!Number.isFinite(vTL) || !Number.isFinite(vTR) || !Number.isFinite(vBR) || !Number.isFinite(vBL)) {
+          continue;
+        }
+        if ((vTL >= 0) !== (vTR >= 0)) updatePt(wxLeft, wyTop, vTL, wxRight, wyTop, vTR);
+        if ((vTR >= 0) !== (vBR >= 0)) updatePt(wxRight, wyTop, vTR, wxRight, wyBot, vBR);
+        if ((vBR >= 0) !== (vBL >= 0)) updatePt(wxRight, wyBot, vBR, wxLeft, wyBot, vBL);
+        if ((vBL >= 0) !== (vTL >= 0)) updatePt(wxLeft, wyBot, vBL, wxLeft, wyTop, vTL);
+      }
+    }
+    return { maxAbsX, maxAbsY, count };
+  };
+
+  let scout = findContourExtent(3.2, 48);
+  if (scout.count === 0) {
+    scout = findContourExtent(10.0, 56);
+  }
+
+  const gridN = 76;
+  const maxCurveSpan = Math.max(scout.maxAbsX, scout.maxAbsY, 0.4);
+  const aspectRatio =
+    scout.maxAbsX > 0.1 && scout.maxAbsY > 0.1
+      ? Math.max(scout.maxAbsX / scout.maxAbsY, scout.maxAbsY / scout.maxAbsX)
+      : 1;
+  // Fit the contour tightly so it occupies ~80% of the coordinate axes!
+  const wSpan =
+    scout.count > 0
+      ? (aspectRatio > 1.8 ? Math.max(0.25, scout.maxAbsX) : maxCurveSpan) * 1.04
+      : 3.0;
+  const hSpan =
+    scout.count > 0
+      ? (aspectRatio > 1.8 ? Math.max(0.25, scout.maxAbsY) : maxCurveSpan) * 1.04
+      : 3.0;
   const gridVals: number[][] = [];
   for (let r = 0; r <= gridN; r++) {
     const row: number[] = [];
