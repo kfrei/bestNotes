@@ -27510,7 +27510,7 @@ export default function App() {
                           className="flex items-center gap-1 px-3 py-1 rounded-full font-bold transition cursor-pointer bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300"
                           title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
                         >
-                          <span>∑ Text2Math</span>
+                          <span>Text2Math</span>
                         </button>
                       )}
 
@@ -27521,7 +27521,7 @@ export default function App() {
                           className="flex items-center gap-1 px-3 py-1 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-2xs transition cursor-pointer"
                           title="Διάγραμμα: Αυτόματη σχεδίαση διαγράμματος (ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο) δίπλα στην εξίσωση!"
                         >
-                          <span>📈 Διάγραμμα</span>
+                          <span>Διάγραμμα</span>
                         </button>
                       )}
 
@@ -32025,7 +32025,7 @@ export default function App() {
                                     className="px-2 py-0.5 rounded font-extrabold cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
                                     title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
                                   >
-                                    ∑ Text2Math
+                                    Text2Math
                                   </button>
                                 </>
                               )}
@@ -32036,7 +32036,7 @@ export default function App() {
                                 className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer"
                                 title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
                               >
-                                📈 Διάγραμμα
+                                Διάγραμμα
                               </button>
                               <button
                                 type="button"
