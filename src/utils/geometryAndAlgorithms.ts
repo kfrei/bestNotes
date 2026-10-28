@@ -8265,10 +8265,24 @@ function createMathGraphLabelText(
   idPrefix: string
 ): TextObject {
   const [mainPart, subPart] = label.split('_');
-  const mainW = mainPart.length * (fontSize * 0.58);
-  const subW = subPart ? subPart.length * (fontSize * 0.42) + 2 : 0;
-  const estW = mainW + subW + 8;
-  const estH = fontSize * 1.1;
+  const measureStrW = (str: string, sz: number) => {
+    let w = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '-' || ch === '.' || ch === ',' || ch === '/' || ch === ' ') {
+        w += sz * 0.34;
+      } else if (ch === '1' || ch === 'i' || ch === 'l' || ch === 'I') {
+        w += sz * 0.4;
+      } else {
+        w += sz * 0.54;
+      }
+    }
+    return w;
+  };
+  const mainW = measureStrW(mainPart, fontSize);
+  const subW = subPart ? measureStrW(subPart, fontSize * 0.72) + 1.5 : 0;
+  const estW = mainW + subW + 1;
+  const estH = fontSize * 1.05;
   const x =
     align === 'center'
       ? Math.round(anchorX - estW / 2)
@@ -9496,30 +9510,30 @@ export function buildMathGraphStrokesFromEquation(
     const dxCandidates = [
       xLabelOffset,
       0,
-      outDir * 4,
-      -outDir * 4,
-      outDir * 8,
-      -outDir * 8,
+      outDir * 3,
+      -outDir * 3,
+      outDir * 6,
+      -outDir * 6,
     ];
     const aboveOptions = [placeAbove, !placeAbove];
 
     let bestAx = px + xLabelOffset;
-    let bestAy = placeAbove ? centerY - 13 : centerY + 14;
+    let bestAy = placeAbove ? centerY - 11 : centerY + 11.5;
     let bestBox = computeLabelBox(labelText, bestAx, bestAy, 'center', fontH);
     let bestScore = -Infinity;
 
     for (const isAbove of aboveOptions) {
-      const candY = isAbove ? centerY - 13 : centerY + 14;
+      const candY = isAbove ? centerY - 11 : centerY + 11.5;
       for (const dx of dxCandidates) {
         const candX = px + dx;
-        if (Math.abs(candX - centerX) < 10) continue;
+        if (Math.abs(candX - centerX) < 9) continue;
         const box = computeLabelBox(labelText, candX, candY, 'center', fontH);
         const clearance = scoreCandidateBox(box, curvePts);
         const prefBonus =
-          (isAbove === placeAbove ? 1.2 : 0) +
-          (Math.abs(dx - xLabelOffset) < 2 ? 0.8 : 0) -
-          Math.abs(dx) * 0.9;
-        const score = Math.min(clearance, 3.5) * 4.0 + prefBonus;
+          (isAbove === placeAbove ? 1.4 : 0) +
+          (Math.abs(dx - xLabelOffset) < 1.5 ? 1.2 : 0) -
+          Math.abs(dx) * 1.1;
+        const score = Math.min(clearance, 2.2) * 3.5 + prefBonus;
         if (score > bestScore) {
           bestScore = score;
           bestAx = candX;
@@ -9577,32 +9591,32 @@ export function buildMathGraphStrokesFromEquation(
     const dyCandidates = [
       yLabelOffset,
       0,
-      outDirY * 4,
-      -outDirY * 4,
-      outDirY * 8,
-      -outDirY * 8,
+      outDirY * 3,
+      -outDirY * 3,
+      outDirY * 5,
+      -outDirY * 5,
     ];
     const leftOptions = [placeLeft, !placeLeft];
 
-    let bestAx = placeLeft ? centerX - 6.5 : centerX + 6.5;
+    let bestAx = placeLeft ? centerX - 4.5 : centerX + 4.5;
     let bestAy = py + yLabelOffset;
     let bestAlign: 'left' | 'right' = placeLeft ? 'right' : 'left';
     let bestBox = computeLabelBox(labelText, bestAx, bestAy, bestAlign, fontH);
     let bestScore = -Infinity;
 
     for (const isLeft of leftOptions) {
-      const candX = isLeft ? centerX - 6.5 : centerX + 6.5;
+      const candX = isLeft ? centerX - 4.5 : centerX + 4.5;
       const candAlign: 'left' | 'right' = isLeft ? 'right' : 'left';
       for (const dy of dyCandidates) {
         const candY = py + dy;
-        if (Math.abs(candY - centerY) < 10) continue;
+        if (Math.abs(candY - centerY) < 9) continue;
         const box = computeLabelBox(labelText, candX, candY, candAlign, fontH);
         const clearance = scoreCandidateBox(box, curvePts);
         const prefBonus =
-          (isLeft === placeLeft ? 1.2 : 0) +
-          (Math.abs(dy - yLabelOffset) < 2 ? 0.8 : 0) -
-          Math.abs(dy) * 0.9;
-        const score = Math.min(clearance, 3.5) * 4.0 + prefBonus;
+          (isLeft === placeLeft ? 1.4 : 0) +
+          (Math.abs(dy - yLabelOffset) < 1.5 ? 1.4 : 0) -
+          Math.abs(dy) * 1.2;
+        const score = Math.min(clearance, 2.0) * 3.2 + prefBonus;
         if (score > bestScore) {
           bestScore = score;
           bestAx = candX;
