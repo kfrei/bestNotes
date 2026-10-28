@@ -9131,8 +9131,9 @@ export function buildMathGraphStrokesFromEquation(
   };
 
   // Detect whether the equation is quantitative (numerical constants only, no symbolic parameters like a, b, c, R)
-  const strippedForVars = normalized.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|PI)\b/gi, '');
-  const isQuantitative = !/[a-wyzA-WYZα-ωΑ-Ω]/.test(strippedForVars);
+  // Note: exclude `x`, `y` (coordinate variables) and `e` (Euler's constant) from the symbolic parameter check!
+  const strippedForVars = normalized.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG|PI)\b/gi, '');
+  const isQuantitative = !/[a-df-wzA-DF-WZα-ωΑ-Ω]/.test(strippedForVars);
 
   const formatNumLabel = (val: number): string => {
     if (!Number.isFinite(val) || Math.abs(val) < 1e-5) return '0';
@@ -9151,7 +9152,7 @@ export function buildMathGraphStrokesFromEquation(
     placeAbove = false,
     xLabelOffset = 0
   ) => {
-    if (Math.abs(px - centerX) > halfW - 14 || Math.abs(px - centerX) < 11) return;
+    if (Math.abs(px - centerX) > halfW - 6 || Math.abs(px - centerX) < 11) return;
     const tId = tickCounter++;
     strokes.push({
       id: `math-graph-lbl-${nowId}-xtick-${tId}`,
@@ -9190,7 +9191,7 @@ export function buildMathGraphStrokesFromEquation(
     placeLeft = false,
     yLabelOffset = 0
   ) => {
-    if (Math.abs(py - centerY) > halfH - 14 || Math.abs(py - centerY) < 11) return;
+    if (Math.abs(py - centerY) > halfH - 6 || Math.abs(py - centerY) < 11) return;
     const tId = tickCounter++;
     strokes.push({
       id: `math-graph-lbl-${nowId}-ytick-${tId}`,
@@ -10090,6 +10091,67 @@ export function buildMathGraphStrokesFromEquation(
 
   if (strokes.length <= 6) {
     return null;
+  }
+
+  // Quantitative Axis Intercepts for General Implicit Curves F(x, y) = 0
+  // (e.g. Heart curve `(x^2+y^2-1)^3 - x^2*y^3 = 0` -> x-intercepts at -1, 1 and y-intercepts at -1, 1)
+  if (isQuantitative) {
+    const find1DRoots = (fn1D: (t: number) => number, span: number): number[] => {
+      const roots: number[] = [];
+      const steps = 200;
+      const range = span * 0.98;
+      for (let i = 0; i < steps; i++) {
+        const tA = -range + (2 * range * i) / steps;
+        const tB = -range + (2 * range * (i + 1)) / steps;
+        const vA = fn1D(tA);
+        const vB = fn1D(tB);
+        if (!Number.isFinite(vA) || !Number.isFinite(vB)) continue;
+        let rootCand: number | null = null;
+        if (Math.abs(vA) <= 1e-6) {
+          rootCand = tA;
+        } else if ((vA > 0) !== (vB > 0)) {
+          let lo = tA;
+          let hi = tB;
+          let fLo = vA;
+          for (let iter = 0; iter < 18; iter++) {
+            const mid = 0.5 * (lo + hi);
+            const fMid = fn1D(mid);
+            if (!Number.isFinite(fMid)) break;
+            if ((fLo > 0) !== (fMid > 0) || fMid === 0) {
+              hi = mid;
+            } else {
+              lo = mid;
+              fLo = fMid;
+            }
+          }
+          rootCand = 0.5 * (lo + hi);
+        }
+        if (
+          rootCand !== null &&
+          Math.abs(rootCand) > 0.08 * span &&
+          !roots.some((r) => Math.abs(r - rootCand!) < 0.14 * span)
+        ) {
+          roots.push(rootCand);
+        }
+      }
+      return roots;
+    };
+
+    const xIntercepts = find1DRoots((wx) => evalF(wx, 0), wSpan);
+    if (xIntercepts.length <= 4) {
+      for (const rx of xIntercepts) {
+        const px = centerX + (rx / wSpan) * plotHalfW;
+        addXAxisTickAndLabel(px, formatNumLabel(rx), true, rx < 0 ? -10 : 10);
+      }
+    }
+
+    const yIntercepts = find1DRoots((wy) => evalF(0, wy), hSpan);
+    if (yIntercepts.length <= 4) {
+      for (const ry of yIntercepts) {
+        const py = centerY - (ry / hSpan) * plotHalfH;
+        addYAxisTickAndLabel(py, formatNumLabel(ry), false, ry > 0 ? -10 : 11);
+      }
+    }
   }
 
   return { strokes, groupId, kindLabel };
