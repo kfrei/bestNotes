@@ -1132,6 +1132,7 @@ export default function App() {
   const [springSettleAnim, setSpringSettleAnim] = useState<{
     simId: string;
     startTime: number;
+    fromLengthPx?: number;
   } | null>(null);
   const [springPhaseShiftAnim, setSpringPhaseShiftAnim] = useState<{
     simId: string;
@@ -10231,17 +10232,19 @@ export default function App() {
   const attachMassToSpringAndCreateEquilibriumClone = (springId: string, massId: string) => {
     let createdOrUpdatedName = '';
     let createdSimId = '';
+    let prevSpringLengthPx = 0;
     updateActivePage((page) => {
       const sp = page.strokes.find((s) => s.id === springId);
       const mass = page.strokes.find((s) => s.id === massId);
       if (!sp || !mass) return page;
 
       const info = getSpringTerminalsAndWidthVec(sp);
+      prevSpringLengthPx = info.length;
       const mb = getStrokeBounds(mass);
       const massCx = (mb.minX + mb.maxX) / 2;
       const massCy = (mb.minY + mb.maxY) / 2;
-      const massW = Math.max(24, mb.maxX - mb.minX);
-      const massH = Math.max(24, mb.maxY - mb.minY);
+      const massW = Math.max(16, mb.maxX - mb.minX);
+      const massH = Math.max(16, mb.maxY - mb.minY);
 
       // Determine fixedEnd and supportStrokeId
       let fixedEnd: 'start' | 'end' = sp.springSupport?.fixedEnd || 'start';
@@ -10303,11 +10306,14 @@ export default function App() {
         (sm) => sm.eqSpringStrokeId === sp.id || sm.naturalSpringStrokeId === sp.id
       );
 
-      if (existingSim && existingSim.eqSpringStrokeId === sp.id) {
+      if (existingSim) {
         createdOrUpdatedName = existingSim.name;
         createdSimId = existingSim.id;
         const updatedSim: SpringSimConfig = {
           ...existingSim,
+          eqSpringStrokeId: sp.id,
+          naturalSpringStrokeId: undefined,
+          showNaturalSpring: false,
           massStrokeId: mass.id,
           baseMassWidthPx: massW,
           baseMassHeightPx: massH,
@@ -10316,22 +10322,8 @@ export default function App() {
         return applySpringSimParametersToStrokes(page, updatedSim);
       }
 
-      // Fresh Spring: Keep sp as the Natural Length (l0) spring on the left,
-      // and create a Cloned Equilibrium Spring (eqSpring) to the right with the mass attached at Equilibrium (Θ.Ι.)!
-      const isVertical = Math.abs(uy) >= 0.5;
-      const cloneOffsetX = isVertical
-        ? Math.round(Math.max(92, info.springWidth * 1.9, massW * 1.45) / A4_GRID_STEP_PX) *
-          A4_GRID_STEP_PX
-        : 0;
-      const cloneOffsetY = !isVertical
-        ? -Math.round(Math.max(92, info.springWidth * 1.9, massH * 1.45) / A4_GRID_STEP_PX) *
-          A4_GRID_STEP_PX
-        : 0;
-
-      const eqFixedPt = {
-        x: fixedPt.x + cloneOffsetX,
-        y: fixedPt.y + cloneOffsetY,
-      };
+      // Modify the SAME spring `sp` in-place to its Equilibrium (Θ.Ι.) length (no 2nd cloned spring!)
+      const eqFixedPt = fixedPt;
       const eqLen = computeEquilibriumLengthPx(info.length, ux, uy, totalMass, 1.0);
       const eqFreePt = {
         x: eqFixedPt.x + ux * eqLen,
@@ -10341,14 +10333,6 @@ export default function App() {
       const eqEndTerm = fixedEnd === 'start' ? eqFreePt : eqFixedPt;
       const wVec = orientSpringWidthVec(ux, uy, info.springWidth, info.widthVec);
       const eqCorners = buildSpringQuadCorners(eqStartTerm, eqEndTerm, wVec);
-
-      const eqSpringId = `spring-eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const eqSpringStroke: StrokeObject = {
-        ...sp,
-        id: eqSpringId,
-        points: eqCorners,
-        springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : undefined,
-      };
 
       const floorGap = uy < -0.45 ? 4 : mass.shapeType === 'hooked-weight' ? -2 : 0;
       const newMassCx = eqFreePt.x + ux * (massW / 2 + floorGap);
@@ -10380,11 +10364,11 @@ export default function App() {
         prevBottomY = childCy + uy * (ch / 2);
       }
 
-      // Auto-extend horizontal ceiling/floor support line to the right so it covers the cloned equilibrium spring!
       const nextStrokes = page.strokes.map((s) => {
         if (s.id === sp.id) {
           return {
             ...s,
+            points: eqCorners,
             springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : s.springSupport,
           };
         }
@@ -10392,30 +10376,8 @@ export default function App() {
         if (chainedUpd) {
           return chainedUpd;
         }
-        if (supportStrokeId && s.id === supportStrokeId && s.points.length >= 2) {
-          const p0 = s.points[0];
-          const pLast = s.points[s.points.length - 1];
-          if (Math.abs(pLast.y - p0.y) <= 14 && isVertical) {
-            const neededMaxX = eqFixedPt.x + Math.max(64, massW * 0.85);
-            const curMaxX = Math.max(p0.x, pLast.x);
-            if (neededMaxX > curMaxX) {
-              const newPts = s.points.map((pt, idx) => {
-                if (
-                  (pLast.x >= p0.x && idx === s.points.length - 1) ||
-                  (p0.x > pLast.x && idx === 0)
-                ) {
-                  return { ...pt, x: neededMaxX };
-                }
-                return pt;
-              });
-              return { ...s, points: newPts };
-            }
-          }
-        }
         return s;
       });
-
-      nextStrokes.push(eqSpringStroke);
 
       const newSimName = getNextDefaultSpringSimName(page);
       createdOrUpdatedName = newSimName;
@@ -10423,8 +10385,8 @@ export default function App() {
       const newSpringSim: SpringSimConfig = {
         id: `spring-sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         name: newSimName,
-        naturalSpringStrokeId: sp.id,
-        eqSpringStrokeId: eqSpringId,
+        naturalSpringStrokeId: undefined,
+        eqSpringStrokeId: sp.id,
         massStrokeId: mass.id,
         supportStrokeId,
         fixedEnd,
@@ -10436,7 +10398,7 @@ export default function App() {
         stiffness: 1.0,
         amplitudePx: defaultAmp,
         initialPhaseMode: 'eq',
-        showNaturalSpring: isVertical,
+        showNaturalSpring: false,
         showAmplitudeLines: true,
         showForceVectors: false,
         graphs: {
@@ -10458,13 +10420,15 @@ export default function App() {
 
     setSelectedStrokeIds([]);
     if (createdSimId) {
-      setSpringSettleAnim({ simId: createdSimId, startTime: performance.now() });
+      setSpringSettleAnim({
+        simId: createdSimId,
+        startTime: performance.now(),
+        fromLengthPx: prevSpringLengthPx > 0 ? prevSpringLengthPx : undefined,
+      });
     }
-    setSimActiveCategory('springs');
-    setShowSimulationPanel(true);
     if (createdOrUpdatedName) {
       showToast(
-        `🧲 [${createdOrUpdatedName}] Το σώμα συνδέθηκε! Δημιουργήθηκε θέση ισορροπίας (Θ.Ι.) δίπλα στο φυσικό μήκος (l₀).`
+        `🧲 [${createdOrUpdatedName}] Το σώμα κρεμάστηκε στο ελατήριο και ισορροπεί στη νέα Θ.Ι.!`
       );
     }
   };
@@ -10472,6 +10436,7 @@ export default function App() {
   const attachWeightToWeightChain = (parentWeightId: string, childWeightId: string) => {
     let totalChainedCount = 2;
     let settledSimId = '';
+    let prevSpringLengthPx = 0;
     updateActivePage((page) => {
       const parentSt = page.strokes.find((s) => s.id === parentWeightId);
       const childSt = page.strokes.find((s) => s.id === childWeightId);
@@ -10517,6 +10482,10 @@ export default function App() {
       const attachedSim = getValidSpringSims(nextPage).find((sm) => sm.massStrokeId === rootId);
       if (attachedSim) {
         settledSimId = attachedSim.id;
+        const eqSp = nextPage.strokes.find((s) => s.id === attachedSim.eqSpringStrokeId);
+        if (eqSp) {
+          prevSpringLengthPx = getSpringTerminalsAndWidthVec(eqSp).length;
+        }
         const updatedSim: SpringSimConfig = {
           ...attachedSim,
           mass: Math.max(1.0, fullChain.length * 1.0),
@@ -10529,7 +10498,11 @@ export default function App() {
 
     setSelectedStrokeIds([]);
     if (settledSimId) {
-      setSpringSettleAnim({ simId: settledSimId, startTime: performance.now() });
+      setSpringSettleAnim({
+        simId: settledSimId,
+        startTime: performance.now(),
+        fromLengthPx: prevSpringLengthPx > 0 ? prevSpringLengthPx : undefined,
+      });
     }
     showToast(
       `🪝 Συνδέθηκαν ${totalChainedCount} βαρίδια σε σειρά${settledSimId ? ` (m = ${totalChainedCount} kg — νέα επιμήκυνση ελατηρίου!)` : '!'}`
@@ -12302,10 +12275,11 @@ export default function App() {
               : activeSpringSim.customInitialPhaseRad ?? -Math.PI / 2;
           const A = Math.max(16, activeSpringSim.amplitudePx || 55);
 
+          const SETTLE_DURATION_MS = 3000;
           const isSettlingToEq =
             springSettleAnim !== null &&
             springSettleAnim.simId === activeSpringSim.id &&
-            now - springSettleAnim.startTime < 820;
+            now - springSettleAnim.startTime < SETTLE_DURATION_MS;
           const isPhaseShifting =
             springPhaseShiftAnim !== null &&
             springPhaseShiftAnim.simId === activeSpringSim.id &&
@@ -12360,11 +12334,16 @@ export default function App() {
             dispDx = xDisp * oscUx;
             dispDy = xDisp * oscUy;
           } else if (isSettlingToEq && springSettleAnim) {
-            // Smooth 0.82s damped spring-settle animation from natural length (l0) down to Equilibrium (Θ.Ι.)!
-            const u = Math.max(0, Math.min(1, (now - springSettleAnim.startTime) / 820));
-            const progress = 1 - Math.pow(1 - u, 2.2) * Math.cos(u * Math.PI * 1.65);
+            // Smooth 3.0s damped harmonic oscillation (φθίνουσα ταλάντωση) around the new Equilibrium (Θ.Ι.)!
+            const elapsedSecSettle = (now - springSettleAnim.startTime) / 1000;
+            const u = Math.max(0, Math.min(1, elapsedSecSettle / (SETTLE_DURATION_MS / 1000)));
+            const startLen = springSettleAnim.fromLengthPx ?? activeSpringSim.naturalLengthPx;
+            const rawDelta = axLen - startLen;
+            const initDelta =
+              Math.abs(rawDelta) >= 16 ? rawDelta : rawDelta >= 0 ? 28 : -28;
+            const decay = Math.exp(-1.75 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
             const deltaFromEqAlongAxis =
-              (progress - 1) * (axLen - activeSpringSim.naturalLengthPx);
+              -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 1.45);
             dispDx = deltaFromEqAlongAxis * axisUx;
             dispDy = deltaFromEqAlongAxis * axisUy;
             xDisp = dispDx * oscUx + dispDy * oscUy;
@@ -12372,7 +12351,7 @@ export default function App() {
             if (
               springSettleAnim !== null &&
               springSettleAnim.simId === activeSpringSim.id &&
-              now - springSettleAnim.startTime >= 820
+              now - springSettleAnim.startTime >= SETTLE_DURATION_MS
             ) {
               setSpringSettleAnim(null);
             }
@@ -12444,8 +12423,17 @@ export default function App() {
             | { minX: number; minY: number; maxX: number; maxY: number }
             | undefined;
 
+          const showSpringOscGuides =
+            !isSettlingToEq &&
+            (isSpringSimulating ||
+              (showSimulationPanel && simActiveCategory === 'springs') ||
+              draggingSpringMassRef.current?.simId === activeSpringSim.id ||
+              draggingSpringAmpHandleRef.current?.simId === activeSpringSim.id ||
+              (activeSpringSim.initialPhaseMode !== 'eq' &&
+                activeSpringSim.initialPhaseMode !== 'eqDown'));
+
           // 6B-0. Faint Grey Position Scale & Draggable Position Pointer Arrow (αχνή γκρι κλίμακα θέσης με βελάκι δείκτη) on the left of the mass block!
-          {
+          if (showSpringOscGuides) {
             const scaleDist = massW / 2 + 18;
             const scaleMidX = eqMassCx - perpUx * scaleDist;
             const scaleMidY = eqMassCy - perpUy * scaleDist;
@@ -12583,7 +12571,7 @@ export default function App() {
           }
 
           // 6B. Draw Black Dashed Equilibrium Line (Θ.Ι.) & 2 Blue Dashed Amplitude Lines (+A / -A) with Double-Arrow Handles (↕)
-          if (activeSpringSim.showAmplitudeLines) {
+          if (showSpringOscGuides && activeSpringSim.showAmplitudeLines) {
             const perpHalfMass = (isVertSpring ? massW : massH) / 2;
             const eqStartDist = perpHalfMass + 12;
             const lineEndDist = perpHalfMass + 96;
