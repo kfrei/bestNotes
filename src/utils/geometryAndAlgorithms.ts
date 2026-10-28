@@ -3879,18 +3879,96 @@ export function renderPageStrokesToSnapshotDataUrl(strokes: StrokeObject[]): str
 }
 
 let cachedWorkingVisionModel: string | null = null;
+const quotaExhaustedVisionModels = new Map<string, number>();
+
+function markVisionModelQuotaExhausted(modelName: string): void {
+  const clean = modelName.replace(/^models\//, '');
+  quotaExhaustedVisionModels.set(clean, Date.now() + 15 * 60 * 1000);
+  if (cachedWorkingVisionModel === clean) {
+    cachedWorkingVisionModel = null;
+  }
+}
+
+function getPrioritizedVisionModels(baseModels?: string[]): string[] {
+  const now = Date.now();
+  const defaults = baseModels ?? [
+    'gemini-3-flash-preview',
+    'gemini-robotics-er-2-preview',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+  ];
+  const all = Array.from(
+    new Set([
+      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
+      ...defaults,
+    ])
+  );
+  const active: string[] = [];
+  const exhausted: string[] = [];
+  for (const m of all) {
+    const exp = quotaExhaustedVisionModels.get(m);
+    if (exp && exp > now) {
+      exhausted.push(m);
+    } else {
+      if (exp) quotaExhaustedVisionModels.delete(m);
+      active.push(m);
+    }
+  }
+  return [...active, ...exhausted];
+}
+
+function safeParseVisionJson(rawText: string): any {
+  const cleanJsonText = String(rawText || '')
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (!cleanJsonText) return null;
+
+  try {
+    return JSON.parse(cleanJsonText);
+  } catch {
+    // Fallback 1: sanitize literal newlines inside string quotes and invalid LaTeX backslash escapes
+    try {
+      const sanitized = cleanJsonText
+        .replace(/"((?:[^"\\]|\\.)*)"/gs, (match) =>
+          match
+            .replace(/\r?\n/g, '\\n')
+            .replace(/\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\')
+        );
+      return JSON.parse(sanitized);
+    } catch {
+      // Fallback 2: regex field extraction so valid OCR text is never discarded
+      const extractField = (key: string): string | undefined => {
+        const re = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 's');
+        const m = cleanJsonText.match(re);
+        if (!m) return undefined;
+        return m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      };
+      const eq = extractField('equation');
+      const norm = extractField('normalizedEquation');
+      const latex = extractField('latex');
+      const plainText = extractField('plainText');
+      const text = extractField('text');
+      const kind = extractField('kind');
+      if (eq || norm || latex || plainText || text) {
+        return { equation: eq, normalizedEquation: norm, latex, plainText, text, kind };
+      }
+      return null;
+    }
+  }
+}
 
 /**
  * Staggered-hedge execution across Gemini Vision models:
  * - Fires ONLY the primary model at t = 0ms so normal fast calls (~1.2s) consume just 1 API request!
- * - If the primary model errors (503/429) OR takes longer than `hedgeDelayMs` (1900ms), immediately launches
- *   the backup models in parallel so temporary 503 spikes never slow down the user.
+ * - If the primary model errors (503/429) OR takes longer than `hedgeDelayMs` (1300ms), immediately launches
+ *   the backup models in parallel so temporary 503/429 spikes never slow down the user.
  */
 async function runVisionWithStaggeredHedge<T>(
   models: string[],
   runner: (modelName: string, timeoutMs: number) => Promise<T | null>,
-  hedgeDelayMs = 1900,
-  timeoutMs = 7500
+  hedgeDelayMs = 1300,
+  timeoutMs = 15000
 ): Promise<T | null> {
   if (models.length === 0) return null;
   const primary = models[0];
@@ -4130,18 +4208,11 @@ export async function transcribeHandwrittenStrokesWithGemini(
     },
   ];
 
-  const candidateModels = Array.from(
-    new Set([
-      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-3-flash-preview',
-      'gemini-flash-lite-latest',
-      'gemini-flash-latest',
-    ])
-  );
+  const candidateModels = getPrioritizedVisionModels();
 
   const tryTranscribeWithModel = async (
     modelName: string,
-    timeoutMs = 7500
+    timeoutMs = 15000
   ): Promise<string | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
@@ -4164,13 +4235,14 @@ export async function transcribeHandwrittenStrokesWithGemini(
         }
       );
       if (!res.ok) {
-        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
+        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
         return null;
       }
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
-      const parsed = JSON.parse(rawText);
+      const parsed = safeParseVisionJson(rawText);
       const transcribed =
         typeof parsed?.text === 'string'
           ? parsed.text.trim()
@@ -4191,7 +4263,7 @@ export async function transcribeHandwrittenStrokesWithGemini(
     return null;
   };
 
-  return runVisionWithStaggeredHedge(candidateModels, tryTranscribeWithModel, 1900, 7500);
+  return runVisionWithStaggeredHedge(candidateModels, tryTranscribeWithModel, 1300, 15000);
 }
 
 /**
@@ -4271,18 +4343,11 @@ export async function transcribeHandwrittenMathWithGemini(
     },
   ];
 
-  const candidateModels = Array.from(
-    new Set([
-      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-3-flash-preview',
-      'gemini-flash-lite-latest',
-      'gemini-flash-latest',
-    ])
-  );
+  const candidateModels = getPrioritizedVisionModels();
 
   const tryMathWithModel = async (
     modelName: string,
-    timeoutMs = 7500
+    timeoutMs = 15000
   ): Promise<{ latex: string; plainText: string } | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
@@ -4305,13 +4370,14 @@ export async function transcribeHandwrittenMathWithGemini(
         }
       );
       if (!res.ok) {
-        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
+        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
         return null;
       }
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
-      const parsed = JSON.parse(rawText);
+      const parsed = safeParseVisionJson(rawText);
       const fromLines = Array.isArray(parsed?.lines)
         ? parsed.lines
             .map((l: any) => (typeof l === 'string' ? l.trim() : ''))
@@ -4345,7 +4411,7 @@ export async function transcribeHandwrittenMathWithGemini(
     return null;
   };
 
-  return runVisionWithStaggeredHedge(candidateModels, tryMathWithModel, 1900, 7500);
+  return runVisionWithStaggeredHedge(candidateModels, tryMathWithModel, 1300, 15000);
 }
 
 /**
@@ -7242,7 +7308,7 @@ export async function transcribeEquationForGraphWithGemini(
 3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή και ΔΕΝ είναι άγνωστη παράμετρος!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)") — ΜΗΝ το αντικαθιστάς με 3.14 και ΜΗΝ το μπερδεύεις με τα γράμματα n ή r! Επίσης πρόσεξε πολύ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos, τρία γράμματα σ-υ-ν όπου το σ μοιάζει με μικρό 6/c και το υν με uv): ΜΗΝ το μπερδεύεις ποτέ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
 4. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1 — εξαιρουμένου του π που είναι σταθερά!), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
-{"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
+{"equation": "...", "normalizedEquation": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
     },
     {
@@ -7253,18 +7319,11 @@ export async function transcribeEquationForGraphWithGemini(
     },
   ];
 
-  const candidateModels = Array.from(
-    new Set([
-      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-3-flash-preview',
-      'gemini-flash-lite-latest',
-      'gemini-flash-latest',
-    ])
-  );
+  const candidateModels = getPrioritizedVisionModels();
 
   const tryWithModel = async (
     modelName: string,
-    timeoutMs = 8000
+    timeoutMs = 15000
   ): Promise<{
     equation: string;
     normalizedEquation?: string;
@@ -7292,17 +7351,15 @@ export async function transcribeEquationForGraphWithGemini(
         }
       );
       if (!res.ok) {
-        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
+        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
         return null;
       }
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
-      const cleanJsonText = String(rawText)
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-      const parsedRaw = JSON.parse(cleanJsonText);
+      const parsedRaw = safeParseVisionJson(rawText);
+      if (!parsedRaw) return null;
       const parsed = Array.isArray(parsedRaw) ? parsedRaw[0] : parsedRaw;
       const joinedArrayEq = Array.isArray(parsedRaw)
         ? parsedRaw
@@ -7323,6 +7380,25 @@ export async function transcribeEquationForGraphWithGemini(
             .filter(Boolean)
             .join('\n')
         : '';
+      const joinedArrayNormEq = Array.isArray(parsedRaw)
+        ? parsedRaw
+            .map((item) =>
+              typeof item === 'string'
+                ? item.trim()
+                : (item?.normalizedEquation || item?.equation || '').trim()
+            )
+            .filter(Boolean)
+            .join('\n')
+        : Array.isArray(parsed?.equations)
+        ? parsed.equations
+            .map((item: any) =>
+              typeof item === 'string'
+                ? item.trim()
+                : (item?.normalizedEquation || item?.equation || '').trim()
+            )
+            .filter(Boolean)
+            .join('\n')
+        : '';
       const eq =
         joinedArrayEq ||
         (typeof parsed?.equation === 'string' && parsed.equation.trim()
@@ -7339,9 +7415,10 @@ export async function transcribeEquationForGraphWithGemini(
         return {
           equation: eq,
           normalizedEquation:
-            typeof parsed?.normalizedEquation === 'string'
+            joinedArrayNormEq ||
+            (typeof parsed?.normalizedEquation === 'string'
               ? parsed.normalizedEquation.trim()
-              : undefined,
+              : undefined),
           latex: typeof parsed?.latex === 'string' ? parsed.latex.trim() : undefined,
           kind: typeof parsed?.kind === 'string' ? parsed.kind.trim() : undefined,
         };
@@ -7356,7 +7433,7 @@ export async function transcribeEquationForGraphWithGemini(
     return null;
   };
 
-  return runVisionWithStaggeredHedge(candidateModels, tryWithModel, 1900, 8000);
+  return runVisionWithStaggeredHedge(candidateModels, tryWithModel, 1300, 15000);
 }
 
 /**

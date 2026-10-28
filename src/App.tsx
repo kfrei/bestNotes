@@ -22772,7 +22772,7 @@ export default function App() {
     try {
       const transcribed = await Promise.race([
         transcribeHandwrittenStrokesWithGemini(cropDataUrl, activeNotebook?.title || ''),
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 8200)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 16000)),
       ]);
       if (!transcribed || !transcribed.trim()) {
         // Fallback if online OCR timed out or couldn't read: apply local calligraphic beautification to the strokes!
@@ -22914,7 +22914,7 @@ export default function App() {
     try {
       const mathRes = await Promise.race([
         transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 8500)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 16000)),
       ]);
       if (!mathRes || !mathRes.latex.trim()) {
         // Fallback if online MathOCR timed out or couldn't respond: smooth the handwritten equation in place!
@@ -23139,14 +23139,14 @@ export default function App() {
     try {
       const aiRes = await Promise.race([
         transcribeEquationForGraphWithGemini(cropDataUrl, activeNotebook?.title || ''),
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 11000)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 18000)),
       ]);
 
       let eqStr = aiRes?.equation || aiRes?.normalizedEquation || aiRes?.latex || '';
       if (!eqStr) {
         const fallbackMath = await Promise.race([
           transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
-          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 7000)),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 15000)),
         ]);
         eqStr = fallbackMath?.latex || fallbackMath?.plainText || '';
       }
