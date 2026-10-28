@@ -16866,6 +16866,28 @@ export default function App() {
           return;
         }
 
+        // If a math diagram (`math-graph-grp-...`) is ALREADY selected and the user taps directly on one of its curves (`-crv-`),
+        // select ONLY that specific curve so its color or solid/dashed style can be changed independently!
+        if (
+          !isAdditive &&
+          grpId?.startsWith('math-graph-grp-') &&
+          tappedStroke.id.includes('-crv-') &&
+          strokeList.some((s) => s.groupId === grpId && selectedStrokeIds.includes(s.id))
+        ) {
+          const fnMatch = tappedStroke.id.match(/-crv-fn(\d+)-/);
+          const curveStrokeIds = fnMatch
+            ? strokeList
+                .filter((s) => s.groupId === grpId && s.id.includes(`-crv-fn${fnMatch[1]}-`))
+                .map((s) => s.id)
+            : [tappedStroke.id];
+          setSelectedStrokeIds(curveStrokeIds);
+          setSelectedImageIds([]);
+          setSelectedImageId(null);
+          setActiveNodeStrokeId(tappedStroke.id);
+          setStrokeColor(tappedStroke.color);
+          return;
+        }
+
         setSelectedStrokeIds(memberStrokeIds);
         setSelectedImageIds(memberImgIds);
         setSelectedImageId(memberImgIds[0] || null);
@@ -21688,10 +21710,23 @@ export default function App() {
       recordRecentColor(c);
       const activeTxtId = selectedTextId || editingTextId;
       if (activeTxtId) {
-        updateActivePage((page) => ({
-          ...page,
-          texts: (page.texts || []).map((t) => (t.id === activeTxtId ? { ...t, color: c } : t)),
-        }));
+        updateActivePage((page) => {
+          const targetTxt = (page.texts || []).find((t) => t.id === activeTxtId);
+          const clblMatch = targetTxt?.id.match(/-clbl-fn(\d+)$/);
+          const mathGrp = targetTxt?.groupId?.startsWith('math-graph-grp-') ? targetTxt.groupId : null;
+          return {
+            ...page,
+            texts: (page.texts || []).map((t) => (t.id === activeTxtId ? { ...t, color: c } : t)),
+            strokes:
+              mathGrp && clblMatch
+                ? page.strokes.map((s) =>
+                    s.groupId === mathGrp && s.id.includes(`-crv-fn${clblMatch[1]}-`)
+                      ? { ...s, color: c }
+                      : s
+                  )
+                : page.strokes,
+          };
+        });
       }
       const baseIds =
         selectedStrokeIds.length > 0
@@ -21705,17 +21740,55 @@ export default function App() {
 
       updateActivePage((page) => {
         const baseSet = new Set(baseIds);
-        const groupIds = new Set(
+        // Only expand a groupId to all its members if it's NOT a single-curve selection inside `math-graph-grp-...`
+        const fullMathGroups = new Set(
           page.strokes
-            .filter((s) => baseSet.has(s.id) && s.groupId)
+            .filter(
+              (s) =>
+                baseSet.has(s.id) &&
+                s.groupId?.startsWith('math-graph-grp-') &&
+                (s.id.endsWith('-axx') || s.id.endsWith('-axy'))
+            )
             .map((s) => s.groupId as string)
         );
+        const groupIds = new Set(
+          page.strokes
+            .filter(
+              (s) =>
+                baseSet.has(s.id) &&
+                s.groupId &&
+                (!s.groupId.startsWith('math-graph-grp-') || fullMathGroups.has(s.groupId))
+            )
+            .map((s) => s.groupId as string)
+        );
+        const targetedCurveFnKeys = new Set<string>();
+        for (const s of page.strokes) {
+          if (baseSet.has(s.id) && s.groupId?.startsWith('math-graph-grp-')) {
+            const fnM = s.id.match(/-crv-fn(\d+)-/);
+            if (fnM) targetedCurveFnKeys.add(`${s.groupId}::${fnM[1]}`);
+          }
+        }
         const hasWaveAxesGroup = Array.from(groupIds).some((g) => g.startsWith('wave-axes-'));
         if (hasWaveAxesGroup) {
           setWaveGuideColor(c);
         }
         return {
           ...page,
+          texts:
+            fullMathGroups.size > 0 || targetedCurveFnKeys.size > 0
+              ? (page.texts || []).map((t) => {
+                  if (!t.groupId?.startsWith('math-graph-grp-')) return t;
+                  const clblM = t.id.match(/-clbl-fn(\d+)$/);
+                  if (!clblM) return t;
+                  if (
+                    fullMathGroups.has(t.groupId) ||
+                    targetedCurveFnKeys.has(`${t.groupId}::${clblM[1]}`)
+                  ) {
+                    return { ...t, color: c };
+                  }
+                  return t;
+                })
+              : page.texts,
           strokes: page.strokes.map((s) => {
             if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
               if (s.groupId && s.groupId.startsWith('wave-axes-')) {
@@ -21894,9 +21967,24 @@ export default function App() {
 
       updateActivePage((page) => {
         const baseSet = new Set(baseIds);
+        const fullMathGroups = new Set(
+          page.strokes
+            .filter(
+              (s) =>
+                baseSet.has(s.id) &&
+                s.groupId?.startsWith('math-graph-grp-') &&
+                (s.id.endsWith('-axx') || s.id.endsWith('-axy'))
+            )
+            .map((s) => s.groupId as string)
+        );
         const groupIds = new Set(
           page.strokes
-            .filter((s) => baseSet.has(s.id) && s.groupId)
+            .filter(
+              (s) =>
+                baseSet.has(s.id) &&
+                s.groupId &&
+                (!s.groupId.startsWith('math-graph-grp-') || fullMathGroups.has(s.groupId))
+            )
             .map((s) => s.groupId as string)
         );
         return {
@@ -21942,9 +22030,24 @@ export default function App() {
 
       updateActivePage((page) => {
         const baseSet = new Set(baseIds);
+        const fullMathGroups = new Set(
+          page.strokes
+            .filter(
+              (s) =>
+                baseSet.has(s.id) &&
+                s.groupId?.startsWith('math-graph-grp-') &&
+                (s.id.endsWith('-axx') || s.id.endsWith('-axy'))
+            )
+            .map((s) => s.groupId as string)
+        );
         const groupIds = new Set(
           page.strokes
-            .filter((s) => baseSet.has(s.id) && s.groupId)
+            .filter(
+              (s) =>
+                baseSet.has(s.id) &&
+                s.groupId &&
+                (!s.groupId.startsWith('math-graph-grp-') || fullMathGroups.has(s.groupId))
+            )
             .map((s) => s.groupId as string)
         );
         return {
@@ -23022,12 +23125,31 @@ export default function App() {
         showToast('ℹ️ Γράψε πρώτα μια εξίσωση στο πλαίσιο κειμένου (π.χ. (x^2)/9 + (y^2)/16 = 25 ή y = ax + b)!');
         return;
       }
-      const rawEq = (
+      let rawEq = (
         (!txtObj.isMath && txtObj.text ? txtObj.text : txtObj.text || txtObj.latex) || ''
       ).trim();
       if (!rawEq) {
         showToast('ℹ️ Το πλαίσιο κειμένου είναι κενό — γράψε πρώτα την εξίσωση (π.χ. x^2 + y^2 = 1)!');
         return;
+      }
+
+      // If this text box has a single indexed equation (e.g. y_1 = ... or y_2 = ...), check if there are sibling indexed equations right above/below it!
+      const isIndexedFnText = (s: string) =>
+        /^\s*(?:\\text\{)?[yYfFgGhHψΨ]\s*(?:_\s*\{?\s*[1-9]\s*\}?|[1-9₁₂₃₄])(?:\s*\(\s*[xχ]\s*\))?\s*=/m.test(s);
+      if (!rawEq.includes('\n') && isIndexedFnText(rawEq)) {
+        const siblingTxts = (activePage.texts || [])
+          .filter((t) => {
+            if (t.groupId?.startsWith('math-graph-grp-')) return false;
+            const tContent = ((!t.isMath && t.text ? t.text : t.text || t.latex) || '').trim();
+            if (!tContent || !isIndexedFnText(tContent)) return false;
+            return Math.abs(t.x - txtObj.x) <= 240 && Math.abs(t.y - txtObj.y) <= 280;
+          })
+          .sort((a, b) => a.y - b.y);
+        if (siblingTxts.length >= 2) {
+          rawEq = siblingTxts
+            .map((t) => ((!t.isMath && t.text ? t.text : t.text || t.latex) || '').trim())
+            .join('\n');
+        }
       }
 
       const domEl = document.querySelector(`[data-text-id="${txtObj.id}"]`) as HTMLElement | null;
@@ -23110,6 +23232,77 @@ export default function App() {
         const start = textarea.selectionStart ?? curText.length;
         const end = textarea.selectionEnd ?? curText.length;
         nextText = `${curText.slice(0, start)}^${curText.slice(end)}`;
+        nextCursorPos = start + 1;
+      }
+
+      updateActivePage((page) => ({
+        ...page,
+        texts: (page.texts || []).map((t) => (t.id === txtObj.id ? { ...t, text: nextText } : t)),
+      }));
+      setSelectedTextId(txtObj.id);
+      setEditingTextId(txtObj.id);
+
+      window.requestAnimationFrame(() => {
+        const updatedBox = document.querySelector(`[data-text-id="${txtObj.id}"]`);
+        const ta = updatedBox?.querySelector('textarea') as HTMLTextAreaElement | null;
+        if (ta) {
+          ta.focus();
+          try {
+            ta.setSelectionRange(nextCursorPos, nextCursorPos);
+          } catch {
+            // ignore
+          }
+        }
+      });
+    },
+    [
+      editingTextId,
+      selectedTextId,
+      activePage,
+      strokeColor,
+      textFontSize,
+      textBold,
+      textFontFamily,
+      activeLayerId,
+      updateActivePage,
+    ]
+  );
+
+  // 5b. Insert `_` (Subscript / Δείκτης κάτω χαμηλά) into the currently active or selected Text Box (e.g. y_1, y_2, x_0, u_max)!
+  const handleInsertSubscriptInText = useCallback(
+    (targetTxtId?: string) => {
+      const txtId = targetTxtId || editingTextId || selectedTextId;
+      const txtObj = (activePage.texts || []).find((t) => t.id === txtId);
+      if (!txtObj) {
+        const pW = getPageLogicalWidth(activePage);
+        const pH = getPageLogicalHeight(activePage);
+        const newTxt: TextObject = {
+          id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          x: Math.round(pW * 0.25),
+          y: Math.round(Math.min(pH * 0.25, 220)),
+          text: 'y_1',
+          color: strokeColor,
+          fontSize: textFontSize,
+          bold: textBold,
+          fontFamily: textFontFamily,
+          layerId: activeLayerId,
+        };
+        updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+        setSelectedTextId(newTxt.id);
+        setEditingTextId(newTxt.id);
+        return;
+      }
+
+      const domBox = document.querySelector(`[data-text-id="${txtObj.id}"]`);
+      const textarea = domBox?.querySelector('textarea') as HTMLTextAreaElement | null;
+      const curText = txtObj.text || '';
+      let nextText = `${curText}_`;
+      let nextCursorPos = nextText.length;
+
+      if (textarea) {
+        const start = textarea.selectionStart ?? curText.length;
+        const end = textarea.selectionEnd ?? curText.length;
+        nextText = `${curText.slice(0, start)}_${curText.slice(end)}`;
         nextCursorPos = start + 1;
       }
 
@@ -26620,13 +26813,39 @@ export default function App() {
                       ? lastCreatedShapeIdsRef.current
                       : [];
                   const selSet = new Set(selIds);
+                  const fullMathGroups = new Set(
+                    activePage.strokes
+                      .filter(
+                        (s) =>
+                          selSet.has(s.id) &&
+                          s.groupId?.startsWith('math-graph-grp-') &&
+                          (s.id.endsWith('-axx') || s.id.endsWith('-axy'))
+                      )
+                      .map((s) => s.groupId as string)
+                  );
                   const groupIds = new Set(
                     activePage.strokes
-                      .filter((s) => selSet.has(s.id) && s.groupId)
+                      .filter(
+                        (s) =>
+                          selSet.has(s.id) &&
+                          s.groupId &&
+                          (!s.groupId.startsWith('math-graph-grp-') || fullMathGroups.has(s.groupId))
+                      )
                       .map((s) => s.groupId as string)
                   );
                   const targetStrokes = activePage.strokes.filter(
                     (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+                  );
+                  const styleTargetStrokes = targetStrokes.filter(
+                    (s) =>
+                      !(
+                        s.groupId?.startsWith('math-graph-grp-') &&
+                        (s.shapeType === 'wave-axis-x' ||
+                          s.shapeType === 'wave-axis-y' ||
+                          s.shapeType === 'wave-guide-top' ||
+                          s.shapeType === 'wave-guide-bottom' ||
+                          s.id.startsWith('math-graph-lbl-'))
+                      )
                   );
                   const effectiveFilled =
                     targetStrokes.length > 0
@@ -26641,8 +26860,8 @@ export default function App() {
                       ? 45
                       : 90;
                   const effectiveDashed =
-                    targetStrokes.length > 0
-                      ? targetStrokes.some((s) => s.lineStyle === 'dashed')
+                    styleTargetStrokes.length > 0
+                      ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
                       : lineStyle === 'dashed';
                   return (
                     <>
@@ -26998,16 +27217,26 @@ export default function App() {
 
                       <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
 
-                      {/* Power Caret (^), Text2Math (∑), & 1-Click Equation Diagram Plotter in Text Bar */}
+                      {/* Power Caret (^), Subscript (_), Text2Math (∑), & 1-Click Equation Diagram Plotter in Text Bar */}
                       {(!selTxt || !selTxt.isMath || editingTextId === selTxt.id) && (
-                        <button
-                          onMouseDown={(ev) => ev.preventDefault()}
-                          onClick={() => handleInsertPowerCaretInText(selTxt?.id)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold border border-amber-300 transition cursor-pointer"
-                          title="Εισαγωγή συμβόλου δύναμης (^) στο κείμενο — π.χ. (x^2)/9 + (y^2)/16 = 25"
-                        >
-                          <span>xⁿ (^)</span>
-                        </button>
+                        <>
+                          <button
+                            onMouseDown={(ev) => ev.preventDefault()}
+                            onClick={() => handleInsertPowerCaretInText(selTxt?.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold border border-amber-300 transition cursor-pointer"
+                            title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
+                          >
+                            <span>xⁿ (^)</span>
+                          </button>
+                          <button
+                            onMouseDown={(ev) => ev.preventDefault()}
+                            onClick={() => handleInsertSubscriptInText(selTxt?.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-100 hover:bg-teal-200 text-teal-900 font-extrabold border border-teal-300 transition cursor-pointer"
+                            title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max, K_max"
+                          >
+                            <span>xᵢ (_)</span>
+                          </button>
+                        </>
                       )}
 
                       {selTxt && (
@@ -27680,12 +27909,138 @@ export default function App() {
                               ? 'bg-rose-300 text-white cursor-wait'
                               : 'bg-rose-600 hover:bg-rose-700 text-white'
                           }`}
-                          title="Διάγραμμα OCR: Αναγνώριση χειρόγραφης εξίσωσης (ποσοτικής ή συμβολικής π.χ. y=ax+b, x²+y²=1, έλλειψη, παραβολή, υπερβολή, πολυώνυμο) και σχεδίαση επεξεργάσιμου διαγράμματος δίπλα της!"
+                          title="Διάγραμμα OCR: Αναγνώριση 1 ή περισσότερων χειρόγραφων εξισώσεων (π.χ. y₁ = x² - 9 και y₂ = x² - 16) και σχεδίαση σε κοινό σύστημα αξόνων!"
                         >
                           <span>{isConvertingHandwriting ? 'Διάγραμμα...' : '📈 Διάγραμμα'}</span>
                         </button>
                       </>
                     )}
+
+                    {/* Multi-Curve / Single-Curve Selector Pills & Quick Continuous/Dashed Toggle when a Math Diagram is selected */}
+                    {selectedStrokeIds.length > 0 &&
+                      (() => {
+                        const selMathStroke = activePage.strokes.find(
+                          (s) =>
+                            selectedStrokeIds.includes(s.id) &&
+                            s.groupId?.startsWith('math-graph-grp-')
+                        );
+                        if (!selMathStroke?.groupId) return null;
+                        const mathGrpId = selMathStroke.groupId;
+                        const allGrpStrokes = activePage.strokes.filter(
+                          (s) => s.groupId === mathGrpId
+                        );
+                        const curveMap = new Map<
+                          number,
+                          { ids: string[]; color: string; dashed: boolean; label: string }
+                        >();
+                        for (const s of allGrpStrokes) {
+                          if (!s.id.includes('-crv-')) continue;
+                          const fnMatch = s.id.match(/-crv-(fn(\d+))-/);
+                          const fnIdx = fnMatch ? parseInt(fnMatch[2], 10) : 0;
+                          const existing = curveMap.get(fnIdx);
+                          if (existing) {
+                            existing.ids.push(s.id);
+                          } else {
+                            const subDigits = '₀₁₂₃₄₅₆₇₈₉';
+                            const defaultLbl =
+                              fnIdx > 0
+                                ? `y${String(fnIdx)
+                                    .split('')
+                                    .map((d) => subDigits[parseInt(d, 10)] || d)
+                                    .join('')}`
+                                : 'y';
+                            const clblTxt = (activePage.texts || []).find(
+                              (t) =>
+                                t.groupId === mathGrpId &&
+                                t.id.endsWith(`-clbl-fn${fnIdx}`)
+                            );
+                            const cleanLbl = clblTxt?.text
+                              ? clblTxt.text.replace(/_(\d+)/g, (_, dStr: string) =>
+                                  dStr
+                                    .split('')
+                                    .map((d) => subDigits[parseInt(d, 10)] || d)
+                                    .join('')
+                                )
+                              : defaultLbl;
+                            curveMap.set(fnIdx, {
+                              ids: [s.id],
+                              color: s.color || '#dc2626',
+                              dashed: s.lineStyle === 'dashed',
+                              label: cleanLbl,
+                            });
+                          }
+                        }
+                        if (curveMap.size === 0) return null;
+                        const sortedCurves = [...curveMap.entries()].sort((a, b) => a[0] - b[0]);
+                        const hasAxesSelected = allGrpStrokes.some(
+                          (s) =>
+                            selectedStrokeIds.includes(s.id) &&
+                            (s.id.includes('-axx') || s.id.includes('-axy'))
+                        );
+                        const activeCurveStrokes = allGrpStrokes.filter(
+                          (s) => selectedStrokeIds.includes(s.id) && s.id.includes('-crv-')
+                        );
+                        const isCurrentlyDashed =
+                          activeCurveStrokes.length > 0 &&
+                          activeCurveStrokes.every((s) => s.lineStyle === 'dashed');
+
+                        return (
+                          <div className="flex items-center gap-1 bg-rose-50/90 px-1.5 py-0.5 rounded-full border border-rose-200/90">
+                            <button
+                              onClick={() => {
+                                setSelectedStrokeIds(allGrpStrokes.map((s) => s.id));
+                              }}
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition cursor-pointer ${
+                                hasAxesSelected
+                                  ? 'bg-slate-800 text-white shadow-2xs'
+                                  : 'hover:bg-white text-slate-700'
+                              }`}
+                              title="Επιλογή ολόκληρου του διαγράμματος (άξονες + όλες οι καμπύλες)"
+                            >
+                              📐 Όλο
+                            </button>
+                            {sortedCurves.map(([fnIdx, info]) => {
+                              const isThisCurveOnly =
+                                !hasAxesSelected &&
+                                info.ids.every((id) => selectedStrokeIds.includes(id)) &&
+                                selectedStrokeIds.length === info.ids.length;
+                              return (
+                                <button
+                                  key={fnIdx}
+                                  onClick={() => {
+                                    setSelectedStrokeIds(info.ids);
+                                  }}
+                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold transition cursor-pointer ${
+                                    isThisCurveOnly
+                                      ? 'bg-white text-slate-900 ring-2 ring-rose-500 shadow-2xs'
+                                      : 'hover:bg-white/80 text-slate-700'
+                                  }`}
+                                  title={`Επιλογή μόνο της καμπύλης ${info.label} (για αλλαγή χρώματος, πάχους ή συνεχούς/διακεκομμένης γραμμής)`}
+                                >
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/15"
+                                    style={{ backgroundColor: info.color }}
+                                  />
+                                  <span>{info.label}</span>
+                                </button>
+                              );
+                            })}
+                            <button
+                              onClick={() =>
+                                applyLineStyleToSelection(isCurrentlyDashed ? 'solid' : 'dashed')
+                              }
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition cursor-pointer ${
+                                isCurrentlyDashed
+                                  ? 'bg-amber-600 text-white shadow-2xs'
+                                  : 'bg-white/90 hover:bg-white text-slate-700 border border-slate-200'
+                              }`}
+                              title="Εναλλαγή Συνεχούς (───) / Διακεκομμένης (- - -) γραμμής για την επιλεγμένη καμπύλη"
+                            >
+                              {isCurrentlyDashed ? '- - - Διακεκομμένη' : '─── Συνεχής'}
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                     {/* Z-Order Controls: Send to Back / -1 Backward / +1 Forward / Bring to Front */}
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
@@ -27890,20 +28245,43 @@ export default function App() {
                               : selectedImageId
                               ? [selectedImageId]
                               : [];
-                          const delMathGroups = new Set(
+                          const delFullMathGroups = new Set(
                             activePage.strokes
                               .filter(
                                 (s) =>
                                   selectedStrokeIds.includes(s.id) &&
-                                  s.groupId?.startsWith('math-graph-grp-')
+                                  s.groupId?.startsWith('math-graph-grp-') &&
+                                  (s.id.includes('-axx') || s.id.includes('-axy'))
                               )
                               .map((s) => s.groupId as string)
                           );
+                          const delSingleCurveTags = new Set<string>();
+                          for (const s of activePage.strokes) {
+                            if (
+                              selectedStrokeIds.includes(s.id) &&
+                              s.groupId?.startsWith('math-graph-grp-') &&
+                              !delFullMathGroups.has(s.groupId)
+                            ) {
+                              const fnMatch = s.id.match(/-crv-(fn\d+)-/);
+                              if (fnMatch) {
+                                delSingleCurveTags.add(`${s.groupId}::${fnMatch[1]}`);
+                              }
+                            }
+                          }
                           updateActivePage((page) => ({
                             ...page,
-                            texts: (page.texts || []).filter(
-                              (t) => !(t.groupId && delMathGroups.has(t.groupId))
-                            ),
+                            texts: (page.texts || []).filter((t) => {
+                              if (t.groupId && delFullMathGroups.has(t.groupId)) return false;
+                              if (t.groupId && delSingleCurveTags.size > 0) {
+                                for (const tag of delSingleCurveTags) {
+                                  const [grp, fnTag] = tag.split('::');
+                                  if (t.groupId === grp && t.id.endsWith(`-clbl-${fnTag}`)) {
+                                    return false;
+                                  }
+                                }
+                              }
+                              return true;
+                            }),
                             strokes: page.strokes.filter((s) => !selectedStrokeIds.includes(s.id)),
                             images: (page.images || []).filter((im) => !effectiveImgIds.includes(im.id)),
                           }));
@@ -31349,15 +31727,26 @@ export default function App() {
                                 A+
                               </button>
                               {(!txt.isMath || isEditingTxt) && (
-                                <button
-                                  type="button"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => handleInsertPowerCaretInText(txt.id)}
-                                  className="px-1.5 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-extrabold cursor-pointer"
-                                  title="Εισαγωγή συμβόλου δύναμης (^) — π.χ. (x^2)/9 + (y^2)/16 = 25"
-                                >
-                                  xⁿ (^)
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => handleInsertPowerCaretInText(txt.id)}
+                                    className="px-1.5 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-extrabold cursor-pointer"
+                                    title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
+                                  >
+                                    xⁿ (^)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => handleInsertSubscriptInText(txt.id)}
+                                    className="px-1.5 py-0.5 rounded bg-teal-600/85 hover:bg-teal-500 text-white font-extrabold cursor-pointer"
+                                    title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max"
+                                  >
+                                    xᵢ (_)
+                                  </button>
+                                </>
                               )}
                               <button
                                 type="button"
@@ -31605,18 +31994,51 @@ export default function App() {
                                 ...fontCss,
                               }}
                             >
-                              {txt.text &&
-                              txt.text.includes('_') &&
-                              !txt.text.includes('\n') &&
-                              txt.text.length <= 16 ? (
+                              {txt.text && (txt.text.includes('_') || txt.text.includes('^')) ? (
                                 (() => {
-                                  const uIdx = txt.text.indexOf('_');
-                                  const mainPart = txt.text.slice(0, uIdx);
-                                  const subPart = txt.text.slice(uIdx + 1);
+                                  const tokenRegex =
+                                    /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
+                                  const parts = txt.text.split(tokenRegex);
                                   return (
                                     <span>
-                                      {mainPart}
-                                      <sub className="text-[0.72em] leading-none">{subPart}</sub>
+                                      {parts.map((part, pIdx) => {
+                                        if (!part) return null;
+                                        if (part.startsWith('^') && part.length > 1) {
+                                          let inner = part.slice(1);
+                                          if (
+                                            (inner.startsWith('(') && inner.endsWith(')')) ||
+                                            (inner.startsWith('{') && inner.endsWith('}'))
+                                          ) {
+                                            inner = inner.slice(1, -1);
+                                          }
+                                          return (
+                                            <sup
+                                              key={pIdx}
+                                              className="text-[0.72em] leading-none align-super"
+                                            >
+                                              {inner}
+                                            </sup>
+                                          );
+                                        }
+                                        if (part.startsWith('_') && part.length > 1) {
+                                          let inner = part.slice(1);
+                                          if (
+                                            (inner.startsWith('(') && inner.endsWith(')')) ||
+                                            (inner.startsWith('{') && inner.endsWith('}'))
+                                          ) {
+                                            inner = inner.slice(1, -1);
+                                          }
+                                          return (
+                                            <sub
+                                              key={pIdx}
+                                              className="text-[0.72em] leading-none align-sub"
+                                            >
+                                              {inner}
+                                            </sub>
+                                          );
+                                        }
+                                        return <React.Fragment key={pIdx}>{part}</React.Fragment>;
+                                      })}
                                     </span>
                                   );
                                 })()

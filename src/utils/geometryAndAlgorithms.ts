@@ -7235,10 +7235,11 @@ export async function transcribeEquationForGraphWithGemini(
   const parts: any[] = [
     {
       text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Απλής Αρμονικής Ταλάντωσης (Φυσικής) για σχεδίαση διαγράμματος${contextHint}.
-Διάβασε τη χειρόγραφη εξίσωση ή συνάρτηση στην εικόνα (π.χ. y = sin(x), y = ημ(x), y = ημ(χ), y = cos(x), y = συν(x), y = συν(χ), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
+Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
 Κανόνες:
-1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας τα σύμβολα Φυσικής αν πρόκειται για ταλάντωση/ενέργεια/δύναμη (π.χ. "y = sin(x)", "y = ημ(x)", "y = cos(x)", "y = συν(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "F = -k*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "u = u_max*συν(ω*t)", "a = -a_max*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = α*x + β", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
-2. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
+1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας τους δείκτες (π.χ. y_1, y_2) και τα σύμβολα Φυσικής αν πρόκειται για ταλάντωση/ενέργεια/δύναμη (π.χ. "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
+2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "y_1 = x^2 - 9\\ny_2 = x^2 - 16") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
+3. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
@@ -7302,8 +7303,28 @@ export async function transcribeEquationForGraphWithGemini(
         .trim();
       const parsedRaw = JSON.parse(cleanJsonText);
       const parsed = Array.isArray(parsedRaw) ? parsedRaw[0] : parsedRaw;
+      const joinedArrayEq = Array.isArray(parsedRaw)
+        ? parsedRaw
+            .map((item) =>
+              typeof item === 'string'
+                ? item.trim()
+                : (item?.equation || item?.normalizedEquation || item?.latex || '').trim()
+            )
+            .filter(Boolean)
+            .join('\n')
+        : Array.isArray(parsed?.equations)
+        ? parsed.equations
+            .map((item: any) =>
+              typeof item === 'string'
+                ? item.trim()
+                : (item?.equation || item?.normalizedEquation || '').trim()
+            )
+            .filter(Boolean)
+            .join('\n')
+        : '';
       const eq =
-        typeof parsed?.equation === 'string' && parsed.equation.trim()
+        joinedArrayEq ||
+        (typeof parsed?.equation === 'string' && parsed.equation.trim()
           ? parsed.equation.trim()
           : typeof parsed?.normalizedEquation === 'string' && parsed.normalizedEquation.trim()
           ? parsed.normalizedEquation.trim()
@@ -7311,7 +7332,7 @@ export async function transcribeEquationForGraphWithGemini(
           ? parsed.latex.trim()
           : typeof parsed?.text === 'string' && parsed.text.trim()
           ? parsed.text.trim()
-          : '';
+          : '');
       if (eq) {
         cachedWorkingVisionModel = cleanName;
         return {
@@ -7464,6 +7485,21 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     return `^(${digits})`;
   });
 
+  // Convert Unicode subscripts (e.g. y₁, y₂, x₀) to _1, _2, _0
+  const subMap: Record<string, string> = {
+    '₀': '_0',
+    '₁': '_1',
+    '₂': '_2',
+    '₃': '_3',
+    '₄': '_4',
+    '₅': '_5',
+    '₆': '_6',
+    '₇': '_7',
+    '₈': '_8',
+    '₉': '_9',
+  };
+  s = s.replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (ch) => subMap[ch] ?? ch);
+
   // Normalize trig & standard functions into uppercase tokens before single-letter variable splitting
   // Note: Do NOT use `\b` after Greek words (`ημ`, `συν`, `εφ`) or unparenthesized `sinx`/`cosx` because JS `\b` only matches ASCII!
   s = s
@@ -7478,10 +7514,10 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/√\s*([a-zA-Zα-ωΑ-Ω0-9]+)/g, 'SQRT($1)')
     .replace(/\\?(?:abs)\b/gi, 'ABS');
 
-  // Convert f(x), g(x), y(x), x(t), u(t), v(t) (also accepting Greek χ)
+  // Convert f(x), g(x), y(x), f_1(x), y_1(x), x(t), u(t), v(t) (also accepting Greek χ)
   s = s
-    .replace(/(?<![A-Z])\b[fghyFGH]\s*\(\s*[xχ]\s*\)/g, 'y')
-    .replace(/(?<![A-Z])\b[xuvXUV]\s*\(\s*t\s*\)/g, 'y');
+    .replace(/(?<![A-Z])\b[fghyFGH](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*[xχ]\s*\)/g, 'y')
+    .replace(/(?<![A-Z])\b[xuvXUV](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*t\s*\)/g, 'y');
 
   // Remove subscripts like x_0, y_0, u_0, v_0 -> treat as symbolic positive constant k
   s = s
@@ -7516,16 +7552,19 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     }
   }
 
-  // Smart Physical / Non-(x,y) Variable Mapping:
-  // If an equation uses Physics symbols like `K = 1/2 m u^2`, `U = 1/2 D x^2`, `P = I^2 R`, `F = k/r^2`,
-  // automatically map the LHS dependent variable to `y` and the primary RHS independent variable to `x`!
+  // Smart Physical / Non-(x,y) Variable & Indexed Function (y_1, y_2, y1, y2, f_1, g) Mapping:
   if (s.includes('=')) {
     const eqPos = s.indexOf('=');
     let lhsPart = s.slice(0, eqPos).trim();
     let rhsPart = s.slice(eqPos + 1).trim();
 
-    const hasY = /\by\b/.test(s);
-    const hasX = /\bx\b/.test(s);
+    // Normalize indexed LHS function identifiers like y_1, y_{1}, y1, y_2, y2, f_1, f1, f, g, h -> y
+    if (/^(?:[yYfFgGhH]\s*(?:_\s*\{?\s*[0-9a-zA-Zα-ωΑ-Ω]+\s*\}?|[0-9]+)|[fFgGhH])$/.test(lhsPart)) {
+      lhsPart = 'y';
+    }
+
+    const hasY = /\by\b/.test(`${lhsPart} = ${rhsPart}`);
+    const hasX = /\bx\b/.test(`${lhsPart} = ${rhsPart}`);
 
     // 1. If there is no `y` in the equation and the LHS is a single variable/symbol (e.g. K, U, E, F, ΣF, P, V, a, u, v, s), map LHS -> `y`
     if (!hasY && /^(?:Σ?[a-zA-Zα-ωΑ-Ω](?:_[a-zA-Z0-9]+)?)$/.test(lhsPart) && lhsPart !== 'x') {
@@ -7553,6 +7592,124 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
   }
 
   return s.trim();
+}
+
+/**
+ * Splits a raw multi-line or multi-function input (e.g. `"y_1 = x^2 - 9\ny_2 = x^2 - 16"`)
+ * into distinct plottable equation items, extracting each function's display label (`y_1`, `y_2`, `f`, `g`, etc.).
+ */
+export function extractEquationItemsForPlot(
+  rawInput: string
+): { rawLine: string; normalized: string; curveLabel: string | null }[] {
+  if (!rawInput || !rawInput.trim()) return [];
+
+  const subMap: Record<string, string> = {
+    '₀': '_0',
+    '₁': '_1',
+    '₂': '_2',
+    '₃': '_3',
+    '₄': '_4',
+    '₅': '_5',
+    '₆': '_6',
+    '₇': '_7',
+    '₈': '_8',
+    '₉': '_9',
+  };
+
+  // 1. Split by newlines and semicolons, merging lines that start with an implication arrow (⇒) into the previous line
+  const initialLines = splitAndCleanMathLatexLines(rawInput)
+    .flatMap((l) => l.split(/\s*;\s*/))
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const mergedDerivationLines: string[] = [];
+  for (const l of initialLines) {
+    if (/^(?:\\Rightarrow|\\Leftrightarrow|\\implies|⇒|⇔|->)/.test(l) && mergedDerivationLines.length > 0) {
+      mergedDerivationLines[mergedDerivationLines.length - 1] += ` ${l}`;
+    } else {
+      mergedDerivationLines.push(l);
+    }
+  }
+
+  // 2. Further split lines that contain multiple separate equations on one row (e.g. `y_1 = x^2 - 9, y_2 = x^2 - 16` or `y_1 = x^2 - 9   y_2 = x^2 - 16`)
+  const expandedLines: string[] = [];
+  for (const rawL of mergedDerivationLines) {
+    // Take last implication step if line has ⇒
+    const arrowParts = rawL.split(/\\Rightarrow|\\Leftrightarrow|\\implies|⇒|⇔|->/);
+    const effectiveLine = (arrowParts[arrowParts.length - 1] || rawL).trim();
+
+    // Check comma-separated equations where each part has '='
+    if (effectiveLine.includes(',')) {
+      const commaParts = effectiveLine.split(/\s*,\s*/).filter(Boolean);
+      if (commaParts.length >= 2 && commaParts.every((p) => p.includes('='))) {
+        expandedLines.push(...commaParts);
+        continue;
+      }
+    }
+
+    // Check space-separated indexed functions like `y_1 = x^2 - 9 y_2 = x^2 - 16`
+    const spaceSplit = effectiveLine
+      .split(/\s+(?=(?:[yYfFgGhH]\s*(?:_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9₁₂₃₄])?(?:\s*\(\s*[xχ]\s*\))?)\s*=)/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (spaceSplit.length >= 2 && spaceSplit.every((p) => p.includes('='))) {
+      expandedLines.push(...spaceSplit);
+      continue;
+    }
+
+    expandedLines.push(effectiveLine);
+  }
+
+  const results: { rawLine: string; normalized: string; curveLabel: string | null }[] = [];
+
+  for (const line of expandedLines) {
+    const cleanSubLine = line.replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (ch) => subMap[ch] ?? ch);
+    let explicitLabel: string | null = null;
+    if (cleanSubLine.includes('=')) {
+      const rawLhs = cleanSubLine
+        .slice(0, cleanSubLine.indexOf('='))
+        .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+        .replace(/\\left|\\right/g, '')
+        .trim();
+      const subMatch = rawLhs.match(
+        /^([yYfFgGhHψΨ])\s*_\s*\{?\s*([0-9a-zA-Zα-ωΑ-Ω]+)\s*\}?(?:\s*\(\s*[xχ]\s*\))?$/
+      );
+      const digitMatch = rawLhs.match(/^([yYfFgGhHψΨ])([1-9])(?:\s*\(\s*[xχ]\s*\))?$/);
+      const fnNameMatch = rawLhs.match(/^([fFgGhH])\s*\(\s*[xχ]\s*\)$/);
+      if (subMatch) {
+        const base = /^[yYψΨ]$/.test(subMatch[1]) ? 'y' : subMatch[1];
+        explicitLabel = `${base}_${subMatch[2]}`;
+      } else if (digitMatch) {
+        const base = /^[yYψΨ]$/.test(digitMatch[1]) ? 'y' : digitMatch[1];
+        explicitLabel = `${base}_${digitMatch[2]}`;
+      } else if (fnNameMatch) {
+        explicitLabel = fnNameMatch[1];
+      }
+    }
+
+    const norm = normalizeMathEquationForPlot(cleanSubLine);
+    if (!norm || !norm.includes('=')) continue;
+    // Avoid duplicate identical normalized equations unless they have different explicit labels
+    if (
+      results.some(
+        (r) =>
+          r.normalized.replace(/\s+/g, '') === norm.replace(/\s+/g, '') &&
+          r.curveLabel === explicitLabel
+      )
+    ) {
+      continue;
+    }
+    results.push({ rawLine: line, normalized: norm, curveLabel: explicitLabel });
+  }
+
+  if (results.length >= 2) {
+    return results.slice(0, 4).map((item, idx) => ({
+      ...item,
+      curveLabel: item.curveLabel || `y_${idx + 1}`,
+    }));
+  }
+
+  return results;
 }
 
 type MathExprToken =
@@ -8626,19 +8783,25 @@ export function buildMathGraphStrokesFromEquation(
   axisColor = '#0f172a',
   layerId = 'layer-1'
 ): { strokes: StrokeObject[]; texts: TextObject[]; groupId: string; kindLabel: string } | null {
-  // First check specialized Physics Oscillation Diagrams (K-u, U-x, K-x, E-x, ΣF-x, a-x, x-t, u-t, a-t)
-  const oscDiag = tryBuildOscillationDiagramStrokes(
-    rawEquation,
-    centerX,
-    centerY,
-    width,
-    height,
-    curveColor,
-    axisColor,
-    layerId
-  );
-  if (oscDiag) return oscDiag;
-  const normalized = normalizeMathEquationForPlot(rawEquation);
+  const eqItems = extractEquationItemsForPlot(rawEquation);
+  const singleCurveLabel = eqItems.length === 1 ? eqItems[0].curveLabel : null;
+
+  // First check specialized Physics Oscillation Diagrams (K-u, U-x, K-x, E-x, ΣF-x, a-x, x-t, u-t, a-t) when plotting a single equation
+  if (eqItems.length <= 1) {
+    const oscDiag = tryBuildOscillationDiagramStrokes(
+      rawEquation,
+      centerX,
+      centerY,
+      width,
+      height,
+      curveColor,
+      axisColor,
+      layerId
+    );
+    if (oscDiag) return oscDiag;
+  }
+
+  const normalized = eqItems.length > 0 ? eqItems[0].normalized : normalizeMathEquationForPlot(rawEquation);
   if (!normalized || !normalized.includes('=')) return null;
 
   const eqIdx = normalized.indexOf('=');
@@ -8734,12 +8897,18 @@ export function buildMathGraphStrokesFromEquation(
     )
   );
 
-  const addCurveStroke = (pts: { x: number; y: number }[], idx: number, asLineShape = false) => {
+  const addCurveStroke = (
+    pts: { x: number; y: number }[],
+    idx: number,
+    asLineShape = false,
+    fnIdx = 0,
+    customColor = curveColor
+  ) => {
     if (pts.length < 2) return;
     strokes.push({
-      id: `st-${nowId}-crv-${idx}`,
+      id: `st-${nowId}-crv-fn${fnIdx}-${idx}`,
       tool: 'pen',
-      color: curveColor,
+      color: customColor,
       width: 3.0,
       opacity: 1,
       points: pts.map((p) => ({ x: p.x, y: p.y, pressure: 0.7 })),
@@ -8765,6 +8934,8 @@ export function buildMathGraphStrokesFromEquation(
   };
 
   let tickCounter = 0;
+  const placedXTicksPx: number[] = [];
+  const placedYTicksPx: number[] = [];
   const placedLabelBoxes: { minX: number; maxX: number; minY: number; maxY: number }[] = [
     // Reserve boxes around the 'x' and 'y' axis-tip labels so tick numbers never collide with them
     { minX: lx - 8, maxX: lx + 8, minY: ly - 8, maxY: ly + 8 },
@@ -8823,17 +8994,17 @@ export function buildMathGraphStrokesFromEquation(
     fontH: number
   ) => {
     const [mainPart, subPart] = labelText.split('_');
-    const mainCharW = fontH * 0.66;
-    const mainGap = fontH * 0.14;
-    const subH = fontH * 0.62;
-    const subCharW = subH * 0.68;
-    const subGap = subH * 0.12;
-    const mainTotalW =
-      mainPart.length > 0 ? mainPart.length * mainCharW + (mainPart.length - 1) * mainGap : 0;
+    const measurePartW = (part: string, charH: number) => {
+      let w = 0;
+      for (let i = 0; i < part.length; i++) {
+        const ch = part[i];
+        w += ch === '-' || ch === '.' || ch === '1' ? charH * 0.4 : charH * 0.6;
+      }
+      return w;
+    };
+    const mainTotalW = mainPart.length > 0 ? measurePartW(mainPart, fontH) : 0;
     const subTotalW =
-      subPart && subPart.length > 0
-        ? subPart.length * subCharW + (subPart.length - 1) * subGap + fontH * 0.08
-        : 0;
+      subPart && subPart.length > 0 ? measurePartW(subPart, fontH * 0.65) + fontH * 0.06 : 0;
     const totalW = mainTotalW + subTotalW;
     const minX =
       align === 'center'
@@ -8842,10 +9013,10 @@ export function buildMathGraphStrokesFromEquation(
         ? anchorX - totalW
         : anchorX;
     return {
-      minX: minX - 2,
-      maxX: minX + totalW + 2,
-      minY: anchorY - fontH / 2 - 2,
-      maxY: anchorY + fontH / 2 + 2,
+      minX: minX - 1.5,
+      maxX: minX + totalW + 1.5,
+      minY: anchorY - fontH / 2 - 1.5,
+      maxY: anchorY + fontH / 2 + 1.5,
     };
   };
 
@@ -8886,6 +9057,8 @@ export function buildMathGraphStrokesFromEquation(
     xLabelOffset = 0
   ) => {
     if (Math.abs(px - centerX) > halfW - 6 || Math.abs(px - centerX) < 11) return;
+    if (placedXTicksPx.some((existingPx) => Math.abs(existingPx - px) < 4.5)) return;
+    placedXTicksPx.push(px);
     const tId = tickCounter++;
     strokes.push({
       id: `math-graph-lbl-${nowId}-xtick-${tId}`,
@@ -8909,6 +9082,8 @@ export function buildMathGraphStrokesFromEquation(
     const dxCandidates = [
       xLabelOffset,
       0,
+      outDir * 6,
+      -outDir * 6,
       outDir * 13,
       -outDir * 13,
       outDir * 20,
@@ -8965,6 +9140,8 @@ export function buildMathGraphStrokesFromEquation(
     yLabelOffset = 0
   ) => {
     if (Math.abs(py - centerY) > halfH - 6 || Math.abs(py - centerY) < 11) return;
+    if (placedYTicksPx.some((existingPy) => Math.abs(existingPy - py) < 4.5)) return;
+    placedYTicksPx.push(py);
     const tId = tickCounter++;
     strokes.push({
       id: `math-graph-lbl-${nowId}-ytick-${tId}`,
@@ -8988,6 +9165,8 @@ export function buildMathGraphStrokesFromEquation(
     const dyCandidates = [
       yLabelOffset,
       0,
+      outDirY * 6,
+      -outDirY * 6,
       outDirY * 13,
       -outDirY * 13,
       outDirY * 18,
@@ -9088,6 +9267,545 @@ export function buildMathGraphStrokesFromEquation(
       addYAxisTickAndLabel(py, vyLabel, px > centerX);
     }
   };
+
+  const addCurveNameLabel = (fnIdx: number, labelText: string | null, fnColor: string) => {
+    if (!labelText) return;
+    const fnStrokes = strokes.filter((s) => s.id.includes(`-crv-fn${fnIdx}-`) || (fnIdx === 0 && s.id.includes('-crv-ellipse')));
+    if (fnStrokes.length === 0) return;
+
+    // Pick the best tip point (preferring rightmost endpoint in the upper half-plane, or rightmost endpoint overall)
+    let tipPt: { x: number; y: number } | null = null;
+    let bestTipMetric = -Infinity;
+    for (const s of fnStrokes) {
+      if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 4) {
+        const [pTop, pRight] = s.points;
+        const ecx = (s.points[3].x + pRight.x) / 2;
+        const ecy = (pTop.y + s.points[2].y) / 2;
+        const erx = Math.abs(pRight.x - s.points[3].x) / 2;
+        const ery = Math.abs(s.points[2].y - pTop.y) / 2;
+        tipPt = {
+          x: ecx + erx * Math.cos(-Math.PI / 4),
+          y: ecy + ery * Math.sin(-Math.PI / 4),
+        };
+        break;
+      }
+      const endpoints = [s.points[0], s.points[s.points.length - 1]].filter(Boolean);
+      for (const ep of endpoints) {
+        const metric = (ep.x - centerX) * 1.4 - (ep.y - centerY) * 0.8;
+        if (metric > bestTipMetric) {
+          bestTipMetric = metric;
+          tipPt = { x: ep.x, y: ep.y };
+        }
+      }
+    }
+    if (!tipPt) return;
+
+    const fontH = 16;
+    const curvePts = getDenseCurvePointsForClearance();
+    const candidates = [
+      { x: tipPt.x + 2, y: tipPt.y - 13, pref: 2.0 },
+      { x: tipPt.x + 11, y: tipPt.y - 11, pref: 1.8 },
+      { x: tipPt.x - 9, y: tipPt.y - 13, pref: 1.5 },
+      { x: tipPt.x + 14, y: tipPt.y - 2, pref: 1.4 },
+      { x: tipPt.x + 12, y: tipPt.y + 11, pref: 1.0 },
+      { x: tipPt.x - 14, y: tipPt.y - 4, pref: 0.9 },
+    ];
+
+    let bestAx = candidates[0].x;
+    let bestAy = candidates[0].y;
+    let bestBox = computeLabelBox(labelText, bestAx, bestAy, 'center', fontH);
+    let bestScore = -Infinity;
+
+    for (const c of candidates) {
+      const box = computeLabelBox(labelText, c.x, c.y, 'center', fontH);
+      const clearance = scoreCandidateBox(box, curvePts);
+      const score = Math.min(clearance, 18) * 3.0 + c.pref;
+      if (score > bestScore) {
+        bestScore = score;
+        bestAx = c.x;
+        bestAy = c.y;
+        bestBox = box;
+      }
+    }
+
+    placedLabelBoxes.push(bestBox);
+    texts.push(
+      createMathGraphLabelText(
+        labelText,
+        bestAx,
+        bestAy,
+        'center',
+        17,
+        fnColor,
+        layerId,
+        groupId,
+        `${nowId}-clbl-fn${fnIdx}`
+      )
+    );
+  };
+
+  // MULTI-FUNCTION SHARED COORDINATE SYSTEM PLOTTER (2 to 4 functions y_1, y_2, ... on shared axes!)
+  if (eqItems.length >= 2) {
+    const palette = [
+      curveColor || '#dc2626',
+      (curveColor || '').toLowerCase() === '#2563eb' ? '#dc2626' : '#2563eb',
+      '#16a34a',
+      '#7c3aed',
+    ];
+
+    type MultiFnSpec = {
+      idx: number;
+      curveLabel: string;
+      color: string;
+      normalized: string;
+      isQuantitative: boolean;
+      kind: 'line' | 'parabola' | 'explicit';
+      evalF: (x: number, y: number) => number;
+      fnEval: (x: number) => number;
+      A: number;
+      B: number;
+      C: number;
+      D: number;
+      E: number;
+      G: number;
+      pa: number;
+      pb: number;
+      pc: number;
+      xv: number;
+      yv: number;
+      disc: number;
+      idealXSpan: number;
+      idealYSpan: number;
+      edgeTopY: number | null;
+    };
+
+    const specs: MultiFnSpec[] = [];
+
+    for (let idx = 0; idx < eqItems.length; idx++) {
+      const item = eqItems[idx];
+      const norm = item.normalized;
+      const eqPos = norm.indexOf('=');
+      if (eqPos === -1) continue;
+      const lStr = norm.slice(0, eqPos).trim();
+      const rStr = norm.slice(eqPos + 1).trim();
+      if (!lStr || !rStr) continue;
+
+      const evL = compileMathExprEvaluator(lStr, paramOverrides);
+      const evR = compileMathExprEvaluator(rStr, paramOverrides);
+      const evF = (x: number, y: number) => evL(x, y) - evR(x, y);
+
+      const stripped = norm.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG|PI)\b/gi, '');
+      const isQuant = !/[a-df-wzA-DF-WZα-ωΑ-Ω]/.test(stripped);
+
+      const v00 = evF(0, 0);
+      const v10 = evF(1, 0);
+      const vm10 = evF(-1, 0);
+      const v01 = evF(0, 1);
+      const v0m1 = evF(0, -1);
+      const v11 = evF(1, 1);
+      const canConic =
+        Number.isFinite(v00) &&
+        Number.isFinite(v10) &&
+        Number.isFinite(vm10) &&
+        Number.isFinite(v01) &&
+        Number.isFinite(v0m1) &&
+        Number.isFinite(v11);
+
+      const G = canConic ? v00 : 0;
+      const D = canConic ? (v10 - vm10) / 2 : 0;
+      const E = canConic ? (v01 - v0m1) / 2 : -1;
+      const A = canConic ? (v10 + vm10) / 2 - G : 0;
+      const C = canConic ? (v01 + v0m1) / 2 - G : 0;
+      const B = canConic ? v11 - (A + C + D + E + G) : 0;
+
+      const testPts = [
+        [2.3, -1.7],
+        [-0.7, 3.1],
+        [1.4, 2.2],
+      ];
+      const isQuadOrLin =
+        canConic &&
+        testPts.every(([tx, ty]) => {
+          const act = evF(tx, ty);
+          if (!Number.isFinite(act)) return false;
+          const pred = A * tx * tx + B * tx * ty + C * ty * ty + D * tx + E * ty + G;
+          return Math.abs(act - pred) <= 1e-5 * Math.max(1, Math.abs(act), Math.abs(pred));
+        });
+
+      const eps = 1e-6;
+      const hasQuad = Math.abs(A) > eps || Math.abs(B) > eps || Math.abs(C) > eps;
+
+      if (isQuadOrLin && !hasQuad && (Math.abs(D) > eps || Math.abs(E) > eps)) {
+        const xInt = Math.abs(D) > eps ? -G / D : 0;
+        const yInt = Math.abs(E) > eps ? -G / E : 0;
+        const maxInt = Math.max(
+          1.4,
+          Math.abs(xInt) > eps ? Math.abs(xInt) * 1.38 : 0,
+          Math.abs(yInt) > eps ? Math.abs(yInt) * 1.38 : 0
+        );
+        const fnEval = Math.abs(E) > eps ? (x: number) => (-D * x - G) / E : () => NaN;
+        specs.push({
+          idx,
+          curveLabel: item.curveLabel || `y_${idx + 1}`,
+          color: palette[idx % palette.length],
+          normalized: norm,
+          isQuantitative: isQuant,
+          kind: 'line',
+          evalF: evF,
+          fnEval,
+          A,
+          B,
+          C,
+          D,
+          E,
+          G,
+          pa: 0,
+          pb: Math.abs(E) > eps ? -D / E : 0,
+          pc: yInt,
+          xv: 0,
+          yv: yInt,
+          disc: 0,
+          idealXSpan: maxInt,
+          idealYSpan: maxInt,
+          edgeTopY: null,
+        });
+        continue;
+      }
+
+      if (isQuadOrLin && Math.abs(B) <= eps && Math.abs(A) > eps && Math.abs(C) <= eps && Math.abs(E) > eps) {
+        const pa = -A / E;
+        const pb = -D / E;
+        const pc = -G / E;
+        const xv = -pb / (2 * pa);
+        const yv = pa * xv * xv + pb * xv + pc;
+        const disc = pb * pb - 4 * pa * pc;
+        const rootSpan = disc > 0 ? Math.sqrt(disc) / Math.abs(2 * pa) : 0;
+        const halfDomainX = Math.max(1.45, rootSpan * 1.4, Math.abs(xv) * 0.6 + 1.35);
+        const xSpan = Math.max(Math.abs(xv) + halfDomainX, 1.55);
+        const yAtEdge1 = pa * (xv + halfDomainX) * (xv + halfDomainX) + pb * (xv + halfDomainX) + pc;
+        const ySpan = Math.max(Math.abs(yv) * 1.3, Math.abs(yAtEdge1) * 0.96, Math.abs(pc) * 1.25, 1.25);
+        specs.push({
+          idx,
+          curveLabel: item.curveLabel || `y_${idx + 1}`,
+          color: palette[idx % palette.length],
+          normalized: norm,
+          isQuantitative: isQuant,
+          kind: 'parabola',
+          evalF: evF,
+          fnEval: (x: number) => pa * x * x + pb * x + pc,
+          A,
+          B,
+          C,
+          D,
+          E,
+          G,
+          pa,
+          pb,
+          pc,
+          xv,
+          yv,
+          disc,
+          idealXSpan: xSpan,
+          idealYSpan: ySpan,
+          edgeTopY: yAtEdge1,
+        });
+        continue;
+      }
+
+      // General explicit function y = f(x)
+      const isLhsYFn = lStr === 'y' && !/\by\b/.test(rStr);
+      const isRhsYFn = rStr === 'y' && !/\by\b/.test(lStr);
+      const fnEval = isLhsYFn
+        ? (x: number) => evR(x, 0)
+        : isRhsYFn
+        ? (x: number) => evL(x, 0)
+        : (x: number) => -evF(x, 0);
+      const fnStr = isLhsYFn ? rStr : lStr;
+      let xSpan = /SIN|COS|TAN/i.test(fnStr) ? 6.5 : 3.4;
+      let maxExtremaX = 0;
+      let maxExtremaY = 0;
+      const sampleCheck: { x: number; y: number }[] = [];
+      for (let sx = -5.0; sx <= 5.0; sx += 0.1) {
+        const sy = fnEval(sx);
+        if (Number.isFinite(sy) && Math.abs(sy) < 120) {
+          sampleCheck.push({ x: sx, y: sy });
+        }
+      }
+      for (let i = 1; i < sampleCheck.length - 1; i++) {
+        const yPrev = sampleCheck[i - 1].y;
+        const yCur = sampleCheck[i].y;
+        const yNext = sampleCheck[i + 1].y;
+        if ((yCur > yPrev && yCur > yNext) || (yCur < yPrev && yCur < yNext)) {
+          maxExtremaX = Math.max(maxExtremaX, Math.abs(sampleCheck[i].x));
+          maxExtremaY = Math.max(maxExtremaY, Math.abs(yCur));
+        }
+      }
+      if (maxExtremaX > 0.2 && !/SIN|COS|TAN/i.test(fnStr)) {
+        xSpan = Math.max(2.6, Math.min(6.5, maxExtremaX * 2.1));
+      }
+      const validAbsY: number[] = [];
+      for (let i = 0; i <= 100; i++) {
+        const wx = -xSpan + (2 * xSpan * i) / 100;
+        if (Math.abs(wx) < 0.08) continue;
+        const wy = fnEval(wx);
+        if (Number.isFinite(wy) && Math.abs(wy) < 200) validAbsY.push(Math.abs(wy));
+      }
+      validAbsY.sort((a, b) => a - b);
+      const p75 = validAbsY.length > 0 ? validAbsY[Math.floor(validAbsY.length * 0.75)] : 2.5;
+      const ySpan =
+        /SIN|COS/i.test(fnStr) && maxExtremaY > 1e-4
+          ? maxExtremaY * 1.2
+          : Math.max(1.2, maxExtremaY * 1.25, Math.min(24, p75 * 1.18));
+
+      specs.push({
+        idx,
+        curveLabel: item.curveLabel || `y_${idx + 1}`,
+        color: palette[idx % palette.length],
+        normalized: norm,
+        isQuantitative: isQuant,
+        kind: 'explicit',
+        evalF: evF,
+        fnEval,
+        A,
+        B,
+        C,
+        D,
+        E,
+        G,
+        pa: 0,
+        pb: 0,
+        pc: fnEval(0),
+        xv: 0,
+        yv: 0,
+        disc: 0,
+        idealXSpan: xSpan,
+        idealYSpan: ySpan,
+        edgeTopY: null,
+      });
+    }
+
+    if (specs.length >= 2) {
+      const sharedXSpan = Math.max(1.6, ...specs.map((s) => s.idealXSpan));
+      const sharedYSpan = Math.max(1.6, ...specs.map((s) => s.idealYSpan));
+
+      // Step 1: Plot all curve strokes on the shared (sharedXSpan, sharedYSpan) coordinate system
+      for (const sp of specs) {
+        if (sp.kind === 'line') {
+          const eps = 1e-6;
+          const wSpan = sharedXSpan;
+          const hSpan = sharedYSpan;
+          const boxHits: { x: number; y: number }[] = [];
+          if (Math.abs(sp.E) > eps) {
+            for (const bx of [-wSpan, wSpan]) {
+              const by = (-sp.G - sp.D * bx) / sp.E;
+              if (by >= -hSpan - 1e-5 && by <= hSpan + 1e-5) {
+                boxHits.push({ x: bx, y: by });
+              }
+            }
+          }
+          if (Math.abs(sp.D) > eps) {
+            for (const by of [-hSpan, hSpan]) {
+              const bx = (-sp.G - sp.E * by) / sp.D;
+              if (bx >= -wSpan - 1e-5 && bx <= wSpan + 1e-5) {
+                if (!boxHits.some((p) => Math.hypot(p.x - bx, p.y - by) < 1e-4)) {
+                  boxHits.push({ x: bx, y: by });
+                }
+              }
+            }
+          }
+          if (boxHits.length >= 2) {
+            const p0 = boxHits[0];
+            const p1 = boxHits[boxHits.length - 1];
+            addCurveStroke(
+              [
+                {
+                  x: centerX + (p0.x / wSpan) * plotHalfW,
+                  y: centerY - (p0.y / hSpan) * plotHalfH,
+                },
+                {
+                  x: centerX + (p1.x / wSpan) * plotHalfW,
+                  y: centerY - (p1.y / hSpan) * plotHalfH,
+                },
+              ],
+              0,
+              true,
+              sp.idx,
+              sp.color
+            );
+          }
+          continue;
+        }
+
+        // For parabolas and explicit functions: sample across [-sharedXSpan * 0.96, sharedXSpan * 0.96]
+        // and clip smoothly at ±yCapWorld so multiple parabolas reach a clean, harmonious height!
+        const xMaxWorld = sharedXSpan * 0.96;
+        const yCapWorld = sharedYSpan * 0.88;
+        const numSteps = 160;
+        let currentBranch: { x: number; y: number }[] = [];
+        let branchIdx = 0;
+        let prevWx: number | null = null;
+        let prevWy: number | null = null;
+
+        const toPx = (wx: number, wy: number) => ({
+          x: centerX + (wx / sharedXSpan) * plotHalfW,
+          y: centerY - (wy / sharedYSpan) * plotHalfH,
+        });
+
+        for (let i = 0; i <= numSteps; i++) {
+          const wx = -xMaxWorld + (2 * xMaxWorld * i) / numSteps;
+          const wy = sp.fnEval(wx);
+          const isFiniteWy = Number.isFinite(wy);
+          const isInside = isFiniteWy && Math.abs(wy) <= yCapWorld;
+          const wasInside = prevWy !== null && Number.isFinite(prevWy) && Math.abs(prevWy) <= yCapWorld;
+          const isAsymptoteJump =
+            prevWy !== null &&
+            isFiniteWy &&
+            Math.abs(wy - prevWy) > sharedYSpan * 1.35 &&
+            wy * prevWy < 0;
+
+          if (isAsymptoteJump) {
+            if (currentBranch.length >= 2) {
+              addCurveStroke(currentBranch, branchIdx++, false, sp.idx, sp.color);
+            }
+            currentBranch = isInside ? [toPx(wx, wy)] : [];
+            prevWx = wx;
+            prevWy = isFiniteWy ? wy : null;
+            continue;
+          }
+
+          if (isInside) {
+            if (!wasInside && prevWx !== null && prevWy !== null && Number.isFinite(prevWy)) {
+              const boundY = prevWy > yCapWorld ? yCapWorld : -yCapWorld;
+              const t = (boundY - prevWy) / (wy - prevWy);
+              if (t >= 0 && t <= 1) {
+                currentBranch.push(toPx(prevWx + (wx - prevWx) * t, boundY));
+              }
+            }
+            currentBranch.push(toPx(wx, wy));
+          } else {
+            if (wasInside && prevWx !== null && prevWy !== null && isFiniteWy) {
+              const boundY = wy > yCapWorld ? yCapWorld : -yCapWorld;
+              const t = (boundY - prevWy) / (wy - prevWy);
+              if (t >= 0 && t <= 1) {
+                currentBranch.push(toPx(prevWx + (wx - prevWx) * t, boundY));
+              }
+            }
+            if (currentBranch.length >= 2) {
+              addCurveStroke(currentBranch, branchIdx++, false, sp.idx, sp.color);
+            }
+            currentBranch = [];
+          }
+
+          prevWx = wx;
+          prevWy = isFiniteWy ? wy : null;
+        }
+        if (currentBranch.length >= 2) {
+          addCurveStroke(currentBranch, branchIdx++, false, sp.idx, sp.color);
+        }
+      }
+
+      // Step 2: Add quantitative ticks & labels for all curves on the shared axes
+      for (const sp of specs) {
+        if (!sp.isQuantitative) continue;
+        if (sp.kind === 'line') {
+          const eps = 1e-6;
+          const xInt = Math.abs(sp.D) > eps ? -sp.G / sp.D : 0;
+          const yInt = Math.abs(sp.E) > eps ? -sp.G / sp.E : 0;
+          if (Math.abs(sp.D) > eps && Math.abs(xInt) > 1e-4) {
+            const pxInt = centerX + (xInt / sharedXSpan) * plotHalfW;
+            addXAxisTickAndLabel(pxInt, formatNumLabel(xInt), yInt < -1e-4);
+          }
+          if (Math.abs(sp.E) > eps && Math.abs(yInt) > 1e-4) {
+            const pyInt = centerY - (yInt / sharedYSpan) * plotHalfH;
+            addYAxisTickAndLabel(pyInt, formatNumLabel(yInt), xInt > 1e-4);
+          }
+        } else if (sp.kind === 'parabola') {
+          if (sp.disc > 1e-5) {
+            const sqrtD = Math.sqrt(sp.disc);
+            const r1 = (-sp.pb - sqrtD) / (2 * sp.pa);
+            const r2 = (-sp.pb + sqrtD) / (2 * sp.pa);
+            for (const r of [Math.min(r1, r2), Math.max(r1, r2)]) {
+              if (Math.abs(r) > 1e-4) {
+                const px = centerX + (r / sharedXSpan) * plotHalfW;
+                addXAxisTickAndLabel(px, formatNumLabel(r), sp.pa < 0, r < sp.xv ? -4 : 4);
+              }
+            }
+          } else if (Math.abs(sp.disc) <= 1e-5 && Math.abs(sp.xv) > 1e-4) {
+            const px = centerX + (sp.xv / sharedXSpan) * plotHalfW;
+            addXAxisTickAndLabel(px, formatNumLabel(sp.xv), sp.pa < 0);
+          }
+          if (Math.abs(sp.pc) > 1e-4) {
+            const pyc = centerY - (sp.pc / sharedYSpan) * plotHalfH;
+            addYAxisTickAndLabel(pyc, formatNumLabel(sp.pc), true, sp.pc < 0 ? 9 : -9);
+          }
+        } else {
+          const y0Val = sp.fnEval(0);
+          if (Number.isFinite(y0Val) && Math.abs(y0Val) > 1e-4 && Math.abs(y0Val) <= sharedYSpan * 0.92) {
+            const py0 = centerY - (y0Val / sharedYSpan) * plotHalfH;
+            addYAxisTickAndLabel(py0, formatNumLabel(y0Val), true, y0Val < 0 ? 9 : -9);
+          }
+          const foundRoots: number[] = [];
+          const rootScanSteps = 140;
+          const scanRange = sharedXSpan * 0.92;
+          for (let i = 0; i < rootScanSteps; i++) {
+            const xA = -scanRange + (2 * scanRange * i) / rootScanSteps;
+            const xB = -scanRange + (2 * scanRange * (i + 1)) / rootScanSteps;
+            const yA = sp.fnEval(xA);
+            const yB = sp.fnEval(xB);
+            if (!Number.isFinite(yA) || !Number.isFinite(yB)) continue;
+            if (Math.abs(yA - yB) > sharedYSpan * 1.2) continue;
+            let rootCand: number | null = null;
+            if (Math.abs(yA) <= 1e-5) {
+              rootCand = xA;
+            } else if (yA * yB < 0) {
+              let lo = xA;
+              let hi = xB;
+              let fLo = yA;
+              for (let iter = 0; iter < 14; iter++) {
+                const mid = 0.5 * (lo + hi);
+                const fMid = sp.fnEval(mid);
+                if (!Number.isFinite(fMid)) break;
+                if (fLo * fMid <= 0) hi = mid;
+                else {
+                  lo = mid;
+                  fLo = fMid;
+                }
+              }
+              rootCand = 0.5 * (lo + hi);
+            }
+            if (
+              rootCand !== null &&
+              Math.abs(rootCand) > 0.06 * sharedXSpan &&
+              !foundRoots.some((r) => Math.abs(r - rootCand!) < 0.1 * sharedXSpan)
+            ) {
+              foundRoots.push(rootCand);
+            }
+          }
+          if (foundRoots.length <= 4) {
+            for (const r of foundRoots) {
+              const px = centerX + (r / sharedXSpan) * plotHalfW;
+              addXAxisTickAndLabel(px, formatNumLabel(r), false);
+            }
+          }
+        }
+      }
+
+      // Step 3: Place colored curve labels (`y_1`, `y_2`, etc.) near the tip of each curve
+      for (const sp of specs) {
+        addCurveNameLabel(sp.idx, sp.curveLabel, sp.color);
+      }
+
+      if (strokes.length > 2) {
+        const labelsSummary = specs.map((s) => s.curveLabel.replace('_', '')).join(', ');
+        return {
+          strokes,
+          texts,
+          groupId,
+          kindLabel: `Κοινό Σύστημα Αξόνων (${labelsSummary})`,
+        };
+      }
+    }
+  }
 
   let kindLabel = 'Συνάρτηση';
 
@@ -9201,6 +9919,7 @@ export function buildMathGraphStrokesFromEquation(
               addDashedCoordProjection(px1, py1, '1', formatNumLabel(slope));
             }
           }
+          addCurveNameLabel(0, singleCurveLabel, curveColor);
           return { strokes, texts, groupId, kindLabel };
         }
       }
@@ -9288,6 +10007,7 @@ export function buildMathGraphStrokesFromEquation(
           addDashedCoordProjection(cxPx, cyPx, formatNumLabel(x0), formatNumLabel(y0));
         }
 
+        addCurveNameLabel(0, singleCurveLabel, curveColor);
         return { strokes, texts, groupId, kindLabel };
       }
 
@@ -9354,6 +10074,7 @@ export function buildMathGraphStrokesFromEquation(
           }
         }
 
+        addCurveNameLabel(0, singleCurveLabel, curveColor);
         return { strokes, texts, groupId, kindLabel };
       }
 
@@ -9406,6 +10127,7 @@ export function buildMathGraphStrokesFromEquation(
           }
         }
 
+        addCurveNameLabel(0, singleCurveLabel, curveColor);
         return { strokes, texts, groupId, kindLabel };
       }
 
@@ -9455,6 +10177,7 @@ export function buildMathGraphStrokesFromEquation(
             addXAxisTickAndLabel(pxL, formatNumLabel(x0 - aSemi), false, -6);
             addXAxisTickAndLabel(pxR, formatNumLabel(x0 + aSemi), false, 6);
           }
+          addCurveNameLabel(0, singleCurveLabel, curveColor);
           return { strokes, texts, groupId, kindLabel };
         } else {
           // y = y0 ± b * sqrt(1 + (x - x0)^2 / a^2)
@@ -9487,6 +10210,7 @@ export function buildMathGraphStrokesFromEquation(
             addYAxisTickAndLabel(pyT, formatNumLabel(y0 + bSemi), false, -8);
             addYAxisTickAndLabel(pyB, formatNumLabel(y0 - bSemi), false, 8);
           }
+          addCurveNameLabel(0, singleCurveLabel, curveColor);
           return { strokes, texts, groupId, kindLabel };
         }
       }
@@ -9523,6 +10247,7 @@ export function buildMathGraphStrokesFromEquation(
         }
         addCurveStroke(branch1, 0, false);
         addCurveStroke(branch2, 1, false);
+        addCurveNameLabel(0, singleCurveLabel, curveColor);
         return { strokes, texts, groupId, kindLabel };
       }
     }
@@ -9721,6 +10446,7 @@ export function buildMathGraphStrokesFromEquation(
     }
 
     if (strokes.length > 2) {
+      addCurveNameLabel(0, singleCurveLabel, curveColor);
       return { strokes, texts, groupId, kindLabel };
     }
   }
@@ -9969,6 +10695,7 @@ export function buildMathGraphStrokesFromEquation(
     }
   }
 
+  addCurveNameLabel(0, singleCurveLabel, curveColor);
   return { strokes, texts, groupId, kindLabel };
 }
 
