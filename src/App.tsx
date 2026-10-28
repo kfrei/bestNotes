@@ -11913,7 +11913,7 @@ export default function App() {
             ctx.restore();
           }
 
-          // 6C. Draw Dynamic Force Vectors (W, F_ελ, ΣF_επ) when enabled
+          // 6C. Draw Dynamic Force Vectors (W, F_ελ, ΣF) when enabled
           if (activeSpringSim.showForceVectors) {
             const drawPhysicsArrow = (
               x1: number,
@@ -11929,13 +11929,16 @@ export default function App() {
               ctx.save();
               ctx.strokeStyle = color;
               ctx.fillStyle = color;
-              ctx.lineWidth = 2.6;
+              ctx.lineWidth = 3.1;
               ctx.lineCap = 'round';
+              ctx.beginPath();
+              ctx.arc(x1, y1, 3.0, 0, Math.PI * 2);
+              ctx.fill();
               ctx.beginPath();
               ctx.moveTo(x1, y1);
               ctx.lineTo(x2, y2);
               ctx.stroke();
-              const head = 8.5;
+              const head = 10.5;
               ctx.beginPath();
               ctx.moveTo(x2, y2);
               ctx.lineTo(
@@ -11948,44 +11951,44 @@ export default function App() {
               );
               ctx.closePath();
               ctx.fill();
-              ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
-              ctx.fillText(label, x2 + 8, y2 + 4);
+              ctx.font = 'bold 13.5px system-ui, -apple-system, sans-serif';
+              ctx.fillText(label, x2 + 9, y2 + 4);
               ctx.restore();
             };
 
-            const wLen = 46 * activeSpringSim.mass;
-            // Weight W (downwards)
+            const wLen = 64 * activeSpringSim.mass;
+            const netFLen = -xDisp * 1.05 * activeSpringSim.stiffness;
+            // Weight W (downwards) and Spring force F_ελ (upwards) on the exact same vertical line!
             if (isVertSpring) {
+              const forceLineX = curMassCx;
               drawPhysicsArrow(
-                curMassCx - 10,
+                forceLineX,
                 curMassCy,
-                curMassCx - 10,
+                forceLineX,
                 curMassCy + wLen,
                 '#0284c7',
                 'W'
               );
-              // Spring force F_ελ (upwards, proportional to total stretch)
-              const fElLen = Math.max(
-                8,
-                wLen - xDisp * 0.65 * activeSpringSim.stiffness
-              );
+              // Spring force F_ελ (upwards on the same vertical line as W, proportional to total stretch)
+              const fElLen = Math.max(10, wLen + netFLen);
               drawPhysicsArrow(
-                curMassCx + 10,
+                forceLineX,
                 curMassCy,
-                curMassCx + 10,
+                forceLineX,
                 curMassCy - fElLen,
                 '#059669',
                 'Fελ'
               );
             }
-            // Restoring Force ΣF = -k*x along oscU
-            const netFLen = -xDisp * 0.75 * activeSpringSim.stiffness;
-            if (Math.abs(netFLen) >= 7) {
+            // Restoring Force ΣF = -k*x placed cleanly to the right of the mass box!
+            if (Math.abs(netFLen) >= 6) {
+              const sfOriginX = curMassCx + perpUx * (massW / 2 + 16);
+              const sfOriginY = curMassCy + perpUy * (massW / 2 + 16);
               drawPhysicsArrow(
-                curMassCx,
-                curMassCy,
-                curMassCx + oscUx * netFLen,
-                curMassCy + oscUy * netFLen,
+                sfOriginX,
+                sfOriginY,
+                sfOriginX + oscUx * netFLen,
+                sfOriginY + oscUy * netFLen,
                 '#e11d48',
                 'ΣF'
               );
