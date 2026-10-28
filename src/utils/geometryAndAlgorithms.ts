@@ -10040,6 +10040,200 @@ export function buildMathGraphStrokesFromEquation(
   return { strokes, groupId, kindLabel };
 }
 
+/**
+ * Prepares the strokes of a generated math diagram for progressive drawing animation:
+ * - Closed contour loops (e.g. heart curve) are rotated so point 0 is at the top peak (minimum y).
+ * - Open curves / lines are oriented left-to-right (or top-to-bottom if vertical).
+ */
+export function prepareMathGraphStrokesForAnimation(strokes: StrokeObject[]): StrokeObject[] {
+  return strokes.map((s) => {
+    if (!s.id.includes('-crv-') || s.shapeType === 'ellipse' || s.shapeType === 'circle') {
+      return s;
+    }
+    const pts = s.points;
+    if (pts.length < 2) return s;
+
+    // Check if closed contour loop (start and end within 18px)
+    const isClosedLoop =
+      pts.length >= 6 &&
+      Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) <= 18;
+
+    if (isClosedLoop) {
+      let topIdx = 0;
+      let minY = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        if (pts[i].y < minY) {
+          minY = pts[i].y;
+          topIdx = i;
+        }
+      }
+      const corePts =
+        Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < 2
+          ? pts.slice(0, -1)
+          : pts;
+      const safeTopIdx = Math.min(topIdx, corePts.length - 1);
+      const rotated = [
+        ...corePts.slice(safeTopIdx),
+        ...corePts.slice(0, safeTopIdx),
+        { ...corePts[safeTopIdx] },
+      ];
+      return { ...s, points: rotated };
+    }
+
+    // For open curves / lines, ensure left-to-right drawing direction
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    if (first.x > last.x + 2) {
+      return { ...s, points: [...pts].reverse() };
+    }
+    return s;
+  });
+}
+
+/**
+ * Computes an intermediate frame of `StrokeObject[]` at `elapsedMs` (out of `totalDurationMs`, default 1750ms):
+ * 1. 0ms - 260ms: Fast fade-in of coordinate axes and axis tip labels (`x`, `y`, `K`, `U`, `u`, `t`, etc.)
+ * 2. 200ms - 1620ms: Progressive drawing of the curve from one side to the other, or from the top peak around the circumference for circles/ellipses/closed loops
+ * 3. 1200ms - 1750ms: Smooth fade-in of dashed projection guides and quantitative tick marks / numbers
+ */
+export function computeMathGraphAnimationFrame(
+  preparedStrokes: StrokeObject[],
+  elapsedMs: number,
+  totalDurationMs = 1750
+): StrokeObject[] {
+  if (elapsedMs >= totalDurationMs) {
+    return preparedStrokes;
+  }
+
+  const axisFadeDuration = 260;
+  const curveStartMs = 200;
+  const curveDrawDuration = 1420;
+  const guidesStartMs = 1180;
+  const guidesFadeDuration = totalDurationMs - guidesStartMs;
+
+  const axisAlpha = Math.min(1, Math.max(0.05, elapsedMs / axisFadeDuration));
+  const rawCurveU = Math.min(1, Math.max(0, (elapsedMs - curveStartMs) / curveDrawDuration));
+  // Smooth ease-in-out cubic progression for the curve sweep
+  const curveProgress =
+    rawCurveU < 0.5
+      ? 2 * rawCurveU * rawCurveU
+      : 1 - Math.pow(-2 * rawCurveU + 2, 2) / 2;
+  const guidesAlpha = Math.min(1, Math.max(0, (elapsedMs - guidesStartMs) / guidesFadeDuration));
+
+  const out: StrokeObject[] = [];
+
+  for (const s of preparedStrokes) {
+    const isPrimaryAxisOrTip = /-axx|-axy|-lblx|-lbly|-ly-|-lx-|-lt-/.test(s.id);
+    const isCurve = s.id.includes('-crv-');
+
+    if (isPrimaryAxisOrTip) {
+      out.push(axisAlpha >= 0.995 ? s : { ...s, opacity: (s.opacity ?? 1) * axisAlpha });
+      continue;
+    }
+
+    if (isCurve) {
+      if (curveProgress <= 0.005) continue;
+      if (curveProgress >= 0.998) {
+        out.push(s);
+        continue;
+      }
+
+      // Circle or Ellipse: sweep clockwise starting from the top peak (theta = -pi/2) around the perimeter
+      if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 4) {
+        const topPt = s.points[0];
+        const rightPt = s.points[1];
+        const botPt = s.points[2];
+        const leftPt = s.points[3];
+        const cx = (rightPt.x + leftPt.x) / 2;
+        const cy = (botPt.y + topPt.y) / 2;
+        const rx = Math.abs(rightPt.x - leftPt.x) / 2;
+        const ry = Math.abs(botPt.y - topPt.y) / 2;
+        const steps = Math.max(4, Math.ceil(76 * curveProgress));
+        const maxAngle = Math.PI * 2 * curveProgress;
+        const arcPts: BezierPoint[] = [];
+        for (let i = 0; i <= steps; i++) {
+          const theta = -Math.PI / 2 + (maxAngle * i) / steps;
+          arcPts.push({
+            x: cx + rx * Math.cos(theta),
+            y: cy + ry * Math.sin(theta),
+            pressure: 0.7,
+          });
+        }
+        out.push({
+          ...s,
+          isShape: false,
+          shapeType: undefined,
+          points: arcPts,
+        });
+        continue;
+      }
+
+      // Polyline or 2-point Line: slice progressively by arc length from start to end
+      const pts = s.points;
+      if (pts.length === 2) {
+        const p0 = pts[0];
+        const p1 = pts[1];
+        out.push({
+          ...s,
+          points: [
+            p0,
+            {
+              x: p0.x + (p1.x - p0.x) * curveProgress,
+              y: p0.y + (p1.y - p0.y) * curveProgress,
+              pressure: 0.7,
+            },
+          ],
+        });
+        continue;
+      }
+
+      if (pts.length > 2) {
+        const cumLen: number[] = [0];
+        let totalLen = 0;
+        for (let i = 1; i < pts.length; i++) {
+          totalLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+          cumLen.push(totalLen);
+        }
+        if (totalLen <= 1e-4) {
+          out.push(s);
+          continue;
+        }
+        const targetLen = totalLen * curveProgress;
+        const slicedPts: BezierPoint[] = [pts[0]];
+        for (let i = 1; i < pts.length; i++) {
+          if (cumLen[i] <= targetLen) {
+            slicedPts.push(pts[i]);
+          } else {
+            const segLen = cumLen[i] - cumLen[i - 1];
+            const frac = segLen > 1e-5 ? (targetLen - cumLen[i - 1]) / segLen : 1;
+            slicedPts.push({
+              x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * frac,
+              y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * frac,
+              pressure: 0.7,
+            });
+            break;
+          }
+        }
+        if (slicedPts.length >= 2) {
+          out.push({
+            ...s,
+            points: slicedPts,
+          });
+        }
+      }
+      continue;
+    }
+
+    // Dashed Projection Guides & Quantitative Tick Marks / Numbers
+    if (guidesAlpha > 0.01) {
+      out.push(guidesAlpha >= 0.995 ? s : { ...s, opacity: (s.opacity ?? 1) * guidesAlpha });
+    }
+  }
+
+  return out;
+}
+
+
 
 
 

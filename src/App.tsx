@@ -137,6 +137,8 @@ import {
   transcribeEquationForGraphWithGemini,
   convertPlainTextToMathLatex,
   buildMathGraphStrokesFromEquation,
+  prepareMathGraphStrokesForAnimation,
+  computeMathGraphAnimationFrame,
   splitAndCleanMathLatexLines,
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
@@ -22182,6 +22184,70 @@ export default function App() {
     showToast,
   ]);
 
+  // Progressive 1.75s Diagram Animation helper:
+  // 1) Fast fade-in of coordinate axes (0..260ms)
+  // 2) Progressive drawing of the plotted curve from left-to-right or from the top peak around the circumference (200..1620ms)
+  // 3) Smooth fade-in of projection guides & quantitative ticks (1180..1750ms), then final editable selection
+  const mathGraphAnimRafRef = useRef<number | null>(null);
+  const animateAndCommitMathGraph = useCallback(
+    (
+      graphBuilt: { strokes: StrokeObject[]; groupId: string; kindLabel: string },
+      extraUpdater?: (page: NotePage) => NotePage
+    ) => {
+      if (mathGraphAnimRafRef.current !== null) {
+        cancelAnimationFrame(mathGraphAnimRafRef.current);
+        mathGraphAnimRafRef.current = null;
+      }
+      const totalDurationMs = 1750;
+      const prepared = prepareMathGraphStrokesForAnimation(graphBuilt.strokes);
+      const targetGroupId = graphBuilt.groupId;
+      const initialFrame = computeMathGraphAnimationFrame(prepared, 0, totalDurationMs);
+
+      setEditingTextId(null);
+      setSelectedTextId(null);
+      setActiveNodeStrokeId(null);
+      setSelectedStrokeIds([]);
+
+      updateActivePage((page) => {
+        const basePage = extraUpdater ? extraUpdater(page) : page;
+        return {
+          ...basePage,
+          strokes: [...basePage.strokes, ...initialFrame],
+        };
+      }, true);
+
+      const startTime = performance.now();
+      const step = (now: number) => {
+        const elapsed = now - startTime;
+        if (elapsed >= totalDurationMs) {
+          mathGraphAnimRafRef.current = null;
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...prepared],
+            }),
+            false
+          );
+          setActiveTool('lasso');
+          setSelectedStrokeIds(prepared.map((s) => s.id));
+          setShowToolSubBar(true);
+          return;
+        }
+        const frameStrokes = computeMathGraphAnimationFrame(prepared, elapsed, totalDurationMs);
+        updateActivePage(
+          (page) => ({
+            ...page,
+            strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...frameStrokes],
+          }),
+          false
+        );
+        mathGraphAnimRafRef.current = requestAnimationFrame(step);
+      };
+      mathGraphAnimRafRef.current = requestAnimationFrame(step);
+    },
+    [updateActivePage]
+  );
+
   // 3. Manual (on-demand) Lasso Handwriting -> 2D Mathematical Coordinate Diagram (`📈 Διάγραμμα`) right next to the equation!
   const handleConvertLassoToMathGraph = useCallback(async () => {
     if (isConvertingHandwriting) return;
@@ -22306,18 +22372,9 @@ export default function App() {
         return;
       }
 
-      const newIds = graphBuilt.strokes.map((s) => s.id);
-      updateActivePage((page) => ({
-        ...page,
-        strokes: [...page.strokes, ...graphBuilt!.strokes],
-      }));
-
-      setActiveTool('lasso');
-      setSelectedStrokeIds(newIds);
-      setActiveNodeStrokeId(null);
-      setShowToolSubBar(true);
+      animateAndCommitMathGraph(graphBuilt);
       showToast(
-        `📈 Διάγραμμα (${graphBuilt.kindLabel}): Δημιουργήθηκε δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
+        `📈 Διάγραμμα (${graphBuilt.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
       );
     } finally {
       setIsConvertingHandwriting(false);
@@ -22329,7 +22386,7 @@ export default function App() {
     activePage,
     activeNotebook?.title,
     activeLayerId,
-    updateActivePage,
+    animateAndCommitMathGraph,
     showToast,
   ]);
 
@@ -22384,23 +22441,12 @@ export default function App() {
         return;
       }
 
-      const newIds = graphBuilt.strokes.map((s) => s.id);
-      updateActivePage((page) => ({
-        ...page,
-        strokes: [...page.strokes, ...graphBuilt.strokes],
-      }));
-
-      setEditingTextId(null);
-      setSelectedTextId(null);
-      setActiveTool('lasso');
-      setSelectedStrokeIds(newIds);
-      setActiveNodeStrokeId(null);
-      setShowToolSubBar(true);
+      animateAndCommitMathGraph(graphBuilt);
       showToast(
-        `📈 Διάγραμμα (${graphBuilt.kindLabel}): Δημιουργήθηκε δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
+        `📈 Διάγραμμα (${graphBuilt.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
       );
     },
-    [selectedTextId, editingTextId, activePage, activeLayerId, updateActivePage, showToast]
+    [selectedTextId, editingTextId, activePage, activeLayerId, animateAndCommitMathGraph, showToast]
   );
 
   // 5. Insert `^` (Power / Δύναμη) into the currently active or selected Text Box so the user can easily type exponents like (x^2)/9 + (y^2)/16 = 25!
@@ -31720,20 +31766,15 @@ export default function App() {
                     showToast('⚠️ Δεν αναγνωρίστηκε έγκυρη εξίσωση για σχεδίαση διαγράμματος!');
                     return;
                   }
-                  updateActivePage((page) => ({
+                  animateAndCommitMathGraph(graphRes, (page) => ({
                     ...page,
                     texts: selMathTxt
                       ? (page.texts || []).map((t) => (t.id === selMathTxt.id && updatedOrNewTxt ? updatedOrNewTxt : t))
                       : [...(page.texts || []), ...(updatedOrNewTxt ? [updatedOrNewTxt] : [])],
-                    strokes: [...page.strokes, ...graphRes.strokes],
                   }));
-                  setSelectedStrokeIds(graphRes.strokes.map((s) => s.id));
-                  setSelectedTextId(null);
-                  setActiveTool('lasso');
-                  setShowToolSubBar(true);
                   setShowMathModal(false);
                   showToast(
-                    `📈 Διάγραμμα (${graphRes.kindLabel}): Δημιουργήθηκε δίπλα στην εξίσωση!`
+                    `📈 Διάγραμμα (${graphRes.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση!`
                   );
                 }}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs"
