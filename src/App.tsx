@@ -22311,14 +22311,14 @@ export default function App() {
     try {
       const aiRes = await Promise.race([
         transcribeEquationForGraphWithGemini(cropDataUrl, activeNotebook?.title || ''),
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 8500)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 11000)),
       ]);
 
-      let eqStr = aiRes?.equation || aiRes?.normalizedEquation || '';
+      let eqStr = aiRes?.equation || aiRes?.normalizedEquation || aiRes?.latex || '';
       if (!eqStr) {
         const fallbackMath = await Promise.race([
           transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
-          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 5000)),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 7000)),
         ]);
         eqStr = fallbackMath?.latex || fallbackMath?.plainText || '';
       }
@@ -22344,19 +22344,18 @@ export default function App() {
       const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
       const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
 
-      let graphBuilt = buildMathGraphStrokesFromEquation(
-        eqStr,
-        centerX,
-        centerY,
-        diagW,
-        diagH,
-        '#dc2626',
-        axisInk,
-        targetLayerId
+      const candidateEquations = Array.from(
+        new Set(
+          [eqStr, aiRes?.normalizedEquation, aiRes?.latex]
+            .map((c) => (c || '').trim())
+            .filter(Boolean)
+        )
       );
-      if (!graphBuilt && aiRes?.normalizedEquation) {
+
+      let graphBuilt: ReturnType<typeof buildMathGraphStrokesFromEquation> = null;
+      for (const candEq of candidateEquations) {
         graphBuilt = buildMathGraphStrokesFromEquation(
-          aiRes.normalizedEquation,
+          candEq,
           centerX,
           centerY,
           diagW,
@@ -22365,6 +22364,7 @@ export default function App() {
           axisInk,
           targetLayerId
         );
+        if (graphBuilt) break;
       }
 
       if (!graphBuilt) {

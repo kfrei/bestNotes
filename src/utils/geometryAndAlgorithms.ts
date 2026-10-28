@@ -4040,10 +4040,11 @@ export async function transcribeHandwrittenStrokesWithGemini(
   const candidateModels = Array.from(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-3.5-flash',
       'gemini-3-flash-preview',
       'gemini-3.6-flash',
+      'gemini-3.5-flash',
       'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite',
       'gemini-3.8-flash',
       'gemini-flash-latest',
     ])
@@ -4051,12 +4052,13 @@ export async function transcribeHandwrittenStrokesWithGemini(
 
   const tryTranscribeWithModel = async (
     modelName: string,
-    timeoutMs = 4200
+    timeoutMs = 7500
   ): Promise<string | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
+      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
@@ -4065,7 +4067,10 @@ export async function transcribeHandwrittenStrokesWithGemini(
           signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: { responseMimeType: 'application/json' },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
+            },
           }),
         }
       );
@@ -4097,32 +4102,24 @@ export async function transcribeHandwrittenStrokesWithGemini(
     return null;
   };
 
-  // 1. Try primary fastest model first with a tight 3.6s timeout
-  const primaryModel = candidateModels[0];
-  if (primaryModel) {
-    const firstTry = await tryTranscribeWithModel(primaryModel, 3600);
-    if (firstTry) return firstTry;
-  }
-
-  // 2. If primary model timed out or returned 503/429, race the backup models in parallel so the fastest responder wins immediately!
-  const backupModels = candidateModels.slice(1, 5);
-  if (backupModels.length > 0) {
+  const parallelBatch = candidateModels.slice(0, 4);
+  if (parallelBatch.length > 0) {
     try {
-      const fastestBackup = await Promise.any(
-        backupModels.map(async (m) => {
-          const res = await tryTranscribeWithModel(m, 4500);
+      const fastest = await Promise.any(
+        parallelBatch.map(async (m) => {
+          const res = await tryTranscribeWithModel(m, 7500);
           if (!res) throw new Error('empty');
           return res;
         })
       );
-      if (fastestBackup) return fastestBackup;
+      if (fastest) return fastest;
     } catch {
-      // All parallel backup models failed; try remaining candidates if any
+      // ignore and fall back to remaining candidates
     }
   }
 
-  for (const modelName of candidateModels.slice(5)) {
-    const out = await tryTranscribeWithModel(modelName, 3800);
+  for (const modelName of candidateModels.slice(4)) {
+    const out = await tryTranscribeWithModel(modelName, 5500);
     if (out) return out;
   }
 
@@ -4209,10 +4206,11 @@ export async function transcribeHandwrittenMathWithGemini(
   const candidateModels = Array.from(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-3.5-flash',
       'gemini-3-flash-preview',
       'gemini-3.6-flash',
+      'gemini-3.5-flash',
       'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite',
       'gemini-3.8-flash',
       'gemini-flash-latest',
     ])
@@ -4220,12 +4218,13 @@ export async function transcribeHandwrittenMathWithGemini(
 
   const tryMathWithModel = async (
     modelName: string,
-    timeoutMs = 4500
+    timeoutMs = 7500
   ): Promise<{ latex: string; plainText: string } | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
+      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
@@ -4234,7 +4233,10 @@ export async function transcribeHandwrittenMathWithGemini(
           signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: { responseMimeType: 'application/json' },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
+            },
           }),
         }
       );
@@ -4279,32 +4281,24 @@ export async function transcribeHandwrittenMathWithGemini(
     return null;
   };
 
-  // 1. Try primary fastest model first with a tight 3.8s timeout
-  const primaryModel = candidateModels[0];
-  if (primaryModel) {
-    const firstTry = await tryMathWithModel(primaryModel, 3800);
-    if (firstTry) return firstTry;
-  }
-
-  // 2. If primary model timed out or returned 503/429, race the backup models in parallel so the fastest responder wins immediately!
-  const backupModels = candidateModels.slice(1, 5);
-  if (backupModels.length > 0) {
+  const parallelBatch = candidateModels.slice(0, 4);
+  if (parallelBatch.length > 0) {
     try {
-      const fastestBackup = await Promise.any(
-        backupModels.map(async (m) => {
-          const res = await tryMathWithModel(m, 4800);
+      const fastest = await Promise.any(
+        parallelBatch.map(async (m) => {
+          const res = await tryMathWithModel(m, 7500);
           if (!res) throw new Error('empty');
           return res;
         })
       );
-      if (fastestBackup) return fastestBackup;
+      if (fastest) return fastest;
     } catch {
-      // All parallel backup models failed; try remaining candidates if any
+      // ignore and fall back to remaining candidates
     }
   }
 
-  for (const modelName of candidateModels.slice(5)) {
-    const out = await tryMathWithModel(modelName, 4000);
+  for (const modelName of candidateModels.slice(4)) {
+    const out = await tryMathWithModel(modelName, 5500);
     if (out) return out;
   }
 
@@ -7196,10 +7190,11 @@ export async function transcribeEquationForGraphWithGemini(
   const candidateModels = Array.from(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
-      'gemini-3.5-flash',
       'gemini-3-flash-preview',
       'gemini-3.6-flash',
+      'gemini-3.5-flash',
       'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite',
       'gemini-3.8-flash',
       'gemini-flash-latest',
     ])
@@ -7207,7 +7202,7 @@ export async function transcribeEquationForGraphWithGemini(
 
   const tryWithModel = async (
     modelName: string,
-    timeoutMs = 4500
+    timeoutMs = 8000
   ): Promise<{
     equation: string;
     normalizedEquation?: string;
@@ -7218,6 +7213,7 @@ export async function transcribeEquationForGraphWithGemini(
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
+      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
@@ -7226,7 +7222,10 @@ export async function transcribeEquationForGraphWithGemini(
           signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: { responseMimeType: 'application/json' },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
+            },
           }),
         }
       );
@@ -7237,12 +7236,21 @@ export async function transcribeEquationForGraphWithGemini(
       const data = await res.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) return null;
-      const parsed = JSON.parse(rawText);
+      const cleanJsonText = String(rawText)
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+      const parsedRaw = JSON.parse(cleanJsonText);
+      const parsed = Array.isArray(parsedRaw) ? parsedRaw[0] : parsedRaw;
       const eq =
         typeof parsed?.equation === 'string' && parsed.equation.trim()
           ? parsed.equation.trim()
           : typeof parsed?.normalizedEquation === 'string' && parsed.normalizedEquation.trim()
           ? parsed.normalizedEquation.trim()
+          : typeof parsed?.latex === 'string' && parsed.latex.trim()
+          ? parsed.latex.trim()
+          : typeof parsed?.text === 'string' && parsed.text.trim()
+          ? parsed.text.trim()
           : '';
       if (eq) {
         cachedWorkingVisionModel = cleanName;
@@ -7266,30 +7274,25 @@ export async function transcribeEquationForGraphWithGemini(
     return null;
   };
 
-  const primaryModel = candidateModels[0];
-  if (primaryModel) {
-    const firstTry = await tryWithModel(primaryModel, 3800);
-    if (firstTry) return firstTry;
-  }
-
-  const backupModels = candidateModels.slice(1, 5);
-  if (backupModels.length > 0) {
+  // Race the top 4 models in parallel immediately so a 503 spike on any single model never delays OCR!
+  const parallelBatch = candidateModels.slice(0, 4);
+  if (parallelBatch.length > 0) {
     try {
-      const fastestBackup = await Promise.any(
-        backupModels.map(async (m) => {
-          const res = await tryWithModel(m, 4800);
+      const fastest = await Promise.any(
+        parallelBatch.map(async (m) => {
+          const res = await tryWithModel(m, 8000);
           if (!res) throw new Error('empty');
           return res;
         })
       );
-      if (fastestBackup) return fastestBackup;
+      if (fastest) return fastest;
     } catch {
-      // ignore
+      // ignore and fall back to remaining models
     }
   }
 
-  for (const modelName of candidateModels.slice(5)) {
-    const out = await tryWithModel(modelName, 4000);
+  for (const modelName of candidateModels.slice(4)) {
+    const out = await tryWithModel(modelName, 6000);
     if (out) return out;
   }
 
@@ -7470,6 +7473,42 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     if (eqParts.length >= 2) {
       s = `${eqParts[eqParts.length - 2]} = ${eqParts[eqParts.length - 1]}`;
     }
+  }
+
+  // Smart Physical / Non-(x,y) Variable Mapping:
+  // If an equation uses Physics symbols like `K = 1/2 m u^2`, `U = 1/2 D x^2`, `P = I^2 R`, `F = k/r^2`,
+  // automatically map the LHS dependent variable to `y` and the primary RHS independent variable to `x`!
+  if (s.includes('=')) {
+    const eqPos = s.indexOf('=');
+    let lhsPart = s.slice(0, eqPos).trim();
+    let rhsPart = s.slice(eqPos + 1).trim();
+
+    const hasY = /\by\b/.test(s);
+    const hasX = /\bx\b/.test(s);
+
+    // 1. If there is no `y` in the equation and the LHS is a single variable/symbol (e.g. K, U, E, F, ΣF, P, V, a, u, v, s), map LHS -> `y`
+    if (!hasY && /^(?:Σ?[a-zA-Zα-ωΑ-Ω](?:_[a-zA-Z0-9]+)?)$/.test(lhsPart) && lhsPart !== 'x') {
+      lhsPart = 'y';
+    }
+
+    // 2. If there is still no `x` on the RHS (e.g. `K = 1/2 m u^2` where RHS has `m` and `u`), map the primary RHS variable -> `x`
+    if (!hasX) {
+      const strippedRhs = rhsPart.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG)\b/g, '');
+      // Prefer a variable raised to a power (like `u^(2)` or `v^2` or `r^2` or `t^2`)
+      const powVarMatch = strippedRhs.match(/([a-zA-Zα-ωΑ-Ω])\s*\^/);
+      if (powVarMatch && powVarMatch[1] && powVarMatch[1] !== 'y' && powVarMatch[1] !== 'e') {
+        const targetVar = powVarMatch[1];
+        rhsPart = rhsPart.replace(new RegExp(targetVar, 'g'), 'x');
+      } else {
+        // Otherwise prefer common physics independent variables (u, v, υ, t, r, s, I, T, q, z)
+        const prefMatch = strippedRhs.match(/[uvυtrsITqz]/);
+        if (prefMatch && prefMatch[0]) {
+          rhsPart = rhsPart.replace(new RegExp(prefMatch[0], 'g'), 'x');
+        }
+      }
+    }
+
+    s = `${lhsPart} = ${rhsPart}`;
   }
 
   return s.trim();
@@ -8240,18 +8279,34 @@ function tryBuildOscillationDiagramStrokes(
     if (lastPart) raw = lastPart;
   }
 
-  const expanded = expandLatexConstructs(raw)
+  let expanded = expandLatexConstructs(raw)
     .replace(/\\Sigma\b/g, 'Σ')
+    .replace(/\\Delta\b/g, 'D')
     .replace(/\\omega\b/g, 'ω')
     .replace(/\\alpha\b/g, 'α')
+    .replace(/\\mu\b/g, 'm')
+    .replace(/\\(?:upsilon|nu)\b/g, 'u')
+    .replace(/\\kappa\b/g, 'k')
     .replace(/\\text\{([^}]*)\}/g, '$1')
     .replace(/\\(?:cdot|times)\b/g, '*')
     .replace(/[·×∙]/g, '*')
     .replace(/[−–—]/g, '-')
     .replace(/²/g, '^2')
     .replace(/\^\(\s*2\s*\)/g, '^2')
+    .replace(/Κ/g, 'K')
+    .replace(/Ε/g, 'E')
+    .replace(/Α/g, 'A')
+    .replace(/Υ/g, 'U')
+    .replace(/(\d),(\d)/g, '$1.$2')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Unwrap redundant parentheses around simple tokens/fractions like `((1)/(2))` -> `1/2`
+  for (let pass = 0; pass < 4; pass++) {
+    expanded = expanded
+      .replace(/\(\s*([0-9.]+|[a-zA-Zα-ωΑ-Ω]+(?:\^2)?)\s*\)/g, '$1')
+      .replace(/\(\s*(1\/2|0\.5)\s*\)/g, '$1');
+  }
 
   const compact = expanded.replace(/\s+/g, '');
   const groupId = `math-graph-grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -8465,9 +8520,9 @@ function tryBuildOscillationDiagramStrokes(
 
   // CASE 1: Kinetic Energy vs Velocity `K = 1/2 m u^2` or `K - u`
   const isKineticVelocity =
-    /^(?:K|E_?k|E_?K)\s*=\s*(?:(?:\(?1\/2\)?|0\.5)\s*\*?\s*m\s*\*?\s*[uvυ]\^2|m\s*\*?\s*[uvυ]\^2\s*\/\s*2|[0-9.]+\s*\*?\s*[uvυ]\^2)$/i.test(
+    /^(?:[KΚκ]|E_?[kKκ])(?:\([uvυ]\))?=(?:(?:\(?1\/2\)?|0\.5)\*?[mμM]?\*?[uvυ]\^2|[mμM]?\*?[uvυ]\^2\/2|[0-9.]*\*?[mμM]?\*?[uvυ]\^2)$/i.test(
       compact
-    ) || /^K\s*-\s*[uvυ]$/i.test(compact);
+    ) || /^[KΚκ]-[uvυ]$/i.test(compact);
 
   if (isKineticVelocity) {
     return buildEnergyParabolaDiagram({
@@ -8483,9 +8538,9 @@ function tryBuildOscillationDiagramStrokes(
 
   // CASE 2: Potential Energy vs Displacement `U = 1/2 D x^2` or `U = 1/2 k x^2` or `U - x`
   const isPotentialDisplacement =
-    /^(?:U|E_?p|E_?U)\s*=\s*(?:(?:\(?1\/2\)?|0\.5)\s*\*?\s*[Dkκ]\s*\*?\s*[xχ]\^2|[Dkκ]\s*\*?\s*[xχ]\^2\s*\/\s*2|[0-9.]+\s*\*?\s*[xχ]\^2)$/i.test(
+    /^(?:U|E_?[pU])(?:\([xχ]\))?=(?:(?:\(?1\/2\)?|0\.5)\*?[DkκΔδ]?\*?[xχ]\^2|[DkκΔδ]?\*?[xχ]\^2\/2|[0-9.]*\*?[DkκΔδ]?\*?[xχ]\^2)$/i.test(
       compact
-    ) || /^U\s*-\s*[xχ]$/i.test(compact);
+    ) || /^U-[xχ]$/i.test(compact);
 
   if (isPotentialDisplacement) {
     return buildEnergyParabolaDiagram({
