@@ -27503,15 +27503,11 @@ export default function App() {
                         </>
                       )}
 
-                      {selTxt && (
+                      {selTxt && (!selTxt.isMath || editingTextId === selTxt.id) && (
                         <button
                           onMouseDown={(ev) => ev.preventDefault()}
                           onClick={() => handleConvertTextToMath(selTxt.id)}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-bold transition cursor-pointer ${
-                            selTxt.isMath && editingTextId !== selTxt.id
-                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs'
-                              : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300'
-                          }`}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full font-bold transition cursor-pointer bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300"
                           title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
                         >
                           <span>∑ Text2Math</span>
@@ -32022,21 +32018,17 @@ export default function App() {
                                   >
                                     xᵢ (_)
                                   </button>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => handleConvertTextToMath(txt.id)}
+                                    className="px-2 py-0.5 rounded font-extrabold cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
+                                    title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
+                                  >
+                                    ∑ Text2Math
+                                  </button>
                                 </>
                               )}
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => handleConvertTextToMath(txt.id)}
-                                className={`px-2 py-0.5 rounded font-extrabold cursor-pointer ${
-                                  txt.isMath && !isEditingTxt
-                                    ? 'bg-indigo-500 hover:bg-indigo-400 text-white ring-1 ring-white/40'
-                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                }`}
-                                title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
-                              >
-                                ∑ Text2Math
-                              </button>
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
@@ -32046,42 +32038,6 @@ export default function App() {
                               >
                                 📈 Διάγραμμα
                               </button>
-                              {txt.isMath && (
-                                <button
-                                  type="button"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => {
-                                    const currentLines = splitAndCleanMathLatexLines(txt.latex || txt.text || '');
-                                    let nextLatex = currentLines.join('\n');
-                                    if (currentLines.length === 1) {
-                                      const line = currentLines[0];
-                                      const arrowMatches = [...line.matchAll(/(\\Rightarrow|\\Leftrightarrow|\\implies)/g)];
-                                      if (arrowMatches.length >= 2) {
-                                        const midMatch = arrowMatches[Math.floor(arrowMatches.length / 2)];
-                                        if (midMatch.index !== undefined) {
-                                          nextLatex = `${line.slice(0, midMatch.index).trim()}\n${line.slice(midMatch.index).trim()}`;
-                                        }
-                                      } else if (arrowMatches.length === 1 && arrowMatches[0].index !== undefined) {
-                                        const idx = arrowMatches[0].index;
-                                        nextLatex = `${line.slice(0, idx).trim()}\n${line.slice(idx).trim()}`;
-                                      }
-                                    } else {
-                                      // Merge back to 1 line if already multi-line
-                                      nextLatex = currentLines.join(' ');
-                                    }
-                                    updateActivePage((page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).map((t) =>
-                                        t.id === txt.id ? { ...t, latex: nextLatex, text: nextLatex } : t
-                                      ),
-                                    }));
-                                  }}
-                                  className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 cursor-pointer"
-                                  title="Εναλλαγή 1 / 2 σειρών εξίσωσης"
-                                >
-                                  ↵ 2 Σειρές
-                                </button>
-                              )}
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
@@ -32097,14 +32053,29 @@ export default function App() {
                                   }
                                   setEditingTextId(isEditingTxt ? null : txt.id);
                                 }}
-                                className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 cursor-pointer"
+                                className="px-1.5 py-1 rounded bg-sky-600/85 hover:bg-sky-500 text-white flex items-center justify-center cursor-pointer"
                                 title={
                                   isEditingTxt
                                     ? 'Ολοκλήρωση επεξεργασίας (επιστροφή στη μαθηματική μορφή)'
                                     : 'Επεξεργασία στην αρχική μορφή κειμένου'
                                 }
                               >
-                                {isEditingTxt ? '✓' : '✏️'}
+                                {isEditingTxt ? (
+                                  <span className="font-extrabold text-xs leading-none">✓</span>
+                                ) : (
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    className="w-3.5 h-3.5 text-white"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.3"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                                    <path d="m15 5 4 4" />
+                                  </svg>
+                                )}
                               </button>
                               <button
                                 type="button"
@@ -32117,10 +32088,10 @@ export default function App() {
                                   setSelectedTextId(null);
                                   setEditingTextId(null);
                                 }}
-                                className="px-1.5 py-0.5 rounded bg-rose-500/80 hover:bg-rose-600 text-white cursor-pointer"
+                                className="px-1.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center cursor-pointer"
                                 title="Διαγραφή κειμένου"
                               >
-                                🗑️
+                                <Trash2 className="w-3.5 h-3.5 text-white stroke-[2.3]" />
                               </button>
                             </div>
                           )}
