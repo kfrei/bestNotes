@@ -30899,14 +30899,22 @@ export default function App() {
                               }`}
                             >
                               {(() => {
-                                const mathRows = splitAndCleanMathLatexLines(txt.latex);
-                                const rowsToRender = mathRows.length > 0 ? mathRows : [txt.latex];
+                                const effectiveLatex =
+                                  txt.text &&
+                                  !txt.text.includes('\\frac') &&
+                                  !txt.text.includes('\\sqrt') &&
+                                  !txt.text.includes('\\cdot')
+                                    ? convertPlainTextToMathLatex(txt.text)
+                                    : txt.latex;
+                                const mathRows = splitAndCleanMathLatexLines(effectiveLatex);
+                                const rowsToRender = mathRows.length > 0 ? mathRows : [effectiveLatex];
                                 return rowsToRender.map((rowLatex, rIdx) => (
                                   <div
                                     key={rIdx}
                                     dangerouslySetInnerHTML={{
                                       __html: katex.renderToString(rowLatex, {
                                         throwOnError: false,
+                                        strict: false,
                                         displayMode: true,
                                       }),
                                     }}

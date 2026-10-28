@@ -7050,35 +7050,54 @@ export function convertPlainTextToMathLatex(rawText: string): string {
           }
         }
       } else {
-        let i = denStart;
-        if (s[i] === '-' || s[i] === '+') i++;
-        while (i < s.length) {
-          if ((s[i] === '^' || s[i] === '_') && i + 1 < s.length) {
-            i++;
-            while (i < s.length && /\s/.test(s[i])) i++;
-            if (i < s.length && s[i] === '(') {
-              let d = 0;
-              for (let j = i; j < s.length; j++) {
-                if (s[j] === '(') d++;
-                else if (s[j] === ')') {
-                  d--;
-                  if (d === 0) {
-                    i = j + 1;
-                    break;
+        const preNum = stripOuterNumParens
+          ? s.slice(numStart + 1, numEnd).trim()
+          : s.slice(numStart, numEnd + 1).trim();
+        const isPureNumericNum = /^\d+(?:\.\d+)?$/.test(preNum);
+        const denLeadingNumMatch = s.slice(denStart).match(/^-?\d+(?:\.\d+)?/);
+
+        if (isPureNumericNum && denLeadingNumMatch) {
+          // e.g. `1/2mu^2` or `3/4x^2` -> fraction is `\frac{1}{2}` followed by `mu^2`!
+          denEnd = denStart + denLeadingNumMatch[0].length - 1;
+        } else {
+          let i = denStart;
+          if (s[i] === '-' || s[i] === '+') i++;
+          while (i < s.length) {
+            if ((s[i] === '^' || s[i] === '_') && i + 1 < s.length) {
+              i++;
+              while (i < s.length && /\s/.test(s[i])) i++;
+              if (i < s.length && s[i] === '(') {
+                let d = 0;
+                for (let j = i; j < s.length; j++) {
+                  if (s[j] === '(') d++;
+                  else if (s[j] === ')') {
+                    d--;
+                    if (d === 0) {
+                      i = j + 1;
+                      break;
+                    }
                   }
                 }
+                continue;
               }
-              continue;
+              if (i < s.length && (s[i] === '-' || s[i] === '+')) i++;
+              if (i < s.length && /\d/.test(s[i])) {
+                while (i < s.length && /[\d.]/.test(s[i])) i++;
+                break;
+              }
+              if (i < s.length && /[a-zA-Zα-ωΑ-Ω]/.test(s[i])) {
+                i++;
+                break;
+              }
             }
-            if (i < s.length && (s[i] === '-' || s[i] === '+')) i++;
+            if (isAtomChar(s[i])) {
+              i++;
+            } else {
+              break;
+            }
           }
-          if (isAtomChar(s[i])) {
-            i++;
-          } else {
-            break;
-          }
+          denEnd = Math.max(denStart, i - 1);
         }
-        denEnd = Math.max(denStart, i - 1);
       }
 
       const rawNum = stripOuterNumParens
@@ -7117,9 +7136,11 @@ export function convertPlainTextToMathLatex(rawText: string): string {
       s = `${s.slice(0, m.index)}${op}{${convertSingleExpr(inside, depth + 1)}}${s.slice(closeIdx + 1)}`;
     }
 
-    // 4. Convert simple exponents `^2`, `^-2`, `^2n` and subscripts `_max`, `_0`
-    s = s.replace(/\^\s*(-?[a-zA-Zα-ωΑ-Ω0-9.]+)/g, '^{$1}');
+    // 4. Convert simple exponents `^2`, `^-2`, `^n` (without swallowing the next variable in `x^2y^3`!) and subscripts `_max`, `_0`
+    s = s.replace(/\^\s*(-?(?:\d+(?:\.\d+)?|[a-zA-Zα-ωΑ-Ω]))/g, '^{$1}');
     s = s.replace(/_\s*([a-zA-Zα-ωΑ-Ω0-9.]+)/g, '_{$1}');
+    // Guard against any stacked double superscripts `a^{b}^{c}` which cause a KaTeX parse error
+    s = s.replace(/([a-zA-Zα-ωΑ-Ω0-9)}])\^\{([^}]+)\}\s*\^\{([^}]+)\}/g, '{$1^{$2}}^{$3}');
 
     // 5. Convert trig functions & common operators / arrows
     s = s
