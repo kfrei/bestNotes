@@ -28942,10 +28942,12 @@ export default function App() {
                             {(() => {
                               const curM = Math.max(0.4, Math.min(2.5, activeSpring.mass));
                               const curK = Math.max(0.4, Math.min(2.5, activeSpring.stiffness));
-                              const curRootRatio = Math.sqrt(curK / curM); // √(k/m) in [0.4, 2.5]
+                              const curRootRatio = Math.sqrt(curK / curM); // √(k/m)
                               const curFreqHz = curRootRatio / (2 * Math.PI); // f = (1/2π)√(k/m)
-                              const minFreqHz = 0.4 / (2 * Math.PI);
-                              const maxFreqHz = 2.5 / (2 * Math.PI);
+                              const minRootRatio = Math.min(0.58, curRootRatio);
+                              const maxRootRatio = Math.max(1.72, curRootRatio);
+                              const minFreqHz = minRootRatio / (2 * Math.PI);
+                              const maxFreqHz = maxRootRatio / (2 * Math.PI);
 
                               return (
                                 <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
@@ -29020,7 +29022,7 @@ export default function App() {
                                       type="range"
                                       min={minFreqHz.toFixed(4)}
                                       max={maxFreqHz.toFixed(4)}
-                                      step="0.005"
+                                      step="0.003"
                                       value={curFreqHz}
                                       onChange={(e) => {
                                         const nextFreq = parseFloat(e.target.value);
@@ -29028,13 +29030,15 @@ export default function App() {
                                           0.4,
                                           Math.min(2.5, nextFreq * 2 * Math.PI)
                                         );
-                                        const r = targetRootRatio * targetRootRatio; // k / m
-                                        const prod = Math.max(0.75, Math.min(1.35, curK * curM));
+                                        const r = targetRootRatio * targetRootRatio; // target k / m
+                                        const oldR = Math.max(1e-4, curK / curM);
+                                        // Change mainly k (~88%) and make only a very small inverse change to m (~12%)!
+                                        const desiredM = curM * Math.pow(oldR / r, 0.12);
                                         const mLow = Math.max(0.4, 0.4 / r);
                                         const mHigh = Math.min(2.5, 2.5 / r);
                                         const nextM = Math.max(
                                           mLow,
-                                          Math.min(mHigh, Math.sqrt(prod / r))
+                                          Math.min(mHigh, desiredM)
                                         );
                                         const nextK = Math.max(
                                           0.4,
