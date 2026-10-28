@@ -139,7 +139,6 @@ import {
   buildMathGraphStrokesFromEquation,
   prepareMathGraphStrokesForAnimation,
   computeMathGraphAnimationFrameWithPen,
-  type MathGraphPenTipState,
   splitAndCleanMathLatexLines,
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
@@ -23050,11 +23049,13 @@ export default function App() {
   // 2) Progressive drawing of the plotted curve from left-to-right or from the top peak around the circumference (200..1620ms)
   // 3) Smooth fade-in of projection guides & quantitative ticks (1180..1750ms), then final editable selection
   const mathGraphAnimRafRef = useRef<number | null>(null);
-  const mathGraphHandImgRef = useRef<HTMLImageElement | null>(null);
-  const [mathGraphDrawingHand, setMathGraphDrawingHand] = useState<MathGraphPenTipState | null>(null);
+  const mathGraphAnimCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const mathGraphHandImgObjRef = useRef<HTMLImageElement | null>(null);
   useEffect(() => {
     const preloadImg = new Image();
+    preloadImg.decoding = 'async';
     preloadImg.src = '/drawing-hand.png';
+    mathGraphHandImgObjRef.current = preloadImg;
   }, []);
   const animateAndCommitMathGraph = useCallback(
     (
@@ -23070,79 +23071,110 @@ export default function App() {
         cancelAnimationFrame(mathGraphAnimRafRef.current);
         mathGraphAnimRafRef.current = null;
       }
-      const totalDurationMs = 2740;
+      const totalDurationMs = 2840;
       const prepared = prepareMathGraphStrokesForAnimation(graphBuilt.strokes);
       const allTexts = graphBuilt.texts || [];
       const axisTipTexts = allTexts.filter((t) => t.id.endsWith('-lx') || t.id.endsWith('-ly'));
+      const nonAxisTipTexts = allTexts.filter((t) => !t.id.endsWith('-lx') && !t.id.endsWith('-ly'));
       const targetGroupId = graphBuilt.groupId;
-      const initialFrame = computeMathGraphAnimationFrameWithPen(prepared, 0, totalDurationMs);
 
       setEditingTextId(null);
       setSelectedTextId(null);
       setActiveNodeStrokeId(null);
       setSelectedStrokeIds([]);
-      setMathGraphDrawingHand(
-        initialFrame.penTip || { x: 0, y: 0, tiltDeg: 0, opacity: 1 }
-      );
 
-      updateActivePage((page) => {
-        const basePage = extraUpdater ? extraUpdater(page) : page;
-        return {
-          ...basePage,
-          strokes: [...basePage.strokes, ...initialFrame.strokes],
-          texts: [...(basePage.texts || [])],
-        };
-      }, true);
+      if (extraUpdater) {
+        updateActivePage((page) => extraUpdater(page), true);
+      }
 
       const startTime = performance.now();
-      let axisTipsAdded = false;
-      let allTextsAdded = false;
       const step = (now: number) => {
         const elapsed = now - startTime;
+        const animCanvas = mathGraphAnimCanvasRef.current;
+
         if (elapsed >= totalDurationMs) {
           mathGraphAnimRafRef.current = null;
-          setMathGraphDrawingHand(null);
           updateActivePage(
             (page) => ({
               ...page,
               strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...prepared],
               texts: [...(page.texts || []).filter((t) => t.groupId !== targetGroupId), ...allTexts],
             }),
-            false
+            !extraUpdater
           );
           setActiveTool('lasso');
           setSelectedStrokeIds(prepared.map((s) => s.id));
           setShowToolSubBar(true);
+          requestAnimationFrame(() => {
+            if (animCanvas) {
+              const ctx = animCanvas.getContext('2d');
+              if (ctx) {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.clearRect(0, 0, animCanvas.width, animCanvas.height);
+              }
+            }
+          });
           return;
         }
+
         const frame = computeMathGraphAnimationFrameWithPen(prepared, elapsed, totalDurationMs);
-        const handEl = mathGraphHandImgRef.current;
-        if (handEl && frame.penTip) {
-          const tx = (frame.penTip.x - 3.71).toFixed(2);
-          const ty = (frame.penTip.y - 18.17).toFixed(2);
-          handEl.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-          handEl.style.opacity = String(frame.penTip.opacity);
+        if (animCanvas) {
+          const ctx = animCanvas.getContext('2d');
+          if (ctx) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, animCanvas.width, animCanvas.height);
+            ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            for (const s of frame.strokes) {
+              drawStrokeOnContext(ctx, s, false);
+            }
+
+            const drawAnimTextObj = (t: TextObject, alpha: number) => {
+              if (alpha <= 0.01) return;
+              ctx.save();
+              ctx.globalAlpha = alpha;
+              ctx.fillStyle = t.color || '#111827';
+              ctx.font = `600 ${t.fontSize}px ${t.fontFamily || 'Inter, system-ui, sans-serif'}`;
+              ctx.textBaseline = 'top';
+              ctx.fillText(t.text, t.x + 2, t.y + 1);
+              ctx.restore();
+            };
+
+            if (elapsed >= 660) {
+              const axAlpha = Math.min(1, (elapsed - 660) / 90);
+              for (const t of axisTipTexts) {
+                drawAnimTextObj(t, axAlpha);
+              }
+            }
+            if (elapsed >= 2350) {
+              const tkAlpha = Math.min(1, (elapsed - 2350) / 380);
+              for (const t of nonAxisTipTexts) {
+                drawAnimTextObj(t, tkAlpha);
+              }
+            }
+
+            const handImg = mathGraphHandImgObjRef.current;
+            if (frame.penTip && handImg && handImg.complete && handImg.naturalWidth > 0) {
+              ctx.save();
+              ctx.globalAlpha = frame.penTip.opacity;
+              ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+              ctx.shadowBlur = 5;
+              ctx.shadowOffsetX = 2;
+              ctx.shadowOffsetY = 4;
+              ctx.drawImage(
+                handImg,
+                frame.penTip.x - 3.71,
+                frame.penTip.y - 18.17,
+                112,
+                84.56
+              );
+              ctx.restore();
+            }
+          }
         }
-        const shouldCommitAxisTipsNow = !axisTipsAdded && elapsed >= 680;
-        if (shouldCommitAxisTipsNow) {
-          axisTipsAdded = true;
-        }
-        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 2350;
-        if (shouldCommitAllTextsNow) {
-          allTextsAdded = true;
-        }
-        updateActivePage(
-          (page) => ({
-            ...page,
-            strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...frame.strokes],
-            texts: shouldCommitAllTextsNow
-              ? [...(page.texts || []).filter((t) => t.groupId !== targetGroupId), ...allTexts]
-              : shouldCommitAxisTipsNow
-              ? [...(page.texts || []).filter((t) => t.groupId !== targetGroupId), ...axisTipTexts]
-              : page.texts,
-          }),
-          false
-        );
+
         mathGraphAnimRafRef.current = requestAnimationFrame(step);
       };
       mathGraphAnimRafRef.current = requestAnimationFrame(step);
@@ -32394,29 +32426,16 @@ export default function App() {
                         );
                       })()}
 
-                    {/* Synchronized Hand-with-Pen Overlay when animating a newly created Math Diagram (`📈 Διάγραμμα`) */}
-                    {isCurrentActive && mathGraphDrawingHand && (
-                      <img
-                        ref={mathGraphHandImgRef}
-                        src="/drawing-hand.png"
-                        alt=""
-                        aria-hidden="true"
-                        decoding="sync"
-                        loading="eager"
-                        style={{
-                          position: 'absolute',
-                          left: 0,
-                          top: 0,
-                          width: 112,
-                          height: 84.56,
-                          transform: `translate3d(${(mathGraphDrawingHand.x - 3.71).toFixed(2)}px, ${(mathGraphDrawingHand.y - 18.17).toFixed(2)}px, 0)`,
-                          opacity: mathGraphDrawingHand.opacity,
-                          willChange: 'transform, opacity',
-                          pointerEvents: 'none',
-                          userSelect: 'none',
-                          zIndex: 45,
-                          filter: 'drop-shadow(2px 4px 5px rgba(15, 23, 42, 0.24))',
+                    {/* Double-Buffered 2x Retina 60/120fps Canvas for Math Diagram + Pencil Hand Animation (Zero React Re-Renders / Zero Flicker) */}
+                    {isCurrentActive && (
+                      <canvas
+                        ref={(el) => {
+                          mathGraphAnimCanvasRef.current = el;
                         }}
+                        width={pW * CANVAS_DPR}
+                        height={pH * CANVAS_DPR}
+                        style={{ width: pW, height: pH, zIndex: 45 }}
+                        className="absolute inset-0 pointer-events-none"
                       />
                     )}
 

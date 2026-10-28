@@ -11208,17 +11208,17 @@ export interface MathGraphPenTipState {
 
 /**
  * Computes both the intermediate `StrokeObject[]` frame and the synchronized hand-pen nib position
- * (`penTip`) at `elapsedMs` (out of `totalDurationMs`, default 2740ms):
+ * (`penTip`) at `elapsedMs` (out of `totalDurationMs`, default 2840ms):
  * 1. 0ms - 350ms: Hand draws the horizontal X-axis (`-axx`) from left to right.
  * 2. 350ms - 700ms: Hand draws the vertical Y-axis (`-axy`) from bottom to top (total axes = 0.7s).
- * 3. 700ms - 2600ms: Hand draws each curve stroke (`-crv-`) sequentially from start to end (total graph = 1.9s)
+ * 3. 700ms - 2700ms: Hand draws each curve stroke (`-crv-`) sequentially from start to end (total graph = 2.0s)
  *    so the pen nib coincides with the exact point being drawn at every instant.
- * 4. 2250ms - 2740ms: Smooth fade-in of dashed projection guides and quantitative tick marks, while the hand lifts off.
+ * 4. 2350ms - 2840ms: Smooth fade-in of dashed projection guides and quantitative tick marks, while the hand lifts off.
  */
 export function computeMathGraphAnimationFrameWithPen(
   preparedStrokes: StrokeObject[],
   elapsedMs: number,
-  totalDurationMs = 2740
+  totalDurationMs = 2840
 ): { strokes: StrokeObject[]; penTip: MathGraphPenTipState | null } {
   if (elapsedMs >= totalDurationMs) {
     return { strokes: preparedStrokes, penTip: null };
@@ -11227,9 +11227,9 @@ export function computeMathGraphAnimationFrameWithPen(
   const xAxisEndMs = 350;
   const yAxisEndMs = 700;
   const curveStartMs = 700;
-  const curveEndMs = 2600;
+  const curveEndMs = 2700;
   const curveDrawDuration = curveEndMs - curveStartMs;
-  const guidesStartMs = 2250;
+  const guidesStartMs = 2350;
   const guidesFadeDuration = Math.max(1, totalDurationMs - guidesStartMs);
 
   const easeInOut = (u: number) => {
@@ -11509,7 +11509,7 @@ export function computeMathGraphAnimationFrameWithPen(
 export function computeMathGraphAnimationFrame(
   preparedStrokes: StrokeObject[],
   elapsedMs: number,
-  totalDurationMs = 2740
+  totalDurationMs = 2840
 ): StrokeObject[] {
   return computeMathGraphAnimationFrameWithPen(preparedStrokes, elapsedMs, totalDurationMs).strokes;
 }
