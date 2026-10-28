@@ -8554,7 +8554,7 @@ function tryBuildOscillationDiagramStrokes(
       ...createVectorMathLabelStrokes(
         opts.topYLabel,
         centerX + 8,
-        yPeakPx + 15,
+        opts.inverted ? yPeakPx - 13 : yPeakPx + 15,
         'left',
         15.5,
         axisColor,
@@ -9194,6 +9194,119 @@ export function buildMathGraphStrokesFromEquation(
   };
 
   let tickCounter = 0;
+  const placedLabelBoxes: { minX: number; maxX: number; minY: number; maxY: number }[] = [
+    // Reserve boxes around the 'x' and 'y' axis-tip labels so tick numbers never collide with them
+    { minX: lx - 8, maxX: lx + 8, minY: ly - 8, maxY: ly + 8 },
+    { minX: yx - 8, maxX: yx + 8, minY: yy - 8, maxY: yy + 10 },
+  ];
+
+  const getDenseCurvePointsForClearance = (): { x: number; y: number }[] => {
+    const pts: { x: number; y: number }[] = [];
+    for (const s of strokes) {
+      if (
+        !s.id.includes('-crv-') &&
+        !s.id.includes('-proj') &&
+        !s.id.includes('-trig-')
+      ) {
+        continue;
+      }
+      if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 4) {
+        const [pTop, pRight, pBot, pLeft] = s.points;
+        const ecx = (pLeft.x + pRight.x) / 2;
+        const ecy = (pTop.y + pBot.y) / 2;
+        const erx = Math.abs(pRight.x - pLeft.x) / 2;
+        const ery = Math.abs(pBot.y - pTop.y) / 2;
+        for (let k = 0; k < 64; k++) {
+          const ang = (k / 64) * Math.PI * 2;
+          pts.push({ x: ecx + erx * Math.cos(ang), y: ecy + ery * Math.sin(ang) });
+        }
+        continue;
+      }
+      for (let i = 0; i < s.points.length; i++) {
+        const pA = s.points[i];
+        pts.push({ x: pA.x, y: pA.y });
+        if (i + 1 < s.points.length) {
+          const pB = s.points[i + 1];
+          const segLen = Math.hypot(pB.x - pA.x, pB.y - pA.y);
+          if (segLen > 3.5) {
+            const subSteps = Math.min(40, Math.ceil(segLen / 3.5));
+            for (let k = 1; k < subSteps; k++) {
+              const t = k / subSteps;
+              pts.push({
+                x: pA.x + (pB.x - pA.x) * t,
+                y: pA.y + (pB.y - pA.y) * t,
+              });
+            }
+          }
+        }
+      }
+    }
+    return pts;
+  };
+
+  const computeLabelBox = (
+    labelText: string,
+    anchorX: number,
+    anchorY: number,
+    align: 'left' | 'center' | 'right',
+    fontH: number
+  ) => {
+    const [mainPart, subPart] = labelText.split('_');
+    const mainCharW = fontH * 0.66;
+    const mainGap = fontH * 0.14;
+    const subH = fontH * 0.62;
+    const subCharW = subH * 0.68;
+    const subGap = subH * 0.12;
+    const mainTotalW =
+      mainPart.length > 0 ? mainPart.length * mainCharW + (mainPart.length - 1) * mainGap : 0;
+    const subTotalW =
+      subPart && subPart.length > 0
+        ? subPart.length * subCharW + (subPart.length - 1) * subGap + fontH * 0.08
+        : 0;
+    const totalW = mainTotalW + subTotalW;
+    const minX =
+      align === 'center'
+        ? anchorX - totalW / 2
+        : align === 'right'
+        ? anchorX - totalW
+        : anchorX;
+    return {
+      minX: minX - 2,
+      maxX: minX + totalW + 2,
+      minY: anchorY - fontH / 2 - 2,
+      maxY: anchorY + fontH / 2 + 2,
+    };
+  };
+
+  const scoreCandidateBox = (
+    box: { minX: number; maxX: number; minY: number; maxY: number },
+    curvePts: { x: number; y: number }[]
+  ): number => {
+    let minClearance = 36;
+    for (const p of curvePts) {
+      const dx = Math.max(box.minX - p.x, 0, p.x - box.maxX);
+      const dy = Math.max(box.minY - p.y, 0, p.y - box.maxY);
+      let d: number;
+      if (dx === 0 && dy === 0) {
+        d = -Math.min(p.x - box.minX, box.maxX - p.x, p.y - box.minY, box.maxY - p.y) - 2;
+      } else {
+        d = Math.hypot(dx, dy);
+      }
+      if (d < minClearance) minClearance = d;
+    }
+    for (const ob of placedLabelBoxes) {
+      const ox = Math.max(box.minX - ob.maxX, 0, ob.minX - box.maxX);
+      const oy = Math.max(box.minY - ob.maxY, 0, ob.minY - box.maxY);
+      const od = ox === 0 && oy === 0 ? -12 : Math.hypot(ox, oy);
+      if (od < minClearance) minClearance = od;
+    }
+    // Also keep at least 5px clear of the two axes themselves so labels don't sit on the axis lines
+    const distToXAxis = Math.max(box.minY - centerY, 0, centerY - box.maxY);
+    const distToYAxis = Math.max(box.minX - centerX, 0, centerX - box.maxX);
+    if (distToXAxis < 4) minClearance = Math.min(minClearance, distToXAxis - 4);
+    if (distToYAxis < 4) minClearance = Math.min(minClearance, distToYAxis - 4);
+    return minClearance;
+  };
 
   const addXAxisTickAndLabel = (
     px: number,
@@ -9218,14 +9331,54 @@ export function buildMathGraphStrokesFromEquation(
       isShape: true,
       shapeType: 'wave-axis-x',
     });
-    const lblY = placeAbove ? centerY - 17 : centerY + 18;
+
+    const fontH = 14.5;
+    const curvePts = getDenseCurvePointsForClearance();
+    const outDir = px < centerX ? -1 : 1;
+    const dxCandidates = [
+      xLabelOffset,
+      0,
+      outDir * 13,
+      -outDir * 13,
+      outDir * 20,
+      -outDir * 20,
+    ];
+    const aboveOptions = [placeAbove, !placeAbove];
+
+    let bestAx = px + xLabelOffset;
+    let bestAy = placeAbove ? centerY - 18 : centerY + 19;
+    let bestBox = computeLabelBox(labelText, bestAx, bestAy, 'center', fontH);
+    let bestScore = -Infinity;
+
+    for (const isAbove of aboveOptions) {
+      const candY = isAbove ? centerY - 18 : centerY + 19;
+      for (const dx of dxCandidates) {
+        const candX = px + dx;
+        if (Math.abs(candX - centerX) < 10) continue;
+        const box = computeLabelBox(labelText, candX, candY, 'center', fontH);
+        const clearance = scoreCandidateBox(box, curvePts);
+        const prefBonus =
+          (isAbove === placeAbove ? 1.2 : 0) +
+          (Math.abs(dx - xLabelOffset) < 2 ? 0.8 : 0) -
+          Math.abs(dx) * 0.08;
+        const score = Math.min(clearance, 18) * 3.0 + prefBonus;
+        if (score > bestScore) {
+          bestScore = score;
+          bestAx = candX;
+          bestAy = candY;
+          bestBox = box;
+        }
+      }
+    }
+
+    placedLabelBoxes.push(bestBox);
     strokes.push(
       ...createVectorMathLabelStrokes(
         labelText,
-        px + xLabelOffset,
-        lblY,
+        bestAx,
+        bestAy,
         'center',
-        14.5,
+        fontH,
         axisColor,
         layerId,
         groupId,
@@ -9257,15 +9410,57 @@ export function buildMathGraphStrokesFromEquation(
       isShape: true,
       shapeType: 'wave-axis-y',
     });
-    const lblX = placeLeft ? centerX - 10 : centerX + 10;
-    const alignMode = placeLeft ? 'right' : 'left';
+
+    const fontH = 14.5;
+    const curvePts = getDenseCurvePointsForClearance();
+    const outDirY = py < centerY ? -1 : 1;
+    const dyCandidates = [
+      yLabelOffset,
+      0,
+      outDirY * 13,
+      -outDirY * 13,
+      outDirY * 18,
+      -outDirY * 18,
+    ];
+    const leftOptions = [placeLeft, !placeLeft];
+
+    let bestAx = placeLeft ? centerX - 10 : centerX + 10;
+    let bestAy = py + yLabelOffset;
+    let bestAlign: 'left' | 'right' = placeLeft ? 'right' : 'left';
+    let bestBox = computeLabelBox(labelText, bestAx, bestAy, bestAlign, fontH);
+    let bestScore = -Infinity;
+
+    for (const isLeft of leftOptions) {
+      const candX = isLeft ? centerX - 10 : centerX + 10;
+      const candAlign: 'left' | 'right' = isLeft ? 'right' : 'left';
+      for (const dy of dyCandidates) {
+        const candY = py + dy;
+        if (Math.abs(candY - centerY) < 10) continue;
+        const box = computeLabelBox(labelText, candX, candY, candAlign, fontH);
+        const clearance = scoreCandidateBox(box, curvePts);
+        const prefBonus =
+          (isLeft === placeLeft ? 1.2 : 0) +
+          (Math.abs(dy - yLabelOffset) < 2 ? 0.8 : 0) -
+          Math.abs(dy) * 0.08;
+        const score = Math.min(clearance, 18) * 3.0 + prefBonus;
+        if (score > bestScore) {
+          bestScore = score;
+          bestAx = candX;
+          bestAy = candY;
+          bestAlign = candAlign;
+          bestBox = box;
+        }
+      }
+    }
+
+    placedLabelBoxes.push(bestBox);
     strokes.push(
       ...createVectorMathLabelStrokes(
         labelText,
-        lblX,
-        py + yLabelOffset,
-        alignMode,
-        14.5,
+        bestAx,
+        bestAy,
+        bestAlign,
+        fontH,
         axisColor,
         layerId,
         groupId,
