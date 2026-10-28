@@ -8210,16 +8210,24 @@ export default function App() {
     [updateActivePage, showToast]
   );
 
+  const lastLassoEmptyTapPtRef = useRef<{ x: number; y: number } | null>(null);
+
   const pasteFromInternalClipboard = useCallback((): boolean => {
     if (!internalClipboardRef.current) return false;
     const { strokes: copiedStrokes, image: copiedImg, text: copiedTxt } = internalClipboardRef.current;
+    const tapPt = lastLassoEmptyTapPtRef.current;
 
     if (copiedImg) {
+      const targetX = tapPt ? Math.max(12, Math.round(tapPt.x - copiedImg.width / 2)) : copiedImg.x + 28;
+      const targetY = tapPt ? Math.max(12, Math.round(tapPt.y - copiedImg.height / 2)) : copiedImg.y + 28;
+      if (tapPt) {
+        lastLassoEmptyTapPtRef.current = { x: tapPt.x + 26, y: tapPt.y + 26 };
+      }
       const newImg: ImageObject = {
         ...structuredClone(copiedImg),
         id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        x: copiedImg.x + 28,
-        y: copiedImg.y + 28,
+        x: targetX,
+        y: targetY,
       };
       internalClipboardRef.current = {
         ...internalClipboardRef.current,
@@ -8239,6 +8247,27 @@ export default function App() {
     }
 
     if (copiedStrokes.length > 0) {
+      let dx = 26;
+      let dy = 26;
+      if (tapPt) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const s of copiedStrokes) {
+          for (const p of s.points) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+        if (Number.isFinite(minX) && Number.isFinite(minY)) {
+          dx = tapPt.x - (minX + maxX) / 2;
+          dy = tapPt.y - (minY + maxY) / 2;
+        }
+        lastLassoEmptyTapPtRef.current = { x: tapPt.x + 26, y: tapPt.y + 26 };
+      }
       const newGroupId = copiedStrokes.some((s) => s.groupId) ? `grp-${Date.now()}` : undefined;
       const pasted = copiedStrokes.map((s) => ({
         ...structuredClone(s),
@@ -8246,10 +8275,10 @@ export default function App() {
         groupId: s.groupId ? newGroupId : undefined,
         points: s.points.map((p) => ({
           ...p,
-          x: p.x + 26,
-          y: p.y + 26,
-          cx: p.cx !== undefined ? p.cx + 26 : undefined,
-          cy: p.cy !== undefined ? p.cy + 26 : undefined,
+          x: p.x + dx,
+          y: p.y + dy,
+          cx: p.cx !== undefined ? p.cx + dx : undefined,
+          cy: p.cy !== undefined ? p.cy + dy : undefined,
         })),
       }));
       internalClipboardRef.current = {
@@ -8274,11 +8303,16 @@ export default function App() {
     }
 
     if (copiedTxt) {
+      const targetX = tapPt ? Math.max(12, Math.round(tapPt.x - 40)) : copiedTxt.x + 24;
+      const targetY = tapPt ? Math.max(12, Math.round(tapPt.y - 16)) : copiedTxt.y + 24;
+      if (tapPt) {
+        lastLassoEmptyTapPtRef.current = { x: tapPt.x + 24, y: tapPt.y + 24 };
+      }
       const newTxt: TextObject = {
         ...structuredClone(copiedTxt),
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        x: copiedTxt.x + 24,
-        y: copiedTxt.y + 24,
+        x: targetX,
+        y: targetY,
       };
       internalClipboardRef.current = {
         ...internalClipboardRef.current,
@@ -17069,6 +17103,7 @@ export default function App() {
         return;
       }
 
+      lastLassoEmptyTapPtRef.current = { x: pt.x, y: pt.y };
       setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
@@ -26758,16 +26793,6 @@ export default function App() {
                   <span className="hidden md:inline">Στρώσιμο</span>
                 </button>
               */}
-
-              {/* Quick Paste Button (for photos copied outside the app or internal objects) */}
-              <button
-                onClick={handlePaste}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white hover:bg-sky-50 text-[#0066ff] border border-sky-200 text-[11px] font-semibold transition cursor-pointer"
-                title="Επικόλληση (Paste) φωτογραφίας από το iPad Clipboard ή αντικειμένου"
-              >
-                <ClipboardPaste className="w-3.5 h-3.5" />
-                <span>Paste</span>
-              </button>
             </div>
 
             {/* Center: Goodnotes 6 Iconic Pill Toolbar */}
@@ -28111,9 +28136,29 @@ export default function App() {
                   </div>
                 )}
 
+                {activeTool === 'lasso' &&
+                  !showAlignSubBar &&
+                  selectedStrokeIds.length === 0 &&
+                  !selectedImgObj &&
+                  !selectedTextId &&
+                  !editingTextId && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={handlePaste}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
+                      title="Επικόλληση (Paste) στο σημείο που κάνατε κλικ με το Λάσο"
+                    >
+                      <ClipboardPaste className="w-3.5 h-3.5" />
+                      <span>Paste</span>
+                    </button>
+                  </div>
+                )}
+
                 {activeTool !== 'direct-node' &&
                   !showAlignSubBar &&
-                  (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso') && (
+                  !selectedTextId &&
+                  !editingTextId &&
+                  (selectedStrokeIds.length > 0 || Boolean(selectedImgObj)) && (
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={handleCutSelected}
@@ -28132,14 +28177,6 @@ export default function App() {
                       <span>Copy</span>
                     </button>
                     <button
-                      onClick={handlePaste}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
-                      title="Επικόλληση (Paste)"
-                    >
-                      <ClipboardPaste className="w-3.5 h-3.5" />
-                      <span>Paste</span>
-                    </button>
-                    <button
                       onClick={handleDuplicateSelected}
                       className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold cursor-pointer"
                       title="Άμεση δημιουργία αντιγράφου λίγο πιο κάτω και λίγο πιο δεξιά"
@@ -28148,27 +28185,25 @@ export default function App() {
                       <span>Αντίγραφο</span>
                     </button>
 
-                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) — hidden when in text/math mode */}
-                    {activeTool !== 'text' && selectedTextId === null && editingTextId === null && (
-                      <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
-                        <button
-                          onClick={() => handleMirrorSelected('horizontal')}
-                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                          title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
-                        >
-                          <MirrorHorizontalIcon className="w-4 h-4" />
-                          <span>Mirror</span>
-                        </button>
-                        <button
-                          onClick={() => handleMirrorSelected('vertical')}
-                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                          title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
-                        >
-                          <MirrorVerticalIcon className="w-4 h-4" />
-                          <span>Mirror</span>
-                        </button>
-                      </div>
-                    )}
+                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) */}
+                    <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
+                      <button
+                        onClick={() => handleMirrorSelected('horizontal')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                        title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
+                      >
+                        <MirrorHorizontalIcon className="w-4 h-4" />
+                        <span>Mirror</span>
+                      </button>
+                      <button
+                        onClick={() => handleMirrorSelected('vertical')}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                        title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
+                      >
+                        <MirrorVerticalIcon className="w-4 h-4" />
+                        <span>Mirror</span>
+                      </button>
+                    </div>
 
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
