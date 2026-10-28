@@ -7127,8 +7127,10 @@ export function convertPlainTextToMathLatex(rawText: string): string {
     s = s.replace(/\^\s*(-?[a-zA-Zα-ωΑ-Ω0-9.]+)/g, '^{$1}');
     s = s.replace(/_\s*([a-zA-Zα-ωΑ-Ω0-9.]+)/g, '_{$1}');
 
-    // 5. Convert common operators & arrows
+    // 5. Convert trig functions & common operators / arrows
     s = s
+      .replace(/(?<!\\)\b(sin|cos|tan|ln|log)\b/gi, (_, fn) => `\\${fn.toLowerCase()}`)
+      .replace(/(?<!\\text\{)(ημιτ|ημ|συνημ|συν|εφ|σφ)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9])/gi, '\\text{$1}')
       .replace(/<=>/g, ' \\Leftrightarrow ')
       .replace(/=>|->/g, ' \\Rightarrow ')
       .replace(/<=/g, ' \\le ')
@@ -7175,9 +7177,9 @@ export async function transcribeEquationForGraphWithGemini(
   const parts: any[] = [
     {
       text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Απλής Αρμονικής Ταλάντωσης (Φυσικής) για σχεδίαση διαγράμματος${contextHint}.
-Διάβασε τη χειρόγραφη εξίσωση ή συνάρτηση στην εικόνα (π.χ. K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
+Διάβασε τη χειρόγραφη εξίσωση ή συνάρτηση στην εικόνα (π.χ. y = sin(x), y = ημ(x), y = ημ(χ), y = cos(x), y = συν(x), y = συν(χ), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
 Κανόνες:
-1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας τα σύμβολα Φυσικής αν πρόκειται για ταλάντωση/ενέργεια/δύναμη (π.χ. "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "F = -k*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "u = u_max*συν(ω*t)", "a = -a_max*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = α*x + β", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
+1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας τα σύμβολα Φυσικής αν πρόκειται για ταλάντωση/ενέργεια/δύναμη (π.χ. "y = sin(x)", "y = ημ(x)", "y = cos(x)", "y = συν(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "F = -k*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "u = u_max*συν(ω*t)", "a = -a_max*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = α*x + β", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
 2. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
@@ -7379,7 +7381,7 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/\\left\s*\|([^|]+)\\right\s*\|/g, 'ABS($1)')
     .replace(/\|([^|=]+)\|/g, 'ABS($1)')
     .replace(/\\left\b|\\right\b|\\displaystyle\b/g, '')
-    .replace(/\\text\{[^}]*\}/g, '')
+    .replace(/\\(?:text|operatorname|mathrm)\{([^}]*)\}/g, '$1')
     .replace(/\\(?:cdot|times)\b/g, '*')
     .replace(/[·×∙]/g, '*')
     .replace(/÷/g, '/')
@@ -7419,10 +7421,11 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
   });
 
   // Normalize trig & standard functions into uppercase tokens before single-letter variable splitting
+  // Note: Do NOT use `\b` after Greek words (`ημ`, `συν`, `εφ`) or unparenthesized `sinx`/`cosx` because JS `\b` only matches ASCII!
   s = s
-    .replace(/\\?(?:sin|ημ)\b/gi, 'SIN')
-    .replace(/\\?(?:cos|συν)\b/gi, 'COS')
-    .replace(/\\?(?:tan|tg|εφ)\b/gi, 'TAN')
+    .replace(/\\?(?:sin(?!h)|ημιτ|ημ)/gi, 'SIN')
+    .replace(/\\?(?:cos(?!h)|συνημ|συν)/gi, 'COS')
+    .replace(/\\?(?:tan(?!h)|tg|εφ)/gi, 'TAN')
     .replace(/\\?(?:ln)\b/gi, 'LN')
     .replace(/\\?(?:log)\b/gi, 'LOG')
     .replace(/\\?(?:exp)\b/gi, 'EXP')
@@ -7431,10 +7434,10 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/√\s*([a-zA-Zα-ωΑ-Ω0-9]+)/g, 'SQRT($1)')
     .replace(/\\?(?:abs)\b/gi, 'ABS');
 
-  // Convert f(x), g(x), y(x), x(t), u(t), v(t)
+  // Convert f(x), g(x), y(x), x(t), u(t), v(t) (also accepting Greek χ)
   s = s
-    .replace(/\b[fghyFGH]\s*\(\s*[xχ]\s*\)/g, 'y')
-    .replace(/\b[xuvXUV]\s*\(\s*t\s*\)/g, 'y');
+    .replace(/(?<![A-Z])\b[fghyFGH]\s*\(\s*[xχ]\s*\)/g, 'y')
+    .replace(/(?<![A-Z])\b[xuvXUV]\s*\(\s*t\s*\)/g, 'y');
 
   // Remove subscripts like x_0, y_0, u_0, v_0 -> treat as symbolic positive constant k
   s = s
@@ -7720,7 +7723,7 @@ function compileMathExprEvaluator(
           pos++;
         }
       } else {
-        argNode = parseUnary();
+        argNode = parseTerm();
       }
       return (x, y) => {
         const val = argNode(x, y);
@@ -8701,7 +8704,7 @@ function tryBuildOscillationDiagramStrokes(
 
   // CASE 6: Time Oscillation Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)`
   const timeOscMatch = compact.match(
-    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημ|sin|συν|cos)\s*\(/i
+    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?.*t/i
   );
   const shorthandTimeMatch = compact.match(/^(x|u|υ|v|a|α|ΣF|F)\s*-\s*t$/i);
 
@@ -8729,7 +8732,7 @@ function tryBuildOscillationDiagramStrokes(
         numAmp = ampStr;
       }
       const trig = timeOscMatch[4].toLowerCase();
-      const isCos = trig === 'συν' || trig === 'cos';
+      const isCos = trig === 'συν' || trig === 'συνημ' || trig === 'cos';
       waveKind = isCos ? (isNeg ? '-cos' : 'cos') : isNeg ? '-sin' : 'sin';
     }
 
@@ -9748,7 +9751,47 @@ export function buildMathGraphStrokesFromEquation(
       addCurveStroke(currentBranch, branchIdx++, false);
     }
 
-    if (strokes.length > 6 && isQuantitative) {
+    if (strokes.length > 6 && /SIN|COS/i.test(fnStr) && maxExtremaY > 1e-4) {
+      // For sine / cosine functions (sin(x), ημ(χ), cos(x), συν(χ)), mark +ymax and -ymax on Y-axis with dashed amplitude guides!
+      const pyTop = centerY - (maxExtremaY / ySpan) * plotHalfH;
+      const pyBot = centerY + (maxExtremaY / ySpan) * plotHalfH;
+      const topLbl = isQuantitative ? formatNumLabel(maxExtremaY) : 'A';
+      const botLbl = isQuantitative ? `-${formatNumLabel(maxExtremaY)}` : '-A';
+      strokes.push({
+        id: `st-${nowId}-trig-gtop`,
+        tool: 'pen',
+        color: '#2563eb',
+        width: 1.6,
+        opacity: 0.85,
+        lineStyle: 'dashed',
+        points: [
+          { x: centerX - plotHalfW, y: pyTop, pressure: 0.7 },
+          { x: centerX + plotHalfW, y: pyTop, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-guide-top',
+      });
+      strokes.push({
+        id: `st-${nowId}-trig-gbot`,
+        tool: 'pen',
+        color: '#2563eb',
+        width: 1.6,
+        opacity: 0.85,
+        lineStyle: 'dashed',
+        points: [
+          { x: centerX - plotHalfW, y: pyBot, pressure: 0.7 },
+          { x: centerX + plotHalfW, y: pyBot, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-guide-bottom',
+      });
+      addYAxisTickAndLabel(pyTop, topLbl, true, -9);
+      addYAxisTickAndLabel(pyBot, botLbl, true, 10);
+    } else if (strokes.length > 6 && isQuantitative) {
       // 1. Y-intercept (x = 0, y0 = f(0))
       const y0Val = fnEval(0);
       if (Number.isFinite(y0Val) && Math.abs(y0Val) > 1e-4 && Math.abs(y0Val) <= ySpan * 0.95) {
