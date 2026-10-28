@@ -7239,7 +7239,7 @@ export async function transcribeEquationForGraphWithGemini(
 Κανόνες:
 1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
 2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. u_1 = 10 και u_2 = 2 + 5t, ή y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "u_1 = 10\\nu_2 = 2 + 5*t") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
-3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή και ΔΕΝ είναι άγνωστη παράμετρος!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)") — ΜΗΝ το αντικαθιστάς με 3.14 και ΜΗΝ το μπερδεύεις με τα γράμματα n ή r!
+3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή και ΔΕΝ είναι άγνωστη παράμετρος!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)") — ΜΗΝ το αντικαθιστάς με 3.14 και ΜΗΝ το μπερδεύεις με τα γράμματα n ή r! Επίσης πρόσεξε πολύ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos, τρία γράμματα σ-υ-ν όπου το σ μοιάζει με μικρό 6/c και το υν με uv): ΜΗΝ το μπερδεύεις ποτέ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
 4. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1 — εξαιρουμένου του π που είναι σταθερά!), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
@@ -8751,7 +8751,9 @@ function tryBuildOscillationDiagramStrokes(
       yVar === 'u' ? 'cos' : yVar === 'a' || yVar === 'ΣF' || yVar === 'F' ? '-sin' : 'sin';
 
     let numAmp = '';
+    let halfPeriodLabel = 'T/2';
     let periodLabel = '1T';
+    let threeHalfPeriodLabel = '1.5T';
     if (timeOscMatch) {
       const isNeg = timeOscMatch[2] === '-';
       const ampStr = (timeOscMatch[3] || '').replace(/\*/g, '');
@@ -8776,6 +8778,15 @@ function tryBuildOscillationDiagramStrokes(
         }
         return Math.max(1, x);
       };
+      const formatPiFraction = (numInt: number, denInt: number): string => {
+        const g = gcdInt(numInt, denInt);
+        const pRed = Math.round(numInt / g);
+        const qRed = Math.round(denInt / g);
+        if (qRed === 1) {
+          return pRed === 1 ? 'π' : `${pRed}π`;
+        }
+        return `${pRed === 1 ? 'π' : `${pRed}π`}/${qRed}`;
+      };
       if (rawOmega && !/[ωfT]/i.test(rawOmega)) {
         const piMatch = rawOmega.match(/^([0-9.]+)?\s*\*?\s*π(?:\s*\/\s*([0-9.]+))?$/);
         const pureNumMatch = rawOmega.match(/^([0-9.]+)(?:\s*\/\s*([0-9.]+))?$/);
@@ -8784,44 +8795,38 @@ function tryBuildOscillationDiagramStrokes(
           const den = piMatch[2] ? parseFloat(piMatch[2]) : 1;
           const k = num / Math.max(1e-6, den); // ω = k * π => T = 2 / k
           if (k > 0) {
-            const tVal = +(2 / k).toFixed(2);
-            periodLabel = String(tVal);
+            const fullT = 2 / k;
+            halfPeriodLabel = String(+(0.5 * fullT).toFixed(2));
+            periodLabel = String(+fullT.toFixed(2));
+            threeHalfPeriodLabel = String(+(1.5 * fullT).toFixed(2));
           }
         } else if (pureNumMatch) {
           const num = parseFloat(pureNumMatch[1]);
           const den = pureNumMatch[2] ? parseFloat(pureNumMatch[2]) : 1;
           const omegaVal = num / Math.max(1e-6, den); // ω = omegaVal => T = 2π / omegaVal (keep π symbolically!)
           if (omegaVal > 0) {
-            const ratioToPi = 2 / omegaVal;
-            if (Math.abs(ratioToPi - 1) < 1e-4) {
-              periodLabel = 'π';
-            } else if (Math.abs(ratioToPi - Math.round(ratioToPi)) < 1e-4) {
-              periodLabel = `${Math.round(ratioToPi)}π`;
-            } else if (Math.abs(1 / ratioToPi - Math.round(1 / ratioToPi)) < 1e-4) {
-              periodLabel = `π/${Math.round(1 / ratioToPi)}`;
-            } else if (
+            if (
               Math.abs(num - Math.round(num)) < 1e-4 &&
               Math.abs(den - Math.round(den)) < 1e-4
             ) {
-              const p = Math.round(2 * den);
-              const q = Math.round(num);
-              const g = gcdInt(p, q);
-              const pRed = p / g;
-              const qRed = q / g;
-              periodLabel =
-                qRed === 1
-                  ? pRed === 1
-                    ? 'π'
-                    : `${pRed}π`
-                  : `${pRed === 1 ? 'π' : `${pRed}π`}/${qRed}`;
+              const nInt = Math.round(num);
+              const dInt = Math.round(den);
+              halfPeriodLabel = formatPiFraction(1 * dInt, nInt);
+              periodLabel = formatPiFraction(2 * dInt, nInt);
+              threeHalfPeriodLabel = formatPiFraction(3 * dInt, nInt);
             } else {
+              const ratioToPi = 2 / omegaVal;
+              halfPeriodLabel = `${+(0.5 * ratioToPi).toFixed(2)}π`;
               periodLabel = `${+ratioToPi.toFixed(2)}π`;
+              threeHalfPeriodLabel = `${+(1.5 * ratioToPi).toFixed(2)}π`;
             }
           }
         }
       } else if (!rawOmega && numAmp) {
         // e.g. u = 10 συν(t) where ω = 1 => T = 2π
+        halfPeriodLabel = 'π';
         periodLabel = '2π';
+        threeHalfPeriodLabel = '3π';
       }
     }
 
@@ -8927,29 +8932,41 @@ function tryBuildOscillationDiagramStrokes(
       isShape: false,
     });
 
-    // 4b. Thin black vertical dashed line at 1 Period (1T -> u = 2/3 of the 1.5-period wave) + ruler tick & period value/1T label on t-axis
+    // 4b. Ticks & labels at T/2 (u = 1/3), 1T (u = 2/3), and 1.5T (u = 1) on the horizontal t-axis.
+    // Only draw the vertical dashed projection line at 1T when the wave is at a peak (`cos` or `-cos`);
+    // for `sin` / `-sin`, the curve is already on the t-axis at T/2, 1T, and 1.5T!
+    const xHalfPeriod = axisLeftX + (1 / 3) * waveW;
     const xPeriod = axisLeftX + (2 / 3) * waveW;
-    const yPeakAtPeriod =
-      waveKind === '-cos' ? centerY + ampPx : centerY - ampPx;
-    strokes.push({
-      id: `st-${nowId}-tguide-1`,
-      tool: 'pen',
-      color: axisColor,
-      width: 1.4,
-      opacity: 0.9,
-      lineStyle: 'dashed',
-      points: [
-        { x: xPeriod, y: yPeakAtPeriod, pressure: 0.6 },
-        { x: xPeriod, y: centerY, pressure: 0.6 },
-      ],
-      layerId,
-      groupId,
-      isShape: true,
-      shapeType: 'line',
-    });
+    const xThreeHalfPeriod = axisLeftX + waveW;
+    const isCosWave = waveKind === 'cos' || waveKind === '-cos';
+    if (isCosWave) {
+      const yPeakAtPeriod = waveKind === '-cos' ? centerY + ampPx : centerY - ampPx;
+      strokes.push({
+        id: `st-${nowId}-tguide-1`,
+        tool: 'pen',
+        color: axisColor,
+        width: 1.4,
+        opacity: 0.9,
+        lineStyle: 'dashed',
+        points: [
+          { x: xPeriod, y: yPeakAtPeriod, pressure: 0.6 },
+          { x: xPeriod, y: centerY, pressure: 0.6 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'line',
+      });
+    }
+    addRulerTick(xHalfPeriod, centerY - 4.5, xHalfPeriod, centerY + 4.5, 'xtick-thalf');
     addRulerTick(xPeriod, centerY - 4.5, xPeriod, centerY + 4.5, 'xtick-t1');
+    addRulerTick(xThreeHalfPeriod, centerY - 4.5, xThreeHalfPeriod, centerY + 4.5, 'xtick-t15');
 
-    // 5. Labels: yVar at top, t at right, +Max and -Max to the left of vertical axis, and Period (1T or numeric T) on t-axis
+    const halfLblDx = waveKind === 'sin' ? -6 : waveKind === '-sin' ? 6 : 0;
+    const oneLblDx = waveKind === 'sin' ? 5 : waveKind === '-sin' ? -5 : 0;
+    const threeHalfLblDx = waveKind === 'sin' ? -6 : waveKind === '-sin' ? 6 : 0;
+
+    // 5. Labels: yVar at top, t at right, +Max and -Max to the left of vertical axis, and T/2, 1T, 1.5T (or numeric values) on t-axis
     texts.push(
       createMathGraphLabelText(
         yVar,
@@ -8996,15 +9013,37 @@ function tryBuildOscillationDiagramStrokes(
         `${nowId}-ln`
       ),
       createMathGraphLabelText(
+        halfPeriodLabel,
+        xHalfPeriod + halfLblDx,
+        centerY + 15,
+        'center',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-xlbl-thalf`
+      ),
+      createMathGraphLabelText(
         periodLabel,
-        xPeriod,
+        xPeriod + oneLblDx,
         waveKind === '-cos' ? centerY - 15 : centerY + 15,
         'center',
-        15,
+        14,
         axisColor,
         layerId,
         groupId,
         `${nowId}-xlbl-t1`
+      ),
+      createMathGraphLabelText(
+        threeHalfPeriodLabel,
+        xThreeHalfPeriod + threeHalfLblDx,
+        centerY + 15,
+        'center',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-xlbl-t15`
       )
     );
 
