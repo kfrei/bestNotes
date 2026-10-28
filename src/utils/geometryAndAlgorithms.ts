@@ -3878,15 +3878,94 @@ export function renderPageStrokesToSnapshotDataUrl(strokes: StrokeObject[]): str
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
+const QUOTA_STORAGE_KEY = 'bestnotes_vision_quota_v1';
 let cachedWorkingVisionModel: string | null = null;
 const quotaExhaustedVisionModels = new Map<string, number>();
 
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const raw = window.localStorage.getItem(QUOTA_STORAGE_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      const now = Date.now();
+      for (const [k, exp] of Object.entries(obj)) {
+        if (typeof exp === 'number' && exp > now) {
+          quotaExhaustedVisionModels.set(k, exp);
+        }
+      }
+    }
+  }
+} catch {
+  // ignore localStorage read errors
+}
+
+function saveQuotaExhaustedToStorage(): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const now = Date.now();
+      const obj: Record<string, number> = {};
+      quotaExhaustedVisionModels.forEach((exp, k) => {
+        if (exp > now) obj[k] = exp;
+      });
+      window.localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(obj));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export type VisionOcrFailureReason = 'quota' | 'timeout' | 'unrecognized' | null;
+let lastVisionOcrFailureReason: VisionOcrFailureReason = null;
+let currentCallSaw429 = false;
+let currentCallSaw200 = false;
+
+function resetVisionFailureTracking(): void {
+  lastVisionOcrFailureReason = null;
+  currentCallSaw429 = false;
+  currentCallSaw200 = false;
+}
+
+function recordVisionHttpStatus(status: number, modelName?: string): void {
+  if (status === 429) {
+    currentCallSaw429 = true;
+    if (modelName) markVisionModelQuotaExhausted(modelName);
+  } else if (status >= 200 && status < 300) {
+    currentCallSaw200 = true;
+  }
+}
+
+function finalizeVisionFailureReason(): void {
+  if (currentCallSaw200) {
+    lastVisionOcrFailureReason = 'unrecognized';
+  } else if (currentCallSaw429) {
+    lastVisionOcrFailureReason = 'quota';
+  } else {
+    lastVisionOcrFailureReason = 'timeout';
+  }
+}
+
+export function getLastVisionOcrFailureReason(): VisionOcrFailureReason {
+  return lastVisionOcrFailureReason;
+}
+
+export function getUnifiedOcrErrorMessage(): string {
+  if (lastVisionOcrFailureReason === 'quota') {
+    return '⛔ Πέρας μετατροπών OCR — εξαντλήθηκαν τα διαθέσιμα ημερήσια tokens του Gemini.';
+  }
+  if (lastVisionOcrFailureReason === 'unrecognized') {
+    return '⚠️ Δεν αναγνωρίστηκε το χειρόγραφο — δοκίμασε να το γράψεις πιο καθαρά.';
+  }
+  return '⏳ Το σύστημα OCR καθυστέρησε — δοκίμασε ξανά σε λίγο.';
+}
+
 function markVisionModelQuotaExhausted(modelName: string): void {
   const clean = modelName.replace(/^models\//, '');
-  quotaExhaustedVisionModels.set(clean, Date.now() + 15 * 60 * 1000);
+  // Remember 429 daily quota exhaustion for 6 hours in localStorage so page refreshes skip it in 0ms
+  quotaExhaustedVisionModels.set(clean, Date.now() + 6 * 60 * 60 * 1000);
   if (cachedWorkingVisionModel === clean) {
     cachedWorkingVisionModel = null;
   }
+  saveQuotaExhaustedToStorage();
 }
 
 function getPrioritizedVisionModels(baseModels?: string[]): string[] {
@@ -3895,6 +3974,7 @@ function getPrioritizedVisionModels(baseModels?: string[]): string[] {
     'gemini-3-flash-preview',
     'gemini-robotics-er-2-preview',
     'gemini-flash-latest',
+    'gemini-3.5-flash-lite',
     'gemini-flash-lite-latest',
   ];
   const all = Array.from(
@@ -3914,7 +3994,26 @@ function getPrioritizedVisionModels(baseModels?: string[]): string[] {
       active.push(m);
     }
   }
-  return [...active, ...exhausted];
+  // Only try active (non-429) models first; if all are marked exhausted, fall back to the two high-quota -lite models
+  if (active.length > 0) {
+    return active;
+  }
+  currentCallSaw429 = true;
+  return ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
+}
+
+function buildVisionGenerationConfig(cleanModelName: string): Record<string, any> {
+  const isLite = cleanModelName.includes('lite');
+  if (isLite) {
+    return {
+      responseMimeType: 'application/json',
+      mediaResolution: 'MEDIA_RESOLUTION_LOW',
+    };
+  }
+  return {
+    responseMimeType: 'application/json',
+    thinkingConfig: { thinkingBudget: 0 },
+  };
 }
 
 function safeParseVisionJson(rawText: string): any {
@@ -3959,104 +4058,38 @@ function safeParseVisionJson(rawText: string): any {
 }
 
 /**
- * Staggered-hedge execution across Gemini Vision models:
- * - Fires ONLY the primary model at t = 0ms so normal fast calls (~1.2s) consume just 1 API request!
- * - If the primary model errors (503/429) OR takes longer than `hedgeDelayMs` (1300ms), immediately launches
- *   the backup models in parallel so temporary 503/429 spikes never slow down the user.
+ * Sequential quota-preserving execution across Gemini Vision models:
+ * - Calls ONLY 1 model at a time so each user click consumes just 1 API request!
+ * - If a model returns 429 (Quota Exceeded) or 503 (High Demand), immediately advances to the next model.
+ * - Gives `-lite` models (which have 500 RPD quota) a 26s timeout so their ~13-16s responses are never cut off.
  */
 async function runVisionWithStaggeredHedge<T>(
   models: string[],
   runner: (modelName: string, timeoutMs: number) => Promise<T | null>,
-  hedgeDelayMs = 1300,
-  timeoutMs = 15000
+  _hedgeDelayMs = 1300,
+  timeoutMs = 26000
 ): Promise<T | null> {
-  if (models.length === 0) return null;
-  const primary = models[0];
-  const backups = models.slice(1);
-  if (backups.length === 0) {
-    return runner(primary, timeoutMs);
+  resetVisionFailureTracking();
+  if (models.length === 0) {
+    finalizeVisionFailureReason();
+    return null;
   }
-
-  let backupPromise: Promise<T> | null = null;
-  const startBackups = (): Promise<T> => {
-    if (!backupPromise) {
-      backupPromise = Promise.any(
-        backups.map(async (m) => {
-          const r = await runner(m, timeoutMs);
-          if (!r) throw new Error('empty');
-          return r;
-        })
-      );
+  for (const m of models) {
+    const perModelTimeout = m.includes('lite') ? Math.max(26000, timeoutMs) : Math.min(timeoutMs, 14000);
+    const res = await runner(m, perModelTimeout);
+    if (res) {
+      return res;
     }
-    return backupPromise;
-  };
-
-  return new Promise<T | null>((resolve) => {
-    let settled = false;
-    const hedgeTimer = window.setTimeout(() => {
-      if (!settled) {
-        startBackups()
-          .then((res) => {
-            if (!settled) {
-              settled = true;
-              resolve(res);
-            }
-          })
-          .catch(() => {
-            // primary might still finish
-          });
-      }
-    }, hedgeDelayMs);
-
-    runner(primary, timeoutMs)
-      .then((res) => {
-        window.clearTimeout(hedgeTimer);
-        if (settled) return;
-        if (res) {
-          settled = true;
-          resolve(res);
-        } else {
-          startBackups()
-            .then((bRes) => {
-              if (!settled) {
-                settled = true;
-                resolve(bRes);
-              }
-            })
-            .catch(() => {
-              if (!settled) {
-                settled = true;
-                resolve(null);
-              }
-            });
-        }
-      })
-      .catch(() => {
-        window.clearTimeout(hedgeTimer);
-        if (settled) return;
-        startBackups()
-          .then((bRes) => {
-            if (!settled) {
-              settled = true;
-              resolve(bRes);
-            }
-          })
-          .catch(() => {
-            if (!settled) {
-              settled = true;
-              resolve(null);
-            }
-          });
-      });
-  });
+  }
+  finalizeVisionFailureReason();
+  return null;
 }
 
 /**
  * Uses Gemini Flash Vision (free tier on project bestnotes-2026) to inspect up to 4 images/texts
  * on a notebook page and return 3-4 clean Greek keyword tags in nominative singular.
- * Includes automatic evergreen model resolution ('gemini-flash-latest', 'gemini-3.8-flash',
- * 'gemini-3.5-flash', 'gemini-flash-lite-latest') plus live /v1beta/models auto-discovery
- * so future model upgrades (3.8 -> 4.0 -> 5.0) work automatically without code changes.
+ * Uses only the high-quota `-lite` models (500 RPD) so background auto-tagging never consumes
+ * the 20 RPD quota of the primary interactive OCR models.
  */
 export async function generateSmartGreekTagsFromImages(
   notebookTitle: string,
@@ -4098,17 +4131,16 @@ export async function generateSmartGreekTagsFromImages(
     }
   }
 
-  const candidateModels = getPrioritizedVisionModels();
+  const candidateModels = ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
 
   const tryGenerateWithModel = async (
     modelName: string,
-    timeoutMs = 15000
+    timeoutMs = 26000
   ): Promise<string[] | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
-      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
@@ -4117,16 +4149,12 @@ export async function generateSmartGreekTagsFromImages(
           signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
-            },
+            generationConfig: buildVisionGenerationConfig(cleanName),
           }),
         }
       );
       if (!res.ok) {
         if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
-        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
         return null;
       }
       const data = await res.json();
@@ -4144,58 +4172,20 @@ export async function generateSmartGreekTagsFromImages(
           .filter((t: string) => t.length >= 2)
           .slice(0, 4);
         if (tags.length > 0) {
-          cachedWorkingVisionModel = cleanName;
           return tags;
         }
       }
     } catch {
-      if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
-        cachedWorkingVisionModel = null;
-      }
+      // ignore timeout
     } finally {
       window.clearTimeout(timer);
     }
     return null;
   };
 
-  const hedgedTags = await runVisionWithStaggeredHedge(
-    candidateModels,
-    tryGenerateWithModel,
-    1300,
-    15000
-  );
-  if (hedgedTags && hedgedTags.length > 0) return hedgedTags;
-
-  // Automatic Future-Proof Discovery: query /v1beta/models dynamically if all known aliases/versions rotated
-  try {
-    const listRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-    );
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      const discovered: string[] = (listData?.models || [])
-        .filter(
-          (m: any) =>
-            Array.isArray(m?.supportedGenerationMethods) &&
-            m.supportedGenerationMethods.includes('generateContent') &&
-            typeof m.name === 'string' &&
-            m.name.includes('gemini') &&
-            m.name.includes('flash') &&
-            !m.name.includes('tts') &&
-            !m.name.includes('transcribe') &&
-            !m.name.includes('embedding')
-        )
-        .map((m: any) => String(m.name).replace(/^models\//, ''))
-        .sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
-
-      for (const dynModel of discovered) {
-        if (candidateModels.includes(dynModel)) continue;
-        const tags = await tryGenerateWithModel(dynModel);
-        if (tags && tags.length > 0) return tags;
-      }
-    }
-  } catch {
-    // ignore discovery error
+  for (const m of candidateModels) {
+    const tags = await tryGenerateWithModel(m, 26000);
+    if (tags && tags.length > 0) return tags;
   }
 
   return [];
@@ -4238,13 +4228,12 @@ export async function transcribeHandwrittenStrokesWithGemini(
 
   const tryTranscribeWithModel = async (
     modelName: string,
-    timeoutMs = 15000
+    timeoutMs = 26000
   ): Promise<string | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
-      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
@@ -4253,16 +4242,13 @@ export async function transcribeHandwrittenStrokesWithGemini(
           signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
-            },
+            generationConfig: buildVisionGenerationConfig(cleanName),
           }),
         }
       );
+      recordVisionHttpStatus(res.status, cleanName);
       if (!res.ok) {
-        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
-        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
         return null;
       }
       const data = await res.json();
@@ -4289,7 +4275,7 @@ export async function transcribeHandwrittenStrokesWithGemini(
     return null;
   };
 
-  return runVisionWithStaggeredHedge(candidateModels, tryTranscribeWithModel, 1300, 15000);
+  return runVisionWithStaggeredHedge(candidateModels, tryTranscribeWithModel, 1300, 26000);
 }
 
 /**
@@ -4373,13 +4359,12 @@ export async function transcribeHandwrittenMathWithGemini(
 
   const tryMathWithModel = async (
     modelName: string,
-    timeoutMs = 15000
+    timeoutMs = 26000
   ): Promise<{ latex: string; plainText: string } | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
-      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
@@ -4388,16 +4373,13 @@ export async function transcribeHandwrittenMathWithGemini(
           signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
-            },
+            generationConfig: buildVisionGenerationConfig(cleanName),
           }),
         }
       );
+      recordVisionHttpStatus(res.status, cleanName);
       if (!res.ok) {
-        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
-        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
         return null;
       }
       const data = await res.json();
@@ -4437,7 +4419,7 @@ export async function transcribeHandwrittenMathWithGemini(
     return null;
   };
 
-  return runVisionWithStaggeredHedge(candidateModels, tryMathWithModel, 1300, 15000);
+  return runVisionWithStaggeredHedge(candidateModels, tryMathWithModel, 1300, 26000);
 }
 
 /**
@@ -7349,7 +7331,7 @@ export async function transcribeEquationForGraphWithGemini(
 
   const tryWithModel = async (
     modelName: string,
-    timeoutMs = 15000
+    timeoutMs = 26000
   ): Promise<{
     equation: string;
     normalizedEquation?: string;
@@ -7360,7 +7342,6 @@ export async function transcribeEquationForGraphWithGemini(
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const cleanName = modelName.replace(/^models\//, '');
-      const isLite = cleanName.includes('lite');
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
         {
@@ -7369,16 +7350,13 @@ export async function transcribeEquationForGraphWithGemini(
           signal: ctrl.signal,
           body: JSON.stringify({
             contents: [{ parts }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              ...(isLite ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
-            },
+            generationConfig: buildVisionGenerationConfig(cleanName),
           }),
         }
       );
+      recordVisionHttpStatus(res.status, cleanName);
       if (!res.ok) {
-        if (res.status === 429) markVisionModelQuotaExhausted(cleanName);
-        else if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
         return null;
       }
       const data = await res.json();
@@ -7459,7 +7437,7 @@ export async function transcribeEquationForGraphWithGemini(
     return null;
   };
 
-  return runVisionWithStaggeredHedge(candidateModels, tryWithModel, 1300, 15000);
+  return runVisionWithStaggeredHedge(candidateModels, tryWithModel, 1300, 26000);
 }
 
 /**

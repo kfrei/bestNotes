@@ -135,6 +135,7 @@ import {
   transcribeHandwrittenStrokesWithGemini,
   transcribeHandwrittenMathWithGemini,
   transcribeEquationForGraphWithGemini,
+  getUnifiedOcrErrorMessage,
   convertPlainTextToMathLatex,
   buildMathGraphStrokesFromEquation,
   prepareMathGraphStrokesForAnimation,
@@ -22836,17 +22837,16 @@ export default function App() {
     try {
       const transcribed = await Promise.race([
         transcribeHandwrittenStrokesWithGemini(cropDataUrl, activeNotebook?.title || ''),
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 16000)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
       if (!transcribed || !transcribed.trim()) {
-        // Fallback if online OCR timed out or couldn't read: apply local calligraphic beautification to the strokes!
         const beautified = beautifyHandwritingStrokes(selStrokes);
         const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
         updateActivePage((page) => ({
           ...page,
           strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
         }));
-        showToast('✨ Το online OCR καθυστέρησε — εφαρμόστηκε αυτόματα Καλλιγραφική Εξομάλυνση στα γράμματα!');
+        showToast(getUnifiedOcrErrorMessage());
         return;
       }
 
@@ -22978,17 +22978,16 @@ export default function App() {
     try {
       const mathRes = await Promise.race([
         transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 16000)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
       if (!mathRes || !mathRes.latex.trim()) {
-        // Fallback if online MathOCR timed out or couldn't respond: smooth the handwritten equation in place!
         const beautified = beautifyHandwritingStrokes(selStrokes);
         const beautifiedMap = new Map(beautified.map((b) => [b.id, b]));
         updateActivePage((page) => ({
           ...page,
           strokes: page.strokes.map((s) => beautifiedMap.get(s.id) || s),
         }));
-        showToast('✨ Το online MathOCR καθυστέρησε — εφαρμόστηκε αυτόματα Εξομάλυνση στην εξίσωση! Δοκίμασε ξανά σε λίγο.');
+        showToast(getUnifiedOcrErrorMessage());
         return;
       }
 
@@ -23245,20 +23244,13 @@ export default function App() {
     try {
       const aiRes = await Promise.race([
         transcribeEquationForGraphWithGemini(cropDataUrl, activeNotebook?.title || ''),
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 18000)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
       ]);
 
-      let eqStr = aiRes?.equation || aiRes?.normalizedEquation || aiRes?.latex || '';
-      if (!eqStr) {
-        const fallbackMath = await Promise.race([
-          transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
-          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 15000)),
-        ]);
-        eqStr = fallbackMath?.latex || fallbackMath?.plainText || '';
-      }
+      const eqStr = aiRes?.equation || aiRes?.normalizedEquation || aiRes?.latex || '';
 
       if (!eqStr.trim()) {
-        showToast('⚠️ Δεν αναγνωρίστηκε εξίσωση — δοκίμασε ξανά ή γράψε την εξίσωση στο εργαλείο Κειμένου!');
+        showToast(getUnifiedOcrErrorMessage());
         return;
       }
 
