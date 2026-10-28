@@ -1980,6 +1980,7 @@ export default function App() {
     startDistY: number;
     baseStrokes: Map<string, BezierPoint[]>;
     labelCenters: Map<string, { cx: number; cy: number }>;
+    baseTexts: Map<string, { x: number; y: number }>;
   } | null>(null);
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
@@ -15783,6 +15784,13 @@ export default function App() {
           });
         });
 
+        const baseTexts = new Map<string, { x: number; y: number }>();
+        for (const t of targetPage.texts || []) {
+          if (t.groupId === targetMathDiag.groupId) {
+            baseTexts.set(t.id, { x: t.x, y: t.y });
+          }
+        }
+
         mathGraphDragRef.current = {
           groupId: targetMathDiag.groupId,
           mode: mathMode,
@@ -15794,6 +15802,7 @@ export default function App() {
           startDistY: Math.max(16, Math.abs(pt.y - targetMathDiag.originY)),
           baseStrokes,
           labelCenters,
+          baseTexts,
         };
         isDrawingRef.current = true;
         return;
@@ -17638,6 +17647,34 @@ export default function App() {
       updateActivePage(
         (page) => ({
           ...page,
+          texts: (page.texts || []).map((t) => {
+            if (t.groupId !== mg.groupId) return t;
+            const baseT = mg.baseTexts.get(t.id);
+            if (!baseT) return t;
+            if (t.id.endsWith('-lx') || t.id.endsWith('-ly')) return t;
+            let dx = 0;
+            let dy = 0;
+            const approxCx = baseT.x + 12;
+            const approxCy = baseT.y + 8;
+            if (
+              t.id.endsWith('-ll') ||
+              t.id.endsWith('-lr') ||
+              t.id.endsWith('-la1') ||
+              t.id.endsWith('-la2') ||
+              t.id.includes('-xlbl-')
+            ) {
+              dx = (approxCx - mg.originX) * (scaleX - 1);
+            } else if (t.id.endsWith('-lt')) {
+              dy = (mg.cMinY - mg.originY) * (scaleY - 1);
+            } else {
+              dy = (approxCy - mg.originY) * (scaleY - 1);
+            }
+            return {
+              ...t,
+              x: Math.round(baseT.x + dx),
+              y: Math.round(baseT.y + dy),
+            };
+          }),
           strokes: page.strokes.map((s) => {
             if (s.groupId !== mg.groupId) return s;
             const basePts = mg.baseStrokes.get(s.id);
@@ -18683,59 +18720,83 @@ export default function App() {
 
           const dAngleDeg = (dAngle * 180) / Math.PI;
           updateActivePage(
-            (page) => ({
-              ...page,
-              images: (page.images || []).map((im) => {
-                if (!effectiveImgIds.includes(im.id)) return im;
-                const oldCx = im.x + im.width / 2;
-                const oldCy = im.y + im.height / 2;
-                const rx = oldCx - tf.centerX;
-                const ry = oldCy - tf.centerY;
-                const nextCx = tf.centerX + rx * cosA - ry * sinA;
-                const nextCy = tf.centerY + rx * sinA + ry * cosA;
-                const nextDeg = (((im.rotation || 0) + dAngleDeg) % 360 + 360) % 360;
-                return {
-                  ...im,
-                  x: nextCx - im.width / 2,
-                  y: nextCy - im.height / 2,
-                  rotation: Math.round(nextDeg),
-                };
-              }),
-              strokes: page.strokes.map((s) => {
-                if (!selectedStrokeIds.includes(s.id)) return s;
-                const nextRot = (s.rotation || 0) + dAngle;
-                const cleanRot =
-                  Math.abs(nextRot - snappedTotalRad) < 1e-3 ? snappedTotalRad : nextRot;
-                return {
-                  ...s,
-                  rotation: cleanRot,
-                  points: s.points.map((p) => {
-                    const rx = p.x - tf.centerX;
-                    const ry = p.y - tf.centerY;
-                    const nextPt: BezierPoint = {
-                      ...p,
-                      x: tf.centerX + rx * cosA - ry * sinA,
-                      y: tf.centerY + rx * sinA + ry * cosA,
-                    };
-                    if (p.cx !== undefined && p.cy !== undefined) {
-                      const rcx = p.cx - tf.centerX;
-                      const rcy = p.cy - tf.centerY;
-                      nextPt.cx = tf.centerX + rcx * cosA - rcy * sinA;
-                      nextPt.cy = tf.centerY + rcx * sinA + rcy * cosA;
-                    }
-                    if (p.inDx !== undefined && p.inDy !== undefined) {
-                      nextPt.inDx = p.inDx * cosA - p.inDy * sinA;
-                      nextPt.inDy = p.inDx * sinA + p.inDy * cosA;
-                    }
-                    if (p.outDx !== undefined && p.outDy !== undefined) {
-                      nextPt.outDx = p.outDx * cosA - p.outDy * sinA;
-                      nextPt.outDy = p.outDx * sinA + p.outDy * cosA;
-                    }
-                    return nextPt;
-                  }),
-                };
-              }),
-            }),
+            (page) => {
+              const selMathGroupIds = new Set(
+                page.strokes
+                  .filter(
+                    (s) => selectedStrokeIds.includes(s.id) && s.groupId?.startsWith('math-graph-grp-')
+                  )
+                  .map((s) => s.groupId as string)
+              );
+              return {
+                ...page,
+                texts:
+                  selMathGroupIds.size > 0
+                    ? (page.texts || []).map((t) => {
+                        if (!t.groupId || !selMathGroupIds.has(t.groupId)) return t;
+                        const cx = t.x + 10;
+                        const cy = t.y + 8;
+                        const rx = cx - tf.centerX;
+                        const ry = cy - tf.centerY;
+                        return {
+                          ...t,
+                          x: tf.centerX + rx * cosA - ry * sinA - 10,
+                          y: tf.centerY + rx * sinA + ry * cosA - 8,
+                        };
+                      })
+                    : page.texts,
+                images: (page.images || []).map((im) => {
+                  if (!effectiveImgIds.includes(im.id)) return im;
+                  const oldCx = im.x + im.width / 2;
+                  const oldCy = im.y + im.height / 2;
+                  const rx = oldCx - tf.centerX;
+                  const ry = oldCy - tf.centerY;
+                  const nextCx = tf.centerX + rx * cosA - ry * sinA;
+                  const nextCy = tf.centerY + rx * sinA + ry * cosA;
+                  const nextDeg = (((im.rotation || 0) + dAngleDeg) % 360 + 360) % 360;
+                  return {
+                    ...im,
+                    x: nextCx - im.width / 2,
+                    y: nextCy - im.height / 2,
+                    rotation: Math.round(nextDeg),
+                  };
+                }),
+                strokes: page.strokes.map((s) => {
+                  if (!selectedStrokeIds.includes(s.id)) return s;
+                  const nextRot = (s.rotation || 0) + dAngle;
+                  const cleanRot =
+                    Math.abs(nextRot - snappedTotalRad) < 1e-3 ? snappedTotalRad : nextRot;
+                  return {
+                    ...s,
+                    rotation: cleanRot,
+                    points: s.points.map((p) => {
+                      const rx = p.x - tf.centerX;
+                      const ry = p.y - tf.centerY;
+                      const nextPt: BezierPoint = {
+                        ...p,
+                        x: tf.centerX + rx * cosA - ry * sinA,
+                        y: tf.centerY + rx * sinA + ry * cosA,
+                      };
+                      if (p.cx !== undefined && p.cy !== undefined) {
+                        const rcx = p.cx - tf.centerX;
+                        const rcy = p.cy - tf.centerY;
+                        nextPt.cx = tf.centerX + rcx * cosA - rcy * sinA;
+                        nextPt.cy = tf.centerY + rcx * sinA + rcy * cosA;
+                      }
+                      if (p.inDx !== undefined && p.inDy !== undefined) {
+                        nextPt.inDx = p.inDx * cosA - p.inDy * sinA;
+                        nextPt.inDy = p.inDx * sinA + p.inDy * cosA;
+                      }
+                      if (p.outDx !== undefined && p.outDy !== undefined) {
+                        nextPt.outDx = p.outDx * cosA - p.outDy * sinA;
+                        nextPt.outDy = p.outDx * sinA + p.outDy * cosA;
+                      }
+                      return nextPt;
+                    }),
+                  };
+                }),
+              };
+            },
             false
           );
           return;
@@ -18861,42 +18922,64 @@ export default function App() {
           }
 
           updateActivePage(
-            (page) => ({
-              ...page,
-              images: (page.images || []).map((im) => {
-                if (!effectiveImgIds.includes(im.id)) return im;
-                const minSide = Math.max(1, Math.min(im.width, im.height));
-                const clampedScale = Math.max(24 / minSide, scaleFactor);
-                return {
-                  ...im,
-                  x: tf.anchorX + (im.x - tf.anchorX) * clampedScale,
-                  y: tf.anchorY + (im.y - tf.anchorY) * clampedScale,
-                  width: im.width * clampedScale,
-                  height: im.height * clampedScale,
-                  clipPolygon: im.clipPolygon?.map((cp) => ({
-                    x: cp.x * clampedScale,
-                    y: cp.y * clampedScale,
-                  })),
-                };
-              }),
-              strokes: page.strokes.map((s) => {
-                if (!selectedStrokeIds.includes(s.id)) return s;
-                return {
-                  ...s,
-                  points: s.points.map((p) => ({
-                    ...p,
-                    x: tf.anchorX + (p.x - tf.anchorX) * scaleFactor,
-                    y: tf.anchorY + (p.y - tf.anchorY) * scaleFactor,
-                    cx: p.cx !== undefined ? tf.anchorX + (p.cx - tf.anchorX) * scaleFactor : undefined,
-                    cy: p.cy !== undefined ? tf.anchorY + (p.cy - tf.anchorY) * scaleFactor : undefined,
-                    inDx: p.inDx !== undefined ? p.inDx * scaleFactor : undefined,
-                    inDy: p.inDy !== undefined ? p.inDy * scaleFactor : undefined,
-                    outDx: p.outDx !== undefined ? p.outDx * scaleFactor : undefined,
-                    outDy: p.outDy !== undefined ? p.outDy * scaleFactor : undefined,
-                  })),
-                };
-              }),
-            }),
+            (page) => {
+              const selMathGroupIds = new Set(
+                page.strokes
+                  .filter(
+                    (s) => selectedStrokeIds.includes(s.id) && s.groupId?.startsWith('math-graph-grp-')
+                  )
+                  .map((s) => s.groupId as string)
+              );
+              return {
+                ...page,
+                texts:
+                  selMathGroupIds.size > 0
+                    ? (page.texts || []).map((t) => {
+                        if (!t.groupId || !selMathGroupIds.has(t.groupId)) return t;
+                        const cx = t.x + 10;
+                        const cy = t.y + 8;
+                        return {
+                          ...t,
+                          x: tf.anchorX + (cx - tf.anchorX) * scaleFactor - 10,
+                          y: tf.anchorY + (cy - tf.anchorY) * scaleFactor - 8,
+                        };
+                      })
+                    : page.texts,
+                images: (page.images || []).map((im) => {
+                  if (!effectiveImgIds.includes(im.id)) return im;
+                  const minSide = Math.max(1, Math.min(im.width, im.height));
+                  const clampedScale = Math.max(24 / minSide, scaleFactor);
+                  return {
+                    ...im,
+                    x: tf.anchorX + (im.x - tf.anchorX) * clampedScale,
+                    y: tf.anchorY + (im.y - tf.anchorY) * clampedScale,
+                    width: im.width * clampedScale,
+                    height: im.height * clampedScale,
+                    clipPolygon: im.clipPolygon?.map((cp) => ({
+                      x: cp.x * clampedScale,
+                      y: cp.y * clampedScale,
+                    })),
+                  };
+                }),
+                strokes: page.strokes.map((s) => {
+                  if (!selectedStrokeIds.includes(s.id)) return s;
+                  return {
+                    ...s,
+                    points: s.points.map((p) => ({
+                      ...p,
+                      x: tf.anchorX + (p.x - tf.anchorX) * scaleFactor,
+                      y: tf.anchorY + (p.y - tf.anchorY) * scaleFactor,
+                      cx: p.cx !== undefined ? tf.anchorX + (p.cx - tf.anchorX) * scaleFactor : undefined,
+                      cy: p.cy !== undefined ? tf.anchorY + (p.cy - tf.anchorY) * scaleFactor : undefined,
+                      inDx: p.inDx !== undefined ? p.inDx * scaleFactor : undefined,
+                      inDy: p.inDy !== undefined ? p.inDy * scaleFactor : undefined,
+                      outDx: p.outDx !== undefined ? p.outDx * scaleFactor : undefined,
+                      outDy: p.outDy !== undefined ? p.outDy * scaleFactor : undefined,
+                    })),
+                  };
+                }),
+              };
+            },
             false
           );
           return;
@@ -19222,140 +19305,157 @@ export default function App() {
           };
 
           updateActivePage(
-            (page) => ({
-              ...page,
-              images: (page.images || []).map((im) => {
-                if (!effectiveImgIds.includes(im.id)) return im;
-                const p0 = stretchPoint(im.x, im.y);
-                const p1 = stretchPoint(im.x + im.width, im.y + im.height);
-                const newX = Math.min(p0.x, p1.x);
-                const newY = Math.min(p0.y, p1.y);
-                const newW = Math.max(24, Math.abs(p1.x - p0.x));
-                const newH = Math.max(24, Math.abs(p1.y - p0.y));
-                const sxRatio = newW / Math.max(1, im.width);
-                const syRatio = newH / Math.max(1, im.height);
-                return {
-                  ...im,
-                  x: newX,
-                  y: newY,
-                  width: newW,
-                  height: newH,
-                  clipPolygon: im.clipPolygon?.map((cp) => ({
-                    x: cp.x * sxRatio,
-                    y: cp.y * syRatio,
-                  })),
-                };
-              }),
-              strokes: page.strokes.map((s) => {
-                if (!selectedStrokeIds.includes(s.id)) return s;
-                // Keep inclined-plane block a true 90° rectangle sitting flush on the stretched slope when grouped
-                if (s.shapeType === 'incline-block' && s.groupId) {
-                  const companionWedge = page.strokes.find(
-                    (ws) =>
-                      ws.groupId === s.groupId &&
-                      ws.shapeType === 'incline-wedge' &&
-                      selectedStrokeIds.includes(ws.id) &&
-                      ws.points.length >= 3
-                  );
-                  if (companionWedge) {
-                    const pSlopeStart = stretchPoint(
-                      companionWedge.points[0].x,
-                      companionWedge.points[0].y
+            (page) => {
+              const selMathGroupIds = new Set(
+                page.strokes
+                  .filter(
+                    (s) => selectedStrokeIds.includes(s.id) && s.groupId?.startsWith('math-graph-grp-')
+                  )
+                  .map((s) => s.groupId as string)
+              );
+              return {
+                ...page,
+                texts:
+                  selMathGroupIds.size > 0
+                    ? (page.texts || []).map((t) => {
+                        if (!t.groupId || !selMathGroupIds.has(t.groupId)) return t;
+                        const sp = stretchPoint(t.x + 10, t.y + 8);
+                        return { ...t, x: sp.x - 10, y: sp.y - 8 };
+                      })
+                    : page.texts,
+                images: (page.images || []).map((im) => {
+                  if (!effectiveImgIds.includes(im.id)) return im;
+                  const p0 = stretchPoint(im.x, im.y);
+                  const p1 = stretchPoint(im.x + im.width, im.y + im.height);
+                  const newX = Math.min(p0.x, p1.x);
+                  const newY = Math.min(p0.y, p1.y);
+                  const newW = Math.max(24, Math.abs(p1.x - p0.x));
+                  const newH = Math.max(24, Math.abs(p1.y - p0.y));
+                  const sxRatio = newW / Math.max(1, im.width);
+                  const syRatio = newH / Math.max(1, im.height);
+                  return {
+                    ...im,
+                    x: newX,
+                    y: newY,
+                    width: newW,
+                    height: newH,
+                    clipPolygon: im.clipPolygon?.map((cp) => ({
+                      x: cp.x * sxRatio,
+                      y: cp.y * syRatio,
+                    })),
+                  };
+                }),
+                strokes: page.strokes.map((s) => {
+                  if (!selectedStrokeIds.includes(s.id)) return s;
+                  // Keep inclined-plane block a true 90° rectangle sitting flush on the stretched slope when grouped
+                  if (s.shapeType === 'incline-block' && s.groupId) {
+                    const companionWedge = page.strokes.find(
+                      (ws) =>
+                        ws.groupId === s.groupId &&
+                        ws.shapeType === 'incline-wedge' &&
+                        selectedStrokeIds.includes(ws.id) &&
+                        ws.points.length >= 3
                     );
-                    const pBaseCorner = stretchPoint(
-                      companionWedge.points[1].x,
-                      companionWedge.points[1].y
-                    );
-                    const pSlopePeak = stretchPoint(
-                      companionWedge.points[2].x,
-                      companionWedge.points[2].y
-                    );
-                    return {
-                      ...s,
-                      points: computeInclinedPlaneBlockPoints(
-                        pSlopeStart,
-                        pBaseCorner,
-                        pSlopePeak
-                      ),
-                    };
-                  }
-                }
-                const nextShapeType =
-                  selectedStrokeIds.length === 1 &&
-                  (s.shapeType === 'ellipse' || s.shapeType === 'circle')
-                    ? isSnapped1to1
-                      ? 'circle'
-                      : 'ellipse'
-                    : s.shapeType;
-                // Keep vector math labels (`-m-`, `-s-` inside `math-graph-grp-...`) un-squished during 1D aspect-ratio stretch
-                if (
-                  s.groupId?.startsWith('math-graph-grp-') &&
-                  (/-[ms]-\d+$/.test(s.id) || s.id.includes('-lblx') || s.id.includes('-lbly'))
-                ) {
-                  const prefix = /-[ms]-\d+$/.test(s.id)
-                    ? s.id.replace(/-[ms]-\d+$/, '')
-                    : s.id.replace(/\d+$/, '');
-                  const sibs = page.strokes.filter(
-                    (st) => st.groupId === s.groupId && st.id.startsWith(prefix)
-                  );
-                  let lMinX = Infinity,
-                    lMaxX = -Infinity,
-                    lMinY = Infinity,
-                    lMaxY = -Infinity;
-                  for (const sb of sibs) {
-                    for (const pt of sb.points) {
-                      if (pt.x < lMinX) lMinX = pt.x;
-                      if (pt.x > lMaxX) lMaxX = pt.x;
-                      if (pt.y < lMinY) lMinY = pt.y;
-                      if (pt.y > lMaxY) lMaxY = pt.y;
+                    if (companionWedge) {
+                      const pSlopeStart = stretchPoint(
+                        companionWedge.points[0].x,
+                        companionWedge.points[0].y
+                      );
+                      const pBaseCorner = stretchPoint(
+                        companionWedge.points[1].x,
+                        companionWedge.points[1].y
+                      );
+                      const pSlopePeak = stretchPoint(
+                        companionWedge.points[2].x,
+                        companionWedge.points[2].y
+                      );
+                      return {
+                        ...s,
+                        points: computeInclinedPlaneBlockPoints(
+                          pSlopeStart,
+                          pBaseCorner,
+                          pSlopePeak
+                        ),
+                      };
                     }
                   }
-                  if (Number.isFinite(lMinX)) {
-                    const lCx = (lMinX + lMaxX) / 2;
-                    const lCy = (lMinY + lMaxY) / 2;
-                    const sCenter = stretchPoint(lCx, lCy);
-                    const tDx = sCenter.x - lCx;
-                    const tDy = sCenter.y - lCy;
-                    return {
-                      ...s,
-                      points: s.points.map((p) => ({
+                  const nextShapeType =
+                    selectedStrokeIds.length === 1 &&
+                    (s.shapeType === 'ellipse' || s.shapeType === 'circle')
+                      ? isSnapped1to1
+                        ? 'circle'
+                        : 'ellipse'
+                      : s.shapeType;
+                  // Keep vector math labels (`-m-`, `-s-` inside `math-graph-grp-...`) un-squished during 1D aspect-ratio stretch
+                  if (
+                    s.groupId?.startsWith('math-graph-grp-') &&
+                    (/-[ms]-\d+$/.test(s.id) || s.id.includes('-lblx') || s.id.includes('-lbly'))
+                  ) {
+                    const prefix = /-[ms]-\d+$/.test(s.id)
+                      ? s.id.replace(/-[ms]-\d+$/, '')
+                      : s.id.replace(/\d+$/, '');
+                    const sibs = page.strokes.filter(
+                      (st) => st.groupId === s.groupId && st.id.startsWith(prefix)
+                    );
+                    let lMinX = Infinity,
+                      lMaxX = -Infinity,
+                      lMinY = Infinity,
+                      lMaxY = -Infinity;
+                    for (const sb of sibs) {
+                      for (const pt of sb.points) {
+                        if (pt.x < lMinX) lMinX = pt.x;
+                        if (pt.x > lMaxX) lMaxX = pt.x;
+                        if (pt.y < lMinY) lMinY = pt.y;
+                        if (pt.y > lMaxY) lMaxY = pt.y;
+                      }
+                    }
+                    if (Number.isFinite(lMinX)) {
+                      const lCx = (lMinX + lMaxX) / 2;
+                      const lCy = (lMinY + lMaxY) / 2;
+                      const sCenter = stretchPoint(lCx, lCy);
+                      const tDx = sCenter.x - lCx;
+                      const tDy = sCenter.y - lCy;
+                      return {
+                        ...s,
+                        points: s.points.map((p) => ({
+                          ...p,
+                          x: p.x + tDx,
+                          y: p.y + tDy,
+                        })),
+                      };
+                    }
+                  }
+                  return {
+                    ...s,
+                    shapeType: nextShapeType,
+                    points: s.points.map((p) => {
+                      const sp = stretchPoint(p.x, p.y);
+                      const nextPt: BezierPoint = {
                         ...p,
-                        x: p.x + tDx,
-                        y: p.y + tDy,
-                      })),
-                    };
-                  }
-                }
-                return {
-                  ...s,
-                  shapeType: nextShapeType,
-                  points: s.points.map((p) => {
-                    const sp = stretchPoint(p.x, p.y);
-                    const nextPt: BezierPoint = {
-                      ...p,
-                      x: sp.x,
-                      y: sp.y,
-                    };
-                    if (p.cx !== undefined && p.cy !== undefined) {
-                      const sc = stretchPoint(p.cx, p.cy);
-                      nextPt.cx = sc.x;
-                      nextPt.cy = sc.y;
-                    }
-                    if (p.inDx !== undefined && p.inDy !== undefined) {
-                      const sinPt = stretchPoint(p.x + p.inDx, p.y + p.inDy);
-                      nextPt.inDx = sinPt.x - sp.x;
-                      nextPt.inDy = sinPt.y - sp.y;
-                    }
-                    if (p.outDx !== undefined && p.outDy !== undefined) {
-                      const soutPt = stretchPoint(p.x + p.outDx, p.y + p.outDy);
-                      nextPt.outDx = soutPt.x - sp.x;
-                      nextPt.outDy = soutPt.y - sp.y;
-                    }
-                    return nextPt;
-                  }),
-                };
-              }),
-            }),
+                        x: sp.x,
+                        y: sp.y,
+                      };
+                      if (p.cx !== undefined && p.cy !== undefined) {
+                        const sc = stretchPoint(p.cx, p.cy);
+                        nextPt.cx = sc.x;
+                        nextPt.cy = sc.y;
+                      }
+                      if (p.inDx !== undefined && p.inDy !== undefined) {
+                        const sinPt = stretchPoint(p.x + p.inDx, p.y + p.inDy);
+                        nextPt.inDx = sinPt.x - sp.x;
+                        nextPt.inDy = sinPt.y - sp.y;
+                      }
+                      if (p.outDx !== undefined && p.outDy !== undefined) {
+                        const soutPt = stretchPoint(p.x + p.outDx, p.y + p.outDy);
+                        nextPt.outDx = soutPt.x - sp.x;
+                        nextPt.outDy = soutPt.y - sp.y;
+                      }
+                      return nextPt;
+                    }),
+                  };
+                }),
+              };
+            },
             false
           );
           return;
@@ -20026,26 +20126,44 @@ export default function App() {
         }
 
         updateActivePage(
-          (page) => ({
-            ...page,
-            images: (page.images || []).map((im) =>
-              targetImgIdList.includes(im.id) ? { ...im, x: im.x + dx, y: im.y + dy } : im
-            ),
-            strokes: page.strokes.map((s) =>
-              targetStrokeIdList.includes(s.id)
-                ? {
-                    ...s,
-                    points: s.points.map((p) => ({
-                      ...p,
-                      x: p.x + dx,
-                      y: p.y + dy,
-                      cx: p.cx !== undefined ? p.cx + dx : undefined,
-                      cy: p.cy !== undefined ? p.cy + dy : undefined,
-                    })),
-                  }
-                : s
-            ),
-          }),
+          (page) => {
+            const selMathGroupIds = new Set(
+              page.strokes
+                .filter(
+                  (s) =>
+                    targetStrokeIdList.includes(s.id) && s.groupId?.startsWith('math-graph-grp-')
+                )
+                .map((s) => s.groupId as string)
+            );
+            return {
+              ...page,
+              texts:
+                selMathGroupIds.size > 0
+                  ? (page.texts || []).map((t) =>
+                      t.groupId && selMathGroupIds.has(t.groupId)
+                        ? { ...t, x: t.x + dx, y: t.y + dy }
+                        : t
+                    )
+                  : page.texts,
+              images: (page.images || []).map((im) =>
+                targetImgIdList.includes(im.id) ? { ...im, x: im.x + dx, y: im.y + dy } : im
+              ),
+              strokes: page.strokes.map((s) =>
+                targetStrokeIdList.includes(s.id)
+                  ? {
+                      ...s,
+                      points: s.points.map((p) => ({
+                        ...p,
+                        x: p.x + dx,
+                        y: p.y + dy,
+                        cx: p.cx !== undefined ? p.cx + dx : undefined,
+                        cy: p.cy !== undefined ? p.cy + dy : undefined,
+                      })),
+                    }
+                  : s
+              ),
+            };
+          },
           false
         );
         return;
@@ -22152,6 +22270,7 @@ export default function App() {
           }
           updateActivePage((page) => ({
             ...page,
+            texts: (page.texts || []).filter((t) => !(t.groupId && groupIds.has(t.groupId))),
             images: (page.images || []).filter(
               (im) => !imgSet.has(im.id) && !(im.groupId && groupIds.has(im.groupId))
             ),
@@ -22678,7 +22797,12 @@ export default function App() {
   const mathGraphAnimRafRef = useRef<number | null>(null);
   const animateAndCommitMathGraph = useCallback(
     (
-      graphBuilt: { strokes: StrokeObject[]; groupId: string; kindLabel: string },
+      graphBuilt: {
+        strokes: StrokeObject[];
+        texts?: TextObject[];
+        groupId: string;
+        kindLabel: string;
+      },
       extraUpdater?: (page: NotePage) => NotePage
     ) => {
       if (mathGraphAnimRafRef.current !== null) {
@@ -22687,6 +22811,8 @@ export default function App() {
       }
       const totalDurationMs = 1750;
       const prepared = prepareMathGraphStrokesForAnimation(graphBuilt.strokes);
+      const allTexts = graphBuilt.texts || [];
+      const axisTipTexts = allTexts.filter((t) => t.id.endsWith('-lx') || t.id.endsWith('-ly'));
       const targetGroupId = graphBuilt.groupId;
       const initialFrame = computeMathGraphAnimationFrame(prepared, 0, totalDurationMs);
 
@@ -22700,10 +22826,12 @@ export default function App() {
         return {
           ...basePage,
           strokes: [...basePage.strokes, ...initialFrame],
+          texts: [...(basePage.texts || []), ...axisTipTexts],
         };
       }, true);
 
       const startTime = performance.now();
+      let allTextsAdded = false;
       const step = (now: number) => {
         const elapsed = now - startTime;
         if (elapsed >= totalDurationMs) {
@@ -22712,6 +22840,7 @@ export default function App() {
             (page) => ({
               ...page,
               strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...prepared],
+              texts: [...(page.texts || []).filter((t) => t.groupId !== targetGroupId), ...allTexts],
             }),
             false
           );
@@ -22721,10 +22850,17 @@ export default function App() {
           return;
         }
         const frameStrokes = computeMathGraphAnimationFrame(prepared, elapsed, totalDurationMs);
+        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 1220;
+        if (shouldCommitAllTextsNow) {
+          allTextsAdded = true;
+        }
         updateActivePage(
           (page) => ({
             ...page,
             strokes: [...page.strokes.filter((s) => s.groupId !== targetGroupId), ...frameStrokes],
+            texts: shouldCommitAllTextsNow
+              ? [...(page.texts || []).filter((t) => t.groupId !== targetGroupId), ...allTexts]
+              : page.texts,
           }),
           false
         );
@@ -27754,8 +27890,20 @@ export default function App() {
                               : selectedImageId
                               ? [selectedImageId]
                               : [];
+                          const delMathGroups = new Set(
+                            activePage.strokes
+                              .filter(
+                                (s) =>
+                                  selectedStrokeIds.includes(s.id) &&
+                                  s.groupId?.startsWith('math-graph-grp-')
+                              )
+                              .map((s) => s.groupId as string)
+                          );
                           updateActivePage((page) => ({
                             ...page,
+                            texts: (page.texts || []).filter(
+                              (t) => !(t.groupId && delMathGroups.has(t.groupId))
+                            ),
                             strokes: page.strokes.filter((s) => !selectedStrokeIds.includes(s.id)),
                             images: (page.images || []).filter((im) => !effectiveImgIds.includes(im.id)),
                           }));
@@ -30961,7 +31109,14 @@ export default function App() {
                             setSelectedTextId(txt.id);
                             setEditingTextId(txt.id);
                           }}
-                          className={`absolute px-3 py-1.5 rounded-lg select-none z-10 transition-shadow ${
+                          className={`absolute ${
+                            (txt.id.startsWith('math-graph-txt-') ||
+                              txt.groupId?.startsWith('math-graph-grp-')) &&
+                            !isSelectedTxt &&
+                            !isEditingTxt
+                              ? 'px-1 py-0 leading-none rounded'
+                              : 'px-3 py-1.5 rounded-lg'
+                          } select-none z-10 transition-shadow ${
                             isSelectedTxt || isEditingTxt
                               ? 'ring-2 ring-[#0066ff] bg-white/90 shadow-md cursor-grab active:cursor-grabbing'
                               : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
@@ -31450,7 +31605,24 @@ export default function App() {
                                 ...fontCss,
                               }}
                             >
-                              {txt.text || 'Κείμενο...'}
+                              {txt.text &&
+                              txt.text.includes('_') &&
+                              !txt.text.includes('\n') &&
+                              txt.text.length <= 16 ? (
+                                (() => {
+                                  const uIdx = txt.text.indexOf('_');
+                                  const mainPart = txt.text.slice(0, uIdx);
+                                  const subPart = txt.text.slice(uIdx + 1);
+                                  return (
+                                    <span>
+                                      {mainPart}
+                                      <sub className="text-[0.72em] leading-none">{subPart}</sub>
+                                    </span>
+                                  );
+                                })()
+                              ) : (
+                                txt.text || 'Κείμενο...'
+                              )}
                             </div>
                           )}
                         </div>

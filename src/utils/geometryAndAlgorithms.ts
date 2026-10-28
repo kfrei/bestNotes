@@ -1,4 +1,4 @@
-import { BezierPoint, StrokeObject, ShapePresetType, Notebook } from '../types/note';
+import { BezierPoint, StrokeObject, TextObject, ShapePresetType, Notebook } from '../types/note';
 
 export function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
@@ -7848,453 +7848,45 @@ function compileMathExprEvaluator(
 }
 
 /**
- * Renders clean textbook vector strokes for physics/math axis labels & extrema annotations
- * (e.g. `K`, `U`, `E`, `F`, `ΣF`, `x`, `y`, `u`, `a`, `t`, `-u_max`, `+u_max`, `K_max`, `U_max`, `-A`, `+A`, `+F_max`, `-F_max`, `+4`, `-4`)
- * so that all labels are native `StrokeObject`s inside the diagram group that move and scale seamlessly!
+ * Creates an independent editable `TextObject` in the flowing "🖋️ Ρέουσα" (`'neohellenic'`) font
+ * for diagram axis titles & quantitative/qualitative extrema annotations
+ * (e.g. `K`, `U`, `E`, `F`, `ΣF`, `x`, `y`, `u`, `a`, `t`, `-u_max`, `+u_max`, `K_max`, `-A`, `+A`, `-3`, `3`, `-9`).
  */
-function createVectorMathLabelStrokes(
+function createMathGraphLabelText(
   label: string,
   anchorX: number,
   anchorY: number,
   align: 'left' | 'center' | 'right',
-  fontH: number,
+  fontSize: number,
   color: string,
   layerId: string,
   groupId: string,
   idPrefix: string
-): StrokeObject[] {
-  const glyphPaths = (ch: string): [number, number][][] => {
-    switch (ch) {
-      case '+':
-        return [
-          [
-            [0.1, 0.52],
-            [0.9, 0.52],
-          ],
-          [
-            [0.5, 0.18],
-            [0.5, 0.86],
-          ],
-        ];
-      case '-':
-        return [
-          [
-            [0.12, 0.52],
-            [0.88, 0.52],
-          ],
-        ];
-      case 'x':
-        return [
-          [
-            [0.12, 0.28],
-            [0.88, 0.94],
-          ],
-          [
-            [0.88, 0.28],
-            [0.12, 0.94],
-          ],
-        ];
-      case 'y':
-        return [
-          [
-            [0.12, 0.28],
-            [0.48, 0.72],
-          ],
-          [
-            [0.88, 0.28],
-            [0.2, 1.22],
-          ],
-        ];
-      case 'u':
-      case 'υ':
-      case 'v':
-        return [
-          [
-            [0.14, 0.3],
-            [0.14, 0.72],
-            [0.26, 0.9],
-            [0.54, 0.9],
-            [0.76, 0.72],
-          ],
-          [
-            [0.76, 0.3],
-            [0.76, 0.92],
-          ],
-        ];
-      case 'a':
-      case 'α':
-        return [
-          [
-            [0.76, 0.42],
-            [0.58, 0.32],
-            [0.3, 0.32],
-            [0.14, 0.48],
-            [0.14, 0.76],
-            [0.3, 0.92],
-            [0.58, 0.92],
-            [0.76, 0.78],
-          ],
-          [
-            [0.76, 0.32],
-            [0.76, 0.92],
-          ],
-        ];
-      case 't':
-        return [
-          [
-            [0.45, 0.08],
-            [0.45, 0.84],
-            [0.62, 0.94],
-            [0.82, 0.9],
-          ],
-          [
-            [0.16, 0.36],
-            [0.8, 0.36],
-          ],
-        ];
-      case 'K':
-      case 'k':
-        return [
-          [
-            [0.16, 0.08],
-            [0.16, 0.94],
-          ],
-          [
-            [0.86, 0.1],
-            [0.18, 0.54],
-          ],
-          [
-            [0.34, 0.44],
-            [0.88, 0.94],
-          ],
-        ];
-      case 'U':
-        return [
-          [
-            [0.14, 0.08],
-            [0.14, 0.68],
-            [0.3, 0.92],
-            [0.7, 0.92],
-            [0.86, 0.68],
-            [0.86, 0.08],
-          ],
-        ];
-      case 'E':
-        return [
-          [
-            [0.84, 0.08],
-            [0.16, 0.08],
-            [0.16, 0.92],
-            [0.86, 0.92],
-          ],
-          [
-            [0.16, 0.5],
-            [0.74, 0.5],
-          ],
-        ];
-      case 'F':
-        return [
-          [
-            [0.18, 0.08],
-            [0.18, 0.94],
-          ],
-          [
-            [0.18, 0.08],
-            [0.88, 0.08],
-          ],
-          [
-            [0.18, 0.48],
-            [0.74, 0.48],
-          ],
-        ];
-      case 'Σ':
-        return [
-          [
-            [0.88, 0.08],
-            [0.14, 0.08],
-            [0.58, 0.5],
-            [0.14, 0.92],
-            [0.88, 0.92],
-          ],
-        ];
-      case 'A':
-        return [
-          [
-            [0.1, 0.94],
-            [0.5, 0.08],
-            [0.9, 0.94],
-          ],
-          [
-            [0.25, 0.62],
-            [0.75, 0.62],
-          ],
-        ];
-      case 'm':
-        return [
-          [
-            [0.08, 0.32],
-            [0.08, 0.92],
-          ],
-          [
-            [0.08, 0.46],
-            [0.22, 0.32],
-            [0.38, 0.32],
-            [0.5, 0.46],
-            [0.5, 0.92],
-          ],
-          [
-            [0.5, 0.46],
-            [0.64, 0.32],
-            [0.8, 0.32],
-            [0.92, 0.46],
-            [0.92, 0.92],
-          ],
-        ];
-      case '0':
-        return [
-          [
-            [0.5, 0.1],
-            [0.2, 0.25],
-            [0.15, 0.52],
-            [0.2, 0.8],
-            [0.5, 0.94],
-            [0.8, 0.8],
-            [0.85, 0.52],
-            [0.8, 0.25],
-            [0.5, 0.1],
-          ],
-        ];
-      case '1':
-        return [
-          [
-            [0.24, 0.28],
-            [0.52, 0.1],
-            [0.52, 0.92],
-          ],
-          [
-            [0.26, 0.92],
-            [0.78, 0.92],
-          ],
-        ];
-      case '2':
-        return [
-          [
-            [0.18, 0.28],
-            [0.38, 0.1],
-            [0.72, 0.12],
-            [0.84, 0.32],
-            [0.16, 0.92],
-            [0.86, 0.92],
-          ],
-        ];
-      case '3':
-        return [
-          [
-            [0.18, 0.2],
-            [0.52, 0.1],
-            [0.82, 0.26],
-            [0.68, 0.48],
-            [0.42, 0.5],
-            [0.74, 0.56],
-            [0.84, 0.78],
-            [0.52, 0.94],
-            [0.18, 0.84],
-          ],
-        ];
-      case '4':
-        return [
-          [
-            [0.68, 0.94],
-            [0.68, 0.1],
-            [0.14, 0.66],
-            [0.88, 0.66],
-          ],
-        ];
-      case '5':
-        return [
-          [
-            [0.82, 0.1],
-            [0.22, 0.1],
-            [0.18, 0.48],
-            [0.62, 0.46],
-            [0.84, 0.64],
-            [0.76, 0.88],
-            [0.44, 0.94],
-            [0.16, 0.84],
-          ],
-        ];
-      case '6':
-        return [
-          [
-            [0.76, 0.14],
-            [0.42, 0.12],
-            [0.18, 0.42],
-            [0.18, 0.78],
-            [0.48, 0.94],
-            [0.8, 0.78],
-            [0.76, 0.52],
-            [0.46, 0.46],
-            [0.18, 0.58],
-          ],
-        ];
-      case '7':
-        return [
-          [
-            [0.16, 0.12],
-            [0.86, 0.12],
-            [0.36, 0.94],
-          ],
-        ];
-      case '8':
-        return [
-          [
-            [0.5, 0.5],
-            [0.22, 0.34],
-            [0.26, 0.14],
-            [0.5, 0.1],
-            [0.74, 0.14],
-            [0.78, 0.34],
-            [0.5, 0.5],
-            [0.18, 0.68],
-            [0.22, 0.88],
-            [0.5, 0.94],
-            [0.78, 0.88],
-            [0.82, 0.68],
-            [0.5, 0.5],
-          ],
-        ];
-      case '9':
-        return [
-          [
-            [0.82, 0.46],
-            [0.52, 0.56],
-            [0.2, 0.44],
-            [0.22, 0.18],
-            [0.52, 0.1],
-            [0.82, 0.22],
-            [0.82, 0.66],
-            [0.56, 0.92],
-            [0.24, 0.9],
-          ],
-        ];
-      case '.':
-        return [
-          [
-            [0.45, 0.86],
-            [0.55, 0.94],
-          ],
-        ];
-      case 'R':
-      case 'r':
-        return [
-          [
-            [0.18, 0.94],
-            [0.18, 0.1],
-            [0.62, 0.1],
-            [0.82, 0.24],
-            [0.82, 0.42],
-            [0.62, 0.52],
-            [0.18, 0.52],
-          ],
-          [
-            [0.52, 0.52],
-            [0.86, 0.94],
-          ],
-        ];
-      case 'b':
-      case 'β':
-        return [
-          [
-            [0.18, 0.08],
-            [0.18, 0.92],
-            [0.58, 0.92],
-            [0.82, 0.78],
-            [0.82, 0.54],
-            [0.58, 0.42],
-            [0.18, 0.42],
-          ],
-        ];
-      default:
-        return [];
-    }
-  };
-
-  // Split into main part and optional subscript part after '_' (e.g. `-u_max` -> main `-u`, sub `max`)
+): TextObject {
   const [mainPart, subPart] = label.split('_');
-  const mainCharW = fontH * 0.66;
-  const mainGap = fontH * 0.14;
-  const subH = fontH * 0.62;
-  const subCharW = subH * 0.68;
-  const subGap = subH * 0.12;
-
-  const mainTotalW =
-    mainPart.length > 0 ? mainPart.length * mainCharW + (mainPart.length - 1) * mainGap : 0;
-  const subTotalW =
-    subPart && subPart.length > 0
-      ? subPart.length * subCharW + (subPart.length - 1) * subGap + fontH * 0.08
-      : 0;
-  const totalW = mainTotalW + subTotalW;
-
-  let curX =
+  const mainW = mainPart.length * (fontSize * 0.54);
+  const subW = subPart ? subPart.length * (fontSize * 0.38) + 2 : 0;
+  const estW = mainW + subW + 8;
+  const estH = fontSize * 1.1;
+  const x =
     align === 'center'
-      ? anchorX - totalW / 2
+      ? Math.round(anchorX - estW / 2)
       : align === 'right'
-      ? anchorX - totalW
-      : anchorX;
-  const topY = anchorY - fontH / 2;
-
-  const out: StrokeObject[] = [];
-  let sCounter = 0;
-
-  for (const ch of mainPart) {
-    const paths = glyphPaths(ch);
-    for (const poly of paths) {
-      out.push({
-        id: `${idPrefix}-m-${sCounter++}`,
-        tool: 'pen',
-        color,
-        width: 2.1,
-        opacity: 1,
-        points: poly.map(([u, v]) => ({
-          x: curX + u * mainCharW,
-          y: topY + v * fontH,
-          pressure: 0.7,
-        })),
-        layerId,
-        groupId,
-        isShape: false,
-      });
-    }
-    curX += mainCharW + mainGap;
-  }
-
-  if (subPart) {
-    curX += fontH * 0.05;
-    const subTopY = topY + fontH * 0.46;
-    for (const ch of subPart) {
-      const paths = glyphPaths(ch);
-      for (const poly of paths) {
-        out.push({
-          id: `${idPrefix}-s-${sCounter++}`,
-          tool: 'pen',
-          color,
-          width: 1.85,
-          opacity: 1,
-          points: poly.map(([u, v]) => ({
-            x: curX + u * subCharW,
-            y: subTopY + v * subH,
-            pressure: 0.7,
-          })),
-          layerId,
-          groupId,
-          isShape: false,
-        });
-      }
-      curX += subCharW + subGap;
-    }
-  }
-
-  return out;
+      ? Math.round(anchorX - estW)
+      : Math.round(anchorX);
+  const y = Math.round(anchorY - estH / 2);
+  return {
+    id: `math-graph-txt-${idPrefix}`,
+    x,
+    y,
+    text: label,
+    color,
+    fontSize: Math.round(fontSize),
+    bold: true,
+    fontFamily: 'neohellenic',
+    layerId,
+    groupId,
+  };
 }
 
 /**
@@ -8317,7 +7909,7 @@ function tryBuildOscillationDiagramStrokes(
   curveColor: string,
   axisColor: string,
   layerId: string
-): { strokes: StrokeObject[]; groupId: string; kindLabel: string } | null {
+): { strokes: StrokeObject[]; texts: TextObject[]; groupId: string; kindLabel: string } | null {
   if (!rawInput || !rawInput.trim()) return null;
 
   const lines = splitAndCleanMathLatexLines(rawInput);
@@ -8364,6 +7956,7 @@ function tryBuildOscillationDiagramStrokes(
   const halfH = Math.max(85, height / 2);
   const blueGuide = '#2563eb';
   const strokes: StrokeObject[] = [];
+  const texts: TextObject[] = [];
 
   const addDashedGuide = (x1: number, y1: number, x2: number, y2: number, idx: number) => {
     strokes.push({
@@ -8381,6 +7974,24 @@ function tryBuildOscillationDiagramStrokes(
       groupId,
       isShape: true,
       shapeType: 'wave-guide-top',
+    });
+  };
+
+  const addRulerTick = (x1: number, y1: number, x2: number, y2: number, tag: string) => {
+    strokes.push({
+      id: `math-graph-lbl-${nowId}-${tag}`,
+      tool: 'pen',
+      color: axisColor,
+      width: 1.35,
+      opacity: 1,
+      points: [
+        { x: x1, y: y1, pressure: 0.7 },
+        { x: x2, y: y2, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'line',
     });
   };
 
@@ -8437,27 +8048,31 @@ function tryBuildOscillationDiagramStrokes(
       shapeType: 'wave-axis-y',
     });
 
-    // 3. Axis tip labels (e.g. K at top-right of vertical arrow, u/x at right of horizontal arrow)
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    // 3. Ruler-style thin ticks on axes + Axis tip labels (K at top-right of vertical arrow, u/x at right of horizontal arrow)
+    addRulerTick(centerX - xMaxPx, axisY - 4.5, centerX - xMaxPx, axisY + 4.5, 'xtick-0');
+    addRulerTick(centerX + xMaxPx, axisY - 4.5, centerX + xMaxPx, axisY + 4.5, 'xtick-1');
+    addRulerTick(centerX - 4.5, yPeakPx, centerX + 4.5, yPeakPx, 'ytick-0');
+
+    texts.push(
+      createMathGraphLabelText(
         opts.yAxisLabel,
-        centerX + 9,
+        centerX + 8,
         axisTopY + 8,
         'left',
-        17.5,
+        18,
         axisColor,
         layerId,
         groupId,
         `st-${nowId}-ly`
       )
     );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         opts.xAxisLabel,
-        centerX + halfW + 9,
-        axisY + 1,
+        centerX + halfW + 8,
+        axisY,
         'left',
-        17.5,
+        18,
         axisColor,
         layerId,
         groupId,
@@ -8524,39 +8139,39 @@ function tryBuildOscillationDiagramStrokes(
     }
 
     // 6. Extrema labels: `-u_max` / `-A` on left, `+u_max` / `+A` on right, `K_max` / `U_max` below top dashed line
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         opts.leftXLabel,
         centerX - xMaxPx,
-        axisY + 16,
+        axisY + 17,
         'center',
-        15.5,
+        16,
         axisColor,
         layerId,
         groupId,
         `st-${nowId}-ll`
       )
     );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         opts.rightXLabel,
         centerX + xMaxPx,
-        axisY + 16,
+        axisY + 17,
         'center',
-        15.5,
+        16,
         axisColor,
         layerId,
         groupId,
         `st-${nowId}-lr`
       )
     );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         opts.topYLabel,
         centerX + 8,
-        opts.inverted ? yPeakPx - 13 : yPeakPx + 15,
+        opts.inverted ? yPeakPx - 14 : yPeakPx + 15,
         'left',
-        15.5,
+        16,
         axisColor,
         layerId,
         groupId,
@@ -8564,7 +8179,7 @@ function tryBuildOscillationDiagramStrokes(
       )
     );
 
-    return { strokes, groupId, kindLabel: opts.kindLabel };
+    return { strokes, texts, groupId, kindLabel: opts.kindLabel };
   };
 
   // CASE 1: Kinetic Energy vs Velocity `K = 1/2 m u^2` or `K - u`
@@ -8692,41 +8307,43 @@ function tryBuildOscillationDiagramStrokes(
       shapeType: 'wave-axis-y',
     });
 
-    // 3. Axis tip labels
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    // 3. Axis tip labels as independent TextObjects ('neohellenic' / Ρέουσα)
+    texts.push(
+      createMathGraphLabelText(
         yAxisTitle,
         centerX + 8,
         centerY - halfH + 8,
         'left',
-        16,
+        18,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-ly`
-      )
-    );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+        `${nowId}-ly`
+      ),
+      createMathGraphLabelText(
         'x',
         centerX + halfW + 8,
         centerY + 2,
         'left',
-        16,
+        18,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-lx`
+        `${nowId}-lx`
       )
     );
 
-    // 4. 4 Blue dashed projection lines from (-A, +F_max) and (+A, -F_max) to axes
+    // 4. 4 Blue dashed projection lines from (-A, +F_max) and (+A, -F_max) to axes + ruler ticks
     const pTL = { x: centerX - xMaxPx, y: centerY - yMaxPx };
     const pBR = { x: centerX + xMaxPx, y: centerY + yMaxPx };
     addDashedGuide(pTL.x, pTL.y, pTL.x, centerY, 1);
     addDashedGuide(pTL.x, pTL.y, centerX, pTL.y, 2);
     addDashedGuide(pBR.x, pBR.y, pBR.x, centerY, 3);
     addDashedGuide(pBR.x, pBR.y, centerX, pBR.y, 4);
+    addRulerTick(pTL.x, centerY - 4.5, pTL.x, centerY + 4.5, 'xtick-l');
+    addRulerTick(pBR.x, centerY - 4.5, pBR.x, centerY + 4.5, 'xtick-r');
+    addRulerTick(centerX - 4.5, pTL.y, centerX + 4.5, pTL.y, 'ytick-t');
+    addRulerTick(centerX - 4.5, pBR.y, centerX + 4.5, pBR.y, 'ytick-b');
 
     // 5. Red negative-slope straight line from (-A, +F_max) through (0,0) to (+A, -F_max)
     strokes.push({
@@ -8746,61 +8363,56 @@ function tryBuildOscillationDiagramStrokes(
     });
 
     // 6. Labels: `-A` below -A, `+A` above +A, `+F_max` right of axis, `-F_max` left of axis
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         '-A',
         centerX - xMaxPx,
         centerY + 15,
         'center',
-        13.5,
+        16,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-la1`
-      )
-    );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+        `${nowId}-la1`
+      ),
+      createMathGraphLabelText(
         '+A',
         centerX + xMaxPx,
-        centerY - 14,
+        centerY - 15,
         'center',
-        13.5,
+        16,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-la2`
-      )
-    );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+        `${nowId}-la2`
+      ),
+      createMathGraphLabelText(
         topValLabel,
-        centerX + 7,
+        centerX + 8,
         centerY - yMaxPx,
         'left',
-        13.5,
+        16,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-lf1`
-      )
-    );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+        `${nowId}-lf1`
+      ),
+      createMathGraphLabelText(
         botValLabel,
-        centerX - 7,
+        centerX - 8,
         centerY + yMaxPx,
         'right',
-        13.5,
+        16,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-lf2`
+        `${nowId}-lf2`
       )
     );
 
     return {
       strokes,
+      texts,
       groupId,
       kindLabel: isForceDisplacement ? `Διάγραμμα ${yAxisTitle}(x)` : 'Διάγραμμα a(x)',
     };
@@ -8899,9 +8511,11 @@ function tryBuildOscillationDiagramStrokes(
       shapeType: 'wave-axis-x',
     });
 
-    // 3. Upper & Lower Blue Dashed Envelope Lines
+    // 3. Upper & Lower Blue Dashed Envelope Lines + ruler ticks on vertical axis
     addDashedGuide(axisLeftX, centerY - ampPx, axisRightX - 14, centerY - ampPx, 1);
     addDashedGuide(axisLeftX, centerY + ampPx, axisRightX - 14, centerY + ampPx, 2);
+    addRulerTick(axisLeftX - 4.5, centerY - ampPx, axisLeftX + 4.5, centerY - ampPx, 'ytick-p');
+    addRulerTick(axisLeftX - 4.5, centerY + ampPx, axisLeftX + 4.5, centerY + ampPx, 'ytick-n');
 
     // 4. Wave curve (1.5 periods)
     const waveW = axisRightX - axisLeftX - 18;
@@ -8937,67 +8551,61 @@ function tryBuildOscillationDiagramStrokes(
     });
 
     // 5. Labels: yVar at top, t at right, +Max and -Max to the left of vertical axis
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         yVar,
         axisLeftX + 8,
         centerY - halfH * 0.9 + 6,
         'left',
-        16,
+        18,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-ly`
-      )
-    );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+        `${nowId}-ly`
+      ),
+      createMathGraphLabelText(
         't',
         axisRightX + 7,
         centerY + 2,
         'left',
-        16,
+        18,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-lx`
-      )
-    );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+        `${nowId}-lx`
+      ),
+      createMathGraphLabelText(
         posLabel,
-        axisLeftX - 6,
+        axisLeftX - 7,
         centerY - ampPx,
         'right',
-        13,
+        15,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-lp`
-      )
-    );
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+        `${nowId}-lp`
+      ),
+      createMathGraphLabelText(
         negLabel,
-        axisLeftX - 6,
+        axisLeftX - 7,
         centerY + ampPx,
         'right',
-        13,
+        15,
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-ln`
+        `${nowId}-ln`
       )
     );
 
-    return { strokes, groupId, kindLabel: `Διάγραμμα Ταλάντωσης ${yVar}(t)` };
+    return { strokes, texts, groupId, kindLabel: `Διάγραμμα Ταλάντωσης ${yVar}(t)` };
   }
 
   return null;
 }
 
 /**
- * Generates editable vector `StrokeObject[]` (grouped under a single `math-graph-grp-...` ID)
+ * Generates editable vector `StrokeObject[]` and independent `TextObject[]` (grouped under a single `math-graph-grp-...` ID)
  * representing a Cartesian $(x, y)$ coordinate diagram and plotted curve(s) for any equation:
  * - Physics Oscillation Diagrams (`K = 1/2 m u^2`, `U = 1/2 D x^2`, `ΣF = -D x`, `a = -ω^2 x`, `x = A ημ(ωt)`, etc.)
  * - Circle (`x^2 + y^2 = 1`, `(x - a)^2 + (y - b)^2 = R^2`)
@@ -9017,7 +8625,7 @@ export function buildMathGraphStrokesFromEquation(
   curveColor = '#dc2626',
   axisColor = '#0f172a',
   layerId = 'layer-1'
-): { strokes: StrokeObject[]; groupId: string; kindLabel: string } | null {
+): { strokes: StrokeObject[]; texts: TextObject[]; groupId: string; kindLabel: string } | null {
   // First check specialized Physics Oscillation Diagrams (K-u, U-x, K-x, E-x, ΣF-x, a-x, x-t, u-t, a-t)
   const oscDiag = tryBuildOscillationDiagramStrokes(
     rawEquation,
@@ -9058,6 +8666,7 @@ export function buildMathGraphStrokesFromEquation(
   const nowId = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
 
   const strokes: StrokeObject[] = [];
+  const texts: TextObject[] = [];
 
   // 1. Horizontal X-axis with open arrow at right
   strokes.push({
@@ -9095,73 +8704,35 @@ export function buildMathGraphStrokesFromEquation(
     shapeType: 'wave-axis-y',
   });
 
-  // 3. Vector label 'x' near right arrow tip (drawn as 2 strokes so it scales & moves with the diagram)
-  const lx = centerX + halfW + 10;
-  const ly = centerY - 14;
-  strokes.push({
-    id: `st-${nowId}-lblx1`,
-    tool: 'pen',
-    color: axisColor,
-    width: 2.1,
-    opacity: 1,
-    points: [
-      { x: lx - 5, y: ly - 5.5, pressure: 0.7 },
-      { x: lx + 5, y: ly + 5.5, pressure: 0.7 },
-    ],
-    layerId,
-    groupId,
-    isShape: true,
-    shapeType: 'wave-axis-x',
-  });
-  strokes.push({
-    id: `st-${nowId}-lblx2`,
-    tool: 'pen',
-    color: axisColor,
-    width: 2.1,
-    opacity: 1,
-    points: [
-      { x: lx - 5, y: ly + 5.5, pressure: 0.7 },
-      { x: lx + 5, y: ly - 5.5, pressure: 0.7 },
-    ],
-    layerId,
-    groupId,
-    isShape: true,
-    shapeType: 'wave-axis-x',
-  });
-
-  // 4. Vector label 'y' near top arrow tip
-  const yx = centerX - 18;
-  const yy = centerY - halfH + 6;
-  strokes.push({
-    id: `st-${nowId}-lbly1`,
-    tool: 'pen',
-    color: axisColor,
-    width: 2.1,
-    opacity: 1,
-    points: [
-      { x: yx - 4.5, y: yy - 6, pressure: 0.7 },
-      { x: yx + 0.5, y: yy + 1, pressure: 0.7 },
-    ],
-    layerId,
-    groupId,
-    isShape: true,
-    shapeType: 'wave-axis-y',
-  });
-  strokes.push({
-    id: `st-${nowId}-lbly2`,
-    tool: 'pen',
-    color: axisColor,
-    width: 2.1,
-    opacity: 1,
-    points: [
-      { x: yx + 5.5, y: yy - 6, pressure: 0.7 },
-      { x: yx - 3.5, y: yy + 8.5, pressure: 0.7 },
-    ],
-    layerId,
-    groupId,
-    isShape: true,
-    shapeType: 'wave-axis-y',
-  });
+  // 3. Independent TextObjects 'x' and 'y' near arrow tips ('neohellenic' / Ρέουσα)
+  const lx = centerX + halfW + 9;
+  const ly = centerY - 12;
+  const yx = centerX - 16;
+  const yy = centerY - halfH + 8;
+  texts.push(
+    createMathGraphLabelText(
+      'x',
+      lx,
+      ly,
+      'center',
+      18,
+      axisColor,
+      layerId,
+      groupId,
+      `${nowId}-lx`
+    ),
+    createMathGraphLabelText(
+      'y',
+      yx,
+      yy,
+      'center',
+      18,
+      axisColor,
+      layerId,
+      groupId,
+      `${nowId}-ly`
+    )
+  );
 
   const addCurveStroke = (pts: { x: number; y: number }[], idx: number, asLineShape = false) => {
     if (pts.length < 2) return;
@@ -9320,19 +8891,19 @@ export function buildMathGraphStrokesFromEquation(
       id: `math-graph-lbl-${nowId}-xtick-${tId}`,
       tool: 'pen',
       color: axisColor,
-      width: 2.1,
+      width: 1.35,
       opacity: 1,
       points: [
-        { x: px, y: centerY - 6.5, pressure: 0.7 },
-        { x: px, y: centerY + 6.5, pressure: 0.7 },
+        { x: px, y: centerY - 4.5, pressure: 0.7 },
+        { x: px, y: centerY + 4.5, pressure: 0.7 },
       ],
       layerId,
       groupId,
       isShape: true,
-      shapeType: 'wave-axis-x',
+      shapeType: 'line',
     });
 
-    const fontH = 14.5;
+    const fontH = 15;
     const curvePts = getDenseCurvePointsForClearance();
     const outDir = px < centerX ? -1 : 1;
     const dxCandidates = [
@@ -9346,12 +8917,12 @@ export function buildMathGraphStrokesFromEquation(
     const aboveOptions = [placeAbove, !placeAbove];
 
     let bestAx = px + xLabelOffset;
-    let bestAy = placeAbove ? centerY - 18 : centerY + 19;
+    let bestAy = placeAbove ? centerY - 17 : centerY + 18;
     let bestBox = computeLabelBox(labelText, bestAx, bestAy, 'center', fontH);
     let bestScore = -Infinity;
 
     for (const isAbove of aboveOptions) {
-      const candY = isAbove ? centerY - 18 : centerY + 19;
+      const candY = isAbove ? centerY - 17 : centerY + 18;
       for (const dx of dxCandidates) {
         const candX = px + dx;
         if (Math.abs(candX - centerX) < 10) continue;
@@ -9372,17 +8943,17 @@ export function buildMathGraphStrokesFromEquation(
     }
 
     placedLabelBoxes.push(bestBox);
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         labelText,
         bestAx,
         bestAy,
         'center',
-        fontH,
+        16,
         axisColor,
         layerId,
         groupId,
-        `math-graph-lbl-${nowId}-xlbl-${tId}`
+        `${nowId}-xlbl-${tId}`
       )
     );
   };
@@ -9399,19 +8970,19 @@ export function buildMathGraphStrokesFromEquation(
       id: `math-graph-lbl-${nowId}-ytick-${tId}`,
       tool: 'pen',
       color: axisColor,
-      width: 2.1,
+      width: 1.35,
       opacity: 1,
       points: [
-        { x: centerX - 6.5, y: py, pressure: 0.7 },
-        { x: centerX + 6.5, y: py, pressure: 0.7 },
+        { x: centerX - 4.5, y: py, pressure: 0.7 },
+        { x: centerX + 4.5, y: py, pressure: 0.7 },
       ],
       layerId,
       groupId,
       isShape: true,
-      shapeType: 'wave-axis-y',
+      shapeType: 'line',
     });
 
-    const fontH = 14.5;
+    const fontH = 15;
     const curvePts = getDenseCurvePointsForClearance();
     const outDirY = py < centerY ? -1 : 1;
     const dyCandidates = [
@@ -9424,14 +8995,14 @@ export function buildMathGraphStrokesFromEquation(
     ];
     const leftOptions = [placeLeft, !placeLeft];
 
-    let bestAx = placeLeft ? centerX - 10 : centerX + 10;
+    let bestAx = placeLeft ? centerX - 9 : centerX + 9;
     let bestAy = py + yLabelOffset;
     let bestAlign: 'left' | 'right' = placeLeft ? 'right' : 'left';
     let bestBox = computeLabelBox(labelText, bestAx, bestAy, bestAlign, fontH);
     let bestScore = -Infinity;
 
     for (const isLeft of leftOptions) {
-      const candX = isLeft ? centerX - 10 : centerX + 10;
+      const candX = isLeft ? centerX - 9 : centerX + 9;
       const candAlign: 'left' | 'right' = isLeft ? 'right' : 'left';
       for (const dy of dyCandidates) {
         const candY = py + dy;
@@ -9454,17 +9025,17 @@ export function buildMathGraphStrokesFromEquation(
     }
 
     placedLabelBoxes.push(bestBox);
-    strokes.push(
-      ...createVectorMathLabelStrokes(
+    texts.push(
+      createMathGraphLabelText(
         labelText,
         bestAx,
         bestAy,
         bestAlign,
-        fontH,
+        16,
         axisColor,
         layerId,
         groupId,
-        `math-graph-lbl-${nowId}-ylbl-${tId}`
+        `${nowId}-ylbl-${tId}`
       )
     );
   };
@@ -9630,7 +9201,7 @@ export function buildMathGraphStrokesFromEquation(
               addDashedCoordProjection(px1, py1, '1', formatNumLabel(slope));
             }
           }
-          return { strokes, groupId, kindLabel };
+          return { strokes, texts, groupId, kindLabel };
         }
       }
 
@@ -9717,7 +9288,7 @@ export function buildMathGraphStrokesFromEquation(
           addDashedCoordProjection(cxPx, cyPx, formatNumLabel(x0), formatNumLabel(y0));
         }
 
-        return { strokes, groupId, kindLabel };
+        return { strokes, texts, groupId, kindLabel };
       }
 
       // 3. VERTICAL PARABOLA: A != 0, C ≈ 0, B ≈ 0, E != 0 -> y = a*x^2 + b*x + c
@@ -9783,7 +9354,7 @@ export function buildMathGraphStrokesFromEquation(
           }
         }
 
-        return { strokes, groupId, kindLabel };
+        return { strokes, texts, groupId, kindLabel };
       }
 
       // 4. HORIZONTAL PARABOLA: C != 0, A ≈ 0, B ≈ 0, D != 0 -> x = a*y^2 + b*y + c (e.g. y^2 = 2px)
@@ -9835,7 +9406,7 @@ export function buildMathGraphStrokesFromEquation(
           }
         }
 
-        return { strokes, groupId, kindLabel };
+        return { strokes, texts, groupId, kindLabel };
       }
 
       // 5. CONIC HYPERBOLA: B ≈ 0 and A * C < 0 (e.g. x^2/a^2 - y^2/b^2 = 1 or y^2/b^2 - x^2/a^2 = 1)
@@ -9884,7 +9455,7 @@ export function buildMathGraphStrokesFromEquation(
             addXAxisTickAndLabel(pxL, formatNumLabel(x0 - aSemi), false, -6);
             addXAxisTickAndLabel(pxR, formatNumLabel(x0 + aSemi), false, 6);
           }
-          return { strokes, groupId, kindLabel };
+          return { strokes, texts, groupId, kindLabel };
         } else {
           // y = y0 ± b * sqrt(1 + (x - x0)^2 / a^2)
           const branchTop: { x: number; y: number }[] = [];
@@ -9916,7 +9487,7 @@ export function buildMathGraphStrokesFromEquation(
             addYAxisTickAndLabel(pyT, formatNumLabel(y0 + bSemi), false, -8);
             addYAxisTickAndLabel(pyB, formatNumLabel(y0 - bSemi), false, 8);
           }
-          return { strokes, groupId, kindLabel };
+          return { strokes, texts, groupId, kindLabel };
         }
       }
 
@@ -9952,7 +9523,7 @@ export function buildMathGraphStrokesFromEquation(
         }
         addCurveStroke(branch1, 0, false);
         addCurveStroke(branch2, 1, false);
-        return { strokes, groupId, kindLabel };
+        return { strokes, texts, groupId, kindLabel };
       }
     }
   }
@@ -10054,7 +9625,7 @@ export function buildMathGraphStrokesFromEquation(
       addCurveStroke(currentBranch, branchIdx++, false);
     }
 
-    if (strokes.length > 6 && /SIN|COS/i.test(fnStr) && maxExtremaY > 1e-4) {
+    if (strokes.length > 2 && /SIN|COS/i.test(fnStr) && maxExtremaY > 1e-4) {
       // For sine / cosine functions (sin(x), ημ(χ), cos(x), συν(χ)), mark +ymax and -ymax on Y-axis with dashed amplitude guides!
       const pyTop = centerY - (maxExtremaY / ySpan) * plotHalfH;
       const pyBot = centerY + (maxExtremaY / ySpan) * plotHalfH;
@@ -10094,7 +9665,7 @@ export function buildMathGraphStrokesFromEquation(
       });
       addYAxisTickAndLabel(pyTop, topLbl, true, -9);
       addYAxisTickAndLabel(pyBot, botLbl, true, 10);
-    } else if (strokes.length > 6 && isQuantitative) {
+    } else if (strokes.length > 2 && isQuantitative) {
       // 1. Y-intercept (x = 0, y0 = f(0))
       const y0Val = fnEval(0);
       if (Number.isFinite(y0Val) && Math.abs(y0Val) > 1e-4 && Math.abs(y0Val) <= ySpan * 0.95) {
@@ -10149,8 +9720,8 @@ export function buildMathGraphStrokesFromEquation(
       }
     }
 
-    if (strokes.length > 6) {
-      return { strokes, groupId, kindLabel };
+    if (strokes.length > 2) {
+      return { strokes, texts, groupId, kindLabel };
     }
   }
 
@@ -10333,7 +9904,7 @@ export function buildMathGraphStrokesFromEquation(
     }
   }
 
-  if (strokes.length <= 6) {
+  if (strokes.length <= 2) {
     return null;
   }
 
@@ -10398,7 +9969,7 @@ export function buildMathGraphStrokesFromEquation(
     }
   }
 
-  return { strokes, groupId, kindLabel };
+  return { strokes, texts, groupId, kindLabel };
 }
 
 /**
