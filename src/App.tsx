@@ -27496,12 +27496,12 @@ export default function App() {
                       <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                         {(
                           [
-                            { id: 'calligraphic', label: '✍️ Καλλιγραφική' },
-                            { id: 'marker', label: '✒️ Πένα' },
-                            { id: 'mansalva', label: '🖊️ Μαρκαδόρος' },
-                            { id: 'handwritten', label: '📝 Χειρόγραφο' },
-                            { id: 'neohellenic', label: '🖋️ Ρέουσα' },
-                            { id: 'sans', label: '🔤 Τυπωμένο' },
+                            { id: 'calligraphic', label: 'Καλλιγραφική' },
+                            { id: 'marker', label: 'Πένα' },
+                            { id: 'mansalva', label: 'Μαρκαδόρος' },
+                            { id: 'handwritten', label: 'Χειρόγραφο' },
+                            { id: 'neohellenic', label: 'Ρέουσα' },
+                            { id: 'sans', label: 'Τυπωμένο' },
                           ] as { id: TextFontStyle; label: string }[]
                         ).map((fOpt) => (
                           <button
