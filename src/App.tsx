@@ -11983,7 +11983,7 @@ export default function App() {
                   curMassCy,
                   forceLineX,
                   curMassCy - fElUpward,
-                  '#059669',
+                  '#e11d48',
                   'Fελ',
                   'left'
                 );
@@ -12012,14 +12012,14 @@ export default function App() {
                     curMassCy,
                     forceLineX,
                     curMassCy - fElUpward,
-                    '#059669',
+                    '#e11d48',
                     'Fελ',
                     bothDownwards ? 'left' : 'right'
                   );
                 }
               }
             }
-            // Restoring Force ΣF = -k*x placed cleanly to the right of the mass box!
+            // Restoring Force ΣF = -k*x placed cleanly to the right of the mass box (Green #16a34a, matching a(t) since ΣF = m·a)!
             if (Math.abs(netFLen) >= 4) {
               const sfOriginX = curMassCx + perpUx * (massW / 2 + 16);
               const sfOriginY = curMassCy + perpUy * (massW / 2 + 16);
@@ -12028,7 +12028,7 @@ export default function App() {
                 sfOriginY,
                 sfOriginX + oscUx * netFLen,
                 sfOriginY + oscUy * netFLen,
-                '#e11d48',
+                '#16a34a',
                 'ΣF'
               );
             }
@@ -12036,8 +12036,8 @@ export default function App() {
 
           // 6D. Draw the 3 Textbook Live Animated Diagrams directly on the grid paper:
           //     - x - t [Red #ef4444] + Blue Dashed +A/-A lines aligned 1:1 with the spring's +A/-A lines!
-          //     - u - t [Green #16a34a] + Blue Dashed envelope lines
-          //     - a - t [Purple #9333ea] + Blue Dashed envelope lines
+          //     - u - t [Purple #9333ea] + Blue Dashed envelope lines
+          //     - a - t [Green #16a34a, matching ΣF since ΣF = m·a] + Blue Dashed envelope lines
           const visibleGraphKeys = (['xt', 'vt', 'at'] as const).filter(
             (k) => activeSpringSim.graphs[k]?.visible
           );
@@ -12129,11 +12129,11 @@ export default function App() {
                 : gKey === 'vt'
                 ? {
                     yLabel: 'u',
-                    curveColor: '#16a34a',
+                    curveColor: '#9333ea',
                   }
                 : {
                     yLabel: 'a',
-                    curveColor: '#9333ea',
+                    curveColor: '#16a34a',
                   };
 
             const isDarkGrid = activePage.template === 'dark-grid';
@@ -29183,7 +29183,7 @@ export default function App() {
 
                               <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
                                 <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
                                   <span>Ταχύτητα – Χρόνος υ(t)</span>
                                 </span>
                                 <input
@@ -29199,13 +29199,13 @@ export default function App() {
                                       },
                                     }));
                                   }}
-                                  className="accent-emerald-500 w-4 h-4 cursor-pointer"
+                                  className="accent-purple-600 w-4 h-4 cursor-pointer"
                                 />
                               </label>
 
                               <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
                                 <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
+                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
                                   <span>Επιτάχυνση – Χρόνος α(t)</span>
                                 </span>
                                 <input
@@ -29221,7 +29221,7 @@ export default function App() {
                                       },
                                     }));
                                   }}
-                                  className="accent-purple-600 w-4 h-4 cursor-pointer"
+                                  className="accent-emerald-600 w-4 h-4 cursor-pointer"
                                 />
                               </label>
                             </div>
