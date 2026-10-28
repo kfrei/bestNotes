@@ -27553,11 +27553,10 @@ export default function App() {
                         A+
                       </button>
 
-                      <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
-
-                      {/* Power Caret (^), Subscript (_), Text2Math (∑), & 1-Click Equation Diagram Plotter in Text Bar */}
+                      {/* Power Caret (^) & Subscript (_) in Text Bar */}
                       {(!selTxt || !selTxt.isMath || editingTextId === selTxt.id) && (
                         <>
+                          <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
                           <button
                             onMouseDown={(ev) => ev.preventDefault()}
                             onClick={() => handleInsertPowerCaretInText(selTxt?.id)}
@@ -27573,49 +27572,6 @@ export default function App() {
                             title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max, K_max"
                           >
                             <span>xᵢ (_)</span>
-                          </button>
-                        </>
-                      )}
-
-                      {selTxt && (!selTxt.isMath || editingTextId === selTxt.id) && (
-                        <button
-                          onMouseDown={(ev) => ev.preventDefault()}
-                          onClick={() => handleConvertTextToMath(selTxt.id)}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full font-bold transition cursor-pointer bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300"
-                          title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
-                        >
-                          <span>Text2Math</span>
-                        </button>
-                      )}
-
-                      {selTxt && (
-                        <button
-                          onMouseDown={(ev) => ev.preventDefault()}
-                          onClick={() => handleCreateMathGraphFromTextBox(selTxt.id)}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-2xs transition cursor-pointer"
-                          title="Διάγραμμα: Αυτόματη σχεδίαση διαγράμματος (ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο) δίπλα στην εξίσωση!"
-                        >
-                          <span>Διάγραμμα</span>
-                        </button>
-                      )}
-
-                      {selTxt && (
-                        <>
-                          <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
-                          <button
-                            onClick={() => {
-                              updateActivePage((page) => ({
-                                ...page,
-                                texts: (page.texts || []).filter((t) => t.id !== selTxt.id),
-                              }));
-                              setSelectedTextId(null);
-                              setEditingTextId(null);
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold cursor-pointer"
-                            title="Διαγραφή επιλεγμένου κειμένου"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Διαγραφή</span>
                           </button>
                         </>
                       )}
