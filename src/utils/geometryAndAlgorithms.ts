@@ -7601,19 +7601,24 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/(?<![A-Z])\b[fghyFGH](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*[xχ]\s*\)/g, 'y')
     .replace(/(?<![A-Z])\b[xuvXUV](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*t\s*\)/g, 'y');
 
-  // Remove subscripts like x_0, y_0, u_0, v_0 -> treat as symbolic positive constant k
+  // Remove subscripts like x_0, y_0, u_0, v_0 -> treat as symbolic positive constant b,
+  // and amplitude/extrema subscripts like u_{max}, u_{mαx}, x_{max}, a_{max}, F_{max}, K_{max}, U_{max} -> treat as symbolic amplitude A
+  // (CRITICAL: prevents the trailing 'x' in 'max'/'mαx' from being mistaken for the horizontal coordinate variable x!)
   s = s
+    .replace(/\b([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[aα]x\s*\}?/gi, 'A')
+    .replace(/\b([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[iι]n\s*\}?/gi, 'b')
     .replace(/\b([xyuvα-ωa-z])\s*_\s*\{?\s*0\s*\}?/gi, 'b')
     .replace(/\\[a-zA-Z]+/g, '');
 
   // Replace Greek χ/Χ with x, and ψ/Ψ with y
   s = s.replace(/[χΧ]/g, 'x').replace(/[ψΨ]/g, 'y');
 
-  // If equation has 't' on RHS and no 'x' (e.g. x = 2t + 1 or u = a*t), map LHS variable to y and t to x
-  if (!s.includes('y') && /\bt\b/.test(s) && s.includes('=')) {
+  // If equation has 't' on RHS and no 'x' (e.g. x = 2t + 1, u = a*t, or u = A*COS(ωt + π/2)), map LHS variable to y and t to x
+  // Note: use (?<![a-zA-Z])t(?![a-zA-Z]) instead of \bt\b so `2t`, `ωt`, `πt` also match cleanly!
+  if (!s.includes('y') && /(?<![a-zA-Z])t(?![a-zA-Z])/.test(s) && s.includes('=')) {
     const [lhs, rhs] = s.split('=');
-    if (lhs && rhs && /\bt\b/.test(rhs)) {
-      s = `y = ${rhs.replace(/\bt\b/g, 'x')}`;
+    if (lhs && rhs && /(?<![a-zA-Z])t(?![a-zA-Z])/.test(rhs)) {
+      s = `y = ${rhs.replace(/(?<![a-zA-Z])t(?![a-zA-Z])/g, 'x')}`;
     }
   }
 
@@ -8322,9 +8327,14 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/6\.283\d*|6\.28\b/g, '2*π')
     .replace(/\\alpha\b/g, 'α')
     .replace(/\\mu\b/g, 'm')
+    .replace(/\\sigma\s*\\upsilon\s*\\nu/gi, 'συν')
+    .replace(/\\eta\s*\\mu/gi, 'ημ')
     .replace(/\\(?:upsilon|nu)\b/g, 'u')
     .replace(/\\kappa\b/g, 'k')
-    .replace(/\\text\{([^}]*)\}/g, '$1')
+    .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+    .replace(/\\left\b|\\right\b/g, '')
+    .replace(/_\{([^}]*)\}/g, '_$1')
+    .replace(/m[αa][xχ]/gi, 'max')
     .replace(/\\(?:cdot|times)\b/g, '*')
     .replace(/[·×∙]/g, '*')
     .replace(/[−–—]/g, '-')
@@ -8334,7 +8344,7 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/Ε/g, 'E')
     .replace(/Α/g, 'A')
     .replace(/Υ/g, 'U')
-    .replace(/τ(?=\s*\))/g, 't')
+    .replace(/τ(?=\s*[)+-])/g, 't')
     .replace(/(\d),(\d)/g, '$1.$2')
     .replace(/\s+/g, ' ')
     .trim();
@@ -8823,9 +8833,9 @@ function tryBuildOscillationDiagramStrokes(
     };
   }
 
-  // CASE 6: Time Oscillation Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)`
+  // CASE 6: Time Oscillation Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)` (including initial phase φ_0 like `u = u_max συν(ωt + π/2)`)
   const timeOscMatch = compact.match(
-    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A|u_?max|v_?max|a_?max|ΣF_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?(.*?)[tτ](?:\)|$)/i
+    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A|[uvυ]_?max|[aα]_?max|ΣF_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?(.*?)[tτ]([^)]*)\)?$/i
   );
   const shorthandTimeMatch = compact.match(/^(x|u|υ|v|a|α|ΣF|F)\s*-\s*t$/i);
 
@@ -8844,6 +8854,9 @@ function tryBuildOscillationDiagramStrokes(
 
     let waveKind: 'sin' | 'cos' | '-sin' | '-cos' =
       yVar === 'u' ? 'cos' : yVar === 'a' || yVar === 'ΣF' || yVar === 'F' ? '-sin' : 'sin';
+    let baseIsCos = waveKind === 'cos';
+    let baseSign = waveKind === '-sin' ? -1 : 1;
+    let phaseRad = 0;
 
     let numAmp = '';
     let halfPeriodLabel = 'T/2';
@@ -8857,7 +8870,35 @@ function tryBuildOscillationDiagramStrokes(
       }
       const trig = timeOscMatch[4].toLowerCase();
       const isCos = trig === 'συν' || trig === 'συνημ' || trig === 'cos';
-      waveKind = isCos ? (isNeg ? '-cos' : 'cos') : isNeg ? '-sin' : 'sin';
+      baseIsCos = isCos;
+      baseSign = isNeg ? -1 : 1;
+
+      // Parse optional initial phase φ_0 after `t` (e.g. `+π/2`, `+(π)/(2)`, `-π/2`, `+π`, `+3*π/2`, `+π/6`)
+      const rawPhase = (timeOscMatch[6] || '').replace(/[()\s{}]/g, '');
+      if (rawPhase) {
+        const phasePiMatch = rawPhase.match(/^([+-])(?:([0-9.]+)\*?)?π(?:\/([0-9.]+))?$/);
+        if (phasePiMatch) {
+          const sgn = phasePiMatch[1] === '-' ? -1 : 1;
+          const pNum = phasePiMatch[2] ? parseFloat(phasePiMatch[2]) : 1;
+          const pDen = phasePiMatch[3] ? parseFloat(phasePiMatch[3]) : 1;
+          phaseRad = sgn * (pNum / Math.max(1e-6, pDen)) * Math.PI;
+        } else {
+          const parsedPhase = parseFloat(rawPhase);
+          if (Number.isFinite(parsedPhase)) {
+            phaseRad = parsedPhase;
+          }
+        }
+      }
+
+      // Determine effective waveKind ('sin' | 'cos' | '-sin' | '-cos') after applying phase shift φ_0
+      // e.g. for `u = u_max συν(ωt + π/2)`, cos(θ + π/2) = -sin(θ) -> effective waveKind is '-sin'!
+      const v0 = baseSign * (baseIsCos ? Math.cos(phaseRad) : Math.sin(phaseRad));
+      const dv0 = baseSign * (baseIsCos ? -Math.sin(phaseRad) : Math.cos(phaseRad));
+      if (Math.abs(v0) >= 0.7) {
+        waveKind = v0 >= 0 ? 'cos' : '-cos';
+      } else {
+        waveKind = dv0 >= 0 ? 'sin' : '-sin';
+      }
 
       // Parse angular frequency ω multiplying `t` inside trig argument to determine quantitative vs qualitative period T = 2π/ω
       const rawOmega = (timeOscMatch[5] || '')
@@ -9001,14 +9042,7 @@ function tryBuildOscillationDiagramStrokes(
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
       const theta = u * Math.PI * 3; // 1.5 periods
-      const val =
-        waveKind === 'sin'
-          ? Math.sin(theta)
-          : waveKind === 'cos'
-          ? Math.cos(theta)
-          : waveKind === '-sin'
-          ? -Math.sin(theta)
-          : -Math.cos(theta);
+      const val = baseSign * (baseIsCos ? Math.cos(theta + phaseRad) : Math.sin(theta + phaseRad));
       wavePts.push({
         x: axisLeftX + u * waveW,
         y: centerY - val * ampPx,
