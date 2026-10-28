@@ -8021,8 +8021,8 @@ function createMathGraphLabelText(
   idPrefix: string
 ): TextObject {
   const [mainPart, subPart] = label.split('_');
-  const mainW = mainPart.length * (fontSize * 0.54);
-  const subW = subPart ? subPart.length * (fontSize * 0.38) + 2 : 0;
+  const mainW = mainPart.length * (fontSize * 0.58);
+  const subW = subPart ? subPart.length * (fontSize * 0.42) + 2 : 0;
   const estW = mainW + subW + 8;
   const estH = fontSize * 1.1;
   const x =
@@ -8423,8 +8423,16 @@ function tryBuildOscillationDiagramStrokes(
   if (isForceDisplacement || isAccelDisplacement) {
     const isSigmaF = /ΣF/i.test(compact);
     const yAxisTitle = isForceDisplacement ? (isSigmaF ? 'ΣF' : 'F') : 'a';
-    const topValLabel = isForceDisplacement ? '+F_max' : '+a_max';
-    const botValLabel = isForceDisplacement ? '-F_max' : '-a_max';
+    const topValLabel = isForceDisplacement
+      ? isSigmaF
+        ? '+ΣF_max'
+        : '+F_max'
+      : '+a_max';
+    const botValLabel = isForceDisplacement
+      ? isSigmaF
+        ? '-ΣF_max'
+        : '-F_max'
+      : '-a_max';
     const xMaxPx = halfW * 0.64;
     const yMaxPx = halfH * 0.64;
 
@@ -8577,7 +8585,7 @@ function tryBuildOscillationDiagramStrokes(
 
   // CASE 6: Time Oscillation Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)`
   const timeOscMatch = compact.match(
-    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?.*t/i
+    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|ΣF_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?.*t/i
   );
   const shorthandTimeMatch = compact.match(/^(x|u|υ|v|a|α|ΣF|F)\s*-\s*t$/i);
 
@@ -8617,6 +8625,8 @@ function tryBuildOscillationDiagramStrokes(
       ? '+u_max'
       : yVar === 'a'
       ? '+a_max'
+      : yVar === 'ΣF'
+      ? '+ΣF_max'
       : '+F_max';
     const negLabel = numAmp
       ? `-${numAmp}`
@@ -8626,6 +8636,8 @@ function tryBuildOscillationDiagramStrokes(
       ? '-u_max'
       : yVar === 'a'
       ? '-a_max'
+      : yVar === 'ΣF'
+      ? '-ΣF_max'
       : '-F_max';
 
     const axisLeftX = centerX - halfW * 0.72;
