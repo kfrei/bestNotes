@@ -31687,6 +31687,15 @@ export default function App() {
                                 10
                               );
                             }
+                            if (
+                              txt.isMath &&
+                              (resizeHandle === 'n' ||
+                                resizeHandle === 's' ||
+                                resizeHandle === 'e' ||
+                                resizeHandle === 'w')
+                            ) {
+                              resizeHandle = null;
+                            }
 
                             const isTouchOrPen =
                               ev.pointerType === 'touch' || ev.pointerType === 'pen';
@@ -31779,6 +31788,15 @@ export default function App() {
                                 10
                               );
                             }
+                            if (
+                              txt.isMath &&
+                              (resizeHandle === 'n' ||
+                                resizeHandle === 's' ||
+                                resizeHandle === 'e' ||
+                                resizeHandle === 'w')
+                            ) {
+                              resizeHandle = null;
+                            }
 
                             const curBoxW = (txt.isMath ? 0 : txt.boxWidth) || ev.currentTarget.offsetWidth || 180;
                             const curBoxH = (txt.isMath ? 0 : txt.boxHeight) || ev.currentTarget.offsetHeight || 48;
@@ -31850,77 +31868,81 @@ export default function App() {
                               : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
                           }`}
                         >
-                          {/* 8 Finger-Friendly 32px Resize Handles (26px outside + 6px inside border) so interior stays free & edges/corners grab easily on iPad! */}
+                          {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (narrower side pills + small corner circles) */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <>
-                              {/* Top Edge Handle (N) */}
-                              <div
-                                data-text-resize="n"
-                                style={{ touchAction: 'none' }}
-                                title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute left-3 right-3 -top-[26px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
-                              >
-                                <div className="w-8 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
-                              </div>
-                              {/* Bottom Edge Handle (S) */}
-                              <div
-                                data-text-resize="s"
-                                style={{ touchAction: 'none' }}
-                                title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute left-3 right-3 -bottom-[26px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
-                              >
-                                <div className="w-8 h-3.5 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
-                              </div>
-                              {/* Left Edge Handle (W) */}
-                              <div
-                                data-text-resize="w"
-                                style={{ touchAction: 'none' }}
-                                title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute -left-[26px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
-                              >
-                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
-                              </div>
-                              {/* Right Edge Handle (E) */}
-                              <div
-                                data-text-resize="e"
-                                style={{ touchAction: 'none' }}
-                                title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                className="absolute -right-[26px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
-                              >
-                                <div className="w-3.5 h-8 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
-                              </div>
-                              {/* 4 Corner Handles (NW, NE, SW, SE) — 32x32px touch zones */}
+                              {!txt.isMath && (
+                                <>
+                                  {/* Top Edge Handle (N) */}
+                                  <div
+                                    data-text-resize="n"
+                                    style={{ touchAction: 'none' }}
+                                    title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    className="absolute left-3 right-3 -top-[18px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
+                                  >
+                                    <div className="w-5 h-2 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                  </div>
+                                  {/* Bottom Edge Handle (S) */}
+                                  <div
+                                    data-text-resize="s"
+                                    style={{ touchAction: 'none' }}
+                                    title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    className="absolute left-3 right-3 -bottom-[18px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
+                                  >
+                                    <div className="w-5 h-2 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                  </div>
+                                  {/* Left Edge Handle (W) */}
+                                  <div
+                                    data-text-resize="w"
+                                    style={{ touchAction: 'none' }}
+                                    title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    className="absolute -left-[18px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
+                                  >
+                                    <div className="w-2 h-5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                  </div>
+                                  {/* Right Edge Handle (E) */}
+                                  <div
+                                    data-text-resize="e"
+                                    style={{ touchAction: 'none' }}
+                                    title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    className="absolute -right-[18px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
+                                  >
+                                    <div className="w-2 h-5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                  </div>
+                                </>
+                              )}
+                              {/* 4 Corner Handles (NW, NE, SW, SE) — 32x32px touch zones with compact 10x10px circles */}
                               <div
                                 data-text-resize="nw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-[26px] -top-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
+                                className="absolute -left-[18px] -top-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
-                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="ne"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-[26px] -top-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
+                                className="absolute -right-[18px] -top-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
-                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="sw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-[26px] -bottom-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
+                                className="absolute -left-[18px] -bottom-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
-                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="se"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-[26px] -bottom-[26px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
+                                className="absolute -right-[18px] -bottom-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
-                                <div className="w-4 h-4 rounded-full bg-white border-2 border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                             </>
                           )}
