@@ -23348,9 +23348,9 @@ export default function App() {
         return;
       }
 
-      // If this text box has a single indexed equation (e.g. y_1 = ... or y_2 = ...), check if there are sibling indexed equations right above/below it!
+      // If this text box has a single indexed equation (e.g. y_1 = ... or u_1 = ...), check if there are sibling indexed equations right above/below it!
       const isIndexedFnText = (s: string) =>
-        /^\s*(?:\\text\{)?[yYfFgGhHψΨ]\s*(?:_\s*\{?\s*[1-9]\s*\}?|[1-9₁₂₃₄])(?:\s*\(\s*[xχ]\s*\))?\s*=/m.test(s);
+        /^\s*(?:\\text\{)?Σ?[a-zA-Zα-ωΑ-Ω]\s*(?:_\s*\{?\s*[1-9]\s*\}?|[1-9₁₂₃₄])(?:\s*\(\s*[xχt]\s*\))?\s*=/m.test(s);
       let matchedSiblingTxts: TextObject[] = [];
       if (!rawEq.includes('\n') && isIndexedFnText(rawEq)) {
         const siblingTxts = (activePage.texts || [])

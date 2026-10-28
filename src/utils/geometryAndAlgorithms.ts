@@ -7237,8 +7237,8 @@ export async function transcribeEquationForGraphWithGemini(
       text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Απλής Αρμονικής Ταλάντωσης (Φυσικής) για σχεδίαση διαγράμματος${contextHint}.
 Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
 Κανόνες:
-1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας τους δείκτες (π.χ. y_1, y_2) και τα σύμβολα Φυσικής αν πρόκειται για ταλάντωση/ενέργεια/δύναμη (π.χ. "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
-2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "y_1 = x^2 - 9\\ny_2 = x^2 - 16") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
+1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
+2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. u_1 = 10 και u_2 = 2 + 5t, ή y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "u_1 = 10\\nu_2 = 2 + 5*t") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
 3. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
@@ -7552,14 +7552,17 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     }
   }
 
-  // Smart Physical / Non-(x,y) Variable & Indexed Function (y_1, y_2, y1, y2, f_1, g) Mapping:
+  // Smart Physical / Non-(x,y) Variable & Indexed Function (y_1, y_2, u_1, u_2, x_1, x_2, f_1, g) Mapping:
   if (s.includes('=')) {
     const eqPos = s.indexOf('=');
     let lhsPart = s.slice(0, eqPos).trim();
     let rhsPart = s.slice(eqPos + 1).trim();
 
-    // Normalize indexed LHS function identifiers like y_1, y_{1}, y1, y_2, y2, f_1, f1, f, g, h -> y
-    if (/^(?:[yYfFgGhH]\s*(?:_\s*\{?\s*[0-9a-zA-Zα-ωΑ-Ω]+\s*\}?|[0-9]+)|[fFgGhH])$/.test(lhsPart)) {
+    // Normalize indexed LHS function identifiers like y_1, y_{1}, y1, u_1, u_2, x_1, x_2, f_1, f1, f, g, h -> y
+    if (
+      /^(?:Σ?[a-zA-Zα-ωΑ-Ω]\s*(?:_\s*\{?\s*[0-9a-zA-Zα-ωΑ-Ω]+\s*\}?|[1-9][0-9]*)|[fFgGhH])$/.test(lhsPart) &&
+      !/\by\b/.test(rhsPart)
+    ) {
       lhsPart = 'y';
     }
 
@@ -7595,12 +7598,19 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
 }
 
 /**
- * Splits a raw multi-line or multi-function input (e.g. `"y_1 = x^2 - 9\ny_2 = x^2 - 16"`)
- * into distinct plottable equation items, extracting each function's display label (`y_1`, `y_2`, `f`, `g`, etc.).
+ * Splits a raw multi-line or multi-function input (e.g. `"y_1 = x^2 - 9\ny_2 = x^2 - 16"` or `"u_1 = 10\nu_2 = 2 + 5t"`)
+ * into distinct plottable equation items, extracting each function's display label (`y_1`, `y_2`, `u_1`, `u_2`, `f`, `g`, etc.)
+ * as well as the vertical (`yAxisVar`) and horizontal (`xAxisVar`) axis variable symbols.
  */
 export function extractEquationItemsForPlot(
   rawInput: string
-): { rawLine: string; normalized: string; curveLabel: string | null }[] {
+): {
+  rawLine: string;
+  normalized: string;
+  curveLabel: string | null;
+  yAxisVar?: string;
+  xAxisVar?: string;
+}[] {
   if (!rawInput || !rawInput.trim()) return [];
 
   const subMap: Record<string, string> = {
@@ -7614,6 +7624,15 @@ export function extractEquationItemsForPlot(
     '₇': '_7',
     '₈': '_8',
     '₉': '_9',
+  };
+
+  const normalizeAxisVarSymbol = (sym: string): string => {
+    const clean = sym.replace(/^\\Sigma\s*/i, 'Σ').trim();
+    if (/^[yYψΨ]$/.test(clean)) return 'y';
+    if (/^[uυv]$/.test(clean)) return 'u';
+    if (/^[xχXΧ]$/.test(clean)) return 'x';
+    if (/^Σ\s*F$/i.test(clean)) return 'ΣF';
+    return clean;
   };
 
   // 1. Split by newlines and semicolons, merging lines that start with an implication arrow (⇒) into the previous line
@@ -7631,7 +7650,7 @@ export function extractEquationItemsForPlot(
     }
   }
 
-  // 2. Further split lines that contain multiple separate equations on one row (e.g. `y_1 = x^2 - 9, y_2 = x^2 - 16` or `y_1 = x^2 - 9   y_2 = x^2 - 16`)
+  // 2. Further split lines that contain multiple separate equations on one row (e.g. `y_1 = x^2 - 9, y_2 = x^2 - 16` or `u_1 = 10   u_2 = 2 + 5t`)
   const expandedLines: string[] = [];
   for (const rawL of mergedDerivationLines) {
     // Take last implication step if line has ⇒
@@ -7647,9 +7666,9 @@ export function extractEquationItemsForPlot(
       }
     }
 
-    // Check space-separated indexed functions like `y_1 = x^2 - 9 y_2 = x^2 - 16`
+    // Check space-separated indexed functions like `y_1 = x^2 - 9 y_2 = x^2 - 16` or `u_1 = 10 u_2 = 2 + 5t`
     const spaceSplit = effectiveLine
-      .split(/\s+(?=(?:[yYfFgGhH]\s*(?:_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9₁₂₃₄])?(?:\s*\(\s*[xχ]\s*\))?)\s*=)/)
+      .split(/\s+(?=(?:Σ?[a-zA-Zα-ωΑ-Ω]\s*(?:_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9₁₂₃₄])?(?:\s*\(\s*[xχt]\s*\))?)\s*=)/)
       .map((p) => p.trim())
       .filter(Boolean);
     if (spaceSplit.length >= 2 && spaceSplit.every((p) => p.includes('='))) {
@@ -7660,30 +7679,112 @@ export function extractEquationItemsForPlot(
     expandedLines.push(effectiveLine);
   }
 
-  const results: { rawLine: string; normalized: string; curveLabel: string | null }[] = [];
+  const results: {
+    rawLine: string;
+    normalized: string;
+    curveLabel: string | null;
+    yAxisVar?: string;
+    xAxisVar?: string;
+  }[] = [];
 
   for (const line of expandedLines) {
     const cleanSubLine = line.replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (ch) => subMap[ch] ?? ch);
     let explicitLabel: string | null = null;
+    let itemYVar: string | undefined;
+    let itemXVar: string | undefined;
+
     if (cleanSubLine.includes('=')) {
+      const eqPos = cleanSubLine.indexOf('=');
       const rawLhs = cleanSubLine
-        .slice(0, cleanSubLine.indexOf('='))
+        .slice(0, eqPos)
+        .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+        .replace(/\\Sigma\b/g, 'Σ')
+        .replace(/\\left|\\right/g, '')
+        .trim();
+      const rawRhs = cleanSubLine
+        .slice(eqPos + 1)
         .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
         .replace(/\\left|\\right/g, '')
         .trim();
+
       const subMatch = rawLhs.match(
-        /^([yYfFgGhHψΨ])\s*_\s*\{?\s*([0-9a-zA-Zα-ωΑ-Ω]+)\s*\}?(?:\s*\(\s*[xχ]\s*\))?$/
+        /^(Σ?[a-zA-Zα-ωΑ-Ω])\s*_\s*\{?\s*([0-9a-zA-Zα-ωΑ-Ω]+)\s*\}?(?:\s*\(\s*([xχt])\s*\))?$/
       );
-      const digitMatch = rawLhs.match(/^([yYfFgGhHψΨ])([1-9])(?:\s*\(\s*[xχ]\s*\))?$/);
-      const fnNameMatch = rawLhs.match(/^([fFgGhH])\s*\(\s*[xχ]\s*\)$/);
-      if (subMatch) {
-        const base = /^[yYψΨ]$/.test(subMatch[1]) ? 'y' : subMatch[1];
-        explicitLabel = `${base}_${subMatch[2]}`;
+      const digitMatch = rawLhs.match(/^(Σ?[a-zA-Zα-ωΑ-Ω])([1-9])(?:\s*\(\s*([xχt])\s*\))?$/);
+      const fnNameMatch = rawLhs.match(/^(Σ?[a-zA-Zα-ωΑ-Ω])\s*\(\s*([xχt])\s*\)$/);
+      const plainLhsMatch = rawLhs.match(/^(Σ?[a-zA-Zα-ωΑ-Ω])$/);
+
+      if (subMatch && subMatch[2] !== '0') {
+        const rawBase = subMatch[1];
+        const sub = subMatch[2];
+        const argVar = subMatch[3];
+        if (/^[fFgGhH]$/.test(rawBase)) {
+          explicitLabel = `${rawBase}_${sub}`;
+          itemYVar = 'y';
+        } else {
+          const normBase = normalizeAxisVarSymbol(rawBase);
+          explicitLabel = `${normBase}_${sub}`;
+          itemYVar = normBase;
+        }
+        if (argVar) itemXVar = normalizeAxisVarSymbol(argVar);
       } else if (digitMatch) {
-        const base = /^[yYψΨ]$/.test(digitMatch[1]) ? 'y' : digitMatch[1];
-        explicitLabel = `${base}_${digitMatch[2]}`;
+        const rawBase = digitMatch[1];
+        const sub = digitMatch[2];
+        const argVar = digitMatch[3];
+        if (/^[fFgGhH]$/.test(rawBase)) {
+          explicitLabel = `${rawBase}_${sub}`;
+          itemYVar = 'y';
+        } else {
+          const normBase = normalizeAxisVarSymbol(rawBase);
+          explicitLabel = `${normBase}_${sub}`;
+          itemYVar = normBase;
+        }
+        if (argVar) itemXVar = normalizeAxisVarSymbol(argVar);
       } else if (fnNameMatch) {
-        explicitLabel = fnNameMatch[1];
+        const rawBase = fnNameMatch[1];
+        const argVar = fnNameMatch[2];
+        itemXVar = normalizeAxisVarSymbol(argVar);
+        if (/^[fFgGhH]$/.test(rawBase)) {
+          explicitLabel = rawBase;
+          itemYVar = 'y';
+        } else {
+          itemYVar = normalizeAxisVarSymbol(rawBase);
+        }
+      } else if (plainLhsMatch) {
+        const rawBase = plainLhsMatch[1];
+        if (/^[fFgGhH]$/.test(rawBase)) {
+          explicitLabel = rawBase;
+          itemYVar = 'y';
+        } else if (/^[yYψΨ]$/.test(rawBase)) {
+          itemYVar = 'y';
+        } else if (/^[xχXΧ]$/.test(rawBase)) {
+          if (/\bt\b/.test(rawRhs)) {
+            itemYVar = 'x';
+          }
+        } else if (!/\b[yYψΨ]\b/.test(rawRhs)) {
+          itemYVar = normalizeAxisVarSymbol(rawBase);
+        }
+      }
+
+      if (!itemXVar) {
+        const strippedRhs = rawRhs
+          .replace(/\\?(?:sin|cos|tan|tg|ln|log|exp|sqrt|abs|ημιτ|ημ|συνημ|συν|εφ|max|min)/gi, '')
+          .replace(/_\{?[0-9a-zA-Zα-ωΑ-Ω]+\}?/g, '');
+        if (/\bt\b/.test(strippedRhs)) {
+          itemXVar = 't';
+        } else if (/[xχXΧ]/.test(strippedRhs)) {
+          itemXVar = 'x';
+        } else {
+          const powMatch = strippedRhs.match(/([a-zA-Zα-ωΑ-Ω])\s*\^/);
+          if (powMatch && powMatch[1] && !/^[yYeE]$/.test(powMatch[1])) {
+            itemXVar = normalizeAxisVarSymbol(powMatch[1]);
+          } else {
+            const prefMatch = strippedRhs.match(/[uυvrsITqz]/);
+            if (prefMatch && prefMatch[0]) {
+              itemXVar = normalizeAxisVarSymbol(prefMatch[0]);
+            }
+          }
+        }
       }
     }
 
@@ -7699,17 +7800,38 @@ export function extractEquationItemsForPlot(
     ) {
       continue;
     }
-    results.push({ rawLine: line, normalized: norm, curveLabel: explicitLabel });
+    results.push({
+      rawLine: line,
+      normalized: norm,
+      curveLabel: explicitLabel,
+      yAxisVar: itemYVar,
+      xAxisVar: itemXVar,
+    });
   }
+
+  const sharedYVar =
+    results.find((r) => r.yAxisVar && r.yAxisVar !== 'y')?.yAxisVar ||
+    results.find((r) => r.yAxisVar)?.yAxisVar ||
+    'y';
+  const sharedXVar =
+    results.find((r) => r.xAxisVar && r.xAxisVar !== 'x')?.xAxisVar ||
+    results.find((r) => r.xAxisVar)?.xAxisVar ||
+    (sharedYVar === 'u' || sharedYVar === 'v' || sharedYVar === 's' ? 't' : 'x');
 
   if (results.length >= 2) {
     return results.slice(0, 4).map((item, idx) => ({
       ...item,
-      curveLabel: item.curveLabel || `y_${idx + 1}`,
+      curveLabel: item.curveLabel || `${sharedYVar}_${idx + 1}`,
+      yAxisVar: sharedYVar,
+      xAxisVar: sharedXVar,
     }));
   }
 
-  return results;
+  return results.map((item) => ({
+    ...item,
+    yAxisVar: item.yAxisVar || sharedYVar,
+    xAxisVar: item.xAxisVar || sharedXVar,
+  }));
 }
 
 type MathExprToken =
@@ -8869,6 +8991,9 @@ export function buildMathGraphStrokesFromEquation(
 ): { strokes: StrokeObject[]; texts: TextObject[]; groupId: string; kindLabel: string } | null {
   const eqItems = extractEquationItemsForPlot(rawEquation);
   const singleCurveLabel = eqItems.length === 1 ? eqItems[0].curveLabel : null;
+  const yAxisVar = (eqItems.find((it) => it.yAxisVar)?.yAxisVar || 'y').trim() || 'y';
+  const xAxisVar = (eqItems.find((it) => it.xAxisVar)?.xAxisVar || 'x').trim() || 'x';
+  const isOrthonormalAxes = xAxisVar.toLowerCase() === 'x' && yAxisVar.toLowerCase() === 'y';
 
   // First check specialized Physics Oscillation Diagrams (K-u, U-x, K-x, E-x, ΣF-x, a-x, x-t, u-t, a-t) when plotting a single equation
   if (eqItems.length <= 1) {
@@ -8951,14 +9076,14 @@ export function buildMathGraphStrokesFromEquation(
     shapeType: 'wave-axis-y',
   });
 
-  // 3. Independent TextObjects 'x' and 'y' near arrow tips ('neohellenic' / Ρέουσα)
+  // 3. Independent TextObjects for horizontal (`xAxisVar`) and vertical (`yAxisVar`) axes near arrow tips ('neohellenic' / Ρέουσα)
   const lx = centerX + halfW + 9;
   const ly = centerY - 12;
   const yx = centerX - 16;
   const yy = centerY - halfH + 8;
   texts.push(
     createMathGraphLabelText(
-      'x',
+      xAxisVar,
       lx,
       ly,
       'center',
@@ -8969,7 +9094,7 @@ export function buildMathGraphStrokesFromEquation(
       `${nowId}-lx`
     ),
     createMathGraphLabelText(
-      'y',
+      yAxisVar,
       yx,
       yy,
       'center',
@@ -9166,22 +9291,20 @@ export function buildMathGraphStrokesFromEquation(
     const dxCandidates = [
       xLabelOffset,
       0,
-      outDir * 6,
-      -outDir * 6,
-      outDir * 13,
-      -outDir * 13,
-      outDir * 20,
-      -outDir * 20,
+      outDir * 4,
+      -outDir * 4,
+      outDir * 8,
+      -outDir * 8,
     ];
     const aboveOptions = [placeAbove, !placeAbove];
 
     let bestAx = px + xLabelOffset;
-    let bestAy = placeAbove ? centerY - 17 : centerY + 18;
+    let bestAy = placeAbove ? centerY - 13 : centerY + 14;
     let bestBox = computeLabelBox(labelText, bestAx, bestAy, 'center', fontH);
     let bestScore = -Infinity;
 
     for (const isAbove of aboveOptions) {
-      const candY = isAbove ? centerY - 17 : centerY + 18;
+      const candY = isAbove ? centerY - 13 : centerY + 14;
       for (const dx of dxCandidates) {
         const candX = px + dx;
         if (Math.abs(candX - centerX) < 10) continue;
@@ -9190,8 +9313,8 @@ export function buildMathGraphStrokesFromEquation(
         const prefBonus =
           (isAbove === placeAbove ? 1.2 : 0) +
           (Math.abs(dx - xLabelOffset) < 2 ? 0.8 : 0) -
-          Math.abs(dx) * 0.08;
-        const score = Math.min(clearance, 18) * 3.0 + prefBonus;
+          Math.abs(dx) * 0.9;
+        const score = Math.min(clearance, 3.5) * 4.0 + prefBonus;
         if (score > bestScore) {
           bestScore = score;
           bestAx = candX;
@@ -9249,23 +9372,21 @@ export function buildMathGraphStrokesFromEquation(
     const dyCandidates = [
       yLabelOffset,
       0,
-      outDirY * 6,
-      -outDirY * 6,
-      outDirY * 13,
-      -outDirY * 13,
-      outDirY * 18,
-      -outDirY * 18,
+      outDirY * 4,
+      -outDirY * 4,
+      outDirY * 8,
+      -outDirY * 8,
     ];
     const leftOptions = [placeLeft, !placeLeft];
 
-    let bestAx = placeLeft ? centerX - 9 : centerX + 9;
+    let bestAx = placeLeft ? centerX - 6.5 : centerX + 6.5;
     let bestAy = py + yLabelOffset;
     let bestAlign: 'left' | 'right' = placeLeft ? 'right' : 'left';
     let bestBox = computeLabelBox(labelText, bestAx, bestAy, bestAlign, fontH);
     let bestScore = -Infinity;
 
     for (const isLeft of leftOptions) {
-      const candX = isLeft ? centerX - 9 : centerX + 9;
+      const candX = isLeft ? centerX - 6.5 : centerX + 6.5;
       const candAlign: 'left' | 'right' = isLeft ? 'right' : 'left';
       for (const dy of dyCandidates) {
         const candY = py + dy;
@@ -9275,8 +9396,8 @@ export function buildMathGraphStrokesFromEquation(
         const prefBonus =
           (isLeft === placeLeft ? 1.2 : 0) +
           (Math.abs(dy - yLabelOffset) < 2 ? 0.8 : 0) -
-          Math.abs(dy) * 0.08;
-        const score = Math.min(clearance, 18) * 3.0 + prefBonus;
+          Math.abs(dy) * 0.9;
+        const score = Math.min(clearance, 3.5) * 4.0 + prefBonus;
         if (score > bestScore) {
           bestScore = score;
           bestAx = candX;
@@ -9522,15 +9643,12 @@ export function buildMathGraphStrokesFromEquation(
       if (isQuadOrLin && !hasQuad && (Math.abs(D) > eps || Math.abs(E) > eps)) {
         const xInt = Math.abs(D) > eps ? -G / D : 0;
         const yInt = Math.abs(E) > eps ? -G / E : 0;
-        const maxInt = Math.max(
-          1.4,
-          Math.abs(xInt) > eps ? Math.abs(xInt) * 1.38 : 0,
-          Math.abs(yInt) > eps ? Math.abs(yInt) * 1.38 : 0
-        );
+        const idealX = Math.abs(D) > eps ? Math.max(1.4, Math.abs(xInt) * 1.38) : 0;
+        const idealY = Math.abs(E) > eps ? Math.max(1.4, Math.abs(yInt) * 1.38) : 0;
         const fnEval = Math.abs(E) > eps ? (x: number) => (-D * x - G) / E : () => NaN;
         specs.push({
           idx,
-          curveLabel: item.curveLabel || `y_${idx + 1}`,
+          curveLabel: item.curveLabel || `${yAxisVar}_${idx + 1}`,
           color: palette[idx % palette.length],
           normalized: norm,
           isQuantitative: isQuant,
@@ -9546,11 +9664,11 @@ export function buildMathGraphStrokesFromEquation(
           pa: 0,
           pb: Math.abs(E) > eps ? -D / E : 0,
           pc: yInt,
-          xv: 0,
+          xv: xInt,
           yv: yInt,
           disc: 0,
-          idealXSpan: maxInt,
-          idealYSpan: maxInt,
+          idealXSpan: idealX,
+          idealYSpan: idealY,
           edgeTopY: null,
         });
         continue;
@@ -9669,8 +9787,21 @@ export function buildMathGraphStrokesFromEquation(
     }
 
     if (specs.length >= 2) {
-      const sharedXSpan = Math.max(1.6, ...specs.map((s) => s.idealXSpan));
       const sharedYSpan = Math.max(1.6, ...specs.map((s) => s.idealYSpan));
+      const adjustedXSpans = specs.map((s) => {
+        if (s.kind === 'line' && Math.abs(s.pb) > 1e-6) {
+          const xAtTop = Math.abs((sharedYSpan - s.pc) / s.pb);
+          const xAtBot = Math.abs((-sharedYSpan - s.pc) / s.pb);
+          const xReach = Math.max(xAtTop, xAtBot, Math.abs(s.xv));
+          if (!isOrthonormalAxes || Math.abs(s.pb) >= 2.0) {
+            return Math.max(1.4, xReach * 1.25);
+          }
+          return Math.max(s.idealXSpan, xReach * 1.15);
+        }
+        return s.idealXSpan;
+      });
+      const rawMaxXSpan = Math.max(...adjustedXSpans);
+      const sharedXSpan = rawMaxXSpan > 0.1 ? Math.max(1.4, rawMaxXSpan) : sharedYSpan;
 
       // Step 1: Plot all curve strokes on the shared (sharedXSpan, sharedYSpan) coordinate system
       for (const sp of specs) {
@@ -9820,13 +9951,13 @@ export function buildMathGraphStrokesFromEquation(
           }
           if (Math.abs(sp.pc) > 1e-4) {
             const pyc = centerY - (sp.pc / sharedYSpan) * plotHalfH;
-            addYAxisTickAndLabel(pyc, formatNumLabel(sp.pc), true, sp.pc < 0 ? 9 : -9);
+            addYAxisTickAndLabel(pyc, formatNumLabel(sp.pc), true, 0);
           }
         } else {
           const y0Val = sp.fnEval(0);
           if (Number.isFinite(y0Val) && Math.abs(y0Val) > 1e-4 && Math.abs(y0Val) <= sharedYSpan * 0.92) {
             const py0 = centerY - (y0Val / sharedYSpan) * plotHalfH;
-            addYAxisTickAndLabel(py0, formatNumLabel(y0Val), true, y0Val < 0 ? 9 : -9);
+            addYAxisTickAndLabel(py0, formatNumLabel(y0Val), true, 0);
           }
           const foundRoots: number[] = [];
           const rootScanSteps = 140;
@@ -9947,8 +10078,22 @@ export function buildMathGraphStrokesFromEquation(
           Math.abs(xInt) > eps ? Math.abs(xInt) * 1.35 : 0,
           Math.abs(yInt) > eps ? Math.abs(yInt) * 1.35 : 0
         );
-        const wSpan = maxIntercept;
-        const hSpan = maxIntercept;
+        let wSpan = maxIntercept;
+        let hSpan = maxIntercept;
+        if (
+          (!isOrthonormalAxes || Math.abs(D / (E || 1)) >= 2.2) &&
+          Math.abs(D) > eps &&
+          Math.abs(E) > eps
+        ) {
+          const slope = -D / E;
+          hSpan = Math.max(1.4, Math.abs(yInt) > eps ? Math.abs(yInt) * 1.85 : 2.0);
+          const xReach = Math.max(
+            Math.abs((hSpan - yInt) / slope),
+            Math.abs((-hSpan - yInt) / slope),
+            Math.abs(xInt)
+          );
+          wSpan = Math.max(1.2, xReach * 1.25);
+        }
 
         // Clip infinite line D*x + E*y + G = 0 to [-wSpan, wSpan] x [-hSpan, hSpan]
         const boxHits: { x: number; y: number }[] = [];
@@ -10082,10 +10227,10 @@ export function buildMathGraphStrokesFromEquation(
             lblYNeg = '-b';
           }
           if (lblXPos) {
-            addXAxisTickAndLabel(cxPx - rxPx, lblXNeg, true, -11);
-            addXAxisTickAndLabel(cxPx + rxPx, lblXPos, true, 10);
-            addYAxisTickAndLabel(cyPx - ryPx, lblYPos, false, -10);
-            addYAxisTickAndLabel(cyPx + ryPx, lblYNeg, false, 11);
+            addXAxisTickAndLabel(cxPx - rxPx, lblXNeg, true, -6);
+            addXAxisTickAndLabel(cxPx + rxPx, lblXPos, true, 6);
+            addYAxisTickAndLabel(cyPx - ryPx, lblYPos, false, 0);
+            addYAxisTickAndLabel(cyPx + ryPx, lblYNeg, false, 0);
           }
         } else if (isQuantitative) {
           addDashedCoordProjection(cxPx, cyPx, formatNumLabel(x0), formatNumLabel(y0));
@@ -10147,7 +10292,7 @@ export function buildMathGraphStrokesFromEquation(
           // 2. Y-intercept (x = 0, y = pc)
           if (Math.abs(pc) > 1e-4) {
             const pyc = centerY - (pc / ySpan) * plotHalfH;
-            addYAxisTickAndLabel(pyc, formatNumLabel(pc), true, pc < 0 ? 11 : -10);
+            addYAxisTickAndLabel(pyc, formatNumLabel(pc), true, 0);
           }
 
           // 3. Off-axis vertex projection (xv, yv)
@@ -10472,14 +10617,14 @@ export function buildMathGraphStrokesFromEquation(
         isShape: true,
         shapeType: 'wave-guide-bottom',
       });
-      addYAxisTickAndLabel(pyTop, topLbl, true, -9);
-      addYAxisTickAndLabel(pyBot, botLbl, true, 10);
+      addYAxisTickAndLabel(pyTop, topLbl, true, 0);
+      addYAxisTickAndLabel(pyBot, botLbl, true, 0);
     } else if (strokes.length > 2 && isQuantitative) {
       // 1. Y-intercept (x = 0, y0 = f(0))
       const y0Val = fnEval(0);
       if (Number.isFinite(y0Val) && Math.abs(y0Val) > 1e-4 && Math.abs(y0Val) <= ySpan * 0.95) {
         const py0 = centerY - (y0Val / ySpan) * plotHalfH;
-        addYAxisTickAndLabel(py0, formatNumLabel(y0Val), true, y0Val < 0 ? 10 : -10);
+        addYAxisTickAndLabel(py0, formatNumLabel(y0Val), true, 0);
       }
 
       // 2. X-intercepts (real roots f(x) = 0 in [-xSpan * 0.92, xSpan * 0.92])
