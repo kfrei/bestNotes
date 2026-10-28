@@ -28194,8 +28194,8 @@ export default function App() {
                           disabled={isConvertingHandwriting}
                           className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
                             isConvertingHandwriting
-                              ? 'bg-rose-300 text-white cursor-wait'
-                              : 'bg-rose-600 hover:bg-rose-700 text-white'
+                              ? 'bg-emerald-300 text-white cursor-wait'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                           }`}
                           title="Διάγραμμα OCR: Αναγνώριση 1 ή περισσότερων χειρόγραφων εξισώσεων (π.χ. y₁ = x² - 9 και y₂ = x² - 16) και σχεδίαση σε κοινό σύστημα αξόνων!"
                         >
@@ -32052,7 +32052,7 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => handleCreateMathGraphFromTextBox(txt.id)}
-                                className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
                                 title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
                               >
                                 Διάγραμμα
