@@ -12124,7 +12124,7 @@ export default function App() {
               gKey === 'xt'
                 ? {
                     yLabel: 'x',
-                    curveColor: '#ef4444',
+                    curveColor: '#92400e',
                   }
                 : gKey === 'vt'
                 ? {
@@ -12334,7 +12334,7 @@ export default function App() {
               ctx.fill();
               if (gKey === 'xt' && Math.abs(startY - curMassCy) <= 28) {
                 ctx.save();
-                ctx.strokeStyle = 'rgba(239, 68, 68, 0.42)';
+                ctx.strokeStyle = 'rgba(146, 64, 14, 0.45)';
                 ctx.lineWidth = 1.4;
                 ctx.setLineDash([4, 4]);
                 ctx.beginPath();
@@ -12386,7 +12386,7 @@ export default function App() {
               // Dotted horizontal projection line from oscillating mass to x(t) leading dot!
               if (gKey === 'xt' && Math.abs(tipY - curMassCy) <= 28) {
                 ctx.save();
-                ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+                ctx.strokeStyle = 'rgba(146, 64, 14, 0.45)';
                 ctx.lineWidth = 1.5;
                 ctx.setLineDash([4, 4]);
                 ctx.beginPath();
@@ -29165,7 +29165,7 @@ export default function App() {
 
                               <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
                                 <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-800 inline-block" />
                                   <span>Θέση – Χρόνος x(t)</span>
                                 </span>
                                 <input
@@ -29181,7 +29181,7 @@ export default function App() {
                                       },
                                     }));
                                   }}
-                                  className="accent-red-500 w-4 h-4 cursor-pointer"
+                                  className="accent-amber-800 w-4 h-4 cursor-pointer"
                                 />
                               </label>
 
