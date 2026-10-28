@@ -134,6 +134,8 @@ import {
   generateSmartGreekTagsFromImages,
   transcribeHandwrittenStrokesWithGemini,
   transcribeHandwrittenMathWithGemini,
+  transcribeEquationForGraphWithGemini,
+  buildMathGraphStrokesFromEquation,
   splitAndCleanMathLatexLines,
   renderPageStrokesToSnapshotDataUrl,
   getCubicSegmentControlPoints,
@@ -16724,6 +16726,31 @@ export default function App() {
       return;
     }
 
+    // Also check if the Lasso loop enclosed or crossed a Text / MathOCR equation box on the page!
+    const matchedTxt = (activePage.texts || []).find((txt) => {
+      if (lockedLayers.has(txt.layerId)) return false;
+      const domEl = document.querySelector(`[data-text-id="${txt.id}"]`) as HTMLElement | null;
+      const boxW = txt.boxWidth || domEl?.offsetWidth || 160;
+      const boxH = txt.boxHeight || domEl?.offsetHeight || 48;
+      const checkPts = [
+        { x: txt.x + boxW / 2, y: txt.y + boxH / 2 },
+        { x: txt.x + 8, y: txt.y + 8 },
+        { x: txt.x + boxW - 8, y: txt.y + 8 },
+        { x: txt.x + boxW - 8, y: txt.y + boxH - 8 },
+        { x: txt.x + 8, y: txt.y + boxH - 8 },
+      ];
+      return checkPts.some((p) => isPointInPolygon(p, poly));
+    });
+    if (matchedTxt) {
+      setSelectedImageIds([]);
+      setSelectedImageId(null);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setSelectedTextId(matchedTxt.id);
+      setShowToolSubBar(true);
+      return;
+    }
+
     if (!isAdditive) {
       setSelectedImageIds([]);
       setSelectedImageId(null);
@@ -21067,6 +21094,16 @@ export default function App() {
                 }
                 return s;
               }
+              if (s.groupId && s.groupId.startsWith('math-graph-grp-')) {
+                if (s.shapeType === 'wave-axis-x' || s.shapeType === 'wave-axis-y') {
+                  return s;
+                }
+                return {
+                  ...s,
+                  color: c,
+                  fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined,
+                };
+              }
               if (s.shapeType === 'fan') {
                 // Keep fan wire leads dark; for the round circle perimeter, change its border color `c` while keeping soft grey background!
                 if (s.points.length === 2) {
@@ -21228,9 +21265,19 @@ export default function App() {
         );
         return {
           ...page,
-          strokes: page.strokes.map((s) =>
-            baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)) ? { ...s, width: w } : s
-          ),
+          strokes: page.strokes.map((s) => {
+            if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
+              if (
+                s.groupId &&
+                s.groupId.startsWith('math-graph-grp-') &&
+                (s.shapeType === 'wave-axis-x' || s.shapeType === 'wave-axis-y')
+              ) {
+                return s;
+              }
+              return { ...s, width: w };
+            }
+            return s;
+          }),
         };
       });
     },
@@ -21262,11 +21309,23 @@ export default function App() {
         );
         return {
           ...page,
-          strokes: page.strokes.map((s) =>
-            baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
-              ? { ...s, lineStyle: ls, arrowEnd: nextArrowEnd !== undefined ? nextArrowEnd : s.arrowEnd }
-              : s
-          ),
+          strokes: page.strokes.map((s) => {
+            if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
+              if (
+                s.groupId &&
+                s.groupId.startsWith('math-graph-grp-') &&
+                (s.shapeType === 'wave-axis-x' || s.shapeType === 'wave-axis-y')
+              ) {
+                return s;
+              }
+              return {
+                ...s,
+                lineStyle: ls,
+                arrowEnd: nextArrowEnd !== undefined ? nextArrowEnd : s.arrowEnd,
+              };
+            }
+            return s;
+          }),
         };
       });
     },
@@ -22085,6 +22144,299 @@ export default function App() {
     updateActivePage,
     showToast,
   ]);
+
+  // 3. Manual (on-demand) Lasso Handwriting -> 2D Mathematical Coordinate Diagram (`📈 Διάγραμμα`) right next to the equation!
+  const handleConvertLassoToMathGraph = useCallback(async () => {
+    if (isConvertingHandwriting) return;
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+    if (selStrokes.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση για την οποία θέλεις Διάγραμμα!');
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const st of selStrokes) {
+      const b = getStrokeBounds(st);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+    const pad = 32;
+    const rawW = Math.max(48, Math.ceil(maxX - minX));
+    const rawH = Math.max(32, Math.ceil(maxY - minY));
+    const scale = 2;
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = (rawW + pad * 2) * scale;
+    cropCanvas.height = (rawH + pad * 2) * scale;
+    const cropCtx = cropCanvas.getContext('2d');
+    if (!cropCtx) return;
+
+    cropCtx.fillStyle = '#ffffff';
+    cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+    cropCtx.save();
+    cropCtx.scale(scale, scale);
+    cropCtx.translate(-minX + pad, -minY + pad);
+    for (const st of selStrokes) {
+      drawStrokeOnContext(cropCtx, st);
+    }
+    cropCtx.restore();
+
+    const cropDataUrl = cropCanvas.toDataURL('image/png');
+    setIsConvertingHandwriting(true);
+    showToast('📈 Διάγραμμα OCR: Αναγνώριση εξίσωσης & σχεδίαση διαγράμματος...');
+
+    try {
+      const aiRes = await Promise.race([
+        transcribeEquationForGraphWithGemini(cropDataUrl, activeNotebook?.title || ''),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 8500)),
+      ]);
+
+      let eqStr = aiRes?.equation || aiRes?.normalizedEquation || '';
+      if (!eqStr) {
+        const fallbackMath = await Promise.race([
+          transcribeHandwrittenMathWithGemini(cropDataUrl, activeNotebook?.title || ''),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 5000)),
+        ]);
+        eqStr = fallbackMath?.latex || fallbackMath?.plainText || '';
+      }
+
+      if (!eqStr.trim()) {
+        showToast('⚠️ Δεν αναγνωρίστηκε εξίσωση — δοκίμασε ξανά ή γράψε την εξίσωση στο εργαλείο Κειμένου!');
+        return;
+      }
+
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const diagW = 240;
+      const diagH = 240;
+      const eqMidY = (minY + maxY) / 2;
+      // Place diagram right next to the equation (or below if near the right margin of the page)
+      let centerX = maxX + 56 + diagW / 2;
+      let centerY = Math.max(diagH / 2 + 24, Math.min(pH - diagH / 2 - 24, eqMidY));
+      if (centerX + diagW / 2 + 24 > pW) {
+        centerX = Math.max(diagW / 2 + 24, Math.min(pW - diagW / 2 - 24, (minX + maxX) / 2));
+        centerY = Math.min(pH - diagH / 2 - 24, maxY + 48 + diagH / 2);
+      }
+
+      const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+      const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
+
+      let graphBuilt = buildMathGraphStrokesFromEquation(
+        eqStr,
+        centerX,
+        centerY,
+        diagW,
+        diagH,
+        '#dc2626',
+        axisInk,
+        targetLayerId
+      );
+      if (!graphBuilt && aiRes?.normalizedEquation) {
+        graphBuilt = buildMathGraphStrokesFromEquation(
+          aiRes.normalizedEquation,
+          centerX,
+          centerY,
+          diagW,
+          diagH,
+          '#dc2626',
+          axisInk,
+          targetLayerId
+        );
+      }
+
+      if (!graphBuilt) {
+        showToast(`⚠️ Δεν ήταν δυνατή η σχεδίαση διαγράμματος για: ${eqStr}`);
+        return;
+      }
+
+      const newIds = graphBuilt.strokes.map((s) => s.id);
+      updateActivePage((page) => ({
+        ...page,
+        strokes: [...page.strokes, ...graphBuilt!.strokes],
+      }));
+
+      setActiveTool('lasso');
+      setSelectedStrokeIds(newIds);
+      setActiveNodeStrokeId(null);
+      setShowToolSubBar(true);
+      showToast(
+        `📈 Διάγραμμα (${graphBuilt.kindLabel}): Δημιουργήθηκε δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
+      );
+    } finally {
+      setIsConvertingHandwriting(false);
+    }
+  }, [
+    isConvertingHandwriting,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    activePage,
+    activeNotebook?.title,
+    activeLayerId,
+    updateActivePage,
+    showToast,
+  ]);
+
+  // 4. Create 2D Mathematical Coordinate Diagram (`📈 Διάγραμμα`) directly from a typed Text Box or MathOCR Equation Box!
+  const handleCreateMathGraphFromTextBox = useCallback(
+    (targetTxtId?: string) => {
+      const txtId = targetTxtId || selectedTextId || editingTextId;
+      const txtObj = (activePage.texts || []).find((t) => t.id === txtId);
+      if (!txtObj) {
+        showToast('ℹ️ Γράψε πρώτα μια εξίσωση στο πλαίσιο κειμένου (π.χ. (x^2)/9 + (y^2)/16 = 25 ή y = ax + b)!');
+        return;
+      }
+      const rawEq = (txtObj.latex || txtObj.text || '').trim();
+      if (!rawEq) {
+        showToast('ℹ️ Το πλαίσιο κειμένου είναι κενό — γράψε πρώτα την εξίσωση (π.χ. x^2 + y^2 = 1)!');
+        return;
+      }
+
+      const domEl = document.querySelector(`[data-text-id="${txtObj.id}"]`) as HTMLElement | null;
+      const boxW = txtObj.boxWidth || domEl?.offsetWidth || 180;
+      const boxH = txtObj.boxHeight || domEl?.offsetHeight || 48;
+
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const diagW = 240;
+      const diagH = 240;
+      let centerX = txtObj.x + boxW + 56 + diagW / 2;
+      let centerY = Math.max(diagH / 2 + 24, Math.min(pH - diagH / 2 - 24, txtObj.y + boxH / 2));
+      if (centerX + diagW / 2 + 24 > pW) {
+        centerX = Math.max(diagW / 2 + 24, Math.min(pW - diagW / 2 - 24, txtObj.x + boxW / 2));
+        centerY = Math.min(pH - diagH / 2 - 24, txtObj.y + boxH + 48 + diagH / 2);
+      }
+
+      const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+      const targetLayerId = txtObj.layerId || activeLayerId;
+
+      const graphBuilt = buildMathGraphStrokesFromEquation(
+        rawEq,
+        centerX,
+        centerY,
+        diagW,
+        diagH,
+        '#dc2626',
+        axisInk,
+        targetLayerId
+      );
+
+      if (!graphBuilt) {
+        showToast(
+          '⚠️ Δεν αναγνωρίστηκε έγκυρη εξίσωση (π.χ. δοκίμασε y = 2x + 1, y = ax + b, x^2 + y^2 = 1 ή (x^2)/9 + (y^2)/16 = 25)!'
+        );
+        return;
+      }
+
+      const newIds = graphBuilt.strokes.map((s) => s.id);
+      updateActivePage((page) => ({
+        ...page,
+        strokes: [...page.strokes, ...graphBuilt.strokes],
+      }));
+
+      setEditingTextId(null);
+      setSelectedTextId(null);
+      setActiveTool('lasso');
+      setSelectedStrokeIds(newIds);
+      setActiveNodeStrokeId(null);
+      setShowToolSubBar(true);
+      showToast(
+        `📈 Διάγραμμα (${graphBuilt.kindLabel}): Δημιουργήθηκε δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
+      );
+    },
+    [selectedTextId, editingTextId, activePage, activeLayerId, updateActivePage, showToast]
+  );
+
+  // 5. Insert `^` (Power / Δύναμη) into the currently active or selected Text Box so the user can easily type exponents like (x^2)/9 + (y^2)/16 = 25!
+  const handleInsertPowerCaretInText = useCallback(
+    (targetTxtId?: string) => {
+      const txtId = targetTxtId || editingTextId || selectedTextId;
+      const txtObj = (activePage.texts || []).find((t) => t.id === txtId);
+      if (!txtObj) {
+        // Create a new text box in edit mode with '^' ready or empty
+        const pW = getPageLogicalWidth(activePage);
+        const pH = getPageLogicalHeight(activePage);
+        const newTxt: TextObject = {
+          id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          x: Math.round(pW * 0.25),
+          y: Math.round(Math.min(pH * 0.25, 220)),
+          text: '^',
+          color: strokeColor,
+          fontSize: textFontSize,
+          bold: textBold,
+          fontFamily: textFontFamily,
+          layerId: activeLayerId,
+        };
+        updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+        setSelectedTextId(newTxt.id);
+        setEditingTextId(newTxt.id);
+        return;
+      }
+
+      const domBox = document.querySelector(`[data-text-id="${txtObj.id}"]`);
+      const textarea = domBox?.querySelector('textarea') as HTMLTextAreaElement | null;
+      const curText = txtObj.text || '';
+      let nextText = `${curText}^`;
+      let nextCursorPos = nextText.length;
+
+      if (textarea) {
+        const start = textarea.selectionStart ?? curText.length;
+        const end = textarea.selectionEnd ?? curText.length;
+        nextText = `${curText.slice(0, start)}^${curText.slice(end)}`;
+        nextCursorPos = start + 1;
+      }
+
+      updateActivePage((page) => ({
+        ...page,
+        texts: (page.texts || []).map((t) => (t.id === txtObj.id ? { ...t, text: nextText } : t)),
+      }));
+      setSelectedTextId(txtObj.id);
+      setEditingTextId(txtObj.id);
+
+      window.requestAnimationFrame(() => {
+        const updatedBox = document.querySelector(`[data-text-id="${txtObj.id}"]`);
+        const ta = updatedBox?.querySelector('textarea') as HTMLTextAreaElement | null;
+        if (ta) {
+          ta.focus();
+          try {
+            ta.setSelectionRange(nextCursorPos, nextCursorPos);
+          } catch {
+            // ignore
+          }
+        }
+      });
+    },
+    [
+      editingTextId,
+      selectedTextId,
+      activePage,
+      strokeColor,
+      textFontSize,
+      textBold,
+      textFontFamily,
+      activeLayerId,
+      updateActivePage,
+    ]
+  );
 
   // Convert Lasso-selected discrete straight lines / open polylines into the closest closed geometric Polygon!
   // Handles corner gaps, T-overshoots (by intersecting consecutive infinite edge lines), and snaps nearly horizontal/vertical edges to 0°/90°.
@@ -25859,6 +26211,31 @@ export default function App() {
                         A+
                       </button>
 
+                      <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
+
+                      {/* Power Caret (^) Button & 1-Click Equation Diagram Plotter in Text Bar */}
+                      {(!selTxt || !selTxt.isMath) && (
+                        <button
+                          onMouseDown={(ev) => ev.preventDefault()}
+                          onClick={() => handleInsertPowerCaretInText(selTxt?.id)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold border border-amber-300 transition cursor-pointer"
+                          title="Εισαγωγή συμβόλου δύναμης (^) στο κείμενο — π.χ. (x^2)/9 + (y^2)/16 = 25"
+                        >
+                          <span>xⁿ (^)</span>
+                        </button>
+                      )}
+
+                      {selTxt && (
+                        <button
+                          onMouseDown={(ev) => ev.preventDefault()}
+                          onClick={() => handleCreateMathGraphFromTextBox(selTxt.id)}
+                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                          title="Διάγραμμα: Αυτόματη σχεδίαση διαγράμματος (ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο) δίπλα στην εξίσωση!"
+                        >
+                          <span>📈 Διάγραμμα</span>
+                        </button>
+                      )}
+
                       {selTxt && (
                         <>
                           <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
@@ -26494,6 +26871,18 @@ export default function App() {
                         >
                           <Calculator className="w-3.5 h-3.5" />
                           <span>{isConvertingHandwriting ? 'MathOCR...' : '∑ MathOCR'}</span>
+                        </button>
+                        <button
+                          onClick={() => void handleConvertLassoToMathGraph()}
+                          disabled={isConvertingHandwriting}
+                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                            isConvertingHandwriting
+                              ? 'bg-rose-300 text-white cursor-wait'
+                              : 'bg-rose-600 hover:bg-rose-700 text-white'
+                          }`}
+                          title="Διάγραμμα OCR: Αναγνώριση χειρόγραφης εξίσωσης (ποσοτικής ή συμβολικής π.χ. y=ax+b, x²+y²=1, έλλειψη, παραβολή, υπερβολή, πολυώνυμο) και σχεδίαση επεξεργάσιμου διαγράμματος δίπλα της!"
+                        >
+                          <span>{isConvertingHandwriting ? 'Διάγραμμα...' : '📈 Διάγραμμα'}</span>
                         </button>
                       </>
                     )}
@@ -30139,6 +30528,26 @@ export default function App() {
                                 title="Μεγαλύτερη γραμματοσειρά"
                               >
                                 A+
+                              </button>
+                              {!txt.isMath && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => handleInsertPowerCaretInText(txt.id)}
+                                  className="px-1.5 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-extrabold cursor-pointer"
+                                  title="Εισαγωγή συμβόλου δύναμης (^) — π.χ. (x^2)/9 + (y^2)/16 = 25"
+                                >
+                                  xⁿ (^)
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => handleCreateMathGraphFromTextBox(txt.id)}
+                                className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer"
+                                title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
+                              >
+                                📈 Διάγραμμα
                               </button>
                               {txt.isMath && (
                                 <button

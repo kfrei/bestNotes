@@ -6882,6 +6882,1344 @@ export function analyzeCircuitForSimulation(
   };
 }
 
+/**
+ * Uses Gemini Flash Vision to recognize a handwritten mathematical equation or function
+ * selected with the Lasso tool so we can plot its 2D diagram right next to it.
+ */
+export async function transcribeEquationForGraphWithGemini(
+  imageDataUrl: string,
+  notebookTitle = ''
+): Promise<{
+  equation: string;
+  normalizedEquation?: string;
+  latex?: string;
+  kind?: string;
+} | null> {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return null;
+  const apiKey = (partA + partB).split('').reverse().join('');
+
+  const compact = await downscaleImageDataUrlForVision(imageDataUrl);
+  if (!compact) return null;
+
+  const contextHint =
+    notebookTitle && !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim())
+      ? ` (από σημείωση "${notebookTitle}")`
+      : '';
+
+  const parts: any[] = [
+    {
+      text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων και συναρτήσεων για σχεδίαση διαγράμματος (γραφικής παράστασης)${contextHint}.
+Διάβασε τη χειρόγραφη εξίσωση ή συνάρτηση στην εικόνα (π.χ. ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο, τριγωνομετρική, εκθετική, λογαριθμική κ.λπ.).
+Κανόνες:
+1. Στο πεδίο "equation" γράψε την εξίσωση σε καθαρή αλγεβρική μορφή με σύμβολα +, -, *, /, ^, ( ) (π.χ. "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = α*x + β", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
+2. Αν η εξίσωση έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, y = ax^2 + bx + c, x^2 + y^2 = R^2, x^2/a^2 + y^2/b^2 = 1, y = a/x), θεώρησε ότι οι παράμετροι (a, b, c, α, β, γ, κ, μ, R, r) είναι ΘΕΤΙΚΟΙ αριθμοί και γράψε στο "normalizedEquation" μια αντίστοιχη αριθμητική εξίσωση με θετικές τιμές παραμέτρων (π.χ. για "y = αx + β" -> "y = 1.2*x + 1.5", για "y = -αx + β" -> "y = -1.2*x + 1.5", για "x^2/a^2 + y^2/b^2 = 1" -> "(x^2)/2.56 + (y^2)/1 = 1", για "x^2 + y^2 = R^2" -> "x^2 + y^2 = 1"). Αν η εξίσωση έχει ήδη αριθμούς, βάλε στο "normalizedEquation" την ακριβή αριθμητική εξίσωση (π.χ. "(x^2)/9 + (y^2)/16 = 25").
+3. Αν οι μεταβλητές είναι ελληνικές (χ, ψ) ή φυσικής (π.χ. u = u_0 + a*t, x = 1/2*a*t^2), στο "normalizedEquation" αντικατέστησε την ανεξάρτητη μεταβλητή (χ ή t) με "x" και την εξαρτημένη (ψ ή u ή f(x)) με "y".
+Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
+{"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "circle|ellipse|parabola|hyperbola|line|polynomial|function"}
+χωρίς κανένα άλλο σχόλιο.`,
+    },
+    {
+      inlineData: {
+        mimeType: compact.mimeType,
+        data: compact.base64,
+      },
+    },
+  ];
+
+  const candidateModels = Array.from(
+    new Set([
+      ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
+      'gemini-3.5-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.6-flash',
+      'gemini-flash-lite-latest',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+    ])
+  );
+
+  const tryWithModel = async (
+    modelName: string,
+    timeoutMs = 4500
+  ): Promise<{
+    equation: string;
+    normalizedEquation?: string;
+    latex?: string;
+    kind?: string;
+  } | null> => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const cleanName = modelName.replace(/^models\//, '');
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { responseMimeType: 'application/json' },
+          }),
+        }
+      );
+      if (!res.ok) {
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        return null;
+      }
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) return null;
+      const parsed = JSON.parse(rawText);
+      const eq =
+        typeof parsed?.equation === 'string' && parsed.equation.trim()
+          ? parsed.equation.trim()
+          : typeof parsed?.normalizedEquation === 'string' && parsed.normalizedEquation.trim()
+          ? parsed.normalizedEquation.trim()
+          : '';
+      if (eq) {
+        cachedWorkingVisionModel = cleanName;
+        return {
+          equation: eq,
+          normalizedEquation:
+            typeof parsed?.normalizedEquation === 'string'
+              ? parsed.normalizedEquation.trim()
+              : undefined,
+          latex: typeof parsed?.latex === 'string' ? parsed.latex.trim() : undefined,
+          kind: typeof parsed?.kind === 'string' ? parsed.kind.trim() : undefined,
+        };
+      }
+    } catch {
+      if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
+        cachedWorkingVisionModel = null;
+      }
+    } finally {
+      window.clearTimeout(timer);
+    }
+    return null;
+  };
+
+  const primaryModel = candidateModels[0];
+  if (primaryModel) {
+    const firstTry = await tryWithModel(primaryModel, 3800);
+    if (firstTry) return firstTry;
+  }
+
+  const backupModels = candidateModels.slice(1, 5);
+  if (backupModels.length > 0) {
+    try {
+      const fastestBackup = await Promise.any(
+        backupModels.map(async (m) => {
+          const res = await tryWithModel(m, 4800);
+          if (!res) throw new Error('empty');
+          return res;
+        })
+      );
+      if (fastestBackup) return fastestBackup;
+    } catch {
+      // ignore
+    }
+  }
+
+  for (const modelName of candidateModels.slice(5)) {
+    const out = await tryWithModel(modelName, 4000);
+    if (out) return out;
+  }
+
+  return null;
+}
+
+/**
+ * Helper to replace LaTeX `\frac{A}{B}` (including nested braces) with `((A)/(B))`
+ * and `\sqrt{A}` with `SQRT(A)`.
+ */
+function expandLatexConstructs(input: string): string {
+  let s = input;
+  const extractBraceGroup = (str: string, startIdx: number): { content: string; nextIdx: number } | null => {
+    let i = startIdx;
+    while (i < str.length && /\s/.test(str[i])) i++;
+    if (str[i] !== '{') return null;
+    let depth = 0;
+    const contentStart = i + 1;
+    for (; i < str.length; i++) {
+      if (str[i] === '{') depth++;
+      else if (str[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          return { content: str.slice(contentStart, i), nextIdx: i + 1 };
+        }
+      }
+    }
+    return null;
+  };
+
+  // Expand \frac{A}{B}, \dfrac{A}{B}, \tfrac{A}{B}
+  for (let pass = 0; pass < 8; pass++) {
+    const fracMatch = s.match(/\\(?:d|t)?frac\b/);
+    if (!fracMatch || fracMatch.index === undefined) break;
+    const start = fracMatch.index;
+    const afterCmd = start + fracMatch[0].length;
+    const num = extractBraceGroup(s, afterCmd);
+    if (!num) break;
+    const den = extractBraceGroup(s, num.nextIdx);
+    if (!den) break;
+    s = `${s.slice(0, start)}((${num.content})/(${den.content}))${s.slice(den.nextIdx)}`;
+  }
+
+  // Expand \sqrt{A}
+  for (let pass = 0; pass < 6; pass++) {
+    const sqrtMatch = s.match(/\\sqrt\b/);
+    if (!sqrtMatch || sqrtMatch.index === undefined) break;
+    const start = sqrtMatch.index;
+    const afterCmd = start + sqrtMatch[0].length;
+    const arg = extractBraceGroup(s, afterCmd);
+    if (!arg) break;
+    s = `${s.slice(0, start)}SQRT(${arg.content})${s.slice(arg.nextIdx)}`;
+  }
+
+  // Expand ^{...} -> ^(...)
+  for (let pass = 0; pass < 8; pass++) {
+    const powMatch = s.match(/\^\s*\{/);
+    if (!powMatch || powMatch.index === undefined) break;
+    const start = powMatch.index;
+    const braceStart = s.indexOf('{', start);
+    const grp = extractBraceGroup(s, braceStart);
+    if (!grp) break;
+    s = `${s.slice(0, start)}^(${grp.content})${s.slice(grp.nextIdx)}`;
+  }
+
+  return s;
+}
+
+/**
+ * Normalizes a raw math equation string (from Text box, MathOCR LaTeX, or Gemini Vision)
+ * into a clean algebraic equation in `x` and `y` with positive symbolic parameter substitution.
+ */
+export function normalizeMathEquationForPlot(rawInput: string): string {
+  if (!rawInput || !rawInput.trim()) return '';
+
+  // Take the last non-empty equation line or last implication step
+  const lines = splitAndCleanMathLatexLines(rawInput);
+  let line = lines.length > 0 ? lines[lines.length - 1] : rawInput.trim();
+  const arrowParts = line.split(/\\Rightarrow|\\Leftrightarrow|\\implies|⇒|⇔|->/);
+  if (arrowParts.length > 1) {
+    const lastPart = arrowParts[arrowParts.length - 1].trim();
+    if (lastPart) line = lastPart;
+  }
+
+  let s = expandLatexConstructs(line);
+
+  // Strip LaTeX formatting wrappers
+  s = s
+    .replace(/\\left\s*\|([^|]+)\\right\s*\|/g, 'ABS($1)')
+    .replace(/\|([^|=]+)\|/g, 'ABS($1)')
+    .replace(/\\left\b|\\right\b|\\displaystyle\b/g, '')
+    .replace(/\\text\{[^}]*\}/g, '')
+    .replace(/\\(?:cdot|times)\b/g, '*')
+    .replace(/[·×∙]/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/[−–—]/g, '-')
+    .replace(/\\alpha\b/g, 'α')
+    .replace(/\\beta\b/g, 'β')
+    .replace(/\\gamma\b/g, 'γ')
+    .replace(/\\delta\b/g, 'δ')
+    .replace(/\\kappa\b/g, 'κ')
+    .replace(/\\lambda\b/g, 'λ')
+    .replace(/\\mu\b/g, 'μ')
+    .replace(/\\rho\b/g, 'ρ')
+    .replace(/\\omega\b/g, 'ω')
+    .replace(/\\pi\b|π/g, '3.14159265');
+
+  // Convert Unicode superscripts (e.g. x², y³, x⁻²) to ^(2), ^(3), ^(-2)
+  const supMap: Record<string, string> = {
+    '⁰': '0',
+    '¹': '1',
+    '²': '2',
+    '³': '3',
+    '⁴': '4',
+    '⁵': '5',
+    '⁶': '6',
+    '⁷': '7',
+    '⁸': '8',
+    '⁹': '9',
+    '⁺': '+',
+    '⁻': '-',
+  };
+  s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+/g, (match) => {
+    const digits = match
+      .split('')
+      .map((ch) => supMap[ch] ?? '')
+      .join('');
+    return `^(${digits})`;
+  });
+
+  // Normalize trig & standard functions into uppercase tokens before single-letter variable splitting
+  s = s
+    .replace(/\\?(?:sin|ημ)\b/gi, 'SIN')
+    .replace(/\\?(?:cos|συν)\b/gi, 'COS')
+    .replace(/\\?(?:tan|tg|εφ)\b/gi, 'TAN')
+    .replace(/\\?(?:ln)\b/gi, 'LN')
+    .replace(/\\?(?:log)\b/gi, 'LOG')
+    .replace(/\\?(?:exp)\b/gi, 'EXP')
+    .replace(/\\?(?:sqrt)\b/gi, 'SQRT')
+    .replace(/√\s*\(([^)]+)\)/g, 'SQRT($1)')
+    .replace(/√\s*([a-zA-Zα-ωΑ-Ω0-9]+)/g, 'SQRT($1)')
+    .replace(/\\?(?:abs)\b/gi, 'ABS');
+
+  // Convert f(x), g(x), y(x), x(t), u(t), v(t)
+  s = s
+    .replace(/\b[fghyFGH]\s*\(\s*[xχ]\s*\)/g, 'y')
+    .replace(/\b[xuvXUV]\s*\(\s*t\s*\)/g, 'y');
+
+  // Remove subscripts like x_0, y_0, u_0, v_0 -> treat as symbolic positive constant k
+  s = s
+    .replace(/\b([xyuvα-ωa-z])\s*_\s*\{?\s*0\s*\}?/gi, 'b')
+    .replace(/\\[a-zA-Z]+/g, '');
+
+  // Replace Greek χ/Χ with x, and ψ/Ψ with y
+  s = s.replace(/[χΧ]/g, 'x').replace(/[ψΨ]/g, 'y');
+
+  // If equation has 't' on RHS and no 'x' (e.g. x = 2t + 1 or u = a*t), map LHS variable to y and t to x
+  if (!s.includes('y') && /\bt\b/.test(s) && s.includes('=')) {
+    const [lhs, rhs] = s.split('=');
+    if (lhs && rhs && /\bt\b/.test(rhs)) {
+      s = `y = ${rhs.replace(/\bt\b/g, 'x')}`;
+    }
+  }
+
+  // Handle uppercase X, Y as x, y
+  s = s.replace(/X/g, 'x').replace(/Y/g, 'y');
+
+  // Replace comma decimals (e.g. 1,5 -> 1.5)
+  s = s.replace(/(\d),(\d)/g, '$1.$2');
+
+  // If no '=' sign is present, treat the expression as `y = <expr>`
+  if (!s.includes('=')) {
+    s = `y = ${s}`;
+  } else {
+    // If multiple '=' exist (e.g. f(x) = y = 2x + 1), keep last two parts
+    const eqParts = s.split('=').map((p) => p.trim()).filter(Boolean);
+    if (eqParts.length >= 2) {
+      s = `${eqParts[eqParts.length - 2]} = ${eqParts[eqParts.length - 1]}`;
+    }
+  }
+
+  return s.trim();
+}
+
+type MathExprToken =
+  | { type: 'num'; value: number }
+  | { type: 'var'; name: 'x' | 'y' }
+  | { type: 'func'; name: 'SIN' | 'COS' | 'TAN' | 'LN' | 'LOG' | 'EXP' | 'SQRT' | 'ABS' }
+  | { type: 'op'; value: '+' | '-' | '*' | '/' | '^' }
+  | { type: 'paren'; value: '(' | ')' };
+
+/**
+ * Compiles an algebraic expression string (after `normalizeMathEquationForPlot`)
+ * into a fast numerical evaluator `(x: number, y: number) => number`.
+ * Automatically substitutes positive constants for symbolic parameters (`a, b, c, α, β, γ, k, m, p, R, r...`)
+ * and inserts implicit multiplication (`2x` -> `2*x`, `ax` -> `a*x`, `(x+1)(x-1)` -> `(x+1)*(x-1)`).
+ */
+function compileMathExprEvaluator(
+  exprStr: string,
+  paramOverrides?: Record<string, number>
+): (x: number, y: number) => number {
+  const defaultParams: Record<string, number> = {
+    a: 1.35,
+    α: 1.35,
+    A: 1.35,
+    b: 1.5,
+    β: 1.5,
+    B: 1.5,
+    c: 0.8,
+    γ: 0.8,
+    C: 0.8,
+    d: 1.0,
+    δ: 1.0,
+    k: 1.2,
+    κ: 1.2,
+    l: 1.0,
+    λ: 1.0,
+    m: 1.2,
+    μ: 1.2,
+    n: 1.0,
+    ν: 1.0,
+    p: 1.2,
+    q: 1.0,
+    r: 1.5,
+    ρ: 1.5,
+    R: 1.5,
+    u: 1.2,
+    v: 1.2,
+    w: 1.0,
+    ω: 1.0,
+    e: Math.E,
+    ...(paramOverrides || {}),
+  };
+
+  const rawTokens: MathExprToken[] = [];
+  const fnNames = ['SIN', 'COS', 'TAN', 'SQRT', 'ABS', 'EXP', 'LOG', 'LN'] as const;
+  let i = 0;
+  while (i < exprStr.length) {
+    const ch = exprStr[i];
+    if (/\s/.test(ch) || ch === '{' || ch === '}') {
+      i++;
+      continue;
+    }
+    // Check function names first
+    let matchedFn: (typeof fnNames)[number] | null = null;
+    for (const fn of fnNames) {
+      if (exprStr.startsWith(fn, i)) {
+        matchedFn = fn;
+        break;
+      }
+    }
+    if (matchedFn) {
+      rawTokens.push({ type: 'func', name: matchedFn });
+      i += matchedFn.length;
+      continue;
+    }
+
+    // Number literal
+    if (/\d/.test(ch) || (ch === '.' && i + 1 < exprStr.length && /\d/.test(exprStr[i + 1]))) {
+      let j = i;
+      while (j < exprStr.length && /[\d.]/.test(exprStr[j])) j++;
+      const numVal = parseFloat(exprStr.slice(i, j));
+      rawTokens.push({ type: 'num', value: Number.isFinite(numVal) ? numVal : 1 });
+      i = j;
+      continue;
+    }
+
+    // Operators
+    if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '^') {
+      rawTokens.push({ type: 'op', value: ch });
+      i++;
+      continue;
+    }
+
+    // Parentheses / brackets
+    if (ch === '(' || ch === '[') {
+      rawTokens.push({ type: 'paren', value: '(' });
+      i++;
+      continue;
+    }
+    if (ch === ')' || ch === ']') {
+      rawTokens.push({ type: 'paren', value: ')' });
+      i++;
+      continue;
+    }
+
+    // Variable x or y
+    if (ch === 'x' || ch === 'y') {
+      rawTokens.push({ type: 'var', name: ch });
+      i++;
+      continue;
+    }
+
+    // Any symbolic parameter letter (Latin or Greek: a, b, c, α, β, γ, R, r, k, m, etc.) -> positive constant!
+    if (/[a-zA-Zα-ωΑ-Ω]/.test(ch)) {
+      const val = defaultParams[ch] ?? 1.2;
+      rawTokens.push({ type: 'num', value: val });
+      i++;
+      continue;
+    }
+
+    i++;
+  }
+
+  // Insert implicit '*' tokens where needed:
+  // Left is ('num' | 'var' | ')') and Right is ('num' | 'var' | 'func' | '(')
+  const tokens: MathExprToken[] = [];
+  for (let k = 0; k < rawTokens.length; k++) {
+    const cur = rawTokens[k];
+    if (tokens.length > 0) {
+      const prev = tokens[tokens.length - 1];
+      const leftCanMul =
+        prev.type === 'num' ||
+        prev.type === 'var' ||
+        (prev.type === 'paren' && prev.value === ')');
+      const rightCanMul =
+        cur.type === 'num' ||
+        cur.type === 'var' ||
+        cur.type === 'func' ||
+        (cur.type === 'paren' && cur.value === '(');
+      if (leftCanMul && rightCanMul) {
+        tokens.push({ type: 'op', value: '*' });
+      }
+    }
+    tokens.push(cur);
+  }
+
+  // Recursive descent AST compiler so `-x^2` is evaluated as `-(x^2)` (power binds tighter than unary minus!)
+  type EvalNode = (x: number, y: number) => number;
+  let pos = 0;
+
+  const parseExpr = (): EvalNode => {
+    let left = parseTerm();
+    while (pos < tokens.length) {
+      const tok = tokens[pos];
+      if (tok.type === 'op' && (tok.value === '+' || tok.value === '-')) {
+        pos++;
+        const op = tok.value;
+        const right = parseTerm();
+        const prevLeft = left;
+        left = op === '+' ? (x, y) => prevLeft(x, y) + right(x, y) : (x, y) => prevLeft(x, y) - right(x, y);
+      } else {
+        break;
+      }
+    }
+    return left;
+  };
+
+  const parseTerm = (): EvalNode => {
+    let left = parseUnary();
+    while (pos < tokens.length) {
+      const tok = tokens[pos];
+      if (tok.type === 'op' && (tok.value === '*' || tok.value === '/')) {
+        pos++;
+        const op = tok.value;
+        const right = parseUnary();
+        const prevLeft = left;
+        left =
+          op === '*'
+            ? (x, y) => prevLeft(x, y) * right(x, y)
+            : (x, y) => {
+                const den = right(x, y);
+                return Math.abs(den) < 1e-9 ? NaN : prevLeft(x, y) / den;
+              };
+      } else {
+        break;
+      }
+    }
+    return left;
+  };
+
+  // Unary +/- is LOWER precedence than Power (`^`), so `-x^2` = `-(x^2)`!
+  const parseUnary = (): EvalNode => {
+    if (pos < tokens.length) {
+      const tok = tokens[pos];
+      if (tok.type === 'op' && (tok.value === '+' || tok.value === '-')) {
+        pos++;
+        const operand = parseUnary();
+        return tok.value === '-' ? (x, y) => -operand(x, y) : operand;
+      }
+    }
+    return parsePower();
+  };
+
+  const parsePower = (): EvalNode => {
+    const base = parsePrimary();
+    if (pos < tokens.length) {
+      const tok = tokens[pos];
+      if (tok.type === 'op' && tok.value === '^') {
+        pos++;
+        const exp = parseUnary();
+        return (x, y) => {
+          const bVal = base(x, y);
+          const eVal = exp(x, y);
+          if (!Number.isFinite(bVal) || !Number.isFinite(eVal)) return NaN;
+          // Handle integer powers (including odd powers of negative numbers like (-2)^3 = -8)
+          const roundedExp = Math.round(eVal);
+          if (Math.abs(eVal - roundedExp) < 1e-7) {
+            return Math.pow(bVal, roundedExp);
+          }
+          return bVal < 0 ? NaN : Math.pow(bVal, eVal);
+        };
+      }
+    }
+    return base;
+  };
+
+  const parsePrimary = (): EvalNode => {
+    if (pos >= tokens.length) return () => 0;
+    const tok = tokens[pos];
+    if (tok.type === 'num') {
+      pos++;
+      const v = tok.value;
+      return () => v;
+    }
+    if (tok.type === 'var') {
+      pos++;
+      return tok.name === 'x' ? (x) => x : (_x, y) => y;
+    }
+    if (tok.type === 'func') {
+      pos++;
+      const fnName = tok.name;
+      let argNode: EvalNode;
+      const openTok = tokens[pos];
+      if (openTok && openTok.type === 'paren' && openTok.value === '(') {
+        pos++;
+        argNode = parseExpr();
+        const closeTok = tokens[pos];
+        if (closeTok && closeTok.type === 'paren' && closeTok.value === ')') {
+          pos++;
+        }
+      } else {
+        argNode = parseUnary();
+      }
+      return (x, y) => {
+        const val = argNode(x, y);
+        if (!Number.isFinite(val)) return NaN;
+        switch (fnName) {
+          case 'SIN':
+            return Math.sin(val);
+          case 'COS':
+            return Math.cos(val);
+          case 'TAN': {
+            const c = Math.cos(val);
+            return Math.abs(c) < 1e-3 ? NaN : Math.tan(val);
+          }
+          case 'SQRT':
+            return val < 0 ? NaN : Math.sqrt(val);
+          case 'ABS':
+            return Math.abs(val);
+          case 'EXP':
+            return Math.exp(val);
+          case 'LN':
+            return val <= 0 ? NaN : Math.log(val);
+          case 'LOG':
+            return val <= 0 ? NaN : Math.log10(val);
+        }
+      };
+    }
+    if (tok.type === 'paren' && tok.value === '(') {
+      pos++;
+      const inner = parseExpr();
+      const closeTok = tokens[pos];
+      if (closeTok && closeTok.type === 'paren' && closeTok.value === ')') {
+        pos++;
+      }
+      return inner;
+    }
+    pos++;
+    return () => 0;
+  };
+
+  const root = parseExpr();
+  return root;
+}
+
+/**
+ * Generates editable vector `StrokeObject[]` (grouped under a single `math-graph-grp-...` ID)
+ * representing a Cartesian $(x, y)$ coordinate diagram and plotted curve(s) for any equation:
+ * - Circle (`x^2 + y^2 = 1`, `(x - a)^2 + (y - b)^2 = R^2`)
+ * - Ellipse (`(x^2)/9 + (y^2)/16 = 25`, `x^2/a^2 + y^2/b^2 = 1`)
+ * - Hyperbola (`y = a/x`, `xy = c`, `x^2/a^2 - y^2/b^2 = 1`, `y^2/b^2 - x^2/a^2 = 1`)
+ * - Parabola (`y = ax^2 + bx + c`, `y = x^2 - 4`, `y^2 = 2px`)
+ * - Line (`y = ax + b`, `y = αχ + β`, `2x + 3y = 6`, `x = c`, `y = c`)
+ * - Polynomials & Functions (`y = x^3 - 3x`, `y = x^4 - 2x^2`, `y = sin(x)`, `y = e^x`, `y = ln(x)`, `y = sqrt(x)`, `y = |x|`)
+ * - General Implicit Curves (`F(x, y) = 0`)
+ */
+export function buildMathGraphStrokesFromEquation(
+  rawEquation: string,
+  centerX: number,
+  centerY: number,
+  width = 250,
+  height = 250,
+  curveColor = '#dc2626',
+  axisColor = '#0f172a',
+  layerId = 'layer-1'
+): { strokes: StrokeObject[]; groupId: string; kindLabel: string } | null {
+  const normalized = normalizeMathEquationForPlot(rawEquation);
+  if (!normalized || !normalized.includes('=')) return null;
+
+  const eqIdx = normalized.indexOf('=');
+  const lhsStr = normalized.slice(0, eqIdx).trim();
+  const rhsStr = normalized.slice(eqIdx + 1).trim();
+  if (!lhsStr || !rhsStr) return null;
+
+  // Check if symbolic ellipse/hyperbola with a^2 and b^2 so we give distinct semi-axes a != b
+  const hasBothAB =
+    (/[aαA]/.test(normalized) && /[bβB]/.test(normalized)) ||
+    (/[aαA]/.test(lhsStr) && /[bβB]/.test(rhsStr));
+  const paramOverrides: Record<string, number> = hasBothAB
+    ? { a: 1.5, α: 1.5, A: 1.5, b: 1.0, β: 1.0, B: 1.0, c: 0.4, γ: 0.4, C: 0.4 }
+    : { a: 1.2, α: 1.2, A: 1.2, b: 1.4, β: 1.4, B: 1.4, c: 0.5, γ: 0.5, C: 0.5 };
+
+  const evalLhs = compileMathExprEvaluator(lhsStr, paramOverrides);
+  const evalRhs = compileMathExprEvaluator(rhsStr, paramOverrides);
+  const evalF = (x: number, y: number): number => evalLhs(x, y) - evalRhs(x, y);
+
+  const halfW = Math.max(70, width / 2);
+  const halfH = Math.max(70, height / 2);
+  const plotHalfW = halfW * 0.82;
+  const plotHalfH = halfH * 0.82;
+  const groupId = `math-graph-grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const nowId = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+
+  const strokes: StrokeObject[] = [];
+
+  // 1. Horizontal X-axis with open arrow at right
+  strokes.push({
+    id: `st-${nowId}-axx`,
+    tool: 'pen',
+    color: axisColor,
+    width: 2.5,
+    opacity: 1,
+    arrowEnd: true,
+    points: [
+      { x: centerX - halfW, y: centerY, pressure: 0.7 },
+      { x: centerX + halfW, y: centerY, pressure: 0.7 },
+    ],
+    layerId,
+    groupId,
+    isShape: true,
+    shapeType: 'wave-axis-x',
+  });
+
+  // 2. Vertical Y-axis with open arrow at top
+  strokes.push({
+    id: `st-${nowId}-axy`,
+    tool: 'pen',
+    color: axisColor,
+    width: 2.5,
+    opacity: 1,
+    arrowEnd: true,
+    points: [
+      { x: centerX, y: centerY + halfH, pressure: 0.7 },
+      { x: centerX, y: centerY - halfH, pressure: 0.7 },
+    ],
+    layerId,
+    groupId,
+    isShape: true,
+    shapeType: 'wave-axis-y',
+  });
+
+  // 3. Vector label 'x' near right arrow tip (drawn as 2 strokes so it scales & moves with the diagram)
+  const lx = centerX + halfW + 10;
+  const ly = centerY - 14;
+  strokes.push({
+    id: `st-${nowId}-lblx1`,
+    tool: 'pen',
+    color: axisColor,
+    width: 2.1,
+    opacity: 1,
+    points: [
+      { x: lx - 5, y: ly - 5.5, pressure: 0.7 },
+      { x: lx + 5, y: ly + 5.5, pressure: 0.7 },
+    ],
+    layerId,
+    groupId,
+    isShape: true,
+    shapeType: 'wave-axis-x',
+  });
+  strokes.push({
+    id: `st-${nowId}-lblx2`,
+    tool: 'pen',
+    color: axisColor,
+    width: 2.1,
+    opacity: 1,
+    points: [
+      { x: lx - 5, y: ly + 5.5, pressure: 0.7 },
+      { x: lx + 5, y: ly - 5.5, pressure: 0.7 },
+    ],
+    layerId,
+    groupId,
+    isShape: true,
+    shapeType: 'wave-axis-x',
+  });
+
+  // 4. Vector label 'y' near top arrow tip
+  const yx = centerX - 18;
+  const yy = centerY - halfH + 6;
+  strokes.push({
+    id: `st-${nowId}-lbly1`,
+    tool: 'pen',
+    color: axisColor,
+    width: 2.1,
+    opacity: 1,
+    points: [
+      { x: yx - 4.5, y: yy - 6, pressure: 0.7 },
+      { x: yx + 0.5, y: yy + 1, pressure: 0.7 },
+    ],
+    layerId,
+    groupId,
+    isShape: true,
+    shapeType: 'wave-axis-y',
+  });
+  strokes.push({
+    id: `st-${nowId}-lbly2`,
+    tool: 'pen',
+    color: axisColor,
+    width: 2.1,
+    opacity: 1,
+    points: [
+      { x: yx + 5.5, y: yy - 6, pressure: 0.7 },
+      { x: yx - 3.5, y: yy + 8.5, pressure: 0.7 },
+    ],
+    layerId,
+    groupId,
+    isShape: true,
+    shapeType: 'wave-axis-y',
+  });
+
+  const addCurveStroke = (pts: { x: number; y: number }[], idx: number, asLineShape = false) => {
+    if (pts.length < 2) return;
+    strokes.push({
+      id: `st-${nowId}-crv-${idx}`,
+      tool: 'pen',
+      color: curveColor,
+      width: 3.0,
+      opacity: 1,
+      points: pts.map((p) => ({ x: p.x, y: p.y, pressure: 0.7 })),
+      layerId,
+      groupId,
+      isShape: asLineShape,
+      shapeType: asLineShape ? 'line' : undefined,
+    });
+  };
+
+  let kindLabel = 'Συνάρτηση';
+
+  // Step A: Test if F(x, y) is an exact polynomial of degree <= 2 (Line, Circle, Ellipse, Parabola, or Conic Hyperbola):
+  // F(x, y) = A*x^2 + B*x*y + C*y^2 + D*x + E*y + G
+  const f00 = evalF(0, 0);
+  const f10 = evalF(1, 0);
+  const fm10 = evalF(-1, 0);
+  const f01 = evalF(0, 1);
+  const f0m1 = evalF(0, -1);
+  const f11 = evalF(1, 1);
+
+  const canBeConic =
+    Number.isFinite(f00) &&
+    Number.isFinite(f10) &&
+    Number.isFinite(fm10) &&
+    Number.isFinite(f01) &&
+    Number.isFinite(f0m1) &&
+    Number.isFinite(f11);
+
+  if (canBeConic) {
+    const G = f00;
+    const D = (f10 - fm10) / 2;
+    const E = (f01 - f0m1) / 2;
+    const A = (f10 + fm10) / 2 - G;
+    const C = (f01 + f0m1) / 2 - G;
+    const B = f11 - (A + C + D + E + G);
+
+    const testPts = [
+      [2.3, -1.7],
+      [-0.7, 3.1],
+      [1.4, 2.2],
+      [-2.1, -1.3],
+      [0.6, -0.9],
+    ];
+    const isExactQuadraticOrLinear = testPts.every(([tx, ty]) => {
+      const actual = evalF(tx, ty);
+      if (!Number.isFinite(actual)) return false;
+      const pred = A * tx * tx + B * tx * ty + C * ty * ty + D * tx + E * ty + G;
+      const scale = Math.max(1, Math.abs(actual), Math.abs(pred));
+      return Math.abs(actual - pred) <= 1e-5 * scale;
+    });
+
+    if (isExactQuadraticOrLinear) {
+      const eps = 1e-6;
+      const hasQuad = Math.abs(A) > eps || Math.abs(B) > eps || Math.abs(C) > eps;
+
+      // 1. LINE: D*x + E*y + G = 0
+      if (!hasQuad && (Math.abs(D) > eps || Math.abs(E) > eps)) {
+        kindLabel = 'Ευθεία';
+        const xInt = Math.abs(D) > eps ? -G / D : 0;
+        const yInt = Math.abs(E) > eps ? -G / E : 0;
+        const maxIntercept = Math.max(
+          1.5,
+          Math.abs(xInt) > eps ? Math.abs(xInt) * 1.85 : 0,
+          Math.abs(yInt) > eps ? Math.abs(yInt) * 1.85 : 0
+        );
+        const wSpan = maxIntercept;
+        const hSpan = maxIntercept;
+
+        // Clip infinite line D*x + E*y + G = 0 to [-wSpan, wSpan] x [-hSpan, hSpan]
+        const boxHits: { x: number; y: number }[] = [];
+        if (Math.abs(E) > eps) {
+          for (const bx of [-wSpan, wSpan]) {
+            const by = (-G - D * bx) / E;
+            if (by >= -hSpan - 1e-5 && by <= hSpan + 1e-5) {
+              boxHits.push({ x: bx, y: by });
+            }
+          }
+        }
+        if (Math.abs(D) > eps) {
+          for (const by of [-hSpan, hSpan]) {
+            const bx = (-G - E * by) / D;
+            if (bx >= -wSpan - 1e-5 && bx <= wSpan + 1e-5) {
+              if (!boxHits.some((p) => Math.hypot(p.x - bx, p.y - by) < 1e-4)) {
+                boxHits.push({ x: bx, y: by });
+              }
+            }
+          }
+        }
+        if (boxHits.length >= 2) {
+          const p0 = boxHits[0];
+          const p1 = boxHits[boxHits.length - 1];
+          addCurveStroke(
+            [
+              {
+                x: centerX + (p0.x / wSpan) * plotHalfW,
+                y: centerY - (p0.y / hSpan) * plotHalfH,
+              },
+              {
+                x: centerX + (p1.x / wSpan) * plotHalfW,
+                y: centerY - (p1.y / hSpan) * plotHalfH,
+              },
+            ],
+            0,
+            true
+          );
+          return { strokes, groupId, kindLabel };
+        }
+      }
+
+      // 2. CIRCLE OR ELLIPSE: B ≈ 0 and A * C > 0
+      if (Math.abs(B) <= eps && A * C > eps * eps) {
+        const x0 = -D / (2 * A);
+        const y0 = -E / (2 * C);
+        const rhsConst = A * x0 * x0 + C * y0 * y0 - G;
+        const absK = Math.abs(rhsConst) > eps ? Math.abs(rhsConst) : Math.abs(A);
+        const aSemi = Math.sqrt(absK / Math.abs(A));
+        const bSemi = Math.sqrt(absK / Math.abs(C));
+        const isCircle = Math.abs(aSemi - bSemi) <= 1e-3 * Math.max(aSemi, bSemi);
+        kindLabel = isCircle ? 'Κύκλος' : 'Έλλειψη';
+
+        const maxCenterOffset = Math.max(Math.abs(x0), Math.abs(y0));
+        const baseRadiusPx = Math.min(plotHalfW, plotHalfH) * (maxCenterOffset > 0.05 ? 0.52 : 0.72);
+        let rxPx = baseRadiusPx;
+        let ryPx = baseRadiusPx;
+
+        if (!isCircle) {
+          if (aSemi > bSemi) {
+            const ratio = Math.min(0.64, Math.max(0.34, bSemi / aSemi));
+            rxPx = baseRadiusPx * 1.08;
+            ryPx = rxPx * ratio;
+          } else {
+            const ratio = Math.min(0.64, Math.max(0.34, aSemi / bSemi));
+            ryPx = baseRadiusPx * 1.08;
+            rxPx = ryPx * ratio;
+          }
+        }
+
+        const worldRef = Math.max(aSemi, bSemi, 1e-4);
+        const cxPx = centerX + (x0 / (worldRef * 1.8)) * plotHalfW;
+        const cyPx = centerY - (y0 / (worldRef * 1.8)) * plotHalfH;
+
+        strokes.push({
+          id: `st-${nowId}-crv-ellipse`,
+          tool: 'pen',
+          color: curveColor,
+          width: 3.0,
+          opacity: 1,
+          points: [
+            { x: cxPx, y: cyPx - ryPx, pressure: 0.7 },
+            { x: cxPx + rxPx, y: cyPx, pressure: 0.7 },
+            { x: cxPx, y: cyPx + ryPx, pressure: 0.7 },
+            { x: cxPx - rxPx, y: cyPx, pressure: 0.7 },
+          ],
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'ellipse',
+        });
+        return { strokes, groupId, kindLabel };
+      }
+
+      // 3. VERTICAL PARABOLA: A != 0, C ≈ 0, B ≈ 0, E != 0 -> y = a*x^2 + b*x + c
+      if (Math.abs(B) <= eps && Math.abs(A) > eps && Math.abs(C) <= eps && Math.abs(E) > eps) {
+        kindLabel = 'Παραβολή';
+        const pa = -A / E;
+        const pb = -D / E;
+        const pc = -G / E;
+        const xv = -pb / (2 * pa);
+        const yv = pa * xv * xv + pb * xv + pc;
+        const disc = pb * pb - 4 * pa * pc;
+        const rootSpan = disc > 0 ? Math.sqrt(disc) / Math.abs(2 * pa) : 0;
+        const halfDomainX = Math.max(1.8, rootSpan * 1.55, Math.abs(xv) * 0.8 + 1.6);
+        const xSpan = Math.max(Math.abs(xv) + halfDomainX, 2.2);
+        const yAtEdge1 = pa * (xv + halfDomainX) * (xv + halfDomainX) + pb * (xv + halfDomainX) + pc;
+        const ySpan = Math.max(Math.abs(yv) * 1.45, Math.abs(yAtEdge1), Math.abs(pc) * 1.3, 2.0);
+
+        const pts: { x: number; y: number }[] = [];
+        const steps = 80;
+        const xMin = Math.max(-xSpan, xv - halfDomainX);
+        const xMax = Math.min(xSpan, xv + halfDomainX);
+        for (let i = 0; i <= steps; i++) {
+          const wx = xMin + ((xMax - xMin) * i) / steps;
+          const wy = pa * wx * wx + pb * wx + pc;
+          if (Math.abs(wy) <= ySpan * 1.08) {
+            pts.push({
+              x: centerX + (wx / xSpan) * plotHalfW,
+              y: centerY - (wy / ySpan) * plotHalfH,
+            });
+          }
+        }
+        addCurveStroke(pts, 0, false);
+        return { strokes, groupId, kindLabel };
+      }
+
+      // 4. HORIZONTAL PARABOLA: C != 0, A ≈ 0, B ≈ 0, D != 0 -> x = a*y^2 + b*y + c (e.g. y^2 = 2px)
+      if (Math.abs(B) <= eps && Math.abs(C) > eps && Math.abs(A) <= eps && Math.abs(D) > eps) {
+        kindLabel = 'Παραβολή';
+        const pa = -C / D;
+        const pb = -E / D;
+        const pc = -G / D;
+        const yv = -pb / (2 * pa);
+        const xv = pa * yv * yv + pb * yv + pc;
+        const disc = pb * pb - 4 * pa * pc;
+        const rootSpan = disc > 0 ? Math.sqrt(disc) / Math.abs(2 * pa) : 0;
+        const halfDomainY = Math.max(1.8, rootSpan * 1.55, Math.abs(yv) * 0.8 + 1.6);
+        const ySpan = Math.max(Math.abs(yv) + halfDomainY, 2.2);
+        const xAtEdge = pa * (yv + halfDomainY) * (yv + halfDomainY) + pb * (yv + halfDomainY) + pc;
+        const xSpan = Math.max(Math.abs(xv) * 1.45, Math.abs(xAtEdge), Math.abs(pc) * 1.3, 2.0);
+
+        const pts: { x: number; y: number }[] = [];
+        const steps = 80;
+        const yMin = Math.max(-ySpan, yv - halfDomainY);
+        const yMax = Math.min(ySpan, yv + halfDomainY);
+        for (let i = 0; i <= steps; i++) {
+          const wy = yMin + ((yMax - yMin) * i) / steps;
+          const wx = pa * wy * wy + pb * wy + pc;
+          if (Math.abs(wx) <= xSpan * 1.08) {
+            pts.push({
+              x: centerX + (wx / xSpan) * plotHalfW,
+              y: centerY - (wy / ySpan) * plotHalfH,
+            });
+          }
+        }
+        addCurveStroke(pts, 0, false);
+        return { strokes, groupId, kindLabel };
+      }
+
+      // 5. CONIC HYPERBOLA: B ≈ 0 and A * C < 0 (e.g. x^2/a^2 - y^2/b^2 = 1 or y^2/b^2 - x^2/a^2 = 1)
+      if (Math.abs(B) <= eps && A * C < -eps * eps) {
+        kindLabel = 'Υπερβολή';
+        const x0 = -D / (2 * A);
+        const y0 = -E / (2 * C);
+        const K = A * x0 * x0 + C * y0 * y0 - G;
+        const effK = Math.abs(K) > eps ? K : A;
+        const aSemi = Math.sqrt(Math.abs(effK / A));
+        const bSemi = Math.sqrt(Math.abs(effK / C));
+        const opensEastWest = effK / A > 0;
+
+        const xSpan = Math.max(aSemi * 2.8, Math.abs(x0) + aSemi * 2.4, 2.0);
+        const ySpan = Math.max(bSemi * 2.8, Math.abs(y0) + bSemi * 2.4, 2.0);
+        const steps = 72;
+
+        if (opensEastWest) {
+          // x = x0 ± a * sqrt(1 + (y - y0)^2 / b^2)
+          const branchRight: { x: number; y: number }[] = [];
+          const branchLeft: { x: number; y: number }[] = [];
+          const yRange = ySpan * 0.92;
+          for (let i = 0; i <= steps; i++) {
+            const wy = -yRange + (2 * yRange * i) / steps;
+            const rad = aSemi * Math.sqrt(1 + ((wy - y0) * (wy - y0)) / (bSemi * bSemi));
+            const wxR = x0 + rad;
+            const wxL = x0 - rad;
+            if (Math.abs(wxR) <= xSpan * 1.08) {
+              branchRight.push({
+                x: centerX + (wxR / xSpan) * plotHalfW,
+                y: centerY - (wy / ySpan) * plotHalfH,
+              });
+            }
+            if (Math.abs(wxL) <= xSpan * 1.08) {
+              branchLeft.push({
+                x: centerX + (wxL / xSpan) * plotHalfW,
+                y: centerY - (wy / ySpan) * plotHalfH,
+              });
+            }
+          }
+          addCurveStroke(branchRight, 0, false);
+          addCurveStroke(branchLeft, 1, false);
+          return { strokes, groupId, kindLabel };
+        } else {
+          // y = y0 ± b * sqrt(1 + (x - x0)^2 / a^2)
+          const branchTop: { x: number; y: number }[] = [];
+          const branchBot: { x: number; y: number }[] = [];
+          const xRange = xSpan * 0.92;
+          for (let i = 0; i <= steps; i++) {
+            const wx = -xRange + (2 * xRange * i) / steps;
+            const rad = bSemi * Math.sqrt(1 + ((wx - x0) * (wx - x0)) / (aSemi * aSemi));
+            const wyT = y0 + rad;
+            const wyB = y0 - rad;
+            if (Math.abs(wyT) <= ySpan * 1.08) {
+              branchTop.push({
+                x: centerX + (wx / xSpan) * plotHalfW,
+                y: centerY - (wyT / ySpan) * plotHalfH,
+              });
+            }
+            if (Math.abs(wyB) <= ySpan * 1.08) {
+              branchBot.push({
+                x: centerX + (wx / xSpan) * plotHalfW,
+                y: centerY - (wyB / ySpan) * plotHalfH,
+              });
+            }
+          }
+          addCurveStroke(branchTop, 0, false);
+          addCurveStroke(branchBot, 1, false);
+          return { strokes, groupId, kindLabel };
+        }
+      }
+
+      // 6. RECTANGULAR HYPERBOLA: B != 0, A ≈ 0, C ≈ 0 -> B*x*y + D*x + E*y + G = 0 (e.g. x*y = c)
+      if (Math.abs(B) > eps && Math.abs(A) <= eps && Math.abs(C) <= eps) {
+        kindLabel = 'Υπερβολή';
+        const xAsym = -E / B;
+        const yAsym = -D / B;
+        const numK = (D * E) / (B * B) - G / B;
+        const effC = Math.abs(numK) > eps ? numK : 1.2;
+        const sVal = Math.sqrt(Math.abs(effC));
+        const span = Math.max(sVal * 3.0, Math.abs(xAsym) + sVal * 2.5, Math.abs(yAsym) + sVal * 2.5, 2.5);
+
+        const branch1: { x: number; y: number }[] = [];
+        const branch2: { x: number; y: number }[] = [];
+        const steps = 64;
+        const tMin = sVal * 0.36;
+        const tMax = sVal * 2.75;
+        for (let i = 0; i <= steps; i++) {
+          const u = i / steps;
+          const dx = tMin * Math.pow(tMax / tMin, u);
+          const dy = effC / dx;
+          // Positive dx branch
+          branch1.push({
+            x: centerX + ((xAsym + dx) / span) * plotHalfW,
+            y: centerY - ((yAsym + dy) / span) * plotHalfH,
+          });
+          // Negative dx branch
+          branch2.push({
+            x: centerX + ((xAsym - dx) / span) * plotHalfW,
+            y: centerY - ((yAsym - dy) / span) * plotHalfH,
+          });
+        }
+        addCurveStroke(branch1, 0, false);
+        addCurveStroke(branch2, 1, false);
+        return { strokes, groupId, kindLabel };
+      }
+    }
+  }
+
+  // Step B: Check if explicit function y = f(x) (either LHS is 'y' and RHS has no 'y', or RHS is 'y' and LHS has no 'y')
+  const isLhsY = lhsStr === 'y' && !/\by\b/.test(rhsStr);
+  const isRhsY = rhsStr === 'y' && !/\by\b/.test(lhsStr);
+  if (isLhsY || isRhsY) {
+    const fnEval = isLhsY ? (x: number) => evalRhs(x, 0) : (x: number) => evalLhs(x, 0);
+    const fnStr = isLhsY ? rhsStr : lhsStr;
+
+    if (/\//.test(fnStr) && /x/.test(fnStr.split('/')[1] || '')) {
+      kindLabel = 'Υπερβολή';
+    } else if (/\^/.test(fnStr)) {
+      kindLabel = 'Πολυώνυμο';
+    } else if (/SIN|COS|TAN/i.test(fnStr)) {
+      kindLabel = 'Τριγωνομετρική';
+    }
+
+    // Choose domain xSpan and range ySpan to capture roots, extrema, or periods cleanly
+    let xSpan = /SIN|COS|TAN/i.test(fnStr) ? 6.5 : 3.2;
+    const sampleCheck: { x: number; y: number }[] = [];
+    for (let sx = -4.5; sx <= 4.5; sx += 0.1) {
+      const sy = fnEval(sx);
+      if (Number.isFinite(sy) && Math.abs(sy) < 80) {
+        sampleCheck.push({ x: sx, y: sy });
+      }
+    }
+    // Find turning points (local extrema) to size window cleanly
+    let maxExtremaX = 0;
+    let maxExtremaY = 0;
+    for (let i = 1; i < sampleCheck.length - 1; i++) {
+      const yPrev = sampleCheck[i - 1].y;
+      const yCur = sampleCheck[i].y;
+      const yNext = sampleCheck[i + 1].y;
+      if ((yCur > yPrev && yCur > yNext) || (yCur < yPrev && yCur < yNext)) {
+        maxExtremaX = Math.max(maxExtremaX, Math.abs(sampleCheck[i].x));
+        maxExtremaY = Math.max(maxExtremaY, Math.abs(yCur));
+      }
+    }
+    if (maxExtremaX > 0.2 && !/SIN|COS|TAN/i.test(fnStr)) {
+      xSpan = Math.max(2.4, Math.min(6.0, maxExtremaX * 2.1));
+    }
+
+    // Compute robust ySpan (75th percentile / extrema so vertical asymptotes like 1/x don't flatten the curve!)
+    const validAbsY: number[] = [];
+    for (let i = 0; i <= 120; i++) {
+      const wx = -xSpan + (2 * xSpan * i) / 120;
+      if (Math.abs(wx) < 0.08) continue;
+      const wy = fnEval(wx);
+      if (Number.isFinite(wy) && Math.abs(wy) < 200) {
+        validAbsY.push(Math.abs(wy));
+      }
+    }
+    validAbsY.sort((a, b) => a - b);
+    const p75 = validAbsY.length > 0 ? validAbsY[Math.floor(validAbsY.length * 0.75)] : 2.5;
+    const ySpan = Math.max(1.8, maxExtremaY * 1.45, Math.min(18, p75 * 1.35));
+
+    // Sample continuous branches, splitting across vertical asymptotes or domain gaps
+    const numSteps = 160;
+    let currentBranch: { x: number; y: number }[] = [];
+    let branchIdx = 0;
+    let prevWy: number | null = null;
+
+    for (let i = 0; i <= numSteps; i++) {
+      const wx = -xSpan + (2 * xSpan * i) / numSteps;
+      const wy = fnEval(wx);
+      const isJump =
+        prevWy !== null &&
+        Number.isFinite(wy) &&
+        Math.abs(wy - prevWy) > ySpan * 1.35 &&
+        wy * prevWy < 0;
+
+      if (!Number.isFinite(wy) || Math.abs(wy) > ySpan * 1.06 || isJump) {
+        if (currentBranch.length >= 2) {
+          addCurveStroke(currentBranch, branchIdx++, false);
+        }
+        currentBranch = [];
+        prevWy = Number.isFinite(wy) ? wy : null;
+        if (Number.isFinite(wy) && Math.abs(wy) <= ySpan * 1.06 && isJump) {
+          currentBranch.push({
+            x: centerX + (wx / xSpan) * plotHalfW,
+            y: centerY - (wy / ySpan) * plotHalfH,
+          });
+        }
+        continue;
+      }
+
+      currentBranch.push({
+        x: centerX + (wx / xSpan) * plotHalfW,
+        y: centerY - (wy / ySpan) * plotHalfH,
+      });
+      prevWy = wy;
+    }
+    if (currentBranch.length >= 2) {
+      addCurveStroke(currentBranch, branchIdx++, false);
+    }
+
+    if (strokes.length > 6) {
+      return { strokes, groupId, kindLabel };
+    }
+  }
+
+  // Step C: General Implicit Contour Plotter (Marching Squares on F(x, y) = 0)
+  const gridN = 56;
+  const wSpan = 3.5;
+  const hSpan = 3.5;
+  const gridVals: number[][] = [];
+  for (let r = 0; r <= gridN; r++) {
+    const row: number[] = [];
+    const wy = hSpan - (2 * hSpan * r) / gridN;
+    for (let c = 0; c <= gridN; c++) {
+      const wx = -wSpan + (2 * wSpan * c) / gridN;
+      row.push(evalF(wx, wy));
+    }
+    gridVals.push(row);
+  }
+
+  type Seg = { p1: { x: number; y: number }; p2: { x: number; y: number }; used?: boolean };
+  const segs: Seg[] = [];
+
+  const interpPt = (
+    x1: number,
+    y1: number,
+    v1: number,
+    x2: number,
+    y2: number,
+    v2: number
+  ): { x: number; y: number } => {
+    const denom = v1 - v2;
+    const t = Math.abs(denom) > 1e-9 ? Math.max(0, Math.min(1, v1 / denom)) : 0.5;
+    const wx = x1 + (x2 - x1) * t;
+    const wy = y1 + (y2 - y1) * t;
+    return {
+      x: centerX + (wx / wSpan) * plotHalfW,
+      y: centerY - (wy / hSpan) * plotHalfH,
+    };
+  };
+
+  for (let r = 0; r < gridN; r++) {
+    const wyTop = hSpan - (2 * hSpan * r) / gridN;
+    const wyBot = hSpan - (2 * hSpan * (r + 1)) / gridN;
+    for (let c = 0; c < gridN; c++) {
+      const wxLeft = -wSpan + (2 * wSpan * c) / gridN;
+      const wxRight = -wSpan + (2 * wSpan * (c + 1)) / gridN;
+      const vTL = gridVals[r][c];
+      const vTR = gridVals[r][c + 1];
+      const vBR = gridVals[r + 1][c + 1];
+      const vBL = gridVals[r + 1][c];
+      if (
+        !Number.isFinite(vTL) ||
+        !Number.isFinite(vTR) ||
+        !Number.isFinite(vBR) ||
+        !Number.isFinite(vBL)
+      ) {
+        continue;
+      }
+      const edgePts: { x: number; y: number }[] = [];
+      if ((vTL >= 0) !== (vTR >= 0)) {
+        edgePts.push(interpPt(wxLeft, wyTop, vTL, wxRight, wyTop, vTR));
+      }
+      if ((vTR >= 0) !== (vBR >= 0)) {
+        edgePts.push(interpPt(wxRight, wyTop, vTR, wxRight, wyBot, vBR));
+      }
+      if ((vBR >= 0) !== (vBL >= 0)) {
+        edgePts.push(interpPt(wxRight, wyBot, vBR, wxLeft, wyBot, vBL));
+      }
+      if ((vBL >= 0) !== (vTL >= 0)) {
+        edgePts.push(interpPt(wxLeft, wyBot, vBL, wxLeft, wyTop, vTL));
+      }
+      if (edgePts.length === 2) {
+        segs.push({ p1: edgePts[0], p2: edgePts[1] });
+      }
+    }
+  }
+
+  // Chain segments into continuous polylines
+  let chainIdx = 0;
+  for (let i = 0; i < segs.length; i++) {
+    if (segs[i].used) continue;
+    segs[i].used = true;
+    const poly: { x: number; y: number }[] = [segs[i].p1, segs[i].p2];
+    let extended = true;
+    while (extended) {
+      extended = false;
+      const tail = poly[poly.length - 1];
+      const head = poly[0];
+      for (let j = 0; j < segs.length; j++) {
+        if (segs[j].used) continue;
+        if (Math.hypot(segs[j].p1.x - tail.x, segs[j].p1.y - tail.y) < 3.5) {
+          segs[j].used = true;
+          poly.push(segs[j].p2);
+          extended = true;
+          break;
+        }
+        if (Math.hypot(segs[j].p2.x - tail.x, segs[j].p2.y - tail.y) < 3.5) {
+          segs[j].used = true;
+          poly.push(segs[j].p1);
+          extended = true;
+          break;
+        }
+        if (Math.hypot(segs[j].p1.x - head.x, segs[j].p1.y - head.y) < 3.5) {
+          segs[j].used = true;
+          poly.unshift(segs[j].p2);
+          extended = true;
+          break;
+        }
+        if (Math.hypot(segs[j].p2.x - head.x, segs[j].p2.y - head.y) < 3.5) {
+          segs[j].used = true;
+          poly.unshift(segs[j].p1);
+          extended = true;
+          break;
+        }
+      }
+    }
+    if (poly.length >= 3) {
+      addCurveStroke(poly, chainIdx++, false);
+    }
+  }
+
+  if (strokes.length <= 6) {
+    return null;
+  }
+
+  return { strokes, groupId, kindLabel };
+}
+
+
 
 
 
