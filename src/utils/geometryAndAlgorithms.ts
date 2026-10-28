@@ -4420,11 +4420,12 @@ export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
         // Normalize handwritten Greek συν / ημ variations in LaTeX
         .replace(/\\text\{\s*συν\s*\}|(?<!\\)συν|(?:6|\\sigma\s*)[uυv][vν](?=\s*[\(\\])/g, '\\sigma\\upsilon\\nu')
         .replace(/\\text\{\s*ημ\s*\}|(?<!\\)ημ/g, '\\eta\\mu')
-        // Handwritten Greek `π` (with a longer right leg) inside trig arguments or phase terms is often misread as `\eta`:
-        // e.g. `(5\pi t + \eta)` -> `(5\pi t + \pi)`, `\frac{\eta}{2}` -> `\frac{\pi}{2}`, `5\eta t` -> `5\pi t`
-        .replace(/([+-]\s*)\\eta(?!\s*\\mu)(?=\s*[\)\/])/g, '$1\\pi')
-        .replace(/\\frac\{\s*(\d*)\s*\\eta\s*\}\{\s*(\d+)\s*\}/g, '\\frac{$1\\pi}{$2}')
-        .replace(/(\d+\s*)\\eta(?!\s*\\mu)(?=\s*t\b|\s*\))/g, '$1\\pi')
+        // Handwritten Greek `π` (with a longer right leg) inside trig arguments, phases, or 2π formulas is often misread as `\eta`:
+        // e.g. `(5\pi t + \eta)` -> `(5\pi t + \pi)`, `\frac{\eta}{2}` -> `\frac{\pi}{2}`, `5\eta t` -> `5\pi t`, `\phi_0 = \eta` -> `\phi_0 = \pi`
+        .replace(/([+-]\s*\d*\s*)(?:\\eta|η)(?!\s*(?:\\mu|μ))(?=\s*(?:\\right)?[\)\/])/g, '$1\\pi')
+        .replace(/\\frac\{\s*(\d*)\s*(?:\\eta|η)\s*\}\{\s*(\d+|T|\\omega)\s*\}/g, '\\frac{$1\\pi}{$2}')
+        .replace(/(\b\d+\s*)(?:\\eta|η)(?!\s*(?:\\mu|μ))(?=\s*(?:t|f|R|r|\\sqrt|\\cdot|\)|\\right\)|$))/g, '$1\\pi')
+        .replace(/((?:\\phi|\\varphi|\\theta)(?:_\{?0\}?)?\s*=\s*[+-]?\s*\d*\s*)(?:\\eta|η)(?!\s*(?:\\mu|μ))/g, '$1\\pi')
         .trim();
       // If LHS is lowercase velocity `u = ...` (or `u(t) = ...`), ensure velocity amplitude is lowercase `u_{max}` (NOT uppercase `U_{max}`)
       if (/(?:^|\\Rightarrow|\\Leftrightarrow)\s*(?:\\vec\{u\}|u(?:\s*\(\s*t\s*\))?)\s*=/.test(cleaned)) {
