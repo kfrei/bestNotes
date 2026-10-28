@@ -28156,13 +28156,11 @@ export default function App() {
 
                 {activeTool !== 'direct-node' &&
                   !showAlignSubBar &&
-                  !selectedTextId &&
-                  !editingTextId &&
-                  (selectedStrokeIds.length > 0 || Boolean(selectedImgObj)) && (
+                  (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || Boolean(selectedTextId)) && (
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={handleCutSelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-semibold cursor-pointer"
                       title="Αποκοπή (Cut)"
                     >
                       <Scissors className="w-3.5 h-3.5" />
@@ -28170,7 +28168,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={handleCopySelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-semibold cursor-pointer"
                       title="Αντιγραφή (Copy)"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -28185,25 +28183,27 @@ export default function App() {
                       <span>Αντίγραφο</span>
                     </button>
 
-                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) */}
-                    <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
-                      <button
-                        onClick={() => handleMirrorSelected('horizontal')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                        title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
-                      >
-                        <MirrorHorizontalIcon className="w-4 h-4" />
-                        <span>Mirror</span>
-                      </button>
-                      <button
-                        onClick={() => handleMirrorSelected('vertical')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
-                        title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
-                      >
-                        <MirrorVerticalIcon className="w-4 h-4" />
-                        <span>Mirror</span>
-                      </button>
-                    </div>
+                    {/* Mirror Controls: Horizontal (Left <-> Right) & Vertical (Up <-> Down) — hidden when in text/math mode */}
+                    {activeTool !== 'text' && selectedTextId === null && editingTextId === null && (
+                      <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
+                        <button
+                          onClick={() => handleMirrorSelected('horizontal')}
+                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                          title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
+                        >
+                          <MirrorHorizontalIcon className="w-4 h-4" />
+                          <span>Mirror</span>
+                        </button>
+                        <button
+                          onClick={() => handleMirrorSelected('vertical')}
+                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                          title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
+                        >
+                          <MirrorVerticalIcon className="w-4 h-4" />
+                          <span>Mirror</span>
+                        </button>
+                      </div>
+                    )}
 
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
