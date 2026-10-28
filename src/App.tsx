@@ -12362,86 +12362,6 @@ export default function App() {
             ctx.restore();
           }
 
-          // 6E. On-Canvas Floating "⏸ Παύση / ▶ Συνέχεια", "🧹 Καθαρισμός" & "⏹" Pill Buttons right above the oscillating spring!
-          let pauseBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
-          let clearBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
-          let stopBtnBox: { x1: number; y1: number; x2: number; y2: number } | undefined;
-          if (isSpringSimulating) {
-            const pW = isSpringPaused ? 94 : 80;
-            const cW = 98;
-            const sW = 28;
-            const bH = 26;
-            const gap = 5;
-            const totW = pW + gap + cW + gap + sW;
-            const topAnchorY = Math.min(fixedPt.y, eqFreePt.y - A);
-            const bY = Math.max(12, topAnchorY - 38);
-            const pX = Math.max(12, Math.min(w - totW - 12, fixedPt.x - totW / 2));
-            const cX = pX + pW + gap;
-            const sX = cX + cW + gap;
-
-            pauseBtnBox = { x1: pX, y1: bY, x2: pX + pW, y2: bY + bH };
-            clearBtnBox = { x1: cX, y1: bY, x2: cX + cW, y2: bY + bH };
-            stopBtnBox = { x1: sX, y1: bY, x2: sX + sW, y2: bY + bH };
-
-            ctx.save();
-            // 1) Pause / Resume Pill
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
-            ctx.shadowBlur = 6;
-            ctx.shadowOffsetY = 1.5;
-            ctx.fillStyle = isSpringPaused ? '#059669' : '#f59e0b';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            ctx.roundRect(pX, bY, pW, bH, 13);
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.shadowColor = 'transparent';
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(
-              isSpringPaused ? '▶ Συνέχεια' : '⏸ Παύση',
-              pX + pW / 2,
-              bY + bH / 2 + 0.5
-            );
-
-            // 2) Clear Diagrams Pill ("🧹 Καθαρισμός")
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
-            ctx.shadowBlur = 6;
-            ctx.shadowOffsetY = 1.5;
-            ctx.fillStyle = '#0284c7';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            ctx.roundRect(cX, bY, cW, bH, 13);
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.shadowColor = 'transparent';
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
-            ctx.fillText('🧹 Καθαρισμός', cX + cW / 2, bY + bH / 2 + 0.5);
-
-            // 3) Stop Pill ("⏹")
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
-            ctx.shadowBlur = 6;
-            ctx.shadowOffsetY = 1.5;
-            ctx.fillStyle = '#e11d48';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            ctx.roundRect(sX, bY, sW, bH, 13);
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.shadowColor = 'transparent';
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(sX + sW / 2 - 4.2, bY + bH / 2 - 4.2, 8.4, 8.4);
-            ctx.restore();
-          }
-
           springOverlayHitRef.current = {
             simId: activeSpringSim.id,
             eqCenterX: eqMassCx,
@@ -12456,9 +12376,6 @@ export default function App() {
             },
             posPointerPt: posPointerPtHit,
             posScaleBox: posScaleBoxHit,
-            pauseBtnBox,
-            clearBtnBox,
-            stopBtnBox,
             ampHandles,
             graphResizeHandles: graphResizeHandlesHit,
             graphBoxes: graphBoxesHit,
