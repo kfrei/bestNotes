@@ -2213,6 +2213,34 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notebooks, viewMode, triggerSmartAutoTagsForNotebook]);
 
+  const notebookByteSizeCacheRef = useRef<WeakMap<Notebook, number>>(new WeakMap());
+
+  const getNotebookSizeBytes = useCallback((nb: Notebook): number => {
+    const cached = notebookByteSizeCacheRef.current.get(nb);
+    if (cached !== undefined) return cached;
+    try {
+      const jsonStr = JSON.stringify(nb);
+      const bytes = new Blob([jsonStr]).size;
+      notebookByteSizeCacheRef.current.set(nb, bytes);
+      return bytes;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const formatNotebookSizeLabel = useCallback((bytes: number): string => {
+    if (bytes <= 0) return '0 KB';
+    if (bytes >= 1024 * 1024) {
+      const mb = bytes / (1024 * 1024);
+      return `${mb >= 10 ? mb.toFixed(1) : mb.toFixed(2).replace(/\.00$/, '')} MB`;
+    }
+    const kb = bytes / 1024;
+    if (kb < 10) {
+      return `${Math.max(0.5, Number(kb.toFixed(1)))} KB`;
+    }
+    return `${Math.round(kb)} KB`;
+  }, []);
+
   const changeNotebookFolder = useCallback(
     (nbId: string, nextFolder: string) => {
       const cleanFolder = nextFolder.trim();
@@ -23964,22 +23992,24 @@ export default function App() {
           <div className="max-w-5xl mx-auto space-y-5">
             {(() => {
               // Build unified folder map from customFolders + notebooks
-              const folderMap = new Map<string, { name: string; updatedAt: string; count: number }>();
+              const folderMap = new Map<string, { name: string; updatedAt: string; count: number; totalBytes: number }>();
               for (const cf of customFolders) {
                 const trimmed = cf.name.trim();
                 if (trimmed) {
-                  folderMap.set(trimmed, { name: trimmed, updatedAt: cf.updatedAt || new Date().toISOString(), count: 0 });
+                  folderMap.set(trimmed, { name: trimmed, updatedAt: cf.updatedAt || new Date().toISOString(), count: 0, totalBytes: 0 });
                 }
               }
               for (const nb of notebooks) {
                 const fName = (nb.folder || '').trim();
                 if (fName) {
+                  const nbBytes = getNotebookSizeBytes(nb);
                   const existing = folderMap.get(fName);
                   if (existing) {
                     existing.count += 1;
+                    existing.totalBytes += nbBytes;
                     if (nb.updatedAt > existing.updatedAt) existing.updatedAt = nb.updatedAt;
                   } else {
-                    folderMap.set(fName, { name: fName, updatedAt: nb.updatedAt || new Date().toISOString(), count: 1 });
+                    folderMap.set(fName, { name: fName, updatedAt: nb.updatedAt || new Date().toISOString(), count: 1, totalBytes: nbBytes });
                   }
                 }
               }
@@ -24043,6 +24073,11 @@ export default function App() {
                     ? a.title.localeCompare(b.title, 'el')
                     : new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
                 );
+
+              const totalVisibleBytes = visibleNotebooks.reduce(
+                (acc, nb) => acc + getNotebookSizeBytes(nb),
+                0
+              );
 
               const formatLibraryTimestamp = (isoStr?: string, fallbackId?: string) => {
                 let d = isoStr ? new Date(isoStr) : null;
@@ -24395,7 +24430,7 @@ export default function App() {
                             <div>
                               <p className="text-sm font-bold text-[#1b2a4a]">{delNb.title}</p>
                               <p className="text-[11px] text-slate-500">
-                                {delNb.pages.length} {delNb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • {formatLibraryTimestamp(delNb.updatedAt, delNb.id)}
+                                {delNb.pages.length} {delNb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • {formatNotebookSizeLabel(getNotebookSizeBytes(delNb))} • {formatLibraryTimestamp(delNb.updatedAt, delNb.id)}
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5">
@@ -24678,7 +24713,7 @@ export default function App() {
                                   <div>
                                     <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
                                     <p className="text-[11px] text-slate-500">
-                                      {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
+                                      {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} ({formatNotebookSizeLabel(folder.totalBytes)}) • {formatLibraryTimestamp(folder.updatedAt)}
                                     </p>
                                   </div>
                                 </div>
@@ -24690,9 +24725,14 @@ export default function App() {
 
                       {/* Notes Section in Grid Mode */}
                       <div>
-                        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                          Σημειώσεις ({visibleNotebooks.length})
-                        </h2>
+                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                            Σημειώσεις ({visibleNotebooks.length})
+                          </h2>
+                          <span className="text-[11px] font-bold text-slate-600 bg-slate-200/80 border border-slate-300/70 px-2.5 py-0.5 rounded-full">
+                            Σύνολο: {formatNotebookSizeLabel(totalVisibleBytes)}
+                          </span>
+                        </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
                           {/* Symmetrical Faint-Gray Drag & Drop New Document Card right before the first Note! */}
                           <div
@@ -24798,6 +24838,8 @@ export default function App() {
                             const pH = getPageLogicalHeight(p0);
                             const hasDocBg = Boolean(p0?.backgroundDataUrl);
                             const isDraggingThisNb = draggingLibraryNbId === nb.id;
+                            const nbBytes = getNotebookSizeBytes(nb);
+                            const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
                             return (
                               <div
                                 key={nb.id}
@@ -24835,6 +24877,14 @@ export default function App() {
                                     className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
                                     style={{ backgroundColor: nb.coverColor }}
                                   />
+
+                                  {/* File Size Badge (KB / MB) at Top-Right of .bestnotes Card */}
+                                  <div
+                                    className="absolute top-2 right-2 z-20 px-2 py-0.5 rounded-lg bg-slate-900/70 backdrop-blur-[2px] text-white text-[10px] font-bold tracking-tight shadow-2xs pointer-events-none"
+                                    title={`Μέγεθος αρχείου .bestnotes: ${nbSizeLabel}`}
+                                  >
+                                    {nbSizeLabel}
+                                  </div>
 
                                   {/* 1st Page PDF / Image Background if present */}
                                   {p0?.backgroundDataUrl && (
@@ -25048,7 +25098,7 @@ export default function App() {
                                     </span>
                                   )}
                                   <span className="text-[10px] text-slate-500 truncate max-w-full">
-                                    {formatLibraryTimestamp(nb.updatedAt, nb.id)} ({nb.pages.length} σελ.)
+                                    {formatLibraryTimestamp(nb.updatedAt, nb.id)} ({nb.pages.length} σελ. • <span className="font-semibold text-slate-700">{nbSizeLabel}</span>)
                                   </span>
                                 </div>
 
@@ -25221,7 +25271,7 @@ export default function App() {
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
                                 <p className="text-[11px] text-slate-500">
-                                  Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} • {formatLibraryTimestamp(folder.updatedAt)}
+                                  Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} ({formatNotebookSizeLabel(folder.totalBytes)}) • {formatLibraryTimestamp(folder.updatedAt)}
                                 </p>
                               </div>
                             </div>
@@ -25266,6 +25316,8 @@ export default function App() {
                       {/* Notes in List Mode */}
                       {visibleNotebooks.map((nb) => {
                         const isDraggingThisNb = draggingLibraryNbId === nb.id;
+                        const nbBytes = getNotebookSizeBytes(nb);
+                        const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
                         return (
                           <div
                             key={`list-nb-${nb.id}`}
@@ -25375,12 +25427,15 @@ export default function App() {
                                 </button>
                               </div>
                               <p className="text-[11px] text-slate-500">
-                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • {formatLibraryTimestamp(nb.updatedAt, nb.id)}
+                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • <span className="font-semibold text-sky-700">{nbSizeLabel}</span> • {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 hidden sm:inline">
+                              {nbSizeLabel}
+                            </span>
                             <span className="text-[11px] text-slate-400 hidden sm:inline">
                               {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                             </span>
