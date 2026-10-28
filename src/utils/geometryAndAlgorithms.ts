@@ -7910,32 +7910,33 @@ function createVectorMathLabelStrokes(
       case 'v':
         return [
           [
-            [0.12, 0.3],
-            [0.12, 0.74],
-            [0.28, 0.92],
-            [0.56, 0.92],
-            [0.78, 0.74],
-            [0.78, 0.3],
-            [0.78, 0.86],
-            [0.92, 0.94],
+            [0.14, 0.3],
+            [0.14, 0.72],
+            [0.26, 0.9],
+            [0.54, 0.9],
+            [0.76, 0.72],
+          ],
+          [
+            [0.76, 0.3],
+            [0.76, 0.92],
           ],
         ];
       case 'a':
       case 'α':
         return [
           [
-            [0.78, 0.36],
-            [0.55, 0.28],
-            [0.25, 0.34],
-            [0.12, 0.58],
-            [0.22, 0.88],
-            [0.52, 0.92],
-            [0.78, 0.72],
+            [0.76, 0.42],
+            [0.58, 0.32],
+            [0.3, 0.32],
+            [0.14, 0.48],
+            [0.14, 0.76],
+            [0.3, 0.92],
+            [0.58, 0.92],
+            [0.76, 0.78],
           ],
           [
-            [0.78, 0.3],
-            [0.78, 0.88],
-            [0.92, 0.94],
+            [0.76, 0.32],
+            [0.76, 0.92],
           ],
         ];
       case 't':
@@ -8031,17 +8032,22 @@ function createVectorMathLabelStrokes(
       case 'm':
         return [
           [
-            [0.08, 0.94],
             [0.08, 0.32],
-            [0.32, 0.3],
-            [0.5, 0.45],
-            [0.5, 0.94],
+            [0.08, 0.92],
           ],
           [
-            [0.5, 0.45],
-            [0.68, 0.3],
-            [0.92, 0.32],
-            [0.92, 0.94],
+            [0.08, 0.46],
+            [0.22, 0.32],
+            [0.38, 0.32],
+            [0.5, 0.46],
+            [0.5, 0.92],
+          ],
+          [
+            [0.5, 0.46],
+            [0.64, 0.32],
+            [0.8, 0.32],
+            [0.92, 0.46],
+            [0.92, 0.92],
           ],
         ];
       case '0':
@@ -8061,9 +8067,13 @@ function createVectorMathLabelStrokes(
       case '1':
         return [
           [
-            [0.25, 0.26],
+            [0.24, 0.28],
             [0.52, 0.1],
-            [0.52, 0.94],
+            [0.52, 0.92],
+          ],
+          [
+            [0.26, 0.92],
+            [0.78, 0.92],
           ],
         ];
       case '2':
@@ -8243,7 +8253,7 @@ function createVectorMathLabelStrokes(
         id: `${idPrefix}-m-${sCounter++}`,
         tool: 'pen',
         color,
-        width: 2.0,
+        width: 2.1,
         opacity: 1,
         points: poly.map(([u, v]) => ({
           x: curX + u * mainCharW,
@@ -8252,15 +8262,14 @@ function createVectorMathLabelStrokes(
         })),
         layerId,
         groupId,
-        isShape: true,
-        shapeType: 'wave-axis-x',
+        isShape: false,
       });
     }
     curX += mainCharW + mainGap;
   }
 
   if (subPart) {
-    curX += fontH * 0.04;
+    curX += fontH * 0.05;
     const subTopY = topY + fontH * 0.46;
     for (const ch of subPart) {
       const paths = glyphPaths(ch);
@@ -8269,7 +8278,7 @@ function createVectorMathLabelStrokes(
           id: `${idPrefix}-s-${sCounter++}`,
           tool: 'pen',
           color,
-          width: 1.7,
+          width: 1.85,
           opacity: 1,
           points: poly.map(([u, v]) => ({
             x: curX + u * subCharW,
@@ -8278,8 +8287,7 @@ function createVectorMathLabelStrokes(
           })),
           layerId,
           groupId,
-          isShape: true,
-          shapeType: 'wave-axis-x',
+          isShape: false,
         });
       }
       curX += subCharW + subGap;
@@ -8436,7 +8444,7 @@ function tryBuildOscillationDiagramStrokes(
         centerX + 9,
         axisTopY + 8,
         'left',
-        17,
+        17.5,
         axisColor,
         layerId,
         groupId,
@@ -8446,10 +8454,10 @@ function tryBuildOscillationDiagramStrokes(
     strokes.push(
       ...createVectorMathLabelStrokes(
         opts.xAxisLabel,
-        centerX + halfW + 8,
-        axisY + 2,
+        centerX + halfW + 9,
+        axisY + 1,
         'left',
-        16,
+        17.5,
         axisColor,
         layerId,
         groupId,
@@ -8520,9 +8528,9 @@ function tryBuildOscillationDiagramStrokes(
       ...createVectorMathLabelStrokes(
         opts.leftXLabel,
         centerX - xMaxPx,
-        axisY + 15,
+        axisY + 16,
         'center',
-        14,
+        15.5,
         axisColor,
         layerId,
         groupId,
@@ -8533,9 +8541,9 @@ function tryBuildOscillationDiagramStrokes(
       ...createVectorMathLabelStrokes(
         opts.rightXLabel,
         centerX + xMaxPx,
-        axisY + 15,
+        axisY + 16,
         'center',
-        14,
+        15.5,
         axisColor,
         layerId,
         groupId,
@@ -8546,9 +8554,9 @@ function tryBuildOscillationDiagramStrokes(
       ...createVectorMathLabelStrokes(
         opts.topYLabel,
         centerX + 8,
-        yPeakPx + 14,
+        yPeakPx + 15,
         'left',
-        14,
+        15.5,
         axisColor,
         layerId,
         groupId,
@@ -8952,7 +8960,7 @@ function tryBuildOscillationDiagramStrokes(
         axisColor,
         layerId,
         groupId,
-        `st-${nowId}-lt`
+        `st-${nowId}-lx`
       )
     );
     strokes.push(

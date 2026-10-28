@@ -1969,6 +1969,18 @@ export default function App() {
     topBasePts: BezierPoint[];
     botBasePts: BezierPoint[];
   } | null>(null);
+  const mathGraphDragRef = useRef<{
+    groupId: string;
+    mode: 'scale-x' | 'scale-y' | 'both';
+    originX: number;
+    originY: number;
+    cMinY: number;
+    cMaxY: number;
+    startDistX: number;
+    startDistY: number;
+    baseStrokes: Map<string, BezierPoint[]>;
+    labelCenters: Map<string, { cx: number; cy: number }>;
+  } | null>(null);
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
     image?: ImageObject;
@@ -3631,9 +3643,11 @@ export default function App() {
     return s.points;
   };
 
-  // Spring, Resistor, 3D Shapes, and Oscillation Wave-Axes use Lasso / Custom Guide Handles (no raw endpoint Nodes!)
+  // Spring, Resistor, 3D Shapes, Oscillation Wave-Axes, and Math Graph Diagrams use Lasso / Custom Guide Handles (no raw endpoint Nodes!)
   const isShapeWithoutNodes = (s: StrokeObject | undefined | null): boolean => {
-    if (!s || !s.isShape) return false;
+    if (!s) return false;
+    if (s.groupId?.startsWith('math-graph-grp-')) return true;
+    if (!s.isShape) return false;
     return (
       s.shapeType === 'spring' ||
       s.shapeType === 'resistor' ||
@@ -4193,7 +4207,7 @@ export default function App() {
         Math.abs(localY - (hh + 26)) <= 20
       )
         return true;
-      if (Math.abs(localX) <= hw + 22 && Math.abs(localY) <= hh + 22) return true;
+      if (Math.abs(localX) <= hw + 28 && Math.abs(localY) <= hh + 28) return true;
       return false;
     },
     [activeTool, activeNodeStrokeId, activePage.strokes, selectedStrokeIds.length, selectedImageIds.length, getSelectionBounds]
@@ -4305,13 +4319,16 @@ export default function App() {
     const matchedStroke = page.strokes.find(
       (s) =>
         candSet.has(s.id) &&
+        !s.groupId?.startsWith('math-graph-grp-') &&
         (s.groupId?.startsWith('wave-axes-') ||
           s.shapeType === 'wave-axis-y' ||
           s.shapeType === 'wave-axis-x' ||
           s.shapeType === 'wave-guide-top' ||
           s.shapeType === 'wave-guide-bottom')
     );
-    if (!matchedStroke || !matchedStroke.groupId) return null;
+    if (!matchedStroke || !matchedStroke.groupId || matchedStroke.groupId.startsWith('math-graph-grp-')) {
+      return null;
+    }
     const grpId = matchedStroke.groupId;
     const members = page.strokes.filter((s) => s.groupId === grpId);
     const axisY = members.find((s) => s.shapeType === 'wave-axis-y');
@@ -4401,6 +4418,126 @@ export default function App() {
           }
           if (diag.guideBottom && isPointNearStroke(pt, diag.guideBottom, 16, false)) {
             return 'bottom-independent';
+          }
+        }
+      }
+      return null;
+    },
+    []
+  );
+
+  // Resolves the interactive Extrema / Span Handles (`[ ↕ ]` vertical amplitude/K_max, `[ ↔ ]` horizontal ±u_max/±A span, `[ ±A ]` corner)
+  // for generated Mathematical & Physics Oscillation Diagrams (`math-graph-grp-...`)
+  const resolveMathGraphDiagram = useCallback((page: NotePage, candidateIds: string[]) => {
+    if (!candidateIds || candidateIds.length === 0) return null;
+    const candSet = new Set(candidateIds);
+    const matchedStroke = page.strokes.find(
+      (s) => candSet.has(s.id) && s.groupId?.startsWith('math-graph-grp-')
+    );
+    if (!matchedStroke || !matchedStroke.groupId) return null;
+    const grpId = matchedStroke.groupId;
+    const members = page.strokes.filter((s) => s.groupId === grpId);
+    const axisX = members.find((s) => s.id.endsWith('-axx'));
+    const axisY = members.find((s) => s.id.endsWith('-axy'));
+    if (!axisX || !axisY || axisX.points.length < 2 || axisY.points.length < 2) return null;
+
+    const originX = axisY.points[0].x;
+    const originY = axisX.points[0].y;
+    const curveAndGuides = members.filter(
+      (s) => s.id.includes('-crv-') || s.id.includes('-gd-')
+    );
+    if (curveAndGuides.length === 0) return null;
+
+    let cMinX = Infinity,
+      cMaxX = -Infinity,
+      cMinY = Infinity,
+      cMaxY = -Infinity;
+    for (const st of curveAndGuides) {
+      for (const p of st.points) {
+        if (p.x < cMinX) cMinX = p.x;
+        if (p.x > cMaxX) cMaxX = p.x;
+        if (p.y < cMinY) cMinY = p.y;
+        if (p.y > cMaxY) cMaxY = p.y;
+      }
+    }
+    if (!Number.isFinite(cMinX) || !Number.isFinite(cMinY)) return null;
+
+    const hasLeftSpan = originX - cMinX >= 18;
+    const hasRightSpan = cMaxX - originX >= 18;
+    const hasTopPeak = originY - cMinY >= 16;
+    const hasBotPeak = cMaxY - originY >= 18;
+
+    const topHandle = hasTopPeak
+      ? {
+          x: hasLeftSpan ? (cMinX + originX) / 2 : (originX + cMaxX) / 2,
+          y: cMinY,
+        }
+      : null;
+    const botHandle = hasBotPeak
+      ? {
+          x: hasLeftSpan ? (cMinX + originX) / 2 : (originX + cMaxX) / 2,
+          y: cMaxY,
+        }
+      : null;
+    const leftHandle = hasLeftSpan
+      ? {
+          x: cMinX,
+          y: (cMinY + cMaxY) / 2,
+        }
+      : null;
+    const rightHandle = hasRightSpan
+      ? {
+          x: cMaxX,
+          y: (cMinY + cMaxY) / 2,
+        }
+      : null;
+    const symCornerHandle = {
+      x: hasLeftSpan ? cMinX - 22 : cMaxX + 22,
+      y: cMinY,
+    };
+
+    const guideStroke = members.find((s) => s.id.includes('-gd-'));
+    const curveStroke = members.find((s) => s.id.includes('-crv-'));
+    const handleColor = guideStroke?.color || curveStroke?.color || '#2563eb';
+
+    return {
+      groupId: grpId,
+      memberIds: members.map((m) => m.id),
+      members,
+      originX,
+      originY,
+      cMinX,
+      cMaxX,
+      cMinY,
+      cMaxY,
+      topHandle,
+      botHandle,
+      leftHandle,
+      rightHandle,
+      symCornerHandle,
+      handleColor,
+    };
+  }, []);
+
+  const hitTestMathGraphHandle = useCallback(
+    (
+      pt: { x: number; y: number },
+      diag: NonNullable<ReturnType<typeof resolveMathGraphDiagram>>,
+      includeGuides = true
+    ): 'scale-x' | 'scale-y' | 'both' | null => {
+      if (distance(pt, diag.symCornerHandle) <= 24) return 'both';
+      if (diag.topHandle && distance(pt, diag.topHandle) <= 24) return 'scale-y';
+      if (diag.botHandle && distance(pt, diag.botHandle) <= 24) return 'scale-y';
+      if (diag.leftHandle && distance(pt, diag.leftHandle) <= 24) return 'scale-x';
+      if (diag.rightHandle && distance(pt, diag.rightHandle) <= 24) return 'scale-x';
+      if (includeGuides) {
+        for (const st of diag.members) {
+          if (!st.id.includes('-gd-') || st.points.length < 2) continue;
+          if (isPointNearStroke(pt, st, 14, false)) {
+            const dx = Math.abs(st.points[0].x - st.points[st.points.length - 1].x);
+            const dy = Math.abs(st.points[0].y - st.points[st.points.length - 1].y);
+            if (dx < 6 && dy >= 10) return 'scale-x';
+            if (dy < 6 && dx >= 10) return 'scale-y';
           }
         }
       }
@@ -5040,10 +5177,11 @@ export default function App() {
         // 1-point tap/dot/accent: HTML5 Canvas requires a tiny non-zero segment to render a round cap dot!
         ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
       } else if (
-        s.shapeType === 'wave-guide-top' ||
-        s.shapeType === 'wave-guide-bottom' ||
-        s.shapeType === 'wave-axis-x' ||
-        s.shapeType === 'wave-axis-y'
+        !s.groupId?.startsWith('math-graph-grp-') &&
+        (s.shapeType === 'wave-guide-top' ||
+          s.shapeType === 'wave-guide-bottom' ||
+          s.shapeType === 'wave-axis-x' ||
+          s.shapeType === 'wave-axis-y')
       ) {
         const endPt = s.points[s.points.length - 1];
         ctx.lineTo(endPt.x, endPt.y);
@@ -5826,10 +5964,10 @@ export default function App() {
               ctx.stroke();
             }
           } else {
-            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrow ONLY on the Right side!)
+            // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows on Top ↕ & Right ↔!)
             const localSideMidpoints = [
-              { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: false }, // Top (height stretch)
-              { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true },   // Right (width stretch)
+              { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: true },  // Top (height stretch ↕)
+              { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true },   // Right (width stretch ↔)
               { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true, showIcon: false },   // Bottom (height stretch)
               { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false, showIcon: false }, // Left (width stretch)
             ];
@@ -6059,6 +6197,100 @@ export default function App() {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('⇅', hx, hy + 0.5);
+            ctx.restore();
+          }
+
+          ctx.restore();
+        }
+
+        // 4d. Generated Math & Oscillation Diagram Interactive Extrema Handles (`[ ↕ ]` vertical amplitude/K_max, `[ ↔ ]` horizontal ±u_max/±A, `[ ±A ]` both)
+        const activeMathDiag = resolveMathGraphDiagram(pageObj, waveCandIds);
+        if (activeMathDiag) {
+          const hCol = activeMathDiag.handleColor;
+          ctx.save();
+          ctx.setLineDash([]);
+
+          const drawMathArrowPill = (hx: number, hy: number, isVertical: boolean) => {
+            const pw = 30;
+            const ph = 18;
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.2)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = hCol;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(hx - pw / 2, hy - ph / 2, pw, ph, 9);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.strokeStyle = hCol;
+            ctx.lineWidth = 1.8;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            if (isVertical) {
+              ctx.moveTo(hx, hy - 5.2);
+              ctx.lineTo(hx, hy + 5.2);
+              ctx.moveTo(hx - 3, hy - 2.4);
+              ctx.lineTo(hx, hy - 5.2);
+              ctx.lineTo(hx + 3, hy - 2.4);
+              ctx.moveTo(hx - 3, hy + 2.4);
+              ctx.lineTo(hx, hy + 5.2);
+              ctx.lineTo(hx + 3, hy + 2.4);
+            } else {
+              ctx.moveTo(hx - 5.5, hy);
+              ctx.lineTo(hx + 5.5, hy);
+              ctx.moveTo(hx - 2.6, hy - 3);
+              ctx.lineTo(hx - 5.5, hy);
+              ctx.lineTo(hx - 2.6, hy + 3);
+              ctx.moveTo(hx + 2.6, hy - 3);
+              ctx.lineTo(hx + 5.5, hy);
+              ctx.lineTo(hx + 2.6, hy + 3);
+            }
+            ctx.stroke();
+            ctx.restore();
+          };
+
+          if (activeMathDiag.topHandle) {
+            drawMathArrowPill(activeMathDiag.topHandle.x, activeMathDiag.topHandle.y, true);
+          }
+          if (activeMathDiag.botHandle) {
+            drawMathArrowPill(activeMathDiag.botHandle.x, activeMathDiag.botHandle.y, true);
+          }
+          if (activeMathDiag.leftHandle) {
+            drawMathArrowPill(activeMathDiag.leftHandle.x, activeMathDiag.leftHandle.y, false);
+          }
+          if (activeMathDiag.rightHandle) {
+            drawMathArrowPill(activeMathDiag.rightHandle.x, activeMathDiag.rightHandle.y, false);
+          }
+
+          // Corner Symmetric Extrema Pill (`±A`)
+          {
+            const hx = activeMathDiag.symCornerHandle.x;
+            const hy = activeMathDiag.symCornerHandle.y;
+            const pw = 34;
+            const ph = 19;
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetY = 1.5;
+            ctx.fillStyle = '#334155';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(hx - pw / 2, hy - ph / 2, pw, ph, 9.5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10.5px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('±A', hx, hy + 0.5);
             ctx.restore();
           }
 
@@ -15464,14 +15696,15 @@ export default function App() {
           }
         }
       }
-      if (targetWaveDiag && waveMode && targetWaveDiag.guideTop && targetWaveDiag.guideBottom) {
+      if (targetWaveDiag && waveMode && (targetWaveDiag.guideTop || targetWaveDiag.guideBottom)) {
         e.preventDefault();
         setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
         setRedoStack([]);
-        if (!selectedStrokeIds.includes(targetWaveDiag.guideTop.id)) {
+        const refGuide = targetWaveDiag.guideTop || targetWaveDiag.guideBottom!;
+        if (!selectedStrokeIds.includes(refGuide.id)) {
           setSelectedStrokeIds(targetWaveDiag.memberIds);
         }
-        setWaveGuideColor(targetWaveDiag.guideTop.color || '#2563eb');
+        setWaveGuideColor(refGuide.color || '#2563eb');
         setShowToolSubBar(true);
         waveGuideDragRef.current = {
           groupId: targetWaveDiag.groupId,
@@ -15483,8 +15716,84 @@ export default function App() {
           axisLen: targetWaveDiag.axisLen,
           ux: targetWaveDiag.ux,
           uy: targetWaveDiag.uy,
-          topBasePts: targetWaveDiag.guideTop.points.map((p) => ({ ...p })),
-          botBasePts: targetWaveDiag.guideBottom.points.map((p) => ({ ...p })),
+          topBasePts: targetWaveDiag.guideTop ? targetWaveDiag.guideTop.points.map((p) => ({ ...p })) : [],
+          botBasePts: targetWaveDiag.guideBottom ? targetWaveDiag.guideBottom.points.map((p) => ({ ...p })) : [],
+        };
+        isDrawingRef.current = true;
+        return;
+      }
+
+      // 0b. Generated Math & Oscillation Diagram Extrema Handles (`[ ↕ ]`, `[ ↔ ]`, `[ ±A ]`, or dashed guide lines):
+      let targetMathDiag = resolveMathGraphDiagram(targetPage, candidateIds);
+      let mathMode = targetMathDiag ? hitTestMathGraphHandle(pt, targetMathDiag, true) : null;
+      if (!mathMode) {
+        const seenMathGroups = new Set<string>();
+        for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
+          const st = targetPage.strokes[i];
+          if (st.groupId && st.groupId.startsWith('math-graph-grp-') && !seenMathGroups.has(st.groupId)) {
+            seenMathGroups.add(st.groupId);
+            const candidateDiag = resolveMathGraphDiagram(targetPage, [st.id]);
+            if (candidateDiag) {
+              const m = hitTestMathGraphHandle(pt, candidateDiag, false);
+              if (m) {
+                targetMathDiag = candidateDiag;
+                mathMode = m;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (targetMathDiag && mathMode) {
+        e.preventDefault();
+        setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
+        setRedoStack([]);
+        if (!selectedStrokeIds.includes(targetMathDiag.memberIds[0])) {
+          setSelectedStrokeIds(targetMathDiag.memberIds);
+        }
+        const baseStrokes = new Map<string, BezierPoint[]>();
+        const labelBounds = new Map<string, { minX: number; maxX: number; minY: number; maxY: number }>();
+        for (const ms of targetMathDiag.members) {
+          baseStrokes.set(
+            ms.id,
+            ms.points.map((p) => ({ ...p }))
+          );
+          if (/-[ms]-\d+$/.test(ms.id)) {
+            const prefix = ms.id.replace(/-[ms]-\d+$/, '');
+            const cur = labelBounds.get(prefix) || {
+              minX: Infinity,
+              maxX: -Infinity,
+              minY: Infinity,
+              maxY: -Infinity,
+            };
+            for (const p of ms.points) {
+              if (p.x < cur.minX) cur.minX = p.x;
+              if (p.x > cur.maxX) cur.maxX = p.x;
+              if (p.y < cur.minY) cur.minY = p.y;
+              if (p.y > cur.maxY) cur.maxY = p.y;
+            }
+            labelBounds.set(prefix, cur);
+          }
+        }
+        const labelCenters = new Map<string, { cx: number; cy: number }>();
+        labelBounds.forEach((b, prefix) => {
+          labelCenters.set(prefix, {
+            cx: (b.minX + b.maxX) / 2,
+            cy: (b.minY + b.maxY) / 2,
+          });
+        });
+
+        mathGraphDragRef.current = {
+          groupId: targetMathDiag.groupId,
+          mode: mathMode,
+          originX: targetMathDiag.originX,
+          originY: targetMathDiag.originY,
+          cMinY: targetMathDiag.cMinY,
+          cMaxY: targetMathDiag.cMaxY,
+          startDistX: Math.max(16, Math.abs(pt.x - targetMathDiag.originX)),
+          startDistY: Math.max(16, Math.abs(pt.y - targetMathDiag.originY)),
+          baseStrokes,
+          labelCenters,
         };
         isDrawingRef.current = true;
         return;
@@ -16306,19 +16615,24 @@ export default function App() {
             const localSides: {
               lx: number;
               ly: number;
+              ax: number;
+              ay: number;
               oppLx: number;
               oppLy: number;
               mode: 'scale-x' | 'scale-y';
               sx: number;
               sy: number;
             }[] = [
-              { lx: 0, ly: -hh, oppLx: 0, oppLy: selBounds.hh, mode: 'scale-y', sx: 0, sy: -1 },
-              { lx: hw, ly: 0, oppLx: -selBounds.hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
-              { lx: 0, ly: hh, oppLx: 0, oppLy: -selBounds.hh, mode: 'scale-y', sx: 0, sy: 1 },
-              { lx: -hw, ly: 0, oppLx: selBounds.hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
+              { lx: 0, ly: -hh, ax: 0, ay: -hh - 14, oppLx: 0, oppLy: selBounds.hh, mode: 'scale-y', sx: 0, sy: -1 },
+              { lx: hw, ly: 0, ax: hw + 14, ay: 0, oppLx: -selBounds.hw, oppLy: 0, mode: 'scale-x', sx: 1, sy: 0 },
+              { lx: 0, ly: hh, ax: 0, ay: hh + 14, oppLx: 0, oppLy: -selBounds.hh, mode: 'scale-y', sx: 0, sy: 1 },
+              { lx: -hw, ly: 0, ax: -hw - 14, ay: 0, oppLx: selBounds.hw, oppLy: 0, mode: 'scale-x', sx: -1, sy: 0 },
             ];
             for (const m of localSides) {
-              if (Math.hypot(localX - m.lx, localY - m.ly) < 18) {
+              if (
+                Math.hypot(localX - m.lx, localY - m.ly) < 22 ||
+                Math.hypot(localX - m.ax, localY - m.ay) < 18
+              ) {
                 clearActiveOverlay();
                 setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
                 setRedoStack([]);
@@ -17305,6 +17619,105 @@ export default function App() {
           false
         );
       }
+      return;
+    }
+
+    // 0a. Generated Math & Oscillation Diagram Interactive Extrema Dragging (`[ ↕ ]`, `[ ↔ ]`, `[ ±A ]`):
+    // Stretches the curve, dashed guides, ticks, and extrema labels relative to the axes origin without distorting glyph aspect ratio!
+    if (mathGraphDragRef.current) {
+      const mg = mathGraphDragRef.current;
+      const scaleX =
+        mg.mode === 'scale-x' || mg.mode === 'both'
+          ? Math.max(0.32, Math.min(2.4, Math.abs(latestPt.x - mg.originX) / mg.startDistX))
+          : 1;
+      const scaleY =
+        mg.mode === 'scale-y' || mg.mode === 'both'
+          ? Math.max(0.32, Math.min(2.4, Math.abs(latestPt.y - mg.originY) / mg.startDistY))
+          : 1;
+
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (s.groupId !== mg.groupId) return s;
+            const basePts = mg.baseStrokes.get(s.id);
+            if (!basePts) return s;
+
+            // Keep the coordinate axes and axis-tip titles fixed while the curve & extrema adjust along the axes
+            if (
+              s.id.endsWith('-axx') ||
+              s.id.endsWith('-axy') ||
+              s.id.includes('-lblx') ||
+              s.id.includes('-lbly')
+            ) {
+              return s;
+            }
+
+            // Vector text glyphs (`-m-`, `-s-`): translate each label's center with its extremum without squishing the letters!
+            if (/-[ms]-\d+$/.test(s.id)) {
+              const prefix = s.id.replace(/-[ms]-\d+$/, '');
+              if (prefix.endsWith('-lx') || prefix.endsWith('-ly')) {
+                return s;
+              }
+              const lc = mg.labelCenters.get(prefix);
+              let dx = 0;
+              let dy = 0;
+              if (
+                prefix.endsWith('-ll') ||
+                prefix.endsWith('-lr') ||
+                prefix.endsWith('-la1') ||
+                prefix.endsWith('-la2') ||
+                prefix.includes('-xlbl-')
+              ) {
+                dx = lc ? (lc.cx - mg.originX) * (scaleX - 1) : 0;
+              } else if (prefix.endsWith('-lt')) {
+                dy = (mg.cMinY - mg.originY) * (scaleY - 1);
+              } else {
+                dy = lc ? (lc.cy - mg.originY) * (scaleY - 1) : 0;
+              }
+              return {
+                ...s,
+                points: basePts.map((p) => ({
+                  ...p,
+                  x: p.x + dx,
+                  y: p.y + dy,
+                })),
+              };
+            }
+
+            if (s.id.includes('-xtick-')) {
+              return {
+                ...s,
+                points: basePts.map((p) => ({
+                  ...p,
+                  x: mg.originX + (p.x - mg.originX) * scaleX,
+                  y: p.y,
+                })),
+              };
+            }
+            if (s.id.includes('-ytick-')) {
+              return {
+                ...s,
+                points: basePts.map((p) => ({
+                  ...p,
+                  x: p.x,
+                  y: mg.originY + (p.y - mg.originY) * scaleY,
+                })),
+              };
+            }
+
+            return {
+              ...s,
+              points: basePts.map((p) => ({
+                ...p,
+                x: mg.originX + (p.x - mg.originX) * scaleX,
+                y: mg.originY + (p.y - mg.originY) * scaleY,
+              })),
+            };
+          }),
+        }),
+        false
+      );
       return;
     }
 
@@ -18874,6 +19287,45 @@ export default function App() {
                       ? 'circle'
                       : 'ellipse'
                     : s.shapeType;
+                // Keep vector math labels (`-m-`, `-s-` inside `math-graph-grp-...`) un-squished during 1D aspect-ratio stretch
+                if (
+                  s.groupId?.startsWith('math-graph-grp-') &&
+                  (/-[ms]-\d+$/.test(s.id) || s.id.includes('-lblx') || s.id.includes('-lbly'))
+                ) {
+                  const prefix = /-[ms]-\d+$/.test(s.id)
+                    ? s.id.replace(/-[ms]-\d+$/, '')
+                    : s.id.replace(/\d+$/, '');
+                  const sibs = page.strokes.filter(
+                    (st) => st.groupId === s.groupId && st.id.startsWith(prefix)
+                  );
+                  let lMinX = Infinity,
+                    lMaxX = -Infinity,
+                    lMinY = Infinity,
+                    lMaxY = -Infinity;
+                  for (const sb of sibs) {
+                    for (const pt of sb.points) {
+                      if (pt.x < lMinX) lMinX = pt.x;
+                      if (pt.x > lMaxX) lMaxX = pt.x;
+                      if (pt.y < lMinY) lMinY = pt.y;
+                      if (pt.y > lMaxY) lMaxY = pt.y;
+                    }
+                  }
+                  if (Number.isFinite(lMinX)) {
+                    const lCx = (lMinX + lMaxX) / 2;
+                    const lCy = (lMinY + lMaxY) / 2;
+                    const sCenter = stretchPoint(lCx, lCy);
+                    const tDx = sCenter.x - lCx;
+                    const tDy = sCenter.y - lCy;
+                    return {
+                      ...s,
+                      points: s.points.map((p) => ({
+                        ...p,
+                        x: p.x + tDx,
+                        y: p.y + tDy,
+                      })),
+                    };
+                  }
+                }
                 return {
                   ...s,
                   shapeType: nextShapeType,
@@ -19933,6 +20385,13 @@ export default function App() {
 
     if (draggingProposalCornerRef.current) {
       draggingProposalCornerRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
+
+    if (mathGraphDragRef.current) {
+      mathGraphDragRef.current = null;
+      clearActiveOverlay();
       renderStaticSceneRef.current();
       return;
     }
