@@ -7829,6 +7829,36 @@ function createVectorMathLabelStrokes(
             [0.55, 0.94],
           ],
         ];
+      case 'R':
+      case 'r':
+        return [
+          [
+            [0.18, 0.94],
+            [0.18, 0.1],
+            [0.62, 0.1],
+            [0.82, 0.24],
+            [0.82, 0.42],
+            [0.62, 0.52],
+            [0.18, 0.52],
+          ],
+          [
+            [0.52, 0.52],
+            [0.86, 0.94],
+          ],
+        ];
+      case 'b':
+      case 'β':
+        return [
+          [
+            [0.18, 0.08],
+            [0.18, 0.92],
+            [0.58, 0.92],
+            [0.82, 0.78],
+            [0.82, 0.54],
+            [0.58, 0.42],
+            [0.18, 0.42],
+          ],
+        ];
       default:
         return [];
     }
@@ -8780,6 +8810,149 @@ export function buildMathGraphStrokesFromEquation(
     });
   };
 
+  // Detect whether the equation is quantitative (numerical constants only, no symbolic parameters like a, b, c, R)
+  const strippedForVars = normalized.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|PI)\b/gi, '');
+  const isQuantitative = !/[a-wyzA-WYZα-ωΑ-Ω]/.test(strippedForVars);
+
+  const formatNumLabel = (val: number): string => {
+    if (!Number.isFinite(val) || Math.abs(val) < 1e-5) return '0';
+    if (Math.abs(val - Math.round(val)) < 1e-3) {
+      return String(Math.round(val));
+    }
+    const decimals = Math.abs(val) < 10 ? 2 : 1;
+    return Number(val.toFixed(decimals)).toString();
+  };
+
+  let tickCounter = 0;
+
+  const addXAxisTickAndLabel = (
+    px: number,
+    labelText: string,
+    placeAbove = false,
+    xLabelOffset = 0
+  ) => {
+    if (Math.abs(px - centerX) > halfW - 14 || Math.abs(px - centerX) < 11) return;
+    const tId = tickCounter++;
+    strokes.push({
+      id: `math-graph-lbl-${nowId}-xtick-${tId}`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.1,
+      opacity: 1,
+      points: [
+        { x: px, y: centerY - 6.5, pressure: 0.7 },
+        { x: px, y: centerY + 6.5, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-x',
+    });
+    const lblY = placeAbove ? centerY - 17 : centerY + 18;
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        labelText,
+        px + xLabelOffset,
+        lblY,
+        'center',
+        14.5,
+        axisColor,
+        layerId,
+        groupId,
+        `math-graph-lbl-${nowId}-xlbl-${tId}`
+      )
+    );
+  };
+
+  const addYAxisTickAndLabel = (
+    py: number,
+    labelText: string,
+    placeLeft = false,
+    yLabelOffset = 0
+  ) => {
+    if (Math.abs(py - centerY) > halfH - 14 || Math.abs(py - centerY) < 11) return;
+    const tId = tickCounter++;
+    strokes.push({
+      id: `math-graph-lbl-${nowId}-ytick-${tId}`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.1,
+      opacity: 1,
+      points: [
+        { x: centerX - 6.5, y: py, pressure: 0.7 },
+        { x: centerX + 6.5, y: py, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-y',
+    });
+    const lblX = placeLeft ? centerX - 10 : centerX + 10;
+    const alignMode = placeLeft ? 'right' : 'left';
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        labelText,
+        lblX,
+        py + yLabelOffset,
+        alignMode,
+        14.5,
+        axisColor,
+        layerId,
+        groupId,
+        `math-graph-lbl-${nowId}-ylbl-${tId}`
+      )
+    );
+  };
+
+  const addDashedCoordProjection = (
+    px: number,
+    py: number,
+    vxLabel: string,
+    vyLabel: string
+  ) => {
+    const tId = tickCounter++;
+    if (Math.abs(px - centerX) >= 12 && Math.abs(py - centerY) >= 12) {
+      strokes.push({
+        id: `st-${nowId}-projv-${tId}`,
+        tool: 'pen',
+        color: '#2563eb',
+        width: 1.7,
+        opacity: 0.9,
+        lineStyle: 'dashed',
+        points: [
+          { x: px, y: py, pressure: 0.7 },
+          { x: px, y: centerY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-guide-top',
+      });
+      strokes.push({
+        id: `st-${nowId}-projh-${tId}`,
+        tool: 'pen',
+        color: '#2563eb',
+        width: 1.7,
+        opacity: 0.9,
+        lineStyle: 'dashed',
+        points: [
+          { x: px, y: py, pressure: 0.7 },
+          { x: centerX, y: py, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-guide-bottom',
+      });
+    }
+    if (vxLabel && vxLabel !== '0') {
+      addXAxisTickAndLabel(px, vxLabel, py > centerY);
+    }
+    if (vyLabel && vyLabel !== '0') {
+      addYAxisTickAndLabel(py, vyLabel, px > centerX);
+    }
+  };
+
   let kindLabel = 'Συνάρτηση';
 
   // Step A: Test if F(x, y) is an exact polynomial of degree <= 2 (Line, Circle, Ellipse, Parabola, or Conic Hyperbola):
@@ -8876,6 +9049,22 @@ export function buildMathGraphStrokesFromEquation(
             0,
             true
           );
+          if (isQuantitative) {
+            if (Math.abs(D) > eps && Math.abs(xInt) > 1e-4) {
+              const pxInt = centerX + (xInt / wSpan) * plotHalfW;
+              addXAxisTickAndLabel(pxInt, formatNumLabel(xInt), yInt < -1e-4);
+            }
+            if (Math.abs(E) > eps && Math.abs(yInt) > 1e-4) {
+              const pyInt = centerY - (yInt / hSpan) * plotHalfH;
+              addYAxisTickAndLabel(pyInt, formatNumLabel(yInt), xInt > 1e-4);
+            }
+            if (Math.abs(G) <= eps && Math.abs(D) > eps && Math.abs(E) > eps) {
+              const slope = -D / E;
+              const px1 = centerX + (1 / wSpan) * plotHalfW;
+              const py1 = centerY - (slope / hSpan) * plotHalfH;
+              addDashedCoordProjection(px1, py1, '1', formatNumLabel(slope));
+            }
+          }
           return { strokes, groupId, kindLabel };
         }
       }
@@ -8929,6 +9118,40 @@ export function buildMathGraphStrokesFromEquation(
           isShape: true,
           shapeType: 'ellipse',
         });
+
+        if (maxCenterOffset <= 0.05) {
+          let lblXPos = '';
+          let lblXNeg = '';
+          let lblYPos = '';
+          let lblYNeg = '';
+          if (isQuantitative) {
+            const aStr = formatNumLabel(aSemi);
+            const bStr = formatNumLabel(bSemi);
+            lblXPos = aStr;
+            lblXNeg = `-${aStr}`;
+            lblYPos = bStr;
+            lblYNeg = `-${bStr}`;
+          } else if (/\b[rR]\b/.test(normalized)) {
+            lblXPos = 'R';
+            lblXNeg = '-R';
+            lblYPos = 'R';
+            lblYNeg = '-R';
+          } else if (hasBothAB) {
+            lblXPos = 'a';
+            lblXNeg = '-a';
+            lblYPos = 'b';
+            lblYNeg = '-b';
+          }
+          if (lblXPos) {
+            addXAxisTickAndLabel(cxPx - rxPx, lblXNeg, true, -11);
+            addXAxisTickAndLabel(cxPx + rxPx, lblXPos, true, 10);
+            addYAxisTickAndLabel(cyPx - ryPx, lblYPos, false, -10);
+            addYAxisTickAndLabel(cyPx + ryPx, lblYNeg, false, 11);
+          }
+        } else if (isQuantitative) {
+          addDashedCoordProjection(cxPx, cyPx, formatNumLabel(x0), formatNumLabel(y0));
+        }
+
         return { strokes, groupId, kindLabel };
       }
 
@@ -8962,6 +9185,39 @@ export function buildMathGraphStrokesFromEquation(
           }
         }
         addCurveStroke(pts, 0, false);
+
+        if (isQuantitative) {
+          // 1. Roots on X-axis (where y = 0)
+          if (disc > 1e-5) {
+            const sqrtD = Math.sqrt(disc);
+            const r1 = (-pb - sqrtD) / (2 * pa);
+            const r2 = (-pb + sqrtD) / (2 * pa);
+            const roots = [Math.min(r1, r2), Math.max(r1, r2)];
+            for (const r of roots) {
+              if (Math.abs(r) > 1e-4) {
+                const px = centerX + (r / xSpan) * plotHalfW;
+                addXAxisTickAndLabel(px, formatNumLabel(r), pa < 0, r < xv ? -5 : 5);
+              }
+            }
+          } else if (Math.abs(disc) <= 1e-5 && Math.abs(xv) > 1e-4) {
+            const px = centerX + (xv / xSpan) * plotHalfW;
+            addXAxisTickAndLabel(px, formatNumLabel(xv), pa < 0);
+          }
+
+          // 2. Y-intercept (x = 0, y = pc)
+          if (Math.abs(pc) > 1e-4) {
+            const pyc = centerY - (pc / ySpan) * plotHalfH;
+            addYAxisTickAndLabel(pyc, formatNumLabel(pc), true, pc < 0 ? 11 : -10);
+          }
+
+          // 3. Off-axis vertex projection (xv, yv)
+          if (Math.abs(xv) > 0.08 && Math.abs(yv) > 1e-4) {
+            const pxv = centerX + (xv / xSpan) * plotHalfW;
+            const pyv = centerY - (yv / ySpan) * plotHalfH;
+            addDashedCoordProjection(pxv, pyv, formatNumLabel(xv), formatNumLabel(yv));
+          }
+        }
+
         return { strokes, groupId, kindLabel };
       }
 
@@ -8995,6 +9251,25 @@ export function buildMathGraphStrokesFromEquation(
           }
         }
         addCurveStroke(pts, 0, false);
+
+        if (isQuantitative) {
+          if (disc > 1e-5) {
+            const sqrtD = Math.sqrt(disc);
+            const r1 = (-pb - sqrtD) / (2 * pa);
+            const r2 = (-pb + sqrtD) / (2 * pa);
+            for (const r of [Math.min(r1, r2), Math.max(r1, r2)]) {
+              if (Math.abs(r) > 1e-4) {
+                const py = centerY - (r / ySpan) * plotHalfH;
+                addYAxisTickAndLabel(py, formatNumLabel(r), pa > 0, r < yv ? 8 : -8);
+              }
+            }
+          }
+          if (Math.abs(pc) > 1e-4) {
+            const pxc = centerX + (pc / xSpan) * plotHalfW;
+            addXAxisTickAndLabel(pxc, formatNumLabel(pc), false);
+          }
+        }
+
         return { strokes, groupId, kindLabel };
       }
 
@@ -9038,6 +9313,12 @@ export function buildMathGraphStrokesFromEquation(
           }
           addCurveStroke(branchRight, 0, false);
           addCurveStroke(branchLeft, 1, false);
+          if (isQuantitative && Math.abs(y0) <= 0.05) {
+            const pxL = centerX + ((x0 - aSemi) / xSpan) * plotHalfW;
+            const pxR = centerX + ((x0 + aSemi) / xSpan) * plotHalfW;
+            addXAxisTickAndLabel(pxL, formatNumLabel(x0 - aSemi), false, -6);
+            addXAxisTickAndLabel(pxR, formatNumLabel(x0 + aSemi), false, 6);
+          }
           return { strokes, groupId, kindLabel };
         } else {
           // y = y0 ± b * sqrt(1 + (x - x0)^2 / a^2)
@@ -9064,6 +9345,12 @@ export function buildMathGraphStrokesFromEquation(
           }
           addCurveStroke(branchTop, 0, false);
           addCurveStroke(branchBot, 1, false);
+          if (isQuantitative && Math.abs(x0) <= 0.05) {
+            const pyT = centerY - ((y0 + bSemi) / ySpan) * plotHalfH;
+            const pyB = centerY - ((y0 - bSemi) / ySpan) * plotHalfH;
+            addYAxisTickAndLabel(pyT, formatNumLabel(y0 + bSemi), false, -8);
+            addYAxisTickAndLabel(pyB, formatNumLabel(y0 - bSemi), false, 8);
+          }
           return { strokes, groupId, kindLabel };
         }
       }
@@ -9197,6 +9484,61 @@ export function buildMathGraphStrokesFromEquation(
     }
     if (currentBranch.length >= 2) {
       addCurveStroke(currentBranch, branchIdx++, false);
+    }
+
+    if (strokes.length > 6 && isQuantitative) {
+      // 1. Y-intercept (x = 0, y0 = f(0))
+      const y0Val = fnEval(0);
+      if (Number.isFinite(y0Val) && Math.abs(y0Val) > 1e-4 && Math.abs(y0Val) <= ySpan * 0.95) {
+        const py0 = centerY - (y0Val / ySpan) * plotHalfH;
+        addYAxisTickAndLabel(py0, formatNumLabel(y0Val), true, y0Val < 0 ? 10 : -10);
+      }
+
+      // 2. X-intercepts (real roots f(x) = 0 in [-xSpan * 0.92, xSpan * 0.92])
+      const foundRoots: number[] = [];
+      const rootScanSteps = 160;
+      const scanRange = xSpan * 0.92;
+      for (let i = 0; i < rootScanSteps; i++) {
+        const xA = -scanRange + (2 * scanRange * i) / rootScanSteps;
+        const xB = -scanRange + (2 * scanRange * (i + 1)) / rootScanSteps;
+        const yA = fnEval(xA);
+        const yB = fnEval(xB);
+        if (!Number.isFinite(yA) || !Number.isFinite(yB)) continue;
+        if (Math.abs(yA - yB) > ySpan * 1.2) continue; // skip asymptote jumps
+        let rootCand: number | null = null;
+        if (Math.abs(yA) <= 1e-5) {
+          rootCand = xA;
+        } else if (yA * yB < 0) {
+          let lo = xA;
+          let hi = xB;
+          let fLo = yA;
+          for (let iter = 0; iter < 14; iter++) {
+            const mid = 0.5 * (lo + hi);
+            const fMid = fnEval(mid);
+            if (!Number.isFinite(fMid)) break;
+            if (fLo * fMid <= 0) {
+              hi = mid;
+            } else {
+              lo = mid;
+              fLo = fMid;
+            }
+          }
+          rootCand = 0.5 * (lo + hi);
+        }
+        if (
+          rootCand !== null &&
+          Math.abs(rootCand) > 0.07 * xSpan &&
+          !foundRoots.some((r) => Math.abs(r - rootCand!) < 0.14 * xSpan)
+        ) {
+          foundRoots.push(rootCand);
+        }
+      }
+      if (foundRoots.length <= 4) {
+        for (const r of foundRoots) {
+          const px = centerX + (r / xSpan) * plotHalfW;
+          addXAxisTickAndLabel(px, formatNumLabel(r), false);
+        }
+      }
     }
 
     if (strokes.length > 6) {
