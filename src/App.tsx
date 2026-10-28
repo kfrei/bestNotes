@@ -32442,12 +32442,7 @@ export default function App() {
                             >
                               {(() => {
                                 const effectiveLatex =
-                                  txt.text &&
-                                  !txt.text.includes('\\frac') &&
-                                  !txt.text.includes('\\sqrt') &&
-                                  !txt.text.includes('\\cdot')
-                                    ? convertPlainTextToMathLatex(txt.text)
-                                    : txt.latex;
+                                  txt.latex || convertPlainTextToMathLatex(txt.text || '');
                                 const mathRows = splitAndCleanMathLatexLines(effectiveLatex);
                                 const rowsToRender = mathRows.length > 0 ? mathRows : [effectiveLatex];
                                 const multiM = txt.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);

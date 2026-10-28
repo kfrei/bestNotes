@@ -4406,6 +4406,11 @@ export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
         // Normalize un-subscripted umax / Umax / amax / Fmax / xmax / Kmax -> _{max}
         .replace(/\b([uUvVaAxXFKE])\s*_?\s*\{?\s*m[aα]x\s*\}?(?![a-zA-Z])/g, '$1_{max}')
         .replace(/\b([uUvVaAxXFKE])\s*_?\s*\{?\s*m[iι]n\s*\}?(?![a-zA-Z])/g, '$1_{min}')
+        // Repair misrecognized `m/s` or `\mu` right before `(` (e.g. `10 ημ(2πt)` misread as `10 \frac{m}{s} \cdot (2\pi t)` or `10 \, \mu(2\pi t)`)
+        .replace(
+          /(?:\\,?\s*)?(?:\\frac\{m\}\{s\}|\\text\{\s*m\/s\s*\}|\bm\s*\/\s*s\b|(?<!\\eta)\\mu)\s*(?:\\cdot\s*|\*\s*)?(?=\()/g,
+          '\\eta\\mu'
+        )
         // Normalize handwritten Greek συν / ημ variations in LaTeX
         .replace(/\\text\{\s*συν\s*\}|(?<!\\)συν|(?:6|\\sigma\s*)[uυv][vν](?=\s*[\(\\])/g, '\\sigma\\upsilon\\nu')
         .replace(/\\text\{\s*ημ\s*\}|(?<!\\)ημ/g, '\\eta\\mu')
@@ -4450,10 +4455,10 @@ export async function transcribeHandwrittenMathWithGemini(
 1. Απλά & σύνθετα κλάσματα: χρησιμοποίησε \\frac{αριθμητής}{παρονομαστής} (π.χ. \\frac{\\Delta x}{\\Delta t}, \\frac{5}{1}, \\frac{20}{\\Delta t}, \\frac{20}{5}).
 2. Συνεπαγωγές & βέλη: χρησιμοποίησε \\Rightarrow (για συνεπάγεται), \\Leftrightarrow (ισοδύναμα), \\rightarrow.
 3. Πολλαπλασιασμός & σύμβολα: χρησιμοποίησε \\cdot για την τελεία πολλαπλασιασμού (π.χ. 5 \\cdot \\Delta t = 20), \\Delta για το Δέλτα (π.χ. \\Delta x, \\Delta t), δείκτες/εκθέτες (x_1, v_0, t^2), ρίζες (\\sqrt{...}), διανύσματα (\\vec{F}, \\vec{u}, \\vec{a}).
-4. ΚΡΙΣΙΜΟ — Ελληνικές τριγωνομετρικές συναρτήσεις ("συν" & "ημ") vs αγγλικό "sin": Στις ελληνικές σημειώσεις Φυσικής/Μαθηματικών το συνημίτονο γράφεται ελληνικά ως "συν" (τρία γράμματα σ-υ-ν, όπου στο χειρόγραφο το σ μοιάζει με 6 ή c και το υν με uv, π.χ. συν(ωt)) και το ημίτονο ως "ημ" (π.χ. ημ(ωt)). ΜΗΝ μπερδεύεις ΠΟΤΕ το χειρόγραφο ελληνικό "συν" (που μοιάζει με 6uv) με το αγγλικό "sin"! Όταν βλέπεις ελληνικό "συν", γράψε ΠΑΝΤΑ \\sigma\\upsilon\\nu (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t)), και όταν βλέπεις ελληνικό "ημ", γράψε ΠΑΝΤΑ \\eta\\mu (π.χ. x = A\\eta\\mu(\\omega t)).
+4. ΚΡΙΣΙΜΟ — Ελληνικές τριγωνομετρικές συναρτήσεις ("συν" & "ημ") vs αγγλικό "sin" ή μονάδες: Στις ελληνικές σημειώσεις Φυσικής/Μαθηματικών το συνημίτονο γράφεται ελληνικά ως "συν" (τρία γράμματα σ-υ-ν, όπου στο χειρόγραφο το σ μοιάζει με 6 ή c και το υν με uv, π.χ. συν(ωt)) και το ημίτονο ως "ημ" (δύο ελληνικά γράμματα η-μ, π.χ. 10 ημ(2πt), A ημ(ωt)). ΜΗΝ μπερδεύεις ΠΟΤΕ το χειρόγραφο ελληνικό "ημ" πριν από παρένθεση (π.χ. u = 10 ημ(2πt)) με μονάδα μέτρησης m/s ή με σκέτο \\mu! Και ΜΗΝ μπερδεύεις ΠΟΤΕ το χειρόγραφο ελληνικό "συν" (που μοιάζει με 6uv) με το αγγλικό "sin"! Όταν βλέπεις ελληνικό "συν", γράψε ΠΑΝΤΑ \\sigma\\upsilon\\nu (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t)), και όταν βλέπεις ελληνικό "ημ", γράψε ΠΑΝΤΑ \\eta\\mu (π.χ. u = 10\\eta\\mu(2\\pi t), x = A\\eta\\mu(\\omega t)).
 5. ΚΡΙΣΙΜΟ — Ταχύτητα u και πλάτος u_{max} (πεζό u, ΟΧΙ κεφαλαίο U) & δείκτες max/min: Στις εξισώσεις ταχύτητας ταλάντωσης (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t) ή u = -u_{max}\\eta\\mu(\\omega t)), το u είναι ΠΑΝΤΑ πεζό "u" (ταχύτητα) τόσο στο αριστερό μέλος όσο και στο πλάτος u_{max} (ΠΟΤΕ κεφαλαίο U, γιατί το U είναι δυναμική ενέργεια!). Επίσης τα max και min γράφονται ΠΑΝΤΑ ως δείκτης σε αγκύλες _{max} και _{min} (π.χ. u_{max}, a_{max}, F_{max}, x_{max}, K_{max}, U_{max}), ΠΟΤΕ κολλητά (όχι Umax ή umax).
 6. Κυκλωμένοι αριθμοί ασκήσεων (αν υπάρχουν στην αρχή, π.χ. ①, ②, ③): γράψε τους ως \\text{①}\\; ή \\text{②}\\; ή \\text{③}\\;.
-7. Μονάδες μέτρησης & ελληνικές λέξεις: βάλε τις μονάδες μέτρησης σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 10\\,\\text{m/s}, 5\\,\\text{kg}, 25\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
+7. Μονάδες μέτρησης & ελληνικές λέξεις: αν στο τέλος μιας αριθμητικής τιμής (όχι πριν από παρένθεση τριγωνομετρικής συνάρτησης!) υπάρχει μονάδα μέτρησης, βάλε την σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 5\\,\\text{kg}, 25\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
 8. Πολλές γραμμές (σειρές): αν το χειρόγραφο έχει 2 ή περισσότερες σειρές (η μία κάτω από την άλλη), βάλε κάθε σειρά ως ξεχωριστό στοιχείο στον πίνακα "lines" (και ένωσέ τες με απλό χαρακτήρα αλλαγής γραμμής "\\n" στο "latex"). ΜΗΝ χρησιμοποιείς ΠΟΤΕ \\[6pt], \\\\[6pt] ή \\begin{aligned}.
 9. ΜΗΝ βάζεις εξωτερικά σύμβολα $$ ή \\[ \\] γύρω από το latex string.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
@@ -4504,10 +4509,13 @@ export async function transcribeHandwrittenMathWithGemini(
           : '');
       const cleanedRows = splitAndCleanMathLatexLines(rawLatex);
       const cleanLatex = cleanedRows.join('\n').trim();
-      const plainText =
-        typeof parsed?.plainText === 'string' && parsed.plainText.trim().length > 0
-          ? splitAndCleanMathLatexLines(parsed.plainText).join('\n').trim()
-          : cleanLatex;
+      const plainText = cleanLatex
+        .replace(/\\sigma\\upsilon\\nu/g, 'συν')
+        .replace(/\\eta\\mu/g, 'ημ')
+        .replace(/\\omega/g, 'ω')
+        .replace(/\\pi/g, 'π')
+        .replace(/\\Delta\s*/g, 'Δ')
+        .replace(/\\cdot/g, '·');
       if (cleanLatex.length > 0) {
         cachedWorkingVisionModel = cleanName;
         return { latex: cleanLatex, plainText };
@@ -7365,7 +7373,9 @@ export function convertPlainTextToMathLatex(rawText: string): string {
     // 5. Convert trig functions & common operators / arrows
     s = s
       .replace(/(?<!\\)\b(sin|cos|tan|ln|log)\b/gi, (_, fn) => `\\${fn.toLowerCase()}`)
-      .replace(/(?<!\\text\{)(ημιτ|ημ|συνημ|συν|εφ|σφ)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9])/gi, '\\text{$1}')
+      .replace(/(?<!\\)(?:συνημ|συν)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\sigma\\upsilon\\nu')
+      .replace(/(?<!\\)(?:ημιτ|ημ)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\eta\\mu')
+      .replace(/(?<!\\text\{)(εφ|σφ)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9])/gi, '\\text{$1}')
       .replace(/<=>/g, ' \\Leftrightarrow ')
       .replace(/=>|->/g, ' \\Rightarrow ')
       .replace(/<=/g, ' \\le ')
