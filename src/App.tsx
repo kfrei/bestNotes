@@ -1498,6 +1498,7 @@ export default function App() {
     origY: number;
     origW?: number;
     origH?: number;
+    origFontSize?: number;
     pW?: number;
     pH?: number;
     resizeHandle?: 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
@@ -8600,16 +8601,25 @@ export default function App() {
             texts: (page.texts || []).map((t) => {
               if (t.id !== d.id) return t;
               if (t.isMath) {
+                const hasHoriz = Boolean(d.resizeHandle && (d.resizeHandle.includes('e') || d.resizeHandle.includes('w')));
+                const hasVert = Boolean(d.resizeHandle && (d.resizeHandle.includes('n') || d.resizeHandle.includes('s')));
+                const wRatio = nextW / Math.max(48, origW);
+                const hRatio = nextH / Math.max(24, origH);
                 const ratio =
-                  d.resizeHandle && (d.resizeHandle.includes('n') || d.resizeHandle.includes('s'))
-                    ? nextH / Math.max(24, origH)
-                    : nextW / Math.max(48, origW);
-                const mathFs = Math.max(10, Math.min(72, Math.round(t.fontSize * Math.pow(ratio, 0.35))));
+                  hasHoriz && hasVert
+                    ? (wRatio + hRatio) / 2
+                    : hasVert
+                    ? hRatio
+                    : wRatio;
+                const baseFs = d.origFontSize || t.fontSize || 22;
+                const mathFs = Math.max(10, Math.min(96, Math.round(baseFs * ratio)));
                 nextAutoFs = mathFs;
                 return {
                   ...t,
                   x: nextX,
                   y: nextY,
+                  boxWidth: undefined,
+                  boxHeight: undefined,
                   fontSize: mathFs,
                 };
               }
@@ -15210,8 +15220,8 @@ export default function App() {
           e.stopPropagation();
           outsidePanDragRef.current = null;
           cancelScrollMomentum();
-          const curBoxW = activeTxtObj.boxWidth || activeTxtEl.offsetWidth || 180;
-          const curBoxH = activeTxtObj.boxHeight || activeTxtEl.offsetHeight || 48;
+          const curBoxW = (activeTxtObj.isMath ? 0 : activeTxtObj.boxWidth) || activeTxtEl.offsetWidth || 180;
+          const curBoxH = (activeTxtObj.isMath ? 0 : activeTxtObj.boxHeight) || activeTxtEl.offsetHeight || 48;
           draggingTextRef.current = {
             id: activeTxtObj.id,
             pageIdx,
@@ -15222,6 +15232,7 @@ export default function App() {
             origY: activeTxtObj.y,
             origW: curBoxW,
             origH: curBoxH,
+            origFontSize: activeTxtObj.fontSize,
             pW: getPageLogicalWidth(targetPageForTxt),
             pH: getPageLogicalHeight(targetPageForTxt),
             resizeHandle: edgeHandle,
@@ -23394,6 +23405,8 @@ export default function App() {
                 text: rawPlain,
                 latex: convertedLatex,
                 isMath: true,
+                boxWidth: undefined,
+                boxHeight: undefined,
               }
             : t
         ),
@@ -31304,8 +31317,18 @@ export default function App() {
                           style={{
                             left: txt.x,
                             top: txt.y,
-                            width: txt.boxWidth ? `${txt.boxWidth}px` : undefined,
-                            height: txt.boxHeight ? `${txt.boxHeight}px` : undefined,
+                            width:
+                              txt.isMath && !isEditingTxt
+                                ? 'max-content'
+                                : txt.boxWidth
+                                ? `${txt.boxWidth}px`
+                                : undefined,
+                            height:
+                              txt.isMath && !isEditingTxt
+                                ? 'auto'
+                                : txt.boxHeight
+                                ? `${txt.boxHeight}px`
+                                : undefined,
                             color: txt.color,
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
@@ -31366,8 +31389,8 @@ export default function App() {
                               ev.preventDefault();
                             }
 
-                            const curBoxW = txt.boxWidth || ev.currentTarget.offsetWidth || 180;
-                            const curBoxH = txt.boxHeight || ev.currentTarget.offsetHeight || 48;
+                            const curBoxW = (txt.isMath ? 0 : txt.boxWidth) || ev.currentTarget.offsetWidth || 180;
+                            const curBoxH = (txt.isMath ? 0 : txt.boxHeight) || ev.currentTarget.offsetHeight || 48;
                             const wasAlreadySelected = selectedTextId === txt.id;
 
                             draggingTextRef.current = {
@@ -31380,6 +31403,7 @@ export default function App() {
                               origY: txt.y,
                               origW: curBoxW,
                               origH: curBoxH,
+                              origFontSize: txt.fontSize,
                               pW,
                               pH,
                               resizeHandle: resizeHandle || undefined,
@@ -31447,8 +31471,8 @@ export default function App() {
                               );
                             }
 
-                            const curBoxW = txt.boxWidth || ev.currentTarget.offsetWidth || 180;
-                            const curBoxH = txt.boxHeight || ev.currentTarget.offsetHeight || 48;
+                            const curBoxW = (txt.isMath ? 0 : txt.boxWidth) || ev.currentTarget.offsetWidth || 180;
+                            const curBoxH = (txt.isMath ? 0 : txt.boxHeight) || ev.currentTarget.offsetHeight || 48;
                             const wasAlreadySelected = selectedTextId === txt.id;
 
                             draggingTextRef.current = {
@@ -31460,6 +31484,7 @@ export default function App() {
                               origY: txt.y,
                               origW: curBoxW,
                               origH: curBoxH,
+                              origFontSize: txt.fontSize,
                               pW,
                               pH,
                               resizeHandle: resizeHandle || undefined,
