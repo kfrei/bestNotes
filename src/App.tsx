@@ -6290,53 +6290,6 @@ export default function App() {
             ctx.restore();
           }
 
-          // Millimeter (mm) Precision Readout Badge on Selected Object when Ruler "mm" mode is enabled!
-          if (rulerState.showMm) {
-            const ONE_MM_PX = 920 / 200; // 4.6px per 1mm
-            let mmLabel = '';
-            const singleSt = selStrokesList.length === 1 && selImagesList.length === 0 ? selStrokesList[0] : null;
-            if (singleSt && singleSt.shapeType === 'spring') {
-              const spLen = getSpringTerminalsAndWidthVec(singleSt).length;
-              mmLabel = `${Math.max(1, Math.round(spLen / ONE_MM_PX))} mm`;
-            } else if (
-              singleSt &&
-              (singleSt.shapeType === 'line' ||
-                singleSt.shapeType === 'arrow' ||
-                singleSt.shapeType === 'double-arrow') &&
-              singleSt.points.length >= 2 &&
-              singleSt.points[0]?.twist !== 999
-            ) {
-              const p0 = singleSt.points[0];
-              const pN = singleSt.points[singleSt.points.length - 1];
-              const lPx = Math.hypot(pN.x - p0.x, pN.y - p0.y);
-              mmLabel = `${Math.max(1, Math.round(lPx / ONE_MM_PX))} mm`;
-            } else {
-              const wMm = Math.max(1, Math.round((selBounds.hw * 2) / ONE_MM_PX));
-              const hMm = Math.max(1, Math.round((selBounds.hh * 2) / ONE_MM_PX));
-              mmLabel = `${wMm} × ${hMm} mm`;
-            }
-
-            ctx.save();
-            ctx.translate(-Math.max(46, hw * 0.45), rotStemTopY);
-            ctx.rotate(-angle);
-            ctx.font = 'bold 11px sans-serif';
-            const tw = ctx.measureText(mmLabel).width;
-            const pw = Math.max(54, tw + 16);
-            const ph = 20;
-            ctx.fillStyle = '#0f172a';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.6;
-            ctx.beginPath();
-            ctx.roundRect(-pw / 2, -ph / 2, pw, ph, 10);
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = '#38bdf8';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(mmLabel, 0, 0.5);
-            ctx.restore();
-          }
-
           // 4b. Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill right below the Selection Frame!
           if (totalSelObjects >= 2) {
             const firstGrpId = selStrokesList[0]?.groupId || selImagesList[0]?.groupId;
@@ -6377,76 +6330,6 @@ export default function App() {
           }
 
           ctx.restore();
-        }
-
-        // 4a-mm. When Ruler "mm" mode is enabled, also display millimeter (mm) dimensions on unselected standalone shapes on the active page!
-        if (rulerState.visible && rulerState.showMm) {
-          const ONE_MM_PX = 920 / 200; // 4.6px per 1mm
-          for (const st of pageObj.strokes) {
-            if (!st.isShape || st.groupId || selectedStrokeIds.includes(st.id) || st.points.length < 2) continue;
-            let mmText = '';
-            let badgeX = 0;
-            let badgeY = 0;
-            if (st.shapeType === 'spring') {
-              const spInfo = getSpringTerminalsAndWidthVec(st);
-              mmText = `${Math.max(1, Math.round(spInfo.length / ONE_MM_PX))} mm`;
-              badgeX =
-                (spInfo.startTerm.x + spInfo.endTerm.x) / 2 -
-                spInfo.uy * (spInfo.springWidth / 2 + 24);
-              badgeY =
-                (spInfo.startTerm.y + spInfo.endTerm.y) / 2 +
-                spInfo.ux * (spInfo.springWidth / 2 + 24);
-            } else if (
-              (st.shapeType === 'line' || st.shapeType === 'arrow' || st.shapeType === 'double-arrow') &&
-              st.points[0]?.twist !== 999
-            ) {
-              const p0 = st.points[0];
-              const pN = st.points[st.points.length - 1];
-              const lPx = Math.hypot(pN.x - p0.x, pN.y - p0.y);
-              if (lPx < 14) continue;
-              mmText = `${Math.max(1, Math.round(lPx / ONE_MM_PX))} mm`;
-              badgeX = (p0.x + pN.x) / 2;
-              badgeY = (p0.y + pN.y) / 2 - 14;
-            } else {
-              let minX = Infinity;
-              let minY = Infinity;
-              let maxX = -Infinity;
-              let maxY = -Infinity;
-              for (const pt of st.points) {
-                if (pt.x < minX) minX = pt.x;
-                if (pt.y < minY) minY = pt.y;
-                if (pt.x > maxX) maxX = pt.x;
-                if (pt.y > maxY) maxY = pt.y;
-              }
-              const wPx = maxX - minX;
-              const hPx = maxY - minY;
-              if (wPx < 6 && hPx < 6) continue;
-              const wMm = Math.max(1, Math.round(wPx / ONE_MM_PX));
-              const hMm = Math.max(1, Math.round(hPx / ONE_MM_PX));
-              mmText = `${wMm} × ${hMm} mm`;
-              badgeX = (minX + maxX) / 2;
-              badgeY = maxY + 14;
-            }
-            if (mmText) {
-              ctx.save();
-              ctx.font = 'bold 10px sans-serif';
-              const tw = ctx.measureText(mmText).width;
-              const pw = Math.max(44, tw + 12);
-              const ph = 17;
-              ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-              ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-              ctx.lineWidth = 1.2;
-              ctx.beginPath();
-              ctx.roundRect(badgeX - pw / 2, badgeY - ph / 2, pw, ph, 8.5);
-              ctx.fill();
-              ctx.stroke();
-              ctx.fillStyle = '#38bdf8';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(mmText, badgeX, badgeY + 0.5);
-              ctx.restore();
-            }
-          }
         }
 
         // 4b. When a single Sine or Cosine wave is selected in Lasso mode, highlight open endpoints of other matching waves on the page!
@@ -33634,7 +33517,7 @@ export default function App() {
                               type="button"
                               data-ui-panel="true"
                               data-ruler-mm="true"
-                              title="Εμφάνιση υποδιαιρέσεων & τιμών με ακρίβεια χιλιοστού (mm) στον χάρακα και στα αντικείμενα"
+                              title="Εμφάνιση υποδιαιρέσεων & τιμών με ακρίβεια χιλιοστού (mm) στον χάρακα"
                               onPointerDown={(e) => {
                                 e.stopPropagation();
                               }}
@@ -33645,13 +33528,20 @@ export default function App() {
                               className="absolute left-[calc(50%+30px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-pointer outline-none"
                             >
                               <div
-                                className={`h-7 px-2 rounded-full border shadow-md flex items-center justify-center text-[10px] font-extrabold tracking-tight transition ${
+                                className={`w-7 h-7 rounded-full border shadow-md flex items-center justify-center text-[9.5px] font-extrabold tracking-tight transition ${
                                   rulerState.showMm
                                     ? 'bg-[#0066ff] text-white border-[#0052cc] ring-2 ring-[#0066ff]/30'
                                     : 'bg-white/95 text-slate-600 border-slate-400/80 hover:text-slate-900'
                                 }`}
                               >
-                                mm
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    transform: `rotate(${-rulerState.angle}deg)`,
+                                  }}
+                                >
+                                  mm
+                                </span>
                               </div>
                               <div className={`w-[1.5px] h-2 ${rulerState.showMm ? 'bg-[#0066ff]/80' : 'bg-slate-400/80'}`} />
                             </button>
@@ -33665,8 +33555,11 @@ export default function App() {
                                 <>
                                   {/* 0 mm origin label */}
                                   <span
-                                    style={{ left: 3 }}
-                                    className="absolute top-1/2 -translate-y-1/2 text-[8.5px] font-mono font-bold text-slate-700/90 bg-slate-200/80 px-0.5 rounded select-none"
+                                    style={{
+                                      left: 7,
+                                      transform: `translate(-50%, -50%) rotate(${-rulerState.angle}deg)`,
+                                    }}
+                                    className="absolute top-1/2 text-[8.5px] font-mono font-bold text-slate-700/90 bg-slate-200/85 px-0.5 rounded select-none"
                                   >
                                     0
                                   </span>
@@ -33696,11 +33589,14 @@ export default function App() {
                                             style={{ left: xPos, height: tickH, width: tickW }}
                                             className={`absolute bottom-0 -translate-x-1/2 ${tickCls}`}
                                           />
-                                          {/* Numeric mm value every 10 mm (1 cm) */}
+                                          {/* Numeric mm value every 10 mm (1 cm) — counter-rotated so it stays upright when ruler is vertical! */}
                                           {isFullCm && xPos < rulerW - 14 && (
                                             <span
-                                              style={{ left: xPos }}
-                                              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-[8.5px] font-mono font-bold text-slate-700/95 bg-slate-200/85 px-0.5 rounded select-none"
+                                              style={{
+                                                left: xPos,
+                                                transform: `translate(-50%, -50%) rotate(${-rulerState.angle}deg)`,
+                                              }}
+                                              className="absolute top-1/2 text-[8.5px] font-mono font-bold text-slate-700/95 bg-slate-200/85 px-0.5 rounded select-none"
                                             >
                                               {mmIdx}
                                             </span>
