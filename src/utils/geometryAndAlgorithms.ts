@@ -4131,25 +4131,31 @@ function safeParseVisionJson(rawText: string): any {
     .trim();
   if (!cleanJsonText) return null;
 
+  // Pre-escape any unescaped single-backslash LaTeX commands inside JSON string literals
+  // (critical for `\frac`, `\nu`, `\theta`, `\text`, `\tau`, `\rho`, `\rightarrow`, `\beta`
+  // which otherwise get eaten by JSON.parse as \f, \n, \t, \r, \b control characters!)
+  const preEscapedJson = cleanJsonText.replace(/"((?:[^"\\]|\\.)*)"/gs, (match) =>
+    match
+      .replace(/\r?\n/g, '\\n')
+      .replace(/(?<!\\)\\(frac|dfrac|tfrac|nu|neq|nabla|theta|text|tau|times|tan|rho|rightarrow|right|beta|binom|begin|bcancel|eta|mu|pi|omega|sigma|upsilon|alpha|gamma|delta|Delta|lambda|kappa|phi|psi|cdot|sqrt|vec|Rightarrow|Leftrightarrow|implies|le|ge)\b/g, '\\\\$1')
+      .replace(/\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\')
+  );
+
   try {
-    return JSON.parse(cleanJsonText);
+    return JSON.parse(preEscapedJson);
   } catch {
-    // Fallback 1: sanitize literal newlines inside string quotes and invalid LaTeX backslash escapes
     try {
-      const sanitized = cleanJsonText
-        .replace(/"((?:[^"\\]|\\.)*)"/gs, (match) =>
-          match
-            .replace(/\r?\n/g, '\\n')
-            .replace(/\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\')
-        );
-      return JSON.parse(sanitized);
+      return JSON.parse(cleanJsonText);
     } catch {
-      // Fallback 2: regex field extraction so valid OCR text is never discarded
+      // Fallback: regex field extraction so valid OCR text is never discarded
       const extractField = (key: string): string | undefined => {
         const re = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 's');
-        const m = cleanJsonText.match(re);
+        const m = preEscapedJson.match(re) || cleanJsonText.match(re);
         if (!m) return undefined;
-        return m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        return m[1]
+          .replace(/\\n(?![a-zA-Z])/g, '\n')
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\');
       };
       const eq = extractField('equation');
       const norm = extractField('normalizedEquation');
@@ -4396,7 +4402,7 @@ export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
     .replace(/\\\\+/g, '\n')
     .replace(/\\(?:newline|cr)\b/g, '\n');
 
-  return stripped
+  const rows = stripped
     .split(/\r?\n/)
     .map((line) => {
       let cleaned = line
@@ -4414,14 +4420,37 @@ export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
         // Normalize handwritten Greek συν / ημ variations in LaTeX
         .replace(/\\text\{\s*συν\s*\}|(?<!\\)συν|(?:6|\\sigma\s*)[uυv][vν](?=\s*[\(\\])/g, '\\sigma\\upsilon\\nu')
         .replace(/\\text\{\s*ημ\s*\}|(?<!\\)ημ/g, '\\eta\\mu')
+        // Handwritten Greek `π` (with a longer right leg) inside trig arguments or phase terms is often misread as `\eta`:
+        // e.g. `(5\pi t + \eta)` -> `(5\pi t + \pi)`, `\frac{\eta}{2}` -> `\frac{\pi}{2}`, `5\eta t` -> `5\pi t`
+        .replace(/([+-]\s*)\\eta(?!\s*\\mu)(?=\s*[\)\/])/g, '$1\\pi')
+        .replace(/\\frac\{\s*(\d*)\s*\\eta\s*\}\{\s*(\d+)\s*\}/g, '\\frac{$1\\pi}{$2}')
+        .replace(/(\d+\s*)\\eta(?!\s*\\mu)(?=\s*t\b|\s*\))/g, '$1\\pi')
         .trim();
       // If LHS is lowercase velocity `u = ...` (or `u(t) = ...`), ensure velocity amplitude is lowercase `u_{max}` (NOT uppercase `U_{max}`)
-      if (/^(?:\\vec\{u\}|u(?:\s*\(\s*t\s*\))?)\s*=/.test(cleaned)) {
+      if (/(?:^|\\Rightarrow|\\Leftrightarrow)\s*(?:\\vec\{u\}|u(?:\s*\(\s*t\s*\))?)\s*=/.test(cleaned)) {
         cleaned = cleaned.replace(/\bU_\{max\}/g, 'u_{max}').replace(/\bU_\{min\}/g, 'u_{min}');
       }
       return cleaned;
     })
     .filter((line) => line.length > 0);
+
+  // Guard against any hallucinated 2nd line that is just a truncated prefix of line 1 (e.g. "u = 1" below "u = 10\eta\mu(2\pi t)")
+  if (rows.length >= 2) {
+    const firstNoSpace = rows[0].replace(/\s+/g, '');
+    return rows.filter((r, idx) => {
+      if (idx === 0) return true;
+      const curNoSpace = r.replace(/\s+/g, '');
+      if (
+        curNoSpace.length <= 6 &&
+        firstNoSpace.length > curNoSpace.length + 3 &&
+        firstNoSpace.startsWith(curNoSpace)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }
+  return rows;
 }
 
 /**
@@ -4457,12 +4486,13 @@ export async function transcribeHandwrittenMathWithGemini(
 3. Πολλαπλασιασμός & σύμβολα: χρησιμοποίησε \\cdot για την τελεία πολλαπλασιασμού (π.χ. 5 \\cdot \\Delta t = 20), \\Delta για το Δέλτα (π.χ. \\Delta x, \\Delta t), δείκτες/εκθέτες (x_1, v_0, t^2), ρίζες (\\sqrt{...}), διανύσματα (\\vec{F}, \\vec{u}, \\vec{a}).
 4. ΚΡΙΣΙΜΟ — Ελληνικές τριγωνομετρικές συναρτήσεις ("συν" & "ημ") vs αγγλικό "sin" ή μονάδες: Στις ελληνικές σημειώσεις Φυσικής/Μαθηματικών το συνημίτονο γράφεται ελληνικά ως "συν" (τρία γράμματα σ-υ-ν, όπου στο χειρόγραφο το σ μοιάζει με 6 ή c και το υν με uv, π.χ. συν(ωt)) και το ημίτονο ως "ημ" (δύο ελληνικά γράμματα η-μ, π.χ. 10 ημ(2πt), A ημ(ωt)). ΜΗΝ μπερδεύεις ΠΟΤΕ το χειρόγραφο ελληνικό "ημ" πριν από παρένθεση (π.χ. u = 10 ημ(2πt)) με μονάδα μέτρησης m/s ή με σκέτο \\mu! Και ΜΗΝ μπερδεύεις ΠΟΤΕ το χειρόγραφο ελληνικό "συν" (που μοιάζει με 6uv) με το αγγλικό "sin"! Όταν βλέπεις ελληνικό "συν", γράψε ΠΑΝΤΑ \\sigma\\upsilon\\nu (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t)), και όταν βλέπεις ελληνικό "ημ", γράψε ΠΑΝΤΑ \\eta\\mu (π.χ. u = 10\\eta\\mu(2\\pi t), x = A\\eta\\mu(\\omega t)).
 5. ΚΡΙΣΙΜΟ — Ταχύτητα u και πλάτος u_{max} (πεζό u, ΟΧΙ κεφαλαίο U) & δείκτες max/min: Στις εξισώσεις ταχύτητας ταλάντωσης (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t) ή u = -u_{max}\\eta\\mu(\\omega t)), το u είναι ΠΑΝΤΑ πεζό "u" (ταχύτητα) τόσο στο αριστερό μέλος όσο και στο πλάτος u_{max} (ΠΟΤΕ κεφαλαίο U, γιατί το U είναι δυναμική ενέργεια!). Επίσης τα max και min γράφονται ΠΑΝΤΑ ως δείκτης σε αγκύλες _{max} και _{min} (π.χ. u_{max}, a_{max}, F_{max}, x_{max}, K_{max}, U_{max}), ΠΟΤΕ κολλητά (όχι Umax ή umax).
+5β. ΚΡΙΣΙΜΟ — Χειρόγραφο ελληνικό "π" (\\pi) vs "η" (\\eta) μέσα σε φάση τριγωνομετρικής συνάρτησης: Στο ελληνικό χειρόγραφο το γράμμα π (\\pi) γράφεται συχνά με τη δεξιά κάθετη γραμμή λίγο πιο μακριά προς τα κάτω (σαν Π/π), οπότε μοιάζει οπτικά με "η". Μέσα στις παρενθέσεις ημιτόνου/συνημιτόνου (π.χ. (\\omega t + \\phi_0), (5\\pi t + \\pi), (2\\pi t - \\frac{\\pi}{2})) η γωνία/αρχική φάση και ο συντελεστής του t είναι ΠΑΝΤΑ \\pi (π.χ. 5\\pi t + \\pi), ΠΟΤΕ \\eta!
 6. Κυκλωμένοι αριθμοί ασκήσεων (αν υπάρχουν στην αρχή, π.χ. ①, ②, ③): γράψε τους ως \\text{①}\\; ή \\text{②}\\; ή \\text{③}\\;.
 7. Μονάδες μέτρησης & ελληνικές λέξεις: αν στο τέλος μιας αριθμητικής τιμής (όχι πριν από παρένθεση τριγωνομετρικής συνάρτησης!) υπάρχει μονάδα μέτρησης, βάλε την σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 5\\,\\text{kg}, 25\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
-8. Πολλές γραμμές (σειρές): αν το χειρόγραφο έχει 2 ή περισσότερες σειρές (η μία κάτω από την άλλη), βάλε κάθε σειρά ως ξεχωριστό στοιχείο στον πίνακα "lines" (και ένωσέ τες με απλό χαρακτήρα αλλαγής γραμμής "\\n" στο "latex"). ΜΗΝ χρησιμοποιείς ΠΟΤΕ \\[6pt], \\\\[6pt] ή \\begin{aligned}.
+8. Αριθμός γραμμών (σειρών): Αν στην εικόνα υπάρχει ΜΟΝΟ ΜΙΑ γραμμή εξίσωσης, ο πίνακας "lines" ΠΡΕΠΕΙ να έχει ΑΥΣΤΗΡΑ 1 στοιχείο (και το "latex" 1 γραμμή χωρίς "\\n")! Αγνόησε τυχόν μεμονωμένες τελείες ή μικρά σημαδάκια πάνω/κάτω από την εξίσωση και ΜΗΝ επινοείς ΠΟΤΕ δεύτερη γραμμή (όπως "u = 1"). Μόνο αν υπάρχουν πραγματικά 2 ή περισσότερες ολόκληρες σειρές εξισώσεων (η μία κάτω από την άλλη), βάλε κάθε σειρά ως ξεχωριστό στοιχείο στον πίνακα "lines". ΜΗΝ χρησιμοποιείς ΠΟΤΕ \\[6pt], \\\\[6pt] ή \\begin{aligned}.
 9. ΜΗΝ βάζεις εξωτερικά σύμβολα $$ ή \\[ \\] γύρω από το latex string.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
-{"lines": ["σειρά 1 σε LaTeX", "σειρά 2 σε LaTeX"], "latex": "σειρά 1\\nσειρά 2", "plainText": "..."}
+{"lines": ["..."], "latex": "...", "plainText": "..."}
 χωρίς κανένα άλλο σχόλιο.`,
     },
     {

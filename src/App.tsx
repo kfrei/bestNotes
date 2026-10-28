@@ -22962,11 +22962,34 @@ export default function App() {
       return;
     }
 
+    // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
+    // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
+    const strokeWithBounds = selStrokes.map((st) => ({ st, b: getStrokeBounds(st) }));
+    const substantialBounds = strokeWithBounds.filter(
+      ({ b }) => b.maxX - b.minX >= 9 || b.maxY - b.minY >= 9
+    );
+    let mainMinY = Infinity;
+    let mainMaxY = -Infinity;
+    for (const { b } of substantialBounds) {
+      if (b.minY < mainMinY) mainMinY = b.minY;
+      if (b.maxY > mainMaxY) mainMaxY = b.maxY;
+    }
+    const ocrStrokes =
+      substantialBounds.length > 0
+        ? strokeWithBounds
+            .filter(({ b }) => {
+              const isTinyDot = b.maxX - b.minX < 9 && b.maxY - b.minY < 9;
+              if (!isTinyDot) return true;
+              return b.maxY >= mainMinY - 24 && b.minY <= mainMaxY + 24;
+            })
+            .map(({ st }) => st)
+        : selStrokes;
+
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (const st of selStrokes) {
+    for (const st of ocrStrokes) {
       const b = getStrokeBounds(st);
       if (b.minX < minX) minX = b.minX;
       if (b.minY < minY) minY = b.minY;
@@ -22990,7 +23013,7 @@ export default function App() {
     cropCtx.save();
     cropCtx.scale(scale, scale);
     cropCtx.translate(-minX + pad, -minY + pad);
-    for (const st of selStrokes) {
+    for (const st of ocrStrokes) {
       drawStrokeOnContext(cropCtx, st);
     }
     cropCtx.restore();
@@ -23103,11 +23126,34 @@ export default function App() {
       return;
     }
 
+    // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
+    // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
+    const strokeWithBounds = selStrokes.map((st) => ({ st, b: getStrokeBounds(st) }));
+    const substantialBounds = strokeWithBounds.filter(
+      ({ b }) => b.maxX - b.minX >= 9 || b.maxY - b.minY >= 9
+    );
+    let mainMinY = Infinity;
+    let mainMaxY = -Infinity;
+    for (const { b } of substantialBounds) {
+      if (b.minY < mainMinY) mainMinY = b.minY;
+      if (b.maxY > mainMaxY) mainMaxY = b.maxY;
+    }
+    const ocrStrokes =
+      substantialBounds.length > 0
+        ? strokeWithBounds
+            .filter(({ b }) => {
+              const isTinyDot = b.maxX - b.minX < 9 && b.maxY - b.minY < 9;
+              if (!isTinyDot) return true;
+              return b.maxY >= mainMinY - 24 && b.minY <= mainMaxY + 24;
+            })
+            .map(({ st }) => st)
+        : selStrokes;
+
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (const st of selStrokes) {
+    for (const st of ocrStrokes) {
       const b = getStrokeBounds(st);
       if (b.minX < minX) minX = b.minX;
       if (b.minY < minY) minY = b.minY;
@@ -23131,7 +23177,7 @@ export default function App() {
     cropCtx.save();
     cropCtx.scale(scale, scale);
     cropCtx.translate(-minX + pad, -minY + pad);
-    for (const st of selStrokes) {
+    for (const st of ocrStrokes) {
       drawStrokeOnContext(cropCtx, st);
     }
     cropCtx.restore();
@@ -23369,11 +23415,34 @@ export default function App() {
       return;
     }
 
+    // Filter out tiny accidental stray dots (w < 9 && h < 9) that sit far (> 24px) above/below the main equation strokes
+    // so an accidental pen tap on the canvas never makes the OCR model hallucinate a 2nd line
+    const strokeWithBounds = selStrokes.map((st) => ({ st, b: getStrokeBounds(st) }));
+    const substantialBounds = strokeWithBounds.filter(
+      ({ b }) => b.maxX - b.minX >= 9 || b.maxY - b.minY >= 9
+    );
+    let mainMinY = Infinity;
+    let mainMaxY = -Infinity;
+    for (const { b } of substantialBounds) {
+      if (b.minY < mainMinY) mainMinY = b.minY;
+      if (b.maxY > mainMaxY) mainMaxY = b.maxY;
+    }
+    const ocrStrokes =
+      substantialBounds.length > 0
+        ? strokeWithBounds
+            .filter(({ b }) => {
+              const isTinyDot = b.maxX - b.minX < 9 && b.maxY - b.minY < 9;
+              if (!isTinyDot) return true;
+              return b.maxY >= mainMinY - 24 && b.minY <= mainMaxY + 24;
+            })
+            .map(({ st }) => st)
+        : selStrokes;
+
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (const st of selStrokes) {
+    for (const st of ocrStrokes) {
       const b = getStrokeBounds(st);
       if (b.minX < minX) minX = b.minX;
       if (b.minY < minY) minY = b.minY;
@@ -23397,7 +23466,7 @@ export default function App() {
     cropCtx.save();
     cropCtx.scale(scale, scale);
     cropCtx.translate(-minX + pad, -minY + pad);
-    for (const st of selStrokes) {
+    for (const st of ocrStrokes) {
       drawStrokeOnContext(cropCtx, st);
     }
     cropCtx.restore();
