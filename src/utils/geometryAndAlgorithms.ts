@@ -8081,6 +8081,7 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/\\Sigma\b/g, 'Σ')
     .replace(/\\Delta\b/g, 'D')
     .replace(/\\omega\b/g, 'ω')
+    .replace(/\\pi\b/g, 'π')
     .replace(/\\alpha\b/g, 'α')
     .replace(/\\mu\b/g, 'm')
     .replace(/\\(?:upsilon|nu)\b/g, 'u')
@@ -8585,7 +8586,7 @@ function tryBuildOscillationDiagramStrokes(
 
   // CASE 6: Time Oscillation Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)`
   const timeOscMatch = compact.match(
-    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|ΣF_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?.*t/i
+    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|ΣF_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?(.*?)t\b/i
   );
   const shorthandTimeMatch = compact.match(/^(x|u|υ|v|a|α|ΣF|F)\s*-\s*t$/i);
 
@@ -8606,6 +8607,7 @@ function tryBuildOscillationDiagramStrokes(
       yVar === 'u' ? 'cos' : yVar === 'a' || yVar === 'ΣF' || yVar === 'F' ? '-sin' : 'sin';
 
     let numAmp = '';
+    let periodLabel = '1T';
     if (timeOscMatch) {
       const isNeg = timeOscMatch[2] === '-';
       const ampStr = timeOscMatch[3] || '';
@@ -8615,6 +8617,43 @@ function tryBuildOscillationDiagramStrokes(
       const trig = timeOscMatch[4].toLowerCase();
       const isCos = trig === 'συν' || trig === 'συνημ' || trig === 'cos';
       waveKind = isCos ? (isNeg ? '-cos' : 'cos') : isNeg ? '-sin' : 'sin';
+
+      // Parse angular frequency ω multiplying `t` inside trig argument to determine quantitative vs qualitative period T = 2π/ω
+      const rawOmega = (timeOscMatch[5] || '')
+        .replace(/^[(*\s]+|[)*\s]+$/g, '')
+        .trim();
+      if (rawOmega && !/[ωfT]/i.test(rawOmega)) {
+        const piMatch = rawOmega.match(/^([0-9.]+)?\s*\*?\s*π(?:\s*\/\s*([0-9.]+))?$/);
+        const pureNumMatch = rawOmega.match(/^([0-9.]+)(?:\s*\/\s*([0-9.]+))?$/);
+        if (piMatch) {
+          const num = piMatch[1] ? parseFloat(piMatch[1]) : 1;
+          const den = piMatch[2] ? parseFloat(piMatch[2]) : 1;
+          const k = num / Math.max(1e-6, den); // ω = k * π => T = 2 / k
+          if (k > 0) {
+            const tVal = +(2 / k).toFixed(2);
+            periodLabel = String(tVal);
+          }
+        } else if (pureNumMatch) {
+          const num = parseFloat(pureNumMatch[1]);
+          const den = pureNumMatch[2] ? parseFloat(pureNumMatch[2]) : 1;
+          const omegaVal = num / Math.max(1e-6, den); // ω = omegaVal => T = 2π / omegaVal
+          if (omegaVal > 0) {
+            const ratioToPi = 2 / omegaVal;
+            if (Math.abs(ratioToPi - 1) < 1e-4) {
+              periodLabel = 'π';
+            } else if (Math.abs(ratioToPi - Math.round(ratioToPi)) < 1e-4) {
+              periodLabel = `${Math.round(ratioToPi)}π`;
+            } else if (Math.abs(1 / ratioToPi - Math.round(1 / ratioToPi)) < 1e-4) {
+              periodLabel = `π/${Math.round(1 / ratioToPi)}`;
+            } else {
+              periodLabel = String(+((2 * Math.PI) / omegaVal).toFixed(2));
+            }
+          }
+        }
+      } else if (!rawOmega && numAmp) {
+        // e.g. u = 10 συν(t) where ω = 1 => T = 2π
+        periodLabel = '2π';
+      }
     }
 
     const posLabel = numAmp
@@ -8719,7 +8758,29 @@ function tryBuildOscillationDiagramStrokes(
       isShape: false,
     });
 
-    // 5. Labels: yVar at top, t at right, +Max and -Max to the left of vertical axis
+    // 4b. Thin black vertical dashed line at 1 Period (1T -> u = 2/3 of the 1.5-period wave) + ruler tick & period value/1T label on t-axis
+    const xPeriod = axisLeftX + (2 / 3) * waveW;
+    const yPeakAtPeriod =
+      waveKind === '-cos' ? centerY + ampPx : centerY - ampPx;
+    strokes.push({
+      id: `st-${nowId}-tguide-1`,
+      tool: 'pen',
+      color: axisColor,
+      width: 1.4,
+      opacity: 0.9,
+      lineStyle: 'dashed',
+      points: [
+        { x: xPeriod, y: yPeakAtPeriod, pressure: 0.6 },
+        { x: xPeriod, y: centerY, pressure: 0.6 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'line',
+    });
+    addRulerTick(xPeriod, centerY - 4.5, xPeriod, centerY + 4.5, 'xtick-t1');
+
+    // 5. Labels: yVar at top, t at right, +Max and -Max to the left of vertical axis, and Period (1T or numeric T) on t-axis
     texts.push(
       createMathGraphLabelText(
         yVar,
@@ -8764,6 +8825,17 @@ function tryBuildOscillationDiagramStrokes(
         layerId,
         groupId,
         `${nowId}-ln`
+      ),
+      createMathGraphLabelText(
+        periodLabel,
+        xPeriod,
+        waveKind === '-cos' ? centerY - 15 : centerY + 15,
+        'center',
+        15,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-xlbl-t1`
       )
     );
 
