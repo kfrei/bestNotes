@@ -27236,16 +27236,18 @@ export default function App() {
 
                   setShowSimulationPanel((v) => {
                     const next = !v;
-                    if (next) {
-                      setSimActiveCategory(null);
-                    }
+                    setSimActiveCategory(null);
                     return next;
                   });
                 }}
                 className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
-                  showSimulationPanel || isSimulating || isSpringSimulating
+                  (showSimulationPanel && simActiveCategory !== null) ||
+                  (isSimulating && getValidCircuitSims(activePage).length > 0) ||
+                  (isSpringSimulating && getValidSpringSims(activePage).length > 0)
                     ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
-                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                    : showSimulationPanel
+                    ? 'bg-slate-200 text-slate-700 border border-slate-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/90'
                 }`}
                 title="Προσομοίωση Φυσικής: Κυκλώματα & Ελατήρια (⚙️▶️)"
               >
@@ -27266,7 +27268,8 @@ export default function App() {
                   />
                 </svg>
                 <span className="hidden sm:inline">Sim</span>
-                {(isSimulating || isSpringSimulating) && (
+                {((isSimulating && getValidCircuitSims(activePage).length > 0) ||
+                  (isSpringSimulating && getValidSpringSims(activePage).length > 0)) && (
                   <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
                 )}
               </button>
@@ -30119,7 +30122,10 @@ export default function App() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowSimulationPanel(false)}
+                    onClick={() => {
+                      setShowSimulationPanel(false);
+                      setSimActiveCategory(null);
+                    }}
                     className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
                     title="Κλείσιμο παραθύρου"
                   >
