@@ -6912,14 +6912,13 @@ export async function transcribeEquationForGraphWithGemini(
 
   const parts: any[] = [
     {
-      text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων και συναρτήσεων για σχεδίαση διαγράμματος (γραφικής παράστασης)${contextHint}.
-Διάβασε τη χειρόγραφη εξίσωση ή συνάρτηση στην εικόνα (π.χ. ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο, τριγωνομετρική, εκθετική, λογαριθμική κ.λπ.).
+      text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Απλής Αρμονικής Ταλάντωσης (Φυσικής) για σχεδίαση διαγράμματος${contextHint}.
+Διάβασε τη χειρόγραφη εξίσωση ή συνάρτηση στην εικόνα (π.χ. K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
 Κανόνες:
-1. Στο πεδίο "equation" γράψε την εξίσωση σε καθαρή αλγεβρική μορφή με σύμβολα +, -, *, /, ^, ( ) (π.χ. "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = α*x + β", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
-2. Αν η εξίσωση έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, y = ax^2 + bx + c, x^2 + y^2 = R^2, x^2/a^2 + y^2/b^2 = 1, y = a/x), θεώρησε ότι οι παράμετροι (a, b, c, α, β, γ, κ, μ, R, r) είναι ΘΕΤΙΚΟΙ αριθμοί και γράψε στο "normalizedEquation" μια αντίστοιχη αριθμητική εξίσωση με θετικές τιμές παραμέτρων (π.χ. για "y = αx + β" -> "y = 1.2*x + 1.5", για "y = -αx + β" -> "y = -1.2*x + 1.5", για "x^2/a^2 + y^2/b^2 = 1" -> "(x^2)/2.56 + (y^2)/1 = 1", για "x^2 + y^2 = R^2" -> "x^2 + y^2 = 1"). Αν η εξίσωση έχει ήδη αριθμούς, βάλε στο "normalizedEquation" την ακριβή αριθμητική εξίσωση (π.χ. "(x^2)/9 + (y^2)/16 = 25").
-3. Αν οι μεταβλητές είναι ελληνικές (χ, ψ) ή φυσικής (π.χ. u = u_0 + a*t, x = 1/2*a*t^2), στο "normalizedEquation" αντικατέστησε την ανεξάρτητη μεταβλητή (χ ή t) με "x" και την εξαρτημένη (ψ ή u ή f(x)) με "y".
+1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας τα σύμβολα Φυσικής αν πρόκειται για ταλάντωση/ενέργεια/δύναμη (π.χ. "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "F = -k*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "u = u_max*συν(ω*t)", "a = -a_max*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = α*x + β", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x").
+2. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
-{"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "circle|ellipse|parabola|hyperbola|line|polynomial|function"}
+{"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
     },
     {
@@ -7504,8 +7503,1104 @@ function compileMathExprEvaluator(
 }
 
 /**
+ * Renders clean textbook vector strokes for physics/math axis labels & extrema annotations
+ * (e.g. `K`, `U`, `E`, `F`, `ΣF`, `x`, `y`, `u`, `a`, `t`, `-u_max`, `+u_max`, `K_max`, `U_max`, `-A`, `+A`, `+F_max`, `-F_max`, `+4`, `-4`)
+ * so that all labels are native `StrokeObject`s inside the diagram group that move and scale seamlessly!
+ */
+function createVectorMathLabelStrokes(
+  label: string,
+  anchorX: number,
+  anchorY: number,
+  align: 'left' | 'center' | 'right',
+  fontH: number,
+  color: string,
+  layerId: string,
+  groupId: string,
+  idPrefix: string
+): StrokeObject[] {
+  const glyphPaths = (ch: string): [number, number][][] => {
+    switch (ch) {
+      case '+':
+        return [
+          [
+            [0.1, 0.52],
+            [0.9, 0.52],
+          ],
+          [
+            [0.5, 0.18],
+            [0.5, 0.86],
+          ],
+        ];
+      case '-':
+        return [
+          [
+            [0.12, 0.52],
+            [0.88, 0.52],
+          ],
+        ];
+      case 'x':
+        return [
+          [
+            [0.12, 0.28],
+            [0.88, 0.94],
+          ],
+          [
+            [0.88, 0.28],
+            [0.12, 0.94],
+          ],
+        ];
+      case 'y':
+        return [
+          [
+            [0.12, 0.28],
+            [0.48, 0.72],
+          ],
+          [
+            [0.88, 0.28],
+            [0.2, 1.22],
+          ],
+        ];
+      case 'u':
+      case 'υ':
+      case 'v':
+        return [
+          [
+            [0.12, 0.3],
+            [0.12, 0.74],
+            [0.28, 0.92],
+            [0.56, 0.92],
+            [0.78, 0.74],
+            [0.78, 0.3],
+            [0.78, 0.86],
+            [0.92, 0.94],
+          ],
+        ];
+      case 'a':
+      case 'α':
+        return [
+          [
+            [0.78, 0.36],
+            [0.55, 0.28],
+            [0.25, 0.34],
+            [0.12, 0.58],
+            [0.22, 0.88],
+            [0.52, 0.92],
+            [0.78, 0.72],
+          ],
+          [
+            [0.78, 0.3],
+            [0.78, 0.88],
+            [0.92, 0.94],
+          ],
+        ];
+      case 't':
+        return [
+          [
+            [0.45, 0.08],
+            [0.45, 0.84],
+            [0.62, 0.94],
+            [0.82, 0.9],
+          ],
+          [
+            [0.16, 0.36],
+            [0.8, 0.36],
+          ],
+        ];
+      case 'K':
+      case 'k':
+        return [
+          [
+            [0.16, 0.08],
+            [0.16, 0.94],
+          ],
+          [
+            [0.86, 0.1],
+            [0.18, 0.54],
+          ],
+          [
+            [0.34, 0.44],
+            [0.88, 0.94],
+          ],
+        ];
+      case 'U':
+        return [
+          [
+            [0.14, 0.08],
+            [0.14, 0.68],
+            [0.3, 0.92],
+            [0.7, 0.92],
+            [0.86, 0.68],
+            [0.86, 0.08],
+          ],
+        ];
+      case 'E':
+        return [
+          [
+            [0.84, 0.08],
+            [0.16, 0.08],
+            [0.16, 0.92],
+            [0.86, 0.92],
+          ],
+          [
+            [0.16, 0.5],
+            [0.74, 0.5],
+          ],
+        ];
+      case 'F':
+        return [
+          [
+            [0.18, 0.08],
+            [0.18, 0.94],
+          ],
+          [
+            [0.18, 0.08],
+            [0.88, 0.08],
+          ],
+          [
+            [0.18, 0.48],
+            [0.74, 0.48],
+          ],
+        ];
+      case 'Σ':
+        return [
+          [
+            [0.88, 0.08],
+            [0.14, 0.08],
+            [0.58, 0.5],
+            [0.14, 0.92],
+            [0.88, 0.92],
+          ],
+        ];
+      case 'A':
+        return [
+          [
+            [0.1, 0.94],
+            [0.5, 0.08],
+            [0.9, 0.94],
+          ],
+          [
+            [0.25, 0.62],
+            [0.75, 0.62],
+          ],
+        ];
+      case 'm':
+        return [
+          [
+            [0.08, 0.94],
+            [0.08, 0.32],
+            [0.32, 0.3],
+            [0.5, 0.45],
+            [0.5, 0.94],
+          ],
+          [
+            [0.5, 0.45],
+            [0.68, 0.3],
+            [0.92, 0.32],
+            [0.92, 0.94],
+          ],
+        ];
+      case '0':
+        return [
+          [
+            [0.5, 0.1],
+            [0.2, 0.25],
+            [0.15, 0.52],
+            [0.2, 0.8],
+            [0.5, 0.94],
+            [0.8, 0.8],
+            [0.85, 0.52],
+            [0.8, 0.25],
+            [0.5, 0.1],
+          ],
+        ];
+      case '1':
+        return [
+          [
+            [0.25, 0.26],
+            [0.52, 0.1],
+            [0.52, 0.94],
+          ],
+        ];
+      case '2':
+        return [
+          [
+            [0.18, 0.28],
+            [0.38, 0.1],
+            [0.72, 0.12],
+            [0.84, 0.32],
+            [0.16, 0.92],
+            [0.86, 0.92],
+          ],
+        ];
+      case '3':
+        return [
+          [
+            [0.18, 0.2],
+            [0.52, 0.1],
+            [0.82, 0.26],
+            [0.68, 0.48],
+            [0.42, 0.5],
+            [0.74, 0.56],
+            [0.84, 0.78],
+            [0.52, 0.94],
+            [0.18, 0.84],
+          ],
+        ];
+      case '4':
+        return [
+          [
+            [0.68, 0.94],
+            [0.68, 0.1],
+            [0.14, 0.66],
+            [0.88, 0.66],
+          ],
+        ];
+      case '5':
+        return [
+          [
+            [0.82, 0.1],
+            [0.22, 0.1],
+            [0.18, 0.48],
+            [0.62, 0.46],
+            [0.84, 0.64],
+            [0.76, 0.88],
+            [0.44, 0.94],
+            [0.16, 0.84],
+          ],
+        ];
+      case '6':
+        return [
+          [
+            [0.76, 0.14],
+            [0.42, 0.12],
+            [0.18, 0.42],
+            [0.18, 0.78],
+            [0.48, 0.94],
+            [0.8, 0.78],
+            [0.76, 0.52],
+            [0.46, 0.46],
+            [0.18, 0.58],
+          ],
+        ];
+      case '7':
+        return [
+          [
+            [0.16, 0.12],
+            [0.86, 0.12],
+            [0.36, 0.94],
+          ],
+        ];
+      case '8':
+        return [
+          [
+            [0.5, 0.5],
+            [0.22, 0.34],
+            [0.26, 0.14],
+            [0.5, 0.1],
+            [0.74, 0.14],
+            [0.78, 0.34],
+            [0.5, 0.5],
+            [0.18, 0.68],
+            [0.22, 0.88],
+            [0.5, 0.94],
+            [0.78, 0.88],
+            [0.82, 0.68],
+            [0.5, 0.5],
+          ],
+        ];
+      case '9':
+        return [
+          [
+            [0.82, 0.46],
+            [0.52, 0.56],
+            [0.2, 0.44],
+            [0.22, 0.18],
+            [0.52, 0.1],
+            [0.82, 0.22],
+            [0.82, 0.66],
+            [0.56, 0.92],
+            [0.24, 0.9],
+          ],
+        ];
+      case '.':
+        return [
+          [
+            [0.45, 0.86],
+            [0.55, 0.94],
+          ],
+        ];
+      default:
+        return [];
+    }
+  };
+
+  // Split into main part and optional subscript part after '_' (e.g. `-u_max` -> main `-u`, sub `max`)
+  const [mainPart, subPart] = label.split('_');
+  const mainCharW = fontH * 0.66;
+  const mainGap = fontH * 0.14;
+  const subH = fontH * 0.62;
+  const subCharW = subH * 0.68;
+  const subGap = subH * 0.12;
+
+  const mainTotalW =
+    mainPart.length > 0 ? mainPart.length * mainCharW + (mainPart.length - 1) * mainGap : 0;
+  const subTotalW =
+    subPart && subPart.length > 0
+      ? subPart.length * subCharW + (subPart.length - 1) * subGap + fontH * 0.08
+      : 0;
+  const totalW = mainTotalW + subTotalW;
+
+  let curX =
+    align === 'center'
+      ? anchorX - totalW / 2
+      : align === 'right'
+      ? anchorX - totalW
+      : anchorX;
+  const topY = anchorY - fontH / 2;
+
+  const out: StrokeObject[] = [];
+  let sCounter = 0;
+
+  for (const ch of mainPart) {
+    const paths = glyphPaths(ch);
+    for (const poly of paths) {
+      out.push({
+        id: `${idPrefix}-m-${sCounter++}`,
+        tool: 'pen',
+        color,
+        width: 2.0,
+        opacity: 1,
+        points: poly.map(([u, v]) => ({
+          x: curX + u * mainCharW,
+          y: topY + v * fontH,
+          pressure: 0.7,
+        })),
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      });
+    }
+    curX += mainCharW + mainGap;
+  }
+
+  if (subPart) {
+    curX += fontH * 0.04;
+    const subTopY = topY + fontH * 0.46;
+    for (const ch of subPart) {
+      const paths = glyphPaths(ch);
+      for (const poly of paths) {
+        out.push({
+          id: `${idPrefix}-s-${sCounter++}`,
+          tool: 'pen',
+          color,
+          width: 1.7,
+          opacity: 1,
+          points: poly.map(([u, v]) => ({
+            x: curX + u * subCharW,
+            y: subTopY + v * subH,
+            pressure: 0.7,
+          })),
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'wave-axis-x',
+        });
+      }
+      curX += subCharW + subGap;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Specialized Greek Physics Oscillation Diagram Builder:
+ * Recognizes and plots textbook oscillation diagrams (qualitative or quantitative) with blue dashed
+ * amplitude/extrema projection lines and textbook axis/extrema labels:
+ * 1. Kinetic Energy vs Velocity: `K = 1/2 m u^2`, `K - u` -> Parabola with `-u_max`, `+u_max`, `K_max`
+ * 2. Potential Energy vs Displacement: `U = 1/2 D x^2`, `U = 1/2 k x^2`, `U - x` -> Parabola with `-A`, `+A`, `U_max`
+ * 3. Kinetic Energy vs Displacement: `K = E - 1/2 D x^2`, `K = 1/2 D (A^2 - x^2)`, `K - x` -> Inverted Parabola with `-A`, `+A`, `K_max`
+ * 4. Restoring Force vs Displacement: `ΣF = -D x`, `F = -D x`, `F = -k x`, `ΣF - x`, `F - x` -> Negative slope line with `-A`, `+A`, `+F_max`, `-F_max`
+ * 5. Acceleration vs Displacement: `a = -ω^2 x`, `a - x` -> Negative slope line with `-A`, `+A`, `+a_max`, `-a_max`
+ * 6. Time diagrams: `x = A ημ(ωt)`, `u = u_max συν(ωt)`, `a = -a_max ημ(ωt)`, `x - t`, `u - t`, `a - t`
+ */
+function tryBuildOscillationDiagramStrokes(
+  rawInput: string,
+  centerX: number,
+  centerY: number,
+  width: number,
+  height: number,
+  curveColor: string,
+  axisColor: string,
+  layerId: string
+): { strokes: StrokeObject[]; groupId: string; kindLabel: string } | null {
+  if (!rawInput || !rawInput.trim()) return null;
+
+  const lines = splitAndCleanMathLatexLines(rawInput);
+  let raw = lines.length > 0 ? lines[lines.length - 1] : rawInput.trim();
+  const arrowParts = raw.split(/\\Rightarrow|\\Leftrightarrow|\\implies|⇒|⇔|->/);
+  if (arrowParts.length > 1) {
+    const lastPart = arrowParts[arrowParts.length - 1].trim();
+    if (lastPart) raw = lastPart;
+  }
+
+  const expanded = expandLatexConstructs(raw)
+    .replace(/\\Sigma\b/g, 'Σ')
+    .replace(/\\omega\b/g, 'ω')
+    .replace(/\\alpha\b/g, 'α')
+    .replace(/\\text\{([^}]*)\}/g, '$1')
+    .replace(/\\(?:cdot|times)\b/g, '*')
+    .replace(/[·×∙]/g, '*')
+    .replace(/[−–—]/g, '-')
+    .replace(/²/g, '^2')
+    .replace(/\^\(\s*2\s*\)/g, '^2')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const compact = expanded.replace(/\s+/g, '');
+  const groupId = `math-graph-grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const nowId = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+  const halfW = Math.max(85, width / 2);
+  const halfH = Math.max(85, height / 2);
+  const blueGuide = '#2563eb';
+  const strokes: StrokeObject[] = [];
+
+  const addDashedGuide = (x1: number, y1: number, x2: number, y2: number, idx: number) => {
+    strokes.push({
+      id: `st-${nowId}-gd-${idx}`,
+      tool: 'pen',
+      color: blueGuide,
+      width: 2.0,
+      opacity: 1,
+      lineStyle: 'dashed',
+      points: [
+        { x: x1, y: y1, pressure: 0.7 },
+        { x: x2, y: y2, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-guide-top',
+    });
+  };
+
+  // Helper for Non-Negative Energy Parabola Diagrams (K-u, U-x, K-x, E-x) where vertical axis starts near the bottom!
+  const buildEnergyParabolaDiagram = (opts: {
+    yAxisLabel: string;
+    xAxisLabel: string;
+    leftXLabel: string;
+    rightXLabel: string;
+    topYLabel: string;
+    inverted?: boolean;
+    alsoPlotComplement?: boolean;
+    kindLabel: string;
+  }) => {
+    const axisY = centerY + halfH * 0.48;
+    const axisTopY = centerY - halfH * 0.88;
+    const axisBotY = axisY + 24;
+    const xMaxPx = halfW * 0.68;
+    const yPeakPx = axisY - (axisY - axisTopY) * 0.74;
+
+    // 1. Horizontal axis (u or x)
+    strokes.push({
+      id: `st-${nowId}-axx`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: centerX - halfW, y: axisY, pressure: 0.7 },
+        { x: centerX + halfW, y: axisY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-x',
+    });
+
+    // 2. Vertical axis (K or U or E)
+    strokes.push({
+      id: `st-${nowId}-axy`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: centerX, y: axisBotY, pressure: 0.7 },
+        { x: centerX, y: axisTopY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-y',
+    });
+
+    // 3. Axis tip labels (e.g. K at top-right of vertical arrow, u/x at right of horizontal arrow)
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        opts.yAxisLabel,
+        centerX + 9,
+        axisTopY + 8,
+        'left',
+        17,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-ly`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        opts.xAxisLabel,
+        centerX + halfW + 8,
+        axisY + 2,
+        'left',
+        16,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lx`
+      )
+    );
+
+    // 4. Blue dashed projection box
+    if (!opts.inverted) {
+      // Left & right vertical dashed lines from (-xMax, 0) and (+xMax, 0) up to yPeakPx + top horizontal dashed line
+      addDashedGuide(centerX - xMaxPx, axisY, centerX - xMaxPx, yPeakPx, 1);
+      addDashedGuide(centerX + xMaxPx, axisY, centerX + xMaxPx, yPeakPx, 2);
+      addDashedGuide(centerX - xMaxPx, yPeakPx, centerX + xMaxPx, yPeakPx, 3);
+    } else {
+      // Top horizontal dashed guide at K_max
+      addDashedGuide(centerX - xMaxPx, yPeakPx, centerX + xMaxPx, yPeakPx, 1);
+      addDashedGuide(centerX - xMaxPx, axisY, centerX - xMaxPx, yPeakPx, 2);
+      addDashedGuide(centerX + xMaxPx, axisY, centerX + xMaxPx, yPeakPx, 3);
+    }
+
+    // 5. Parabola curve (upward for K-u and U-x; downward for K-x)
+    const steps = 72;
+    const curvePts: { x: number; y: number; pressure: number }[] = [];
+    const ampH = axisY - yPeakPx;
+    for (let i = 0; i <= steps; i++) {
+      const uNorm = -1 + (2 * i) / steps;
+      const px = centerX + uNorm * xMaxPx;
+      const py = opts.inverted
+        ? axisY - (1 - uNorm * uNorm) * ampH
+        : axisY - uNorm * uNorm * ampH;
+      curvePts.push({ x: px, y: py, pressure: 0.7 });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-main`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: curvePts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+
+    if (opts.alsoPlotComplement) {
+      const compPts: { x: number; y: number; pressure: number }[] = [];
+      for (let i = 0; i <= steps; i++) {
+        const uNorm = -1 + (2 * i) / steps;
+        const px = centerX + uNorm * xMaxPx;
+        const py = axisY - (1 - uNorm * uNorm) * ampH;
+        compPts.push({ x: px, y: py, pressure: 0.7 });
+      }
+      strokes.push({
+        id: `st-${nowId}-crv-comp`,
+        tool: 'pen',
+        color: '#16a34a',
+        width: 2.6,
+        opacity: 1,
+        points: compPts,
+        layerId,
+        groupId,
+        isShape: false,
+      });
+    }
+
+    // 6. Extrema labels: `-u_max` / `-A` on left, `+u_max` / `+A` on right, `K_max` / `U_max` below top dashed line
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        opts.leftXLabel,
+        centerX - xMaxPx,
+        axisY + 15,
+        'center',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-ll`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        opts.rightXLabel,
+        centerX + xMaxPx,
+        axisY + 15,
+        'center',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lr`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        opts.topYLabel,
+        centerX + 8,
+        yPeakPx + 14,
+        'left',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lt`
+      )
+    );
+
+    return { strokes, groupId, kindLabel: opts.kindLabel };
+  };
+
+  // CASE 1: Kinetic Energy vs Velocity `K = 1/2 m u^2` or `K - u`
+  const isKineticVelocity =
+    /^(?:K|E_?k|E_?K)\s*=\s*(?:(?:\(?1\/2\)?|0\.5)\s*\*?\s*m\s*\*?\s*[uvυ]\^2|m\s*\*?\s*[uvυ]\^2\s*\/\s*2|[0-9.]+\s*\*?\s*[uvυ]\^2)$/i.test(
+      compact
+    ) || /^K\s*-\s*[uvυ]$/i.test(compact);
+
+  if (isKineticVelocity) {
+    return buildEnergyParabolaDiagram({
+      yAxisLabel: 'K',
+      xAxisLabel: 'u',
+      leftXLabel: '-u_max',
+      rightXLabel: '+u_max',
+      topYLabel: 'K_max',
+      inverted: false,
+      kindLabel: 'Κινητική Ενέργεια K(u)',
+    });
+  }
+
+  // CASE 2: Potential Energy vs Displacement `U = 1/2 D x^2` or `U = 1/2 k x^2` or `U - x`
+  const isPotentialDisplacement =
+    /^(?:U|E_?p|E_?U)\s*=\s*(?:(?:\(?1\/2\)?|0\.5)\s*\*?\s*[Dkκ]\s*\*?\s*[xχ]\^2|[Dkκ]\s*\*?\s*[xχ]\^2\s*\/\s*2|[0-9.]+\s*\*?\s*[xχ]\^2)$/i.test(
+      compact
+    ) || /^U\s*-\s*[xχ]$/i.test(compact);
+
+  if (isPotentialDisplacement) {
+    return buildEnergyParabolaDiagram({
+      yAxisLabel: 'U',
+      xAxisLabel: 'x',
+      leftXLabel: '-A',
+      rightXLabel: '+A',
+      topYLabel: 'U_max',
+      inverted: false,
+      kindLabel: 'Δυναμική Ενέργεια U(x)',
+    });
+  }
+
+  // CASE 3: Kinetic Energy vs Displacement `K = E - 1/2 D x^2` or `K = 1/2 D (A^2 - x^2)` or `K - x`
+  const isKineticDisplacement =
+    /^K\s*=\s*(?:(?:E|K_?max)\s*-\s*(?:\(?1\/2\)?|0\.5)?\s*\*?\s*[Dkκ]?\s*\*?\s*[xχ]\^2|(?:\(?1\/2\)?|0\.5)?\s*\*?\s*[Dkκ]?\s*\*?\s*\(\s*A\^2\s*-\s*[xχ]\^2\s*\))$/i.test(
+      compact
+    ) || /^K\s*-\s*[xχ]$/i.test(compact);
+
+  if (isKineticDisplacement) {
+    return buildEnergyParabolaDiagram({
+      yAxisLabel: 'K',
+      xAxisLabel: 'x',
+      leftXLabel: '-A',
+      rightXLabel: '+A',
+      topYLabel: 'K_max',
+      inverted: true,
+      kindLabel: 'Κινητική Ενέργεια K(x)',
+    });
+  }
+
+  // CASE 4: Combined Energy `E = K + U` or `E = 1/2 D A^2` or `E - x`
+  const isTotalEnergy =
+    /^E\s*=\s*(?:K\s*\+\s*U|U\s*\+\s*K|(?:\(?1\/2\)?|0\.5)\s*\*?\s*[Dkκ]\s*\*?\s*A\^2)$/i.test(
+      compact
+    ) || /^E\s*-\s*[xχ]$/i.test(compact);
+
+  if (isTotalEnergy) {
+    return buildEnergyParabolaDiagram({
+      yAxisLabel: 'E',
+      xAxisLabel: 'x',
+      leftXLabel: '-A',
+      rightXLabel: '+A',
+      topYLabel: 'E',
+      inverted: false,
+      alsoPlotComplement: /K\s*\+\s*U|U\s*\+\s*K/i.test(compact),
+      kindLabel: 'Ενέργεια Ταλάντωσης E(x)',
+    });
+  }
+
+  // CASE 5: Restoring Force `ΣF = -D x` / `F = -k x` / `ΣF - x` OR Acceleration `a = -ω^2 x` / `a - x`
+  const isForceDisplacement =
+    /^(?:ΣF|F)\s*=\s*-\s*(?:[Dkκ]|[0-9.]+)\s*\*?\s*[xχ]$/i.test(compact) ||
+    /^(?:ΣF|F)\s*-\s*[xχ]$/i.test(compact);
+  const isAccelDisplacement =
+    /^[aα]\s*=\s*-\s*(?:ω\^2|[0-9.]+)\s*\*?\s*[xχ]$/i.test(compact) ||
+    /^[aα]\s*-\s*[xχ]$/i.test(compact);
+
+  if (isForceDisplacement || isAccelDisplacement) {
+    const isSigmaF = /ΣF/i.test(compact);
+    const yAxisTitle = isForceDisplacement ? (isSigmaF ? 'ΣF' : 'F') : 'a';
+    const topValLabel = isForceDisplacement ? '+F_max' : '+a_max';
+    const botValLabel = isForceDisplacement ? '-F_max' : '-a_max';
+    const xMaxPx = halfW * 0.64;
+    const yMaxPx = halfH * 0.64;
+
+    // 1. Horizontal x-axis
+    strokes.push({
+      id: `st-${nowId}-axx`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: centerX - halfW, y: centerY, pressure: 0.7 },
+        { x: centerX + halfW, y: centerY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-x',
+    });
+
+    // 2. Vertical ΣF / F / a axis
+    strokes.push({
+      id: `st-${nowId}-axy`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: centerX, y: centerY + halfH, pressure: 0.7 },
+        { x: centerX, y: centerY - halfH, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-y',
+    });
+
+    // 3. Axis tip labels
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        yAxisTitle,
+        centerX + 8,
+        centerY - halfH + 8,
+        'left',
+        16,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-ly`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        'x',
+        centerX + halfW + 8,
+        centerY + 2,
+        'left',
+        16,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lx`
+      )
+    );
+
+    // 4. 4 Blue dashed projection lines from (-A, +F_max) and (+A, -F_max) to axes
+    const pTL = { x: centerX - xMaxPx, y: centerY - yMaxPx };
+    const pBR = { x: centerX + xMaxPx, y: centerY + yMaxPx };
+    addDashedGuide(pTL.x, pTL.y, pTL.x, centerY, 1);
+    addDashedGuide(pTL.x, pTL.y, centerX, pTL.y, 2);
+    addDashedGuide(pBR.x, pBR.y, pBR.x, centerY, 3);
+    addDashedGuide(pBR.x, pBR.y, centerX, pBR.y, 4);
+
+    // 5. Red negative-slope straight line from (-A, +F_max) through (0,0) to (+A, -F_max)
+    strokes.push({
+      id: `st-${nowId}-crv-line`,
+      tool: 'pen',
+      color: curveColor,
+      width: 3.0,
+      opacity: 1,
+      points: [
+        { x: pTL.x, y: pTL.y, pressure: 0.7 },
+        { x: pBR.x, y: pBR.y, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'line',
+    });
+
+    // 6. Labels: `-A` below -A, `+A` above +A, `+F_max` right of axis, `-F_max` left of axis
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        '-A',
+        centerX - xMaxPx,
+        centerY + 15,
+        'center',
+        13.5,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-la1`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        '+A',
+        centerX + xMaxPx,
+        centerY - 14,
+        'center',
+        13.5,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-la2`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        topValLabel,
+        centerX + 7,
+        centerY - yMaxPx,
+        'left',
+        13.5,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lf1`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        botValLabel,
+        centerX - 7,
+        centerY + yMaxPx,
+        'right',
+        13.5,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lf2`
+      )
+    );
+
+    return {
+      strokes,
+      groupId,
+      kindLabel: isForceDisplacement ? `Διάγραμμα ${yAxisTitle}(x)` : 'Διάγραμμα a(x)',
+    };
+  }
+
+  // CASE 6: Time Oscillation Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)`
+  const timeOscMatch = compact.match(
+    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημ|sin|συν|cos)\s*\(/i
+  );
+  const shorthandTimeMatch = compact.match(/^(x|u|υ|v|a|α|ΣF|F)\s*-\s*t$/i);
+
+  if (timeOscMatch || shorthandTimeMatch) {
+    const rawVar = (timeOscMatch ? timeOscMatch[1] : shorthandTimeMatch![1]).trim();
+    const yVar =
+      /^(?:u|υ|v)$/i.test(rawVar)
+        ? 'u'
+        : /^(?:a|α)$/i.test(rawVar)
+        ? 'a'
+        : /^ΣF$/i.test(rawVar)
+        ? 'ΣF'
+        : /^F$/i.test(rawVar)
+        ? 'F'
+        : 'x';
+
+    let waveKind: 'sin' | 'cos' | '-sin' | '-cos' =
+      yVar === 'u' ? 'cos' : yVar === 'a' || yVar === 'ΣF' || yVar === 'F' ? '-sin' : 'sin';
+
+    let numAmp = '';
+    if (timeOscMatch) {
+      const isNeg = timeOscMatch[2] === '-';
+      const ampStr = timeOscMatch[3] || '';
+      if (/^[0-9.]+$/.test(ampStr)) {
+        numAmp = ampStr;
+      }
+      const trig = timeOscMatch[4].toLowerCase();
+      const isCos = trig === 'συν' || trig === 'cos';
+      waveKind = isCos ? (isNeg ? '-cos' : 'cos') : isNeg ? '-sin' : 'sin';
+    }
+
+    const posLabel = numAmp
+      ? `+${numAmp}`
+      : yVar === 'x'
+      ? '+A'
+      : yVar === 'u'
+      ? '+u_max'
+      : yVar === 'a'
+      ? '+a_max'
+      : '+F_max';
+    const negLabel = numAmp
+      ? `-${numAmp}`
+      : yVar === 'x'
+      ? '-A'
+      : yVar === 'u'
+      ? '-u_max'
+      : yVar === 'a'
+      ? '-a_max'
+      : '-F_max';
+
+    const axisLeftX = centerX - halfW * 0.72;
+    const axisRightX = centerX + halfW * 0.92;
+    const ampPx = halfH * 0.62;
+
+    // 1. Vertical axis on left
+    strokes.push({
+      id: `st-${nowId}-axy`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: axisLeftX, y: centerY + halfH * 0.9, pressure: 0.7 },
+        { x: axisLeftX, y: centerY - halfH * 0.9, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-y',
+    });
+
+    // 2. Horizontal t-axis from axisLeftX to axisRightX
+    strokes.push({
+      id: `st-${nowId}-axx`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: axisLeftX, y: centerY, pressure: 0.7 },
+        { x: axisRightX, y: centerY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-x',
+    });
+
+    // 3. Upper & Lower Blue Dashed Envelope Lines
+    addDashedGuide(axisLeftX, centerY - ampPx, axisRightX - 14, centerY - ampPx, 1);
+    addDashedGuide(axisLeftX, centerY + ampPx, axisRightX - 14, centerY + ampPx, 2);
+
+    // 4. Wave curve (1.5 periods)
+    const waveW = axisRightX - axisLeftX - 18;
+    const steps = 96;
+    const wavePts: { x: number; y: number; pressure: number }[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      const theta = u * Math.PI * 3; // 1.5 periods
+      const val =
+        waveKind === 'sin'
+          ? Math.sin(theta)
+          : waveKind === 'cos'
+          ? Math.cos(theta)
+          : waveKind === '-sin'
+          ? -Math.sin(theta)
+          : -Math.cos(theta);
+      wavePts.push({
+        x: axisLeftX + u * waveW,
+        y: centerY - val * ampPx,
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-wave`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: wavePts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+
+    // 5. Labels: yVar at top, t at right, +Max and -Max to the left of vertical axis
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        yVar,
+        axisLeftX + 8,
+        centerY - halfH * 0.9 + 6,
+        'left',
+        16,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-ly`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        't',
+        axisRightX + 7,
+        centerY + 2,
+        'left',
+        16,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lt`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        posLabel,
+        axisLeftX - 6,
+        centerY - ampPx,
+        'right',
+        13,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-lp`
+      )
+    );
+    strokes.push(
+      ...createVectorMathLabelStrokes(
+        negLabel,
+        axisLeftX - 6,
+        centerY + ampPx,
+        'right',
+        13,
+        axisColor,
+        layerId,
+        groupId,
+        `st-${nowId}-ln`
+      )
+    );
+
+    return { strokes, groupId, kindLabel: `Διάγραμμα Ταλάντωσης ${yVar}(t)` };
+  }
+
+  return null;
+}
+
+/**
  * Generates editable vector `StrokeObject[]` (grouped under a single `math-graph-grp-...` ID)
  * representing a Cartesian $(x, y)$ coordinate diagram and plotted curve(s) for any equation:
+ * - Physics Oscillation Diagrams (`K = 1/2 m u^2`, `U = 1/2 D x^2`, `ΣF = -D x`, `a = -ω^2 x`, `x = A ημ(ωt)`, etc.)
  * - Circle (`x^2 + y^2 = 1`, `(x - a)^2 + (y - b)^2 = R^2`)
  * - Ellipse (`(x^2)/9 + (y^2)/16 = 25`, `x^2/a^2 + y^2/b^2 = 1`)
  * - Hyperbola (`y = a/x`, `xy = c`, `x^2/a^2 - y^2/b^2 = 1`, `y^2/b^2 - x^2/a^2 = 1`)
@@ -7524,6 +8619,18 @@ export function buildMathGraphStrokesFromEquation(
   axisColor = '#0f172a',
   layerId = 'layer-1'
 ): { strokes: StrokeObject[]; groupId: string; kindLabel: string } | null {
+  // First check specialized Physics Oscillation Diagrams (K-u, U-x, K-x, E-x, ΣF-x, a-x, x-t, u-t, a-t)
+  const oscDiag = tryBuildOscillationDiagramStrokes(
+    rawEquation,
+    centerX,
+    centerY,
+    width,
+    height,
+    curveColor,
+    axisColor,
+    layerId
+  );
+  if (oscDiag) return oscDiag;
   const normalized = normalizeMathEquationForPlot(rawEquation);
   if (!normalized || !normalized.includes('=')) return null;
 

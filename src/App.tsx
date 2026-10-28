@@ -21117,7 +21117,13 @@ export default function App() {
                 return s;
               }
               if (s.groupId && s.groupId.startsWith('math-graph-grp-')) {
-                if (s.shapeType === 'wave-axis-x' || s.shapeType === 'wave-axis-y') {
+                if (
+                  s.shapeType === 'wave-axis-x' ||
+                  s.shapeType === 'wave-axis-y' ||
+                  s.shapeType === 'wave-guide-top' ||
+                  s.shapeType === 'wave-guide-bottom' ||
+                  s.id.startsWith('math-graph-lbl-')
+                ) {
                   return s;
                 }
                 return {
@@ -21292,7 +21298,11 @@ export default function App() {
               if (
                 s.groupId &&
                 s.groupId.startsWith('math-graph-grp-') &&
-                (s.shapeType === 'wave-axis-x' || s.shapeType === 'wave-axis-y')
+                (s.shapeType === 'wave-axis-x' ||
+                  s.shapeType === 'wave-axis-y' ||
+                  s.shapeType === 'wave-guide-top' ||
+                  s.shapeType === 'wave-guide-bottom' ||
+                  s.id.startsWith('math-graph-lbl-'))
               ) {
                 return s;
               }
@@ -21336,7 +21346,11 @@ export default function App() {
               if (
                 s.groupId &&
                 s.groupId.startsWith('math-graph-grp-') &&
-                (s.shapeType === 'wave-axis-x' || s.shapeType === 'wave-axis-y')
+                (s.shapeType === 'wave-axis-x' ||
+                  s.shapeType === 'wave-axis-y' ||
+                  s.shapeType === 'wave-guide-top' ||
+                  s.shapeType === 'wave-guide-bottom' ||
+                  s.id.startsWith('math-graph-lbl-'))
               ) {
                 return s;
               }
@@ -22364,7 +22378,7 @@ export default function App() {
 
       if (!graphBuilt) {
         showToast(
-          '⚠️ Δεν αναγνωρίστηκε έγκυρη εξίσωση (π.χ. δοκίμασε y = 2x + 1, y = ax + b, x^2 + y^2 = 1 ή (x^2)/9 + (y^2)/16 = 25)!'
+          '⚠️ Δεν αναγνωρίστηκε έγκυρη εξίσωση (π.χ. δοκίμασε K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, y = ax + b ή (x^2)/9 + (y^2)/16 = 25)!'
         );
         return;
       }
@@ -31560,7 +31574,84 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
+              <button
+                onClick={() => {
+                  const cleanedLines = splitAndCleanMathLatexLines(mathInput);
+                  const normalizedLatex = cleanedLines.length > 0 ? cleanedLines.join('\n') : mathInput.trim();
+                  const selMathTxt = (activePage.texts || []).find(
+                    (t) => t.id === selectedTextId && t.isMath
+                  );
+                  let targetX = 160;
+                  let targetY = 220;
+                  let targetW = Math.max(150, normalizedLatex.length * 10);
+                  let targetH = 48;
+                  let updatedOrNewTxt: TextObject | null = null;
+                  if (selMathTxt) {
+                    const domEl = document.querySelector(`[data-text-id="${selMathTxt.id}"]`) as HTMLElement | null;
+                    targetX = selMathTxt.x;
+                    targetY = selMathTxt.y;
+                    targetW = selMathTxt.boxWidth || domEl?.offsetWidth || 180;
+                    targetH = selMathTxt.boxHeight || domEl?.offsetHeight || 48;
+                    updatedOrNewTxt = { ...selMathTxt, latex: normalizedLatex, text: normalizedLatex };
+                  } else {
+                    updatedOrNewTxt = {
+                      id: `math-${Date.now()}`,
+                      x: targetX,
+                      y: targetY,
+                      text: normalizedLatex,
+                      latex: normalizedLatex,
+                      isMath: true,
+                      color: strokeColor,
+                      fontSize: 20,
+                      layerId: activeLayerId,
+                    };
+                  }
+                  const pW = getPageLogicalWidth(activePage);
+                  const pH = getPageLogicalHeight(activePage);
+                  const diagW = 240;
+                  const diagH = 240;
+                  let centerX = targetX + targetW + 56 + diagW / 2;
+                  let centerY = Math.max(diagH / 2 + 24, Math.min(pH - diagH / 2 - 24, targetY + targetH / 2));
+                  if (centerX + diagW / 2 + 24 > pW) {
+                    centerX = Math.max(diagW / 2 + 24, Math.min(pW - diagW / 2 - 24, targetX + targetW / 2));
+                    centerY = Math.min(pH - diagH / 2 - 24, targetY + targetH + 48 + diagH / 2);
+                  }
+                  const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+                  const graphRes = buildMathGraphStrokesFromEquation(
+                    normalizedLatex,
+                    centerX,
+                    centerY,
+                    diagW,
+                    diagH,
+                    '#dc2626',
+                    axisInk,
+                    activeLayerId
+                  );
+                  if (!graphRes) {
+                    showToast('⚠️ Δεν αναγνωρίστηκε έγκυρη εξίσωση για σχεδίαση διαγράμματος!');
+                    return;
+                  }
+                  updateActivePage((page) => ({
+                    ...page,
+                    texts: selMathTxt
+                      ? (page.texts || []).map((t) => (t.id === selMathTxt.id && updatedOrNewTxt ? updatedOrNewTxt : t))
+                      : [...(page.texts || []), ...(updatedOrNewTxt ? [updatedOrNewTxt] : [])],
+                    strokes: [...page.strokes, ...graphRes.strokes],
+                  }));
+                  setSelectedStrokeIds(graphRes.strokes.map((s) => s.id));
+                  setSelectedTextId(null);
+                  setActiveTool('lasso');
+                  setShowToolSubBar(true);
+                  setShowMathModal(false);
+                  showToast(
+                    `📈 Διάγραμμα (${graphRes.kindLabel}): Δημιουργήθηκε δίπλα στην εξίσωση!`
+                  );
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs"
+              >
+                📈 Εισαγωγή + Διάγραμμα δίπλα
+              </button>
               <button
                 onClick={() => {
                   const cleanedLines = splitAndCleanMathLatexLines(mathInput);
