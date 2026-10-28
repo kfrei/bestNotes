@@ -3881,6 +3881,99 @@ export function renderPageStrokesToSnapshotDataUrl(strokes: StrokeObject[]): str
 let cachedWorkingVisionModel: string | null = null;
 
 /**
+ * Staggered-hedge execution across Gemini Vision models:
+ * - Fires ONLY the primary model at t = 0ms so normal fast calls (~1.2s) consume just 1 API request!
+ * - If the primary model errors (503/429) OR takes longer than `hedgeDelayMs` (1900ms), immediately launches
+ *   the backup models in parallel so temporary 503 spikes never slow down the user.
+ */
+async function runVisionWithStaggeredHedge<T>(
+  models: string[],
+  runner: (modelName: string, timeoutMs: number) => Promise<T | null>,
+  hedgeDelayMs = 1900,
+  timeoutMs = 7500
+): Promise<T | null> {
+  if (models.length === 0) return null;
+  const primary = models[0];
+  const backups = models.slice(1);
+  if (backups.length === 0) {
+    return runner(primary, timeoutMs);
+  }
+
+  let backupPromise: Promise<T> | null = null;
+  const startBackups = (): Promise<T> => {
+    if (!backupPromise) {
+      backupPromise = Promise.any(
+        backups.map(async (m) => {
+          const r = await runner(m, timeoutMs);
+          if (!r) throw new Error('empty');
+          return r;
+        })
+      );
+    }
+    return backupPromise;
+  };
+
+  return new Promise<T | null>((resolve) => {
+    let settled = false;
+    const hedgeTimer = window.setTimeout(() => {
+      if (!settled) {
+        startBackups()
+          .then((res) => {
+            if (!settled) {
+              settled = true;
+              resolve(res);
+            }
+          })
+          .catch(() => {
+            // primary might still finish
+          });
+      }
+    }, hedgeDelayMs);
+
+    runner(primary, timeoutMs)
+      .then((res) => {
+        window.clearTimeout(hedgeTimer);
+        if (settled) return;
+        if (res) {
+          settled = true;
+          resolve(res);
+        } else {
+          startBackups()
+            .then((bRes) => {
+              if (!settled) {
+                settled = true;
+                resolve(bRes);
+              }
+            })
+            .catch(() => {
+              if (!settled) {
+                settled = true;
+                resolve(null);
+              }
+            });
+        }
+      })
+      .catch(() => {
+        window.clearTimeout(hedgeTimer);
+        if (settled) return;
+        startBackups()
+          .then((bRes) => {
+            if (!settled) {
+              settled = true;
+              resolve(bRes);
+            }
+          })
+          .catch(() => {
+            if (!settled) {
+              settled = true;
+              resolve(null);
+            }
+          });
+      });
+  });
+}
+
+/**
  * Uses Gemini Flash Vision (free tier on project bestnotes-2026) to inspect up to 4 images/texts
  * on a notebook page and return 3-4 clean Greek keyword tags in nominative singular.
  * Includes automatic evergreen model resolution ('gemini-flash-latest', 'gemini-3.8-flash',
@@ -4041,11 +4134,7 @@ export async function transcribeHandwrittenStrokesWithGemini(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
       'gemini-3-flash-preview',
-      'gemini-3.6-flash',
-      'gemini-3.5-flash',
       'gemini-flash-lite-latest',
-      'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
       'gemini-flash-latest',
     ])
   );
@@ -4102,28 +4191,7 @@ export async function transcribeHandwrittenStrokesWithGemini(
     return null;
   };
 
-  const parallelBatch = candidateModels.slice(0, 4);
-  if (parallelBatch.length > 0) {
-    try {
-      const fastest = await Promise.any(
-        parallelBatch.map(async (m) => {
-          const res = await tryTranscribeWithModel(m, 7500);
-          if (!res) throw new Error('empty');
-          return res;
-        })
-      );
-      if (fastest) return fastest;
-    } catch {
-      // ignore and fall back to remaining candidates
-    }
-  }
-
-  for (const modelName of candidateModels.slice(4)) {
-    const out = await tryTranscribeWithModel(modelName, 5500);
-    if (out) return out;
-  }
-
-  return null;
+  return runVisionWithStaggeredHedge(candidateModels, tryTranscribeWithModel, 1900, 7500);
 }
 
 /**
@@ -4207,11 +4275,7 @@ export async function transcribeHandwrittenMathWithGemini(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
       'gemini-3-flash-preview',
-      'gemini-3.6-flash',
-      'gemini-3.5-flash',
       'gemini-flash-lite-latest',
-      'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
       'gemini-flash-latest',
     ])
   );
@@ -4281,28 +4345,7 @@ export async function transcribeHandwrittenMathWithGemini(
     return null;
   };
 
-  const parallelBatch = candidateModels.slice(0, 4);
-  if (parallelBatch.length > 0) {
-    try {
-      const fastest = await Promise.any(
-        parallelBatch.map(async (m) => {
-          const res = await tryMathWithModel(m, 7500);
-          if (!res) throw new Error('empty');
-          return res;
-        })
-      );
-      if (fastest) return fastest;
-    } catch {
-      // ignore and fall back to remaining candidates
-    }
-  }
-
-  for (const modelName of candidateModels.slice(4)) {
-    const out = await tryMathWithModel(modelName, 5500);
-    if (out) return out;
-  }
-
-  return null;
+  return runVisionWithStaggeredHedge(candidateModels, tryMathWithModel, 1900, 7500);
 }
 
 /**
@@ -7212,11 +7255,7 @@ export async function transcribeEquationForGraphWithGemini(
     new Set([
       ...(cachedWorkingVisionModel ? [cachedWorkingVisionModel] : []),
       'gemini-3-flash-preview',
-      'gemini-3.6-flash',
-      'gemini-3.5-flash',
       'gemini-flash-lite-latest',
-      'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
       'gemini-flash-latest',
     ])
   );
@@ -7295,29 +7334,7 @@ export async function transcribeEquationForGraphWithGemini(
     return null;
   };
 
-  // Race the top 4 models in parallel immediately so a 503 spike on any single model never delays OCR!
-  const parallelBatch = candidateModels.slice(0, 4);
-  if (parallelBatch.length > 0) {
-    try {
-      const fastest = await Promise.any(
-        parallelBatch.map(async (m) => {
-          const res = await tryWithModel(m, 8000);
-          if (!res) throw new Error('empty');
-          return res;
-        })
-      );
-      if (fastest) return fastest;
-    } catch {
-      // ignore and fall back to remaining models
-    }
-  }
-
-  for (const modelName of candidateModels.slice(4)) {
-    const out = await tryWithModel(modelName, 6000);
-    if (out) return out;
-  }
-
-  return null;
+  return runVisionWithStaggeredHedge(candidateModels, tryWithModel, 1900, 8000);
 }
 
 /**
