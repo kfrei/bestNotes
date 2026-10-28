@@ -11168,28 +11168,28 @@ export interface MathGraphPenTipState {
 
 /**
  * Computes both the intermediate `StrokeObject[]` frame and the synchronized hand-pen nib position
- * (`penTip`) at `elapsedMs` (out of `totalDurationMs`, default 2440ms):
- * 1. 0ms - 300ms: Hand draws the horizontal X-axis (`-axx`) from left to right.
- * 2. 300ms - 600ms: Hand draws the vertical Y-axis (`-axy`) from bottom to top (total axes = 0.6s).
- * 3. 600ms - 2300ms: Hand draws each curve stroke (`-crv-`) sequentially from start to end (total graph = 1.7s)
+ * (`penTip`) at `elapsedMs` (out of `totalDurationMs`, default 2740ms):
+ * 1. 0ms - 350ms: Hand draws the horizontal X-axis (`-axx`) from left to right.
+ * 2. 350ms - 700ms: Hand draws the vertical Y-axis (`-axy`) from bottom to top (total axes = 0.7s).
+ * 3. 700ms - 2600ms: Hand draws each curve stroke (`-crv-`) sequentially from start to end (total graph = 1.9s)
  *    so the pen nib coincides with the exact point being drawn at every instant.
- * 4. 1950ms - 2440ms: Smooth fade-in of dashed projection guides and quantitative tick marks, while the hand lifts off.
+ * 4. 2250ms - 2740ms: Smooth fade-in of dashed projection guides and quantitative tick marks, while the hand lifts off.
  */
 export function computeMathGraphAnimationFrameWithPen(
   preparedStrokes: StrokeObject[],
   elapsedMs: number,
-  totalDurationMs = 2440
+  totalDurationMs = 2740
 ): { strokes: StrokeObject[]; penTip: MathGraphPenTipState | null } {
   if (elapsedMs >= totalDurationMs) {
     return { strokes: preparedStrokes, penTip: null };
   }
 
-  const xAxisEndMs = 300;
-  const yAxisEndMs = 600;
-  const curveStartMs = 600;
-  const curveEndMs = 2300;
+  const xAxisEndMs = 350;
+  const yAxisEndMs = 700;
+  const curveStartMs = 700;
+  const curveEndMs = 2600;
   const curveDrawDuration = curveEndMs - curveStartMs;
-  const guidesStartMs = 1950;
+  const guidesStartMs = 2250;
   const guidesFadeDuration = Math.max(1, totalDurationMs - guidesStartMs);
 
   const easeInOut = (u: number) => {
@@ -11215,8 +11215,6 @@ export function computeMathGraphAnimationFrameWithPen(
     s: StrokeObject,
     progress: number
   ): { stroke: StrokeObject | null; tip: { x: number; y: number; dx: number; dy: number } | null } => {
-    if (progress <= 0.004) return { stroke: null, tip: null };
-
     // Circle or Ellipse: sweep clockwise starting from top peak (theta = -pi/2)
     if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length >= 4) {
       const topPt = s.points[0];
@@ -11227,6 +11225,12 @@ export function computeMathGraphAnimationFrameWithPen(
       const cy = (botPt.y + topPt.y) / 2;
       const rx = Math.abs(rightPt.x - leftPt.x) / 2;
       const ry = Math.abs(botPt.y - topPt.y) / 2;
+      if (progress <= 0.004) {
+        return {
+          stroke: null,
+          tip: { x: topPt.x, y: topPt.y, dx: 1, dy: 0 },
+        };
+      }
       if (progress >= 0.998) {
         return {
           stroke: s,
@@ -11244,8 +11248,8 @@ export function computeMathGraphAnimationFrameWithPen(
           pressure: 0.7,
         });
       }
+      const endTheta = -Math.PI / 2 + maxAngle;
       const last = arcPts[arcPts.length - 1];
-      const prev = arcPts[Math.max(0, arcPts.length - 2)];
       return {
         stroke: {
           ...s,
@@ -11256,8 +11260,8 @@ export function computeMathGraphAnimationFrameWithPen(
         tip: {
           x: last.x,
           y: last.y,
-          dx: last.x - prev.x,
-          dy: last.y - prev.y,
+          dx: -rx * Math.sin(endTheta),
+          dy: ry * Math.cos(endTheta),
         },
       };
     }
@@ -11266,6 +11270,12 @@ export function computeMathGraphAnimationFrameWithPen(
     if (pts.length === 2) {
       const p0 = pts[0];
       const p1 = pts[1];
+      if (progress <= 0.004) {
+        return {
+          stroke: null,
+          tip: { x: p0.x, y: p0.y, dx: p1.x - p0.x, dy: p1.y - p0.y },
+        };
+      }
       if (progress >= 0.998) {
         return {
           stroke: s,
@@ -11292,6 +11302,17 @@ export function computeMathGraphAnimationFrameWithPen(
     }
 
     if (pts.length > 2) {
+      if (progress <= 0.004) {
+        return {
+          stroke: null,
+          tip: {
+            x: pts[0].x,
+            y: pts[0].y,
+            dx: pts[1].x - pts[0].x,
+            dy: pts[1].y - pts[0].y,
+          },
+        };
+      }
       const cumLen: number[] = [0];
       let totalLen = 0;
       for (let i = 1; i < pts.length; i++) {
@@ -11308,29 +11329,34 @@ export function computeMathGraphAnimationFrameWithPen(
       }
       const targetLen = totalLen * progress;
       const slicedPts: BezierPoint[] = [pts[0]];
+      let segDx = pts[1].x - pts[0].x;
+      let segDy = pts[1].y - pts[0].y;
       for (let i = 1; i < pts.length; i++) {
         if (cumLen[i] <= targetLen) {
           slicedPts.push(pts[i]);
+          segDx = pts[i].x - pts[i - 1].x;
+          segDy = pts[i].y - pts[i - 1].y;
         } else {
           const segLen = cumLen[i] - cumLen[i - 1];
           const frac = segLen > 1e-5 ? (targetLen - cumLen[i - 1]) / segLen : 1;
+          segDx = pts[i].x - pts[i - 1].x;
+          segDy = pts[i].y - pts[i - 1].y;
           slicedPts.push({
-            x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * frac,
-            y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * frac,
+            x: pts[i - 1].x + segDx * frac,
+            y: pts[i - 1].y + segDy * frac,
             pressure: 0.7,
           });
           break;
         }
       }
       const last = slicedPts[slicedPts.length - 1];
-      const prev = slicedPts[Math.max(0, slicedPts.length - 2)];
       return {
         stroke: slicedPts.length >= 2 ? { ...s, points: slicedPts } : null,
         tip: {
           x: last.x,
           y: last.y,
-          dx: last.x - prev.x,
-          dy: last.y - prev.y,
+          dx: segDx,
+          dy: segDy,
         },
       };
     }
@@ -11352,7 +11378,7 @@ export function computeMathGraphAnimationFrameWithPen(
           x: tip.x,
           y: tip.y,
           tiltDeg: 0,
-          opacity: Math.min(1, Math.max(0.2, elapsedMs / 55)),
+          opacity: 1,
         };
       }
       continue;
@@ -11366,7 +11392,7 @@ export function computeMathGraphAnimationFrameWithPen(
         penTip = {
           x: tip.x,
           y: tip.y,
-          tiltDeg: -4,
+          tiltDeg: 0,
           opacity: 1,
         };
       }
@@ -11387,6 +11413,12 @@ export function computeMathGraphAnimationFrameWithPen(
       const segEnd = (cIdx + 1) / numCurves;
 
       if (rawCurveTotalU <= segStart) {
+        if (!penTip && cIdx === 0) {
+          const { tip } = sliceStrokeWithTip(s, 0);
+          if (tip) {
+            penTip = { x: tip.x, y: tip.y, tiltDeg: 0, opacity: 1 };
+          }
+        }
         continue;
       }
       if (rawCurveTotalU >= segEnd) {
@@ -11402,12 +11434,10 @@ export function computeMathGraphAnimationFrameWithPen(
       if (stroke) out.push(stroke);
       if (tip) {
         lastCurveEndPt = { x: tip.x, y: tip.y };
-        const rawTilt = Math.atan2(tip.dy, Math.abs(tip.dx) + 14) * (180 / Math.PI) * 0.26;
-        const tiltDeg = Math.max(-7, Math.min(7, rawTilt));
         penTip = {
           x: tip.x,
           y: tip.y,
-          tiltDeg,
+          tiltDeg: 0,
           opacity: 1,
         };
       }
@@ -11420,14 +11450,14 @@ export function computeMathGraphAnimationFrameWithPen(
     }
   }
 
-  // Smooth lift-off fade after the curve finishes (1680ms .. 1820ms)
+  // Smooth lift-off fade after the curve finishes (2600ms .. 2740ms)
   if (!penTip && elapsedMs >= curveEndMs && elapsedMs < totalDurationMs && lastCurveEndPt) {
     const fadeOut = Math.max(0, 1 - (elapsedMs - curveEndMs) / Math.max(1, totalDurationMs - curveEndMs));
     if (fadeOut > 0.02) {
       penTip = {
         x: lastCurveEndPt.x + (1 - fadeOut) * 6,
         y: lastCurveEndPt.y - (1 - fadeOut) * 6,
-        tiltDeg: -2,
+        tiltDeg: 0,
         opacity: fadeOut,
       };
     }
@@ -11439,7 +11469,7 @@ export function computeMathGraphAnimationFrameWithPen(
 export function computeMathGraphAnimationFrame(
   preparedStrokes: StrokeObject[],
   elapsedMs: number,
-  totalDurationMs = 1820
+  totalDurationMs = 2740
 ): StrokeObject[] {
   return computeMathGraphAnimationFrameWithPen(preparedStrokes, elapsedMs, totalDurationMs).strokes;
 }

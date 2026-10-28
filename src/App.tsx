@@ -22985,6 +22985,7 @@ export default function App() {
   // 2) Progressive drawing of the plotted curve from left-to-right or from the top peak around the circumference (200..1620ms)
   // 3) Smooth fade-in of projection guides & quantitative ticks (1180..1750ms), then final editable selection
   const mathGraphAnimRafRef = useRef<number | null>(null);
+  const mathGraphHandImgRef = useRef<HTMLImageElement | null>(null);
   const [mathGraphDrawingHand, setMathGraphDrawingHand] = useState<MathGraphPenTipState | null>(null);
   useEffect(() => {
     const preloadImg = new Image();
@@ -23004,7 +23005,7 @@ export default function App() {
         cancelAnimationFrame(mathGraphAnimRafRef.current);
         mathGraphAnimRafRef.current = null;
       }
-      const totalDurationMs = 2440;
+      const totalDurationMs = 2740;
       const prepared = prepareMathGraphStrokesForAnimation(graphBuilt.strokes);
       const allTexts = graphBuilt.texts || [];
       const axisTipTexts = allTexts.filter((t) => t.id.endsWith('-lx') || t.id.endsWith('-ly'));
@@ -23015,7 +23016,9 @@ export default function App() {
       setSelectedTextId(null);
       setActiveNodeStrokeId(null);
       setSelectedStrokeIds([]);
-      setMathGraphDrawingHand(initialFrame.penTip);
+      setMathGraphDrawingHand(
+        initialFrame.penTip || { x: 0, y: 0, tiltDeg: 0, opacity: 1 }
+      );
 
       updateActivePage((page) => {
         const basePage = extraUpdater ? extraUpdater(page) : page;
@@ -23048,12 +23051,18 @@ export default function App() {
           return;
         }
         const frame = computeMathGraphAnimationFrameWithPen(prepared, elapsed, totalDurationMs);
-        setMathGraphDrawingHand(frame.penTip);
-        const shouldCommitAxisTipsNow = !axisTipsAdded && elapsed >= 580;
+        const handEl = mathGraphHandImgRef.current;
+        if (handEl && frame.penTip) {
+          const tx = (frame.penTip.x - 3.71).toFixed(2);
+          const ty = (frame.penTip.y - 18.17).toFixed(2);
+          handEl.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+          handEl.style.opacity = String(frame.penTip.opacity);
+        }
+        const shouldCommitAxisTipsNow = !axisTipsAdded && elapsed >= 680;
         if (shouldCommitAxisTipsNow) {
           axisTipsAdded = true;
         }
-        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 2050;
+        const shouldCommitAllTextsNow = !allTextsAdded && elapsed >= 2350;
         if (shouldCommitAllTextsNow) {
           allTextsAdded = true;
         }
@@ -32378,18 +32387,21 @@ export default function App() {
                     {/* Synchronized Hand-with-Pen Overlay when animating a newly created Math Diagram (`📈 Διάγραμμα`) */}
                     {isCurrentActive && mathGraphDrawingHand && (
                       <img
+                        ref={mathGraphHandImgRef}
                         src="/drawing-hand.png"
                         alt=""
                         aria-hidden="true"
+                        decoding="sync"
+                        loading="eager"
                         style={{
                           position: 'absolute',
-                          left: mathGraphDrawingHand.x - 3.71,
-                          top: mathGraphDrawingHand.y - 18.17,
+                          left: 0,
+                          top: 0,
                           width: 112,
                           height: 84.56,
-                          transformOrigin: '3.71px 18.17px',
-                          transform: `rotate(${mathGraphDrawingHand.tiltDeg.toFixed(1)}deg)`,
+                          transform: `translate3d(${(mathGraphDrawingHand.x - 3.71).toFixed(2)}px, ${(mathGraphDrawingHand.y - 18.17).toFixed(2)}px, 0)`,
                           opacity: mathGraphDrawingHand.opacity,
+                          willChange: 'transform, opacity',
                           pointerEvents: 'none',
                           userSelect: 'none',
                           zIndex: 45,
