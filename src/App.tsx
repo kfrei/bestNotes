@@ -21834,7 +21834,11 @@ export default function App() {
         for (const s of page.strokes) {
           if (baseSet.has(s.id) && s.groupId?.startsWith('math-graph-grp-')) {
             const fnM = s.id.match(/-crv-fn(\d+)-/);
-            if (fnM) targetedCurveFnKeys.add(`${s.groupId}::${fnM[1]}`);
+            if (fnM) {
+              targetedCurveFnKeys.add(`${s.groupId}::${fnM[1]}`);
+            } else if (s.id.includes('-crv-')) {
+              targetedCurveFnKeys.add(`${s.groupId}::0`);
+            }
           }
         }
         const hasWaveAxesGroup = Array.from(groupIds).some((g) => g.startsWith('wave-axes-'));
@@ -21846,6 +21850,13 @@ export default function App() {
           texts:
             fullMathGroups.size > 0 || targetedCurveFnKeys.size > 0
               ? (page.texts || []).map((t) => {
+                  const eqTxtM = t.id.match(/-(math-graph-grp-[a-z0-9-]+)-fn(\d+)$/);
+                  if (eqTxtM) {
+                    const [, eqGrp, eqFn] = eqTxtM;
+                    if (fullMathGroups.has(eqGrp) || targetedCurveFnKeys.has(`${eqGrp}::${eqFn}`)) {
+                      return { ...t, color: c };
+                    }
+                  }
                   if (!t.groupId?.startsWith('math-graph-grp-')) return t;
                   const clblM = t.id.match(/-clbl-fn(\d+)$/);
                   if (!clblM) return t;
@@ -21859,6 +21870,13 @@ export default function App() {
                 })
               : page.texts,
           strokes: page.strokes.map((s) => {
+            const eqSrcM = s.id.match(/-eqsrc-(math-graph-grp-[a-z0-9-]+)-fn(\d+)$/);
+            if (eqSrcM) {
+              const [, eqGrp, eqFn] = eqSrcM;
+              if (fullMathGroups.has(eqGrp) || targetedCurveFnKeys.has(`${eqGrp}::${eqFn}`)) {
+                return { ...s, color: c };
+              }
+            }
             if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
               if (s.groupId && s.groupId.startsWith('wave-axes-')) {
                 if (s.shapeType === 'wave-guide-top' || s.shapeType === 'wave-guide-bottom') {
@@ -23182,7 +23200,120 @@ export default function App() {
         return;
       }
 
-      animateAndCommitMathGraph(graphBuilt);
+      // Extract the curve colors (fn1 -> #dc2626, fn2 -> #2563eb, ...) from the generated diagram
+      const curveColorEntries: { fnIdx: number; color: string }[] = [];
+      const seenFn = new Set<number>();
+      for (const gs of graphBuilt.strokes) {
+        if (!gs.id.includes('-crv-')) continue;
+        const fnM = gs.id.match(/-crv-fn(\d+)-/);
+        const fnIdx = fnM ? parseInt(fnM[1], 10) : 0;
+        if (!seenFn.has(fnIdx)) {
+          seenFn.add(fnIdx);
+          curveColorEntries.push({ fnIdx, color: gs.color || '#dc2626' });
+        }
+      }
+      curveColorEntries.sort((a, b) => a.fnIdx - b.fnIdx);
+
+      // Partition handwritten strokes into horizontal equation rows (top to bottom) with 0 AI calls!
+      const strokeColorAndTagMap = new Map<string, { color?: string; newId: string }>();
+      if (curveColorEntries.length >= 2 && selStrokes.length >= 2) {
+        const numRows = curveColorEntries.length;
+        const items = selStrokes
+          .map((st) => {
+            const b = getStrokeBounds(st);
+            return { st, minY: b.minY, maxY: b.maxY, cy: (b.minY + b.maxY) / 2 };
+          })
+          .sort((a, b) => a.cy - b.cy);
+
+        // Merge strokes whose vertical spans overlap (within 4px) into natural horizontal bands
+        const bands: { items: typeof items; minY: number; maxY: number; cy: number }[] = [];
+        for (const it of items) {
+          const last = bands[bands.length - 1];
+          if (last && it.minY <= last.maxY + 4) {
+            last.items.push(it);
+            last.minY = Math.min(last.minY, it.minY);
+            last.maxY = Math.max(last.maxY, it.maxY);
+            last.cy = (last.minY + last.maxY) / 2;
+          } else {
+            bands.push({ items: [it], minY: it.minY, maxY: it.maxY, cy: it.cy });
+          }
+        }
+
+        // If more bands than numRows (e.g. a high superscript or low subscript), merge closest adjacent bands
+        while (bands.length > numRows) {
+          let bestIdx = 0;
+          let bestDist = Infinity;
+          for (let i = 0; i < bands.length - 1; i++) {
+            const gap = bands[i + 1].cy - bands[i].cy;
+            if (gap < bestDist) {
+              bestDist = gap;
+              bestIdx = i;
+            }
+          }
+          const mergedItems = [...bands[bestIdx].items, ...bands[bestIdx + 1].items];
+          const minY = Math.min(bands[bestIdx].minY, bands[bestIdx + 1].minY);
+          const maxY = Math.max(bands[bestIdx].maxY, bands[bestIdx + 1].maxY);
+          bands.splice(bestIdx, 2, {
+            items: mergedItems,
+            minY,
+            maxY,
+            cy: (minY + maxY) / 2,
+          });
+        }
+
+        // Fallback if all strokes merged into fewer bands than numRows: split at the largest cy gaps
+        let rowGroups: (typeof items)[] = bands.map((b) => b.items);
+        if (rowGroups.length < numRows && items.length >= numRows) {
+          const gaps: { splitAfter: number; gap: number }[] = [];
+          for (let i = 0; i < items.length - 1; i++) {
+            gaps.push({ splitAfter: i, gap: items[i + 1].cy - items[i].cy });
+          }
+          gaps.sort((a, b) => b.gap - a.gap);
+          const splitPoints = gaps
+            .slice(0, numRows - 1)
+            .map((g) => g.splitAfter)
+            .sort((a, b) => a - b);
+          rowGroups = [];
+          let start = 0;
+          for (const sp of splitPoints) {
+            rowGroups.push(items.slice(start, sp + 1));
+            start = sp + 1;
+          }
+          rowGroups.push(items.slice(start));
+        }
+
+        rowGroups.forEach((grp, rIdx) => {
+          const entry = curveColorEntries[Math.min(rIdx, curveColorEntries.length - 1)];
+          for (const it of grp) {
+            const cleanBaseId = it.st.id.replace(/-eqsrc-math-graph-grp-[a-z0-9-]+-fn\d+$/, '');
+            strokeColorAndTagMap.set(it.st.id, {
+              color: entry.color,
+              newId: `${cleanBaseId}-eqsrc-${graphBuilt.groupId}-fn${entry.fnIdx}`,
+            });
+          }
+        });
+      } else if (curveColorEntries.length === 1) {
+        const entry = curveColorEntries[0];
+        for (const st of selStrokes) {
+          const cleanBaseId = st.id.replace(/-eqsrc-math-graph-grp-[a-z0-9-]+-fn\d+$/, '');
+          strokeColorAndTagMap.set(st.id, {
+            newId: `${cleanBaseId}-eqsrc-${graphBuilt.groupId}-fn${entry.fnIdx}`,
+          });
+        }
+      }
+
+      animateAndCommitMathGraph(graphBuilt, (page) => ({
+        ...page,
+        strokes: page.strokes.map((s) => {
+          const mapped = strokeColorAndTagMap.get(s.id);
+          if (!mapped) return s;
+          return {
+            ...s,
+            id: mapped.newId,
+            color: mapped.color || s.color,
+          };
+        }),
+      }));
       showToast(
         `📈 Διάγραμμα (${graphBuilt.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
       );
@@ -23220,6 +23351,7 @@ export default function App() {
       // If this text box has a single indexed equation (e.g. y_1 = ... or y_2 = ...), check if there are sibling indexed equations right above/below it!
       const isIndexedFnText = (s: string) =>
         /^\s*(?:\\text\{)?[yYfFgGhHψΨ]\s*(?:_\s*\{?\s*[1-9]\s*\}?|[1-9₁₂₃₄])(?:\s*\(\s*[xχ]\s*\))?\s*=/m.test(s);
+      let matchedSiblingTxts: TextObject[] = [];
       if (!rawEq.includes('\n') && isIndexedFnText(rawEq)) {
         const siblingTxts = (activePage.texts || [])
           .filter((t) => {
@@ -23230,6 +23362,7 @@ export default function App() {
           })
           .sort((a, b) => a.y - b.y);
         if (siblingTxts.length >= 2) {
+          matchedSiblingTxts = siblingTxts;
           rawEq = siblingTxts
             .map((t) => ((!t.isMath && t.text ? t.text : t.text || t.latex) || '').trim())
             .join('\n');
@@ -23272,7 +23405,52 @@ export default function App() {
         return;
       }
 
-      animateAndCommitMathGraph(graphBuilt);
+      const curveColorEntries: { fnIdx: number; color: string }[] = [];
+      const seenFn = new Set<number>();
+      for (const gs of graphBuilt.strokes) {
+        if (!gs.id.includes('-crv-')) continue;
+        const fnM = gs.id.match(/-crv-fn(\d+)-/);
+        const fnIdx = fnM ? parseInt(fnM[1], 10) : 0;
+        if (!seenFn.has(fnIdx)) {
+          seenFn.add(fnIdx);
+          curveColorEntries.push({ fnIdx, color: gs.color || '#dc2626' });
+        }
+      }
+      curveColorEntries.sort((a, b) => a.fnIdx - b.fnIdx);
+
+      animateAndCommitMathGraph(graphBuilt, (page) => ({
+        ...page,
+        texts: (page.texts || []).map((t) => {
+          if (matchedSiblingTxts.length >= 2 && curveColorEntries.length >= 2) {
+            const sibIdx = matchedSiblingTxts.findIndex((st) => st.id === t.id);
+            if (sibIdx !== -1) {
+              const entry = curveColorEntries[Math.min(sibIdx, curveColorEntries.length - 1)];
+              const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+              return {
+                ...t,
+                id: `${cleanBaseId}-${graphBuilt.groupId}-fn${entry.fnIdx}`,
+                color: entry.color,
+              };
+            }
+          }
+          if (t.id === txtObj.id) {
+            const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+            if (curveColorEntries.length >= 2) {
+              return {
+                ...t,
+                id: `${cleanBaseId}-${graphBuilt.groupId}-multi`,
+              };
+            }
+            if (curveColorEntries.length === 1) {
+              return {
+                ...t,
+                id: `${cleanBaseId}-${graphBuilt.groupId}-fn${curveColorEntries[0].fnIdx}`,
+              };
+            }
+          }
+          return t;
+        }),
+      }));
       showToast(
         `📈 Διάγραμμα (${graphBuilt.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
       );
@@ -32066,18 +32244,30 @@ export default function App() {
                                     : txt.latex;
                                 const mathRows = splitAndCleanMathLatexLines(effectiveLatex);
                                 const rowsToRender = mathRows.length > 0 ? mathRows : [effectiveLatex];
-                                return rowsToRender.map((rowLatex, rIdx) => (
-                                  <div
-                                    key={rIdx}
-                                    dangerouslySetInnerHTML={{
-                                      __html: katex.renderToString(rowLatex, {
-                                        throwOnError: false,
-                                        strict: false,
-                                        displayMode: true,
-                                      }),
-                                    }}
-                                  />
-                                ));
+                                const multiM = txt.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
+                                const multiGrp = multiM ? multiM[1] : null;
+                                return rowsToRender.map((rowLatex, rIdx) => {
+                                  const rowFnColor = multiGrp
+                                    ? pageObj.strokes.find(
+                                        (s) =>
+                                          s.groupId === multiGrp &&
+                                          s.id.includes(`-crv-fn${rIdx + 1}-`)
+                                      )?.color
+                                    : undefined;
+                                  return (
+                                    <div
+                                      key={rIdx}
+                                      style={rowFnColor ? { color: rowFnColor } : undefined}
+                                      dangerouslySetInnerHTML={{
+                                        __html: katex.renderToString(rowLatex, {
+                                          throwOnError: false,
+                                          strict: false,
+                                          displayMode: true,
+                                        }),
+                                      }}
+                                    />
+                                  );
+                                });
                               })()}
                             </div>
                           ) : (
@@ -32092,53 +32282,77 @@ export default function App() {
                                 ...fontCss,
                               }}
                             >
-                              {txt.text && (txt.text.includes('_') || txt.text.includes('^')) ? (
+                              {txt.text &&
+                              (txt.text.includes('_') ||
+                                txt.text.includes('^') ||
+                                txt.id.endsWith('-multi')) ? (
                                 (() => {
+                                  const multiM = txt.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
+                                  const multiGrp = multiM ? multiM[1] : null;
                                   const tokenRegex =
                                     /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
-                                  const parts = txt.text.split(tokenRegex);
-                                  return (
-                                    <span>
-                                      {parts.map((part, pIdx) => {
-                                        if (!part) return null;
-                                        if (part.startsWith('^') && part.length > 1) {
-                                          let inner = part.slice(1);
-                                          if (
-                                            (inner.startsWith('(') && inner.endsWith(')')) ||
-                                            (inner.startsWith('{') && inner.endsWith('}'))
-                                          ) {
-                                            inner = inner.slice(1, -1);
-                                          }
-                                          return (
-                                            <sup
-                                              key={pIdx}
-                                              className="text-[0.72em] leading-none align-super"
-                                            >
-                                              {inner}
-                                            </sup>
-                                          );
+                                  const renderLineTokens = (lineStr: string) =>
+                                    lineStr.split(tokenRegex).map((part, pIdx) => {
+                                      if (!part) return null;
+                                      if (part.startsWith('^') && part.length > 1) {
+                                        let inner = part.slice(1);
+                                        if (
+                                          (inner.startsWith('(') && inner.endsWith(')')) ||
+                                          (inner.startsWith('{') && inner.endsWith('}'))
+                                        ) {
+                                          inner = inner.slice(1, -1);
                                         }
-                                        if (part.startsWith('_') && part.length > 1) {
-                                          let inner = part.slice(1);
-                                          if (
-                                            (inner.startsWith('(') && inner.endsWith(')')) ||
-                                            (inner.startsWith('{') && inner.endsWith('}'))
-                                          ) {
-                                            inner = inner.slice(1, -1);
-                                          }
-                                          return (
-                                            <sub
-                                              key={pIdx}
-                                              className="text-[0.72em] leading-none align-sub"
-                                            >
-                                              {inner}
-                                            </sub>
-                                          );
+                                        return (
+                                          <sup
+                                            key={pIdx}
+                                            className="text-[0.72em] leading-none align-super"
+                                          >
+                                            {inner}
+                                          </sup>
+                                        );
+                                      }
+                                      if (part.startsWith('_') && part.length > 1) {
+                                        let inner = part.slice(1);
+                                        if (
+                                          (inner.startsWith('(') && inner.endsWith(')')) ||
+                                          (inner.startsWith('{') && inner.endsWith('}'))
+                                        ) {
+                                          inner = inner.slice(1, -1);
                                         }
-                                        return <React.Fragment key={pIdx}>{part}</React.Fragment>;
-                                      })}
-                                    </span>
-                                  );
+                                        return (
+                                          <sub
+                                            key={pIdx}
+                                            className="text-[0.72em] leading-none align-sub"
+                                          >
+                                            {inner}
+                                          </sub>
+                                        );
+                                      }
+                                      return <React.Fragment key={pIdx}>{part}</React.Fragment>;
+                                    });
+                                  if (multiGrp && txt.text.includes('\n')) {
+                                    const lines = txt.text.split('\n');
+                                    return (
+                                      <span>
+                                        {lines.map((ln, lIdx) => {
+                                          const lnColor = pageObj.strokes.find(
+                                            (s) =>
+                                              s.groupId === multiGrp &&
+                                              s.id.includes(`-crv-fn${lIdx + 1}-`)
+                                          )?.color;
+                                          return (
+                                            <React.Fragment key={lIdx}>
+                                              {lIdx > 0 && '\n'}
+                                              <span style={lnColor ? { color: lnColor } : undefined}>
+                                                {renderLineTokens(ln)}
+                                              </span>
+                                            </React.Fragment>
+                                          );
+                                        })}
+                                      </span>
+                                    );
+                                  }
+                                  return <span>{renderLineTokens(txt.text)}</span>;
                                 })()
                               ) : (
                                 txt.text || 'Κείμενο...'
