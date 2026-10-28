@@ -11921,10 +11921,11 @@ export default function App() {
               x2: number,
               y2: number,
               color: string,
-              label: string
+              label: string,
+              labelSide: 'right' | 'left' = 'right'
             ) => {
               const len = Math.hypot(x2 - x1, y2 - y1);
-              if (len < 6) return;
+              if (len < 4) return;
               const ang = Math.atan2(y2 - y1, x2 - x1);
               ctx.save();
               ctx.strokeStyle = color;
@@ -11938,7 +11939,7 @@ export default function App() {
               ctx.moveTo(x1, y1);
               ctx.lineTo(x2, y2);
               ctx.stroke();
-              const head = 10.5;
+              const head = Math.min(10.5, Math.max(6.5, len * 0.55));
               ctx.beginPath();
               ctx.moveTo(x2, y2);
               ctx.lineTo(
@@ -11952,36 +11953,74 @@ export default function App() {
               ctx.closePath();
               ctx.fill();
               ctx.font = 'bold 13.5px system-ui, -apple-system, sans-serif';
-              ctx.fillText(label, x2 + 9, y2 + 4);
+              ctx.textAlign = labelSide === 'left' ? 'right' : 'left';
+              ctx.fillText(label, labelSide === 'left' ? x2 - 9 : x2 + 9, y2 + 4);
               ctx.restore();
             };
 
+            // Measure exact spring deformation relative to natural length l0:
+            // - At natural length (aligned with left l0 spring): deltaL = 0 => F_ελ = 0!
+            // - Below natural length (stretched): deltaL > 0 => F_ελ points upwards (-axisU)
+            // - Above natural length (compressed / συσπειρωμένο): deltaL < 0 => F_ελ points downwards (+axisU) and grows as we go higher!
+            const eqDeltaL = Math.max(12, Math.abs(axLen - activeSpringSim.naturalLengthPx));
             const wLen = 64 * activeSpringSim.mass;
-            const netFLen = -xDisp * 1.05 * activeSpringSim.stiffness;
-            // Weight W (downwards) and Spring force F_ελ (upwards) on the exact same vertical line!
+            const forcePerPx = wLen / eqDeltaL;
+            const curSpringLenAlongAxis =
+              axLen + (dispDx * axisUx + dispDy * axisUy);
+            const curDeltaL = curSpringLenAlongAxis - activeSpringSim.naturalLengthPx;
+            const netFLen = -xDisp * forcePerPx;
+
             if (isVertSpring) {
               const forceLineX = curMassCx;
-              drawPhysicsArrow(
-                forceLineX,
-                curMassCy,
-                forceLineX,
-                curMassCy + wLen,
-                '#0284c7',
-                'W'
-              );
-              // Spring force F_ελ (upwards on the same vertical line as W, proportional to total stretch)
-              const fElLen = Math.max(10, wLen + netFLen);
-              drawPhysicsArrow(
-                forceLineX,
-                curMassCy,
-                forceLineX,
-                curMassCy - fElLen,
-                '#059669',
-                'Fελ'
-              );
+              // fElUpward > 0 means upwards; fElUpward < 0 means downwards (when compressed above natural length l0!)
+              const fElUpward = curDeltaL * axisUy * forcePerPx;
+              const bothDownwards = fElUpward < -4;
+
+              // Draw longer downward arrow first so shorter arrow's head stays visible on top
+              if (bothDownwards && Math.abs(fElUpward) > wLen) {
+                drawPhysicsArrow(
+                  forceLineX,
+                  curMassCy,
+                  forceLineX,
+                  curMassCy - fElUpward,
+                  '#059669',
+                  'Fελ',
+                  'left'
+                );
+                drawPhysicsArrow(
+                  forceLineX,
+                  curMassCy,
+                  forceLineX,
+                  curMassCy + wLen,
+                  '#0284c7',
+                  'W',
+                  'right'
+                );
+              } else {
+                drawPhysicsArrow(
+                  forceLineX,
+                  curMassCy,
+                  forceLineX,
+                  curMassCy + wLen,
+                  '#0284c7',
+                  'W',
+                  'right'
+                );
+                if (Math.abs(fElUpward) >= 4) {
+                  drawPhysicsArrow(
+                    forceLineX,
+                    curMassCy,
+                    forceLineX,
+                    curMassCy - fElUpward,
+                    '#059669',
+                    'Fελ',
+                    bothDownwards ? 'left' : 'right'
+                  );
+                }
+              }
             }
             // Restoring Force ΣF = -k*x placed cleanly to the right of the mass box!
-            if (Math.abs(netFLen) >= 6) {
+            if (Math.abs(netFLen) >= 4) {
               const sfOriginX = curMassCx + perpUx * (massW / 2 + 16);
               const sfOriginY = curMassCy + perpUy * (massW / 2 + 16);
               drawPhysicsArrow(
