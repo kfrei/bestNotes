@@ -8351,7 +8351,7 @@ function tryBuildOscillationDiagramStrokes(
       xAxisLabel: 'u',
       leftXLabel: '-u_max',
       rightXLabel: '+u_max',
-      topYLabel: 'K_max',
+      topYLabel: 'E, K_max',
       inverted: false,
       kindLabel: 'Κινητική Ενέργεια K(u)',
     });
@@ -8369,7 +8369,7 @@ function tryBuildOscillationDiagramStrokes(
       xAxisLabel: 'x',
       leftXLabel: '-A',
       rightXLabel: '+A',
-      topYLabel: 'U_max',
+      topYLabel: 'E, U_max',
       inverted: false,
       kindLabel: 'Δυναμική Ενέργεια U(x)',
     });
@@ -8387,7 +8387,7 @@ function tryBuildOscillationDiagramStrokes(
       xAxisLabel: 'x',
       leftXLabel: '-A',
       rightXLabel: '+A',
-      topYLabel: 'K_max',
+      topYLabel: 'E, K_max',
       inverted: true,
       kindLabel: 'Κινητική Ενέργεια K(x)',
     });
