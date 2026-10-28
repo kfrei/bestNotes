@@ -7239,7 +7239,8 @@ export async function transcribeEquationForGraphWithGemini(
 Κανόνες:
 1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
 2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. u_1 = 10 και u_2 = 2 + 5t, ή y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "u_1 = 10\\nu_2 = 2 + 5*t") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
-3. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
+3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή και ΔΕΝ είναι άγνωστη παράμετρος!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)") — ΜΗΝ το αντικαθιστάς με 3.14 και ΜΗΝ το μπερδεύεις με τα γράμματα n ή r!
+4. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1 — εξαιρουμένου του π που είναι σταθερά!), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "latex": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
@@ -7460,7 +7461,7 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/\\mu\b/g, 'μ')
     .replace(/\\rho\b/g, 'ρ')
     .replace(/\\omega\b/g, 'ω')
-    .replace(/\\pi\b|π/g, '3.14159265');
+    .replace(/\\pi\b|\bpi\b|Π/gi, 'π');
 
   // Convert Unicode superscripts (e.g. x², y³, x⁻²) to ^(2), ^(3), ^(-2)
   const supMap: Record<string, string> = {
@@ -7570,16 +7571,30 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     const hasX = /\bx\b/.test(`${lhsPart} = ${rhsPart}`);
 
     // 1. If there is no `y` in the equation and the LHS is a single variable/symbol (e.g. K, U, E, F, ΣF, P, V, a, u, v, s), map LHS -> `y`
-    if (!hasY && /^(?:Σ?[a-zA-Zα-ωΑ-Ω](?:_[a-zA-Z0-9]+)?)$/.test(lhsPart) && lhsPart !== 'x') {
+    if (
+      !hasY &&
+      /^(?:Σ?[a-zA-Zα-ωΑ-Ω](?:_[a-zA-Z0-9]+)?)$/.test(lhsPart) &&
+      lhsPart !== 'x' &&
+      lhsPart !== 'π'
+    ) {
       lhsPart = 'y';
     }
 
     // 2. If there is still no `x` on the RHS (e.g. `K = 1/2 m u^2` where RHS has `m` and `u`), map the primary RHS variable -> `x`
+    // Note: `π` is the constant 3.14159..., NEVER a variable!
     if (!hasX) {
-      const strippedRhs = rhsPart.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG)\b/g, '');
+      const strippedRhs = rhsPart
+        .replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG)\b/g, '')
+        .replace(/[πΠ]/g, '');
       // Prefer a variable raised to a power (like `u^(2)` or `v^2` or `r^2` or `t^2`)
       const powVarMatch = strippedRhs.match(/([a-zA-Zα-ωΑ-Ω])\s*\^/);
-      if (powVarMatch && powVarMatch[1] && powVarMatch[1] !== 'y' && powVarMatch[1] !== 'e') {
+      if (
+        powVarMatch &&
+        powVarMatch[1] &&
+        powVarMatch[1] !== 'y' &&
+        powVarMatch[1] !== 'e' &&
+        powVarMatch[1] !== 'π'
+      ) {
         const targetVar = powVarMatch[1];
         rhsPart = rhsPart.replace(new RegExp(targetVar, 'g'), 'x');
       } else {
@@ -7768,7 +7783,9 @@ export function extractEquationItemsForPlot(
 
       if (!itemXVar) {
         const strippedRhs = rawRhs
-          .replace(/\\?(?:sin|cos|tan|tg|ln|log|exp|sqrt|abs|ημιτ|ημ|συνημ|συν|εφ|max|min)/gi, '')
+          .replace(/\\?(?:sin|cos|tan|tg|ln|log|exp|sqrt|abs|ημιτ|ημ|συνημ|συν|εφ|max|min|pi)\b/gi, '')
+          .replace(/\\?(?:ημιτ|ημ|συνημ|συν|εφ)/gi, '')
+          .replace(/[πΠ]/g, '')
           .replace(/_\{?[0-9a-zA-Zα-ωΑ-Ω]+\}?/g, '');
         if (/\bt\b/.test(strippedRhs)) {
           itemXVar = 't';
@@ -7776,7 +7793,7 @@ export function extractEquationItemsForPlot(
           itemXVar = 'x';
         } else {
           const powMatch = strippedRhs.match(/([a-zA-Zα-ωΑ-Ω])\s*\^/);
-          if (powMatch && powMatch[1] && !/^[yYeE]$/.test(powMatch[1])) {
+          if (powMatch && powMatch[1] && !/^[yYeEπΠ]$/.test(powMatch[1])) {
             itemXVar = normalizeAxisVarSymbol(powMatch[1]);
           } else {
             const prefMatch = strippedRhs.match(/[uυvrsITqz]/);
@@ -7880,6 +7897,8 @@ function compileMathExprEvaluator(
     v: 1.2,
     w: 1.0,
     ω: 1.0,
+    π: Math.PI,
+    Π: Math.PI,
     e: Math.E,
     ...(paramOverrides || {}),
   };
@@ -8203,7 +8222,9 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/\\Sigma\b/g, 'Σ')
     .replace(/\\Delta\b/g, 'D')
     .replace(/\\omega\b/g, 'ω')
-    .replace(/\\pi\b/g, 'π')
+    .replace(/\\pi\b|\bpi\b|Π/gi, 'π')
+    .replace(/3\.14159\d*|3\.14\b/g, 'π')
+    .replace(/6\.283\d*|6\.28\b/g, '2*π')
     .replace(/\\alpha\b/g, 'α')
     .replace(/\\mu\b/g, 'm')
     .replace(/\\(?:upsilon|nu)\b/g, 'u')
@@ -8218,6 +8239,7 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/Ε/g, 'E')
     .replace(/Α/g, 'A')
     .replace(/Υ/g, 'U')
+    .replace(/τ(?=\s*\))/g, 't')
     .replace(/(\d),(\d)/g, '$1.$2')
     .replace(/\s+/g, ' ')
     .trim();
@@ -8708,7 +8730,7 @@ function tryBuildOscillationDiagramStrokes(
 
   // CASE 6: Time Oscillation Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)`
   const timeOscMatch = compact.match(
-    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*([0-9.]+|A|u_?max|v_?max|a_?max|ΣF_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?(.*?)t\b/i
+    /^(x|u|υ|v|a|α|ΣF|F)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A|u_?max|v_?max|a_?max|ΣF_?max|F_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?(.*?)[tτ](?:\)|$)/i
   );
   const shorthandTimeMatch = compact.match(/^(x|u|υ|v|a|α|ΣF|F)\s*-\s*t$/i);
 
@@ -8732,8 +8754,8 @@ function tryBuildOscillationDiagramStrokes(
     let periodLabel = '1T';
     if (timeOscMatch) {
       const isNeg = timeOscMatch[2] === '-';
-      const ampStr = timeOscMatch[3] || '';
-      if (/^[0-9.]+$/.test(ampStr)) {
+      const ampStr = (timeOscMatch[3] || '').replace(/\*/g, '');
+      if (/^(?:[0-9.]+|(?:[0-9.]+)?π(?:\^[0-9]+)?)$/.test(ampStr)) {
         numAmp = ampStr;
       }
       const trig = timeOscMatch[4].toLowerCase();
@@ -8744,6 +8766,16 @@ function tryBuildOscillationDiagramStrokes(
       const rawOmega = (timeOscMatch[5] || '')
         .replace(/^[(*\s]+|[)*\s]+$/g, '')
         .trim();
+      const gcdInt = (a: number, b: number): number => {
+        let x = Math.abs(Math.round(a));
+        let y = Math.abs(Math.round(b));
+        while (y > 0) {
+          const r = x % y;
+          x = y;
+          y = r;
+        }
+        return Math.max(1, x);
+      };
       if (rawOmega && !/[ωfT]/i.test(rawOmega)) {
         const piMatch = rawOmega.match(/^([0-9.]+)?\s*\*?\s*π(?:\s*\/\s*([0-9.]+))?$/);
         const pureNumMatch = rawOmega.match(/^([0-9.]+)(?:\s*\/\s*([0-9.]+))?$/);
@@ -8758,7 +8790,7 @@ function tryBuildOscillationDiagramStrokes(
         } else if (pureNumMatch) {
           const num = parseFloat(pureNumMatch[1]);
           const den = pureNumMatch[2] ? parseFloat(pureNumMatch[2]) : 1;
-          const omegaVal = num / Math.max(1e-6, den); // ω = omegaVal => T = 2π / omegaVal
+          const omegaVal = num / Math.max(1e-6, den); // ω = omegaVal => T = 2π / omegaVal (keep π symbolically!)
           if (omegaVal > 0) {
             const ratioToPi = 2 / omegaVal;
             if (Math.abs(ratioToPi - 1) < 1e-4) {
@@ -8767,8 +8799,23 @@ function tryBuildOscillationDiagramStrokes(
               periodLabel = `${Math.round(ratioToPi)}π`;
             } else if (Math.abs(1 / ratioToPi - Math.round(1 / ratioToPi)) < 1e-4) {
               periodLabel = `π/${Math.round(1 / ratioToPi)}`;
+            } else if (
+              Math.abs(num - Math.round(num)) < 1e-4 &&
+              Math.abs(den - Math.round(den)) < 1e-4
+            ) {
+              const p = Math.round(2 * den);
+              const q = Math.round(num);
+              const g = gcdInt(p, q);
+              const pRed = p / g;
+              const qRed = q / g;
+              periodLabel =
+                qRed === 1
+                  ? pRed === 1
+                    ? 'π'
+                    : `${pRed}π`
+                  : `${pRed === 1 ? 'π' : `${pRed}π`}/${qRed}`;
             } else {
-              periodLabel = String(+((2 * Math.PI) / omegaVal).toFixed(2));
+              periodLabel = `${+ratioToPi.toFixed(2)}π`;
             }
           }
         }
@@ -9129,14 +9176,30 @@ export function buildMathGraphStrokesFromEquation(
   };
 
   // Detect whether the equation is quantitative (numerical constants only, no symbolic parameters like a, b, c, R)
-  // Note: exclude `x`, `y` (coordinate variables) and `e` (Euler's constant) from the symbolic parameter check!
-  const strippedForVars = normalized.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG|PI)\b/gi, '');
+  // Note: exclude `x`, `y` (coordinate variables), `π` (Pi constant), and `e` (Euler's constant) from the symbolic parameter check!
+  const strippedForVars = normalized
+    .replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG|PI)\b/gi, '')
+    .replace(/[πΠ]/g, '');
   const isQuantitative = !/[a-df-wzA-DF-WZα-ωΑ-Ω]/.test(strippedForVars);
 
   const formatNumLabel = (val: number): string => {
     if (!Number.isFinite(val) || Math.abs(val) < 1e-5) return '0';
     if (Math.abs(val - Math.round(val)) < 1e-3) {
       return String(Math.round(val));
+    }
+    // Check if `val` is a clean multiple or fraction of π (e.g. π, -π, 2π, π/2, 3π/2, π/3, π/4)
+    const piRatio = val / Math.PI;
+    const absPiRatio = Math.abs(piRatio);
+    const signStr = piRatio < 0 ? '-' : '';
+    const roundMult = Math.round(absPiRatio);
+    if (roundMult >= 1 && roundMult <= 24 && Math.abs(absPiRatio - roundMult) < 1.5e-3) {
+      return `${signStr}${roundMult === 1 ? 'π' : `${roundMult}π`}`;
+    }
+    for (const den of [2, 3, 4, 6]) {
+      const numCand = Math.round(absPiRatio * den);
+      if (numCand >= 1 && numCand <= 24 && Math.abs(absPiRatio * den - numCand) < 1.5e-3) {
+        return `${signStr}${numCand === 1 ? 'π' : `${numCand}π`}/${den}`;
+      }
     }
     const decimals = Math.abs(val) < 10 ? 2 : 1;
     return Number(val.toFixed(decimals)).toString();
@@ -9599,7 +9662,9 @@ export function buildMathGraphStrokesFromEquation(
       const evR = compileMathExprEvaluator(rStr, paramOverrides);
       const evF = (x: number, y: number) => evL(x, y) - evR(x, y);
 
-      const stripped = norm.replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG|PI)\b/gi, '');
+      const stripped = norm
+        .replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG|PI)\b/gi, '')
+        .replace(/[πΠ]/g, '');
       const isQuant = !/[a-df-wzA-DF-WZα-ωΑ-Ω]/.test(stripped);
 
       const v00 = evF(0, 0);
@@ -9723,7 +9788,7 @@ export function buildMathGraphStrokesFromEquation(
         ? (x: number) => evL(x, 0)
         : (x: number) => -evF(x, 0);
       const fnStr = isLhsYFn ? rStr : lStr;
-      let xSpan = /SIN|COS|TAN/i.test(fnStr) ? 6.5 : 3.4;
+      let xSpan = /SIN|COS|TAN/i.test(fnStr) ? (fnStr.includes('π') ? 2.1 : 6.5) : 3.4;
       let maxExtremaX = 0;
       let maxExtremaY = 0;
       const sampleCheck: { x: number; y: number }[] = [];
@@ -10498,7 +10563,7 @@ export function buildMathGraphStrokesFromEquation(
     }
 
     // Choose domain xSpan and range ySpan to capture roots, extrema, or periods cleanly
-    let xSpan = /SIN|COS|TAN/i.test(fnStr) ? 6.5 : 3.2;
+    let xSpan = /SIN|COS|TAN/i.test(fnStr) ? (fnStr.includes('π') ? 2.1 : 6.5) : 3.2;
     const sampleCheck: { x: number; y: number }[] = [];
     for (let sx = -4.5; sx <= 4.5; sx += 0.1) {
       const sy = fnEval(sx);
