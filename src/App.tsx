@@ -10286,21 +10286,11 @@ export default function App() {
       const ptrColor = ptr.color || '#dc2626';
 
       if (sm) {
-        for (const r of sm.hookeMeasurements || []) {
-          if (!byWeight.has(r.weightsCount)) {
-            byWeight.set(r.weightsCount, {
-              ...r,
-              plotted: plottedSet.has(r.weightsCount),
-              springStrokeId: sp.id,
-              pointerColor: ptrColor,
-            });
-          }
-        }
         const chainCount = getWeightChainIds(page, sm.massStrokeId).length;
-        const forceN = Number(sm.mass.toFixed(2));
+        const forceN = chainCount * 1.0;
         const smL0Mm = Math.round(sm.naturalLengthPx / oneMmPx);
-        const smCurLMm = Math.round(spInfo.length / oneMmPx);
-        const smDeltaLMm = Math.abs(smCurLMm - smL0Mm);
+        const smDeltaLMm = Math.round(Math.abs(spInfo.length - sm.naturalLengthPx) / oneMmPx);
+        const smCurLMm = smL0Mm + smDeltaLMm;
         byWeight.set(chainCount, {
           id: `hm-live-${sp.id}-${chainCount}`,
           weightsCount: chainCount,
@@ -10457,6 +10447,64 @@ export default function App() {
       return applySpringSimParametersToStrokes(page, nextSim);
     }, false);
   };
+
+  // Automatically normalize any Hooke-mode springs on the active page so 1, 2, 3, 4 weights (m = 0,1 kg, g = 10 m/s²)
+  // stretch by exact 10 mm (1 cm = 46 px), 20 mm (2 cm = 92 px), 30 mm (3 cm = 138 px), 40 mm (4 cm = 184 px)!
+  useEffect(() => {
+    if (isSpringSimulating || springSettleAnim) return;
+    const sims = getValidSpringSims(activePage);
+    if (sims.length === 0) return;
+
+    const needsSync = sims.some((sm) => {
+      if (sm.showAmplitudeLines) return false;
+      const eqSp = activePage.strokes.find((s) => s.id === sm.eqSpringStrokeId);
+      const massSt = activePage.strokes.find((s) => s.id === sm.massStrokeId);
+      if (!eqSp || !massSt) return false;
+      const chainCount = getWeightChainIds(activePage, sm.massStrokeId).length;
+      if (chainCount <= 0) return false;
+      const expectedMass = chainCount * 1.0;
+      const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+      const fixedPt = sm.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+      const freePt = sm.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+      const dLen = Math.max(12, spInfo.length);
+      const ux = (freePt.x - fixedPt.x) / dLen;
+      const uy = (freePt.y - fixedPt.y) / dLen;
+      const expectedEqLen = computeEquilibriumLengthPx(
+        sm.naturalLengthPx,
+        ux,
+        uy,
+        expectedMass,
+        1.0
+      );
+      return (
+        Math.abs(spInfo.length - expectedEqLen) > 0.5 ||
+        Math.abs(sm.mass - expectedMass) > 0.01 ||
+        Math.abs(sm.stiffness - 1.0) > 0.01
+      );
+    });
+
+    if (!needsSync) return;
+
+    updateActivePage((page) => {
+      let curPage = page;
+      const curActiveId = page.activeSpringSimId;
+      for (const sm of getValidSpringSims(curPage)) {
+        if (sm.showAmplitudeLines) continue;
+        const chainCount = getWeightChainIds(curPage, sm.massStrokeId).length;
+        if (chainCount <= 0) continue;
+        const expectedMass = chainCount * 1.0;
+        curPage = applySpringSimParametersToStrokes(curPage, {
+          ...sm,
+          mass: expectedMass,
+          stiffness: 1.0,
+        });
+      }
+      return {
+        ...curPage,
+        activeSpringSimId: curActiveId || curPage.activeSpringSimId,
+      };
+    }, false);
+  }, [activePage, isSpringSimulating, springSettleAnim, updateActivePage]);
 
   const snapAndAttachSpringToSupport = (
     springId: string,
@@ -33689,715 +33737,356 @@ export default function App() {
                                     ))}
                                   </div>
                                 </div>
-                              </>
-                            ) : (
-                              (() => {
-                                const eqSpStroke = activePage.strokes.find(
-                                  (s) => s.id === activeSpring.eqSpringStrokeId
-                                );
-                                const spInfo = eqSpStroke
-                                  ? getSpringTerminalsAndWidthVec(eqSpStroke)
-                                  : null;
-                                const fixedPt = spInfo
-                                  ? activeSpring.fixedEnd === 'start'
-                                    ? spInfo.startTerm
-                                    : spInfo.endTerm
-                                  : { x: 0, y: 0 };
-                                const freePt = spInfo
-                                  ? activeSpring.fixedEnd === 'start'
-                                    ? spInfo.endTerm
-                                    : spInfo.startTerm
-                                  : { x: 0, y: 100 };
-                                const ux = spInfo
-                                  ? (freePt.x - fixedPt.x) / spInfo.length
-                                  : 0;
-                                const uy = spInfo
-                                  ? (freePt.y - fixedPt.y) / spInfo.length
-                                  : 1;
-                                const oneMmPx = 4.6;
-                                const l0Mm = Math.round(activeSpring.naturalLengthPx / oneMmPx);
-                                const curLMm = Math.round(
-                                  (spInfo ? spInfo.length : activeSpring.naturalLengthPx) / oneMmPx
-                                );
-                                const curDeltaLMm = Math.abs(curLMm - l0Mm);
-                                const curChainCount = getWeightChainIds(
-                                  activePage,
-                                  activeSpring.massStrokeId
-                                ).length;
-                                const curForceN = Number(activeSpring.mass.toFixed(2));
-                                const eqLen1Px = computeEquilibriumLengthPx(
-                                  activeSpring.naturalLengthPx,
-                                  ux,
-                                  uy,
-                                  1.0,
-                                  activeSpring.stiffness
-                                );
-                                const deltaL1Mm = Math.max(
-                                  1,
-                                  Math.round(
-                                    Math.abs(eqLen1Px - activeSpring.naturalLengthPx) / oneMmPx
-                                  )
-                                );
-                                const signDir = uy < -0.78 ? -1 : 1;
-                                const rows = getCombinedHookeRowsForPage(activePage, activeSpring);
 
-                                return (
-                                  <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2.5 text-[10px] text-sky-950 leading-snug space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-extrabold text-[10.5px] text-sky-900">
-                                        🪝 Μελέτη Νόμου Hooke (Fελ = k·Δl)
-                                      </span>
-                                      <span className="px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-800 font-bold text-[9.5px]">
-                                        l₀ = {Number((l0Mm / 10).toFixed(1)).toString().replace('.', ',')} cm
-                                      </span>
-                                    </div>
+                                {/* 4. Mass (m), Stiffness (k) & Coupled Frequency f = (1/2π)√(k/m) Sliders */}
+                                {(() => {
+                                  const maxMVal = Math.max(5.0, Math.ceil(activeSpring.mass));
+                                  const curM = Math.max(0.4, Math.min(maxMVal, activeSpring.mass));
+                                  const curK = Math.max(0.4, Math.min(2.5, activeSpring.stiffness));
+                                  const curRootRatio = Math.sqrt(curK / curM); // √(k/m)
+                                  const curFreqHz = curRootRatio / (2 * Math.PI); // f = (1/2π)√(k/m)
+                                  const minRootRatio = Math.min(0.45, curRootRatio);
+                                  const maxRootRatio = Math.max(1.72, curRootRatio);
+                                  const minFreqHz = minRootRatio / (2 * Math.PI);
+                                  const maxFreqHz = maxRootRatio / (2 * Math.PI);
 
-                                    {/* 1-Click Attach / Detach Pointer Needle on the Active Spring */}
-                                    {(() => {
-                                      const attachedPointer = activePage.strokes.find(
-                                        (s) => s.attachedToSpringId === activeSpring.eqSpringStrokeId
-                                      );
-                                      return (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (attachedPointer) {
-                                              updateActivePage((page) => ({
-                                                ...page,
-                                                strokes: page.strokes.filter(
-                                                  (s) => s.id !== attachedPointer.id
-                                                ),
-                                                springSims: (page.springSims || []).map((sm) =>
-                                                  sm.eqSpringStrokeId === activeSpring.eqSpringStrokeId
-                                                    ? { ...sm, hookeMeasurements: [] }
-                                                    : sm
-                                                ),
-                                              }));
-                                              showToast(
-                                                '📍 Ο δείκτης αφαιρέθηκε από το ελατήριο!'
-                                              );
-                                            } else {
-                                              const ptrId = `ptr-${Date.now()}-${Math.random()
-                                                .toString(36)
-                                                .slice(2, 5)}`;
-                                              const ptrLen = 36;
-                                              const dirX =
-                                                rulerState.visible && rulerState.x < freePt.x - 10
-                                                  ? -1
-                                                  : 1;
-                                              const newPtr: StrokeObject = {
-                                                id: ptrId,
-                                                tool: 'pen',
-                                                penType: 'fountain',
-                                                color: strokeColor || '#dc2626',
-                                                width: 3,
-                                                opacity: 1,
-                                                lineStyle: 'solid',
-                                                arrowEnd: true,
-                                                isShape: true,
-                                                shapeType: 'spring-pointer',
-                                                attachedToSpringId: activeSpring.eqSpringStrokeId,
-                                                layerId: activeLayerId,
-                                                points: [
-                                                  { x: freePt.x, y: freePt.y, pressure: 0.7 },
-                                                  {
-                                                    x: freePt.x + dirX * ptrLen,
-                                                    y: freePt.y,
-                                                    cx: freePt.x + (dirX * ptrLen) / 2,
-                                                    cy: freePt.y,
-                                                    pressure: 0.7,
-                                                  },
-                                                ],
-                                              };
-                                              setSelectedHookeSpringId(activeSpring.eqSpringStrokeId);
-                                              updateActivePage((page) => ({
-                                                ...page,
-                                                strokes: [
-                                                  ...page.strokes,
-                                                  { ...newPtr, zOrder: getNextPageZOrder(page) },
-                                                ],
-                                              }));
-                                              showToast(
-                                                '📍 Ο δείκτης κολλήθηκε στο ελατήριο! (Σύρε τον με το Λάσο για να τον βγάλεις)'
-                                              );
-                                            }
-                                          }}
-                                          className={`w-full py-1 px-2 rounded-lg font-extrabold text-[10px] border transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                                            attachedPointer
-                                              ? 'bg-red-600 hover:bg-red-700 text-white border-red-700 shadow-2xs'
-                                              : 'bg-white hover:bg-red-50 text-red-700 border-red-200'
-                                          }`}
-                                          title="Κόλλησε ή ξεκόλλησε το βελονάκι μέτρησης στο άκρο του ελατηρίου"
-                                        >
-                                          <span>
-                                            {attachedPointer
-                                              ? '📍 Αφαίρεση Δείκτη (Βελονάκι)'
-                                              : '📍 Προσθήκη Δείκτη (Βελονάκι)'}
+                                  return (
+                                    <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                          <span>⚖️ Μάζα Σώματος (m):</span>
+                                          <span className="text-emerald-700 font-extrabold">
+                                            {curM.toFixed(2)} kg
                                           </span>
-                                        </button>
-                                      );
-                                    })()}
-
-                                    {/* Live Readout matching the Ruler (1cm = 46px) */}
-                                    <div className="grid grid-cols-2 gap-1 bg-white/90 rounded-lg p-1.5 border border-sky-200/80 text-center">
-                                      <div>
-                                        <div className="text-[9px] text-slate-500 font-bold">
-                                          m • W=Fελ
                                         </div>
-                                        <div className="text-[10.5px] font-extrabold text-rose-600">
-                                          {(curForceN / 10).toFixed(1).replace('.', ',')}kg → {curForceN}N
-                                        </div>
+                                        <input
+                                          type="range"
+                                          min="0.4"
+                                          max={maxMVal}
+                                          step="0.05"
+                                          value={curM}
+                                          onChange={(e) => {
+                                            const val = parseFloat(e.target.value);
+                                            const oldRatio = Math.sqrt(curK / curM);
+                                            const newRatio = Math.sqrt(curK / val);
+                                            if (isSpringSimulating && newRatio > 1e-4) {
+                                              springSimElapsedRef.current *= oldRatio / newRatio;
+                                            }
+                                            updateActiveSpringSimConfig((sim) => ({
+                                              ...sim,
+                                              mass: val,
+                                            }));
+                                          }}
+                                          className="w-full accent-emerald-600 cursor-pointer"
+                                        />
                                       </div>
-                                      <div>
-                                        <div className="text-[9px] text-slate-500 font-bold">
-                                          {signDir < 0 ? 'Συσπείρωση Δl' : 'Επιμήκυνση Δl'}
+
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                          <span>🌀 Σταθερά Ελατηρίου (k):</span>
+                                          <span className="text-sky-700 font-extrabold">
+                                            {curK.toFixed(2)} N/m
+                                          </span>
                                         </div>
-                                        <div className="text-[11px] font-extrabold text-sky-700">
-                                          {Number((curDeltaLMm / 10).toFixed(1)).toString().replace('.', ',')} cm
+                                        <input
+                                          type="range"
+                                          min="0.4"
+                                          max="2.5"
+                                          step="0.05"
+                                          value={curK}
+                                          onChange={(e) => {
+                                            const val = parseFloat(e.target.value);
+                                            const oldRatio = Math.sqrt(curK / curM);
+                                            const newRatio = Math.sqrt(val / curM);
+                                            if (isSpringSimulating && newRatio > 1e-4) {
+                                              springSimElapsedRef.current *= oldRatio / newRatio;
+                                            }
+                                            updateActiveSpringSimConfig((sim) => ({
+                                              ...sim,
+                                              stiffness: val,
+                                            }));
+                                          }}
+                                          className="w-full accent-sky-600 cursor-pointer"
+                                        />
+                                      </div>
+
+                                      <div className="space-y-0.5 pt-1 border-t border-slate-200/70">
+                                        <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
+                                          <span title="f = (1 / 2π) · √(k / m)">
+                                            〰️ Συχνότητα f = <span className="font-serif italic">1/2π √(k/m)</span>:
+                                          </span>
+                                          <span className="text-indigo-700 font-extrabold">
+                                            {curFreqHz.toFixed(2)} Hz
+                                          </span>
                                         </div>
+                                        <input
+                                          type="range"
+                                          min={minFreqHz.toFixed(4)}
+                                          max={maxFreqHz.toFixed(4)}
+                                          step="0.003"
+                                          value={curFreqHz}
+                                          onChange={(e) => {
+                                            const nextFreq = parseFloat(e.target.value);
+                                            const targetRootRatio = Math.max(
+                                              0.4,
+                                              Math.min(2.5, nextFreq * 2 * Math.PI)
+                                            );
+                                            const r = targetRootRatio * targetRootRatio;
+                                            const oldR = Math.max(1e-4, curK / curM);
+                                            const desiredM = curM * Math.pow(oldR / r, 0.12);
+                                            const mLow = Math.max(0.4, 0.4 / r);
+                                            const mHigh = Math.min(2.5, 2.5 / r);
+                                            const nextM = Math.max(
+                                              mLow,
+                                              Math.min(mHigh, desiredM)
+                                            );
+                                            const nextK = Math.max(
+                                              0.4,
+                                              Math.min(2.5, nextM * r)
+                                            );
+                                            const oldRatio = Math.sqrt(curK / curM);
+                                            const newRatio = Math.sqrt(nextK / nextM);
+                                            if (isSpringSimulating && newRatio > 1e-4) {
+                                              springSimElapsedRef.current *= oldRatio / newRatio;
+                                            }
+                                            updateActiveSpringSimConfig((sim) => ({
+                                              ...sim,
+                                              mass: Number(nextM.toFixed(3)),
+                                              stiffness: Number(nextK.toFixed(3)),
+                                            }));
+                                          }}
+                                          className="w-full accent-indigo-600 cursor-pointer"
+                                        />
                                       </div>
                                     </div>
+                                  );
+                                })()}
 
-                                    {/* Table Action Buttons */}
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
+                                {/* 5. Canvas Display Checkboxes (Unified Position Scale + Amplitude +A/-A & Θ.Ι., Natural Length l₀, Force Vectors) */}
+                                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                    <span>📏 Κλίμακα & Πλάτος (+A / -A) & Θ.Ι.</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={activeSpring.showAmplitudeLines}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        if (!checked) {
+                                          setIsSpringSimulating(false);
+                                          setIsSpringPaused(false);
+                                          springSimElapsedRef.current = 0;
+                                          springSimLastFrameTimeRef.current = null;
+                                          setSpringPhaseShiftAnim(null);
+                                        }
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          showAmplitudeLines: checked,
+                                          showPositionScale: checked,
+                                          initialPhaseMode: checked ? sim.initialPhaseMode : 'eq',
+                                        }));
+                                      }}
+                                      className="accent-blue-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+
+                                  {activeSpring.naturalSpringStrokeId && (
+                                    <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                      <span>🌀 Ελατήριο Φυσικού Μήκους (l₀)</span>
+                                      <input
+                                        type="checkbox"
+                                        checked={activeSpring.showNaturalSpring}
+                                        onChange={(e) => {
+                                          const checked = e.target.checked;
                                           updateActiveSpringSimConfig((sim) => ({
                                             ...sim,
-                                            hookeMeasurements: upsertHookeMeasurementRow(
-                                              sim.hookeMeasurements,
-                                              sim.naturalLengthPx,
-                                              spInfo ? spInfo.length : sim.naturalLengthPx,
-                                              curChainCount,
-                                              curForceN
-                                            ),
+                                            showNaturalSpring: checked,
                                           }));
+                                          renderStaticSceneRef.current();
                                         }}
-                                        className="flex-1 py-1 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[10px] cursor-pointer transition shadow-2xs"
-                                        title="Καταγράφει την τρέχουσα μέτρηση (Βαρίδια, m, W=Fελ, Δl) στον Πίνακα Τιμών"
-                                      >
-                                        ➕ Καταγραφή ({curChainCount} β.)
-                                      </button>
-                                      {rows.length > 0 && (
+                                        className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                                      />
+                                    </label>
+                                  )}
+
+                                  <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                    <span>🏹 Διανύσματα Δυνάμεων (W, Fελ, ΣF)</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={activeSpring.showForceVectors}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          showForceVectors: checked,
+                                        }));
+                                      }}
+                                      className="accent-rose-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+                                </div>
+
+                                {/* 6. Live Animated Diagrams Checkboxes: x(t) [Red], υ(t) [Green], α(t) [Purple] */}
+                                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                      Ζωντανά Διαγράμματα (1, 2 ή 3):
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      {(activeSpring.graphs.xt.visible ||
+                                        activeSpring.graphs.vt.visible ||
+                                        activeSpring.graphs.at.visible) && (
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            updateActivePage((page) => ({
-                                              ...page,
-                                              springSims: (page.springSims || []).map((sm) => ({
-                                                ...sm,
-                                                hookeMeasurements: [],
-                                                hookePlottedWeights: [],
-                                                hookeLineDrawn: false,
-                                              })),
-                                            }));
-                                            setHookeLineAnim(null);
+                                            springSimElapsedRef.current = 0;
+                                            springSimLastFrameTimeRef.current = null;
+                                            setSpringGraphClearTick((t) => t + 1);
                                           }}
-                                          className="py-1 px-1.5 rounded-lg bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 font-bold text-[10px] cursor-pointer transition"
-                                          title="Καθαρισμός πίνακα μετρήσεων & διαγράμματος"
+                                          className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                          title="Καθαρισμός των καμπυλών στα διαγράμματα"
                                         >
-                                          🧹
+                                          🧹 Καθαρισμός
                                         </button>
                                       )}
-                                    </div>
-
-                                    {/* Interactive Table of Values (Πίνακας Τιμών Fελ - Δl) */}
-                                    {rows.length > 0 && (
-                                      <div className="bg-white rounded-lg border border-sky-200 overflow-hidden">
-                                        <div className="grid grid-cols-10 bg-slate-100 text-[8.5px] font-extrabold text-slate-600 py-1 px-1 text-center border-b border-slate-200">
-                                          <span className="col-span-2">Βάρη</span>
-                                          <span className="col-span-2">m(kg)</span>
-                                          <span className="col-span-3">W=Fελ(N)</span>
-                                          <span className="col-span-2">Δl(cm)</span>
-                                          <span className="col-span-1 text-sky-600">●</span>
-                                        </div>
-                                        <div className="divide-y divide-slate-100 max-h-32 overflow-y-auto">
-                                          {rows.map((r) => {
-                                            const targetSpId =
-                                              selectedHookeSpringId || activeSpring.eqSpringStrokeId;
-                                            const isCur = Boolean(
-                                              r.springStrokeId && r.springStrokeId === targetSpId
-                                            );
-                                            const mKgStr =
-                                              r.forceN === 0
-                                                ? '0'
-                                                : (r.forceN / 10).toFixed(1).replace('.', ',');
-                                            const dLCmStr = Number((r.deltaLMm / 10).toFixed(1))
-                                              .toString()
-                                              .replace('.', ',');
-                                            return (
-                                              <div
-                                                key={r.id}
-                                                onClick={() => {
-                                                  if (r.springStrokeId) {
-                                                    setSelectedHookeSpringId(r.springStrokeId);
-                                                  }
-                                                }}
-                                                className={`grid grid-cols-10 items-center py-0.5 px-1 text-center text-[9.5px] cursor-pointer ${
-                                                  isCur
-                                                    ? 'bg-sky-100/90 font-extrabold text-sky-900'
-                                                    : 'text-slate-700 font-semibold hover:bg-slate-50'
-                                                }`}
-                                              >
-                                                <span className="col-span-2">{r.weightsCount}</span>
-                                                <span className="col-span-2 text-slate-600">
-                                                  {mKgStr}
-                                                </span>
-                                                <span className="col-span-3 text-rose-600">
-                                                  {Number(r.forceN.toFixed(1)).toString().replace('.', ',')}
-                                                </span>
-                                                <span className="col-span-2 text-sky-700">
-                                                  {dLCmStr}
-                                                </span>
-                                                <button
-                                                  type="button"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    updateActivePage((page) => {
-                                                      const curSim = getActiveSpringSim(page);
-                                                      const existingList =
-                                                        curSim?.hookePlottedWeights || [];
-                                                      const isPlotted = existingList.includes(
-                                                        r.weightsCount
-                                                      );
-                                                      const nextPlotted = isPlotted
-                                                        ? existingList.filter(
-                                                            (w) => w !== r.weightsCount
-                                                          )
-                                                        : [...existingList, r.weightsCount];
-                                                      return {
-                                                        ...page,
-                                                        springSims: (page.springSims || []).map(
-                                                          (sm) => ({
-                                                            ...sm,
-                                                            hookePlottedWeights: nextPlotted,
-                                                          })
-                                                        ),
-                                                      };
-                                                    }, false);
-                                                  }}
-                                                  className="col-span-1 flex items-center justify-center cursor-pointer"
-                                                  title="Εμφάνιση / απόκρυψη σημείου στο διάγραμμα Fελ – Δl"
-                                                >
-                                                  <span
-                                                    className={`w-3 h-3 rounded-full border transition ${
-                                                      r.plotted
-                                                        ? 'bg-sky-600 border-sky-700'
-                                                        : 'bg-white border-slate-400 hover:border-sky-500'
-                                                    }`}
-                                                  />
-                                                </button>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Checkboxes to display the F_ελ – Δl Diagram & Table on the Canvas + Quick Frame Resize */}
-                                    <div className="pt-1 border-t border-sky-200/80 space-y-1.5">
-                                      <label className="flex items-center justify-between text-[10.5px] font-extrabold text-sky-950 cursor-pointer">
-                                        <span>📈 Διάγραμμα Fελ – Δl (στον καμβά)</span>
-                                        <input
-                                          type="checkbox"
-                                          checked={Boolean(activeSpring.graphs.hooke?.visible)}
-                                          onChange={(e) => {
-                                            const checked = e.target.checked;
+                                      {(activeSpring.graphs.xt.customMoved ||
+                                        activeSpring.graphs.vt.customMoved ||
+                                        activeSpring.graphs.at.customMoved) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
                                             updateActiveSpringSimConfig((sim) => ({
                                               ...sim,
                                               graphs: {
-                                                ...sim.graphs,
-                                                hooke: {
-                                                  ...(sim.graphs.hooke || {}),
-                                                  visible: checked,
-                                                },
+                                                xt: { ...sim.graphs.xt, customMoved: false },
+                                                vt: { ...sim.graphs.vt, customMoved: false },
+                                                at: { ...sim.graphs.at, customMoved: false },
                                               },
                                             }));
                                           }}
-                                          className="accent-sky-600 w-4 h-4 cursor-pointer"
-                                        />
-                                      </label>
-                                      <label className="flex items-center justify-between text-[10.5px] font-bold text-sky-900 cursor-pointer">
-                                        <span>📋 Πίνακας Τιμών Fελ – Δl (στον καμβά)</span>
-                                        <input
-                                          type="checkbox"
-                                          checked={Boolean(activeSpring.showHookeCanvasTable)}
-                                          onChange={(e) => {
-                                            const checked = e.target.checked;
-                                            updateActiveSpringSimConfig((sim) => ({
-                                              ...sim,
-                                              showHookeCanvasTable: checked,
-                                            }));
-                                          }}
-                                          className="accent-indigo-600 w-4 h-4 cursor-pointer"
-                                        />
-                                      </label>
-                                      {(Boolean(activeSpring.graphs.hooke?.visible) ||
-                                        Boolean(activeSpring.showHookeCanvasTable)) && (
-                                        <div className="flex items-center justify-between gap-1 pt-0.5">
-                                          <span className="text-[9.5px] font-bold text-slate-600">
-                                            Μέγεθος Πλαισίου (ή σύρε τη γωνία ⤡):
-                                          </span>
-                                          <div className="flex items-center gap-1">
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                updateActiveSpringSimConfig((sim) => {
-                                                  const curW = sim.graphs.hooke?.width || 248;
-                                                  const curH = sim.graphs.hooke?.height || 62;
-                                                  return {
-                                                    ...sim,
-                                                    graphs: {
-                                                      ...sim.graphs,
-                                                      hooke: {
-                                                        ...(sim.graphs.hooke || { visible: true }),
-                                                        width: Math.max(165, Math.round(curW * 0.88)),
-                                                        height: Math.max(36, Math.round(curH * 0.88)),
-                                                      },
-                                                    },
-                                                  };
-                                                });
-                                              }}
-                                              className="px-2 py-0.5 rounded bg-white hover:bg-sky-100 text-sky-900 border border-sky-200 font-extrabold text-[10px] cursor-pointer"
-                                              title="Μίκρυνση Πίνακα & Διαγράμματος"
-                                            >
-                                              − Μικρότερο
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                updateActiveSpringSimConfig((sim) => {
-                                                  const curW = sim.graphs.hooke?.width || 248;
-                                                  const curH = sim.graphs.hooke?.height || 62;
-                                                  return {
-                                                    ...sim,
-                                                    graphs: {
-                                                      ...sim.graphs,
-                                                      hooke: {
-                                                        ...(sim.graphs.hooke || { visible: true }),
-                                                        width: Math.min(480, Math.round(curW * 1.12)),
-                                                        height: Math.min(135, Math.round(curH * 1.12)),
-                                                      },
-                                                    },
-                                                  };
-                                                });
-                                              }}
-                                              className="px-2 py-0.5 rounded bg-white hover:bg-sky-100 text-sky-900 border border-sky-200 font-extrabold text-[10px] cursor-pointer"
-                                              title="Μεγέθυνση Πίνακα & Διαγράμματος"
-                                            >
-                                              + Μεγαλύτερο
-                                            </button>
-                                          </div>
-                                        </div>
+                                          className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
+                                          title="Επαναφέρει τα διαγράμματα δίπλα στο ελατήριο"
+                                        >
+                                          ↺ Στοίχιση
+                                        </button>
                                       )}
                                     </div>
                                   </div>
-                                );
-                              })()
-                            )}
 
-                            {/* 4. Mass (m), Stiffness (k) & Coupled Frequency f = (1/2π)√(k/m) Sliders */}
-                            {(() => {
-                              const maxMVal = Math.max(5.0, Math.ceil(activeSpring.mass));
-                              const curM = Math.max(0.4, Math.min(maxMVal, activeSpring.mass));
-                              const curK = Math.max(0.4, Math.min(2.5, activeSpring.stiffness));
-                              const curRootRatio = Math.sqrt(curK / curM); // √(k/m)
-                              const curFreqHz = curRootRatio / (2 * Math.PI); // f = (1/2π)√(k/m)
-                              const minRootRatio = Math.min(0.45, curRootRatio);
-                              const maxRootRatio = Math.max(1.72, curRootRatio);
-                              const minFreqHz = minRootRatio / (2 * Math.PI);
-                              const maxFreqHz = maxRootRatio / (2 * Math.PI);
-
-                              return (
-                                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
-                                      <span>⚖️ Μάζα Σώματος (m):</span>
-                                      <span className="text-emerald-700 font-extrabold">
-                                        {curM.toFixed(2)} kg
-                                      </span>
-                                    </div>
+                                  <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-amber-800 inline-block" />
+                                      <span>Θέση – Χρόνος x(t)</span>
+                                    </span>
                                     <input
-                                      type="range"
-                                      min="0.4"
-                                      max={maxMVal}
-                                      step="0.05"
-                                      value={curM}
+                                      type="checkbox"
+                                      checked={activeSpring.graphs.xt.visible}
                                       onChange={(e) => {
-                                        const val = parseFloat(e.target.value);
-                                        const oldRatio = Math.sqrt(curK / curM);
-                                        const newRatio = Math.sqrt(curK / val);
-                                        if (isSpringSimulating && newRatio > 1e-4) {
-                                          springSimElapsedRef.current *= oldRatio / newRatio;
-                                        }
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          mass: val,
-                                        }));
-                                      }}
-                                      className="w-full accent-emerald-600 cursor-pointer"
-                                    />
-                                  </div>
-
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
-                                      <span>🌀 Σταθερά Ελατηρίου (k):</span>
-                                      <span className="text-sky-700 font-extrabold">
-                                        {curK.toFixed(2)} N/m
-                                      </span>
-                                    </div>
-                                    <input
-                                      type="range"
-                                      min="0.4"
-                                      max="2.5"
-                                      step="0.05"
-                                      value={curK}
-                                      onChange={(e) => {
-                                        const val = parseFloat(e.target.value);
-                                        const oldRatio = Math.sqrt(curK / curM);
-                                        const newRatio = Math.sqrt(val / curM);
-                                        if (isSpringSimulating && newRatio > 1e-4) {
-                                          springSimElapsedRef.current *= oldRatio / newRatio;
-                                        }
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          stiffness: val,
-                                        }));
-                                      }}
-                                      className="w-full accent-sky-600 cursor-pointer"
-                                    />
-                                  </div>
-
-                                  <div className="space-y-0.5 pt-1 border-t border-slate-200/70">
-                                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-700">
-                                      <span title="f = (1 / 2π) · √(k / m)">
-                                        〰️ Συχνότητα f = <span className="font-serif italic">1/2π √(k/m)</span>:
-                                      </span>
-                                      <span className="text-indigo-700 font-extrabold">
-                                        {curFreqHz.toFixed(2)} Hz
-                                      </span>
-                                    </div>
-                                    <input
-                                      type="range"
-                                      min={minFreqHz.toFixed(4)}
-                                      max={maxFreqHz.toFixed(4)}
-                                      step="0.003"
-                                      value={curFreqHz}
-                                      onChange={(e) => {
-                                        const nextFreq = parseFloat(e.target.value);
-                                        const targetRootRatio = Math.max(
-                                          0.4,
-                                          Math.min(2.5, nextFreq * 2 * Math.PI)
-                                        );
-                                        const r = targetRootRatio * targetRootRatio; // target k / m
-                                        const oldR = Math.max(1e-4, curK / curM);
-                                        // Change mainly k (~88%) and make only a very small inverse change to m (~12%)!
-                                        const desiredM = curM * Math.pow(oldR / r, 0.12);
-                                        const mLow = Math.max(0.4, 0.4 / r);
-                                        const mHigh = Math.min(2.5, 2.5 / r);
-                                        const nextM = Math.max(
-                                          mLow,
-                                          Math.min(mHigh, desiredM)
-                                        );
-                                        const nextK = Math.max(
-                                          0.4,
-                                          Math.min(2.5, nextM * r)
-                                        );
-                                        const oldRatio = Math.sqrt(curK / curM);
-                                        const newRatio = Math.sqrt(nextK / nextM);
-                                        if (isSpringSimulating && newRatio > 1e-4) {
-                                          springSimElapsedRef.current *= oldRatio / newRatio;
-                                        }
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          mass: Number(nextM.toFixed(3)),
-                                          stiffness: Number(nextK.toFixed(3)),
-                                        }));
-                                      }}
-                                      className="w-full accent-indigo-600 cursor-pointer"
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })()}
-
-                            {/* 5. Canvas Display Checkboxes (Unified Position Scale + Amplitude +A/-A & Θ.Ι., Natural Length l₀, Force Vectors) */}
-                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                              <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                <span>📏 Κλίμακα & Πλάτος (+A / -A) & Θ.Ι.</span>
-                                <input
-                                  type="checkbox"
-                                  checked={activeSpring.showAmplitudeLines}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    if (!checked) {
-                                      setIsSpringSimulating(false);
-                                      setIsSpringPaused(false);
-                                      springSimElapsedRef.current = 0;
-                                      springSimLastFrameTimeRef.current = null;
-                                      setSpringPhaseShiftAnim(null);
-                                    }
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      showAmplitudeLines: checked,
-                                      showPositionScale: checked,
-                                      initialPhaseMode: checked ? sim.initialPhaseMode : 'eq',
-                                    }));
-                                  }}
-                                  className="accent-blue-600 w-4 h-4 cursor-pointer"
-                                />
-                              </label>
-
-                              {activeSpring.naturalSpringStrokeId && (
-                                <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                  <span>🌀 Ελατήριο Φυσικού Μήκους (l₀)</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={activeSpring.showNaturalSpring}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      updateActiveSpringSimConfig((sim) => ({
-                                        ...sim,
-                                        showNaturalSpring: checked,
-                                      }));
-                                      renderStaticSceneRef.current();
-                                    }}
-                                    className="accent-emerald-600 w-4 h-4 cursor-pointer"
-                                  />
-                                </label>
-                              )}
-
-                              <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                <span>🏹 Διανύσματα Δυνάμεων (W, Fελ, ΣF)</span>
-                                <input
-                                  type="checkbox"
-                                  checked={activeSpring.showForceVectors}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      showForceVectors: checked,
-                                    }));
-                                  }}
-                                  className="accent-rose-600 w-4 h-4 cursor-pointer"
-                                />
-                              </label>
-                            </div>
-
-                            {/* 6. Live Animated Diagrams Checkboxes: x(t) [Red], υ(t) [Green], α(t) [Purple] */}
-                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                                  Ζωντανά Διαγράμματα (1, 2 ή 3):
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  {(activeSpring.graphs.xt.visible ||
-                                    activeSpring.graphs.vt.visible ||
-                                    activeSpring.graphs.at.visible) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        springSimElapsedRef.current = 0;
-                                        springSimLastFrameTimeRef.current = null;
-                                        setSpringGraphClearTick((t) => t + 1);
-                                      }}
-                                      className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
-                                      title="Καθαρισμός των καμπυλών στα διαγράμματα"
-                                    >
-                                      🧹 Καθαρισμός
-                                    </button>
-                                  )}
-                                  {(activeSpring.graphs.xt.customMoved ||
-                                    activeSpring.graphs.vt.customMoved ||
-                                    activeSpring.graphs.at.customMoved) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
+                                        const checked = e.target.checked;
                                         updateActiveSpringSimConfig((sim) => ({
                                           ...sim,
                                           graphs: {
-                                            xt: { ...sim.graphs.xt, customMoved: false },
-                                            vt: { ...sim.graphs.vt, customMoved: false },
-                                            at: { ...sim.graphs.at, customMoved: false },
+                                            ...sim.graphs,
+                                            xt: { ...sim.graphs.xt, visible: checked },
                                           },
                                         }));
                                       }}
-                                      className="text-[9.5px] font-bold text-sky-700 hover:underline cursor-pointer"
-                                      title="Επαναφέρει τα διαγράμματα δίπλα στο ελατήριο"
-                                    >
-                                      ↺ Στοίχιση
-                                    </button>
-                                  )}
+                                      className="accent-amber-800 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+
+                                  <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
+                                      <span>Ταχύτητα – Χρόνος υ(t)</span>
+                                    </span>
+                                    <input
+                                      type="checkbox"
+                                      checked={activeSpring.graphs.vt.visible}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          graphs: {
+                                            ...sim.graphs,
+                                            vt: { ...sim.graphs.vt, visible: checked },
+                                          },
+                                        }));
+                                      }}
+                                      className="accent-purple-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+
+                                  <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
+                                      <span>Επιτάχυνση – Χρόνος α(t)</span>
+                                    </span>
+                                    <input
+                                      type="checkbox"
+                                      checked={activeSpring.graphs.at.visible}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          graphs: {
+                                            ...sim.graphs,
+                                            at: { ...sim.graphs.at, visible: checked },
+                                          },
+                                        }));
+                                      }}
+                                      className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2.5 text-[10px] text-sky-950 leading-snug space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-extrabold text-[10.5px] text-sky-900">
+                                    🪝 Μελέτη Νόμου Hooke (Fελ = k·Δl)
+                                  </span>
+                                </div>
+
+                                <div className="pt-1 border-t border-sky-200/80 space-y-1.5">
+                                  <label className="flex items-center justify-between text-[10.5px] font-bold text-sky-900 cursor-pointer">
+                                    <span>📋 Πίνακας Τιμών Fελ – Δl (στον καμβά)</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(activeSpring.showHookeCanvasTable)}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          showHookeCanvasTable: checked,
+                                        }));
+                                      }}
+                                      className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+                                  <label className="flex items-center justify-between text-[10.5px] font-extrabold text-sky-950 cursor-pointer">
+                                    <span>📈 Διάγραμμα Fελ – Δl (στον καμβά)</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(activeSpring.graphs.hooke?.visible)}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        updateActiveSpringSimConfig((sim) => ({
+                                          ...sim,
+                                          graphs: {
+                                            ...sim.graphs,
+                                            hooke: {
+                                              ...(sim.graphs.hooke || {}),
+                                              visible: checked,
+                                            },
+                                          },
+                                        }));
+                                      }}
+                                      className="accent-sky-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
                                 </div>
                               </div>
-
-                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                                <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-800 inline-block" />
-                                  <span>Θέση – Χρόνος x(t)</span>
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={activeSpring.graphs.xt.visible}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      graphs: {
-                                        ...sim.graphs,
-                                        xt: { ...sim.graphs.xt, visible: checked },
-                                      },
-                                    }));
-                                  }}
-                                  className="accent-amber-800 w-4 h-4 cursor-pointer"
-                                />
-                              </label>
-
-                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                                <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
-                                  <span>Ταχύτητα – Χρόνος υ(t)</span>
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={activeSpring.graphs.vt.visible}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      graphs: {
-                                        ...sim.graphs,
-                                        vt: { ...sim.graphs.vt, visible: checked },
-                                      },
-                                    }));
-                                  }}
-                                  className="accent-purple-600 w-4 h-4 cursor-pointer"
-                                />
-                              </label>
-
-                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                                <span className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
-                                  <span>Επιτάχυνση – Χρόνος α(t)</span>
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={activeSpring.graphs.at.visible}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      graphs: {
-                                        ...sim.graphs,
-                                        at: { ...sim.graphs.at, visible: checked },
-                                      },
-                                    }));
-                                  }}
-                                  className="accent-emerald-600 w-4 h-4 cursor-pointer"
-                                />
-                              </label>
-                            </div>
+                            )}
                           </>
                         )}
                       </div>
