@@ -43,7 +43,10 @@ dialog::backdrop {
 @keyframes rulerPtrDashReveal {
   0% {
     clip-path: inset(-4px 100% -4px 0);
-    opacity: 0.45;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
   }
   100% {
     clip-path: inset(-4px 0% -4px 0);
@@ -61,9 +64,13 @@ dialog::backdrop {
 }
 
 .ruler-ptr-dash-anim {
-  animation: rulerPtrDashReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-name: rulerPtrDashReveal;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
 }
 
 .ruler-ptr-badge-anim {
-  animation: rulerPtrBadgeFadeIn 0.35s ease-out 0.22s both;
+  animation-name: rulerPtrBadgeFadeIn;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
 }
