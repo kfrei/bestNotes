@@ -10932,6 +10932,33 @@ export default function App() {
     const cosA = Math.cos(rad);
     const sinA = Math.sin(rad);
 
+    // Require the ruler to be vertical (near ±90°) to show spring pointer readouts
+    if (Math.abs(sinA) < 0.96) return null;
+
+    // Require the vertical ruler to stand very close to at least one spring with an attached pointer arrow
+    const closeEdgeThreshold = rulerH / 2 + 32; // within 32px of the ruler's vertical edge
+    const hasNearbySpringWithPointer = activePage.strokes.some((cand) => {
+      if (!cand.attachedToSpringId || cand.points.length < 2) return false;
+      const isSelf = cand.id === ptrStroke.id;
+      const cDx = isSelf ? dispDx : 0;
+      const cDy = isSelf ? dispDy : 0;
+      const cP0 = { x: cand.points[0].x + cDx, y: cand.points[0].y + cDy };
+      const cPEnd = {
+        x: cand.points[cand.points.length - 1].x + cDx,
+        y: cand.points[cand.points.length - 1].y + cDy,
+      };
+      const sPerp0 = -(cP0.x - rulerState.x) * sinA + (cP0.y - rulerState.y) * cosA;
+      const sPerpEnd = -(cPEnd.x - rulerState.x) * sinA + (cPEnd.y - rulerState.y) * cosA;
+      const segPerpDist =
+        sPerp0 * sPerpEnd <= 0 ? 0 : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
+      if (segPerpDist > closeEdgeThreshold) return false;
+      const cTip = Math.abs(sPerpEnd) <= Math.abs(sPerp0) ? cPEnd : cP0;
+      const cLocalX = (cTip.x - rulerState.x) * cosA + (cTip.y - rulerState.y) * sinA;
+      const cXPos = cLocalX + rulerW / 2;
+      return cXPos >= -6 && cXPos <= rulerW + 6;
+    });
+    if (!hasNearbySpringWithPointer) return null;
+
     const p0 = {
       x: ptrStroke.points[0].x + dispDx,
       y: ptrStroke.points[0].y + dispDy,
@@ -35682,7 +35709,32 @@ export default function App() {
                               const dx = (e.clientX - st.startClientX) / zoomRef.current;
                               const dy = (e.clientY - st.startClientY) / zoomRef.current;
                               const nextX = Math.max(40, Math.min(pW - 40, st.initialX + dx));
-                              const nextY = Math.max(40, Math.min(pH - 40, st.initialY + dy));
+                              let nextY = Math.max(40, Math.min(pH - 40, st.initialY + dy));
+                              const rad = (rulerState.angle * Math.PI) / 180;
+                              const sinA = Math.sin(rad);
+                              const cosA = Math.cos(rad);
+                              if (Math.abs(sinA) >= 0.96) {
+                                // Gently snap the 0 cm origin of the vertical ruler to a nearby spring pointer arrow
+                                const closeEdgeThreshold = rulerH / 2 + 32;
+                                for (const cand of activePage.strokes) {
+                                  if (!cand.attachedToSpringId || cand.points.length < 2) continue;
+                                  const cP0 = cand.points[0];
+                                  const cPEnd = cand.points[cand.points.length - 1];
+                                  const sPerp0 = -(cP0.x - nextX) * sinA + (cP0.y - nextY) * cosA;
+                                  const sPerpEnd = -(cPEnd.x - nextX) * sinA + (cPEnd.y - nextY) * cosA;
+                                  const segPerpDist =
+                                    sPerp0 * sPerpEnd <= 0
+                                      ? 0
+                                      : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
+                                  if (segPerpDist <= closeEdgeThreshold) {
+                                    const targetY = cPEnd.y + (rulerW / 2) * (sinA >= 0 ? 1 : -1);
+                                    if (Math.abs(nextY - targetY) <= 9) {
+                                      nextY = targetY;
+                                      break;
+                                    }
+                                  }
+                                }
+                              }
                               setRulerState((prev) => ({ ...prev, x: nextX, y: nextY }));
                             }}
                             onPointerUp={(e) => {
