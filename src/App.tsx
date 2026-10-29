@@ -10033,18 +10033,26 @@ export default function App() {
     stiffness: number
   ): number => {
     const ratio = mass / Math.max(0.25, stiffness);
-    // Exact integer-millimeter unit elongation Δl₁ (1 mm = 4.6 px on A4 canvas) so Hooke's Law Δl = n · Δl₁ is crystal-clear on the mm Ruler!
-    const unitDeltaLPx = Math.max(5, Math.round((naturalLengthPx * 0.25) / 4.6)) * 4.6;
-    if (uy > 0.45) {
-      // Hanging from ceiling: gravity elongates the spring strictly linearly by Hooke's Law (l = l₀ + (m/k)·Δl₁)
+    // Exact integer-millimeter unit elongation/compression Δl₁ (1 mm = 4.6 px on A4 canvas) so Hooke's Law Δl = n · Δl₁ is crystal-clear on the mm Ruler!
+    if (uy > 0.78) {
+      // Hanging vertically from ceiling: gravity elongates the spring downwards (l = l₀ + (m/k)·Δl₁)
+      const unitDeltaLPx = Math.max(5, Math.round((naturalLengthPx * 0.25) / 4.6)) * 4.6;
       return naturalLengthPx + unitDeltaLPx * ratio;
     }
-    if (uy < -0.45) {
-      // Standing on floor: gravity compresses the spring downwards
-      return Math.max(naturalLengthPx * 0.32, naturalLengthPx - unitDeltaLPx * 0.85 * ratio);
+    if (uy < -0.78) {
+      // Standing vertically on floor: gravity compresses the spring downwards towards the floor (l = l₀ - (m/k)·Δl₁)
+      const unitFloorDeltaLPx = Math.max(3, Math.round((naturalLengthPx * 0.15) / 4.6)) * 4.6;
+      return Math.max(naturalLengthPx * 0.26, naturalLengthPx - unitFloorDeltaLPx * ratio);
     }
-    // Inclined plane or horizontal spring
-    return Math.max(naturalLengthPx * 0.36, naturalLengthPx + unitDeltaLPx * uy * ratio);
+    // Inclined plane or horizontal spring: gravity component along the spring axis is proportional to uy = ±sin(θ)
+    const inclineFactor = Math.max(0.2, Math.abs(uy));
+    const unitInclineDeltaLPx =
+      Math.max(3, Math.round((naturalLengthPx * 0.22 * inclineFactor) / 4.6)) * 4.6;
+    const signUy = uy >= 0 ? 1 : -1;
+    return Math.max(
+      naturalLengthPx * 0.28,
+      naturalLengthPx + signUy * unitInclineDeltaLPx * ratio
+    );
   };
 
   const getWeightChainIds = (page: NotePage, rootWeightId: string): string[] => {
@@ -10120,10 +10128,13 @@ export default function App() {
     const scaleM = isHookedOrChained ? 1.0 : Math.pow(updatedSim.mass, 0.38);
     const newMassW = Math.max(16, updatedSim.baseMassWidthPx * scaleM);
     const newMassH = Math.max(16, updatedSim.baseMassHeightPx * scaleM);
+    const halfSpanAlongAxis = (w: number, h: number) =>
+      Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
     // Floor spring has a slight 4px visual breathing gap or direct contact at the top terminal
-    const floorGap = uy < -0.45 ? 4 : massStroke.shapeType === 'hooked-weight' ? -2 : 0;
-    const newMassCx = newFreePt.x + ux * (newMassW / 2 + floorGap);
-    const newMassCy = newFreePt.y + uy * (newMassH / 2 + floorGap);
+    const floorGap = uy < -0.45 ? 2 : massStroke.shapeType === 'hooked-weight' ? -2 : 0;
+    const mHalfSpan = halfSpanAlongAxis(newMassW, newMassH);
+    const newMassCx = newFreePt.x + ux * (mHalfSpan + floorGap);
+    const newMassCy = newFreePt.y + uy * (mHalfSpan + floorGap);
     const nextMassStroke = scaleAndMoveMassStrokeToBox(
       massStroke,
       newMassCx,
@@ -10134,8 +10145,8 @@ export default function App() {
 
     const updatedChainMap = new Map<string, StrokeObject>();
     updatedChainMap.set(massStroke.id, nextMassStroke);
-    let prevBottomX = newMassCx + ux * (newMassW / 2);
-    let prevBottomY = newMassCy + uy * (newMassH / 2);
+    let prevBottomX = newMassCx + ux * mHalfSpan;
+    let prevBottomY = newMassCy + uy * mHalfSpan;
 
     for (let k = 1; k < chainIds.length; k++) {
       const childSt = page.strokes.find((s) => s.id === chainIds[k]);
@@ -10143,13 +10154,14 @@ export default function App() {
       const cb = getStrokeBounds(childSt);
       const cw = Math.max(14, cb.maxX - cb.minX);
       const ch = Math.max(14, cb.maxY - cb.minY);
-      const hookOverlap = childSt.shapeType === 'hooked-weight' ? -4 : 0;
-      const childCx = prevBottomX + ux * (cw / 2 + hookOverlap);
-      const childCy = prevBottomY + uy * (ch / 2 + hookOverlap);
+      const cHalfSpan = halfSpanAlongAxis(cw, ch);
+      const hookOverlap = childSt.shapeType === 'hooked-weight' && uy > 0.45 ? -4 : 0;
+      const childCx = prevBottomX + ux * (cHalfSpan + hookOverlap);
+      const childCy = prevBottomY + uy * (cHalfSpan + hookOverlap);
       const movedChild = scaleAndMoveMassStrokeToBox(childSt, childCx, childCy, cw, ch);
       updatedChainMap.set(childSt.id, movedChild);
-      prevBottomX = childCx + ux * (cw / 2);
-      prevBottomY = childCy + uy * (ch / 2);
+      prevBottomX = childCx + ux * cHalfSpan;
+      prevBottomY = childCy + uy * cHalfSpan;
     }
 
     const nextStrokes = page.strokes.map((s) => {
@@ -10375,9 +10387,12 @@ export default function App() {
       const wVec = orientSpringWidthVec(ux, uy, info.springWidth, info.widthVec);
       const eqCorners = buildSpringQuadCorners(eqStartTerm, eqEndTerm, wVec);
 
-      const floorGap = uy < -0.45 ? 4 : mass.shapeType === 'hooked-weight' ? -2 : 0;
-      const newMassCx = eqFreePt.x + ux * (massW / 2 + floorGap);
-      const newMassCy = eqFreePt.y + uy * (massH / 2 + floorGap);
+      const halfSpanAlongAxis = (w: number, h: number) =>
+        Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
+      const floorGap = uy < -0.45 ? 2 : mass.shapeType === 'hooked-weight' ? -2 : 0;
+      const rootHalfSpan = halfSpanAlongAxis(massW, massH);
+      const newMassCx = eqFreePt.x + ux * (rootHalfSpan + floorGap);
+      const newMassCy = eqFreePt.y + uy * (rootHalfSpan + floorGap);
       const movedMassStroke = scaleAndMoveMassStrokeToBox(
         mass,
         newMassCx,
@@ -10388,21 +10403,22 @@ export default function App() {
 
       const updatedChainMap = new Map<string, StrokeObject>();
       updatedChainMap.set(mass.id, movedMassStroke);
-      let prevBottomX = newMassCx + ux * (massW / 2);
-      let prevBottomY = newMassCy + uy * (massH / 2);
+      let prevBottomX = newMassCx + ux * rootHalfSpan;
+      let prevBottomY = newMassCy + uy * rootHalfSpan;
       for (let k = 1; k < chainIds.length; k++) {
         const childSt = page.strokes.find((s) => s.id === chainIds[k]);
         if (!childSt) continue;
         const cb = getStrokeBounds(childSt);
         const cw = Math.max(14, cb.maxX - cb.minX);
         const ch = Math.max(14, cb.maxY - cb.minY);
+        const childHalfSpan = halfSpanAlongAxis(cw, ch);
         const hookOverlap = childSt.shapeType === 'hooked-weight' ? -4 : 0;
-        const childCx = prevBottomX + ux * (cw / 2 + hookOverlap);
-        const childCy = prevBottomY + uy * (ch / 2 + hookOverlap);
+        const childCx = prevBottomX + ux * (childHalfSpan + hookOverlap);
+        const childCy = prevBottomY + uy * (childHalfSpan + hookOverlap);
         const movedChild = scaleAndMoveMassStrokeToBox(childSt, childCx, childCy, cw, ch);
         updatedChainMap.set(childSt.id, movedChild);
-        prevBottomX = childCx + ux * (cw / 2);
-        prevBottomY = childCy + uy * (ch / 2);
+        prevBottomX = childCx + ux * childHalfSpan;
+        prevBottomY = childCy + uy * childHalfSpan;
       }
 
       const nextStrokes = page.strokes.map((s) => {
@@ -10488,9 +10504,35 @@ export default function App() {
       const childSubChain = getWeightChainIds(page, childSt.id);
       if (childSubChain.includes(parentSt.id)) return page;
 
+      const rootIdBefore = getWeightChainRootId(page, parentSt.id);
+      const attachedSimBefore = getValidSpringSims(page).find(
+        (sm) => sm.massStrokeId === rootIdBefore
+      );
+      let ux = 0;
+      let uy = 1;
+      if (attachedSimBefore) {
+        const eqSp = page.strokes.find((s) => s.id === attachedSimBefore.eqSpringStrokeId);
+        if (eqSp) {
+          const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+          const fixedPt =
+            attachedSimBefore.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+          const freePt =
+            attachedSimBefore.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+          ux = (freePt.x - fixedPt.x) / spInfo.length;
+          uy = (freePt.y - fixedPt.y) / spInfo.length;
+        }
+      }
+      const halfSpanAlongAxis = (w: number, h: number) =>
+        Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
+
       const pb = getStrokeBounds(parentSt);
+      const pw = Math.max(14, pb.maxX - pb.minX);
+      const ph = Math.max(14, pb.maxY - pb.minY);
       const parentCx = (pb.minX + pb.maxX) / 2;
-      let prevBottomY = pb.maxY;
+      const parentCy = (pb.minY + pb.maxY) / 2;
+      const parentHalfSpan = halfSpanAlongAxis(pw, ph);
+      let prevEndX = parentCx + ux * parentHalfSpan;
+      let prevEndY = parentCy + uy * parentHalfSpan;
 
       const updatedMap = new Map<string, StrokeObject>();
       for (let k = 0; k < childSubChain.length; k++) {
@@ -10500,15 +10542,17 @@ export default function App() {
         const sb = getStrokeBounds(subSt);
         const sw = Math.max(14, sb.maxX - sb.minX);
         const sh = Math.max(14, sb.maxY - sb.minY);
+        const subHalfSpan = halfSpanAlongAxis(sw, sh);
         const hookOverlap = subSt.shapeType === 'hooked-weight' ? -4 : 0;
-        const targetCx = parentCx;
-        const targetCy = prevBottomY + sh / 2 + hookOverlap;
+        const targetCx = prevEndX + ux * (subHalfSpan + hookOverlap);
+        const targetCy = prevEndY + uy * (subHalfSpan + hookOverlap);
         const movedSub = scaleAndMoveMassStrokeToBox(subSt, targetCx, targetCy, sw, sh);
         updatedMap.set(subId, {
           ...movedSub,
           attachedToWeightId: k === 0 ? parentSt.id : subSt.attachedToWeightId,
         });
-        prevBottomY = targetCy + sh / 2;
+        prevEndX = targetCx + ux * subHalfSpan;
+        prevEndY = targetCy + uy * subHalfSpan;
       }
 
       const nextPage: NotePage = {
@@ -12271,7 +12315,7 @@ export default function App() {
       //    Live Force Vectors & 3 Draggable Live Graphs x(t), υ(t), α(t))
       // ======================================================================
       if (springSettleAnim?.springStrokeId) {
-        const SETTLE_DURATION_MS = 3000;
+        const SETTLE_DURATION_MS = 2200;
         const elapsedMs = now - springSettleAnim.startTime;
         const unloadedSp = activePage.strokes.find(
           (s) => s.id === springSettleAnim.springStrokeId
@@ -12290,10 +12334,10 @@ export default function App() {
           const u = Math.max(0, Math.min(1, elapsedSecSettle / (SETTLE_DURATION_MS / 1000)));
           const startLen = springSettleAnim.fromLengthPx ?? axLen + 36;
           const rawDelta = axLen - startLen;
-          const initDelta = Math.abs(rawDelta) >= 14 ? rawDelta : -28;
-          const decay = Math.exp(-1.75 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
+          const initDelta = Math.abs(rawDelta) >= 12 ? rawDelta : rawDelta >= 0 ? 24 : -24;
+          const decay = Math.exp(-2.25 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
           const deltaFromEqAlongAxis =
-            -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 1.45);
+            -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 2.15);
           const curFreePt = {
             x: freePt.x + deltaFromEqAlongAxis * axisUx,
             y: freePt.y + deltaFromEqAlongAxis * axisUy,
@@ -12356,7 +12400,7 @@ export default function App() {
               : activeSpringSim.customInitialPhaseRad ?? -Math.PI / 2;
           const A = Math.max(16, activeSpringSim.amplitudePx || 55);
 
-          const SETTLE_DURATION_MS = 3000;
+          const SETTLE_DURATION_MS = 2200;
           const isSettlingToEq =
             springSettleAnim !== null &&
             springSettleAnim.simId === activeSpringSim.id &&
@@ -12415,16 +12459,16 @@ export default function App() {
             dispDx = xDisp * oscUx;
             dispDy = xDisp * oscUy;
           } else if (isSettlingToEq && springSettleAnim) {
-            // Smooth 3.0s damped harmonic oscillation (φθίνουσα ταλάντωση) around the new Equilibrium (Θ.Ι.)!
+            // Fast 2.2s damped harmonic oscillation (γρήγορη φθίνουσα ταλάντωση 2.2s) around the new Equilibrium (Θ.Ι.)!
             const elapsedSecSettle = (now - springSettleAnim.startTime) / 1000;
             const u = Math.max(0, Math.min(1, elapsedSecSettle / (SETTLE_DURATION_MS / 1000)));
             const startLen = springSettleAnim.fromLengthPx ?? activeSpringSim.naturalLengthPx;
             const rawDelta = axLen - startLen;
             const initDelta =
-              Math.abs(rawDelta) >= 16 ? rawDelta : rawDelta >= 0 ? 28 : -28;
-            const decay = Math.exp(-1.75 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
+              Math.abs(rawDelta) >= 12 ? rawDelta : rawDelta >= 0 ? 24 : -24;
+            const decay = Math.exp(-2.25 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
             const deltaFromEqAlongAxis =
-              -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 1.45);
+              -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 2.15);
             dispDx = deltaFromEqAlongAxis * axisUx;
             dispDy = deltaFromEqAlongAxis * axisUy;
             xDisp = dispDx * oscUx + dispDy * oscUy;
@@ -12514,7 +12558,7 @@ export default function App() {
                 activeSpringSim.initialPhaseMode !== 'eqDown'));
 
           // 6B-0. Faint Grey Position Scale & Draggable Position Pointer Arrow (αχνή γκρι κλίμακα θέσης με βελάκι δείκτη) on the left of the mass block!
-          if (showSpringOscGuides && Boolean(activeSpringSim.showPositionScale)) {
+          if (showSpringOscGuides && activeSpringSim.showAmplitudeLines) {
             const scaleDist = massW / 2 + 18;
             const scaleMidX = eqMassCx - perpUx * scaleDist;
             const scaleMidY = eqMassCy - perpUy * scaleDist;
@@ -16116,7 +16160,7 @@ export default function App() {
           pt.y >= spHit.posScaleBox.minY - 6 &&
           pt.y <= spHit.posScaleBox.maxY + 6);
       const hitMassBlock =
-        isSpringSimulating &&
+        (isSpringSimulating || Boolean(getActiveSpringSim(activePage)?.showAmplitudeLines)) &&
         pt.x >= spHit.massBox.minX - 8 &&
         pt.x <= spHit.massBox.maxX + 8 &&
         pt.y >= spHit.massBox.minY - 8 &&
@@ -20398,8 +20442,6 @@ export default function App() {
             const mH = Math.max(16, mb.maxY - mb.minY);
             const candCx = (mb.minX + mb.maxX) / 2 + rawDx;
             const candCy = (mb.minY + mb.maxY) / 2 + rawDy;
-            const candTopHookX = candCx;
-            const candTopHookY = mb.minY + rawDy;
             const hookOverlap = draggedSt.shapeType === 'hooked-weight' ? -4 : 0;
             const draggedDescendants = new Set(getWeightChainIds(activePage, draggedSt.id));
 
@@ -20411,22 +20453,40 @@ export default function App() {
                 continue;
               }
               if (other.shapeType === 'spring') {
-                // If this spring ALREADY has a weight chain hanging on it, snap to the bottom hook of the LAST weight in that chain!
+                const spInfo = getSpringTerminalsAndWidthVec(other);
+                // If this spring ALREADY has a weight chain attached, snap to the outer end of the LAST weight in that chain (only in Hooke's Law Mode)!
                 const existingSimOnSp = getValidSpringSims(activePage).find(
                   (sm) => sm.eqSpringStrokeId === other.id
                 );
                 if (existingSimOnSp) {
+                  if (existingSimOnSp.showAmplitudeLines) continue;
+                  const fixedPt =
+                    existingSimOnSp.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+                  const freePt =
+                    existingSimOnSp.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                  const ux = (freePt.x - fixedPt.x) / spInfo.length;
+                  const uy = (freePt.y - fixedPt.y) / spInfo.length;
+                  const halfSpan = (w: number, h: number) =>
+                    Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
                   const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
                   if (existingChain.length > 0 && !existingChain.includes(draggedSt.id)) {
                     const tailId = existingChain[existingChain.length - 1];
                     const tailSt = activePage.strokes.find((s) => s.id === tailId);
                     if (tailSt) {
                       const tb = getStrokeBounds(tailSt);
-                      const tailBottomX = (tb.minX + tb.maxX) / 2;
-                      const tailBottomY = tb.maxY;
+                      const tw = Math.max(14, tb.maxX - tb.minX);
+                      const th = Math.max(14, tb.maxY - tb.minY);
+                      const tailCx = (tb.minX + tb.maxX) / 2;
+                      const tailCy = (tb.minY + tb.maxY) / 2;
+                      const tailHalf = halfSpan(tw, th);
+                      const tailAttachX = tailCx + ux * tailHalf;
+                      const tailAttachY = tailCy + uy * tailHalf;
+                      const candHalf = halfSpan(mW, mH);
+                      const candAttachX = candCx - ux * candHalf;
+                      const candAttachY = candCy - uy * candHalf;
                       const dTail = Math.hypot(
-                        candTopHookX - tailBottomX,
-                        candTopHookY - tailBottomY
+                        candAttachX - tailAttachX,
+                        candAttachY - tailAttachY
                       );
                       if (dTail <= 46 && (!matchedPhysicsMagnet || dTail < matchedPhysicsMagnet.dist)) {
                         matchedPhysicsMagnet = {
@@ -20434,10 +20494,10 @@ export default function App() {
                           springStrokeId: tailSt.id,
                           parentWeightId: tailSt.id,
                           childWeightId: draggedSt.id,
-                          targetX: tailBottomX,
-                          targetY: tailBottomY,
-                          snapDx: tailBottomX - candTopHookX,
-                          snapDy: tailBottomY + hookOverlap - candTopHookY,
+                          targetX: tailAttachX,
+                          targetY: tailAttachY,
+                          snapDx: tailAttachX + ux * hookOverlap - candAttachX,
+                          snapDy: tailAttachY + uy * hookOverlap - candAttachY,
                           dist: dTail,
                         };
                       }
@@ -20446,7 +20506,6 @@ export default function App() {
                   continue;
                 }
 
-                const spInfo = getSpringTerminalsAndWidthVec(other);
                 // Determine which terminal of the spring is the free end
                 let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
                 if (!other.springSupport) {
@@ -20458,8 +20517,9 @@ export default function App() {
                 const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
                 const ux = (freePt.x - fixedPt.x) / spInfo.length;
                 const uy = (freePt.y - fixedPt.y) / spInfo.length;
-                const candAttachX = candCx - ux * (mW / 2);
-                const candAttachY = candCy - uy * (mH / 2);
+                const candHalf = Math.abs(ux) * (mW / 2) + Math.abs(uy) * (mH / 2);
+                const candAttachX = candCx - ux * candHalf;
+                const candAttachY = candCy - uy * candHalf;
                 const d = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
                 if (d <= 46 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
                   matchedPhysicsMagnet = {
@@ -20479,21 +20539,61 @@ export default function App() {
                 !draggedDescendants.has(other.id)
               ) {
                 const otherRootId = getWeightChainRootId(activePage, other.id);
+                const attachedSimOnOther = getValidSpringSims(activePage).find(
+                  (sm) => sm.massStrokeId === otherRootId
+                );
+                if (attachedSimOnOther?.showAmplitudeLines) continue;
                 const otherChain = getWeightChainIds(activePage, otherRootId);
                 if (otherChain.includes(draggedSt.id)) continue;
+                let ux = 0;
+                let uy = 1;
+                if (attachedSimOnOther) {
+                  const eqSp = activePage.strokes.find(
+                    (s) => s.id === attachedSimOnOther.eqSpringStrokeId
+                  );
+                  if (eqSp) {
+                    const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+                    const fixedPt =
+                      attachedSimOnOther.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+                    const freePt =
+                      attachedSimOnOther.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                    ux = (freePt.x - fixedPt.x) / spInfo.length;
+                    uy = (freePt.y - fixedPt.y) / spInfo.length;
+                  }
+                }
+                const halfSpan = (w: number, h: number) =>
+                  Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
                 const tailId = otherChain[otherChain.length - 1] || other.id;
                 const tailSt = activePage.strokes.find((s) => s.id === tailId) || other;
                 const tb = getStrokeBounds(tailSt);
-                const tailBottomHookX = (tb.minX + tb.maxX) / 2;
-                const tailBottomHookY = tb.maxY;
+                const tw = Math.max(14, tb.maxX - tb.minX);
+                const th = Math.max(14, tb.maxY - tb.minY);
+                const tailCx = (tb.minX + tb.maxX) / 2;
+                const tailCy = (tb.minY + tb.maxY) / 2;
+                const tailHalf = halfSpan(tw, th);
+                const tailAttachX = tailCx + ux * tailHalf;
+                const tailAttachY = tailCy + uy * tailHalf;
+
                 const ob = getStrokeBounds(other);
+                const ow = Math.max(14, ob.maxX - ob.minX);
+                const oh = Math.max(14, ob.maxY - ob.minY);
+                const otherCx = (ob.minX + ob.maxX) / 2;
+                const otherCy = (ob.minY + ob.maxY) / 2;
+                const otherHalf = halfSpan(ow, oh);
+                const otherAttachX = otherCx + ux * otherHalf;
+                const otherAttachY = otherCy + uy * otherHalf;
+
+                const candHalf = halfSpan(mW, mH);
+                const candAttachX = candCx - ux * candHalf;
+                const candAttachY = candCy - uy * candHalf;
+
                 const dToTailHook = Math.hypot(
-                  candTopHookX - tailBottomHookX,
-                  candTopHookY - tailBottomHookY
+                  candAttachX - tailAttachX,
+                  candAttachY - tailAttachY
                 );
                 const dToOther = Math.hypot(
-                  candTopHookX - (ob.minX + ob.maxX) / 2,
-                  candTopHookY - ob.maxY
+                  candAttachX - otherAttachX,
+                  candAttachY - otherAttachY
                 );
                 const d = Math.min(dToTailHook, dToOther);
                 if (d <= 42 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
@@ -20502,10 +20602,10 @@ export default function App() {
                     springStrokeId: tailSt.id,
                     parentWeightId: tailSt.id,
                     childWeightId: draggedSt.id,
-                    targetX: tailBottomHookX,
-                    targetY: tailBottomHookY,
-                    snapDx: tailBottomHookX - candTopHookX,
-                    snapDy: tailBottomHookY + hookOverlap - candTopHookY,
+                    targetX: tailAttachX,
+                    targetY: tailAttachY,
+                    snapDx: tailAttachX + ux * hookOverlap - candAttachX,
+                    snapDy: tailAttachY + uy * hookOverlap - candAttachY,
                     dist: d,
                   };
                 }
@@ -21058,19 +21158,58 @@ export default function App() {
               const s = page.strokes.find((st) => st.id === sid);
               if (!s) continue;
               const sb = getStrokeBounds(s);
-              const candTopX = (sb.minX + sb.maxX) / 2 + dx;
-              const candTopY = sb.minY + dy;
+              const sw = Math.max(14, sb.maxX - sb.minX);
+              const sh = Math.max(14, sb.maxY - sb.minY);
+              const candCx = (sb.minX + sb.maxX) / 2 + dx;
+              const candCy = (sb.minY + sb.maxY) / 2 + dy;
 
-              // Case 1: `s` is hooked under a parent weight above it -> unhook when dragged left/right!
+              // Case 1: `s` is hooked onto a parent weight in the chain -> unhook when dragged sideways/away (in Hooke's Law Mode)!
               if (s.attachedToWeightId && !movingStrokeSet.has(s.attachedToWeightId)) {
                 const parentSt = page.strokes.find((p) => p.id === s.attachedToWeightId);
                 if (parentSt) {
+                  const chainRootId = getWeightChainRootId(page, parentSt.id);
+                  const attachedSimForChain = (page.springSims || []).find(
+                    (sm) => sm.massStrokeId === chainRootId
+                  );
+                  if (attachedSimForChain?.showAmplitudeLines) {
+                    continue;
+                  }
+                  let ux = 0;
+                  let uy = 1;
+                  if (attachedSimForChain) {
+                    const eqSp = page.strokes.find(
+                      (sp) => sp.id === attachedSimForChain.eqSpringStrokeId
+                    );
+                    if (eqSp) {
+                      const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+                      const fixedPt =
+                        attachedSimForChain.fixedEnd === 'start'
+                          ? spInfo.startTerm
+                          : spInfo.endTerm;
+                      const freePt =
+                        attachedSimForChain.fixedEnd === 'start'
+                          ? spInfo.endTerm
+                          : spInfo.startTerm;
+                      ux = (freePt.x - fixedPt.x) / spInfo.length;
+                      uy = (freePt.y - fixedPt.y) / spInfo.length;
+                    }
+                  }
+                  const halfSpan = (w: number, h: number) =>
+                    Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
                   const pb = getStrokeBounds(parentSt);
-                  const parentBotX = (pb.minX + pb.maxX) / 2;
-                  const parentBotY = pb.maxY;
-                  const horizDist = Math.abs(candTopX - parentBotX);
-                  const dHook = Math.hypot(candTopX - parentBotX, candTopY - parentBotY);
-                  if (horizDist > 14 || dHook > 22) {
+                  const pw = Math.max(14, pb.maxX - pb.minX);
+                  const ph = Math.max(14, pb.maxY - pb.minY);
+                  const parentCx = (pb.minX + pb.maxX) / 2;
+                  const parentCy = (pb.minY + pb.maxY) / 2;
+                  const parentEndX = parentCx + ux * halfSpan(pw, ph);
+                  const parentEndY = parentCy + uy * halfSpan(pw, ph);
+                  const candStartX = candCx - ux * halfSpan(sw, sh);
+                  const candStartY = candCy - uy * halfSpan(sw, sh);
+                  const relDx = candStartX - parentEndX;
+                  const relDy = candStartY - parentEndY;
+                  const perpDist = Math.abs(relDx * -uy + relDy * ux);
+                  const dHook = Math.hypot(relDx, relDy);
+                  if (perpDist > 14 || dHook > 22) {
                     unhookingDragStrokeIdsRef.current.add(s.id);
                     relinkedChildToParent.set(s.id, undefined);
                     for (const childCandidate of page.strokes) {
@@ -21081,19 +21220,20 @@ export default function App() {
                         relinkedChildToParent.set(childCandidate.id, parentSt.id);
                       }
                     }
-                    unhookedRootId = getWeightChainRootId(page, parentSt.id);
+                    unhookedRootId = chainRootId;
                   }
                 } else {
                   relinkedChildToParent.set(s.id, undefined);
                 }
               }
 
-              // Case 2: `s` is the top root weight hooked directly onto a spring -> unhook when dragged left/right!
+              // Case 2: `s` is the root weight hooked directly onto a spring -> unhook when dragged sideways/away (in Hooke's Law Mode)!
               const attachedSimOnRoot = (page.springSims || []).find(
                 (sm) => sm.massStrokeId === s.id
               );
               if (
                 attachedSimOnRoot &&
+                !attachedSimOnRoot.showAmplitudeLines &&
                 !movingStrokeSet.has(attachedSimOnRoot.eqSpringStrokeId)
               ) {
                 const eqSp = page.strokes.find(
@@ -21105,9 +21245,16 @@ export default function App() {
                     attachedSimOnRoot.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
                   const fixedPt =
                     attachedSimOnRoot.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
-                  const horizDist = Math.abs(candTopX - freePt.x);
-                  const dHook = Math.hypot(candTopX - freePt.x, candTopY - freePt.y);
-                  if (horizDist > 14 || dHook > 24) {
+                  const ux = (freePt.x - fixedPt.x) / spInfo.length;
+                  const uy = (freePt.y - fixedPt.y) / spInfo.length;
+                  const sHalf = Math.abs(ux) * (sw / 2) + Math.abs(uy) * (sh / 2);
+                  const candStartX = candCx - ux * sHalf;
+                  const candStartY = candCy - uy * sHalf;
+                  const relDx = candStartX - freePt.x;
+                  const relDy = candStartY - freePt.y;
+                  const perpDist = Math.abs(relDx * -uy + relDy * ux);
+                  const dHook = Math.hypot(relDx, relDy);
+                  if (perpDist > 14 || dHook > 24) {
                     unhookingDragStrokeIdsRef.current.add(s.id);
                     const childBelow = page.strokes.find(
                       (c) => c.id !== s.id && c.attachedToWeightId === s.id
@@ -21121,8 +21268,6 @@ export default function App() {
                       unhookedRootId = childBelow.id;
                     } else {
                       unhookedSpringSimIdToRemove = attachedSimOnRoot.id;
-                      const ux = (freePt.x - fixedPt.x) / spInfo.length;
-                      const uy = (freePt.y - fixedPt.y) / spInfo.length;
                       const natFreePt = {
                         x: fixedPt.x + ux * attachedSimOnRoot.naturalLengthPx,
                         y: fixedPt.y + uy * attachedSimOnRoot.naturalLengthPx,
@@ -31814,126 +31959,139 @@ export default function App() {
 
                         {activeSpring && (
                           <>
-                            {/* 2. Primary Play / Pause / Resume / Clear / Stop Oscillation Controls */}
-                            {!isSpringSimulating ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  springSimElapsedRef.current = 0;
-                                  springSimLastFrameTimeRef.current = null;
-                                  setIsSpringPaused(false);
-                                  setIsSpringSimulating(true);
-                                }}
-                                className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
-                              >
-                                <span>▶️ Έναρξη Αμείωτης Ταλάντωσης</span>
-                              </button>
-                            ) : (
-                              <div className="space-y-1.5">
-                                <div className="grid grid-cols-2 gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsSpringPaused((p) => !p)}
-                                    className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer ${
-                                      isSpringPaused
-                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                        : 'bg-amber-500 hover:bg-amber-600 text-white'
-                                    }`}
-                                    title={
-                                      isSpringPaused
-                                        ? 'Συνέχιση ταλάντωσης και διαγραμμάτων από το σημείο παύσης'
-                                        : 'Προσωρινή παύση ταλάντωσης και διαγραμμάτων'
-                                    }
-                                  >
-                                    <span>
-                                      {isSpringPaused ? '▶️ Συνέχεια' : '⏸️ Παύση'}
-                                    </span>
-                                  </button>
+                            {activeSpring.showAmplitudeLines ? (
+                              <>
+                                {/* 2. Primary Play / Pause / Resume / Clear / Stop Oscillation Controls */}
+                                {!isSpringSimulating ? (
                                   <button
                                     type="button"
                                     onClick={() => {
                                       springSimElapsedRef.current = 0;
                                       springSimLastFrameTimeRef.current = null;
-                                      setSpringGraphClearTick((t) => t + 1);
+                                      setIsSpringPaused(false);
+                                      setIsSpringSimulating(true);
                                     }}
-                                    className="py-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-                                    title="Καθαρισμός των καμπυλών στα διαγράμματα x(t), υ(t), α(t)"
+                                    className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
                                   >
-                                    <span>🧹 Καθαρισμός</span>
+                                    <span>▶️ Έναρξη Αμείωτης Ταλάντωσης</span>
                                   </button>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => setIsSpringPaused((p) => !p)}
+                                        className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer ${
+                                          isSpringPaused
+                                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                            : 'bg-amber-500 hover:bg-amber-600 text-white'
+                                        }`}
+                                        title={
+                                          isSpringPaused
+                                            ? 'Συνέχιση ταλάντωσης και διαγραμμάτων από το σημείο παύσης'
+                                            : 'Προσωρινή παύση ταλάντωσης και διαγραμμάτων'
+                                        }
+                                      >
+                                        <span>
+                                          {isSpringPaused ? '▶️ Συνέχεια' : '⏸️ Παύση'}
+                                        </span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          springSimElapsedRef.current = 0;
+                                          springSimLastFrameTimeRef.current = null;
+                                          setSpringGraphClearTick((t) => t + 1);
+                                        }}
+                                        className="py-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                                        title="Καθαρισμός των καμπυλών στα διαγράμματα x(t), υ(t), α(t)"
+                                      >
+                                        <span>🧹 Καθαρισμός</span>
+                                      </button>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsSpringSimulating(false);
+                                        setIsSpringPaused(false);
+                                        springSimElapsedRef.current = 0;
+                                        springSimLastFrameTimeRef.current = null;
+                                        setSpringGraphClearTick((t) => t + 1);
+                                      }}
+                                      className="w-full py-1 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                                      title="Διακοπή ταλάντωσης και καθαρισμός διαγραμμάτων"
+                                    >
+                                      <span>⏹️ Διακοπή & Επαναφορά</span>
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* 3. Initial Phase / Starting Position Selector (x=0, +A, -A) */}
+                                <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/80 space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                      Αρχική Θέση (t = 0):
+                                    </span>
+                                    <span className="text-[9.5px] text-slate-400 font-semibold">
+                                      ή τράβηξε το σώμα!
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-4 gap-1">
+                                    {(
+                                      [
+                                        { id: 'minusA', label: 'Από -A', title: 'Αρχική θέση x₀ = -A (υ₀ = 0)' },
+                                        { id: 'eq', label: 'Από 0 (υ↑)', title: 'Από Θ.Ι. (x₀ = 0) με αρχική ταχύτητα προς τα πάνω (+A)' },
+                                        { id: 'eqDown', label: 'Από 0 (υ↓)', title: 'Από Θ.Ι. (x₀ = 0) με αρχική ταχύτητα προς τα κάτω (-A)' },
+                                        { id: 'plusA', label: 'Από +A', title: 'Αρχική θέση x₀ = +A (υ₀ = 0)' },
+                                      ] as const
+                                    ).map((opt) => (
+                                      <button
+                                        key={opt.id}
+                                        type="button"
+                                        title={opt.title}
+                                        onClick={() => {
+                                          const amp = Math.max(16, activeSpring.amplitudePx || 55);
+                                          const targetDisp =
+                                            opt.id === 'minusA' ? -amp : opt.id === 'plusA' ? amp : 0;
+                                          const nudgeDir =
+                                            opt.id === 'eq' ? 1 : opt.id === 'eqDown' ? -1 : undefined;
+                                          springSimElapsedRef.current = 0;
+                                          springSimLastFrameTimeRef.current = null;
+                                          setSpringGraphClearTick((t) => t + 1);
+                                          setSpringPhaseShiftAnim({
+                                            simId: activeSpring.id,
+                                            fromDispPx: lastSpringRenderedDispRef.current,
+                                            toDispPx: targetDisp,
+                                            nudgeDir,
+                                            startTime: performance.now(),
+                                          });
+                                          updateActiveSpringSimConfig((sim) => ({
+                                            ...sim,
+                                            initialPhaseMode: opt.id,
+                                          }));
+                                        }}
+                                        className={`py-1 px-1 rounded-lg text-[9.5px] font-bold border transition cursor-pointer ${
+                                          activeSpring.initialPhaseMode === opt.id
+                                            ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                        }`}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setIsSpringSimulating(false);
-                                    setIsSpringPaused(false);
-                                    springSimElapsedRef.current = 0;
-                                    springSimLastFrameTimeRef.current = null;
-                                    setSpringGraphClearTick((t) => t + 1);
-                                  }}
-                                  className="w-full py-1 px-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10.5px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-                                  title="Διακοπή ταλάντωσης και καθαρισμός διαγραμμάτων"
-                                >
-                                  <span>⏹️ Διακοπή & Επαναφορά</span>
-                                </button>
+                              </>
+                            ) : (
+                              <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2 text-[10px] text-sky-950 leading-snug space-y-1">
+                                <div className="font-extrabold flex items-center justify-between">
+                                  <span>🪝 Λειτουργία Νόμου του Hooke (F = k·Δl)</span>
+                                </div>
+                                <p className="text-[9.5px] text-sky-800">
+                                  Κρεμάστε ή ξεκρεμάστε διαδοχικά βαρίδια (σε ταβάνι, πάτωμα ή κεκλιμένο επίπεδο) με το Λάσο. Για ταλάντωση ενεργοποιήστε το <b>«📏 Κλίμακα & Πλάτος (+A / -A) & Θ.Ι.»</b> παρακάτω!
+                                </p>
                               </div>
                             )}
-
-                            {/* 3. Initial Phase / Starting Position Selector (x=0, +A, -A) */}
-                            <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/80 space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                                  Αρχική Θέση (t = 0):
-                                </span>
-                                <span className="text-[9.5px] text-slate-400 font-semibold">
-                                  ή τράβηξε το σώμα!
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-4 gap-1">
-                                {(
-                                  [
-                                    { id: 'minusA', label: 'Από -A', title: 'Αρχική θέση x₀ = -A (υ₀ = 0)' },
-                                    { id: 'eq', label: 'Από 0 (υ↑)', title: 'Από Θ.Ι. (x₀ = 0) με αρχική ταχύτητα προς τα πάνω (+A)' },
-                                    { id: 'eqDown', label: 'Από 0 (υ↓)', title: 'Από Θ.Ι. (x₀ = 0) με αρχική ταχύτητα προς τα κάτω (-A)' },
-                                    { id: 'plusA', label: 'Από +A', title: 'Αρχική θέση x₀ = +A (υ₀ = 0)' },
-                                  ] as const
-                                ).map((opt) => (
-                                  <button
-                                    key={opt.id}
-                                    type="button"
-                                    title={opt.title}
-                                    onClick={() => {
-                                      const amp = Math.max(16, activeSpring.amplitudePx || 55);
-                                      const targetDisp =
-                                        opt.id === 'minusA' ? -amp : opt.id === 'plusA' ? amp : 0;
-                                      const nudgeDir =
-                                        opt.id === 'eq' ? 1 : opt.id === 'eqDown' ? -1 : undefined;
-                                      springSimElapsedRef.current = 0;
-                                      springSimLastFrameTimeRef.current = null;
-                                      setSpringGraphClearTick((t) => t + 1);
-                                      setSpringPhaseShiftAnim({
-                                        simId: activeSpring.id,
-                                        fromDispPx: lastSpringRenderedDispRef.current,
-                                        toDispPx: targetDisp,
-                                        nudgeDir,
-                                        startTime: performance.now(),
-                                      });
-                                      updateActiveSpringSimConfig((sim) => ({
-                                        ...sim,
-                                        initialPhaseMode: opt.id,
-                                      }));
-                                    }}
-                                    className={`py-1 px-1 rounded-lg text-[9.5px] font-bold border transition cursor-pointer ${
-                                      activeSpring.initialPhaseMode === opt.id
-                                        ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
-                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
 
                             {/* 4. Mass (m), Stiffness (k) & Coupled Frequency f = (1/2π)√(k/m) Sliders */}
                             {(() => {
@@ -32060,34 +32218,27 @@ export default function App() {
                               );
                             })()}
 
-                            {/* 5. Canvas Display Checkboxes (Position Scale +A/0/-A, Amplitude +A/-A, Natural Length l₀, Force Vectors) */}
+                            {/* 5. Canvas Display Checkboxes (Unified Position Scale + Amplitude +A/-A & Θ.Ι., Natural Length l₀, Force Vectors) */}
                             <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
                               <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                <span>📐 Κλίμακα Θέσης (+A / 0 / -A)</span>
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(activeSpring.showPositionScale)}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    updateActiveSpringSimConfig((sim) => ({
-                                      ...sim,
-                                      showPositionScale: checked,
-                                    }));
-                                  }}
-                                  className="accent-indigo-600 w-4 h-4 cursor-pointer"
-                                />
-                              </label>
-
-                              <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                <span>📏 Γραμμές Πλάτους (+A / -A) & Θ.Ι.</span>
+                                <span>📏 Κλίμακα & Πλάτος (+A / -A) & Θ.Ι.</span>
                                 <input
                                   type="checkbox"
                                   checked={activeSpring.showAmplitudeLines}
                                   onChange={(e) => {
                                     const checked = e.target.checked;
+                                    if (!checked) {
+                                      setIsSpringSimulating(false);
+                                      setIsSpringPaused(false);
+                                      springSimElapsedRef.current = 0;
+                                      springSimLastFrameTimeRef.current = null;
+                                      setSpringPhaseShiftAnim(null);
+                                    }
                                     updateActiveSpringSimConfig((sim) => ({
                                       ...sim,
                                       showAmplitudeLines: checked,
+                                      showPositionScale: checked,
+                                      initialPhaseMode: checked ? sim.initialPhaseMode : 'eq',
                                     }));
                                   }}
                                   className="accent-blue-600 w-4 h-4 cursor-pointer"
