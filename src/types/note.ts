@@ -183,6 +183,14 @@ export interface SpringGraphBox {
   customMoved?: boolean;
 }
 
+export interface HookeMeasurementRow {
+  id: string;
+  weightsCount: number; // e.g. 0, 1, 2, 3, 4
+  forceN: number; // F_ελ in N (e.g. 0, 1, 2, 3, 4)
+  lengthMm: number; // Total spring length l in mm (matching ruler 1:1)
+  deltaLMm: number; // Elongation/compression Δl = |l - l0| in mm (matching ruler 1:1)
+}
+
 export interface SpringSimConfig {
   id: string;
   name: string; // e.g. 'ελ01', 'ελ02'
@@ -204,10 +212,13 @@ export interface SpringSimConfig {
   showPositionScale?: boolean; // Show/hide left vertical +A / 0 / -A position scale & pointer arrow
   showAmplitudeLines: boolean; // Show black dashed Θ.Ι. + 2 blue dashed +A/-A lines with blue square handles
   showForceVectors: boolean; // Show dynamic force vectors (W, F_el, ΣF)
+  hookeMeasurements?: HookeMeasurementRow[]; // Recorded rows for Hooke's Law study (F_ελ - Δl)
+  showHookeCanvasTable?: boolean; // Show the F_ελ - Δl table of values on the canvas
   graphs: {
     xt: SpringGraphBox; // Position - Time x(t) [Red #ef4444]
     vt: SpringGraphBox; // Velocity - Time v(t) [Green #10b981]
     at: SpringGraphBox; // Acceleration - Time a(t) [Purple #8b5cf6]
+    hooke?: SpringGraphBox; // Hooke's Law F_ελ - Δl [Blue #0284c7]
   };
 }
 

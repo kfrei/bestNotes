@@ -81,6 +81,7 @@ import {
   CircuitSimConfig,
   SpringSimConfig,
   SpringGraphBox,
+  HookeMeasurementRow,
   StrokeObject,
   BezierPoint,
   ToolType,
@@ -1164,7 +1165,7 @@ export default function App() {
   } | null>(null);
   const draggingSpringGraphRef = useRef<{
     simId: string;
-    graphKey: 'xt' | 'vt' | 'at';
+    graphKey: 'xt' | 'vt' | 'at' | 'hooke';
     startX: number;
     startY: number;
     origBoxX: number;
@@ -1172,11 +1173,11 @@ export default function App() {
   } | null>(null);
   const draggingSpringGraphResizeRef = useRef<{
     simId: string;
-    graphKey: 'xt' | 'vt' | 'at';
+    graphKey: 'xt' | 'vt' | 'at' | 'hooke';
     mode: 'width' | 'height';
     axisLeftX: number;
     axisMidY: number;
-    stackedKeys: ('xt' | 'vt' | 'at')[];
+    stackedKeys: ('xt' | 'vt' | 'at' | 'hooke')[];
     syncSpringAmp: boolean;
   } | null>(null);
   const springOverlayHitRef = useRef<{
@@ -1193,7 +1194,7 @@ export default function App() {
     stopBtnBox?: { x1: number; y1: number; x2: number; y2: number };
     ampHandles: { x: number; y: number }[];
     graphResizeHandles: {
-      key: 'xt' | 'vt' | 'at';
+      key: 'xt' | 'vt' | 'at' | 'hooke';
       mode: 'width' | 'height';
       x: number;
       y: number;
@@ -1203,7 +1204,7 @@ export default function App() {
       customMoved: boolean;
     }[];
     graphBoxes: {
-      key: 'xt' | 'vt' | 'at';
+      key: 'xt' | 'vt' | 'at' | 'hooke';
       x: number;
       y: number;
       width: number;
@@ -11687,6 +11688,8 @@ export default function App() {
           Boolean(activeSpringSim!.showPositionScale) ||
           activeSpringSim!.showAmplitudeLines ||
           activeSpringSim!.showForceVectors ||
+          Boolean(activeSpringSim!.showHookeCanvasTable) ||
+          Boolean(activeSpringSim!.graphs.hooke?.visible) ||
           activeSpringSim!.graphs.xt.visible ||
           activeSpringSim!.graphs.vt.visible ||
           activeSpringSim!.graphs.at.visible ||
@@ -12924,7 +12927,7 @@ export default function App() {
             (k) => activeSpringSim.graphs[k]?.visible
           );
           const graphBoxesHit: {
-            key: 'xt' | 'vt' | 'at';
+            key: 'xt' | 'vt' | 'at' | 'hooke';
             x: number;
             y: number;
             width: number;
@@ -12932,7 +12935,7 @@ export default function App() {
             closePt: { x: number; y: number; r: number };
           }[] = [];
           const graphResizeHandlesHit: {
-            key: 'xt' | 'vt' | 'at';
+            key: 'xt' | 'vt' | 'at' | 'hooke';
             mode: 'width' | 'height';
             x: number;
             y: number;
@@ -13281,6 +13284,391 @@ export default function App() {
 
             ctx.restore();
             ctx.restore();
+          }
+
+          // 6E. Hooke's Law (F_ελ – Δl) Live Table of Values & Elastic Deformation Diagram on Canvas!
+          if (
+            Boolean(activeSpringSim.graphs.hooke?.visible) ||
+            Boolean(activeSpringSim.showHookeCanvasTable)
+          ) {
+            const l0Mm = Math.round(activeSpringSim.naturalLengthPx / 3);
+            const curLMm = Math.round(axLen / 3);
+            const curDeltaLMm = Math.abs(curLMm - l0Mm);
+            const curChainCount = getWeightChainIds(
+              activePage,
+              activeSpringSim.massStrokeId
+            ).length;
+            const curForceN = Number(activeSpringSim.mass.toFixed(2));
+            const eqLen1Px = computeEquilibriumLengthPx(
+              activeSpringSim.naturalLengthPx,
+              axisUx,
+              axisUy,
+              1.0,
+              activeSpringSim.stiffness
+            );
+            const deltaL1Mm = Math.max(
+              1,
+              Math.round(Math.abs(eqLen1Px - activeSpringSim.naturalLengthPx) / 3)
+            );
+            const signDir = axisUy < -0.78 ? -1 : 1;
+
+            const recordedRows =
+              activeSpringSim.hookeMeasurements &&
+              activeSpringSim.hookeMeasurements.length > 0
+                ? [...activeSpringSim.hookeMeasurements].sort(
+                    (a, b) => a.deltaLMm - b.deltaLMm || a.forceN - b.forceN
+                  )
+                : [
+                    {
+                      id: 'auto-0',
+                      weightsCount: 0,
+                      forceN: 0,
+                      lengthMm: l0Mm,
+                      deltaLMm: 0,
+                    },
+                    {
+                      id: 'auto-cur',
+                      weightsCount: curChainCount,
+                      forceN: curForceN,
+                      lengthMm: curLMm,
+                      deltaLMm: curDeltaLMm,
+                    },
+                  ];
+
+            const hCfg = activeSpringSim.graphs.hooke || { visible: false };
+            const defaultHookeW = Math.min(340, Math.max(250, w - baseDefaultX - 18));
+            const hW = hCfg.width || defaultHookeW;
+            const hPlotH = Math.max(120, Math.min(260, (hCfg.height || 85) * 2));
+            const defaultHookeX = baseDefaultX;
+            const defaultHookeY =
+              runningPrevBotY > 0
+                ? runningPrevBotY + 34
+                : Math.max(48, fixedPt.y + 8);
+            const hx =
+              hCfg.customMoved && hCfg.x !== undefined ? hCfg.x : defaultHookeX;
+            const hy =
+              hCfg.customMoved && hCfg.y !== undefined ? hCfg.y : defaultHookeY;
+
+            const isDarkGrid = activePage.template === 'dark-grid';
+            const axisInk = isDarkGrid ? '#f8fafc' : '#0f172a';
+            let diagramTopY = hy;
+
+            // 6E-1. Optional Canvas Table of Values (Πίνακας Τιμών Νόμου του Hooke: n, F_ελ, l, Δl)
+            if (activeSpringSim.showHookeCanvasTable) {
+              const rowH = 21;
+              const headerH = 24;
+              const tblW = Math.max(248, hW);
+              const tblH = headerH + recordedRows.length * rowH + 6;
+              const tblX = hx;
+              const tblY = hy;
+              diagramTopY = tblY + tblH + 26;
+
+              ctx.save();
+              ctx.fillStyle = isDarkGrid
+                ? 'rgba(15, 23, 42, 0.92)'
+                : 'rgba(255, 255, 255, 0.94)';
+              ctx.strokeStyle = isDarkGrid ? '#334155' : '#cbd5e1';
+              ctx.lineWidth = 1.6;
+              ctx.beginPath();
+              ctx.roundRect(tblX, tblY, tblW, tblH, 8);
+              ctx.fill();
+              ctx.stroke();
+
+              // Header background
+              ctx.fillStyle = isDarkGrid ? '#1e293b' : '#f1f5f9';
+              ctx.beginPath();
+              ctx.roundRect(tblX + 1, tblY + 1, tblW - 2, headerH, [7, 7, 0, 0]);
+              ctx.fill();
+
+              const colX = [
+                tblX + tblW * 0.13,
+                tblX + tblW * 0.37,
+                tblX + tblW * 0.63,
+                tblX + tblW * 0.87,
+              ];
+              ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+              ctx.fillStyle = isDarkGrid ? '#e2e8f0' : '#1e293b';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('Βάρη (n)', colX[0], tblY + headerH / 2);
+              ctx.fillText('Fελ (N)', colX[1], tblY + headerH / 2);
+              ctx.fillText('l (mm)', colX[2], tblY + headerH / 2);
+              ctx.fillText('Δl (mm)', colX[3], tblY + headerH / 2);
+
+              for (let rIdx = 0; rIdx < recordedRows.length; rIdx++) {
+                const r = recordedRows[rIdx];
+                const ry = tblY + headerH + rIdx * rowH;
+                const isLiveMatch =
+                  Math.abs(r.deltaLMm - curDeltaLMm) <= 1 &&
+                  Math.abs(r.forceN - curForceN) <= 0.15;
+                if (isLiveMatch) {
+                  ctx.fillStyle = isDarkGrid
+                    ? 'rgba(2, 132, 199, 0.25)'
+                    : 'rgba(224, 242, 254, 0.85)';
+                  ctx.fillRect(tblX + 2, ry + 1, tblW - 4, rowH - 1);
+                }
+                ctx.strokeStyle = isDarkGrid
+                  ? 'rgba(51, 65, 85, 0.6)'
+                  : 'rgba(226, 232, 240, 0.9)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(tblX + 4, ry);
+                ctx.lineTo(tblX + tblW - 4, ry);
+                ctx.stroke();
+
+                ctx.font = isLiveMatch
+                  ? 'bold 11.5px system-ui, -apple-system, sans-serif'
+                  : '600 11px system-ui, -apple-system, sans-serif';
+                ctx.fillStyle = isLiveMatch
+                  ? '#0284c7'
+                  : isDarkGrid
+                  ? '#f1f5f9'
+                  : '#334155';
+                ctx.fillText(String(r.weightsCount), colX[0], ry + rowH / 2 + 1);
+                ctx.fillText(
+                  Number(r.forceN.toFixed(2)).toString(),
+                  colX[1],
+                  ry + rowH / 2 + 1
+                );
+                ctx.fillText(`${r.lengthMm}`, colX[2], ry + rowH / 2 + 1);
+                ctx.fillText(`${r.deltaLMm}`, colX[3], ry + rowH / 2 + 1);
+              }
+              ctx.restore();
+
+              if (!activeSpringSim.graphs.hooke?.visible) {
+                graphBoxesHit.push({
+                  key: 'hooke',
+                  x: tblX,
+                  y: tblY,
+                  width: tblW,
+                  height: tblH,
+                  closePt: { x: -9999, y: -9999, r: -1 },
+                });
+              }
+            }
+
+            // 6E-2. Elastic Deformation Diagram F_ελ – Δl (Νόμος του Hooke: F_ελ = k · Δl)
+            if (activeSpringSim.graphs.hooke?.visible) {
+              const axisLeftX = hx + 32;
+              const axisRightX = hx + hW - 18;
+              const axisTopY = diagramTopY + 18;
+              const axisBotY = axisTopY + hPlotH;
+              const plotSpanW = Math.max(120, axisRightX - axisLeftX - 22);
+              const plotSpanH = Math.max(90, axisBotY - axisTopY - 22);
+
+              const maxRowForce = Math.max(
+                4,
+                curForceN,
+                ...recordedRows.map((r) => r.forceN)
+              );
+              const maxRowDeltaL = Math.max(
+                deltaL1Mm * 4,
+                curDeltaLMm,
+                ...recordedRows.map((r) => r.deltaLMm)
+              );
+
+              ctx.save();
+              if (draggingSpringGraphRef.current?.graphKey === 'hooke') {
+                ctx.save();
+                ctx.strokeStyle = '#0284c7';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 4]);
+                ctx.strokeRect(
+                  hx - 4,
+                  hy - 6,
+                  hW + 8,
+                  axisBotY - hy + 28
+                );
+                ctx.restore();
+              }
+
+              graphBoxesHit.push({
+                key: 'hooke',
+                x: hx,
+                y: hy - 4,
+                width: activeTool === 'lasso' ? hW : 64,
+                height: axisBotY - hy + 28,
+                closePt: { x: -9999, y: -9999, r: -1 },
+              });
+
+              // Resize handles: Height (↕) near top of F_ελ axis, Width (↔) to the right of Δl axis
+              const rhX = axisLeftX;
+              const rhY = axisTopY - 11;
+              ctx.save();
+              ctx.strokeStyle = '#2563eb';
+              ctx.lineWidth = 1.9;
+              ctx.beginPath();
+              ctx.moveTo(rhX, rhY - 6);
+              ctx.lineTo(rhX, rhY + 6);
+              ctx.moveTo(rhX - 3, rhY - 3);
+              ctx.lineTo(rhX, rhY - 6);
+              ctx.lineTo(rhX + 3, rhY - 3);
+              ctx.moveTo(rhX - 3, rhY + 3);
+              ctx.lineTo(rhX, rhY + 6);
+              ctx.lineTo(rhX + 3, rhY + 3);
+              ctx.stroke();
+              graphResizeHandlesHit.push({
+                key: 'hooke',
+                mode: 'height',
+                x: rhX,
+                y: rhY,
+                axisLeftX,
+                axisMidY: (axisTopY + axisBotY) / 2,
+                gx: hx,
+                customMoved: Boolean(hCfg.customMoved),
+              });
+
+              const rwX = axisRightX + 12;
+              const rwY = axisBotY;
+              ctx.beginPath();
+              ctx.moveTo(rwX - 6, rwY);
+              ctx.lineTo(rwX + 6, rwY);
+              ctx.moveTo(rwX - 3, rwY - 3);
+              ctx.lineTo(rwX - 6, rwY);
+              ctx.lineTo(rwX - 3, rwY + 3);
+              ctx.moveTo(rwX + 3, rwY - 3);
+              ctx.lineTo(rwX + 6, rwY);
+              ctx.lineTo(rwX + 3, rwY + 3);
+              ctx.stroke();
+              graphResizeHandlesHit.push({
+                key: 'hooke',
+                mode: 'width',
+                x: rwX,
+                y: rwY,
+                axisLeftX,
+                axisMidY: axisBotY,
+                gx: hx,
+                customMoved: Boolean(hCfg.customMoved),
+              });
+              ctx.restore();
+
+              // Draw Vertical Axis F_ελ (N) and Horizontal Axis Δl (mm)
+              ctx.save();
+              ctx.strokeStyle = axisInk;
+              ctx.fillStyle = axisInk;
+              ctx.lineWidth = 2.4;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.beginPath();
+              // Vertical axis
+              ctx.moveTo(axisLeftX, axisBotY);
+              ctx.lineTo(axisLeftX, axisTopY);
+              ctx.moveTo(axisLeftX - 5.5, axisTopY + 8);
+              ctx.lineTo(axisLeftX, axisTopY);
+              ctx.lineTo(axisLeftX + 5.5, axisTopY + 8);
+              // Horizontal axis
+              ctx.moveTo(axisLeftX, axisBotY);
+              ctx.lineTo(axisRightX, axisBotY);
+              ctx.moveTo(axisRightX - 8, axisBotY - 5.5);
+              ctx.lineTo(axisRightX, axisBotY);
+              ctx.lineTo(axisRightX - 8, axisBotY + 5.5);
+              ctx.stroke();
+
+              // Axis titles: F_ελ (N) & Δl (mm) + origin 0
+              ctx.font = 'italic bold 15px Georgia, "Times New Roman", serif';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('Fελ (N)', axisLeftX + 9, axisTopY + 4);
+              ctx.textAlign = 'right';
+              ctx.fillText(
+                signDir < 0 ? 'Δl συσπ. (mm)' : 'Δl (mm)',
+                axisRightX - 2,
+                axisBotY - 14
+              );
+              ctx.font = 'bold 11.5px system-ui, -apple-system, sans-serif';
+              ctx.textAlign = 'right';
+              ctx.fillText('0', axisLeftX - 6, axisBotY + 10);
+              ctx.restore();
+
+              // Linear Hooke's Law Ray F_ελ = k · Δl from origin (0,0)
+              const lineMaxDeltaL = maxRowDeltaL;
+              const lineMaxForce = (lineMaxDeltaL / Math.max(1, deltaL1Mm)) * 1.0;
+              let endRayDeltaL = lineMaxDeltaL;
+              let endRayForce = lineMaxForce;
+              if (endRayForce > maxRowForce) {
+                endRayForce = maxRowForce;
+                endRayDeltaL = endRayForce * deltaL1Mm;
+              }
+              const rayEndX =
+                axisLeftX + (endRayDeltaL / Math.max(1, maxRowDeltaL)) * plotSpanW;
+              const rayEndY =
+                axisBotY - (endRayForce / Math.max(1, maxRowForce)) * plotSpanH;
+
+              ctx.save();
+              ctx.strokeStyle = '#0284c7';
+              ctx.lineWidth = 2.8;
+              ctx.lineCap = 'round';
+              ctx.beginPath();
+              ctx.moveTo(axisLeftX, axisBotY);
+              ctx.lineTo(rayEndX, rayEndY);
+              ctx.stroke();
+              ctx.restore();
+
+              // Plot each measurement point (Δl_i, F_ελ,i) with dashed projection lines & axis ticks!
+              for (const row of recordedRows) {
+                const px =
+                  axisLeftX +
+                  (Math.max(0, row.deltaLMm) / Math.max(1, maxRowDeltaL)) * plotSpanW;
+                const py =
+                  axisBotY -
+                  (Math.max(0, row.forceN) / Math.max(1, maxRowForce)) * plotSpanH;
+                const isLiveRow =
+                  Math.abs(row.deltaLMm - curDeltaLMm) <= 1 &&
+                  Math.abs(row.forceN - curForceN) <= 0.15;
+
+                if (row.deltaLMm > 0 || row.forceN > 0) {
+                  ctx.save();
+                  ctx.strokeStyle = isLiveRow
+                    ? 'rgba(225, 29, 72, 0.75)'
+                    : 'rgba(100, 116, 139, 0.55)';
+                  ctx.lineWidth = isLiveRow ? 1.6 : 1.3;
+                  ctx.setLineDash([4, 4]);
+                  ctx.beginPath();
+                  // Vertical projection to Δl axis
+                  ctx.moveTo(px, py);
+                  ctx.lineTo(px, axisBotY);
+                  // Horizontal projection to F_ελ axis
+                  ctx.moveTo(px, py);
+                  ctx.lineTo(axisLeftX, py);
+                  ctx.stroke();
+                  ctx.restore();
+
+                  // Axis tick labels
+                  ctx.save();
+                  ctx.font = isLiveRow
+                    ? 'bold 11px system-ui, -apple-system, sans-serif'
+                    : '600 10.5px system-ui, -apple-system, sans-serif';
+                  ctx.fillStyle = isLiveRow ? '#e11d48' : axisInk;
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'top';
+                  ctx.fillText(`${row.deltaLMm}`, px, axisBotY + 5);
+                  ctx.textAlign = 'right';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillText(
+                    `${Number(row.forceN.toFixed(1))}`,
+                    axisLeftX - 6,
+                    py
+                  );
+                  ctx.restore();
+                }
+
+                // Point dot
+                ctx.save();
+                if (isLiveRow) {
+                  ctx.fillStyle = 'rgba(225, 29, 72, 0.22)';
+                  ctx.beginPath();
+                  ctx.arc(px, py, 8.5, 0, Math.PI * 2);
+                  ctx.fill();
+                }
+                ctx.fillStyle = isLiveRow ? '#e11d48' : '#0284c7';
+                ctx.beginPath();
+                ctx.arc(px, py, isLiveRow ? 4.8 : 4.0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+              }
+
+              ctx.restore();
+            }
           }
 
           springOverlayHitRef.current = {
@@ -16115,7 +16503,7 @@ export default function App() {
             ...sim,
             graphs: {
               ...sim.graphs,
-              [gb.key]: { ...sim.graphs[gb.key], visible: false },
+              [gb.key]: { ...(sim.graphs[gb.key] || { visible: true }), visible: false },
             },
           }));
           isDrawingRef.current = false;
@@ -18237,13 +18625,13 @@ export default function App() {
       const dragR = draggingSpringGraphResizeRef.current;
       if (dragR.mode === 'width') {
         const nextW = Math.round(
-          Math.max(260, Math.min(680, latestPt.x - dragR.axisLeftX + 32))
+          Math.max(240, Math.min(680, latestPt.x - dragR.axisLeftX + 32))
         );
         updateActiveSpringSimConfig((sim) => {
           if (sim.id !== dragR.simId) return sim;
           const nextGraphs = { ...sim.graphs };
           for (const k of dragR.stackedKeys) {
-            nextGraphs[k] = { ...nextGraphs[k], width: nextW };
+            nextGraphs[k] = { ...(nextGraphs[k] || { visible: true }), width: nextW };
           }
           return { ...sim, graphs: nextGraphs };
         });
@@ -18255,11 +18643,14 @@ export default function App() {
           if (sim.id !== dragR.simId) return sim;
           const nextGraphs = { ...sim.graphs };
           for (const k of dragR.stackedKeys) {
-            nextGraphs[k] = { ...nextGraphs[k], height: nextHalfH };
+            nextGraphs[k] = { ...(nextGraphs[k] || { visible: true }), height: nextHalfH };
           }
           return {
             ...sim,
-            amplitudePx: dragR.syncSpringAmp ? nextHalfH : sim.amplitudePx,
+            amplitudePx:
+              dragR.syncSpringAmp && dragR.graphKey !== 'hooke'
+                ? nextHalfH
+                : sim.amplitudePx,
             graphs: nextGraphs,
           };
         });
@@ -18285,7 +18676,7 @@ export default function App() {
               graphs: {
                 ...sim.graphs,
                 [dragG.graphKey]: {
-                  ...sim.graphs[dragG.graphKey],
+                  ...(sim.graphs[dragG.graphKey] || { visible: true }),
                   x: nextX,
                   y: nextY,
                   customMoved: true,
@@ -31959,6 +32350,52 @@ export default function App() {
 
                         {activeSpring && (
                           <>
+                            {/* 1B. Two-Mode Switcher on the SAME Spring Setup: Hooke's Law (F_ελ - Δl) vs Simple Harmonic Oscillation (Α.Α.Τ.) */}
+                            <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsSpringSimulating(false);
+                                  setIsSpringPaused(false);
+                                  springSimElapsedRef.current = 0;
+                                  springSimLastFrameTimeRef.current = null;
+                                  setSpringPhaseShiftAnim(null);
+                                  updateActiveSpringSimConfig((sim) => ({
+                                    ...sim,
+                                    showAmplitudeLines: false,
+                                    showPositionScale: false,
+                                    initialPhaseMode: 'eq',
+                                  }));
+                                }}
+                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                  !activeSpring.showAmplitudeLines
+                                    ? 'bg-sky-600 text-white shadow-2xs'
+                                    : 'text-slate-600 hover:bg-white/70'
+                                }`}
+                                title="Μελέτη Ελαστικής Παραμόρφωσης & Νόμου του Hooke (Fελ = k·Δl) με χάρακα, πίνακα τιμών και διάγραμμα Fελ–Δl"
+                              >
+                                <span>📏 Νόμος Hooke</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateActiveSpringSimConfig((sim) => ({
+                                    ...sim,
+                                    showAmplitudeLines: true,
+                                    showPositionScale: true,
+                                  }));
+                                }}
+                                className={`py-1.5 px-2 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                  activeSpring.showAmplitudeLines
+                                    ? 'bg-emerald-600 text-white shadow-2xs'
+                                    : 'text-slate-600 hover:bg-white/70'
+                                }`}
+                                title="Μελέτη Απλής Αρμονικής Ταλάντωσης με κλίμακα θέσης (+A / 0 / -A), πλάτος και διαγράμματα x(t), υ(t), α(t)"
+                              >
+                                <span>〰️ Ταλάντωση (Α.Α.Τ.)</span>
+                              </button>
+                            </div>
+
                             {activeSpring.showAmplitudeLines ? (
                               <>
                                 {/* 2. Primary Play / Pause / Resume / Clear / Stop Oscillation Controls */}
@@ -32004,7 +32441,7 @@ export default function App() {
                                           setSpringGraphClearTick((t) => t + 1);
                                         }}
                                         className="py-1.5 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-                                        title="Καθαρισμός των καμπυλών στα διαγράμματα x(t), υ(t), α(t)"
+                                        title="Καθαρισμός των καμπυλών στα διαγραμματα x(t), υ(t), α(t)"
                                       >
                                         <span>🧹 Καθαρισμός</span>
                                       </button>
@@ -32083,14 +32520,284 @@ export default function App() {
                                 </div>
                               </>
                             ) : (
-                              <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2 text-[10px] text-sky-950 leading-snug space-y-1">
-                                <div className="font-extrabold flex items-center justify-between">
-                                  <span>🪝 Λειτουργία Νόμου του Hooke (F = k·Δl)</span>
-                                </div>
-                                <p className="text-[9.5px] text-sky-800">
-                                  Κρεμάστε ή ξεκρεμάστε διαδοχικά βαρίδια (σε ταβάνι, πάτωμα ή κεκλιμένο επίπεδο) με το Λάσο. Για ταλάντωση ενεργοποιήστε το <b>«📏 Κλίμακα & Πλάτος (+A / -A) & Θ.Ι.»</b> παρακάτω!
-                                </p>
-                              </div>
+                              (() => {
+                                const eqSpStroke = activePage.strokes.find(
+                                  (s) => s.id === activeSpring.eqSpringStrokeId
+                                );
+                                const spInfo = eqSpStroke
+                                  ? getSpringTerminalsAndWidthVec(eqSpStroke)
+                                  : null;
+                                const fixedPt = spInfo
+                                  ? activeSpring.fixedEnd === 'start'
+                                    ? spInfo.startTerm
+                                    : spInfo.endTerm
+                                  : { x: 0, y: 0 };
+                                const freePt = spInfo
+                                  ? activeSpring.fixedEnd === 'start'
+                                    ? spInfo.endTerm
+                                    : spInfo.startTerm
+                                  : { x: 0, y: 100 };
+                                const ux = spInfo
+                                  ? (freePt.x - fixedPt.x) / spInfo.length
+                                  : 0;
+                                const uy = spInfo
+                                  ? (freePt.y - fixedPt.y) / spInfo.length
+                                  : 1;
+                                const l0Mm = Math.round(activeSpring.naturalLengthPx / 3);
+                                const curLMm = Math.round(
+                                  (spInfo ? spInfo.length : activeSpring.naturalLengthPx) / 3
+                                );
+                                const curDeltaLMm = Math.abs(curLMm - l0Mm);
+                                const curChainCount = getWeightChainIds(
+                                  activePage,
+                                  activeSpring.massStrokeId
+                                ).length;
+                                const curForceN = Number(activeSpring.mass.toFixed(2));
+                                const eqLen1Px = computeEquilibriumLengthPx(
+                                  activeSpring.naturalLengthPx,
+                                  ux,
+                                  uy,
+                                  1.0,
+                                  activeSpring.stiffness
+                                );
+                                const deltaL1Mm = Math.max(
+                                  1,
+                                  Math.round(
+                                    Math.abs(eqLen1Px - activeSpring.naturalLengthPx) / 3
+                                  )
+                                );
+                                const signDir = uy < -0.78 ? -1 : 1;
+                                const rows = activeSpring.hookeMeasurements || [];
+
+                                return (
+                                  <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2.5 text-[10px] text-sky-950 leading-snug space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-extrabold text-[10.5px] text-sky-900">
+                                        🪝 Μελέτη Νόμου Hooke (Fελ = k·Δl)
+                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-800 font-bold text-[9.5px]">
+                                        l₀ = {l0Mm} mm
+                                      </span>
+                                    </div>
+
+                                    {/* Live Readout matching the Ruler (1mm = 3px) */}
+                                    <div className="grid grid-cols-3 gap-1 bg-white/90 rounded-lg p-1.5 border border-sky-200/80 text-center">
+                                      <div>
+                                        <div className="text-[9px] text-slate-500 font-bold">
+                                          Βάρος / Fελ
+                                        </div>
+                                        <div className="text-[11px] font-extrabold text-rose-600">
+                                          {curForceN} N ({curChainCount} β.)
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-[9px] text-slate-500 font-bold">
+                                          Μήκος l
+                                        </div>
+                                        <div className="text-[11px] font-extrabold text-slate-800">
+                                          {curLMm} mm
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-[9px] text-slate-500 font-bold">
+                                          {signDir < 0 ? 'Συσπείρωση Δl' : 'Επιμήκυνση Δl'}
+                                        </div>
+                                        <div className="text-[11px] font-extrabold text-sky-700">
+                                          {curDeltaLMm} mm
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Table Action Buttons */}
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          updateActiveSpringSimConfig((sim) => {
+                                            const existing = [...(sim.hookeMeasurements || [])];
+                                            if (existing.length === 0) {
+                                              existing.push({
+                                                id: `hm-0-${Date.now()}`,
+                                                weightsCount: 0,
+                                                forceN: 0,
+                                                lengthMm: l0Mm,
+                                                deltaLMm: 0,
+                                              });
+                                            }
+                                            const matchIdx = existing.findIndex(
+                                              (r) => r.weightsCount === curChainCount
+                                            );
+                                            const newRow: HookeMeasurementRow = {
+                                              id: `hm-${curChainCount}-${Date.now()}`,
+                                              weightsCount: curChainCount,
+                                              forceN: curForceN,
+                                              lengthMm: curLMm,
+                                              deltaLMm: curDeltaLMm,
+                                            };
+                                            if (matchIdx >= 0) existing[matchIdx] = newRow;
+                                            else existing.push(newRow);
+                                            existing.sort(
+                                              (a, b) =>
+                                                a.weightsCount - b.weightsCount ||
+                                                a.deltaLMm - b.deltaLMm
+                                            );
+                                            return {
+                                              ...sim,
+                                              hookeMeasurements: existing,
+                                            };
+                                          });
+                                        }}
+                                        className="flex-1 py-1 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[10px] cursor-pointer transition shadow-2xs"
+                                        title="Καταγράφει την τρέχουσα μέτρηση (Βαρίδια, Fελ, l, Δl) στον Πίνακα Τιμών"
+                                      >
+                                        ➕ Καταγραφή ({curChainCount} β.)
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const autoRows: HookeMeasurementRow[] = [0, 1, 2, 3, 4].map(
+                                            (n) => ({
+                                              id: `hm-auto-${n}-${Date.now()}`,
+                                              weightsCount: n,
+                                              forceN: n,
+                                              lengthMm: Math.max(
+                                                4,
+                                                l0Mm + signDir * n * deltaL1Mm
+                                              ),
+                                              deltaLMm: n * deltaL1Mm,
+                                            })
+                                          );
+                                          updateActiveSpringSimConfig((sim) => ({
+                                            ...sim,
+                                            hookeMeasurements: autoRows,
+                                            showHookeCanvasTable: true,
+                                            graphs: {
+                                              ...sim.graphs,
+                                              hooke: {
+                                                ...(sim.graphs.hooke || {}),
+                                                visible: true,
+                                              },
+                                            },
+                                          }));
+                                        }}
+                                        className="py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] cursor-pointer transition shadow-2xs"
+                                        title="Αυτόματη συμπλήρωση πίνακα τιμών (0 έως 4 βαρίδια) και εμφάνιση διαγράμματος Fελ – Δl"
+                                      >
+                                        ⚡ 0–4 Βάρη
+                                      </button>
+                                      {rows.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            updateActiveSpringSimConfig((sim) => ({
+                                              ...sim,
+                                              hookeMeasurements: [],
+                                            }));
+                                          }}
+                                          className="py-1 px-1.5 rounded-lg bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 font-bold text-[10px] cursor-pointer transition"
+                                          title="Καθαρισμός πίνακα μετρήσεων"
+                                        >
+                                          🧹
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Interactive Table of Values (Πίνακας Τιμών Fελ - Δl) */}
+                                    {rows.length > 0 && (
+                                      <div className="bg-white rounded-lg border border-sky-200 overflow-hidden">
+                                        <div className="grid grid-cols-9 bg-slate-100 text-[9px] font-extrabold text-slate-600 py-1 px-1.5 text-center border-b border-slate-200">
+                                          <span className="col-span-2">Βάρη</span>
+                                          <span className="col-span-2">Fελ (N)</span>
+                                          <span className="col-span-2">l (mm)</span>
+                                          <span className="col-span-2">Δl (mm)</span>
+                                          <span className="col-span-1"></span>
+                                        </div>
+                                        <div className="divide-y divide-slate-100 max-h-32 overflow-y-auto">
+                                          {rows.map((r) => {
+                                            const isCur =
+                                              Math.abs(r.deltaLMm - curDeltaLMm) <= 1 &&
+                                              Math.abs(r.forceN - curForceN) <= 0.15;
+                                            return (
+                                              <div
+                                                key={r.id}
+                                                className={`grid grid-cols-9 items-center py-0.5 px-1.5 text-center text-[10px] ${
+                                                  isCur
+                                                    ? 'bg-sky-50 font-extrabold text-sky-900'
+                                                    : 'text-slate-700 font-semibold'
+                                                }`}
+                                              >
+                                                <span className="col-span-2">{r.weightsCount}</span>
+                                                <span className="col-span-2 text-rose-600">
+                                                  {Number(r.forceN.toFixed(2))}
+                                                </span>
+                                                <span className="col-span-2">{r.lengthMm}</span>
+                                                <span className="col-span-2 text-sky-700">
+                                                  {r.deltaLMm}
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    updateActiveSpringSimConfig((sim) => ({
+                                                      ...sim,
+                                                      hookeMeasurements: (
+                                                        sim.hookeMeasurements || []
+                                                      ).filter((item) => item.id !== r.id),
+                                                    }));
+                                                  }}
+                                                  className="col-span-1 text-slate-400 hover:text-rose-600 cursor-pointer text-[9.5px]"
+                                                  title="Διαγραφή μέτρησης"
+                                                >
+                                                  ✕
+                                                </button>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Checkboxes to display the F_ελ – Δl Diagram & Table on the Canvas */}
+                                    <div className="pt-1 border-t border-sky-200/80 space-y-1.5">
+                                      <label className="flex items-center justify-between text-[10.5px] font-extrabold text-sky-950 cursor-pointer">
+                                        <span>📈 Διάγραμμα Fελ – Δl (στον καμβά)</span>
+                                        <input
+                                          type="checkbox"
+                                          checked={Boolean(activeSpring.graphs.hooke?.visible)}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            updateActiveSpringSimConfig((sim) => ({
+                                              ...sim,
+                                              graphs: {
+                                                ...sim.graphs,
+                                                hooke: {
+                                                  ...(sim.graphs.hooke || {}),
+                                                  visible: checked,
+                                                },
+                                              },
+                                            }));
+                                          }}
+                                          className="accent-sky-600 w-4 h-4 cursor-pointer"
+                                        />
+                                      </label>
+                                      <label className="flex items-center justify-between text-[10.5px] font-bold text-sky-900 cursor-pointer">
+                                        <span>📋 Πίνακας Τιμών Fελ – Δl (στον καμβά)</span>
+                                        <input
+                                          type="checkbox"
+                                          checked={Boolean(activeSpring.showHookeCanvasTable)}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            updateActiveSpringSimConfig((sim) => ({
+                                              ...sim,
+                                              showHookeCanvasTable: checked,
+                                            }));
+                                          }}
+                                          className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                                        />
+                                      </label>
+                                    </div>
+                                  </div>
+                                );
+                              })()
                             )}
 
                             {/* 4. Mass (m), Stiffness (k) & Coupled Frequency f = (1/2π)√(k/m) Sliders */}
