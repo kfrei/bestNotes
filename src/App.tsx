@@ -16548,7 +16548,9 @@ export default function App() {
           pt.y >= spHit.posScaleBox.minY - 6 &&
           pt.y <= spHit.posScaleBox.maxY + 6);
       const hitMassBlock =
-        (isSpringSimulating || Boolean(getActiveSpringSim(activePage)?.showAmplitudeLines)) &&
+        (isSpringSimulating ||
+          (activeTool !== 'lasso' &&
+            Boolean(getActiveSpringSim(activePage)?.showAmplitudeLines))) &&
         pt.x >= spHit.massBox.minX - 8 &&
         pt.x <= spHit.massBox.maxX + 8 &&
         pt.y >= spHit.massBox.minY - 8 &&
@@ -17441,6 +17443,68 @@ export default function App() {
 
     // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle on Oriented Bounding Box!)
     if (effectiveTool === 'lasso') {
+      // Direct 1-Step Touch/Click & Drag on any Chained/Hanging Weight or Hooked Weight:
+      // If the user touches a specific weight (even if another weight in the chain was previously selected), grab THAT exact weight immediately!
+      if (!isAdditiveSelect) {
+        const lockedLayerIdsForWeight = new Set(
+          targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+        );
+        let directWeightHit: StrokeObject | null = null;
+        for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
+          const s = targetPage.strokes[i];
+          if (lockedLayerIdsForWeight.has(s.layerId)) continue;
+          const isChainOrHookedWeight =
+            s.shapeType === 'hooked-weight' ||
+            Boolean(s.attachedToWeightId) ||
+            (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
+            targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
+          if (!isChainOrHookedWeight) continue;
+          const sb = getStrokeBounds(s);
+          if (
+            pt.x >= sb.minX - 4 &&
+            pt.x <= sb.maxX + 4 &&
+            pt.y >= sb.minY - 2 &&
+            pt.y <= sb.maxY + 2
+          ) {
+            directWeightHit = s;
+            break;
+          }
+        }
+        if (
+          directWeightHit &&
+          (selectedStrokeIds.length !== 1 || selectedStrokeIds[0] !== directWeightHit.id)
+        ) {
+          clearActiveOverlay();
+          setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
+          setRedoStack([]);
+          const wb = getStrokeBounds(directWeightHit);
+          const wcx = (wb.minX + wb.maxX) / 2;
+          const wcy = (wb.minY + wb.maxY) / 2;
+          const nextIds = [directWeightHit.id];
+          setSelectedStrokeIds(nextIds);
+          setSelectedImageIds([]);
+          setSelectedImageId(null);
+          setActiveNodeStrokeId(directWeightHit.id);
+          setShowToolSubBar(true);
+          unhookingDragStrokeIdsRef.current = new Set();
+          selectionTransformRef.current = {
+            mode: 'move',
+            startX: pt.x,
+            startY: pt.y,
+            centerX: wcx,
+            centerY: wcy,
+            anchorX: wcx,
+            anchorY: wcy,
+            initialDist: 1,
+            initialAngle: 0,
+            targetStrokeIds: nextIds,
+          };
+          isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+          isDrawingRef.current = true;
+          return;
+        }
+      }
+
       const selBounds = getSelectionBounds();
       if (selBounds) {
         const pad = 8;
@@ -17758,16 +17822,7 @@ export default function App() {
             clearActiveOverlay();
             setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
-            unhookingDragStrokeIdsRef.current = new Set(
-              selectedStrokeIds.filter((id) => {
-                const st = targetPage.strokes.find((s) => s.id === id);
-                return (
-                  Boolean(st?.attachedToWeightId) ||
-                  (targetPage.springSims || []).some((sm) => sm.massStrokeId === id) ||
-                  targetPage.strokes.some((o) => o.attachedToWeightId === id)
-                );
-              })
-            );
+            unhookingDragStrokeIdsRef.current = new Set();
             selectionTransformRef.current = {
               mode: 'move',
               startX: pt.x,
@@ -17826,13 +17881,7 @@ export default function App() {
           setSelectedImageId(null);
           setActiveNodeStrokeId(hitWeightStroke.id);
           setShowToolSubBar(true);
-          const isCurrentlyAttached =
-            Boolean(hitWeightStroke.attachedToWeightId) ||
-            (targetPage.springSims || []).some((sm) => sm.massStrokeId === hitWeightStroke!.id) ||
-            targetPage.strokes.some((o) => o.attachedToWeightId === hitWeightStroke!.id);
-          unhookingDragStrokeIdsRef.current = isCurrentlyAttached
-            ? new Set([hitWeightStroke.id])
-            : new Set();
+          unhookingDragStrokeIdsRef.current = new Set();
           selectionTransformRef.current = {
             mode: 'move',
             startX: pt.x,
@@ -20845,12 +20894,11 @@ export default function App() {
               }
               if (other.shapeType === 'spring') {
                 const spInfo = getSpringTerminalsAndWidthVec(other);
-                // If this spring ALREADY has a weight chain attached, snap to the outer end of the LAST weight in that chain (only in Hooke's Law Mode)!
+                // If this spring ALREADY has a weight chain attached, snap to the outer end of the LAST weight in that chain!
                 const existingSimOnSp = getValidSpringSims(activePage).find(
                   (sm) => sm.eqSpringStrokeId === other.id
                 );
                 if (existingSimOnSp) {
-                  if (existingSimOnSp.showAmplitudeLines) continue;
                   const fixedPt =
                     existingSimOnSp.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
                   const freePt =
@@ -20933,7 +20981,6 @@ export default function App() {
                 const attachedSimOnOther = getValidSpringSims(activePage).find(
                   (sm) => sm.massStrokeId === otherRootId
                 );
-                if (attachedSimOnOther?.showAmplitudeLines) continue;
                 const otherChain = getWeightChainIds(activePage, otherRootId);
                 if (otherChain.includes(draggedSt.id)) continue;
                 let ux = 0;
@@ -21446,7 +21493,15 @@ export default function App() {
           if (nodeMagnetTimerRef.current) {
             cancelNodeMagnetTimer();
           }
-          if (curBox && refBoxes.length > 0) {
+          const isAttachedOrUnhookingWeight = targetStrokeIdList.some((sid) => {
+            if (unhookingDragStrokeIdsRef.current.has(sid)) return true;
+            const st = activePage.strokes.find((s) => s.id === sid);
+            return (
+              Boolean(st?.attachedToWeightId) ||
+              (activePage.springSims || []).some((sm) => sm.massStrokeId === sid)
+            );
+          });
+          if (curBox && refBoxes.length > 0 && !isAttachedOrUnhookingWeight) {
             const SNAP_T = 2.2;
             const candMinX = curBox.minX + rawDx;
             const candMaxX = curBox.maxX + rawDx;
@@ -21554,7 +21609,7 @@ export default function App() {
               const candCx = (sb.minX + sb.maxX) / 2 + dx;
               const candCy = (sb.minY + sb.maxY) / 2 + dy;
 
-              // Case 1: `s` is hooked onto a parent weight in the chain -> unhook when dragged sideways/away (in Hooke's Law Mode)!
+              // Case 1: `s` is hooked onto a parent weight in the chain -> unhook when dragged sideways/away!
               if (s.attachedToWeightId && !movingStrokeSet.has(s.attachedToWeightId)) {
                 const parentSt = page.strokes.find((p) => p.id === s.attachedToWeightId);
                 if (parentSt) {
@@ -21562,9 +21617,6 @@ export default function App() {
                   const attachedSimForChain = (page.springSims || []).find(
                     (sm) => sm.massStrokeId === chainRootId
                   );
-                  if (attachedSimForChain?.showAmplitudeLines) {
-                    continue;
-                  }
                   let ux = 0;
                   let uy = 1;
                   if (attachedSimForChain) {
@@ -21618,13 +21670,12 @@ export default function App() {
                 }
               }
 
-              // Case 2: `s` is the root weight hooked directly onto a spring -> unhook when dragged sideways/away (in Hooke's Law Mode)!
+              // Case 2: `s` is the root weight hooked directly onto a spring -> unhook when dragged sideways/away!
               const attachedSimOnRoot = (page.springSims || []).find(
                 (sm) => sm.massStrokeId === s.id
               );
               if (
                 attachedSimOnRoot &&
-                !attachedSimOnRoot.showAmplitudeLines &&
                 !movingStrokeSet.has(attachedSimOnRoot.eqSpringStrokeId)
               ) {
                 const eqSp = page.strokes.find(
