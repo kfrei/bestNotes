@@ -1133,7 +1133,10 @@ export default function App() {
     simId: string;
     startTime: number;
     fromLengthPx?: number;
+    springStrokeId?: string;
+    fixedEnd?: 'start' | 'end';
   } | null>(null);
+  const unhookingDragStrokeIdsRef = useRef<Set<string>>(new Set());
   const [springPhaseShiftAnim, setSpringPhaseShiftAnim] = useState<{
     simId: string;
     fromDispPx: number;
@@ -5837,6 +5840,9 @@ export default function App() {
             continue;
           }
           // While spring oscillation (or live mass pulling / initial l0->Θ.Ι. settling / initial position shift to +A or -A) is active, hide the static equilibrium spring & mass block so only the 60fps animated/displaced version renders!
+          if (isCurrentActivePage && springSettleAnim?.springStrokeId === s.id) {
+            continue;
+          }
           if (
             isCurrentActivePage &&
             activePageSpringSim &&
@@ -5887,6 +5893,16 @@ export default function App() {
           const selImagesList = (pageObj.images || []).filter((im) => effectiveImgIds.includes(im.id));
           const totalSelObjects = selStrokesList.length + selImagesList.length;
 
+          const isSelectedAttachedWeight =
+            selImagesList.length === 0 &&
+            selStrokesList.length > 0 &&
+            selStrokesList.some(
+              (st) =>
+                Boolean(st.attachedToWeightId) ||
+                (pageObj.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
+                pageObj.strokes.some((o) => o.attachedToWeightId === st.id)
+            );
+
           ctx.save();
           ctx.translate(bcx, bcy);
           ctx.rotate(angle);
@@ -5897,7 +5913,7 @@ export default function App() {
           ctx.setLineDash([6, 4]);
           ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
 
-          if (!isMoveOnlyLassoSelection) {
+          if (!isMoveOnlyLassoSelection && !isSelectedAttachedWeight) {
           // Rotation Stem
           ctx.setLineDash([]);
           ctx.beginPath();
@@ -7503,6 +7519,8 @@ export default function App() {
         ...structuredClone(s),
         id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         groupId: s.groupId ? newGroupId : undefined,
+        attachedToWeightId: undefined,
+        springSupport: undefined,
         points: s.points.map((p) => ({
           ...p,
           x: p.x + 28,
@@ -8481,6 +8499,8 @@ export default function App() {
         ...structuredClone(s),
         id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         groupId: s.groupId ? newGroupId : undefined,
+        attachedToWeightId: undefined,
+        springSupport: undefined,
         points: s.points.map((p) => ({
           ...p,
           x: p.x + dx,
@@ -10013,16 +10033,18 @@ export default function App() {
     stiffness: number
   ): number => {
     const ratio = mass / Math.max(0.25, stiffness);
+    // Exact integer-millimeter unit elongation Δl₁ (1 mm = 4.6 px on A4 canvas) so Hooke's Law Δl = n · Δl₁ is crystal-clear on the mm Ruler!
+    const unitDeltaLPx = Math.max(5, Math.round((naturalLengthPx * 0.25) / 4.6)) * 4.6;
     if (uy > 0.45) {
-      // Hanging from ceiling: gravity elongates the spring downwards
-      return naturalLengthPx * (1 + 0.30 * ratio);
+      // Hanging from ceiling: gravity elongates the spring strictly linearly by Hooke's Law (l = l₀ + (m/k)·Δl₁)
+      return naturalLengthPx + unitDeltaLPx * ratio;
     }
     if (uy < -0.45) {
       // Standing on floor: gravity compresses the spring downwards
-      return naturalLengthPx * Math.max(0.36, 1 - 0.26 * ratio);
+      return Math.max(naturalLengthPx * 0.32, naturalLengthPx - unitDeltaLPx * 0.85 * ratio);
     }
     // Inclined plane or horizontal spring
-    return naturalLengthPx * Math.max(0.4, 1 + 0.28 * uy * ratio);
+    return Math.max(naturalLengthPx * 0.36, naturalLengthPx + unitDeltaLPx * uy * ratio);
   };
 
   const getWeightChainIds = (page: NotePage, rootWeightId: string): string[] => {
@@ -10309,6 +10331,25 @@ export default function App() {
       if (existingSim) {
         createdOrUpdatedName = existingSim.name;
         createdSimId = existingSim.id;
+        const existingChain = getWeightChainIds(page, existingSim.massStrokeId);
+        if (existingChain.length > 0 && !existingChain.includes(mass.id)) {
+          const tailId = existingChain[existingChain.length - 1];
+          const pageWithLinkedMass: NotePage = {
+            ...page,
+            strokes: page.strokes.map((s) =>
+              s.id === mass.id ? { ...s, attachedToWeightId: tailId } : s
+            ),
+          };
+          const fullChain = getWeightChainIds(pageWithLinkedMass, existingSim.massStrokeId);
+          const updatedSim: SpringSimConfig = {
+            ...existingSim,
+            eqSpringStrokeId: sp.id,
+            naturalSpringStrokeId: undefined,
+            showNaturalSpring: false,
+            mass: Math.max(1.0, fullChain.length * 1.0),
+          };
+          return applySpringSimParametersToStrokes(pageWithLinkedMass, updatedSim);
+        }
         const updatedSim: SpringSimConfig = {
           ...existingSim,
           eqSpringStrokeId: sp.id,
@@ -10399,7 +10440,8 @@ export default function App() {
         amplitudePx: defaultAmp,
         initialPhaseMode: 'eq',
         showNaturalSpring: false,
-        showAmplitudeLines: true,
+        showPositionScale: false,
+        showAmplitudeLines: false,
         showForceVectors: false,
         graphs: {
           xt: { visible: false },
@@ -11590,22 +11632,24 @@ export default function App() {
     const activeSim = getActiveCircuitSim(activePage);
     const activeSpringSim = getActiveSpringSim(activePage);
     const hasSpringOverlay =
-      Boolean(activeSpringSim) &&
-      (isSpringSimulating ||
-        springSettleAnim !== null ||
-        springPhaseShiftAnim !== null ||
-        showSimulationPanel ||
-        (activeSpringSim!.initialPhaseMode !== 'eq' &&
-          activeSpringSim!.initialPhaseMode !== 'eqDown') ||
-        activeSpringSim!.showAmplitudeLines ||
-        activeSpringSim!.showForceVectors ||
-        activeSpringSim!.graphs.xt.visible ||
-        activeSpringSim!.graphs.vt.visible ||
-        activeSpringSim!.graphs.at.visible ||
-        draggingSpringMassRef.current !== null ||
-        draggingSpringAmpHandleRef.current !== null ||
-        draggingSpringGraphResizeRef.current !== null ||
-        draggingSpringGraphRef.current !== null);
+      Boolean(springSettleAnim?.springStrokeId) ||
+      (Boolean(activeSpringSim) &&
+        (isSpringSimulating ||
+          springSettleAnim !== null ||
+          springPhaseShiftAnim !== null ||
+          showSimulationPanel ||
+          (activeSpringSim!.initialPhaseMode !== 'eq' &&
+            activeSpringSim!.initialPhaseMode !== 'eqDown') ||
+          Boolean(activeSpringSim!.showPositionScale) ||
+          activeSpringSim!.showAmplitudeLines ||
+          activeSpringSim!.showForceVectors ||
+          activeSpringSim!.graphs.xt.visible ||
+          activeSpringSim!.graphs.vt.visible ||
+          activeSpringSim!.graphs.at.visible ||
+          draggingSpringMassRef.current !== null ||
+          draggingSpringAmpHandleRef.current !== null ||
+          draggingSpringGraphResizeRef.current !== null ||
+          draggingSpringGraphRef.current !== null));
     const hasAlignFlash = circuitAlignFlashStart !== null;
     const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
     if (!hasProposal && !hasSpringOverlay && ((!isSimulating && !hasAlignFlash) || !activeSim)) {
@@ -12226,6 +12270,43 @@ export default function App() {
       //    Θ.Ι. Black Dashed Line, Symmetric Blue Dashed +A/-A Handles,
       //    Live Force Vectors & 3 Draggable Live Graphs x(t), υ(t), α(t))
       // ======================================================================
+      if (springSettleAnim?.springStrokeId) {
+        const SETTLE_DURATION_MS = 3000;
+        const elapsedMs = now - springSettleAnim.startTime;
+        const unloadedSp = activePage.strokes.find(
+          (s) => s.id === springSettleAnim.springStrokeId
+        );
+        if (unloadedSp && elapsedMs < SETTLE_DURATION_MS) {
+          const spInfo = getSpringTerminalsAndWidthVec(unloadedSp);
+          const fEnd = springSettleAnim.fixedEnd || unloadedSp.springSupport?.fixedEnd || 'start';
+          const fixedPt = fEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+          const freePt = fEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+          const axDx = freePt.x - fixedPt.x;
+          const axDy = freePt.y - fixedPt.y;
+          const axLen = Math.max(12, Math.hypot(axDx, axDy));
+          const axisUx = axDx / axLen;
+          const axisUy = axDy / axLen;
+          const elapsedSecSettle = elapsedMs / 1000;
+          const u = Math.max(0, Math.min(1, elapsedSecSettle / (SETTLE_DURATION_MS / 1000)));
+          const startLen = springSettleAnim.fromLengthPx ?? axLen + 36;
+          const rawDelta = axLen - startLen;
+          const initDelta = Math.abs(rawDelta) >= 14 ? rawDelta : -28;
+          const decay = Math.exp(-1.75 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
+          const deltaFromEqAlongAxis =
+            -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 1.45);
+          const curFreePt = {
+            x: freePt.x + deltaFromEqAlongAxis * axisUx,
+            y: freePt.y + deltaFromEqAlongAxis * axisUy,
+          };
+          const curStartTerm = fEnd === 'start' ? fixedPt : curFreePt;
+          const curEndTerm = fEnd === 'start' ? curFreePt : fixedPt;
+          const oscCorners = buildSpringQuadCorners(curStartTerm, curEndTerm, spInfo.widthVec);
+          drawStrokeOnContext(ctx, { ...unloadedSp, points: oscCorners }, false);
+        } else if (elapsedMs >= SETTLE_DURATION_MS) {
+          setSpringSettleAnim(null);
+        }
+      }
+
       if (activeSpringSim && hasSpringOverlay) {
         const eqSpring = activePage.strokes.find(
           (s) => s.id === activeSpringSim.eqSpringStrokeId
@@ -12433,7 +12514,7 @@ export default function App() {
                 activeSpringSim.initialPhaseMode !== 'eqDown'));
 
           // 6B-0. Faint Grey Position Scale & Draggable Position Pointer Arrow (αχνή γκρι κλίμακα θέσης με βελάκι δείκτη) on the left of the mass block!
-          if (showSpringOscGuides) {
+          if (showSpringOscGuides && Boolean(activeSpringSim.showPositionScale)) {
             const scaleDist = massW / 2 + 18;
             const scaleMidX = eqMassCx - perpUx * scaleDist;
             const scaleMidY = eqMassCy - perpUy * scaleDist;
@@ -16035,7 +16116,7 @@ export default function App() {
           pt.y >= spHit.posScaleBox.minY - 6 &&
           pt.y <= spHit.posScaleBox.maxY + 6);
       const hitMassBlock =
-        (isSpringSimulating || (showSimulationPanel && simActiveCategory === 'springs')) &&
+        isSpringSimulating &&
         pt.x >= spHit.massBox.minX - 8 &&
         pt.x <= spHit.massBox.maxX + 8 &&
         pt.y >= spHit.massBox.minY - 8 &&
@@ -16408,6 +16489,16 @@ export default function App() {
               `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
             );
           }
+          unhookingDragStrokeIdsRef.current = new Set(
+            nextStrokeIds.filter((id) => {
+              const st = targetPage.strokes.find((s) => s.id === id);
+              return (
+                Boolean(st?.attachedToWeightId) ||
+                (targetPage.springSims || []).some((sm) => sm.massStrokeId === id) ||
+                targetPage.strokes.some((o) => o.attachedToWeightId === id)
+              );
+            })
+          );
           selectionTransformRef.current = {
             mode: 'move',
             startX: pt.x,
@@ -16462,6 +16553,16 @@ export default function App() {
               `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
             );
           }
+          unhookingDragStrokeIdsRef.current = new Set(
+            nextStrokeIds.filter((id) => {
+              const st = targetPage.strokes.find((s) => s.id === id);
+              return (
+                Boolean(st?.attachedToWeightId) ||
+                (targetPage.springSims || []).some((sm) => sm.massStrokeId === id) ||
+                targetPage.strokes.some((o) => o.attachedToWeightId === id)
+              );
+            })
+          );
           selectionTransformRef.current = {
             mode: 'move',
             startX: pt.x,
@@ -16947,8 +17048,18 @@ export default function App() {
           return;
         }
 
+        const isSelectedAttachedWeight =
+          selImagesList.length === 0 &&
+          selStrokesList.length > 0 &&
+          selStrokesList.some(
+            (st) =>
+              Boolean(st.attachedToWeightId) ||
+              (targetPage.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
+              targetPage.strokes.some((o) => o.attachedToWeightId === st.id)
+          );
+
         if (!isAdditiveSelect) {
-          if (!isMoveOnlyLassoSelection) {
+          if (!isMoveOnlyLassoSelection && !isSelectedAttachedWeight) {
           // A. Check Top Semicircular Rotation Arrow Handle (↻)
           if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
             clearActiveOverlay();
@@ -17215,6 +17326,16 @@ export default function App() {
             clearActiveOverlay();
             setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
+            unhookingDragStrokeIdsRef.current = new Set(
+              selectedStrokeIds.filter((id) => {
+                const st = targetPage.strokes.find((s) => s.id === id);
+                return (
+                  Boolean(st?.attachedToWeightId) ||
+                  (targetPage.springSims || []).some((sm) => sm.massStrokeId === id) ||
+                  targetPage.strokes.some((o) => o.attachedToWeightId === id)
+                );
+              })
+            );
             selectionTransformRef.current = {
               mode: 'move',
               startX: pt.x,
@@ -17230,6 +17351,71 @@ export default function App() {
             isDrawingRef.current = true;
             return;
           }
+        }
+      }
+
+      // Direct 1-Step Touch/Click & Drag on any Lab Weight (or Hanging Weight on a Spring/Chain) in Lasso mode:
+      // Allows touching any weight with the Lasso and immediately dragging it left/right to unhook or hang it!
+      if (!isAdditiveSelect) {
+        const lockedLayerIds = new Set(
+          targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+        );
+        let hitWeightStroke: StrokeObject | null = null;
+        for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
+          const s = targetPage.strokes[i];
+          if (lockedLayerIds.has(s.layerId)) continue;
+          const isAttachedOrHookedWeight =
+            s.shapeType === 'hooked-weight' ||
+            Boolean(s.attachedToWeightId) ||
+            (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
+            targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
+          if (!isAttachedOrHookedWeight) continue;
+          const sb = getStrokeBounds(s);
+          if (
+            pt.x >= sb.minX - 8 &&
+            pt.x <= sb.maxX + 8 &&
+            pt.y >= sb.minY - 8 &&
+            pt.y <= sb.maxY + 8
+          ) {
+            hitWeightStroke = s;
+            break;
+          }
+        }
+        if (hitWeightStroke) {
+          clearActiveOverlay();
+          setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
+          setRedoStack([]);
+          const wb = getStrokeBounds(hitWeightStroke);
+          const wcx = (wb.minX + wb.maxX) / 2;
+          const wcy = (wb.minY + wb.maxY) / 2;
+          const nextIds = [hitWeightStroke.id];
+          setSelectedStrokeIds(nextIds);
+          setSelectedImageIds([]);
+          setSelectedImageId(null);
+          setActiveNodeStrokeId(hitWeightStroke.id);
+          setShowToolSubBar(true);
+          const isCurrentlyAttached =
+            Boolean(hitWeightStroke.attachedToWeightId) ||
+            (targetPage.springSims || []).some((sm) => sm.massStrokeId === hitWeightStroke!.id) ||
+            targetPage.strokes.some((o) => o.attachedToWeightId === hitWeightStroke!.id);
+          unhookingDragStrokeIdsRef.current = isCurrentlyAttached
+            ? new Set([hitWeightStroke.id])
+            : new Set();
+          selectionTransformRef.current = {
+            mode: 'move',
+            startX: pt.x,
+            startY: pt.y,
+            centerX: wcx,
+            centerY: wcy,
+            anchorX: wcx,
+            anchorY: wcy,
+            initialDist: 1,
+            initialAngle: 0,
+            targetStrokeIds: nextIds,
+          };
+          isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
+          isDrawingRef.current = true;
+          return;
         }
       }
 
@@ -20204,13 +20390,17 @@ export default function App() {
           } else if (
             draggedSt &&
             draggedSt.isShape &&
-            massShapeTypes.includes(draggedSt.shapeType || '')
+            massShapeTypes.includes(draggedSt.shapeType || '') &&
+            !unhookingDragStrokeIdsRef.current.has(draggedSt.id)
           ) {
             const mb = getStrokeBounds(draggedSt);
             const mW = Math.max(16, mb.maxX - mb.minX);
             const mH = Math.max(16, mb.maxY - mb.minY);
             const candCx = (mb.minX + mb.maxX) / 2 + rawDx;
             const candCy = (mb.minY + mb.maxY) / 2 + rawDy;
+            const candTopHookX = candCx;
+            const candTopHookY = mb.minY + rawDy;
+            const hookOverlap = draggedSt.shapeType === 'hooked-weight' ? -4 : 0;
             const draggedDescendants = new Set(getWeightChainIds(activePage, draggedSt.id));
 
             for (const other of activePage.strokes) {
@@ -20221,6 +20411,41 @@ export default function App() {
                 continue;
               }
               if (other.shapeType === 'spring') {
+                // If this spring ALREADY has a weight chain hanging on it, snap to the bottom hook of the LAST weight in that chain!
+                const existingSimOnSp = getValidSpringSims(activePage).find(
+                  (sm) => sm.eqSpringStrokeId === other.id
+                );
+                if (existingSimOnSp) {
+                  const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
+                  if (existingChain.length > 0 && !existingChain.includes(draggedSt.id)) {
+                    const tailId = existingChain[existingChain.length - 1];
+                    const tailSt = activePage.strokes.find((s) => s.id === tailId);
+                    if (tailSt) {
+                      const tb = getStrokeBounds(tailSt);
+                      const tailBottomX = (tb.minX + tb.maxX) / 2;
+                      const tailBottomY = tb.maxY;
+                      const dTail = Math.hypot(
+                        candTopHookX - tailBottomX,
+                        candTopHookY - tailBottomY
+                      );
+                      if (dTail <= 46 && (!matchedPhysicsMagnet || dTail < matchedPhysicsMagnet.dist)) {
+                        matchedPhysicsMagnet = {
+                          kind: 'weight-to-weight',
+                          springStrokeId: tailSt.id,
+                          parentWeightId: tailSt.id,
+                          childWeightId: draggedSt.id,
+                          targetX: tailBottomX,
+                          targetY: tailBottomY,
+                          snapDx: tailBottomX - candTopHookX,
+                          snapDy: tailBottomY + hookOverlap - candTopHookY,
+                          dist: dTail,
+                        };
+                      }
+                    }
+                  }
+                  continue;
+                }
+
                 const spInfo = getSpringTerminalsAndWidthVec(other);
                 // Determine which terminal of the spring is the free end
                 let fixedEnd: 'start' | 'end' = other.springSupport?.fixedEnd || 'start';
@@ -20251,29 +20476,36 @@ export default function App() {
               } else if (
                 other.isShape &&
                 massShapeTypes.includes(other.shapeType || '') &&
-                !draggedDescendants.has(other.id) &&
-                // Only hook to a weight that doesn't already have ANOTHER weight hanging from its bottom hook!
-                !activePage.strokes.some(
-                  (s) => s.id !== draggedSt.id && s.attachedToWeightId === other.id
-                )
+                !draggedDescendants.has(other.id)
               ) {
+                const otherRootId = getWeightChainRootId(activePage, other.id);
+                const otherChain = getWeightChainIds(activePage, otherRootId);
+                if (otherChain.includes(draggedSt.id)) continue;
+                const tailId = otherChain[otherChain.length - 1] || other.id;
+                const tailSt = activePage.strokes.find((s) => s.id === tailId) || other;
+                const tb = getStrokeBounds(tailSt);
+                const tailBottomHookX = (tb.minX + tb.maxX) / 2;
+                const tailBottomHookY = tb.maxY;
                 const ob = getStrokeBounds(other);
-                const otherBottomHookX = (ob.minX + ob.maxX) / 2;
-                const otherBottomHookY = ob.maxY;
-                const candTopHookX = candCx;
-                const candTopHookY = mb.minY + rawDy;
-                const d = Math.hypot(candTopHookX - otherBottomHookX, candTopHookY - otherBottomHookY);
-                const hookOverlap = draggedSt.shapeType === 'hooked-weight' ? -4 : 0;
-                if (d <= 36 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                const dToTailHook = Math.hypot(
+                  candTopHookX - tailBottomHookX,
+                  candTopHookY - tailBottomHookY
+                );
+                const dToOther = Math.hypot(
+                  candTopHookX - (ob.minX + ob.maxX) / 2,
+                  candTopHookY - ob.maxY
+                );
+                const d = Math.min(dToTailHook, dToOther);
+                if (d <= 42 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
                   matchedPhysicsMagnet = {
                     kind: 'weight-to-weight',
-                    springStrokeId: other.id,
-                    parentWeightId: other.id,
+                    springStrokeId: tailSt.id,
+                    parentWeightId: tailSt.id,
                     childWeightId: draggedSt.id,
-                    targetX: otherBottomHookX,
-                    targetY: otherBottomHookY,
-                    snapDx: otherBottomHookX - candTopHookX,
-                    snapDy: otherBottomHookY + hookOverlap - candTopHookY,
+                    targetX: tailBottomHookX,
+                    targetY: tailBottomHookY,
+                    snapDx: tailBottomHookX - candTopHookX,
+                    snapDy: tailBottomHookY + hookOverlap - candTopHookY,
                     dist: d,
                   };
                 }
@@ -20792,38 +21024,150 @@ export default function App() {
           );
         }
 
+        let unhookedAnimToTrigger: {
+          simId: string;
+          fromLengthPx: number;
+          springStrokeId?: string;
+          fixedEnd?: 'start' | 'end';
+        } | null = null;
+        let unhookedToastMsg: string | null = null;
+
         updateActivePage(
           (page) => {
             const movingStrokeSet = new Set<string>(targetStrokeIdList);
             for (const sid of targetStrokeIdList) {
-              for (const cid of getWeightChainIds(page, sid)) {
-                movingStrokeSet.add(cid);
+              const st = page.strokes.find((s) => s.id === sid);
+              const isAttachedToSpringOrParent =
+                Boolean(st?.attachedToWeightId) ||
+                (page.springSims || []).some((sm) => sm.massStrokeId === sid);
+              if (!isAttachedToSpringOrParent) {
+                for (const cid of getWeightChainIds(page, sid)) {
+                  movingStrokeSet.add(cid);
+                }
               }
             }
 
             let unhookedRootId: string | null = null;
-            const movedStrokes = page.strokes.map((s) => {
-              if (!movingStrokeSet.has(s.id)) return s;
-              let nextAttachedToWeightId = s.attachedToWeightId;
-              if (
-                s.attachedToWeightId &&
-                !movingStrokeSet.has(s.attachedToWeightId)
-              ) {
+            let unhookedSpringSimIdToRemove: string | null = null;
+            let promotedRootForSim: { simId: string; newRootId: string } | null = null;
+            const relinkedChildToParent = new Map<string, string | undefined>();
+            let restoredNaturalSpringCorners: { springId: string; corners: BezierPoint[] } | null =
+              null;
+
+            for (const sid of targetStrokeIdList) {
+              const s = page.strokes.find((st) => st.id === sid);
+              if (!s) continue;
+              const sb = getStrokeBounds(s);
+              const candTopX = (sb.minX + sb.maxX) / 2 + dx;
+              const candTopY = sb.minY + dy;
+
+              // Case 1: `s` is hooked under a parent weight above it -> unhook when dragged left/right!
+              if (s.attachedToWeightId && !movingStrokeSet.has(s.attachedToWeightId)) {
                 const parentSt = page.strokes.find((p) => p.id === s.attachedToWeightId);
                 if (parentSt) {
                   const pb = getStrokeBounds(parentSt);
-                  const sb = getStrokeBounds(s);
-                  const dHook = Math.hypot(
-                    (sb.minX + sb.maxX) / 2 + dx - (pb.minX + pb.maxX) / 2,
-                    sb.minY + dy - pb.maxY
-                  );
-                  if (dHook > 26) {
+                  const parentBotX = (pb.minX + pb.maxX) / 2;
+                  const parentBotY = pb.maxY;
+                  const horizDist = Math.abs(candTopX - parentBotX);
+                  const dHook = Math.hypot(candTopX - parentBotX, candTopY - parentBotY);
+                  if (horizDist > 14 || dHook > 22) {
+                    unhookingDragStrokeIdsRef.current.add(s.id);
+                    relinkedChildToParent.set(s.id, undefined);
+                    for (const childCandidate of page.strokes) {
+                      if (
+                        childCandidate.id !== s.id &&
+                        childCandidate.attachedToWeightId === s.id
+                      ) {
+                        relinkedChildToParent.set(childCandidate.id, parentSt.id);
+                      }
+                    }
                     unhookedRootId = getWeightChainRootId(page, parentSt.id);
-                    nextAttachedToWeightId = undefined;
                   }
                 } else {
-                  nextAttachedToWeightId = undefined;
+                  relinkedChildToParent.set(s.id, undefined);
                 }
+              }
+
+              // Case 2: `s` is the top root weight hooked directly onto a spring -> unhook when dragged left/right!
+              const attachedSimOnRoot = (page.springSims || []).find(
+                (sm) => sm.massStrokeId === s.id
+              );
+              if (
+                attachedSimOnRoot &&
+                !movingStrokeSet.has(attachedSimOnRoot.eqSpringStrokeId)
+              ) {
+                const eqSp = page.strokes.find(
+                  (sp) => sp.id === attachedSimOnRoot.eqSpringStrokeId
+                );
+                if (eqSp) {
+                  const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+                  const freePt =
+                    attachedSimOnRoot.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                  const fixedPt =
+                    attachedSimOnRoot.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+                  const horizDist = Math.abs(candTopX - freePt.x);
+                  const dHook = Math.hypot(candTopX - freePt.x, candTopY - freePt.y);
+                  if (horizDist > 14 || dHook > 24) {
+                    unhookingDragStrokeIdsRef.current.add(s.id);
+                    const childBelow = page.strokes.find(
+                      (c) => c.id !== s.id && c.attachedToWeightId === s.id
+                    );
+                    if (childBelow) {
+                      relinkedChildToParent.set(childBelow.id, undefined);
+                      promotedRootForSim = {
+                        simId: attachedSimOnRoot.id,
+                        newRootId: childBelow.id,
+                      };
+                      unhookedRootId = childBelow.id;
+                    } else {
+                      unhookedSpringSimIdToRemove = attachedSimOnRoot.id;
+                      const ux = (freePt.x - fixedPt.x) / spInfo.length;
+                      const uy = (freePt.y - fixedPt.y) / spInfo.length;
+                      const natFreePt = {
+                        x: fixedPt.x + ux * attachedSimOnRoot.naturalLengthPx,
+                        y: fixedPt.y + uy * attachedSimOnRoot.naturalLengthPx,
+                      };
+                      const natStart =
+                        attachedSimOnRoot.fixedEnd === 'start' ? fixedPt : natFreePt;
+                      const natEnd =
+                        attachedSimOnRoot.fixedEnd === 'start' ? natFreePt : fixedPt;
+                      const wVec = orientSpringWidthVec(
+                        ux,
+                        uy,
+                        attachedSimOnRoot.baseSpringWidthPx,
+                        spInfo.widthVec
+                      );
+                      restoredNaturalSpringCorners = {
+                        springId: eqSp.id,
+                        corners: buildSpringQuadCorners(natStart, natEnd, wVec),
+                      };
+                      unhookedAnimToTrigger = {
+                        simId: `unhook-${eqSp.id}`,
+                        fromLengthPx: spInfo.length,
+                        springStrokeId: eqSp.id,
+                        fixedEnd: attachedSimOnRoot.fixedEnd,
+                      };
+                      unhookedToastMsg =
+                        '🪝 Το βαρίδιο ξεκρεμάστηκε — το ελατήριο επιστρέφει στο φυσικό του μήκος l₀!';
+                    }
+                  }
+                }
+              }
+            }
+
+            const movedStrokes = page.strokes.map((s) => {
+              if (restoredNaturalSpringCorners && s.id === restoredNaturalSpringCorners.springId) {
+                return {
+                  ...s,
+                  points: restoredNaturalSpringCorners.corners,
+                };
+              }
+              const hasRelink = relinkedChildToParent.has(s.id);
+              const nextAttachedToWeightId = hasRelink
+                ? relinkedChildToParent.get(s.id)
+                : s.attachedToWeightId;
+              if (!movingStrokeSet.has(s.id)) {
+                return hasRelink ? { ...s, attachedToWeightId: nextAttachedToWeightId } : s;
               }
               return {
                 ...s,
@@ -20847,6 +21191,19 @@ export default function App() {
                 .map((s) => s.groupId as string)
             );
 
+            let nextSpringSims = page.springSims || [];
+            if (unhookedSpringSimIdToRemove) {
+              nextSpringSims = nextSpringSims.filter(
+                (sm) => sm.id !== unhookedSpringSimIdToRemove
+              );
+            } else if (promotedRootForSim) {
+              nextSpringSims = nextSpringSims.map((sm) =>
+                sm.id === promotedRootForSim!.simId
+                  ? { ...sm, massStrokeId: promotedRootForSim!.newRootId }
+                  : sm
+              );
+            }
+
             let nextPage: NotePage = {
               ...page,
               texts:
@@ -20862,6 +21219,12 @@ export default function App() {
                 targetImgIdList.includes(im.id) ? { ...im, x: im.x + dx, y: im.y + dy } : im
               ),
               strokes: movedStrokes,
+              springSims: nextSpringSims,
+              activeSpringSimId:
+                unhookedSpringSimIdToRemove &&
+                page.activeSpringSimId === unhookedSpringSimIdToRemove
+                  ? nextSpringSims[0]?.id
+                  : page.activeSpringSimId,
             };
 
             if (unhookedRootId) {
@@ -20870,11 +21233,22 @@ export default function App() {
                 (sm) => sm.massStrokeId === unhookedRootId
               );
               if (attachedSim) {
+                const eqSp = nextPage.strokes.find(
+                  (sp) => sp.id === attachedSim.eqSpringStrokeId
+                );
+                const prevLen = eqSp
+                  ? getSpringTerminalsAndWidthVec(eqSp).length
+                  : attachedSim.naturalLengthPx;
                 const updatedSim: SpringSimConfig = {
                   ...attachedSim,
                   mass: Math.max(1.0, remainingChain.length * 1.0),
                 };
                 nextPage = applySpringSimParametersToStrokes(nextPage, updatedSim);
+                unhookedAnimToTrigger = {
+                  simId: attachedSim.id,
+                  fromLengthPx: prevLen,
+                };
+                unhookedToastMsg = `🪝 Ξεκρεμάστηκε βαρίδιο (έμειναν ${remainingChain.length} — νέα επιμήκυνση Hooke!)`;
               }
             }
 
@@ -20882,6 +21256,21 @@ export default function App() {
           },
           false
         );
+        if (unhookedAnimToTrigger) {
+          const animInfo: {
+            simId: string;
+            fromLengthPx: number;
+            springStrokeId?: string;
+            fixedEnd?: 'start' | 'end';
+          } = unhookedAnimToTrigger;
+          setSpringSettleAnim({
+            ...animInfo,
+            startTime: performance.now(),
+          });
+        }
+        if (unhookedToastMsg) {
+          showToast(unhookedToastMsg);
+        }
         return;
       }
 
@@ -21327,6 +21716,7 @@ export default function App() {
 
     // 2. Finish Lasso Selection
     if (effectiveTool === 'lasso' || selectionTransformRef.current || isDraggingSelectionRef.current) {
+      unhookingDragStrokeIdsRef.current.clear();
       const pendingPhys = pendingPhysicsMagnetRef.current;
       pendingPhysicsMagnetRef.current = null;
       cancelNodeMagnetTimer();
@@ -21350,6 +21740,12 @@ export default function App() {
             pendingPhys.springStrokeId,
             pendingPhys.massStrokeId
           );
+        } else if (
+          pendingPhys.kind === 'weight-to-weight' &&
+          pendingPhys.parentWeightId &&
+          pendingPhys.childWeightId
+        ) {
+          attachWeightToWeightChain(pendingPhys.parentWeightId, pendingPhys.childWeightId);
         }
         return;
       }
@@ -22141,10 +22537,28 @@ export default function App() {
         const topHookY = nb.minY;
         let matchedParentWeightId: string | null = null;
         let matchedSpringId: string | null = null;
-        let bestDist = 38;
+        let bestDist = 42;
         for (const other of activePage.strokes) {
           if (other.id === newStroke.id) continue;
           if (other.shapeType === 'spring') {
+            const existingSimOnSp = getValidSpringSims(activePage).find(
+              (sm) => sm.eqSpringStrokeId === other.id
+            );
+            if (existingSimOnSp) {
+              const existingChain = getWeightChainIds(activePage, existingSimOnSp.massStrokeId);
+              const tailId = existingChain[existingChain.length - 1];
+              const tailSt = tailId ? activePage.strokes.find((s) => s.id === tailId) : undefined;
+              if (tailSt) {
+                const tb = getStrokeBounds(tailSt);
+                const dTail = Math.hypot(topHookX - (tb.minX + tb.maxX) / 2, topHookY - tb.maxY);
+                if (dTail < bestDist) {
+                  bestDist = dTail;
+                  matchedParentWeightId = tailSt.id;
+                  matchedSpringId = null;
+                }
+              }
+              continue;
+            }
             const spInfo = getSpringTerminalsAndWidthVec(other);
             const fixedEnd = other.springSupport?.fixedEnd || 'start';
             const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
@@ -22154,17 +22568,18 @@ export default function App() {
               matchedSpringId = other.id;
               matchedParentWeightId = null;
             }
-          } else if (
-            other.shapeType === 'hooked-weight' &&
-            !activePage.strokes.some((s) => s.attachedToWeightId === other.id)
-          ) {
-            const ob = getStrokeBounds(other);
-            const botHookX = (ob.minX + ob.maxX) / 2;
-            const botHookY = ob.maxY;
+          } else if (other.shapeType === 'hooked-weight') {
+            const rootId = getWeightChainRootId(activePage, other.id);
+            const chain = getWeightChainIds(activePage, rootId);
+            const tailId = chain[chain.length - 1] || other.id;
+            const tailSt = activePage.strokes.find((s) => s.id === tailId) || other;
+            const tb = getStrokeBounds(tailSt);
+            const botHookX = (tb.minX + tb.maxX) / 2;
+            const botHookY = tb.maxY;
             const dW = Math.hypot(topHookX - botHookX, topHookY - botHookY);
             if (dW < bestDist) {
               bestDist = dW;
-              matchedParentWeightId = other.id;
+              matchedParentWeightId = tailSt.id;
               matchedSpringId = null;
             }
           }
@@ -31522,11 +31937,12 @@ export default function App() {
 
                             {/* 4. Mass (m), Stiffness (k) & Coupled Frequency f = (1/2π)√(k/m) Sliders */}
                             {(() => {
-                              const curM = Math.max(0.4, Math.min(2.5, activeSpring.mass));
+                              const maxMVal = Math.max(5.0, Math.ceil(activeSpring.mass));
+                              const curM = Math.max(0.4, Math.min(maxMVal, activeSpring.mass));
                               const curK = Math.max(0.4, Math.min(2.5, activeSpring.stiffness));
                               const curRootRatio = Math.sqrt(curK / curM); // √(k/m)
                               const curFreqHz = curRootRatio / (2 * Math.PI); // f = (1/2π)√(k/m)
-                              const minRootRatio = Math.min(0.58, curRootRatio);
+                              const minRootRatio = Math.min(0.45, curRootRatio);
                               const maxRootRatio = Math.max(1.72, curRootRatio);
                               const minFreqHz = minRootRatio / (2 * Math.PI);
                               const maxFreqHz = maxRootRatio / (2 * Math.PI);
@@ -31543,7 +31959,7 @@ export default function App() {
                                     <input
                                       type="range"
                                       min="0.4"
-                                      max="2.5"
+                                      max={maxMVal}
                                       step="0.05"
                                       value={curM}
                                       onChange={(e) => {
@@ -31644,10 +32060,26 @@ export default function App() {
                               );
                             })()}
 
-                            {/* 5. Canvas Display Checkboxes (Amplitude +A/-A, Natural Length l₀, Force Vectors) */}
+                            {/* 5. Canvas Display Checkboxes (Position Scale +A/0/-A, Amplitude +A/-A, Natural Length l₀, Force Vectors) */}
                             <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-2">
                               <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
-                                <span>📏 Πλάτος (+A / -A) & Θ.Ι.</span>
+                                <span>📐 Κλίμακα Θέσης (+A / 0 / -A)</span>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(activeSpring.showPositionScale)}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    updateActiveSpringSimConfig((sim) => ({
+                                      ...sim,
+                                      showPositionScale: checked,
+                                    }));
+                                  }}
+                                  className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                                />
+                              </label>
+
+                              <label className="flex items-center justify-between text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                <span>📏 Γραμμές Πλάτους (+A / -A) & Θ.Ι.</span>
                                 <input
                                   type="checkbox"
                                   checked={activeSpring.showAmplitudeLines}

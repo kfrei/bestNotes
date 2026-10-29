@@ -201,6 +201,7 @@ export interface SpringSimConfig {
   initialPhaseMode: 'eq' | 'eqDown' | 'plusA' | 'minusA' | 'custom'; // t=0 starting position & initial velocity direction
   customInitialPhaseRad?: number;
   showNaturalSpring: boolean; // Show/hide natural length l0 spring
+  showPositionScale?: boolean; // Show/hide left vertical +A / 0 / -A position scale & pointer arrow
   showAmplitudeLines: boolean; // Show black dashed Θ.Ι. + 2 blue dashed +A/-A lines with blue square handles
   showForceVectors: boolean; // Show dynamic force vectors (W, F_el, ΣF)
   graphs: {
