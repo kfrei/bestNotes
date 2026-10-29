@@ -1054,6 +1054,25 @@ function buildPresetShape(
       ]),
     };
   }
+  if (preset === 'spring-pointer') {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const rawLen = Math.hypot(dx, dy);
+    const dirSign = dx < -10 ? -1 : 1;
+    const len = rawLen < 20 || Math.abs(dx - 110) < 2 ? 38 : Math.max(28, Math.min(72, Math.abs(dx) || rawLen));
+    const p0 = { x: start.x, y: start.y, pressure: 0.7 };
+    const p1 = {
+      x: start.x + dirSign * len,
+      y: start.y,
+      cx: start.x + (dirSign * len) / 2,
+      cy: start.y,
+      pressure: 0.7,
+    };
+    return {
+      shapeType: 'spring-pointer',
+      points: [p0, p1],
+    };
+  }
   if (preset === 'cuboid' || preset === 'cylinder' || preset === 'sphere' || preset === 'pyramid') {
     const w3d = Math.max(72, maxX - minX);
     const h3d = Math.max(72, maxY - minY);

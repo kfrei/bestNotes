@@ -40,6 +40,7 @@ export type ShapePresetType =
   | 'resistor'
   | 'spring'
   | 'hooked-weight'
+  | 'spring-pointer'
   | 'bulb'
   | 'battery'
   | 'voltage-source'
@@ -103,6 +104,7 @@ export interface StrokeObject {
     fixedEnd: 'start' | 'end';
   };
   attachedToWeightId?: string; // ID of the parent weight directly above this weight in a vertical hook-to-hook chain
+  attachedToSpringId?: string; // ID of the spring stroke ('spring') whose free end this pointer needle ('spring-pointer' or 'arrow') is attached to
 }
 
 export type TextFontStyle =

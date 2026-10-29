@@ -1220,13 +1220,14 @@ export default function App() {
     }[];
   } | null>(null);
   const pendingPhysicsMagnetRef = useRef<{
-    kind: 'spring-to-support' | 'mass-to-spring' | 'weight-to-weight';
+    kind: 'spring-to-support' | 'mass-to-spring' | 'weight-to-weight' | 'pointer-to-spring';
     springStrokeId: string;
     supportStrokeId?: string;
     fixedEnd?: 'start' | 'end';
     massStrokeId?: string;
     parentWeightId?: string;
     childWeightId?: string;
+    pointerStrokeId?: string;
     targetX: number;
     targetY: number;
     startTime: number;
@@ -3752,6 +3753,7 @@ export default function App() {
     return (
       s.shapeType === 'spring' ||
       s.shapeType === 'hooked-weight' ||
+      s.shapeType === 'spring-pointer' ||
       s.shapeType === 'resistor' ||
       s.shapeType === 'cuboid' ||
       s.shapeType === 'cylinder' ||
@@ -4976,6 +4978,40 @@ export default function App() {
       ctx.setLineDash([]);
     }
 
+    // 0a. Red Spring Pointer Needle ('spring-pointer')
+    if (s.shapeType === 'spring-pointer' && s.points.length >= 2) {
+      const p0 = s.points[0];
+      const p1 = s.points[s.points.length - 1];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const ang = Math.atan2(dy, dx);
+      const ptrColor = s.color || '#dc2626';
+      ctx.strokeStyle = ptrColor;
+      ctx.fillStyle = ptrColor;
+      ctx.lineWidth = Math.max(2.4, s.width || 2.6);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([]);
+
+      // Small mounting ring at p0 (where it clips onto the spring)
+      ctx.beginPath();
+      ctx.arc(p0.x, p0.y, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pointer shaft + V-arrowhead at p1
+      const headLen = 9.5;
+      const spread = 0.52;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.moveTo(p1.x - headLen * Math.cos(ang - spread), p1.y - headLen * Math.sin(ang - spread));
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p1.x - headLen * Math.cos(ang + spread), p1.y - headLen * Math.sin(ang + spread));
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
     // 0. 3D Geometric Shapes ('cuboid' = Cuboid/Cube, 'cylinder' = 3D Cylinder, 'sphere' = 3D Sphere, 'pyramid' = 3D Pyramid)
     //    Uses bilinear interpolation on the 4 bounding quad corners s.points[0..3] so 360° rotation,
     //    proportional corner scaling, and independent width/height stretching (turning cuboid <-> cube) all work natively!
@@ -5849,7 +5885,12 @@ export default function App() {
           }
           // While spring oscillation (or live mass pulling / initial l0->Θ.Ι. settling / initial position shift to +A or -A) is active, hide the static equilibrium spring & mass block so only the 60fps animated/displaced version renders!
           const curSettleAnim = springSettleAnim || springSettleAnimRef.current;
-          if (isCurrentActivePage && curSettleAnim?.springStrokeId === s.id) {
+          if (
+            isCurrentActivePage &&
+            curSettleAnim?.springStrokeId &&
+            (s.id === curSettleAnim.springStrokeId ||
+              s.attachedToSpringId === curSettleAnim.springStrokeId)
+          ) {
             continue;
           }
           if (
@@ -5862,6 +5903,7 @@ export default function App() {
               (activePageSpringSim.initialPhaseMode !== 'eq' &&
                 activePageSpringSim.initialPhaseMode !== 'eqDown')) &&
             (s.id === activePageSpringSim.eqSpringStrokeId ||
+              s.attachedToSpringId === activePageSpringSim.eqSpringStrokeId ||
               activeSpringChainSet.has(s.id))
           ) {
             continue;
@@ -5908,6 +5950,8 @@ export default function App() {
             selStrokesList.some(
               (st) =>
                 Boolean(st.attachedToWeightId) ||
+                Boolean(st.attachedToSpringId) ||
+                st.shapeType === 'spring-pointer' ||
                 (pageObj.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
                 pageObj.strokes.some((o) => o.attachedToWeightId === st.id)
             );
@@ -10098,6 +10142,29 @@ export default function App() {
     return currId;
   };
 
+  const syncAttachedPointersOnSpring = (
+    strokes: StrokeObject[],
+    springId: string,
+    newFreePt: { x: number; y: number }
+  ): StrokeObject[] =>
+    strokes.map((s) => {
+      if (s.attachedToSpringId !== springId || s.points.length < 2) return s;
+      const tailPt = s.points[0];
+      const dx = newFreePt.x - tailPt.x;
+      const dy = newFreePt.y - tailPt.y;
+      if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return s;
+      return {
+        ...s,
+        points: s.points.map((p) => ({
+          ...p,
+          x: p.x + dx,
+          y: p.y + dy,
+          cx: p.cx !== undefined ? p.cx + dx : undefined,
+          cy: p.cy !== undefined ? p.cy + dy : undefined,
+        })),
+      };
+    });
+
   const applySpringSimParametersToStrokes = (
     page: NotePage,
     updatedSim: SpringSimConfig
@@ -10173,19 +10240,23 @@ export default function App() {
       prevBottomY = childCy + uy * cHalfSpan;
     }
 
-    const nextStrokes = page.strokes.map((s) => {
-      if (s.id === eqSpring.id) {
-        return {
-          ...s,
-          points: nextSpringCorners,
-        };
-      }
-      const chainedUpdated = updatedChainMap.get(s.id);
-      if (chainedUpdated) {
-        return chainedUpdated;
-      }
-      return s;
-    });
+    const nextStrokes = syncAttachedPointersOnSpring(
+      page.strokes.map((s) => {
+        if (s.id === eqSpring.id) {
+          return {
+            ...s,
+            points: nextSpringCorners,
+          };
+        }
+        const chainedUpdated = updatedChainMap.get(s.id);
+        if (chainedUpdated) {
+          return chainedUpdated;
+        }
+        return s;
+      }),
+      eqSpring.id,
+      newFreePt
+    );
 
     const nextSpringSims = (page.springSims || []).map((sm) =>
       sm.id === updatedSim.id ? updatedSim : sm
@@ -10258,14 +10329,18 @@ export default function App() {
 
       return {
         ...page,
-        strokes: page.strokes.map((s) =>
-          s.id === sp.id
-            ? {
-                ...s,
-                points: nextCorners,
-                springSupport: { supportStrokeId: sup.id, fixedEnd },
-              }
-            : s
+        strokes: syncAttachedPointersOnSpring(
+          page.strokes.map((s) =>
+            s.id === sp.id
+              ? {
+                  ...s,
+                  points: nextCorners,
+                  springSupport: { supportStrokeId: sup.id, fixedEnd },
+                }
+              : s
+          ),
+          sp.id,
+          newFree
         ),
       };
     }, true);
@@ -10445,20 +10520,24 @@ export default function App() {
         prevBottomY = childCy + uy * childHalfSpan;
       }
 
-      const nextStrokes = page.strokes.map((s) => {
-        if (s.id === sp.id) {
-          return {
-            ...s,
-            points: eqCorners,
-            springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : s.springSupport,
-          };
-        }
-        const chainedUpd = updatedChainMap.get(s.id);
-        if (chainedUpd) {
-          return chainedUpd;
-        }
-        return s;
-      });
+      const nextStrokes = syncAttachedPointersOnSpring(
+        page.strokes.map((s) => {
+          if (s.id === sp.id) {
+            return {
+              ...s,
+              points: eqCorners,
+              springSupport: supportStrokeId ? { supportStrokeId, fixedEnd } : s.springSupport,
+            };
+          }
+          const chainedUpd = updatedChainMap.get(s.id);
+          if (chainedUpd) {
+            return chainedUpd;
+          }
+          return s;
+        }),
+        sp.id,
+        eqFreePt
+      );
 
       const newSimName = getNextDefaultSpringSimName(page);
       const defaultAmp = Math.round(Math.max(46, Math.min(82, info.length * 0.28)));
@@ -10514,6 +10593,164 @@ export default function App() {
         activeSpringSimId: newSpringSim.id,
       };
     }, true);
+  };
+
+  const attachPointerToSpring = (springId: string, pointerId: string) => {
+    setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
+    updateActivePage((page) => {
+      const sp = page.strokes.find((s) => s.id === springId);
+      const ptr = page.strokes.find((s) => s.id === pointerId);
+      if (!sp || !ptr || ptr.points.length < 2) return page;
+
+      const info = getSpringTerminalsAndWidthVec(sp);
+      const existingSim = getValidSpringSims(page).find(
+        (sm) => sm.eqSpringStrokeId === sp.id || sm.naturalSpringStrokeId === sp.id
+      );
+      const fixedEnd = existingSim?.fixedEnd || sp.springSupport?.fixedEnd || 'start';
+      const freePt = fixedEnd === 'start' ? info.endTerm : info.startTerm;
+
+      let pts = ptr.points.map((p) => ({ ...p }));
+      const pFirst = pts[0];
+      const pLast = pts[pts.length - 1];
+      if (
+        ptr.shapeType !== 'spring-pointer' &&
+        Math.hypot(pLast.x - freePt.x, pLast.y - freePt.y) <
+          Math.hypot(pFirst.x - freePt.x, pFirst.y - freePt.y) - 8
+      ) {
+        pts = [...pts].reverse();
+      }
+      const dx = freePt.x - pts[0].x;
+      const dy = freePt.y - pts[0].y;
+      const shiftedPts = pts.map((p, idx) => ({
+        ...p,
+        x: p.x + dx,
+        y: ptr.shapeType === 'spring-pointer' && idx > 0 ? freePt.y : p.y + dy,
+        cx: p.cx !== undefined ? p.cx + dx : undefined,
+        cy:
+          p.cy !== undefined
+            ? ptr.shapeType === 'spring-pointer'
+              ? freePt.y
+              : p.cy + dy
+            : undefined,
+      }));
+
+      return {
+        ...page,
+        strokes: page.strokes.map((s) =>
+          s.id === ptr.id
+            ? {
+                ...s,
+                shapeType: 'spring-pointer',
+                color: '#dc2626',
+                arrowEnd: true,
+                attachedToSpringId: sp.id,
+                points: shiftedPts,
+              }
+            : s
+        ),
+      };
+    }, true);
+    showToast('📍 Ο κόκκινος δείκτης συνδέθηκε στο ελατήριο!');
+  };
+
+  const computeRulerPointerReadout = (
+    ptrStroke: StrokeObject,
+    dispDx = 0,
+    dispDy = 0,
+    pW = getPageLogicalWidth(activePage)
+  ): {
+    clampedXPos: number;
+    mmVal: number;
+    badgeX: number;
+    badgeY: number;
+    isMostlyVertical: boolean;
+  } | null => {
+    if (!rulerState.visible || ptrStroke.points.length < 2) return null;
+    const isDedicated =
+      ptrStroke.shapeType === 'spring-pointer' || Boolean(ptrStroke.attachedToSpringId);
+    const isArrow = ptrStroke.shapeType === 'arrow' || Boolean(ptrStroke.arrowEnd);
+    if (!isDedicated && !isArrow) return null;
+
+    const rulerW = Math.round(pW * 0.8);
+    const rulerH = 54;
+    const oneMmPx = 920 / 20 / 10; // 4.6px per 1mm
+    const rad = (rulerState.angle * Math.PI) / 180;
+    const cosA = Math.cos(rad);
+    const sinA = Math.sin(rad);
+
+    const p0 = {
+      x: ptrStroke.points[0].x + dispDx,
+      y: ptrStroke.points[0].y + dispDy,
+    };
+    const pEnd = {
+      x: ptrStroke.points[ptrStroke.points.length - 1].x + dispDx,
+      y: ptrStroke.points[ptrStroke.points.length - 1].y + dispDy,
+    };
+    const perp0 = Math.abs(-(p0.x - rulerState.x) * sinA + (p0.y - rulerState.y) * cosA);
+    const perpEnd = Math.abs(-(pEnd.x - rulerState.x) * sinA + (pEnd.y - rulerState.y) * cosA);
+    const tipPt = perpEnd <= perp0 ? pEnd : p0;
+
+    const dx = tipPt.x - rulerState.x;
+    const dy = tipPt.y - rulerState.y;
+    const localX = dx * cosA + dy * sinA;
+    const localY = -dx * sinA + dy * cosA;
+    const xPos = localX + rulerW / 2;
+
+    const maxPerp = isDedicated ? rulerH / 2 + 64 : rulerH / 2 + 32;
+    if (xPos < -6 || xPos > rulerW + 6 || Math.abs(localY) > maxPerp) {
+      return null;
+    }
+
+    const clampedXPos = Math.max(0, Math.min(rulerW, xPos));
+    const mmVal = Math.max(0, Math.round(clampedXPos / oneMmPx));
+    const localAlong = clampedXPos - rulerW / 2;
+    const axisPtX = rulerState.x + localAlong * cosA;
+    const axisPtY = rulerState.y + localAlong * sinA;
+
+    const isMostlyVertical = Math.abs(sinA) >= 0.35;
+    const rightNormalSign = isMostlyVertical ? (-sinA >= 0 ? 1 : -1) : -1;
+    const normX = rightNormalSign * -sinA;
+    const normY = rightNormalSign * cosA;
+    const badgeX = axisPtX + normX * (rulerH / 2 + 8);
+    const badgeY = axisPtY + normY * (rulerH / 2 + 8);
+
+    return {
+      clampedXPos,
+      mmVal,
+      badgeX,
+      badgeY,
+      isMostlyVertical,
+    };
+  };
+
+  const syncRulerPointerDomReadout = (ptrStroke: StrokeObject, dispDx: number, dispDy: number) => {
+    const lineEl = document.querySelector(
+      `[data-ruler-ptr-line="${ptrStroke.id}"]`
+    ) as HTMLElement | null;
+    const badgeEl = document.querySelector(
+      `[data-ruler-ptr-badge="${ptrStroke.id}"]`
+    ) as HTMLElement | null;
+    if (!lineEl && !badgeEl) return;
+    const info = computeRulerPointerReadout(ptrStroke, dispDx, dispDy);
+    if (!info) {
+      if (lineEl) lineEl.style.display = 'none';
+      if (badgeEl) badgeEl.style.display = 'none';
+      return;
+    }
+    if (lineEl) {
+      lineEl.style.display = 'block';
+      lineEl.style.left = `${info.clampedXPos}px`;
+    }
+    if (badgeEl) {
+      badgeEl.style.display = 'flex';
+      badgeEl.style.left = `${info.badgeX}px`;
+      badgeEl.style.top = `${info.badgeY}px`;
+      const valSpan = badgeEl.querySelector('[data-ruler-ptr-val="true"]');
+      if (valSpan) {
+        valSpan.textContent = `${info.mmVal} mm`;
+      }
+    }
   };
 
   const attachWeightToWeightChain = (parentWeightId: string, childWeightId: string) => {
@@ -12388,6 +12625,27 @@ export default function App() {
           const curEndTerm = fEnd === 'start' ? curFreePt : fixedPt;
           const oscCorners = buildSpringQuadCorners(curStartTerm, curEndTerm, spInfo.widthVec);
           drawStrokeOnContext(ctx, { ...unloadedSp, points: oscCorners }, false);
+          const unlDx = deltaFromEqAlongAxis * axisUx;
+          const unlDy = deltaFromEqAlongAxis * axisUy;
+          for (const pSt of activePage.strokes) {
+            if (pSt.attachedToSpringId === unloadedSp.id) {
+              drawStrokeOnContext(
+                ctx,
+                {
+                  ...pSt,
+                  points: pSt.points.map((p) => ({
+                    ...p,
+                    x: p.x + unlDx,
+                    y: p.y + unlDy,
+                    cx: p.cx !== undefined ? p.cx + unlDx : undefined,
+                    cy: p.cy !== undefined ? p.cy + unlDy : undefined,
+                  })),
+                },
+                false
+              );
+              syncRulerPointerDomReadout(pSt, unlDx, unlDy);
+            }
+          }
         } else if (elapsedMs >= SETTLE_DURATION_MS) {
           springSettleAnimRef.current = null;
           setSpringSettleAnim(null);
@@ -12587,6 +12845,25 @@ export default function App() {
                 })),
               };
               drawStrokeOnContext(ctx, oscWeightStroke, false);
+            }
+            for (const pSt of activePage.strokes) {
+              if (pSt.attachedToSpringId === activeSpringSim.eqSpringStrokeId) {
+                drawStrokeOnContext(
+                  ctx,
+                  {
+                    ...pSt,
+                    points: pSt.points.map((p) => ({
+                      ...p,
+                      x: p.x + dispDx,
+                      y: p.y + dispDy,
+                      cx: p.cx !== undefined ? p.cx + dispDx : undefined,
+                      cy: p.cy !== undefined ? p.cy + dispDy : undefined,
+                    })),
+                  },
+                  false
+                );
+                syncRulerPointerDomReadout(pSt, dispDx, dispDy);
+              }
             }
           }
 
@@ -13336,8 +13613,9 @@ export default function App() {
             Boolean(activeSpringSim.graphs.hooke?.visible) ||
             Boolean(activeSpringSim.showHookeCanvasTable)
           ) {
-            const l0Mm = Math.round(activeSpringSim.naturalLengthPx / 3);
-            const curLMm = Math.round(axLen / 3);
+            const oneMmPx = 4.6;
+            const l0Mm = Math.round(activeSpringSim.naturalLengthPx / oneMmPx);
+            const curLMm = Math.round(axLen / oneMmPx);
             const curDeltaLMm = Math.abs(curLMm - l0Mm);
             const curChainCount = getWeightChainIds(
               activePage,
@@ -13353,7 +13631,7 @@ export default function App() {
             );
             const deltaL1Mm = Math.max(
               1,
-              Math.round(Math.abs(eqLen1Px - activeSpringSim.naturalLengthPx) / 3)
+              Math.round(Math.abs(eqLen1Px - activeSpringSim.naturalLengthPx) / oneMmPx)
             );
             const signDir = axisUy < -0.78 ? -1 : 1;
 
@@ -17498,21 +17776,39 @@ export default function App() {
         for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
           const s = targetPage.strokes[i];
           if (lockedLayerIdsForWeight.has(s.layerId)) continue;
-          const isChainOrHookedWeight =
-            s.shapeType === 'hooked-weight' ||
-            Boolean(s.attachedToWeightId) ||
-            (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
-            targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
-          if (!isChainOrHookedWeight) continue;
-          const sb = getStrokeBounds(s);
-          if (
-            pt.x >= sb.minX - 4 &&
-            pt.x <= sb.maxX + 4 &&
-            pt.y >= sb.minY - 2 &&
-            pt.y <= sb.maxY + 2
-          ) {
-            directWeightHit = s;
-            break;
+          if (s.shapeType === 'spring-pointer' || Boolean(s.attachedToSpringId)) {
+            const sb = getStrokeBounds(s);
+            if (
+              pt.x >= sb.minX - 6 &&
+              pt.x <= sb.maxX + 6 &&
+              pt.y >= sb.minY - 7 &&
+              pt.y <= sb.maxY + 7
+            ) {
+              directWeightHit = s;
+              break;
+            }
+          }
+        }
+        if (!directWeightHit) {
+          for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
+            const s = targetPage.strokes[i];
+            if (lockedLayerIdsForWeight.has(s.layerId)) continue;
+            const isChainOrHookedWeight =
+              s.shapeType === 'hooked-weight' ||
+              Boolean(s.attachedToWeightId) ||
+              (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
+              targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
+            if (!isChainOrHookedWeight) continue;
+            const sb = getStrokeBounds(s);
+            if (
+              pt.x >= sb.minX - 4 &&
+              pt.x <= sb.maxX + 4 &&
+              pt.y >= sb.minY - 2 &&
+              pt.y <= sb.maxY + 2
+            ) {
+              directWeightHit = s;
+              break;
+            }
           }
         }
         if (
@@ -17595,6 +17891,8 @@ export default function App() {
           selStrokesList.some(
             (st) =>
               Boolean(st.attachedToWeightId) ||
+              Boolean(st.attachedToSpringId) ||
+              st.shapeType === 'spring-pointer' ||
               (targetPage.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
               targetPage.strokes.some((o) => o.attachedToWeightId === st.id)
           );
@@ -17898,6 +18196,8 @@ export default function App() {
           if (lockedLayerIds.has(s.layerId)) continue;
           const isAttachedOrHookedWeight =
             s.shapeType === 'hooked-weight' ||
+            s.shapeType === 'spring-pointer' ||
+            Boolean(s.attachedToSpringId) ||
             Boolean(s.attachedToWeightId) ||
             (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
             targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
@@ -20824,13 +21124,18 @@ export default function App() {
         // 2) Mass Body <-> Free End of Spring (creates Equilibrium Clone next to l₀)
         // ======================================================================
         let matchedPhysicsMagnet: {
-          kind: 'spring-to-support' | 'mass-to-spring' | 'weight-to-weight';
+          kind:
+            | 'spring-to-support'
+            | 'mass-to-spring'
+            | 'weight-to-weight'
+            | 'pointer-to-spring';
           springStrokeId: string;
           supportStrokeId?: string;
           fixedEnd?: 'start' | 'end';
           massStrokeId?: string;
           parentWeightId?: string;
           childWeightId?: string;
+          pointerStrokeId?: string;
           targetX: number;
           targetY: number;
           snapDx: number;
@@ -21094,6 +21399,52 @@ export default function App() {
                 }
               }
             }
+          } else if (
+            draggedSt &&
+            (draggedSt.shapeType === 'spring-pointer' || draggedSt.shapeType === 'arrow') &&
+            draggedSt.points.length >= 2 &&
+            !unhookingDragStrokeIdsRef.current.has(draggedSt.id)
+          ) {
+            const candTailX = draggedSt.points[0].x + rawDx;
+            const candTailY = draggedSt.points[0].y + rawDy;
+            for (const other of activePage.strokes) {
+              if (other.id === draggedSt.id || hiddenOrLockedLayerIds.has(other.layerId)) {
+                continue;
+              }
+              if (other.shapeType === 'spring') {
+                const spInfo = getSpringTerminalsAndWidthVec(other);
+                const existingSimOnSp = getValidSpringSims(activePage).find(
+                  (sm) => sm.eqSpringStrokeId === other.id
+                );
+                let fixedEnd: 'start' | 'end' =
+                  existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
+                if (!existingSimOnSp && !other.springSupport) {
+                  const dStart = Math.hypot(
+                    spInfo.startTerm.x - candTailX,
+                    spInfo.startTerm.y - candTailY
+                  );
+                  const dEnd = Math.hypot(
+                    spInfo.endTerm.x - candTailX,
+                    spInfo.endTerm.y - candTailY
+                  );
+                  fixedEnd = dStart >= dEnd ? 'start' : 'end';
+                }
+                const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                const d = Math.hypot(candTailX - freePt.x, candTailY - freePt.y);
+                if (d <= 44 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                  matchedPhysicsMagnet = {
+                    kind: 'pointer-to-spring',
+                    springStrokeId: other.id,
+                    pointerStrokeId: draggedSt.id,
+                    targetX: freePt.x,
+                    targetY: freePt.y,
+                    snapDx: freePt.x - candTailX,
+                    snapDy: freePt.y - candTailY,
+                    dist: d,
+                  };
+                }
+              }
+            }
           }
         }
 
@@ -21114,6 +21465,8 @@ export default function App() {
           const isOpenLassoWeldable = (st: StrokeObject) =>
             st.points.length >= 2 &&
             st.points[0]?.twist !== 999 &&
+            st.shapeType !== 'spring-pointer' &&
+            !st.attachedToSpringId &&
             !(st.groupId && (st.groupId.startsWith('axes-') || st.groupId.startsWith('wave-axes-'))) &&
             (!st.isShape ||
               st.shapeType === 'line' ||
@@ -21192,7 +21545,8 @@ export default function App() {
             curPhys.fixedEnd === matchedPhysicsMagnet.fixedEnd &&
             curPhys.massStrokeId === matchedPhysicsMagnet.massStrokeId &&
             curPhys.parentWeightId === matchedPhysicsMagnet.parentWeightId &&
-            curPhys.childWeightId === matchedPhysicsMagnet.childWeightId;
+            curPhys.childWeightId === matchedPhysicsMagnet.childWeightId &&
+            curPhys.pointerStrokeId === matchedPhysicsMagnet.pointerStrokeId;
 
           if (!isSameTarget) {
             cancelNodeMagnetTimer();
@@ -21204,6 +21558,7 @@ export default function App() {
               massStrokeId: matchedPhysicsMagnet.massStrokeId,
               parentWeightId: matchedPhysicsMagnet.parentWeightId,
               childWeightId: matchedPhysicsMagnet.childWeightId,
+              pointerStrokeId: matchedPhysicsMagnet.pointerStrokeId,
               targetX: matchedPhysicsMagnet.targetX,
               targetY: matchedPhysicsMagnet.targetY,
               startTime: performance.now(),
@@ -21214,7 +21569,11 @@ export default function App() {
               draggedKeyPosIdx: 0,
               draggedEndSide: 'start' as const,
               targetStrokeId:
-                physObj.supportStrokeId || physObj.massStrokeId || physObj.childWeightId || '',
+                physObj.supportStrokeId ||
+                physObj.massStrokeId ||
+                physObj.childWeightId ||
+                physObj.pointerStrokeId ||
+                '',
               targetEndSide: 'end' as const,
               targetX: physObj.targetX,
               targetY: physObj.targetY,
@@ -21271,6 +21630,8 @@ export default function App() {
                   physObj.childWeightId
                 ) {
                   attachWeightToWeightChain(physObj.parentWeightId, physObj.childWeightId);
+                } else if (physObj.kind === 'pointer-to-spring' && physObj.pointerStrokeId) {
+                  attachPointerToSpring(physObj.springStrokeId, physObj.pointerStrokeId);
                 }
                 return;
               }
@@ -21543,6 +21904,8 @@ export default function App() {
             const st = activePage.strokes.find((s) => s.id === sid);
             return (
               Boolean(st?.attachedToWeightId) ||
+              Boolean(st?.attachedToSpringId) ||
+              st?.shapeType === 'spring-pointer' ||
               (activePage.springSims || []).some((sm) => sm.massStrokeId === sid)
             );
           });
@@ -21631,10 +21994,18 @@ export default function App() {
               const st = page.strokes.find((s) => s.id === sid);
               const isAttachedToSpringOrParent =
                 Boolean(st?.attachedToWeightId) ||
+                Boolean(st?.attachedToSpringId) ||
                 (page.springSims || []).some((sm) => sm.massStrokeId === sid);
               if (!isAttachedToSpringOrParent) {
                 for (const cid of getWeightChainIds(page, sid)) {
                   movingStrokeSet.add(cid);
+                }
+              }
+              if (st?.shapeType === 'spring') {
+                for (const ps of page.strokes) {
+                  if (ps.attachedToSpringId === st.id) {
+                    movingStrokeSet.add(ps.id);
+                  }
                 }
               }
             }
@@ -21643,8 +22014,12 @@ export default function App() {
             let unhookedSpringSimIdToRemove: string | null = null;
             let promotedRootForSim: { simId: string; newRootId: string } | null = null;
             const relinkedChildToParent = new Map<string, string | undefined>();
-            let restoredNaturalSpringCorners: { springId: string; corners: BezierPoint[] } | null =
-              null;
+            const unhookedPointerIds = new Set<string>();
+            let restoredNaturalSpringCorners: {
+              springId: string;
+              corners: BezierPoint[];
+              natFreePt: { x: number; y: number };
+            } | null = null;
 
             for (const sid of targetStrokeIdList) {
               const s = page.strokes.find((st) => st.id === sid);
@@ -21654,6 +22029,29 @@ export default function App() {
               const sh = Math.max(14, sb.maxY - sb.minY);
               const candCx = (sb.minX + sb.maxX) / 2 + dx;
               const candCy = (sb.minY + sb.maxY) / 2 + dy;
+
+              // Case 0: `s` is a red pointer needle attached to a spring -> unhook when dragged away!
+              if (s.attachedToSpringId && !movingStrokeSet.has(s.attachedToSpringId)) {
+                const sp = page.strokes.find((p) => p.id === s.attachedToSpringId);
+                if (sp && s.points.length >= 2) {
+                  const spInfo = getSpringTerminalsAndWidthVec(sp);
+                  const existingSim = (page.springSims || []).find(
+                    (sm) => sm.eqSpringStrokeId === sp.id
+                  );
+                  const fixedEnd =
+                    existingSim?.fixedEnd || sp.springSupport?.fixedEnd || 'start';
+                  const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+                  const candTailX = s.points[0].x + dx;
+                  const candTailY = s.points[0].y + dy;
+                  if (Math.hypot(candTailX - freePt.x, candTailY - freePt.y) > 16) {
+                    unhookingDragStrokeIdsRef.current.add(s.id);
+                    unhookedPointerIds.add(s.id);
+                    unhookedToastMsg = '📍 Ο κόκκινος δείκτης αφαιρέθηκε από το ελατήριο!';
+                  }
+                } else {
+                  unhookedPointerIds.add(s.id);
+                }
+              }
 
               // Case 1: `s` is hooked onto a parent weight in the chain -> unhook when dragged sideways/away!
               if (s.attachedToWeightId && !movingStrokeSet.has(s.attachedToWeightId)) {
@@ -21773,6 +22171,7 @@ export default function App() {
                       restoredNaturalSpringCorners = {
                         springId: eqSp.id,
                         corners: buildSpringQuadCorners(natStart, natEnd, wVec),
+                        natFreePt,
                       };
                       unhookedAnimToTrigger = {
                         simId: `unhook-${eqSp.id}`,
@@ -21788,7 +22187,7 @@ export default function App() {
               }
             }
 
-            const movedStrokes = page.strokes.map((s) => {
+            let movedStrokes = page.strokes.map((s) => {
               if (restoredNaturalSpringCorners && s.id === restoredNaturalSpringCorners.springId) {
                 return {
                   ...s,
@@ -21799,12 +22198,22 @@ export default function App() {
               const nextAttachedToWeightId = hasRelink
                 ? relinkedChildToParent.get(s.id)
                 : s.attachedToWeightId;
+              const nextAttachedToSpringId = unhookedPointerIds.has(s.id)
+                ? undefined
+                : s.attachedToSpringId;
               if (!movingStrokeSet.has(s.id)) {
-                return hasRelink ? { ...s, attachedToWeightId: nextAttachedToWeightId } : s;
+                return hasRelink || unhookedPointerIds.has(s.id)
+                  ? {
+                      ...s,
+                      attachedToWeightId: nextAttachedToWeightId,
+                      attachedToSpringId: nextAttachedToSpringId,
+                    }
+                  : s;
               }
               return {
                 ...s,
                 attachedToWeightId: nextAttachedToWeightId,
+                attachedToSpringId: nextAttachedToSpringId,
                 points: s.points.map((p) => ({
                   ...p,
                   x: p.x + dx,
@@ -21814,6 +22223,14 @@ export default function App() {
                 })),
               };
             });
+
+            if (restoredNaturalSpringCorners) {
+              movedStrokes = syncAttachedPointersOnSpring(
+                movedStrokes,
+                restoredNaturalSpringCorners.springId,
+                restoredNaturalSpringCorners.natFreePt
+              );
+            }
 
             const selMathGroupIds = new Set(
               page.strokes
@@ -22387,6 +22804,11 @@ export default function App() {
           pendingPhys.childWeightId
         ) {
           attachWeightToWeightChain(pendingPhys.parentWeightId, pendingPhys.childWeightId);
+        } else if (
+          pendingPhys.kind === 'pointer-to-spring' &&
+          pendingPhys.pointerStrokeId
+        ) {
+          attachPointerToSpring(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
         }
         return;
       }
@@ -23090,6 +23512,7 @@ export default function App() {
       (isShape || isClosedFreehand) &&
       shapeType !== 'line' &&
       shapeType !== 'arrow' &&
+      shapeType !== 'spring-pointer' &&
       shapeType !== 'double-arrow' &&
       shapeType !== 'resistor' &&
       shapeType !== 'spring' &&
@@ -23116,7 +23539,7 @@ export default function App() {
       id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       penType: penSubType,
-      color: strokeColor,
+      color: shapeType === 'spring-pointer' ? '#dc2626' : strokeColor,
       fillColor:
         commitFillStyle !== 'none'
           ? shapeType === 'hooked-weight' && fillStyle === 'none'
@@ -23128,7 +23551,7 @@ export default function App() {
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
-      arrowEnd: arrowEnd || shapePreset === 'arrow',
+      arrowEnd: arrowEnd || shapePreset === 'arrow' || shapeType === 'spring-pointer',
       points: finalPts,
       layerId: activeLayerId,
       isShape,
@@ -23231,6 +23654,38 @@ export default function App() {
         } else if (matchedSpringId) {
           const sid = matchedSpringId;
           window.setTimeout(() => attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id), 10);
+        }
+      } else if (
+        (newStroke.shapeType === 'spring-pointer' || newStroke.shapeType === 'arrow') &&
+        newStroke.points.length >= 2
+      ) {
+        const tailX = newStroke.points[0].x;
+        const tailY = newStroke.points[0].y;
+        let matchedSpringId: string | null = null;
+        let bestDist = 48;
+        for (const other of activePage.strokes) {
+          if (other.id === newStroke.id || other.shapeType !== 'spring') continue;
+          const spInfo = getSpringTerminalsAndWidthVec(other);
+          const existingSimOnSp = getValidSpringSims(activePage).find(
+            (sm) => sm.eqSpringStrokeId === other.id
+          );
+          let fixedEnd: 'start' | 'end' =
+            existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
+          if (!existingSimOnSp && !other.springSupport) {
+            const dStart = Math.hypot(spInfo.startTerm.x - tailX, spInfo.startTerm.y - tailY);
+            const dEnd = Math.hypot(spInfo.endTerm.x - tailX, spInfo.endTerm.y - tailY);
+            fixedEnd = dStart >= dEnd ? 'start' : 'end';
+          }
+          const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+          const dSp = Math.hypot(tailX - freePt.x, tailY - freePt.y);
+          if (dSp < bestDist) {
+            bestDist = dSp;
+            matchedSpringId = other.id;
+          }
+        }
+        if (matchedSpringId) {
+          const sid = matchedSpringId;
+          window.setTimeout(() => attachPointerToSpring(sid, newStroke.id), 10);
         }
       }
     }
@@ -29541,6 +29996,17 @@ export default function App() {
                           ),
                         },
                         {
+                          id: 'spring-pointer',
+                          title: 'Κόκκινος Δείκτης (Βελονάκι) για μέτρηση επιμήκυνσης στον Χάρακα (κολλάει & ξεκολλάει από το ελατήριο)',
+                          icon: (
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#dc2626" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="5.5" cy="11" r="2.2" fill="#dc2626" />
+                              <line x1="6" y1="11" x2="26.5" y2="11" />
+                              <polyline points="19.5,6 26.5,11 19.5,16" />
+                            </svg>
+                          ),
+                        },
+                        {
                           id: 'bulb',
                           title: 'Λαμπτήρας',
                           icon: (
@@ -32648,9 +33114,10 @@ export default function App() {
                                 const uy = spInfo
                                   ? (freePt.y - fixedPt.y) / spInfo.length
                                   : 1;
-                                const l0Mm = Math.round(activeSpring.naturalLengthPx / 3);
+                                const oneMmPx = 4.6;
+                                const l0Mm = Math.round(activeSpring.naturalLengthPx / oneMmPx);
                                 const curLMm = Math.round(
-                                  (spInfo ? spInfo.length : activeSpring.naturalLengthPx) / 3
+                                  (spInfo ? spInfo.length : activeSpring.naturalLengthPx) / oneMmPx
                                 );
                                 const curDeltaLMm = Math.abs(curLMm - l0Mm);
                                 const curChainCount = getWeightChainIds(
@@ -32668,7 +33135,7 @@ export default function App() {
                                 const deltaL1Mm = Math.max(
                                   1,
                                   Math.round(
-                                    Math.abs(eqLen1Px - activeSpring.naturalLengthPx) / 3
+                                    Math.abs(eqLen1Px - activeSpring.naturalLengthPx) / oneMmPx
                                   )
                                 );
                                 const signDir = uy < -0.78 ? -1 : 1;
@@ -32684,6 +33151,86 @@ export default function App() {
                                         l₀ = {l0Mm} mm
                                       </span>
                                     </div>
+
+                                    {/* 1-Click Attach / Detach Red Pointer Needle on the Active Spring */}
+                                    {(() => {
+                                      const attachedPointer = activePage.strokes.find(
+                                        (s) => s.attachedToSpringId === activeSpring.eqSpringStrokeId
+                                      );
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (attachedPointer) {
+                                              updateActivePage((page) => ({
+                                                ...page,
+                                                strokes: page.strokes.filter(
+                                                  (s) => s.id !== attachedPointer.id
+                                                ),
+                                              }));
+                                              showToast(
+                                                '📍 Ο κόκκινος δείκτης αφαιρέθηκε από το ελατήριο!'
+                                              );
+                                            } else {
+                                              const ptrId = `ptr-${Date.now()}-${Math.random()
+                                                .toString(36)
+                                                .slice(2, 5)}`;
+                                              const ptrLen = 36;
+                                              const dirX =
+                                                rulerState.visible && rulerState.x < freePt.x - 10
+                                                  ? -1
+                                                  : 1;
+                                              const newPtr: StrokeObject = {
+                                                id: ptrId,
+                                                tool: 'pen',
+                                                penType: 'fountain',
+                                                color: '#dc2626',
+                                                width: 3,
+                                                opacity: 1,
+                                                lineStyle: 'solid',
+                                                arrowEnd: true,
+                                                isShape: true,
+                                                shapeType: 'spring-pointer',
+                                                attachedToSpringId: activeSpring.eqSpringStrokeId,
+                                                layerId: activeLayerId,
+                                                points: [
+                                                  { x: freePt.x, y: freePt.y, pressure: 0.7 },
+                                                  {
+                                                    x: freePt.x + dirX * ptrLen,
+                                                    y: freePt.y,
+                                                    cx: freePt.x + (dirX * ptrLen) / 2,
+                                                    cy: freePt.y,
+                                                    pressure: 0.7,
+                                                  },
+                                                ],
+                                              };
+                                              updateActivePage((page) => ({
+                                                ...page,
+                                                strokes: [
+                                                  ...page.strokes,
+                                                  { ...newPtr, zOrder: getNextPageZOrder(page) },
+                                                ],
+                                              }));
+                                              showToast(
+                                                '📍 Ο κόκκινος δείκτης κολλήθηκε στο ελατήριο! (Σύρε τον με το Λάσο για να τον βγάλεις)'
+                                              );
+                                            }
+                                          }}
+                                          className={`w-full py-1 px-2 rounded-lg font-extrabold text-[10px] border transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                                            attachedPointer
+                                              ? 'bg-red-600 hover:bg-red-700 text-white border-red-700 shadow-2xs'
+                                              : 'bg-white hover:bg-red-50 text-red-700 border-red-200'
+                                          }`}
+                                          title="Κόλλησε ή ξεκόλλησε το κόκκινο βελονάκι μέτρησης στο άκρο του ελατηρίου (ή χρησιμοποίησε το εργαλείο Κόκκινου Δείκτη / Λάσο)"
+                                        >
+                                          <span>
+                                            {attachedPointer
+                                              ? '📍 Αφαίρεση Κόκκινου Δείκτη (Βελονάκι)'
+                                              : '📍 Προσθήκη Κόκκινου Δείκτη (Βελονάκι)'}
+                                          </span>
+                                        </button>
+                                      );
+                                    })()}
 
                                     {/* Live Readout matching the Ruler (1mm = 3px) */}
                                     <div className="grid grid-cols-3 gap-1 bg-white/90 rounded-lg p-1.5 border border-sky-200/80 text-center">
@@ -34740,13 +35287,22 @@ export default function App() {
                         const oneCmPx = 920 / 20; // 46px per 1cm
                         const halfCmPx = oneCmPx / 2; // 23px per 0.5cm
                         const totalHalfCmSteps = Math.floor(rulerW / halfCmPx);
+                        const pointerCandidates = activePage.strokes.filter(
+                          (s) =>
+                            s.points.length >= 2 &&
+                            (s.shapeType === 'spring-pointer' ||
+                              Boolean(s.attachedToSpringId) ||
+                              s.shapeType === 'arrow' ||
+                              Boolean(s.arrowEnd))
+                        );
 
                         return (
-                          <div
-                            data-ui-panel="true"
-                            data-ruler-root="true"
-                            tabIndex={0}
-                            aria-label="Χάρακας (σύρετε με το χέρι ή μετακινήστε με τα βελάκια)"
+                          <>
+                            <div
+                              data-ui-panel="true"
+                              data-ruler-root="true"
+                              tabIndex={0}
+                              aria-label="Χάρακας (σύρετε με το χέρι ή μετακινήστε με τα βελάκια)"
                             onKeyDown={(e) => {
                               const step = 15;
                               if (e.key === 'ArrowLeft') {
@@ -35022,10 +35578,53 @@ export default function App() {
                                   );
                                 })
                               )}
+
+                              {/* Red Indicator Line Across Ruler When a Red Pointer Needle is Close */}
+                              {pointerCandidates.map((pSt) => {
+                                const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                                return (
+                                  <div
+                                    key={`rline-${pSt.id}`}
+                                    data-ruler-ptr-line={pSt.id}
+                                    style={{
+                                      display: info ? 'block' : 'none',
+                                      left: info ? info.clampedXPos : 0,
+                                    }}
+                                    className="absolute inset-y-0 w-[2px] -translate-x-1/2 bg-red-600/85 z-10 pointer-events-none"
+                                  />
+                                );
+                              })}
                             </div>
                           </div>
-                        );
-                      })()}
+
+                          {/* Red Numerical Readout to the Right of the Ruler at the Exact Same Height as the Red Pointer Needle */}
+                          {pointerCandidates.map((pSt) => {
+                            const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                            return (
+                              <div
+                                key={`rbadge-${pSt.id}`}
+                                data-ruler-ptr-badge={pSt.id}
+                                style={{
+                                  display: info ? 'flex' : 'none',
+                                  left: info ? info.badgeX : 0,
+                                  top: info ? info.badgeY : 0,
+                                  transform:
+                                    !info || info.isMostlyVertical
+                                      ? 'translate(0, -50%)'
+                                      : 'translate(-50%, -100%)',
+                                }}
+                                className="absolute z-30 pointer-events-none items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/95 border border-red-500/85 shadow-sm text-[#dc2626] font-mono font-extrabold text-[11px] leading-none whitespace-nowrap select-none"
+                              >
+                                <span className="text-[8.5px] text-red-500">◀</span>
+                                <span data-ruler-ptr-val="true">
+                                  {info ? `${info.mmVal} mm` : ''}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </>
+                      );
+                    })()}
                   </div>
                 );
               })}
