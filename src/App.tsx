@@ -21925,13 +21925,42 @@ export default function App() {
                     }
                   }
                 }
+              } else if (
+                other.isShape &&
+                massShapeTypes.includes(other.shapeType || '') &&
+                !other.attachedToWeightId &&
+                !(activePage.springSims || []).some(
+                  (sm) => sm.eqSpringStrokeId === draggedSt.id || sm.massStrokeId === other.id
+                )
+              ) {
+                const ob = getStrokeBounds(other);
+                const topHookX = (ob.minX + ob.maxX) / 2;
+                const topHookY = ob.minY;
+                const dEnd = Math.hypot(candEnd.x - topHookX, candEnd.y - topHookY);
+                const dStart = Math.hypot(candStart.x - topHookX, candStart.y - topHookY);
+                const useStart = !draggedSt.springSupport && dStart < dEnd;
+                const freeCand = useStart ? candStart : candEnd;
+                const d = Math.hypot(freeCand.x - topHookX, freeCand.y - topHookY);
+                if (d <= 68 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                  matchedPhysicsMagnet = {
+                    kind: 'mass-to-spring',
+                    springStrokeId: draggedSt.id,
+                    massStrokeId: other.id,
+                    targetX: topHookX,
+                    targetY: topHookY,
+                    snapDx: topHookX - freeCand.x,
+                    snapDy: topHookY - freeCand.y,
+                    dist: d,
+                  };
+                }
               }
             }
           } else if (
             draggedSt &&
             draggedSt.isShape &&
             massShapeTypes.includes(draggedSt.shapeType || '') &&
-            !unhookingDragStrokeIdsRef.current.has(draggedSt.id)
+            !draggedSt.attachedToWeightId &&
+            !(activePage.springSims || []).some((sm) => sm.massStrokeId === draggedSt.id)
           ) {
             const mb = getStrokeBounds(draggedSt);
             const mW = Math.max(16, mb.maxX - mb.minX);
@@ -21940,6 +21969,8 @@ export default function App() {
             const candCy = (mb.minY + mb.maxY) / 2 + rawDy;
             const hookOverlap = draggedSt.shapeType === 'hooked-weight' ? -4 : 0;
             const draggedDescendants = new Set(getWeightChainIds(activePage, draggedSt.id));
+            const wasUnhookedInThisDrag = unhookingDragStrokeIdsRef.current.has(draggedSt.id);
+            const hookSnapRadius = wasUnhookedInThisDrag ? 48 : 72;
 
             for (const other of activePage.strokes) {
               if (
@@ -21983,7 +22014,7 @@ export default function App() {
                         candAttachX - tailAttachX,
                         candAttachY - tailAttachY
                       );
-                      if (dTail <= 46 && (!matchedPhysicsMagnet || dTail < matchedPhysicsMagnet.dist)) {
+                      if (dTail <= hookSnapRadius && (!matchedPhysicsMagnet || dTail < matchedPhysicsMagnet.dist)) {
                         matchedPhysicsMagnet = {
                           kind: 'weight-to-weight',
                           springStrokeId: tailSt.id,
@@ -22016,7 +22047,7 @@ export default function App() {
                 const candAttachX = candCx - ux * candHalf;
                 const candAttachY = candCy - uy * candHalf;
                 const d = Math.hypot(candAttachX - freePt.x, candAttachY - freePt.y);
-                if (d <= 46 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                if (d <= hookSnapRadius && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
                   matchedPhysicsMagnet = {
                     kind: 'mass-to-spring',
                     springStrokeId: other.id,
@@ -22090,7 +22121,7 @@ export default function App() {
                   candAttachY - otherAttachY
                 );
                 const d = Math.min(dToTailHook, dToOther);
-                if (d <= 42 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                if (d <= hookSnapRadius && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
                   matchedPhysicsMagnet = {
                     kind: 'weight-to-weight',
                     springStrokeId: tailSt.id,
@@ -22314,8 +22345,13 @@ export default function App() {
               progress: 0,
             });
 
-            // 220ms Ultra-Fast Magnet for Pointer-to-Spring, 480ms Fast Magnet for Weights/Support
-            const FAST_MAGNET_MS = physObj.kind === 'pointer-to-spring' ? 220 : 480;
+            // 180ms Ultra-Fast Magnet for Hooks (Pointer-to-Spring, Weight-to-Weight, Mass-to-Spring)
+            const FAST_MAGNET_MS =
+              physObj.kind === 'pointer-to-spring' ||
+              physObj.kind === 'weight-to-weight' ||
+              physObj.kind === 'mass-to-spring'
+                ? 180
+                : 380;
             const stepPhysicsMagnet = (now: number) => {
               if (nodeMagnetTimerRef.current !== timerObj) return;
               const elapsed = now - timerObj.startTime;
@@ -24348,7 +24384,7 @@ export default function App() {
         const topHookY = nb.minY;
         let matchedParentWeightId: string | null = null;
         let matchedSpringId: string | null = null;
-        let bestDist = 42;
+        let bestDist = 72;
         for (const other of activePage.strokes) {
           if (other.id === newStroke.id) continue;
           if (other.shapeType === 'spring') {
