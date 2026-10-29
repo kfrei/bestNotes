@@ -191,6 +191,9 @@ export interface HookeMeasurementRow {
   forceN: number; // F_ελ in N (e.g. 0, 1, 2, 3, 4)
   lengthMm: number; // Total spring length l in mm (matching ruler 1:1)
   deltaLMm: number; // Elongation/compression Δl = |l - l0| in mm (matching ruler 1:1)
+  plotted?: boolean; // Whether the user toggled the dot in the last column of the table to plot this point on the diagram
+  springStrokeId?: string; // Associated spring stroke ID on the page
+  pointerColor?: string; // Color of the attached pointer arrow
 }
 
 export interface SpringSimConfig {
@@ -215,6 +218,8 @@ export interface SpringSimConfig {
   showAmplitudeLines: boolean; // Show black dashed Θ.Ι. + 2 blue dashed +A/-A lines with blue square handles
   showForceVectors: boolean; // Show dynamic force vectors (W, F_el, ΣF)
   hookeMeasurements?: HookeMeasurementRow[]; // Recorded rows for Hooke's Law study (F_ελ - Δl)
+  hookePlottedWeights?: number[]; // Weights counts (0, 1, 2, 3, 4...) whose dot is toggled ON (blue) in the canvas table
+  hookeLineDrawn?: boolean; // Whether the green checkbox on the diagram is checked to draw the F_ελ = k·Δl line
   showHookeCanvasTable?: boolean; // Show the F_ελ - Δl table of values on the canvas
   graphs: {
     xt: SpringGraphBox; // Position - Time x(t) [Red #ef4444]

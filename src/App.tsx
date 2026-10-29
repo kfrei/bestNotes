@@ -1155,6 +1155,18 @@ export default function App() {
   const lastSpringRenderedDispRef = useRef<number>(0);
   const [editingSpringSimId, setEditingSpringSimId] = useState<string | null>(null);
   const [editingSpringSimName, setEditingSpringSimName] = useState<string>('');
+  const [selectedHookeSpringId, setSelectedHookeSpringId] = useState<string | null>(null);
+  const [hookeLineAnim, setHookeLineAnim] = useState<{
+    simId: string;
+    startTime: number;
+  } | null>(null);
+  const mathGraphHandImgObjRef = useRef<HTMLImageElement | null>(null);
+  useEffect(() => {
+    const preloadImg = new Image();
+    preloadImg.decoding = 'async';
+    preloadImg.src = '/drawing-hand.png';
+    mathGraphHandImgObjRef.current = preloadImg;
+  }, []);
   const draggingSpringAmpHandleRef = useRef<{
     simId: string;
     eqCenterX: number;
@@ -1219,6 +1231,18 @@ export default function App() {
       height: number;
       closePt: { x: number; y: number; r: number };
     }[];
+    hookeTableDotBtns?: {
+      weightsCount: number;
+      x: number;
+      y: number;
+      r: number;
+    }[];
+    hookeDiagramLineCheckbox?: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    } | null;
   } | null>(null);
   const pendingPhysicsMagnetRef = useRef<{
     kind: 'spring-to-support' | 'mass-to-spring' | 'weight-to-weight' | 'pointer-to-spring';
@@ -10114,21 +10138,20 @@ export default function App() {
     stiffness: number
   ): number => {
     const ratio = mass / Math.max(0.25, stiffness);
-    // Exact integer-millimeter unit elongation/compression Δl₁ (1 mm = 4.6 px on A4 canvas) so Hooke's Law Δl = n · Δl₁ is crystal-clear on the mm Ruler!
+    // Exact 1 cm (10 mm = 46 px on A4 canvas) unit elongation per 0,1 kg (1 N) weight so Hooke's Law Δl = n · 1 cm matches the cm Ruler 1:1!
     if (uy > 0.78) {
-      // Hanging vertically from ceiling: gravity elongates the spring downwards (l = l₀ + (m/k)·Δl₁)
-      const unitDeltaLPx = Math.max(5, Math.round((naturalLengthPx * 0.25) / 4.6)) * 4.6;
+      // Hanging vertically from ceiling: gravity elongates the spring downwards by 1 cm (46 px) per 1 N weight
+      const unitDeltaLPx = 46;
       return naturalLengthPx + unitDeltaLPx * ratio;
     }
     if (uy < -0.78) {
-      // Standing vertically on floor: gravity compresses the spring downwards towards the floor (l = l₀ - (m/k)·Δl₁)
-      const unitFloorDeltaLPx = Math.max(3, Math.round((naturalLengthPx * 0.15) / 4.6)) * 4.6;
+      // Standing vertically on floor: gravity compresses the spring downwards towards the floor
+      const unitFloorDeltaLPx = 23;
       return Math.max(naturalLengthPx * 0.26, naturalLengthPx - unitFloorDeltaLPx * ratio);
     }
     // Inclined plane or horizontal spring: gravity component along the spring axis is proportional to uy = ±sin(θ)
     const inclineFactor = Math.max(0.2, Math.abs(uy));
-    const unitInclineDeltaLPx =
-      Math.max(3, Math.round((naturalLengthPx * 0.22 * inclineFactor) / 4.6)) * 4.6;
+    const unitInclineDeltaLPx = Math.max(3, Math.round((46 * inclineFactor) / 4.6)) * 4.6;
     const signUy = uy >= 0 ? 1 : -1;
     return Math.max(
       naturalLengthPx * 0.28,
@@ -10238,58 +10261,67 @@ export default function App() {
     activeSim: SpringSimConfig
   ): HookeMeasurementRow[] => {
     const oneMmPx = 4.6;
-    const l0Mm = Math.round(activeSim.naturalLengthPx / oneMmPx);
-    const eqSpActive = page.strokes.find((s) => s.id === activeSim.eqSpringStrokeId);
-    const spInfoActive = eqSpActive ? getSpringTerminalsAndWidthVec(eqSpActive) : null;
-    const fixedPtActive = spInfoActive
-      ? activeSim.fixedEnd === 'start'
-        ? spInfoActive.startTerm
-        : spInfoActive.endTerm
-      : { x: 0, y: 0 };
-    const freePtActive = spInfoActive
-      ? activeSim.fixedEnd === 'start'
-        ? spInfoActive.endTerm
-        : spInfoActive.startTerm
-      : { x: 0, y: 100 };
-    const uyActive = spInfoActive ? (freePtActive.y - fixedPtActive.y) / spInfoActive.length : 1;
-    const signDir = uyActive < -0.78 ? -1 : 1;
-
-    const byWeight = new Map<number, HookeMeasurementRow>();
-    byWeight.set(0, {
-      id: 'hm-0',
-      weightsCount: 0,
-      forceN: 0,
-      lengthMm: l0Mm,
-      deltaLMm: 0,
-    });
-
-    for (const r of activeSim.hookeMeasurements || []) {
-      byWeight.set(r.weightsCount, r);
+    const pW = getPageLogicalWidth(page);
+    const allSims = getValidSpringSims(page);
+    const plottedSet = new Set<number>(activeSim.hookePlottedWeights || []);
+    for (const sm of allSims) {
+      for (const w of sm.hookePlottedWeights || []) {
+        plottedSet.add(w);
+      }
     }
 
-    // Also merge live measurements from all valid springs with attached weights on the same page
-    // (so whether the user hangs 1, 2, 3 weights sequentially on 1 spring OR places 3 springs side-by-side with 1, 2, 3 weights,
-    // the Table of Values and Diagram automatically include all measurements!)
-    const allSims = getValidSpringSims(page);
-    for (const sm of allSims) {
-      const eqSp = page.strokes.find((s) => s.id === sm.eqSpringStrokeId);
-      if (!eqSp) continue;
-      const spInfo = getSpringTerminalsAndWidthVec(eqSp);
-      const chainCount = getWeightChainIds(page, sm.massStrokeId).length;
-      if (chainCount <= 0) continue;
-      const forceN = Number(sm.mass.toFixed(2));
-      const smL0Mm = Math.round(sm.naturalLengthPx / oneMmPx);
-      const smCurLMm = Math.round(spInfo.length / oneMmPx);
-      const smDeltaLMm = Math.abs(smCurLMm - smL0Mm);
-      const normLengthMm =
-        sm.id === activeSim.id ? smCurLMm : Math.max(4, l0Mm + signDir * smDeltaLMm);
-      if (sm.id === activeSim.id || !byWeight.has(chainCount)) {
+    const byWeight = new Map<number, HookeMeasurementRow>();
+    const allSprings = page.strokes.filter((s) => s.shapeType === 'spring');
+
+    for (const sp of allSprings) {
+      const ptr = page.strokes.find(
+        (s) => s.attachedToSpringId === sp.id && s.points.length >= 2
+      );
+      if (!ptr) continue;
+      const readout = computeRulerPointerReadout(ptr, 0, 0, pW);
+      if (!readout) continue;
+
+      const spInfo = getSpringTerminalsAndWidthVec(sp);
+      const sm = allSims.find((m) => m.eqSpringStrokeId === sp.id);
+      const ptrColor = ptr.color || '#dc2626';
+
+      if (sm) {
+        for (const r of sm.hookeMeasurements || []) {
+          if (!byWeight.has(r.weightsCount)) {
+            byWeight.set(r.weightsCount, {
+              ...r,
+              plotted: plottedSet.has(r.weightsCount),
+              springStrokeId: sp.id,
+              pointerColor: ptrColor,
+            });
+          }
+        }
+        const chainCount = getWeightChainIds(page, sm.massStrokeId).length;
+        const forceN = Number(sm.mass.toFixed(2));
+        const smL0Mm = Math.round(sm.naturalLengthPx / oneMmPx);
+        const smCurLMm = Math.round(spInfo.length / oneMmPx);
+        const smDeltaLMm = Math.abs(smCurLMm - smL0Mm);
         byWeight.set(chainCount, {
-          id: `hm-live-${sm.id}-${chainCount}`,
+          id: `hm-live-${sp.id}-${chainCount}`,
           weightsCount: chainCount,
           forceN,
-          lengthMm: normLengthMm,
+          lengthMm: smCurLMm,
           deltaLMm: smDeltaLMm,
+          plotted: plottedSet.has(chainCount),
+          springStrokeId: sp.id,
+          pointerColor: ptrColor,
+        });
+      } else {
+        const spLMm = Math.round(spInfo.length / oneMmPx);
+        byWeight.set(0, {
+          id: `hm-live-${sp.id}-0`,
+          weightsCount: 0,
+          forceN: 0,
+          lengthMm: spLMm,
+          deltaLMm: 0,
+          plotted: plottedSet.has(0),
+          springStrokeId: sp.id,
+          pointerColor: ptrColor,
         });
       }
     }
@@ -10392,15 +10424,18 @@ export default function App() {
       newFreePt
     );
 
+    const hasAttachedPointer = nextStrokes.some((s) => s.attachedToSpringId === eqSpring.id);
     const simWithRecordedRow: SpringSimConfig = {
       ...updatedSim,
-      hookeMeasurements: upsertHookeMeasurementRow(
-        updatedSim.hookeMeasurements,
-        updatedSim.naturalLengthPx,
-        eqLen,
-        chainIds.length,
-        updatedSim.mass
-      ),
+      hookeMeasurements: hasAttachedPointer
+        ? upsertHookeMeasurementRow(
+            updatedSim.hookeMeasurements,
+            updatedSim.naturalLengthPx,
+            eqLen,
+            chainIds.length,
+            updatedSim.mass
+          )
+        : updatedSim.hookeMeasurements,
     };
 
     const nextSpringSims = (page.springSims || []).map((sm) =>
@@ -10429,6 +10464,7 @@ export default function App() {
     fixedEnd: 'start' | 'end',
     attachPt: { x: number; y: number }
   ) => {
+    setSelectedHookeSpringId(springId);
     updateActivePage((page) => {
       const sp = page.strokes.find((s) => s.id === springId);
       const sup = page.strokes.find((s) => s.id === supportId);
@@ -10472,7 +10508,7 @@ export default function App() {
       const wVec = orientSpringWidthVec(ux, uy, info.springWidth, info.widthVec);
       const nextCorners = buildSpringQuadCorners(newStart, newEnd, wVec);
 
-      return {
+      const nextPageBase: NotePage = {
         ...page,
         strokes: syncAttachedPointersOnSpring(
           page.strokes.map((s) =>
@@ -10488,6 +10524,17 @@ export default function App() {
           newFree
         ),
       };
+      const existingSim = getValidSpringSims(nextPageBase).find(
+        (sm) => sm.eqSpringStrokeId === sp.id
+      );
+      if (existingSim) {
+        return applySpringSimParametersToStrokes(nextPageBase, {
+          ...existingSim,
+          supportStrokeId: sup.id,
+          fixedEnd,
+        });
+      }
+      return nextPageBase;
     }, true);
     showToast('🧲 Το ελατήριο συνδέθηκε μαγνητικά στη βάση στήριξης!');
   };
@@ -10496,6 +10543,7 @@ export default function App() {
     let didScheduleSettle = false;
     setSelectedStrokeIds([]);
     setActiveNodeStrokeId(null);
+    setSelectedHookeSpringId(springId);
     updateActivePage((page) => {
       const sp = page.strokes.find((s) => s.id === springId);
       const mass = page.strokes.find((s) => s.id === massId);
@@ -10684,6 +10732,7 @@ export default function App() {
         eqFreePt
       );
 
+      const hasPtrOnNewSpring = nextStrokes.some((s) => s.attachedToSpringId === sp.id);
       const newSimName = getNextDefaultSpringSimName(page);
       const defaultAmp = Math.round(Math.max(46, Math.min(82, info.length * 0.28)));
       const newSpringSim: SpringSimConfig = {
@@ -10706,13 +10755,15 @@ export default function App() {
         showPositionScale: false,
         showAmplitudeLines: false,
         showForceVectors: false,
-        hookeMeasurements: upsertHookeMeasurementRow(
-          undefined,
-          info.length,
-          eqLen,
-          chainIds.length,
-          totalMass
-        ),
+        hookeMeasurements: hasPtrOnNewSpring
+          ? upsertHookeMeasurementRow(
+              undefined,
+              info.length,
+              eqLen,
+              chainIds.length,
+              totalMass
+            )
+          : [],
         graphs: {
           xt: { visible: false },
           vt: { visible: false },
@@ -10750,6 +10801,7 @@ export default function App() {
   const attachPointerToSpring = (springId: string, pointerId: string) => {
     setSelectedStrokeIds([]);
     setActiveNodeStrokeId(null);
+    setSelectedHookeSpringId(springId);
     updateActivePage((page) => {
       const sp = page.strokes.find((s) => s.id === springId);
       const ptr = page.strokes.find((s) => s.id === pointerId);
@@ -10789,12 +10841,13 @@ export default function App() {
 
       return {
         ...page,
+        activeSpringSimId: existingSim ? existingSim.id : page.activeSpringSimId,
         strokes: page.strokes.map((s) =>
           s.id === ptr.id
             ? {
                 ...s,
                 shapeType: 'spring-pointer',
-                color: '#dc2626',
+                color: s.color || '#dc2626',
                 arrowEnd: true,
                 attachedToSpringId: sp.id,
                 points: shiftedPts,
@@ -10803,7 +10856,7 @@ export default function App() {
         ),
       };
     }, true);
-    showToast('📍 Ο κόκκινος δείκτης συνδέθηκε στο ελατήριο!');
+    showToast('📍 Ο δείκτης συνδέθηκε στο ελατήριο!');
   };
 
   const computeRulerPointerReadout = (
@@ -10814,19 +10867,19 @@ export default function App() {
   ): {
     clampedXPos: number;
     mmVal: number;
+    cmVal: number;
+    cmStr: string;
+    ptrColor: string;
     badgeX: number;
     badgeY: number;
     isMostlyVertical: boolean;
   } | null => {
     if (!rulerState.visible || ptrStroke.points.length < 2) return null;
-    const isDedicated =
-      ptrStroke.shapeType === 'spring-pointer' || Boolean(ptrStroke.attachedToSpringId);
-    const isArrow = ptrStroke.shapeType === 'arrow' || Boolean(ptrStroke.arrowEnd);
-    if (!isDedicated && !isArrow) return null;
+    if (!ptrStroke.attachedToSpringId) return null;
 
     const rulerW = Math.round(pW * 0.8);
     const rulerH = 54;
-    const oneMmPx = 920 / 20 / 10; // 4.6px per 1mm
+    const oneMmPx = 920 / 20 / 10; // 4.6px per 1mm (46px per 1cm)
     const rad = (rulerState.angle * Math.PI) / 180;
     const cosA = Math.cos(rad);
     const sinA = Math.sin(rad);
@@ -10849,13 +10902,16 @@ export default function App() {
     const localY = -dx * sinA + dy * cosA;
     const xPos = localX + rulerW / 2;
 
-    const maxPerp = isDedicated ? rulerH / 2 + 64 : rulerH / 2 + 32;
+    const maxPerp = 880;
     if (xPos < -6 || xPos > rulerW + 6 || Math.abs(localY) > maxPerp) {
       return null;
     }
 
     const clampedXPos = Math.max(0, Math.min(rulerW, xPos));
     const mmVal = Math.max(0, Math.round(clampedXPos / oneMmPx));
+    const cmVal = Number((mmVal / 10).toFixed(1));
+    const cmStr = `${cmVal.toString().replace('.', ',')} cm`;
+    const ptrColor = ptrStroke.color || '#dc2626';
     const localAlong = clampedXPos - rulerW / 2;
     const axisPtX = rulerState.x + localAlong * cosA;
     const axisPtY = rulerState.y + localAlong * sinA;
@@ -10870,6 +10926,9 @@ export default function App() {
     return {
       clampedXPos,
       mmVal,
+      cmVal,
+      cmStr,
+      ptrColor,
       badgeX,
       badgeY,
       isMostlyVertical,
@@ -10893,14 +10952,21 @@ export default function App() {
     if (lineEl) {
       lineEl.style.display = 'block';
       lineEl.style.left = `${info.clampedXPos}px`;
+      lineEl.style.backgroundColor = info.ptrColor;
     }
     if (badgeEl) {
       badgeEl.style.display = 'flex';
       badgeEl.style.left = `${info.badgeX}px`;
       badgeEl.style.top = `${info.badgeY}px`;
+      badgeEl.style.color = info.ptrColor;
+      badgeEl.style.borderColor = info.ptrColor;
+      const arrSpan = badgeEl.querySelector('[data-ruler-ptr-arr="true"]') as HTMLElement | null;
+      if (arrSpan) {
+        arrSpan.style.color = info.ptrColor;
+      }
       const valSpan = badgeEl.querySelector('[data-ruler-ptr-val="true"]');
       if (valSpan) {
-        valSpan.textContent = `${info.mmVal} mm`;
+        valSpan.textContent = info.cmStr;
       }
     }
   };
@@ -13761,15 +13827,24 @@ export default function App() {
           }
 
           // 6E. Hooke's Law (F_ελ – Δl) Live Table of Values & Elastic Deformation Diagram on Canvas!
+          const hookeTableDotBtnsHit: {
+            weightsCount: number;
+            x: number;
+            y: number;
+            r: number;
+          }[] = [];
+          let hookeDiagramLineCheckboxHit: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+          } | null = null;
+
           if (
             Boolean(activeSpringSim.graphs.hooke?.visible) ||
             Boolean(activeSpringSim.showHookeCanvasTable)
           ) {
             const oneMmPx = 4.6;
-            const l0Mm = Math.round(activeSpringSim.naturalLengthPx / oneMmPx);
-            const curLMm = Math.round(axLen / oneMmPx);
-            const curDeltaLMm = Math.abs(curLMm - l0Mm);
-            const curForceN = Number(activeSpringSim.mass.toFixed(2));
             const eqLen1Px = computeEquilibriumLengthPx(
               activeSpringSim.naturalLengthPx,
               axisUx,
@@ -13806,13 +13881,13 @@ export default function App() {
             let diagramTopY = hy;
             let frameBotY = hy;
 
-            // 6E-1. Optional Canvas Table of Values (Πίνακας Τιμών Νόμου του Hooke: Βάρη, m (kg), W=Fελ (N), l (mm), Δl (mm))
+            // 6E-1. Optional Canvas Table of Values (Πίνακας Τιμών Νόμου του Hooke: Βάρη, m (kg), W=Fελ (N), Δl (cm), ●)
             if (activeSpringSim.showHookeCanvasTable) {
-              const rowH = Math.max(15, Math.round(19.5 * uiScale));
-              const subBannerH = Math.max(14, Math.round(17 * uiScale));
-              const headerH = Math.max(17, Math.round(21 * uiScale));
+              const rowH = Math.max(16, Math.round(20 * uiScale));
+              const headerH = Math.max(18, Math.round(22 * uiScale));
+              const displayRowCount = Math.max(1, recordedRows.length);
               const tblW = hW;
-              const tblH = subBannerH + headerH + recordedRows.length * rowH + 5;
+              const tblH = headerH + displayRowCount * rowH + 5;
               const tblX = hx;
               const tblY = hy;
               diagramTopY = tblY + tblH + Math.round(20 * uiScale);
@@ -13829,32 +13904,19 @@ export default function App() {
               ctx.fill();
               ctx.stroke();
 
-              // Formula banner: m = 0,1 kg/β. • W = Fελ = m · 10
-              ctx.fillStyle = isDarkGrid ? '#0c4a6e' : '#e0f2fe';
-              ctx.beginPath();
-              ctx.roundRect(tblX + 1, tblY + 1, tblW - 2, subBannerH, [7, 7, 0, 0]);
-              ctx.fill();
-              ctx.font = `bold ${Math.max(8, Math.round(9.5 * uiScale))}px system-ui, -apple-system, sans-serif`;
-              ctx.fillStyle = isDarkGrid ? '#7dd3fc' : '#0369a1';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(
-                'Βαρίδιο m₁ = 0,1 kg  •  Βάρος W = Fελ = m · 10',
-                tblX + tblW / 2,
-                tblY + subBannerH / 2 + 0.5
-              );
-
               // Column Header background
-              const hdrY = tblY + subBannerH;
+              const hdrY = tblY + 1;
               ctx.fillStyle = isDarkGrid ? '#1e293b' : '#f1f5f9';
-              ctx.fillRect(tblX + 1, hdrY, tblW - 2, headerH);
+              ctx.beginPath();
+              ctx.roundRect(tblX + 1, hdrY, tblW - 2, headerH, [7, 7, 0, 0]);
+              ctx.fill();
 
               const colX = [
-                tblX + tblW * 0.1,
-                tblX + tblW * 0.28,
-                tblX + tblW * 0.49,
-                tblX + tblW * 0.71,
-                tblX + tblW * 0.9,
+                tblX + tblW * 0.11,
+                tblX + tblW * 0.30,
+                tblX + tblW * 0.53,
+                tblX + tblW * 0.76,
+                tblX + tblW * 0.92,
               ];
               ctx.font = `bold ${Math.max(8, Math.round(10 * uiScale))}px system-ui, -apple-system, sans-serif`;
               ctx.fillStyle = isDarkGrid ? '#e2e8f0' : '#1e293b';
@@ -13863,48 +13925,103 @@ export default function App() {
               ctx.fillText('Βάρη', colX[0], hdrY + headerH / 2);
               ctx.fillText('m (kg)', colX[1], hdrY + headerH / 2);
               ctx.fillText('W=Fελ(N)', colX[2], hdrY + headerH / 2);
-              ctx.fillText('l (mm)', colX[3], hdrY + headerH / 2);
-              ctx.fillText('Δl (mm)', colX[4], hdrY + headerH / 2);
+              ctx.fillText('Δl (cm)', colX[3], hdrY + headerH / 2);
+
+              // Small hollow/filled dot icon in the 5th column header
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(colX[4], hdrY + headerH / 2, Math.max(3.5, 4.2 * uiScale), 0, Math.PI * 2);
+              ctx.fillStyle = '#0284c7';
+              ctx.fill();
+              ctx.restore();
 
               const rowsStartY = hdrY + headerH;
-              for (let rIdx = 0; rIdx < recordedRows.length; rIdx++) {
-                const r = recordedRows[rIdx];
-                const ry = rowsStartY + rIdx * rowH;
-                const isLiveMatch =
-                  Math.abs(r.deltaLMm - curDeltaLMm) <= 1 &&
-                  Math.abs(r.forceN - curForceN) <= 0.15;
-                if (isLiveMatch) {
-                  ctx.fillStyle = isDarkGrid
-                    ? 'rgba(2, 132, 199, 0.25)'
-                    : 'rgba(224, 242, 254, 0.85)';
-                  ctx.fillRect(tblX + 2, ry + 1, tblW - 4, rowH - 1);
-                }
-                ctx.strokeStyle = isDarkGrid
-                  ? 'rgba(51, 65, 85, 0.6)'
-                  : 'rgba(226, 232, 240, 0.9)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(tblX + 4, ry);
-                ctx.lineTo(tblX + tblW - 4, ry);
-                ctx.stroke();
+              const targetHighlightSpId =
+                selectedHookeSpringId || activeSpringSim.eqSpringStrokeId;
 
-                const rowFontPx = Math.max(8.5, Math.round((isLiveMatch ? 10.8 : 10.2) * uiScale));
-                ctx.font = `${isLiveMatch ? 'bold' : '600'} ${rowFontPx}px system-ui, -apple-system, sans-serif`;
-                ctx.fillStyle = isLiveMatch
-                  ? '#0284c7'
-                  : isDarkGrid
-                  ? '#f1f5f9'
-                  : '#334155';
-                const massKgStr =
-                  r.forceN === 0
-                    ? '0'
-                    : (r.forceN / 10).toFixed(1).replace('.', ',');
-                const forceStr = Number(r.forceN.toFixed(1)).toString().replace('.', ',');
-                ctx.fillText(String(r.weightsCount), colX[0], ry + rowH / 2 + 1);
-                ctx.fillText(massKgStr, colX[1], ry + rowH / 2 + 1);
-                ctx.fillText(forceStr, colX[2], ry + rowH / 2 + 1);
-                ctx.fillText(`${r.lengthMm}`, colX[3], ry + rowH / 2 + 1);
-                ctx.fillText(`${r.deltaLMm}`, colX[4], ry + rowH / 2 + 1);
+              if (recordedRows.length === 0) {
+                ctx.font = `italic ${Math.max(8, Math.round(9.2 * uiScale))}px system-ui, -apple-system, sans-serif`;
+                ctx.fillStyle = isDarkGrid ? '#94a3b8' : '#64748b';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(
+                  'Βάλε δείκτη (βελονάκι) σε ελατήριο δίπλα στον χάρακα',
+                  tblX + tblW / 2,
+                  rowsStartY + rowH / 2
+                );
+              } else {
+                for (let rIdx = 0; rIdx < recordedRows.length; rIdx++) {
+                  const r = recordedRows[rIdx];
+                  const ry = rowsStartY + rIdx * rowH;
+                  const isSelectedSpringRow = Boolean(
+                    r.springStrokeId && r.springStrokeId === targetHighlightSpId
+                  );
+                  if (isSelectedSpringRow) {
+                    ctx.fillStyle = isDarkGrid
+                      ? 'rgba(2, 132, 199, 0.32)'
+                      : 'rgba(186, 230, 253, 0.88)';
+                    ctx.fillRect(tblX + 2, ry + 1, tblW - 4, rowH - 1);
+                  }
+                  ctx.strokeStyle = isDarkGrid
+                    ? 'rgba(51, 65, 85, 0.6)'
+                    : 'rgba(226, 232, 240, 0.9)';
+                  ctx.lineWidth = 1;
+                  ctx.beginPath();
+                  ctx.moveTo(tblX + 4, ry);
+                  ctx.lineTo(tblX + tblW - 4, ry);
+                  ctx.stroke();
+
+                  const rowFontPx = Math.max(
+                    8.5,
+                    Math.round((isSelectedSpringRow ? 10.8 : 10.2) * uiScale)
+                  );
+                  ctx.font = `${isSelectedSpringRow ? 'bold' : '600'} ${rowFontPx}px system-ui, -apple-system, sans-serif`;
+                  ctx.fillStyle = isSelectedSpringRow
+                    ? '#0284c7'
+                    : isDarkGrid
+                    ? '#f1f5f9'
+                    : '#334155';
+                  const massKgStr =
+                    r.forceN === 0
+                      ? '0'
+                      : (r.forceN / 10).toFixed(1).replace('.', ',');
+                  const forceStr = Number(r.forceN.toFixed(1)).toString().replace('.', ',');
+                  const deltaLCm = Number((r.deltaLMm / 10).toFixed(1));
+                  const deltaLCmStr = deltaLCm.toString().replace('.', ',');
+                  ctx.fillText(String(r.weightsCount), colX[0], ry + rowH / 2 + 1);
+                  ctx.fillText(massKgStr, colX[1], ry + rowH / 2 + 1);
+                  ctx.fillText(forceStr, colX[2], ry + rowH / 2 + 1);
+                  ctx.fillText(deltaLCmStr, colX[3], ry + rowH / 2 + 1);
+
+                  // 5th column: clickable dot (hollow white circle ○ -> filled blue circle ● when clicked)
+                  const dotX = colX[4];
+                  const dotY = ry + rowH / 2;
+                  const dotR = Math.max(4.5, 5.5 * uiScale);
+                  ctx.save();
+                  ctx.beginPath();
+                  ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+                  if (r.plotted) {
+                    ctx.fillStyle = '#0284c7';
+                    ctx.fill();
+                    ctx.strokeStyle = '#0369a1';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                  } else {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                    ctx.strokeStyle = '#64748b';
+                    ctx.lineWidth = 1.6;
+                    ctx.stroke();
+                  }
+                  ctx.restore();
+
+                  hookeTableDotBtnsHit.push({
+                    weightsCount: r.weightsCount,
+                    x: dotX,
+                    y: dotY,
+                    r: Math.max(10, dotR + 5),
+                  });
+                }
               }
               ctx.restore();
             }
@@ -13923,12 +14040,10 @@ export default function App() {
 
               const maxRowForce = Math.max(
                 4,
-                curForceN,
                 ...recordedRows.map((r) => r.forceN)
               );
               const maxRowDeltaL = Math.max(
                 deltaL1Mm * 4,
-                curDeltaLMm,
                 ...recordedRows.map((r) => r.deltaLMm)
               );
 
@@ -13985,7 +14100,7 @@ export default function App() {
               });
               ctx.restore();
 
-              // Draw Vertical Axis F_ελ (N) and Horizontal Axis Δl (mm)
+              // Draw Vertical Axis F_ελ (N) and Horizontal Axis Δl (cm)
               ctx.save();
               ctx.strokeStyle = axisInk;
               ctx.fillStyle = axisInk;
@@ -14007,7 +14122,7 @@ export default function App() {
               ctx.lineTo(axisRightX - 7, axisBotY + 5);
               ctx.stroke();
 
-              // Axis titles: F_ελ (N) & Δl (mm) + origin 0
+              // Axis titles: F_ελ (N) & Δl (cm) + origin 0
               const titleFontPx = Math.max(11, Math.round(14 * uiScale));
               ctx.font = `italic bold ${titleFontPx}px Georgia, "Times New Roman", serif`;
               ctx.textAlign = 'left';
@@ -14015,7 +14130,7 @@ export default function App() {
               ctx.fillText('Fελ (N)', axisLeftX + 7, axisTopY + 4);
               ctx.textAlign = 'right';
               ctx.fillText(
-                signDir < 0 ? 'Δl συσπ. (mm)' : 'Δl (mm)',
+                signDir < 0 ? 'Δl συσπ. (cm)' : 'Δl (cm)',
                 axisRightX - 2,
                 axisBotY - Math.max(10, Math.round(13 * uiScale))
               );
@@ -14024,48 +14139,87 @@ export default function App() {
               ctx.fillText('0', axisLeftX - 5, axisBotY + 9);
               ctx.restore();
 
-              // Linear Hooke's Law Ray F_ελ = k · Δl from origin (0,0)
-              const lineMaxDeltaL = maxRowDeltaL;
-              const lineMaxForce = (lineMaxDeltaL / Math.max(1, deltaL1Mm)) * 1.0;
-              let endRayDeltaL = lineMaxDeltaL;
-              let endRayForce = lineMaxForce;
-              if (endRayForce > maxRowForce) {
-                endRayForce = maxRowForce;
-                endRayDeltaL = endRayForce * deltaL1Mm;
-              }
-              const rayEndX =
-                axisLeftX + (endRayDeltaL / Math.max(1, maxRowDeltaL)) * plotSpanW;
-              const rayEndY =
-                axisBotY - (endRayForce / Math.max(1, maxRowForce)) * plotSpanH;
+              // Green Checkbox at Top-Right of Diagram to Draw the Hooke's Law Line with 2s Pencil Animation!
+              const isLineDrawn =
+                Boolean(activeSpringSim.hookeLineDrawn) ||
+                (activePage.springSims || []).some((sm) => sm.hookeLineDrawn);
+              const cbSize = Math.max(12, Math.round(14 * uiScale));
+              const cbBoxW = Math.max(58, Math.round(68 * uiScale));
+              const cbBoxH = Math.max(18, Math.round(21 * uiScale));
+              const cbBoxX = axisRightX - cbBoxW;
+              const cbBoxY = axisTopY - Math.round(5 * uiScale);
+              const cbSqX = cbBoxX + 4;
+              const cbSqY = cbBoxY + (cbBoxH - cbSize) / 2;
 
               ctx.save();
-              ctx.strokeStyle = '#0284c7';
-              ctx.lineWidth = Math.max(2.0, 2.7 * uiScale);
-              ctx.lineCap = 'round';
+              ctx.fillStyle = isDarkGrid
+                ? 'rgba(15, 23, 42, 0.88)'
+                : 'rgba(255, 255, 255, 0.92)';
+              ctx.strokeStyle = isLineDrawn ? '#16a34a' : isDarkGrid ? '#475569' : '#cbd5e1';
+              ctx.lineWidth = 1.25;
               ctx.beginPath();
-              ctx.moveTo(axisLeftX, axisBotY);
-              ctx.lineTo(rayEndX, rayEndY);
+              ctx.roundRect(cbBoxX, cbBoxY, cbBoxW, cbBoxH, 5);
+              ctx.fill();
               ctx.stroke();
+
+              ctx.beginPath();
+              ctx.roundRect(cbSqX, cbSqY, cbSize, cbSize, 3);
+              if (isLineDrawn) {
+                ctx.fillStyle = '#16a34a';
+                ctx.fill();
+                ctx.strokeStyle = '#15803d';
+                ctx.lineWidth = 1.4;
+                ctx.stroke();
+                // White checkmark
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.8;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                ctx.moveTo(cbSqX + cbSize * 0.22, cbSqY + cbSize * 0.52);
+                ctx.lineTo(cbSqX + cbSize * 0.44, cbSqY + cbSize * 0.74);
+                ctx.lineTo(cbSqX + cbSize * 0.78, cbSqY + cbSize * 0.26);
+                ctx.stroke();
+              } else {
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 1.4;
+                ctx.stroke();
+              }
+              ctx.font = `bold ${Math.max(8, Math.round(9.5 * uiScale))}px system-ui, -apple-system, sans-serif`;
+              ctx.fillStyle = isLineDrawn
+                ? '#15803d'
+                : isDarkGrid
+                ? '#e2e8f0'
+                : '#334155';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('Γραμμή', cbSqX + cbSize + 4, cbBoxY + cbBoxH / 2 + 0.5);
               ctx.restore();
 
-              // Plot each measurement point (Δl_i, F_ελ,i) with dashed projection lines & axis ticks!
-              for (const row of recordedRows) {
+              hookeDiagramLineCheckboxHit = {
+                x: cbBoxX,
+                y: cbBoxY,
+                width: cbBoxW,
+                height: cbBoxH,
+              };
+
+              const plottedRows = recordedRows.filter((r) => r.plotted);
+
+              // Plot each user-selected measurement point (Δl_i, F_ελ,i) with dashed projection lines & axis ticks in cm!
+              for (const row of plottedRows) {
                 const px =
                   axisLeftX +
                   (Math.max(0, row.deltaLMm) / Math.max(1, maxRowDeltaL)) * plotSpanW;
                 const py =
                   axisBotY -
                   (Math.max(0, row.forceN) / Math.max(1, maxRowForce)) * plotSpanH;
-                const isLiveRow =
-                  Math.abs(row.deltaLMm - curDeltaLMm) <= 1 &&
-                  Math.abs(row.forceN - curForceN) <= 0.15;
 
                 if (row.deltaLMm > 0 || row.forceN > 0) {
                   ctx.save();
-                  ctx.strokeStyle = isLiveRow
-                    ? 'rgba(225, 29, 72, 0.78)'
-                    : 'rgba(2, 132, 199, 0.52)';
-                  ctx.lineWidth = isLiveRow ? 1.5 : 1.25;
+                  ctx.strokeStyle = 'rgba(2, 132, 199, 0.58)';
+                  ctx.lineWidth = 1.35;
                   ctx.setLineDash([4, 3]);
                   ctx.beginPath();
                   // Vertical projection to Δl axis
@@ -14077,46 +14231,105 @@ export default function App() {
                   ctx.stroke();
                   ctx.restore();
 
-                  // Axis tick labels
-                  const tickFontPx = Math.max(
-                    8.5,
-                    Math.round((isLiveRow ? 10.5 : 9.8) * uiScale)
-                  );
+                  // Axis tick labels (in cm on horizontal axis, N on vertical axis)
+                  const tickFontPx = Math.max(8.5, Math.round(10 * uiScale));
+                  const rowDeltaLCm = Number((row.deltaLMm / 10).toFixed(1))
+                    .toString()
+                    .replace('.', ',');
                   ctx.save();
-                  ctx.font = `${isLiveRow ? 'bold' : '600'} ${tickFontPx}px system-ui, -apple-system, sans-serif`;
-                  ctx.fillStyle = isLiveRow ? '#e11d48' : axisInk;
+                  ctx.font = `bold ${tickFontPx}px system-ui, -apple-system, sans-serif`;
+                  ctx.fillStyle = axisInk;
                   ctx.textAlign = 'center';
                   ctx.textBaseline = 'top';
-                  ctx.fillText(`${row.deltaLMm}`, px, axisBotY + 4);
+                  ctx.fillText(rowDeltaLCm, px, axisBotY + 4);
                   ctx.textAlign = 'right';
                   ctx.textBaseline = 'middle';
                   ctx.fillText(
-                    `${Number(row.forceN.toFixed(1))}`,
+                    `${Number(row.forceN.toFixed(1)).toString().replace('.', ',')}`,
                     axisLeftX - 5,
                     py
                   );
                   ctx.restore();
                 }
 
-                // Point dot
+                // Blue point dot
                 ctx.save();
-                if (isLiveRow) {
-                  ctx.fillStyle = 'rgba(225, 29, 72, 0.22)';
-                  ctx.beginPath();
-                  ctx.arc(px, py, Math.max(6, 8 * uiScale), 0, Math.PI * 2);
-                  ctx.fill();
-                }
-                ctx.fillStyle = isLiveRow ? '#e11d48' : '#0284c7';
+                ctx.fillStyle = 'rgba(2, 132, 199, 0.2)';
                 ctx.beginPath();
-                ctx.arc(
-                  px,
-                  py,
-                  Math.max(3.2, (isLiveRow ? 4.6 : 3.9) * uiScale),
-                  0,
-                  Math.PI * 2
-                );
+                ctx.arc(px, py, Math.max(5.5, 7 * uiScale), 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#0284c7';
+                ctx.beginPath();
+                ctx.arc(px, py, Math.max(3.5, 4.3 * uiScale), 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
+              }
+
+              // Linear Hooke's Law Ray F_ελ = k · Δl from origin (0,0) — only drawn when the green checkbox is checked!
+              let HandTipToDraw: { x: number; y: number } | null = null;
+              if (isLineDrawn) {
+                const maxPlottedDeltaL =
+                  plottedRows.length > 0
+                    ? Math.max(...plottedRows.map((r) => r.deltaLMm))
+                    : 0;
+                const lineMaxDeltaL =
+                  maxPlottedDeltaL > 0 ? maxPlottedDeltaL : maxRowDeltaL;
+                const lineMaxForce = (lineMaxDeltaL / Math.max(1, deltaL1Mm)) * 1.0;
+                let endRayDeltaL = lineMaxDeltaL;
+                let endRayForce = lineMaxForce;
+                if (endRayForce > maxRowForce) {
+                  endRayForce = maxRowForce;
+                  endRayDeltaL = endRayForce * deltaL1Mm;
+                }
+                const rayEndX =
+                  axisLeftX + (endRayDeltaL / Math.max(1, maxRowDeltaL)) * plotSpanW;
+                const rayEndY =
+                  axisBotY - (endRayForce / Math.max(1, maxRowForce)) * plotSpanH;
+
+                const animElapsed = hookeLineAnim ? now - hookeLineAnim.startTime : 99999;
+                const isAnimatingLine = hookeLineAnim !== null && animElapsed < 2000;
+                const lineProgress = isAnimatingLine
+                  ? Math.max(0, Math.min(1, animElapsed / 2000))
+                  : 1;
+                if (hookeLineAnim !== null && animElapsed >= 2000) {
+                  queueMicrotask(() => setHookeLineAnim(null));
+                }
+
+                const curEndX = axisLeftX + (rayEndX - axisLeftX) * lineProgress;
+                const curEndY = axisBotY + (rayEndY - axisBotY) * lineProgress;
+
+                ctx.save();
+                ctx.strokeStyle = '#0284c7';
+                ctx.lineWidth = Math.max(2.0, 2.7 * uiScale);
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(axisLeftX, axisBotY);
+                ctx.lineTo(curEndX, curEndY);
+                ctx.stroke();
+                ctx.restore();
+
+                if (isAnimatingLine) {
+                  HandTipToDraw = { x: curEndX, y: curEndY };
+                }
+              }
+
+              if (HandTipToDraw) {
+                const handImg = mathGraphHandImgObjRef.current;
+                if (handImg && handImg.complete && handImg.naturalWidth > 0) {
+                  ctx.save();
+                  ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+                  ctx.shadowBlur = 5;
+                  ctx.shadowOffsetX = 2;
+                  ctx.shadowOffsetY = 4;
+                  ctx.drawImage(
+                    handImg,
+                    HandTipToDraw.x - 3.71,
+                    HandTipToDraw.y - 18.17,
+                    112,
+                    84.56
+                  );
+                  ctx.restore();
+                }
               }
 
               ctx.restore();
@@ -14200,6 +14413,8 @@ export default function App() {
             ampHandles,
             graphResizeHandles: graphResizeHandlesHit,
             graphBoxes: graphBoxesHit,
+            hookeTableDotBtns: hookeTableDotBtnsHit,
+            hookeDiagramLineCheckbox: hookeDiagramLineCheckboxHit,
           };
         } else {
           springOverlayHitRef.current = null;
@@ -14215,6 +14430,7 @@ export default function App() {
         hasProposal ||
         springSettleAnim !== null ||
         springPhaseShiftAnim !== null ||
+        hookeLineAnim !== null ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       ) {
         rafId = window.requestAnimationFrame(renderSimFrame);
@@ -14232,6 +14448,9 @@ export default function App() {
     springGraphClearTick,
     springSettleAnim,
     springPhaseShiftAnim,
+    hookeLineAnim,
+    selectedHookeSpringId,
+    rulerState,
     showSimulationPanel,
     simActiveCategory,
     circuitAlignFlashStart,
@@ -16953,6 +17172,71 @@ export default function App() {
         return;
       }
 
+      // 0B) Check Hooke Table of Values Interactive Blue Dots (○ -> ●)
+      if (spHit.hookeTableDotBtns && spHit.hookeTableDotBtns.length > 0) {
+        for (const dBtn of spHit.hookeTableDotBtns) {
+          if (Math.hypot(pt.x - dBtn.x, pt.y - dBtn.y) <= dBtn.r + 4) {
+            e.preventDefault();
+            updateActivePage((page) => {
+              const curSim = getActiveSpringSim(page);
+              const existingList = curSim?.hookePlottedWeights || [];
+              const isAlreadyPlotted = existingList.includes(dBtn.weightsCount);
+              const nextPlotted = isAlreadyPlotted
+                ? existingList.filter((w) => w !== dBtn.weightsCount)
+                : [...existingList, dBtn.weightsCount];
+              return {
+                ...page,
+                springSims: (page.springSims || []).map((sm) => ({
+                  ...sm,
+                  hookePlottedWeights: nextPlotted,
+                })),
+              };
+            }, false);
+            isDrawingRef.current = false;
+            activePointerIdRef.current = null;
+            activePointerTypeRef.current = null;
+            return;
+          }
+        }
+      }
+
+      // 0C) Check Hooke Diagram Green Checkbox (☐ Γραμμή -> ☑ Γραμμή with 2s Pencil Animation!)
+      if (spHit.hookeDiagramLineCheckbox) {
+        const cb = spHit.hookeDiagramLineCheckbox;
+        if (
+          pt.x >= cb.x - 4 &&
+          pt.x <= cb.x + cb.width + 4 &&
+          pt.y >= cb.y - 4 &&
+          pt.y <= cb.y + cb.height + 4
+        ) {
+          e.preventDefault();
+          const curSim = getActiveSpringSim(activePage);
+          const currentlyDrawn =
+            Boolean(curSim?.hookeLineDrawn) ||
+            (activePage.springSims || []).some((sm) => sm.hookeLineDrawn);
+          const nextDrawn = !currentlyDrawn;
+          updateActivePage(
+            (page) => ({
+              ...page,
+              springSims: (page.springSims || []).map((sm) => ({
+                ...sm,
+                hookeLineDrawn: nextDrawn,
+              })),
+            }),
+            false
+          );
+          if (nextDrawn) {
+            setHookeLineAnim({ simId: spHit.simId, startTime: performance.now() });
+          } else {
+            setHookeLineAnim(null);
+          }
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+      }
+
       // 1) Check Blue Square Amplitude Handles (□)
       for (const hPt of spHit.ampHandles) {
         if (Math.hypot(pt.x - hPt.x, pt.y - hPt.y) <= 24) {
@@ -17954,10 +18238,28 @@ export default function App() {
       return;
     }
 
+    // Highlight the corresponding row in light-blue (σιέλ) in the Hooke Table of Values when clicking any spring on the canvas
+    {
+      for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
+        const s = targetPage.strokes[i];
+        if (s.shapeType !== 'spring') continue;
+        const sb = getStrokeBounds(s);
+        if (
+          pt.x >= sb.minX - 6 &&
+          pt.x <= sb.maxX + 6 &&
+          pt.y >= sb.minY - 6 &&
+          pt.y <= sb.maxY + 6
+        ) {
+          setSelectedHookeSpringId(s.id);
+          break;
+        }
+      }
+    }
+
     // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle on Oriented Bounding Box!)
     if (effectiveTool === 'lasso') {
-      // Direct 1-Step Touch/Click & Drag on any Chained/Hanging Weight or Hooked Weight:
-      // If the user touches a specific weight (even if another weight in the chain was previously selected), grab THAT exact weight immediately!
+      // Direct 1-Step Touch/Click & Drag on any Chained/Hanging Weight, Pointer Arrow, or Spring:
+      // If the user touches a specific weight, pointer, or spring, grab THAT exact object immediately!
       if (!isAdditiveSelect) {
         const lockedLayerIdsForWeight = new Set(
           targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
@@ -17969,10 +18271,10 @@ export default function App() {
           if (s.shapeType === 'spring-pointer' || Boolean(s.attachedToSpringId)) {
             const sb = getStrokeBounds(s);
             if (
-              pt.x >= sb.minX - 6 &&
-              pt.x <= sb.maxX + 6 &&
-              pt.y >= sb.minY - 7 &&
-              pt.y <= sb.maxY + 7
+              pt.x >= sb.minX - 8 &&
+              pt.x <= sb.maxX + 8 &&
+              pt.y >= sb.minY - 8 &&
+              pt.y <= sb.maxY + 8
             ) {
               directWeightHit = s;
               break;
@@ -18001,6 +18303,23 @@ export default function App() {
             }
           }
         }
+        if (!directWeightHit) {
+          for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
+            const s = targetPage.strokes[i];
+            if (lockedLayerIdsForWeight.has(s.layerId)) continue;
+            if (s.shapeType !== 'spring') continue;
+            const sb = getStrokeBounds(s);
+            if (
+              pt.x >= sb.minX - 4 &&
+              pt.x <= sb.maxX + 4 &&
+              pt.y >= sb.minY - 4 &&
+              pt.y <= sb.maxY + 4
+            ) {
+              directWeightHit = s;
+              break;
+            }
+          }
+        }
         if (
           directWeightHit &&
           (selectedStrokeIds.length !== 1 || selectedStrokeIds[0] !== directWeightHit.id)
@@ -18008,6 +18327,9 @@ export default function App() {
           clearActiveOverlay();
           setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
           setRedoStack([]);
+          if (directWeightHit.shapeType === 'spring') {
+            setSelectedHookeSpringId(directWeightHit.id);
+          }
           const wb = getStrokeBounds(directWeightHit);
           const wcx = (wb.minX + wb.maxX) / 2;
           const wcy = (wb.minY + wb.maxY) / 2;
@@ -18083,6 +18405,9 @@ export default function App() {
               Boolean(st.attachedToWeightId) ||
               Boolean(st.attachedToSpringId) ||
               st.shapeType === 'spring-pointer' ||
+              (st.shapeType === 'spring' &&
+                (Boolean(st.springSupport) ||
+                  (targetPage.springSims || []).some((sm) => sm.eqSpringStrokeId === st.id))) ||
               (targetPage.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
               targetPage.strokes.some((o) => o.attachedToWeightId === st.id)
           );
@@ -18387,6 +18712,7 @@ export default function App() {
           const isAttachedOrHookedWeight =
             s.shapeType === 'hooked-weight' ||
             s.shapeType === 'spring-pointer' ||
+            s.shapeType === 'spring' ||
             Boolean(s.attachedToSpringId) ||
             Boolean(s.attachedToWeightId) ||
             (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
@@ -18407,6 +18733,9 @@ export default function App() {
           clearActiveOverlay();
           setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
           setRedoStack([]);
+          if (hitWeightStroke.shapeType === 'spring') {
+            setSelectedHookeSpringId(hitWeightStroke.id);
+          }
           const wb = getStrokeBounds(hitWeightStroke);
           const wcx = (wb.minX + wb.maxX) / 2;
           const wcy = (wb.minY + wb.maxY) / 2;
@@ -21391,6 +21720,11 @@ export default function App() {
                 (other.shapeType === 'line' || other.shapeType === 'inclined-plane') &&
                 other.points.length >= 2
               ) {
+                const alreadyAttachedToSupport =
+                  draggedSt.springSupport?.supportStrokeId === other.id ||
+                  (activePage.springSims || []).some(
+                    (sm) => sm.eqSpringStrokeId === draggedSt.id && sm.supportStrokeId === other.id
+                  );
                 const segCount = other.shapeType === 'inclined-plane' ? other.points.length - 1 : 1;
                 for (let sIdx = 0; sIdx < segCount; sIdx++) {
                   const pA = other.points[sIdx];
@@ -21407,16 +21741,27 @@ export default function App() {
                     { side: 'end' as const, pt: candEnd },
                   ]) {
                     const t = Math.max(
-                      0.04,
+                      0.01,
                       Math.min(
-                        0.96,
+                        0.99,
                         ((termEntry.pt.x - pA.x) * abx + (termEntry.pt.y - pA.y) * aby) / lenSq
                       )
                     );
                     const projX = pA.x + t * abx;
                     const projY = pA.y + t * aby;
                     const d = Math.hypot(termEntry.pt.x - projX, termEntry.pt.y - projY);
-                    if (d <= 38 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                    if (alreadyAttachedToSupport) {
+                      const fixedSide =
+                        draggedSt.springSupport?.fixedEnd ||
+                        (activePage.springSims || []).find(
+                          (sm) => sm.eqSpringStrokeId === draggedSt.id
+                        )?.fixedEnd ||
+                        'start';
+                      if (termEntry.side === fixedSide && d <= 34) {
+                        snapDx = projX - termEntry.pt.x;
+                        snapDy = projY - termEntry.pt.y;
+                      }
+                    } else if (d <= 38 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
                       matchedPhysicsMagnet = {
                         kind: 'spring-to-support',
                         springStrokeId: draggedSt.id,
@@ -21614,13 +21959,22 @@ export default function App() {
           } else if (
             draggedSt &&
             (draggedSt.shapeType === 'spring-pointer' || draggedSt.shapeType === 'arrow') &&
-            draggedSt.points.length >= 2 &&
-            !unhookingDragStrokeIdsRef.current.has(draggedSt.id)
+            draggedSt.points.length >= 2
           ) {
             const candTailX = draggedSt.points[0].x + rawDx;
             const candTailY = draggedSt.points[0].y + rawDy;
+            const lastPt = draggedSt.points[draggedSt.points.length - 1];
+            const candHeadX = lastPt.x + rawDx;
+            const candHeadY = lastPt.y + rawDy;
+            const candMidX = (candTailX + candHeadX) / 2;
+            const candMidY = (candTailY + candHeadY) / 2;
+            const wasUnhookedInThisDrag = unhookingDragStrokeIdsRef.current.has(draggedSt.id);
             for (const other of activePage.strokes) {
-              if (other.id === draggedSt.id || hiddenOrLockedLayerIds.has(other.layerId)) {
+              if (
+                other.id === draggedSt.id ||
+                other.id === draggedSt.attachedToSpringId ||
+                hiddenOrLockedLayerIds.has(other.layerId)
+              ) {
                 continue;
               }
               if (other.shapeType === 'spring') {
@@ -21642,16 +21996,26 @@ export default function App() {
                   fixedEnd = dStart >= dEnd ? 'start' : 'end';
                 }
                 const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-                const d = Math.hypot(candTailX - freePt.x, candTailY - freePt.y);
-                if (d <= 44 && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                const dTail = Math.hypot(candTailX - freePt.x, candTailY - freePt.y);
+                const dHead =
+                  draggedSt.shapeType !== 'spring-pointer'
+                    ? Math.hypot(candHeadX - freePt.x, candHeadY - freePt.y)
+                    : 9999;
+                const dMid = Math.hypot(candMidX - freePt.x, candMidY - freePt.y);
+                const d = Math.min(dTail, dHead, dMid);
+                const snapRadius = wasUnhookedInThisDrag ? 48 : 72;
+                if (d <= snapRadius && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
+                  const useHead = dHead < dTail - 8;
+                  const refX = useHead ? candHeadX : candTailX;
+                  const refY = useHead ? candHeadY : candTailY;
                   matchedPhysicsMagnet = {
                     kind: 'pointer-to-spring',
                     springStrokeId: other.id,
                     pointerStrokeId: draggedSt.id,
                     targetX: freePt.x,
                     targetY: freePt.y,
-                    snapDx: freePt.x - candTailX,
-                    snapDy: freePt.y - candTailY,
+                    snapDx: freePt.x - refX,
+                    snapDy: freePt.y - refY,
                     dist: d,
                   };
                 }
@@ -21801,8 +22165,8 @@ export default function App() {
               progress: 0,
             });
 
-            // 480ms Fast Green Magnet (Half the 1000ms line weld time!)
-            const FAST_MAGNET_MS = 480;
+            // 220ms Ultra-Fast Magnet for Pointer-to-Spring, 480ms Fast Magnet for Weights/Support
+            const FAST_MAGNET_MS = physObj.kind === 'pointer-to-spring' ? 220 : 480;
             const stepPhysicsMagnet = (now: number) => {
               if (nodeMagnetTimerRef.current !== timerObj) return;
               const elapsed = now - timerObj.startTime;
@@ -22118,6 +22482,7 @@ export default function App() {
               Boolean(st?.attachedToWeightId) ||
               Boolean(st?.attachedToSpringId) ||
               st?.shapeType === 'spring-pointer' ||
+              st?.shapeType === 'spring' ||
               (activePage.springSims || []).some((sm) => sm.massStrokeId === sid)
             );
           });
@@ -22219,6 +22584,13 @@ export default function App() {
                     movingStrokeSet.add(ps.id);
                   }
                 }
+                for (const sm of page.springSims || []) {
+                  if (sm.eqSpringStrokeId === st.id || sm.naturalSpringStrokeId === st.id) {
+                    for (const wid of getWeightChainIds(page, sm.massStrokeId)) {
+                      movingStrokeSet.add(wid);
+                    }
+                  }
+                }
               }
             }
 
@@ -22255,10 +22627,10 @@ export default function App() {
                   const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
                   const candTailX = s.points[0].x + dx;
                   const candTailY = s.points[0].y + dy;
-                  if (Math.hypot(candTailX - freePt.x, candTailY - freePt.y) > 16) {
+                  if (Math.hypot(candTailX - freePt.x, candTailY - freePt.y) > 22) {
                     unhookingDragStrokeIdsRef.current.add(s.id);
                     unhookedPointerIds.add(s.id);
-                    unhookedToastMsg = '📍 Ο κόκκινος δείκτης αφαιρέθηκε από το ελατήριο!';
+                    unhookedToastMsg = '📍 Ο δείκτης αφαιρέθηκε από το ελατήριο!';
                   }
                 } else {
                   unhookedPointerIds.add(s.id);
@@ -22454,6 +22826,20 @@ export default function App() {
             );
 
             let nextSpringSims = page.springSims || [];
+            if (unhookedPointerIds.size > 0) {
+              const springsLosingPointer = new Set(
+                page.strokes
+                  .filter((st) => unhookedPointerIds.has(st.id) && st.attachedToSpringId)
+                  .map((st) => st.attachedToSpringId as string)
+              );
+              if (springsLosingPointer.size > 0) {
+                nextSpringSims = nextSpringSims.map((sm) =>
+                  springsLosingPointer.has(sm.eqSpringStrokeId)
+                    ? { ...sm, hookeMeasurements: [] }
+                    : sm
+                );
+              }
+            }
             if (unhookedSpringSimIdToRemove) {
               nextSpringSims = nextSpringSims.filter(
                 (sm) => sm.id !== unhookedSpringSimIdToRemove
@@ -23873,8 +24259,11 @@ export default function App() {
       ) {
         const tailX = newStroke.points[0].x;
         const tailY = newStroke.points[0].y;
+        const headPt = newStroke.points[newStroke.points.length - 1];
+        const midX = (tailX + headPt.x) / 2;
+        const midY = (tailY + headPt.y) / 2;
         let matchedSpringId: string | null = null;
-        let bestDist = 48;
+        let bestDist = 75;
         for (const other of activePage.strokes) {
           if (other.id === newStroke.id || other.shapeType !== 'spring') continue;
           const spInfo = getSpringTerminalsAndWidthVec(other);
@@ -23889,7 +24278,13 @@ export default function App() {
             fixedEnd = dStart >= dEnd ? 'start' : 'end';
           }
           const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
-          const dSp = Math.hypot(tailX - freePt.x, tailY - freePt.y);
+          const dTail = Math.hypot(tailX - freePt.x, tailY - freePt.y);
+          const dHead =
+            newStroke.shapeType !== 'spring-pointer'
+              ? Math.hypot(headPt.x - freePt.x, headPt.y - freePt.y)
+              : 9999;
+          const dMid = Math.hypot(midX - freePt.x, midY - freePt.y);
+          const dSp = Math.min(dTail, dHead, dMid);
           if (dSp < bestDist) {
             bestDist = dSp;
             matchedSpringId = other.id;
@@ -25431,13 +25826,6 @@ export default function App() {
   // 3) Smooth fade-in of projection guides & quantitative ticks (1180..1750ms), then final editable selection
   const mathGraphAnimRafRef = useRef<number | null>(null);
   const mathGraphAnimCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const mathGraphHandImgObjRef = useRef<HTMLImageElement | null>(null);
-  useEffect(() => {
-    const preloadImg = new Image();
-    preloadImg.decoding = 'async';
-    preloadImg.src = '/drawing-hand.png';
-    mathGraphHandImgObjRef.current = preloadImg;
-  }, []);
   const animateAndCommitMathGraph = useCallback(
     (
       graphBuilt: {
@@ -33360,14 +33748,11 @@ export default function App() {
                                         🪝 Μελέτη Νόμου Hooke (Fελ = k·Δl)
                                       </span>
                                       <span className="px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-800 font-bold text-[9.5px]">
-                                        l₀ = {l0Mm} mm
+                                        l₀ = {Number((l0Mm / 10).toFixed(1)).toString().replace('.', ',')} cm
                                       </span>
                                     </div>
-                                    <div className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 rounded-md px-2 py-0.5 text-center">
-                                      Βαρίδιο m₁ = 0,1 kg • Βάρος W = Fελ = m · 10 (g = 10 m/s²)
-                                    </div>
 
-                                    {/* 1-Click Attach / Detach Red Pointer Needle on the Active Spring */}
+                                    {/* 1-Click Attach / Detach Pointer Needle on the Active Spring */}
                                     {(() => {
                                       const attachedPointer = activePage.strokes.find(
                                         (s) => s.attachedToSpringId === activeSpring.eqSpringStrokeId
@@ -33382,9 +33767,14 @@ export default function App() {
                                                 strokes: page.strokes.filter(
                                                   (s) => s.id !== attachedPointer.id
                                                 ),
+                                                springSims: (page.springSims || []).map((sm) =>
+                                                  sm.eqSpringStrokeId === activeSpring.eqSpringStrokeId
+                                                    ? { ...sm, hookeMeasurements: [] }
+                                                    : sm
+                                                ),
                                               }));
                                               showToast(
-                                                '📍 Ο κόκκινος δείκτης αφαιρέθηκε από το ελατήριο!'
+                                                '📍 Ο δείκτης αφαιρέθηκε από το ελατήριο!'
                                               );
                                             } else {
                                               const ptrId = `ptr-${Date.now()}-${Math.random()
@@ -33399,7 +33789,7 @@ export default function App() {
                                                 id: ptrId,
                                                 tool: 'pen',
                                                 penType: 'fountain',
-                                                color: '#dc2626',
+                                                color: strokeColor || '#dc2626',
                                                 width: 3,
                                                 opacity: 1,
                                                 lineStyle: 'solid',
@@ -33419,6 +33809,7 @@ export default function App() {
                                                   },
                                                 ],
                                               };
+                                              setSelectedHookeSpringId(activeSpring.eqSpringStrokeId);
                                               updateActivePage((page) => ({
                                                 ...page,
                                                 strokes: [
@@ -33427,7 +33818,7 @@ export default function App() {
                                                 ],
                                               }));
                                               showToast(
-                                                '📍 Ο κόκκινος δείκτης κολλήθηκε στο ελατήριο! (Σύρε τον με το Λάσο για να τον βγάλεις)'
+                                                '📍 Ο δείκτης κολλήθηκε στο ελατήριο! (Σύρε τον με το Λάσο για να τον βγάλεις)'
                                               );
                                             }
                                           }}
@@ -33436,19 +33827,19 @@ export default function App() {
                                               ? 'bg-red-600 hover:bg-red-700 text-white border-red-700 shadow-2xs'
                                               : 'bg-white hover:bg-red-50 text-red-700 border-red-200'
                                           }`}
-                                          title="Κόλλησε ή ξεκόλλησε το κόκκινο βελονάκι μέτρησης στο άκρο του ελατηρίου (ή χρησιμοποίησε το εργαλείο Κόκκινου Δείκτη / Λάσο)"
+                                          title="Κόλλησε ή ξεκόλλησε το βελονάκι μέτρησης στο άκρο του ελατηρίου"
                                         >
                                           <span>
                                             {attachedPointer
-                                              ? '📍 Αφαίρεση Κόκκινου Δείκτη (Βελονάκι)'
-                                              : '📍 Προσθήκη Κόκκινου Δείκτη (Βελονάκι)'}
+                                              ? '📍 Αφαίρεση Δείκτη (Βελονάκι)'
+                                              : '📍 Προσθήκη Δείκτη (Βελονάκι)'}
                                           </span>
                                         </button>
                                       );
                                     })()}
 
-                                    {/* Live Readout matching the Ruler (1mm = 4.6px) */}
-                                    <div className="grid grid-cols-3 gap-1 bg-white/90 rounded-lg p-1.5 border border-sky-200/80 text-center">
+                                    {/* Live Readout matching the Ruler (1cm = 46px) */}
+                                    <div className="grid grid-cols-2 gap-1 bg-white/90 rounded-lg p-1.5 border border-sky-200/80 text-center">
                                       <div>
                                         <div className="text-[9px] text-slate-500 font-bold">
                                           m • W=Fελ
@@ -33459,18 +33850,10 @@ export default function App() {
                                       </div>
                                       <div>
                                         <div className="text-[9px] text-slate-500 font-bold">
-                                          Μήκος l
-                                        </div>
-                                        <div className="text-[11px] font-extrabold text-slate-800">
-                                          {curLMm} mm
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[9px] text-slate-500 font-bold">
                                           {signDir < 0 ? 'Συσπείρωση Δl' : 'Επιμήκυνση Δl'}
                                         </div>
                                         <div className="text-[11px] font-extrabold text-sky-700">
-                                          {curDeltaLMm} mm
+                                          {Number((curDeltaLMm / 10).toFixed(1)).toString().replace('.', ',')} cm
                                         </div>
                                       </div>
                                     </div>
@@ -33492,54 +33875,27 @@ export default function App() {
                                           }));
                                         }}
                                         className="flex-1 py-1 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[10px] cursor-pointer transition shadow-2xs"
-                                        title="Καταγράφει την τρέχουσα μέτρηση (Βαρίδια, m, W=Fελ, l, Δl) στον Πίνακα Τιμών"
+                                        title="Καταγράφει την τρέχουσα μέτρηση (Βαρίδια, m, W=Fελ, Δl) στον Πίνακα Τιμών"
                                       >
                                         ➕ Καταγραφή ({curChainCount} β.)
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const autoRows: HookeMeasurementRow[] = [0, 1, 2, 3, 4].map(
-                                            (n) => ({
-                                              id: `hm-auto-${n}-${Date.now()}`,
-                                              weightsCount: n,
-                                              forceN: n,
-                                              lengthMm: Math.max(
-                                                4,
-                                                l0Mm + signDir * n * deltaL1Mm
-                                              ),
-                                              deltaLMm: n * deltaL1Mm,
-                                            })
-                                          );
-                                          updateActiveSpringSimConfig((sim) => ({
-                                            ...sim,
-                                            hookeMeasurements: autoRows,
-                                            showHookeCanvasTable: true,
-                                            graphs: {
-                                              ...sim.graphs,
-                                              hooke: {
-                                                ...(sim.graphs.hooke || {}),
-                                                visible: true,
-                                              },
-                                            },
-                                          }));
-                                        }}
-                                        className="py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] cursor-pointer transition shadow-2xs"
-                                        title="Αυτόματη συμπλήρωση πίνακα τιμών (0 έως 4 βαρίδια) και εμφάνιση διαγράμματος Fελ – Δl"
-                                      >
-                                        ⚡ 0–4 Βάρη
                                       </button>
                                       {rows.length > 0 && (
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            updateActiveSpringSimConfig((sim) => ({
-                                              ...sim,
-                                              hookeMeasurements: [],
+                                            updateActivePage((page) => ({
+                                              ...page,
+                                              springSims: (page.springSims || []).map((sm) => ({
+                                                ...sm,
+                                                hookeMeasurements: [],
+                                                hookePlottedWeights: [],
+                                                hookeLineDrawn: false,
+                                              })),
                                             }));
+                                            setHookeLineAnim(null);
                                           }}
                                           className="py-1 px-1.5 rounded-lg bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 font-bold text-[10px] cursor-pointer transition"
-                                          title="Καθαρισμός πίνακα μετρήσεων"
+                                          title="Καθαρισμός πίνακα μετρήσεων & διαγράμματος"
                                         >
                                           🧹
                                         </button>
@@ -33549,61 +33905,88 @@ export default function App() {
                                     {/* Interactive Table of Values (Πίνακας Τιμών Fελ - Δl) */}
                                     {rows.length > 0 && (
                                       <div className="bg-white rounded-lg border border-sky-200 overflow-hidden">
-                                        <div className="grid grid-cols-11 bg-slate-100 text-[8.5px] font-extrabold text-slate-600 py-1 px-1 text-center border-b border-slate-200">
+                                        <div className="grid grid-cols-10 bg-slate-100 text-[8.5px] font-extrabold text-slate-600 py-1 px-1 text-center border-b border-slate-200">
                                           <span className="col-span-2">Βάρη</span>
                                           <span className="col-span-2">m(kg)</span>
-                                          <span className="col-span-2">W(N)</span>
-                                          <span className="col-span-2">l(mm)</span>
-                                          <span className="col-span-2">Δl(mm)</span>
-                                          <span className="col-span-1"></span>
+                                          <span className="col-span-3">W=Fελ(N)</span>
+                                          <span className="col-span-2">Δl(cm)</span>
+                                          <span className="col-span-1 text-sky-600">●</span>
                                         </div>
                                         <div className="divide-y divide-slate-100 max-h-32 overflow-y-auto">
                                           {rows.map((r) => {
-                                            const isCur =
-                                              Math.abs(r.deltaLMm - curDeltaLMm) <= 1 &&
-                                              Math.abs(r.forceN - curForceN) <= 0.15;
+                                            const targetSpId =
+                                              selectedHookeSpringId || activeSpring.eqSpringStrokeId;
+                                            const isCur = Boolean(
+                                              r.springStrokeId && r.springStrokeId === targetSpId
+                                            );
                                             const mKgStr =
                                               r.forceN === 0
                                                 ? '0'
                                                 : (r.forceN / 10).toFixed(1).replace('.', ',');
+                                            const dLCmStr = Number((r.deltaLMm / 10).toFixed(1))
+                                              .toString()
+                                              .replace('.', ',');
                                             return (
                                               <div
                                                 key={r.id}
-                                                className={`grid grid-cols-11 items-center py-0.5 px-1 text-center text-[9.5px] ${
+                                                onClick={() => {
+                                                  if (r.springStrokeId) {
+                                                    setSelectedHookeSpringId(r.springStrokeId);
+                                                  }
+                                                }}
+                                                className={`grid grid-cols-10 items-center py-0.5 px-1 text-center text-[9.5px] cursor-pointer ${
                                                   isCur
-                                                    ? 'bg-sky-50 font-extrabold text-sky-900'
-                                                    : 'text-slate-700 font-semibold'
+                                                    ? 'bg-sky-100/90 font-extrabold text-sky-900'
+                                                    : 'text-slate-700 font-semibold hover:bg-slate-50'
                                                 }`}
                                               >
                                                 <span className="col-span-2">{r.weightsCount}</span>
                                                 <span className="col-span-2 text-slate-600">
                                                   {mKgStr}
                                                 </span>
-                                                <span className="col-span-2 text-rose-600">
-                                                  {Number(r.forceN.toFixed(1))}
+                                                <span className="col-span-3 text-rose-600">
+                                                  {Number(r.forceN.toFixed(1)).toString().replace('.', ',')}
                                                 </span>
-                                                <span className="col-span-2">{r.lengthMm}</span>
                                                 <span className="col-span-2 text-sky-700">
-                                                  {r.deltaLMm}
+                                                  {dLCmStr}
                                                 </span>
                                                 <button
                                                   type="button"
-                                                  onClick={() => {
-                                                    updateActiveSpringSimConfig((sim) => ({
-                                                      ...sim,
-                                                      hookeMeasurements: (
-                                                        sim.hookeMeasurements || []
-                                                      ).filter(
-                                                        (item) =>
-                                                          item.id !== r.id &&
-                                                          item.weightsCount !== r.weightsCount
-                                                      ),
-                                                    }));
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updateActivePage((page) => {
+                                                      const curSim = getActiveSpringSim(page);
+                                                      const existingList =
+                                                        curSim?.hookePlottedWeights || [];
+                                                      const isPlotted = existingList.includes(
+                                                        r.weightsCount
+                                                      );
+                                                      const nextPlotted = isPlotted
+                                                        ? existingList.filter(
+                                                            (w) => w !== r.weightsCount
+                                                          )
+                                                        : [...existingList, r.weightsCount];
+                                                      return {
+                                                        ...page,
+                                                        springSims: (page.springSims || []).map(
+                                                          (sm) => ({
+                                                            ...sm,
+                                                            hookePlottedWeights: nextPlotted,
+                                                          })
+                                                        ),
+                                                      };
+                                                    }, false);
                                                   }}
-                                                  className="col-span-1 text-slate-400 hover:text-rose-600 cursor-pointer text-[9.5px]"
-                                                  title="Διαγραφή μέτρησης"
+                                                  className="col-span-1 flex items-center justify-center cursor-pointer"
+                                                  title="Εμφάνιση / απόκρυψη σημείου στο διάγραμμα Fελ – Δl"
                                                 >
-                                                  ✕
+                                                  <span
+                                                    className={`w-3 h-3 rounded-full border transition ${
+                                                      r.plotted
+                                                        ? 'bg-sky-600 border-sky-700'
+                                                        : 'bg-white border-slate-400 hover:border-sky-500'
+                                                    }`}
+                                                  />
                                                 </button>
                                               </div>
                                             );
@@ -35741,20 +36124,20 @@ export default function App() {
                                     transform: `rotate(${-rulerState.angle}deg)`,
                                   }}
                                 >
-                                  mm
+                                  cm
                                 </span>
                               </div>
                               <div className={`w-[1.5px] h-2 ${rulerState.showMm ? 'bg-[#0066ff]/80' : 'bg-slate-400/80'}`} />
                             </button>
 
-                            {/* Tick Lines & Optional mm Precision Labels Along Top and Bottom Edges */}
+                            {/* Tick Lines & Optional cm Precision Labels Along Top and Bottom Edges */}
                             <div className="relative w-full h-full pointer-events-none overflow-hidden rounded-md">
                               {/* Subtle center groove */}
                               <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 h-px bg-slate-400/30" />
 
                               {rulerState.showMm ? (
                                 <>
-                                  {/* 0 mm origin label */}
+                                  {/* 0 cm origin label */}
                                   <span
                                     style={{
                                       left: 7,
@@ -35790,16 +36173,16 @@ export default function App() {
                                             style={{ left: xPos, height: tickH, width: tickW }}
                                             className={`absolute bottom-0 -translate-x-1/2 ${tickCls}`}
                                           />
-                                          {/* Numeric mm value every 10 mm (1 cm) — counter-rotated so it stays upright when ruler is vertical! */}
+                                          {/* Numeric cm value every 10 mm (1 cm) — counter-rotated so it stays upright when ruler is vertical! */}
                                           {isFullCm && xPos < rulerW - 14 && (
                                             <span
                                               style={{
                                                 left: xPos,
                                                 transform: `translate(-50%, -50%) rotate(${-rulerState.angle}deg)`,
                                               }}
-                                              className="absolute top-1/2 text-[8.5px] font-mono font-bold text-slate-700/95 bg-slate-200/85 px-0.5 rounded select-none"
+                                              className="absolute top-1/2 text-[9px] font-mono font-extrabold text-slate-800 bg-slate-200/85 px-0.5 rounded select-none"
                                             >
-                                              {mmIdx}
+                                              {mmIdx / 10}
                                             </span>
                                           )}
                                         </React.Fragment>
@@ -35841,9 +36224,10 @@ export default function App() {
                                 })
                               )}
 
-                              {/* Red Indicator Line Across Ruler When a Red Pointer Needle is Close */}
+                              {/* Colored Indicator Line Across Ruler Matching the Attached Pointer Needle */}
                               {pointerCandidates.map((pSt) => {
                                 const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                                const ptrColor = info ? info.ptrColor : pSt.color || '#dc2626';
                                 return (
                                   <div
                                     key={`rline-${pSt.id}`}
@@ -35851,17 +36235,19 @@ export default function App() {
                                     style={{
                                       display: info ? 'block' : 'none',
                                       left: info ? info.clampedXPos : 0,
+                                      backgroundColor: ptrColor,
                                     }}
-                                    className="absolute inset-y-0 w-[2px] -translate-x-1/2 bg-red-600/85 z-10 pointer-events-none"
+                                    className="absolute inset-y-0 w-[2px] -translate-x-1/2 z-10 pointer-events-none opacity-90"
                                   />
                                 );
                               })}
                             </div>
                           </div>
 
-                          {/* Red Numerical Readout to the Right of the Ruler at the Exact Same Height as the Red Pointer Needle */}
+                          {/* Colored Numerical Readout (in cm) to the Right of the Ruler Matching the Pointer Arrow Color */}
                           {pointerCandidates.map((pSt) => {
                             const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                            const ptrColor = info ? info.ptrColor : pSt.color || '#dc2626';
                             return (
                               <div
                                 key={`rbadge-${pSt.id}`}
@@ -35870,16 +36256,24 @@ export default function App() {
                                   display: info ? 'flex' : 'none',
                                   left: info ? info.badgeX : 0,
                                   top: info ? info.badgeY : 0,
+                                  color: ptrColor,
+                                  borderColor: ptrColor,
                                   transform:
                                     !info || info.isMostlyVertical
                                       ? 'translate(0, -50%)'
                                       : 'translate(-50%, -100%)',
                                 }}
-                                className="absolute z-30 pointer-events-none items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/95 border border-red-500/85 shadow-sm text-[#dc2626] font-mono font-extrabold text-[11px] leading-none whitespace-nowrap select-none"
+                                className="absolute z-30 pointer-events-none items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/95 border shadow-sm font-mono font-extrabold text-[11px] leading-none whitespace-nowrap select-none"
                               >
-                                <span className="text-[8.5px] text-red-500">◀</span>
+                                <span
+                                  data-ruler-ptr-arr="true"
+                                  style={{ color: ptrColor }}
+                                  className="text-[8.5px]"
+                                >
+                                  ◀
+                                </span>
                                 <span data-ruler-ptr-val="true">
-                                  {info ? `${info.mmVal} mm` : ''}
+                                  {info ? info.cmStr : ''}
                                 </span>
                               </div>
                             );
