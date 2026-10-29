@@ -10358,8 +10358,14 @@ export default function App() {
     const isHookedOrChained =
       massStroke.shapeType === 'hooked-weight' || chainIds.length > 1;
     const scaleM = isHookedOrChained ? 1.0 : Math.pow(updatedSim.mass, 0.38);
-    const newMassW = Math.max(16, updatedSim.baseMassWidthPx * scaleM);
-    const newMassH = Math.max(16, updatedSim.baseMassHeightPx * scaleM);
+    const newMassW =
+      massStroke.shapeType === 'hooked-weight'
+        ? 22
+        : Math.max(16, updatedSim.baseMassWidthPx * scaleM);
+    const newMassH =
+      massStroke.shapeType === 'hooked-weight'
+        ? 42
+        : Math.max(16, updatedSim.baseMassHeightPx * scaleM);
     const halfSpanAlongAxis = (w: number, h: number) =>
       Math.abs(ux) * (w / 2) + Math.abs(uy) * (h / 2);
     // Floor spring has a slight 4px visual breathing gap or direct contact at the top terminal
@@ -10384,8 +10390,8 @@ export default function App() {
       const childSt = page.strokes.find((s) => s.id === chainIds[k]);
       if (!childSt) continue;
       const cb = getStrokeBounds(childSt);
-      const cw = Math.max(14, cb.maxX - cb.minX);
-      const ch = Math.max(14, cb.maxY - cb.minY);
+      const cw = childSt.shapeType === 'hooked-weight' ? 22 : Math.max(14, cb.maxX - cb.minX);
+      const ch = childSt.shapeType === 'hooked-weight' ? 42 : Math.max(14, cb.maxY - cb.minY);
       const cHalfSpan = halfSpanAlongAxis(cw, ch);
       const hookOverlap = childSt.shapeType === 'hooked-weight' && uy > 0.45 ? -4 : 0;
       const childCx = prevBottomX + ux * (cHalfSpan + hookOverlap);
@@ -10448,14 +10454,17 @@ export default function App() {
     }, false);
   };
 
-  // Automatically normalize any Hooke-mode springs on the active page so 1, 2, 3, 4 weights (m = 0,1 kg, g = 10 m/s²)
+  // Automatically normalize any Hooke-mode springs and hooked-weights (22x42px) on the active page so 1, 2, 3, 4 weights (m = 0,1 kg, g = 10 m/s²)
   // stretch by exact 10 mm (1 cm = 46 px), 20 mm (2 cm = 92 px), 30 mm (3 cm = 138 px), 40 mm (4 cm = 184 px)!
   useEffect(() => {
     if (isSpringSimulating || springSettleAnim) return;
     const sims = getValidSpringSims(activePage);
-    if (sims.length === 0) return;
-
-    const needsSync = sims.some((sm) => {
+    const hasOversizedHookedWeight = activePage.strokes.some((s) => {
+      if (s.shapeType !== 'hooked-weight') return false;
+      const b = getStrokeBounds(s);
+      return Math.abs(b.maxX - b.minX - 22) > 1.5 || Math.abs(b.maxY - b.minY - 42) > 1.5;
+    });
+    const needsSimSync = sims.some((sm) => {
       if (sm.showAmplitudeLines) return false;
       const eqSp = activePage.strokes.find((s) => s.id === sm.eqSpringStrokeId);
       const massSt = activePage.strokes.find((s) => s.id === sm.massStrokeId);
@@ -10483,10 +10492,26 @@ export default function App() {
       );
     });
 
-    if (!needsSync) return;
+    if (!needsSimSync && !hasOversizedHookedWeight) return;
 
     updateActivePage((page) => {
-      let curPage = page;
+      let curPage: NotePage = {
+        ...page,
+        strokes: page.strokes.map((s) => {
+          if (s.shapeType !== 'hooked-weight') return s;
+          const b = getStrokeBounds(s);
+          if (Math.abs(b.maxX - b.minX - 22) <= 1.5 && Math.abs(b.maxY - b.minY - 42) <= 1.5) {
+            return s;
+          }
+          return scaleAndMoveMassStrokeToBox(
+            s,
+            (b.minX + b.maxX) / 2,
+            (b.minY + b.maxY) / 2,
+            22,
+            42
+          );
+        }),
+      };
       const curActiveId = page.activeSpringSimId;
       for (const sm of getValidSpringSims(curPage)) {
         if (sm.showAmplitudeLines) continue;
@@ -10495,6 +10520,8 @@ export default function App() {
         const expectedMass = chainCount * 1.0;
         curPage = applySpringSimParametersToStrokes(curPage, {
           ...sm,
+          baseMassWidthPx: 22,
+          baseMassHeightPx: 42,
           mass: expectedMass,
           stiffness: 1.0,
         });

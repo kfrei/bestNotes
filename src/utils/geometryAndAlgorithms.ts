@@ -1036,12 +1036,10 @@ function buildPresetShape(
     };
   }
   if (preset === 'hooked-weight') {
-    const rawW = maxX - minX;
-    const rawH = maxY - minY;
-    const finalW = rawW < 18 ? 30 : Math.max(22, rawW);
-    const finalH = rawH < 28 ? 58 : Math.max(40, rawH);
-    const cx = minX + rawW / 2;
-    const cy = minY + rawH / 2;
+    const finalW = 22;
+    const finalH = 42;
+    const cx = start.x;
+    const cy = start.y;
     const halfW = finalW / 2;
     const halfH = finalH / 2;
     return {
