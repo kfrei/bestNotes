@@ -39,3 +39,31 @@ dialog::backdrop {
   background: rgba(148, 163, 184, 0.35);
   border-radius: 9999px;
 }
+
+@keyframes rulerPtrDashReveal {
+  0% {
+    clip-path: inset(-4px 100% -4px 0);
+    opacity: 0.45;
+  }
+  100% {
+    clip-path: inset(-4px 0% -4px 0);
+    opacity: 1;
+  }
+}
+
+@keyframes rulerPtrBadgeFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.ruler-ptr-dash-anim {
+  animation: rulerPtrDashReveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ruler-ptr-badge-anim {
+  animation: rulerPtrBadgeFadeIn 0.35s ease-out 0.22s both;
+}

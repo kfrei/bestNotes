@@ -10921,6 +10921,13 @@ export default function App() {
     badgeX: number;
     badgeY: number;
     isMostlyVertical: boolean;
+    isLockedAtZero: boolean;
+    tipX: number;
+    tipY: number;
+    rulerEdgeX: number;
+    rulerEdgeY: number;
+    dashLen: number;
+    dashAngleDeg: number;
   } | null => {
     if (!rulerState.visible || ptrStroke.points.length < 2) return null;
     if (!ptrStroke.attachedToSpringId) return null;
@@ -10936,9 +10943,11 @@ export default function App() {
     if (Math.abs(sinA) < 0.96) return null;
 
     // Require the vertical ruler to stand very close to at least one spring with an attached pointer arrow
-    const closeEdgeThreshold = rulerH / 2 + 32; // within 32px of the ruler's vertical edge
-    const hasNearbySpringWithPointer = activePage.strokes.some((cand) => {
-      if (!cand.attachedToSpringId || cand.points.length < 2) return false;
+    const closeEdgeThreshold = rulerH / 2 + 36; // within 36px of the ruler's vertical edge
+    let hasNearbySpringWithPointer = false;
+    let isLockedAtZero = false;
+    for (const cand of activePage.strokes) {
+      if (!cand.attachedToSpringId || cand.points.length < 2) continue;
       const isSelf = cand.id === ptrStroke.id;
       const cDx = isSelf ? dispDx : 0;
       const cDy = isSelf ? dispDy : 0;
@@ -10951,12 +10960,17 @@ export default function App() {
       const sPerpEnd = -(cPEnd.x - rulerState.x) * sinA + (cPEnd.y - rulerState.y) * cosA;
       const segPerpDist =
         sPerp0 * sPerpEnd <= 0 ? 0 : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
-      if (segPerpDist > closeEdgeThreshold) return false;
+      if (segPerpDist > closeEdgeThreshold) continue;
       const cTip = Math.abs(sPerpEnd) <= Math.abs(sPerp0) ? cPEnd : cP0;
       const cLocalX = (cTip.x - rulerState.x) * cosA + (cTip.y - rulerState.y) * sinA;
       const cXPos = cLocalX + rulerW / 2;
-      return cXPos >= -6 && cXPos <= rulerW + 6;
-    });
+      if (cXPos >= -6 && cXPos <= rulerW + 6) {
+        hasNearbySpringWithPointer = true;
+        if (Math.abs(cXPos) <= 2.3) {
+          isLockedAtZero = true;
+        }
+      }
+    }
     if (!hasNearbySpringWithPointer) return null;
 
     const p0 = {
@@ -10967,8 +10981,20 @@ export default function App() {
       x: ptrStroke.points[ptrStroke.points.length - 1].x + dispDx,
       y: ptrStroke.points[ptrStroke.points.length - 1].y + dispDy,
     };
-    const perp0 = Math.abs(-(p0.x - rulerState.x) * sinA + (p0.y - rulerState.y) * cosA);
-    const perpEnd = Math.abs(-(pEnd.x - rulerState.x) * sinA + (pEnd.y - rulerState.y) * cosA);
+    const sPerp0Self = -(p0.x - rulerState.x) * sinA + (p0.y - rulerState.y) * cosA;
+    const sPerpEndSelf = -(pEnd.x - rulerState.x) * sinA + (pEnd.y - rulerState.y) * cosA;
+    const selfSegPerpDist =
+      sPerp0Self * sPerpEndSelf <= 0
+        ? 0
+        : Math.min(Math.abs(sPerp0Self), Math.abs(sPerpEndSelf));
+
+    // Distant spring pointers only project onto the ruler once the ruler is locked at 0
+    if (!isLockedAtZero && selfSegPerpDist > closeEdgeThreshold) {
+      return null;
+    }
+
+    const perp0 = Math.abs(sPerp0Self);
+    const perpEnd = Math.abs(sPerpEndSelf);
     const tipPt = perpEnd <= perp0 ? pEnd : p0;
 
     const dx = tipPt.x - rulerState.x;
@@ -10998,6 +11024,15 @@ export default function App() {
     const badgeX = axisPtX + normX * (rulerH / 2 + 8);
     const badgeY = axisPtY + normY * (rulerH / 2 + 8);
 
+    const toTipDotNorm = (tipPt.x - axisPtX) * normX + (tipPt.y - axisPtY) * normY;
+    const edgeSign = toTipDotNorm >= 0 ? 1 : -1;
+    const rulerEdgeX = axisPtX + edgeSign * normX * (rulerH / 2);
+    const rulerEdgeY = axisPtY + edgeSign * normY * (rulerH / 2);
+    const dashDx = rulerEdgeX - tipPt.x;
+    const dashDy = rulerEdgeY - tipPt.y;
+    const dashLen = Math.abs(localY) > rulerH / 2 + 1 ? Math.hypot(dashDx, dashDy) : 0;
+    const dashAngleDeg = (Math.atan2(dashDy, dashDx) * 180) / Math.PI;
+
     return {
       clampedXPos,
       mmVal,
@@ -11007,6 +11042,13 @@ export default function App() {
       badgeX,
       badgeY,
       isMostlyVertical,
+      isLockedAtZero,
+      tipX: tipPt.x,
+      tipY: tipPt.y,
+      rulerEdgeX,
+      rulerEdgeY,
+      dashLen,
+      dashAngleDeg,
     };
   };
 
@@ -11017,11 +11059,15 @@ export default function App() {
     const badgeEl = document.querySelector(
       `[data-ruler-ptr-badge="${ptrStroke.id}"]`
     ) as HTMLElement | null;
-    if (!lineEl && !badgeEl) return;
+    const dashEl = document.querySelector(
+      `[data-ruler-ptr-dash="${ptrStroke.id}"]`
+    ) as HTMLElement | null;
+    if (!lineEl && !badgeEl && !dashEl) return;
     const info = computeRulerPointerReadout(ptrStroke, dispDx, dispDy);
     if (!info) {
       if (lineEl) lineEl.style.display = 'none';
       if (badgeEl) badgeEl.style.display = 'none';
+      if (dashEl) dashEl.style.display = 'none';
       return;
     }
     if (lineEl) {
@@ -11042,6 +11088,26 @@ export default function App() {
       const valSpan = badgeEl.querySelector('[data-ruler-ptr-val="true"]');
       if (valSpan) {
         valSpan.textContent = info.cmStr;
+      }
+    }
+    if (dashEl) {
+      if (info.isLockedAtZero && info.dashLen > 1) {
+        dashEl.style.display = 'block';
+        dashEl.style.left = `${info.tipX}px`;
+        dashEl.style.top = `${info.tipY}px`;
+        dashEl.style.width = `${info.dashLen}px`;
+        dashEl.style.transform = `translateY(-50%) rotate(${info.dashAngleDeg}deg)`;
+        const svgEl = dashEl.querySelector('svg');
+        if (svgEl) {
+          svgEl.setAttribute('width', `${Math.max(1, info.dashLen)}`);
+        }
+        const svgLine = dashEl.querySelector('[data-ruler-ptr-dash-svgline="true"]');
+        if (svgLine) {
+          svgLine.setAttribute('x2', `${Math.max(1, info.dashLen)}`);
+          svgLine.setAttribute('stroke', info.ptrColor);
+        }
+      } else {
+        dashEl.style.display = 'none';
       }
     }
   };
@@ -35715,7 +35781,7 @@ export default function App() {
                               const cosA = Math.cos(rad);
                               if (Math.abs(sinA) >= 0.96) {
                                 // Gently snap the 0 cm origin of the vertical ruler to a nearby spring pointer arrow
-                                const closeEdgeThreshold = rulerH / 2 + 32;
+                                const closeEdgeThreshold = rulerH / 2 + 36;
                                 for (const cand of activePage.strokes) {
                                   if (!cand.attachedToSpringId || cand.points.length < 2) continue;
                                   const cP0 = cand.points[0];
@@ -35728,7 +35794,7 @@ export default function App() {
                                       : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
                                   if (segPerpDist <= closeEdgeThreshold) {
                                     const targetY = cPEnd.y + (rulerW / 2) * (sinA >= 0 ? 1 : -1);
-                                    if (Math.abs(nextY - targetY) <= 9) {
+                                    if (Math.abs(nextY - targetY) <= 14) {
                                       nextY = targetY;
                                       break;
                                     }
@@ -35985,6 +36051,48 @@ export default function App() {
                             </div>
                           </div>
 
+                          {/* Animated Dashed Projection Line from Pointer Arrow Tip to Ruler when Locked at 0 */}
+                          {pointerCandidates.map((pSt) => {
+                            const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                            const ptrColor = info ? info.ptrColor : pSt.color || '#dc2626';
+                            const showDash = Boolean(info && info.isLockedAtZero && info.dashLen > 1);
+                            const dLen = info ? Math.max(1, info.dashLen) : 1;
+                            return (
+                              <div
+                                key={`rdash-${pSt.id}`}
+                                data-ruler-ptr-dash={pSt.id}
+                                style={{
+                                  display: showDash ? 'block' : 'none',
+                                  left: info ? info.tipX : 0,
+                                  top: info ? info.tipY : 0,
+                                  width: dLen,
+                                  height: 6,
+                                  transformOrigin: '0 50%',
+                                  transform: `translateY(-50%) rotate(${info ? info.dashAngleDeg : 0}deg)`,
+                                }}
+                                className="absolute z-20 pointer-events-none select-none ruler-ptr-dash-anim"
+                              >
+                                <svg
+                                  width={dLen}
+                                  height={6}
+                                  className="block overflow-visible"
+                                >
+                                  <line
+                                    data-ruler-ptr-dash-svgline="true"
+                                    x1={0}
+                                    y1={3}
+                                    x2={dLen}
+                                    y2={3}
+                                    stroke={ptrColor}
+                                    strokeWidth={2.2}
+                                    strokeDasharray="6 4"
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                              </div>
+                            );
+                          })}
+
                           {/* Colored Numerical Readout (in cm) to the Right of the Ruler Matching the Pointer Arrow Color */}
                           {pointerCandidates.map((pSt) => {
                             const info = computeRulerPointerReadout(pSt, 0, 0, pW);
@@ -36004,7 +36112,11 @@ export default function App() {
                                       ? 'translate(0, -50%)'
                                       : 'translate(-50%, -100%)',
                                 }}
-                                className="absolute z-30 pointer-events-none items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/95 border shadow-sm font-mono font-extrabold text-[11px] leading-none whitespace-nowrap select-none"
+                                className={`absolute z-30 pointer-events-none items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/95 border shadow-sm font-mono font-extrabold text-[11px] leading-none whitespace-nowrap select-none ${
+                                  info && info.isLockedAtZero && info.dashLen > 24
+                                    ? 'ruler-ptr-badge-anim'
+                                    : ''
+                                }`}
                               >
                                 <span
                                   data-ruler-ptr-arr="true"
