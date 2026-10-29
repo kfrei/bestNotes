@@ -1137,6 +1137,13 @@ export default function App() {
     springStrokeId?: string;
     fixedEnd?: 'start' | 'end';
   } | null>(null);
+  const springSettleAnimRef = useRef<{
+    simId: string;
+    startTime: number;
+    fromLengthPx?: number;
+    springStrokeId?: string;
+    fixedEnd?: 'start' | 'end';
+  } | null>(null);
   const unhookingDragStrokeIdsRef = useRef<Set<string>>(new Set());
   const [springPhaseShiftAnim, setSpringPhaseShiftAnim] = useState<{
     simId: string;
@@ -5841,7 +5848,8 @@ export default function App() {
             continue;
           }
           // While spring oscillation (or live mass pulling / initial l0->Θ.Ι. settling / initial position shift to +A or -A) is active, hide the static equilibrium spring & mass block so only the 60fps animated/displaced version renders!
-          if (isCurrentActivePage && springSettleAnim?.springStrokeId === s.id) {
+          const curSettleAnim = springSettleAnim || springSettleAnimRef.current;
+          if (isCurrentActivePage && curSettleAnim?.springStrokeId === s.id) {
             continue;
           }
           if (
@@ -5849,7 +5857,7 @@ export default function App() {
             activePageSpringSim &&
             (isSpringSimulating ||
               draggingSpringMassRef.current?.simId === activePageSpringSim.id ||
-              springSettleAnim?.simId === activePageSpringSim.id ||
+              curSettleAnim?.simId === activePageSpringSim.id ||
               springPhaseShiftAnim?.simId === activePageSpringSim.id ||
               (activePageSpringSim.initialPhaseMode !== 'eq' &&
                 activePageSpringSim.initialPhaseMode !== 'eqDown')) &&
@@ -10265,16 +10273,16 @@ export default function App() {
   };
 
   const attachMassToSpringAndCreateEquilibriumClone = (springId: string, massId: string) => {
-    let createdOrUpdatedName = '';
-    let createdSimId = '';
-    let prevSpringLengthPx = 0;
+    let didScheduleSettle = false;
+    setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
     updateActivePage((page) => {
       const sp = page.strokes.find((s) => s.id === springId);
       const mass = page.strokes.find((s) => s.id === massId);
       if (!sp || !mass) return page;
 
       const info = getSpringTerminalsAndWidthVec(sp);
-      prevSpringLengthPx = info.length;
+      const prevSpringLengthPx = info.length;
       const mb = getStrokeBounds(mass);
       const massCx = (mb.minX + mb.maxX) / 2;
       const massCy = (mb.minY + mb.maxY) / 2;
@@ -10342,8 +10350,23 @@ export default function App() {
       );
 
       if (existingSim) {
-        createdOrUpdatedName = existingSim.name;
-        createdSimId = existingSim.id;
+        if (!didScheduleSettle) {
+          didScheduleSettle = true;
+          const targetSimId = existingSim.id;
+          const targetName = existingSim.name;
+          const nextAnim = {
+            simId: targetSimId,
+            startTime: performance.now(),
+            fromLengthPx: prevSpringLengthPx > 0 ? prevSpringLengthPx : undefined,
+          };
+          springSettleAnimRef.current = nextAnim;
+          queueMicrotask(() => {
+            setSpringSettleAnim(nextAnim);
+            showToast(
+              `🧲 [${targetName}] Το σώμα κρεμάστηκε στο ελατήριο και ισορροπεί στη νέα Θ.Ι.!`
+            );
+          });
+        }
         const existingChain = getWeightChainIds(page, existingSim.massStrokeId);
         if (existingChain.length > 0 && !existingChain.includes(mass.id)) {
           const tailId = existingChain[existingChain.length - 1];
@@ -10438,7 +10461,6 @@ export default function App() {
       });
 
       const newSimName = getNextDefaultSpringSimName(page);
-      createdOrUpdatedName = newSimName;
       const defaultAmp = Math.round(Math.max(46, Math.min(82, info.length * 0.28)));
       const newSpringSim: SpringSimConfig = {
         id: `spring-sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
@@ -10466,7 +10488,23 @@ export default function App() {
           at: { visible: false },
         },
       };
-      createdSimId = newSpringSim.id;
+
+      if (!didScheduleSettle) {
+        didScheduleSettle = true;
+        const targetSimId = newSpringSim.id;
+        const nextAnim = {
+          simId: targetSimId,
+          startTime: performance.now(),
+          fromLengthPx: prevSpringLengthPx > 0 ? prevSpringLengthPx : undefined,
+        };
+        springSettleAnimRef.current = nextAnim;
+        queueMicrotask(() => {
+          setSpringSettleAnim(nextAnim);
+          showToast(
+            `🧲 [${newSimName}] Το σώμα κρεμάστηκε στο ελατήριο και ισορροπεί στη νέα Θ.Ι.!`
+          );
+        });
+      }
 
       const curValid = getValidSpringSims(page);
       return {
@@ -10476,26 +10514,12 @@ export default function App() {
         activeSpringSimId: newSpringSim.id,
       };
     }, true);
-
-    setSelectedStrokeIds([]);
-    if (createdSimId) {
-      setSpringSettleAnim({
-        simId: createdSimId,
-        startTime: performance.now(),
-        fromLengthPx: prevSpringLengthPx > 0 ? prevSpringLengthPx : undefined,
-      });
-    }
-    if (createdOrUpdatedName) {
-      showToast(
-        `🧲 [${createdOrUpdatedName}] Το σώμα κρεμάστηκε στο ελατήριο και ισορροπεί στη νέα Θ.Ι.!`
-      );
-    }
   };
 
   const attachWeightToWeightChain = (parentWeightId: string, childWeightId: string) => {
-    let totalChainedCount = 2;
-    let settledSimId = '';
-    let prevSpringLengthPx = 0;
+    let didScheduleSettle = false;
+    setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
     updateActivePage((page) => {
       const parentSt = page.strokes.find((s) => s.id === parentWeightId);
       const childSt = page.strokes.find((s) => s.id === childWeightId);
@@ -10563,15 +10587,31 @@ export default function App() {
 
       const rootId = getWeightChainRootId(nextPage, parentSt.id);
       const fullChain = getWeightChainIds(nextPage, rootId);
-      totalChainedCount = fullChain.length;
+      const totalChainedCount = fullChain.length;
 
       // Check if the root weight of this chain is attached to a SpringSimConfig!
       const attachedSim = getValidSpringSims(nextPage).find((sm) => sm.massStrokeId === rootId);
       if (attachedSim) {
-        settledSimId = attachedSim.id;
+        const settledSimId = attachedSim.id;
+        let prevSpringLengthPx = 0;
         const eqSp = nextPage.strokes.find((s) => s.id === attachedSim.eqSpringStrokeId);
         if (eqSp) {
           prevSpringLengthPx = getSpringTerminalsAndWidthVec(eqSp).length;
+        }
+        if (!didScheduleSettle) {
+          didScheduleSettle = true;
+          const nextAnim = {
+            simId: settledSimId,
+            startTime: performance.now(),
+            fromLengthPx: prevSpringLengthPx > 0 ? prevSpringLengthPx : undefined,
+          };
+          springSettleAnimRef.current = nextAnim;
+          queueMicrotask(() => {
+            setSpringSettleAnim(nextAnim);
+            showToast(
+              `🪝 Συνδέθηκαν ${totalChainedCount} βαρίδια σε σειρά (m = ${totalChainedCount} kg — νέα επιμήκυνση ελατηρίου!)`
+            );
+          });
         }
         const updatedSim: SpringSimConfig = {
           ...attachedSim,
@@ -10580,20 +10620,14 @@ export default function App() {
         return applySpringSimParametersToStrokes(nextPage, updatedSim);
       }
 
+      if (!didScheduleSettle) {
+        didScheduleSettle = true;
+        queueMicrotask(() => {
+          showToast(`🪝 Συνδέθηκαν ${totalChainedCount} βαρίδια σε σειρά!`);
+        });
+      }
       return nextPage;
     }, true);
-
-    setSelectedStrokeIds([]);
-    if (settledSimId) {
-      setSpringSettleAnim({
-        simId: settledSimId,
-        startTime: performance.now(),
-        fromLengthPx: prevSpringLengthPx > 0 ? prevSpringLengthPx : undefined,
-      });
-    }
-    showToast(
-      `🪝 Συνδέθηκαν ${totalChainedCount} βαρίδια σε σειρά${settledSimId ? ` (m = ${totalChainedCount} kg — νέα επιμήκυνση ελατηρίου!)` : '!'}`
-    );
   };
 
   const registerOrActivateSpringSimFromLasso = (): boolean => {
@@ -12318,7 +12352,7 @@ export default function App() {
       //    Live Force Vectors & 3 Draggable Live Graphs x(t), υ(t), α(t))
       // ======================================================================
       if (springSettleAnim?.springStrokeId) {
-        const SETTLE_DURATION_MS = 2200;
+        const SETTLE_DURATION_MS = 2350;
         const elapsedMs = now - springSettleAnim.startTime;
         const unloadedSp = activePage.strokes.find(
           (s) => s.id === springSettleAnim.springStrokeId
@@ -12337,10 +12371,15 @@ export default function App() {
           const u = Math.max(0, Math.min(1, elapsedSecSettle / (SETTLE_DURATION_MS / 1000)));
           const startLen = springSettleAnim.fromLengthPx ?? axLen + 36;
           const rawDelta = axLen - startLen;
-          const initDelta = Math.abs(rawDelta) >= 12 ? rawDelta : rawDelta >= 0 ? 24 : -24;
-          const decay = Math.exp(-2.25 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
+          const signDelta = rawDelta >= 0 ? 1 : -1;
+          const baseDelta = Math.abs(rawDelta) >= 12 ? rawDelta : signDelta * 36;
+          const swingAmp = Math.max(38, Math.abs(baseDelta) * 1.15) * signDelta;
+          const omegaSettle = Math.PI * 2 * 2.25;
+          const decay = Math.exp(-1.12 * elapsedSecSettle) * (1 - u * u);
           const deltaFromEqAlongAxis =
-            -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 2.15);
+            decay *
+            (-baseDelta * Math.cos(elapsedSecSettle * omegaSettle) +
+              swingAmp * 0.65 * Math.sin(elapsedSecSettle * omegaSettle));
           const curFreePt = {
             x: freePt.x + deltaFromEqAlongAxis * axisUx,
             y: freePt.y + deltaFromEqAlongAxis * axisUy,
@@ -12350,6 +12389,7 @@ export default function App() {
           const oscCorners = buildSpringQuadCorners(curStartTerm, curEndTerm, spInfo.widthVec);
           drawStrokeOnContext(ctx, { ...unloadedSp, points: oscCorners }, false);
         } else if (elapsedMs >= SETTLE_DURATION_MS) {
+          springSettleAnimRef.current = null;
           setSpringSettleAnim(null);
         }
       }
@@ -12403,7 +12443,7 @@ export default function App() {
               : activeSpringSim.customInitialPhaseRad ?? -Math.PI / 2;
           const A = Math.max(16, activeSpringSim.amplitudePx || 55);
 
-          const SETTLE_DURATION_MS = 2200;
+          const SETTLE_DURATION_MS = 2350;
           const isSettlingToEq =
             springSettleAnim !== null &&
             springSettleAnim.simId === activeSpringSim.id &&
@@ -12462,16 +12502,20 @@ export default function App() {
             dispDx = xDisp * oscUx;
             dispDy = xDisp * oscUy;
           } else if (isSettlingToEq && springSettleAnim) {
-            // Fast 2.2s damped harmonic oscillation (γρήγορη φθίνουσα ταλάντωση 2.2s) around the new Equilibrium (Θ.Ι.)!
+            // Fast 2.35s damped harmonic oscillation (γρήγορη φθίνουσα ταλάντωση ~2.35s) around the new Equilibrium (Θ.Ι.)!
             const elapsedSecSettle = (now - springSettleAnim.startTime) / 1000;
             const u = Math.max(0, Math.min(1, elapsedSecSettle / (SETTLE_DURATION_MS / 1000)));
             const startLen = springSettleAnim.fromLengthPx ?? activeSpringSim.naturalLengthPx;
             const rawDelta = axLen - startLen;
-            const initDelta =
-              Math.abs(rawDelta) >= 12 ? rawDelta : rawDelta >= 0 ? 24 : -24;
-            const decay = Math.exp(-2.25 * elapsedSecSettle) * Math.pow(1 - u, 1.35);
+            const signDelta = rawDelta >= 0 ? 1 : -1;
+            const baseDelta = Math.abs(rawDelta) >= 12 ? rawDelta : signDelta * 36;
+            const swingAmp = Math.max(38, Math.abs(baseDelta) * 1.15) * signDelta;
+            const omegaSettle = Math.PI * 2 * 2.25;
+            const decay = Math.exp(-1.12 * elapsedSecSettle) * (1 - u * u);
             const deltaFromEqAlongAxis =
-              -initDelta * decay * Math.cos(elapsedSecSettle * Math.PI * 2 * 2.15);
+              decay *
+              (-baseDelta * Math.cos(elapsedSecSettle * omegaSettle) +
+                swingAmp * 0.65 * Math.sin(elapsedSecSettle * omegaSettle));
             dispDx = deltaFromEqAlongAxis * axisUx;
             dispDy = deltaFromEqAlongAxis * axisUy;
             xDisp = dispDx * oscUx + dispDy * oscUy;
@@ -12481,6 +12525,7 @@ export default function App() {
               springSettleAnim.simId === activeSpringSim.id &&
               now - springSettleAnim.startTime >= SETTLE_DURATION_MS
             ) {
+              springSettleAnimRef.current = null;
               setSpringSettleAnim(null);
             }
             if (
@@ -21570,16 +21615,17 @@ export default function App() {
           );
         }
 
-        let unhookedAnimToTrigger: {
-          simId: string;
-          fromLengthPx: number;
-          springStrokeId?: string;
-          fixedEnd?: 'start' | 'end';
-        } | null = null;
-        let unhookedToastMsg: string | null = null;
+        let didScheduleUnhook = false;
 
         updateActivePage(
           (page) => {
+            let unhookedAnimToTrigger: {
+              simId: string;
+              fromLengthPx: number;
+              springStrokeId?: string;
+              fixedEnd?: 'start' | 'end';
+            } | null = null;
+            let unhookedToastMsg: string | null = null;
             const movingStrokeSet = new Set<string>(targetStrokeIdList);
             for (const sid of targetStrokeIdList) {
               const st = page.strokes.find((s) => s.id === sid);
@@ -21839,25 +21885,33 @@ export default function App() {
               }
             }
 
+            if (!didScheduleUnhook && (unhookedAnimToTrigger || unhookedToastMsg)) {
+              didScheduleUnhook = true;
+              const animInfo = unhookedAnimToTrigger;
+              const toastText = unhookedToastMsg;
+              const nextAnim = animInfo
+                ? {
+                    ...animInfo,
+                    startTime: performance.now(),
+                  }
+                : null;
+              if (nextAnim) {
+                springSettleAnimRef.current = nextAnim;
+              }
+              queueMicrotask(() => {
+                if (nextAnim) {
+                  setSpringSettleAnim(nextAnim);
+                }
+                if (toastText) {
+                  showToast(toastText);
+                }
+              });
+            }
+
             return nextPage;
           },
           false
         );
-        if (unhookedAnimToTrigger) {
-          const animInfo: {
-            simId: string;
-            fromLengthPx: number;
-            springStrokeId?: string;
-            fixedEnd?: 'start' | 'end';
-          } = unhookedAnimToTrigger;
-          setSpringSettleAnim({
-            ...animInfo,
-            startTime: performance.now(),
-          });
-        }
-        if (unhookedToastMsg) {
-          showToast(unhookedToastMsg);
-        }
         return;
       }
 
