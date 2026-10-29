@@ -1181,9 +1181,10 @@ export default function App() {
   const draggingSpringGraphResizeRef = useRef<{
     simId: string;
     graphKey: 'xt' | 'vt' | 'at' | 'hooke';
-    mode: 'width' | 'height';
+    mode: 'width' | 'height' | 'scale';
     axisLeftX: number;
     axisMidY: number;
+    gx: number;
     stackedKeys: ('xt' | 'vt' | 'at' | 'hooke')[];
     syncSpringAmp: boolean;
   } | null>(null);
@@ -1202,7 +1203,7 @@ export default function App() {
     ampHandles: { x: number; y: number }[];
     graphResizeHandles: {
       key: 'xt' | 'vt' | 'at' | 'hooke';
-      mode: 'width' | 'height';
+      mode: 'width' | 'height' | 'scale';
       x: number;
       y: number;
       axisLeftX: number;
@@ -5095,6 +5096,33 @@ export default function App() {
         ctx.lineTo(botStemBot.x, botStemBot.y);
         traceEllipseBilerp(0.5, 0.932, 0.19, 0.064, -Math.PI * 0.5, Math.PI * 1.15, true);
         ctx.stroke();
+
+        // Crisp mass label ("0,1 kg" -> W = m·10 = 1 N) inside the weight body
+        const bodyCenter = bilerp(0.5, 0.5);
+        const bodyW = Math.hypot(bTR.x - bTL.x, bTR.y - bTL.y);
+        const bodyH = Math.hypot(bBL.x - bTL.x, bBL.y - bTL.y);
+        if (bodyW >= 11 && bodyH >= 12) {
+          const rotAng = Math.atan2(bTR.y - bTL.y, bTR.x - bTL.x);
+          ctx.save();
+          ctx.translate(bodyCenter.x, bodyCenter.y);
+          ctx.rotate(rotAng);
+          ctx.fillStyle = s.color || '#0f172a';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          if (bodyW >= 28 || bodyH < 18) {
+            const fSz = Math.max(7, Math.min(10.5, Math.min(bodyW * 0.28, bodyH * 0.45)));
+            ctx.font = `800 ${fSz.toFixed(1)}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText('0,1 kg', 0, 0.5);
+          } else {
+            const fSz = Math.max(6.8, Math.min(9.5, Math.min(bodyW * 0.48, bodyH * 0.34)));
+            ctx.font = `800 ${fSz.toFixed(1)}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText('0,1', 0, -fSz * 0.48);
+            ctx.font = `700 ${(fSz * 0.88).toFixed(1)}px system-ui, -apple-system, sans-serif`;
+            ctx.fillText('kg', 0, fSz * 0.52);
+          }
+          ctx.restore();
+        }
+
         ctx.restore();
         return;
       }
@@ -10165,6 +10193,112 @@ export default function App() {
       };
     });
 
+  const upsertHookeMeasurementRow = (
+    existing: HookeMeasurementRow[] | undefined,
+    naturalLengthPx: number,
+    eqLengthPx: number,
+    weightsCount: number,
+    forceN: number
+  ): HookeMeasurementRow[] => {
+    const oneMmPx = 4.6;
+    const l0Mm = Math.round(naturalLengthPx / oneMmPx);
+    const curLMm = Math.round(eqLengthPx / oneMmPx);
+    const curDeltaLMm = Math.abs(curLMm - l0Mm);
+    const rows = [...(existing || [])];
+    const zeroIdx = rows.findIndex((r) => r.weightsCount === 0);
+    const zeroRow: HookeMeasurementRow = {
+      id: zeroIdx >= 0 ? rows[zeroIdx].id : `hm-0-${Math.round(l0Mm)}`,
+      weightsCount: 0,
+      forceN: 0,
+      lengthMm: l0Mm,
+      deltaLMm: 0,
+    };
+    if (zeroIdx >= 0) rows[zeroIdx] = zeroRow;
+    else rows.push(zeroRow);
+
+    if (weightsCount > 0) {
+      const matchIdx = rows.findIndex((r) => r.weightsCount === weightsCount);
+      const nextRow: HookeMeasurementRow = {
+        id: matchIdx >= 0 ? rows[matchIdx].id : `hm-${weightsCount}-${Date.now()}`,
+        weightsCount,
+        forceN: Number(forceN.toFixed(2)),
+        lengthMm: curLMm,
+        deltaLMm: curDeltaLMm,
+      };
+      if (matchIdx >= 0) rows[matchIdx] = nextRow;
+      else rows.push(nextRow);
+    }
+
+    rows.sort((a, b) => a.weightsCount - b.weightsCount || a.deltaLMm - b.deltaLMm);
+    return rows;
+  };
+
+  const getCombinedHookeRowsForPage = (
+    page: NotePage,
+    activeSim: SpringSimConfig
+  ): HookeMeasurementRow[] => {
+    const oneMmPx = 4.6;
+    const l0Mm = Math.round(activeSim.naturalLengthPx / oneMmPx);
+    const eqSpActive = page.strokes.find((s) => s.id === activeSim.eqSpringStrokeId);
+    const spInfoActive = eqSpActive ? getSpringTerminalsAndWidthVec(eqSpActive) : null;
+    const fixedPtActive = spInfoActive
+      ? activeSim.fixedEnd === 'start'
+        ? spInfoActive.startTerm
+        : spInfoActive.endTerm
+      : { x: 0, y: 0 };
+    const freePtActive = spInfoActive
+      ? activeSim.fixedEnd === 'start'
+        ? spInfoActive.endTerm
+        : spInfoActive.startTerm
+      : { x: 0, y: 100 };
+    const uyActive = spInfoActive ? (freePtActive.y - fixedPtActive.y) / spInfoActive.length : 1;
+    const signDir = uyActive < -0.78 ? -1 : 1;
+
+    const byWeight = new Map<number, HookeMeasurementRow>();
+    byWeight.set(0, {
+      id: 'hm-0',
+      weightsCount: 0,
+      forceN: 0,
+      lengthMm: l0Mm,
+      deltaLMm: 0,
+    });
+
+    for (const r of activeSim.hookeMeasurements || []) {
+      byWeight.set(r.weightsCount, r);
+    }
+
+    // Also merge live measurements from all valid springs with attached weights on the same page
+    // (so whether the user hangs 1, 2, 3 weights sequentially on 1 spring OR places 3 springs side-by-side with 1, 2, 3 weights,
+    // the Table of Values and Diagram automatically include all measurements!)
+    const allSims = getValidSpringSims(page);
+    for (const sm of allSims) {
+      const eqSp = page.strokes.find((s) => s.id === sm.eqSpringStrokeId);
+      if (!eqSp) continue;
+      const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+      const chainCount = getWeightChainIds(page, sm.massStrokeId).length;
+      if (chainCount <= 0) continue;
+      const forceN = Number(sm.mass.toFixed(2));
+      const smL0Mm = Math.round(sm.naturalLengthPx / oneMmPx);
+      const smCurLMm = Math.round(spInfo.length / oneMmPx);
+      const smDeltaLMm = Math.abs(smCurLMm - smL0Mm);
+      const normLengthMm =
+        sm.id === activeSim.id ? smCurLMm : Math.max(4, l0Mm + signDir * smDeltaLMm);
+      if (sm.id === activeSim.id || !byWeight.has(chainCount)) {
+        byWeight.set(chainCount, {
+          id: `hm-live-${sm.id}-${chainCount}`,
+          weightsCount: chainCount,
+          forceN,
+          lengthMm: normLengthMm,
+          deltaLMm: smDeltaLMm,
+        });
+      }
+    }
+
+    return Array.from(byWeight.values()).sort(
+      (a, b) => a.weightsCount - b.weightsCount || a.deltaLMm - b.deltaLMm
+    );
+  };
+
   const applySpringSimParametersToStrokes = (
     page: NotePage,
     updatedSim: SpringSimConfig
@@ -10258,14 +10392,25 @@ export default function App() {
       newFreePt
     );
 
+    const simWithRecordedRow: SpringSimConfig = {
+      ...updatedSim,
+      hookeMeasurements: upsertHookeMeasurementRow(
+        updatedSim.hookeMeasurements,
+        updatedSim.naturalLengthPx,
+        eqLen,
+        chainIds.length,
+        updatedSim.mass
+      ),
+    };
+
     const nextSpringSims = (page.springSims || []).map((sm) =>
-      sm.id === updatedSim.id ? updatedSim : sm
+      sm.id === simWithRecordedRow.id ? simWithRecordedRow : sm
     );
     return {
       ...page,
       strokes: nextStrokes,
       springSims: nextSpringSims,
-      activeSpringSimId: updatedSim.id,
+      activeSpringSimId: simWithRecordedRow.id,
     };
   };
 
@@ -10561,6 +10706,13 @@ export default function App() {
         showPositionScale: false,
         showAmplitudeLines: false,
         showForceVectors: false,
+        hookeMeasurements: upsertHookeMeasurementRow(
+          undefined,
+          info.length,
+          eqLen,
+          chainIds.length,
+          totalMass
+        ),
         graphs: {
           xt: { visible: false },
           vt: { visible: false },
@@ -10846,7 +10998,7 @@ export default function App() {
           queueMicrotask(() => {
             setSpringSettleAnim(nextAnim);
             showToast(
-              `🪝 Συνδέθηκαν ${totalChainedCount} βαρίδια σε σειρά (m = ${totalChainedCount} kg — νέα επιμήκυνση ελατηρίου!)`
+              `🪝 Συνδέθηκαν ${totalChainedCount} βαρίδια σε σειρά (m = ${(totalChainedCount * 0.1).toFixed(1).replace('.', ',')} kg, W = Fελ = ${totalChainedCount} N)`
             );
           });
         }
@@ -13258,7 +13410,7 @@ export default function App() {
           }[] = [];
           const graphResizeHandlesHit: {
             key: 'xt' | 'vt' | 'at' | 'hooke';
-            mode: 'width' | 'height';
+            mode: 'width' | 'height' | 'scale';
             x: number;
             y: number;
             axisLeftX: number;
@@ -13617,10 +13769,6 @@ export default function App() {
             const l0Mm = Math.round(activeSpringSim.naturalLengthPx / oneMmPx);
             const curLMm = Math.round(axLen / oneMmPx);
             const curDeltaLMm = Math.abs(curLMm - l0Mm);
-            const curChainCount = getWeightChainIds(
-              activePage,
-              activeSpringSim.massStrokeId
-            ).length;
             const curForceN = Number(activeSpringSim.mass.toFixed(2));
             const eqLen1Px = computeEquilibriumLengthPx(
               activeSpringSim.naturalLengthPx,
@@ -13635,92 +13783,93 @@ export default function App() {
             );
             const signDir = axisUy < -0.78 ? -1 : 1;
 
-            const recordedRows =
-              activeSpringSim.hookeMeasurements &&
-              activeSpringSim.hookeMeasurements.length > 0
-                ? [...activeSpringSim.hookeMeasurements].sort(
-                    (a, b) => a.deltaLMm - b.deltaLMm || a.forceN - b.forceN
-                  )
-                : [
-                    {
-                      id: 'auto-0',
-                      weightsCount: 0,
-                      forceN: 0,
-                      lengthMm: l0Mm,
-                      deltaLMm: 0,
-                    },
-                    {
-                      id: 'auto-cur',
-                      weightsCount: curChainCount,
-                      forceN: curForceN,
-                      lengthMm: curLMm,
-                      deltaLMm: curDeltaLMm,
-                    },
-                  ];
+            const recordedRows = getCombinedHookeRowsForPage(activePage, activeSpringSim);
 
             const hCfg = activeSpringSim.graphs.hooke || { visible: false };
-            const defaultHookeW = Math.min(340, Math.max(250, w - baseDefaultX - 18));
-            const hW = hCfg.width || defaultHookeW;
-            const hPlotH = Math.max(120, Math.min(260, (hCfg.height || 85) * 2));
-            const defaultHookeX = baseDefaultX;
+            const defaultHookeW = 248;
+            const hW = Math.max(160, Math.min(520, hCfg.width || defaultHookeW));
+            const uiScale = Math.max(0.66, Math.min(1.24, hW / defaultHookeW));
+            const hPlotH = Math.max(70, Math.min(280, (hCfg.height || 62) * 2));
+            const defaultHookeX = Math.min(baseDefaultX, w - hW - 14);
             const defaultHookeY =
               runningPrevBotY > 0
                 ? runningPrevBotY + 34
                 : Math.max(48, fixedPt.y + 8);
-            const hx =
+            const rawHx =
               hCfg.customMoved && hCfg.x !== undefined ? hCfg.x : defaultHookeX;
+            const hx = Math.max(8, Math.min(w - hW - 14, rawHx));
             const hy =
               hCfg.customMoved && hCfg.y !== undefined ? hCfg.y : defaultHookeY;
 
             const isDarkGrid = activePage.template === 'dark-grid';
             const axisInk = isDarkGrid ? '#f8fafc' : '#0f172a';
             let diagramTopY = hy;
+            let frameBotY = hy;
 
-            // 6E-1. Optional Canvas Table of Values (Πίνακας Τιμών Νόμου του Hooke: n, F_ελ, l, Δl)
+            // 6E-1. Optional Canvas Table of Values (Πίνακας Τιμών Νόμου του Hooke: Βάρη, m (kg), W=Fελ (N), l (mm), Δl (mm))
             if (activeSpringSim.showHookeCanvasTable) {
-              const rowH = 21;
-              const headerH = 24;
-              const tblW = Math.max(248, hW);
-              const tblH = headerH + recordedRows.length * rowH + 6;
+              const rowH = Math.max(15, Math.round(19.5 * uiScale));
+              const subBannerH = Math.max(14, Math.round(17 * uiScale));
+              const headerH = Math.max(17, Math.round(21 * uiScale));
+              const tblW = hW;
+              const tblH = subBannerH + headerH + recordedRows.length * rowH + 5;
               const tblX = hx;
               const tblY = hy;
-              diagramTopY = tblY + tblH + 26;
+              diagramTopY = tblY + tblH + Math.round(20 * uiScale);
+              frameBotY = tblY + tblH + 6;
 
               ctx.save();
               ctx.fillStyle = isDarkGrid
-                ? 'rgba(15, 23, 42, 0.92)'
-                : 'rgba(255, 255, 255, 0.94)';
+                ? 'rgba(15, 23, 42, 0.93)'
+                : 'rgba(255, 255, 255, 0.95)';
               ctx.strokeStyle = isDarkGrid ? '#334155' : '#cbd5e1';
-              ctx.lineWidth = 1.6;
+              ctx.lineWidth = 1.5;
               ctx.beginPath();
               ctx.roundRect(tblX, tblY, tblW, tblH, 8);
               ctx.fill();
               ctx.stroke();
 
-              // Header background
-              ctx.fillStyle = isDarkGrid ? '#1e293b' : '#f1f5f9';
+              // Formula banner: m = 0,1 kg/β. • W = Fελ = m · 10
+              ctx.fillStyle = isDarkGrid ? '#0c4a6e' : '#e0f2fe';
               ctx.beginPath();
-              ctx.roundRect(tblX + 1, tblY + 1, tblW - 2, headerH, [7, 7, 0, 0]);
+              ctx.roundRect(tblX + 1, tblY + 1, tblW - 2, subBannerH, [7, 7, 0, 0]);
               ctx.fill();
+              ctx.font = `bold ${Math.max(8, Math.round(9.5 * uiScale))}px system-ui, -apple-system, sans-serif`;
+              ctx.fillStyle = isDarkGrid ? '#7dd3fc' : '#0369a1';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(
+                'Βαρίδιο m₁ = 0,1 kg  •  Βάρος W = Fελ = m · 10',
+                tblX + tblW / 2,
+                tblY + subBannerH / 2 + 0.5
+              );
+
+              // Column Header background
+              const hdrY = tblY + subBannerH;
+              ctx.fillStyle = isDarkGrid ? '#1e293b' : '#f1f5f9';
+              ctx.fillRect(tblX + 1, hdrY, tblW - 2, headerH);
 
               const colX = [
-                tblX + tblW * 0.13,
-                tblX + tblW * 0.37,
-                tblX + tblW * 0.63,
-                tblX + tblW * 0.87,
+                tblX + tblW * 0.1,
+                tblX + tblW * 0.28,
+                tblX + tblW * 0.49,
+                tblX + tblW * 0.71,
+                tblX + tblW * 0.9,
               ];
-              ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+              ctx.font = `bold ${Math.max(8, Math.round(10 * uiScale))}px system-ui, -apple-system, sans-serif`;
               ctx.fillStyle = isDarkGrid ? '#e2e8f0' : '#1e293b';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              ctx.fillText('Βάρη (n)', colX[0], tblY + headerH / 2);
-              ctx.fillText('Fελ (N)', colX[1], tblY + headerH / 2);
-              ctx.fillText('l (mm)', colX[2], tblY + headerH / 2);
-              ctx.fillText('Δl (mm)', colX[3], tblY + headerH / 2);
+              ctx.fillText('Βάρη', colX[0], hdrY + headerH / 2);
+              ctx.fillText('m (kg)', colX[1], hdrY + headerH / 2);
+              ctx.fillText('W=Fελ(N)', colX[2], hdrY + headerH / 2);
+              ctx.fillText('l (mm)', colX[3], hdrY + headerH / 2);
+              ctx.fillText('Δl (mm)', colX[4], hdrY + headerH / 2);
 
+              const rowsStartY = hdrY + headerH;
               for (let rIdx = 0; rIdx < recordedRows.length; rIdx++) {
                 const r = recordedRows[rIdx];
-                const ry = tblY + headerH + rIdx * rowH;
+                const ry = rowsStartY + rIdx * rowH;
                 const isLiveMatch =
                   Math.abs(r.deltaLMm - curDeltaLMm) <= 1 &&
                   Math.abs(r.forceN - curForceN) <= 0.15;
@@ -13739,45 +13888,38 @@ export default function App() {
                 ctx.lineTo(tblX + tblW - 4, ry);
                 ctx.stroke();
 
-                ctx.font = isLiveMatch
-                  ? 'bold 11.5px system-ui, -apple-system, sans-serif'
-                  : '600 11px system-ui, -apple-system, sans-serif';
+                const rowFontPx = Math.max(8.5, Math.round((isLiveMatch ? 10.8 : 10.2) * uiScale));
+                ctx.font = `${isLiveMatch ? 'bold' : '600'} ${rowFontPx}px system-ui, -apple-system, sans-serif`;
                 ctx.fillStyle = isLiveMatch
                   ? '#0284c7'
                   : isDarkGrid
                   ? '#f1f5f9'
                   : '#334155';
+                const massKgStr =
+                  r.forceN === 0
+                    ? '0'
+                    : (r.forceN / 10).toFixed(1).replace('.', ',');
+                const forceStr = Number(r.forceN.toFixed(1)).toString().replace('.', ',');
                 ctx.fillText(String(r.weightsCount), colX[0], ry + rowH / 2 + 1);
-                ctx.fillText(
-                  Number(r.forceN.toFixed(2)).toString(),
-                  colX[1],
-                  ry + rowH / 2 + 1
-                );
-                ctx.fillText(`${r.lengthMm}`, colX[2], ry + rowH / 2 + 1);
-                ctx.fillText(`${r.deltaLMm}`, colX[3], ry + rowH / 2 + 1);
+                ctx.fillText(massKgStr, colX[1], ry + rowH / 2 + 1);
+                ctx.fillText(forceStr, colX[2], ry + rowH / 2 + 1);
+                ctx.fillText(`${r.lengthMm}`, colX[3], ry + rowH / 2 + 1);
+                ctx.fillText(`${r.deltaLMm}`, colX[4], ry + rowH / 2 + 1);
               }
               ctx.restore();
-
-              if (!activeSpringSim.graphs.hooke?.visible) {
-                graphBoxesHit.push({
-                  key: 'hooke',
-                  x: tblX,
-                  y: tblY,
-                  width: tblW,
-                  height: tblH,
-                  closePt: { x: -9999, y: -9999, r: -1 },
-                });
-              }
             }
 
             // 6E-2. Elastic Deformation Diagram F_ελ – Δl (Νόμος του Hooke: F_ελ = k · Δl)
             if (activeSpringSim.graphs.hooke?.visible) {
-              const axisLeftX = hx + 32;
-              const axisRightX = hx + hW - 18;
-              const axisTopY = diagramTopY + 18;
+              const leftPad = Math.max(22, Math.round(30 * uiScale));
+              const rightPad = Math.max(12, Math.round(16 * uiScale));
+              const axisLeftX = hx + leftPad;
+              const axisRightX = hx + hW - rightPad;
+              const axisTopY = diagramTopY + Math.round(14 * uiScale);
               const axisBotY = axisTopY + hPlotH;
-              const plotSpanW = Math.max(120, axisRightX - axisLeftX - 22);
-              const plotSpanH = Math.max(90, axisBotY - axisTopY - 22);
+              frameBotY = axisBotY + Math.round(22 * uiScale);
+              const plotSpanW = Math.max(70, axisRightX - axisLeftX - Math.round(18 * uiScale));
+              const plotSpanH = Math.max(52, axisBotY - axisTopY - Math.round(18 * uiScale));
 
               const maxRowForce = Math.max(
                 4,
@@ -13791,44 +13933,22 @@ export default function App() {
               );
 
               ctx.save();
-              if (draggingSpringGraphRef.current?.graphKey === 'hooke') {
-                ctx.save();
-                ctx.strokeStyle = '#0284c7';
-                ctx.lineWidth = 1.5;
-                ctx.setLineDash([5, 4]);
-                ctx.strokeRect(
-                  hx - 4,
-                  hy - 6,
-                  hW + 8,
-                  axisBotY - hy + 28
-                );
-                ctx.restore();
-              }
-
-              graphBoxesHit.push({
-                key: 'hooke',
-                x: hx,
-                y: hy - 4,
-                width: activeTool === 'lasso' ? hW : 64,
-                height: axisBotY - hy + 28,
-                closePt: { x: -9999, y: -9999, r: -1 },
-              });
 
               // Resize handles: Height (↕) near top of F_ελ axis, Width (↔) to the right of Δl axis
               const rhX = axisLeftX;
-              const rhY = axisTopY - 11;
+              const rhY = axisTopY - 10;
               ctx.save();
               ctx.strokeStyle = '#2563eb';
-              ctx.lineWidth = 1.9;
+              ctx.lineWidth = 1.8;
               ctx.beginPath();
-              ctx.moveTo(rhX, rhY - 6);
-              ctx.lineTo(rhX, rhY + 6);
-              ctx.moveTo(rhX - 3, rhY - 3);
-              ctx.lineTo(rhX, rhY - 6);
-              ctx.lineTo(rhX + 3, rhY - 3);
-              ctx.moveTo(rhX - 3, rhY + 3);
-              ctx.lineTo(rhX, rhY + 6);
-              ctx.lineTo(rhX + 3, rhY + 3);
+              ctx.moveTo(rhX, rhY - 5.5);
+              ctx.lineTo(rhX, rhY + 5.5);
+              ctx.moveTo(rhX - 2.8, rhY - 2.8);
+              ctx.lineTo(rhX, rhY - 5.5);
+              ctx.lineTo(rhX + 2.8, rhY - 2.8);
+              ctx.moveTo(rhX - 2.8, rhY + 2.8);
+              ctx.lineTo(rhX, rhY + 5.5);
+              ctx.lineTo(rhX + 2.8, rhY + 2.8);
               ctx.stroke();
               graphResizeHandlesHit.push({
                 key: 'hooke',
@@ -13841,17 +13961,17 @@ export default function App() {
                 customMoved: Boolean(hCfg.customMoved),
               });
 
-              const rwX = axisRightX + 12;
+              const rwX = axisRightX + 9;
               const rwY = axisBotY;
               ctx.beginPath();
-              ctx.moveTo(rwX - 6, rwY);
-              ctx.lineTo(rwX + 6, rwY);
-              ctx.moveTo(rwX - 3, rwY - 3);
-              ctx.lineTo(rwX - 6, rwY);
-              ctx.lineTo(rwX - 3, rwY + 3);
-              ctx.moveTo(rwX + 3, rwY - 3);
-              ctx.lineTo(rwX + 6, rwY);
-              ctx.lineTo(rwX + 3, rwY + 3);
+              ctx.moveTo(rwX - 5.5, rwY);
+              ctx.lineTo(rwX + 5.5, rwY);
+              ctx.moveTo(rwX - 2.8, rwY - 2.8);
+              ctx.lineTo(rwX - 5.5, rwY);
+              ctx.lineTo(rwX - 2.8, rwY + 2.8);
+              ctx.moveTo(rwX + 2.8, rwY - 2.8);
+              ctx.lineTo(rwX + 5.5, rwY);
+              ctx.lineTo(rwX + 2.8, rwY + 2.8);
               ctx.stroke();
               graphResizeHandlesHit.push({
                 key: 'hooke',
@@ -13869,38 +13989,39 @@ export default function App() {
               ctx.save();
               ctx.strokeStyle = axisInk;
               ctx.fillStyle = axisInk;
-              ctx.lineWidth = 2.4;
+              ctx.lineWidth = Math.max(1.8, 2.3 * uiScale);
               ctx.lineCap = 'round';
               ctx.lineJoin = 'round';
               ctx.beginPath();
               // Vertical axis
               ctx.moveTo(axisLeftX, axisBotY);
               ctx.lineTo(axisLeftX, axisTopY);
-              ctx.moveTo(axisLeftX - 5.5, axisTopY + 8);
+              ctx.moveTo(axisLeftX - 5, axisTopY + 7);
               ctx.lineTo(axisLeftX, axisTopY);
-              ctx.lineTo(axisLeftX + 5.5, axisTopY + 8);
+              ctx.lineTo(axisLeftX + 5, axisTopY + 7);
               // Horizontal axis
               ctx.moveTo(axisLeftX, axisBotY);
               ctx.lineTo(axisRightX, axisBotY);
-              ctx.moveTo(axisRightX - 8, axisBotY - 5.5);
+              ctx.moveTo(axisRightX - 7, axisBotY - 5);
               ctx.lineTo(axisRightX, axisBotY);
-              ctx.lineTo(axisRightX - 8, axisBotY + 5.5);
+              ctx.lineTo(axisRightX - 7, axisBotY + 5);
               ctx.stroke();
 
               // Axis titles: F_ελ (N) & Δl (mm) + origin 0
-              ctx.font = 'italic bold 15px Georgia, "Times New Roman", serif';
+              const titleFontPx = Math.max(11, Math.round(14 * uiScale));
+              ctx.font = `italic bold ${titleFontPx}px Georgia, "Times New Roman", serif`;
               ctx.textAlign = 'left';
               ctx.textBaseline = 'middle';
-              ctx.fillText('Fελ (N)', axisLeftX + 9, axisTopY + 4);
+              ctx.fillText('Fελ (N)', axisLeftX + 7, axisTopY + 4);
               ctx.textAlign = 'right';
               ctx.fillText(
                 signDir < 0 ? 'Δl συσπ. (mm)' : 'Δl (mm)',
                 axisRightX - 2,
-                axisBotY - 14
+                axisBotY - Math.max(10, Math.round(13 * uiScale))
               );
-              ctx.font = 'bold 11.5px system-ui, -apple-system, sans-serif';
+              ctx.font = `bold ${Math.max(9.5, Math.round(11 * uiScale))}px system-ui, -apple-system, sans-serif`;
               ctx.textAlign = 'right';
-              ctx.fillText('0', axisLeftX - 6, axisBotY + 10);
+              ctx.fillText('0', axisLeftX - 5, axisBotY + 9);
               ctx.restore();
 
               // Linear Hooke's Law Ray F_ελ = k · Δl from origin (0,0)
@@ -13919,7 +14040,7 @@ export default function App() {
 
               ctx.save();
               ctx.strokeStyle = '#0284c7';
-              ctx.lineWidth = 2.8;
+              ctx.lineWidth = Math.max(2.0, 2.7 * uiScale);
               ctx.lineCap = 'round';
               ctx.beginPath();
               ctx.moveTo(axisLeftX, axisBotY);
@@ -13942,10 +14063,10 @@ export default function App() {
                 if (row.deltaLMm > 0 || row.forceN > 0) {
                   ctx.save();
                   ctx.strokeStyle = isLiveRow
-                    ? 'rgba(225, 29, 72, 0.75)'
-                    : 'rgba(100, 116, 139, 0.55)';
-                  ctx.lineWidth = isLiveRow ? 1.6 : 1.3;
-                  ctx.setLineDash([4, 4]);
+                    ? 'rgba(225, 29, 72, 0.78)'
+                    : 'rgba(2, 132, 199, 0.52)';
+                  ctx.lineWidth = isLiveRow ? 1.5 : 1.25;
+                  ctx.setLineDash([4, 3]);
                   ctx.beginPath();
                   // Vertical projection to Δl axis
                   ctx.moveTo(px, py);
@@ -13957,19 +14078,21 @@ export default function App() {
                   ctx.restore();
 
                   // Axis tick labels
+                  const tickFontPx = Math.max(
+                    8.5,
+                    Math.round((isLiveRow ? 10.5 : 9.8) * uiScale)
+                  );
                   ctx.save();
-                  ctx.font = isLiveRow
-                    ? 'bold 11px system-ui, -apple-system, sans-serif'
-                    : '600 10.5px system-ui, -apple-system, sans-serif';
+                  ctx.font = `${isLiveRow ? 'bold' : '600'} ${tickFontPx}px system-ui, -apple-system, sans-serif`;
                   ctx.fillStyle = isLiveRow ? '#e11d48' : axisInk;
                   ctx.textAlign = 'center';
                   ctx.textBaseline = 'top';
-                  ctx.fillText(`${row.deltaLMm}`, px, axisBotY + 5);
+                  ctx.fillText(`${row.deltaLMm}`, px, axisBotY + 4);
                   ctx.textAlign = 'right';
                   ctx.textBaseline = 'middle';
                   ctx.fillText(
                     `${Number(row.forceN.toFixed(1))}`,
-                    axisLeftX - 6,
+                    axisLeftX - 5,
                     py
                   );
                   ctx.restore();
@@ -13980,18 +14103,84 @@ export default function App() {
                 if (isLiveRow) {
                   ctx.fillStyle = 'rgba(225, 29, 72, 0.22)';
                   ctx.beginPath();
-                  ctx.arc(px, py, 8.5, 0, Math.PI * 2);
+                  ctx.arc(px, py, Math.max(6, 8 * uiScale), 0, Math.PI * 2);
                   ctx.fill();
                 }
                 ctx.fillStyle = isLiveRow ? '#e11d48' : '#0284c7';
                 ctx.beginPath();
-                ctx.arc(px, py, isLiveRow ? 4.8 : 4.0, 0, Math.PI * 2);
+                ctx.arc(
+                  px,
+                  py,
+                  Math.max(3.2, (isLiveRow ? 4.6 : 3.9) * uiScale),
+                  0,
+                  Math.PI * 2
+                );
                 ctx.fill();
                 ctx.restore();
               }
 
               ctx.restore();
             }
+
+            // 6E-3. Outer Resizable Frame + Bottom-Right Corner Scale Handle (⤡) for the entire Table + Diagram block!
+            const isDraggingOrResizingHooke =
+              draggingSpringGraphRef.current?.graphKey === 'hooke' ||
+              draggingSpringGraphResizeRef.current?.graphKey === 'hooke';
+            const frameX = hx - 4;
+            const frameY = hy - 4;
+            const frameW = hW + 8;
+            const frameH = Math.max(40, frameBotY - hy + 8);
+
+            ctx.save();
+            ctx.strokeStyle = isDraggingOrResizingHooke
+              ? '#0284c7'
+              : 'rgba(2, 132, 199, 0.48)';
+            ctx.lineWidth = isDraggingOrResizingHooke ? 1.7 : 1.25;
+            ctx.setLineDash([5, 4]);
+            ctx.strokeRect(frameX, frameY, frameW, frameH);
+            ctx.setLineDash([]);
+
+            // Corner scale handle (⤡) at bottom-right of the frame to shrink/enlarge the whole Table + Diagram together
+            const cornerX = frameX + frameW;
+            const cornerY = frameY + frameH;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.arc(cornerX, cornerY, 7.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(cornerX - 3.2, cornerY - 3.2);
+            ctx.lineTo(cornerX + 3.2, cornerY + 3.2);
+            ctx.moveTo(cornerX + 0.5, cornerY + 3.2);
+            ctx.lineTo(cornerX + 3.2, cornerY + 3.2);
+            ctx.lineTo(cornerX + 3.2, cornerY + 0.5);
+            ctx.moveTo(cornerX - 0.5, cornerY - 3.2);
+            ctx.lineTo(cornerX - 3.2, cornerY - 3.2);
+            ctx.lineTo(cornerX - 3.2, cornerY - 0.5);
+            ctx.stroke();
+            ctx.restore();
+
+            graphResizeHandlesHit.push({
+              key: 'hooke',
+              mode: 'scale',
+              x: cornerX,
+              y: cornerY,
+              axisLeftX: hx,
+              axisMidY: diagramTopY,
+              gx: hx,
+              customMoved: Boolean(hCfg.customMoved),
+            });
+
+            graphBoxesHit.push({
+              key: 'hooke',
+              x: hx,
+              y: hy - 4,
+              width: activeTool === 'lasso' ? hW : Math.min(hW, 110),
+              height: frameH,
+              closePt: { x: -9999, y: -9999, r: -1 },
+            });
           }
 
           springOverlayHitRef.current = {
@@ -16802,6 +16991,7 @@ export default function App() {
             mode: rh.mode,
             axisLeftX: rh.axisLeftX,
             axisMidY: rh.axisMidY,
+            gx: rh.gx,
             stackedKeys,
             syncSpringAmp: !rh.customMoved,
           };
@@ -19017,9 +19207,30 @@ export default function App() {
 
     if (draggingSpringGraphResizeRef.current) {
       const dragR = draggingSpringGraphResizeRef.current;
-      if (dragR.mode === 'width') {
+      if (dragR.mode === 'scale') {
         const nextW = Math.round(
-          Math.max(240, Math.min(680, latestPt.x - dragR.axisLeftX + 32))
+          Math.max(160, Math.min(520, latestPt.x - dragR.gx))
+        );
+        const nextHalfH = Math.round(
+          Math.max(35, Math.min(140, Math.max(35, (latestPt.y - dragR.axisMidY) / 2)))
+        );
+        updateActiveSpringSimConfig((sim) => {
+          if (sim.id !== dragR.simId) return sim;
+          const nextGraphs = { ...sim.graphs };
+          for (const k of dragR.stackedKeys) {
+            nextGraphs[k] = {
+              ...(nextGraphs[k] || { visible: true }),
+              width: nextW,
+              height: nextHalfH,
+            };
+          }
+          return { ...sim, graphs: nextGraphs };
+        });
+      } else if (dragR.mode === 'width') {
+        const minW = dragR.graphKey === 'hooke' ? 160 : 220;
+        const maxW = dragR.graphKey === 'hooke' ? 520 : 680;
+        const nextW = Math.round(
+          Math.max(minW, Math.min(maxW, latestPt.x - dragR.axisLeftX + 32))
         );
         updateActiveSpringSimConfig((sim) => {
           if (sim.id !== dragR.simId) return sim;
@@ -19030,8 +19241,9 @@ export default function App() {
           return { ...sim, graphs: nextGraphs };
         });
       } else {
+        const minHalfH = dragR.graphKey === 'hooke' ? 35 : 24;
         const nextHalfH = Math.round(
-          Math.max(24, Math.min(180, Math.abs(latestPt.y - dragR.axisMidY)))
+          Math.max(minHalfH, Math.min(180, Math.abs(latestPt.y - dragR.axisMidY)))
         );
         updateActiveSpringSimConfig((sim) => {
           if (sim.id !== dragR.simId) return sim;
@@ -33139,7 +33351,7 @@ export default function App() {
                                   )
                                 );
                                 const signDir = uy < -0.78 ? -1 : 1;
-                                const rows = activeSpring.hookeMeasurements || [];
+                                const rows = getCombinedHookeRowsForPage(activePage, activeSpring);
 
                                 return (
                                   <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2.5 text-[10px] text-sky-950 leading-snug space-y-2">
@@ -33150,6 +33362,9 @@ export default function App() {
                                       <span className="px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-800 font-bold text-[9.5px]">
                                         l₀ = {l0Mm} mm
                                       </span>
+                                    </div>
+                                    <div className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 rounded-md px-2 py-0.5 text-center">
+                                      Βαρίδιο m₁ = 0,1 kg • Βάρος W = Fελ = m · 10 (g = 10 m/s²)
                                     </div>
 
                                     {/* 1-Click Attach / Detach Red Pointer Needle on the Active Spring */}
@@ -33232,14 +33447,14 @@ export default function App() {
                                       );
                                     })()}
 
-                                    {/* Live Readout matching the Ruler (1mm = 3px) */}
+                                    {/* Live Readout matching the Ruler (1mm = 4.6px) */}
                                     <div className="grid grid-cols-3 gap-1 bg-white/90 rounded-lg p-1.5 border border-sky-200/80 text-center">
                                       <div>
                                         <div className="text-[9px] text-slate-500 font-bold">
-                                          Βάρος / Fελ
+                                          m • W=Fελ
                                         </div>
-                                        <div className="text-[11px] font-extrabold text-rose-600">
-                                          {curForceN} N ({curChainCount} β.)
+                                        <div className="text-[10.5px] font-extrabold text-rose-600">
+                                          {(curForceN / 10).toFixed(1).replace('.', ',')}kg → {curForceN}N
                                         </div>
                                       </div>
                                       <div>
@@ -33265,42 +33480,19 @@ export default function App() {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          updateActiveSpringSimConfig((sim) => {
-                                            const existing = [...(sim.hookeMeasurements || [])];
-                                            if (existing.length === 0) {
-                                              existing.push({
-                                                id: `hm-0-${Date.now()}`,
-                                                weightsCount: 0,
-                                                forceN: 0,
-                                                lengthMm: l0Mm,
-                                                deltaLMm: 0,
-                                              });
-                                            }
-                                            const matchIdx = existing.findIndex(
-                                              (r) => r.weightsCount === curChainCount
-                                            );
-                                            const newRow: HookeMeasurementRow = {
-                                              id: `hm-${curChainCount}-${Date.now()}`,
-                                              weightsCount: curChainCount,
-                                              forceN: curForceN,
-                                              lengthMm: curLMm,
-                                              deltaLMm: curDeltaLMm,
-                                            };
-                                            if (matchIdx >= 0) existing[matchIdx] = newRow;
-                                            else existing.push(newRow);
-                                            existing.sort(
-                                              (a, b) =>
-                                                a.weightsCount - b.weightsCount ||
-                                                a.deltaLMm - b.deltaLMm
-                                            );
-                                            return {
-                                              ...sim,
-                                              hookeMeasurements: existing,
-                                            };
-                                          });
+                                          updateActiveSpringSimConfig((sim) => ({
+                                            ...sim,
+                                            hookeMeasurements: upsertHookeMeasurementRow(
+                                              sim.hookeMeasurements,
+                                              sim.naturalLengthPx,
+                                              spInfo ? spInfo.length : sim.naturalLengthPx,
+                                              curChainCount,
+                                              curForceN
+                                            ),
+                                          }));
                                         }}
                                         className="flex-1 py-1 px-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-[10px] cursor-pointer transition shadow-2xs"
-                                        title="Καταγράφει την τρέχουσα μέτρηση (Βαρίδια, Fελ, l, Δl) στον Πίνακα Τιμών"
+                                        title="Καταγράφει την τρέχουσα μέτρηση (Βαρίδια, m, W=Fελ, l, Δl) στον Πίνακα Τιμών"
                                       >
                                         ➕ Καταγραφή ({curChainCount} β.)
                                       </button>
@@ -33357,11 +33549,12 @@ export default function App() {
                                     {/* Interactive Table of Values (Πίνακας Τιμών Fελ - Δl) */}
                                     {rows.length > 0 && (
                                       <div className="bg-white rounded-lg border border-sky-200 overflow-hidden">
-                                        <div className="grid grid-cols-9 bg-slate-100 text-[9px] font-extrabold text-slate-600 py-1 px-1.5 text-center border-b border-slate-200">
+                                        <div className="grid grid-cols-11 bg-slate-100 text-[8.5px] font-extrabold text-slate-600 py-1 px-1 text-center border-b border-slate-200">
                                           <span className="col-span-2">Βάρη</span>
-                                          <span className="col-span-2">Fελ (N)</span>
-                                          <span className="col-span-2">l (mm)</span>
-                                          <span className="col-span-2">Δl (mm)</span>
+                                          <span className="col-span-2">m(kg)</span>
+                                          <span className="col-span-2">W(N)</span>
+                                          <span className="col-span-2">l(mm)</span>
+                                          <span className="col-span-2">Δl(mm)</span>
                                           <span className="col-span-1"></span>
                                         </div>
                                         <div className="divide-y divide-slate-100 max-h-32 overflow-y-auto">
@@ -33369,18 +33562,25 @@ export default function App() {
                                             const isCur =
                                               Math.abs(r.deltaLMm - curDeltaLMm) <= 1 &&
                                               Math.abs(r.forceN - curForceN) <= 0.15;
+                                            const mKgStr =
+                                              r.forceN === 0
+                                                ? '0'
+                                                : (r.forceN / 10).toFixed(1).replace('.', ',');
                                             return (
                                               <div
                                                 key={r.id}
-                                                className={`grid grid-cols-9 items-center py-0.5 px-1.5 text-center text-[10px] ${
+                                                className={`grid grid-cols-11 items-center py-0.5 px-1 text-center text-[9.5px] ${
                                                   isCur
                                                     ? 'bg-sky-50 font-extrabold text-sky-900'
                                                     : 'text-slate-700 font-semibold'
                                                 }`}
                                               >
                                                 <span className="col-span-2">{r.weightsCount}</span>
+                                                <span className="col-span-2 text-slate-600">
+                                                  {mKgStr}
+                                                </span>
                                                 <span className="col-span-2 text-rose-600">
-                                                  {Number(r.forceN.toFixed(2))}
+                                                  {Number(r.forceN.toFixed(1))}
                                                 </span>
                                                 <span className="col-span-2">{r.lengthMm}</span>
                                                 <span className="col-span-2 text-sky-700">
@@ -33393,7 +33593,11 @@ export default function App() {
                                                       ...sim,
                                                       hookeMeasurements: (
                                                         sim.hookeMeasurements || []
-                                                      ).filter((item) => item.id !== r.id),
+                                                      ).filter(
+                                                        (item) =>
+                                                          item.id !== r.id &&
+                                                          item.weightsCount !== r.weightsCount
+                                                      ),
                                                     }));
                                                   }}
                                                   className="col-span-1 text-slate-400 hover:text-rose-600 cursor-pointer text-[9.5px]"
@@ -33408,7 +33612,7 @@ export default function App() {
                                       </div>
                                     )}
 
-                                    {/* Checkboxes to display the F_ελ – Δl Diagram & Table on the Canvas */}
+                                    {/* Checkboxes to display the F_ελ – Δl Diagram & Table on the Canvas + Quick Frame Resize */}
                                     <div className="pt-1 border-t border-sky-200/80 space-y-1.5">
                                       <label className="flex items-center justify-between text-[10.5px] font-extrabold text-sky-950 cursor-pointer">
                                         <span>📈 Διάγραμμα Fελ – Δl (στον καμβά)</span>
@@ -33446,6 +33650,64 @@ export default function App() {
                                           className="accent-indigo-600 w-4 h-4 cursor-pointer"
                                         />
                                       </label>
+                                      {(Boolean(activeSpring.graphs.hooke?.visible) ||
+                                        Boolean(activeSpring.showHookeCanvasTable)) && (
+                                        <div className="flex items-center justify-between gap-1 pt-0.5">
+                                          <span className="text-[9.5px] font-bold text-slate-600">
+                                            Μέγεθος Πλαισίου (ή σύρε τη γωνία ⤡):
+                                          </span>
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                updateActiveSpringSimConfig((sim) => {
+                                                  const curW = sim.graphs.hooke?.width || 248;
+                                                  const curH = sim.graphs.hooke?.height || 62;
+                                                  return {
+                                                    ...sim,
+                                                    graphs: {
+                                                      ...sim.graphs,
+                                                      hooke: {
+                                                        ...(sim.graphs.hooke || { visible: true }),
+                                                        width: Math.max(165, Math.round(curW * 0.88)),
+                                                        height: Math.max(36, Math.round(curH * 0.88)),
+                                                      },
+                                                    },
+                                                  };
+                                                });
+                                              }}
+                                              className="px-2 py-0.5 rounded bg-white hover:bg-sky-100 text-sky-900 border border-sky-200 font-extrabold text-[10px] cursor-pointer"
+                                              title="Μίκρυνση Πίνακα & Διαγράμματος"
+                                            >
+                                              − Μικρότερο
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                updateActiveSpringSimConfig((sim) => {
+                                                  const curW = sim.graphs.hooke?.width || 248;
+                                                  const curH = sim.graphs.hooke?.height || 62;
+                                                  return {
+                                                    ...sim,
+                                                    graphs: {
+                                                      ...sim.graphs,
+                                                      hooke: {
+                                                        ...(sim.graphs.hooke || { visible: true }),
+                                                        width: Math.min(480, Math.round(curW * 1.12)),
+                                                        height: Math.min(135, Math.round(curH * 1.12)),
+                                                      },
+                                                    },
+                                                  };
+                                                });
+                                              }}
+                                              className="px-2 py-0.5 rounded bg-white hover:bg-sky-100 text-sky-900 border border-sky-200 font-extrabold text-[10px] cursor-pointer"
+                                              title="Μεγέθυνση Πίνακα & Διαγράμματος"
+                                            >
+                                              + Μεγαλύτερο
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 );
