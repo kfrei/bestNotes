@@ -35037,22 +35037,6 @@ export default function App() {
                       +
                     </button>
                   </div>
-
-                  <div className="flex items-center justify-between gap-1 pt-0.5">
-                    {[10, 25, 50, 75, 90].map((preset) => (
-                      <button
-                        key={preset}
-                        onClick={() => applyFillTransparencyToSelection(preset)}
-                        className={`flex-1 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
-                          currentTrans === preset
-                            ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-sky-50 hover:text-[#0066ff]'
-                        }`}
-                      >
-                        {preset}%
-                      </button>
-                    ))}
-                  </div>
                 </div>
               );
             })()}
