@@ -3865,7 +3865,7 @@ export default function App() {
     return (
       s.shapeType === 'spring' ||
       s.shapeType === 'hooked-weight' ||
-      (s.shapeType === 'spring-pointer' && Boolean(s.attachedToSpringId)) ||
+      s.shapeType === 'spring-pointer' ||
       s.shapeType === 'resistor' ||
       s.shapeType === 'cuboid' ||
       s.shapeType === 'cylinder' ||
@@ -6136,6 +6136,8 @@ export default function App() {
             selStrokesList.length > 0 &&
             selStrokesList.some(
               (st) =>
+                st.shapeType === 'hooked-weight' ||
+                st.shapeType === 'spring-pointer' ||
                 Boolean(st.attachedToWeightId) ||
                 Boolean(st.attachedToSpringId) ||
                 (pageObj.springSims || []).some((sm) => sm.massStrokeId === st.id) ||
@@ -11307,8 +11309,8 @@ export default function App() {
         fxUnits: cx,
         fyUnits: cy,
         snapToGrid: true,
-        anMode: 'F',
-        step: 1,
+        anMode: 'none',
+        step: 0,
         showCalc: false,
       };
       setSelectedStrokeIds([]);
@@ -11334,7 +11336,6 @@ export default function App() {
         forceSims: [...getValidForceSims(page), newSim],
         activeForceSimId: newSimId,
       }));
-      triggerForceSimStep(newSimId, 1, undefined, 620);
       return;
     }
     if (action.startsWith('quick-create-synthesis:')) {
@@ -11393,7 +11394,7 @@ export default function App() {
         f2xUnits: f2x,
         f2yUnits: f2y,
         synthesisStepMode: false,
-        step: 3,
+        step: 0,
         showCalc: false,
       };
       setSelectedStrokeIds([]);
@@ -11425,7 +11426,6 @@ export default function App() {
         ],
         activeForceSimId: newSimId,
       }));
-      triggerForceSimStep(newSimId, 1, 3, 520);
       return;
     }
     if (!sim) return;
@@ -14149,14 +14149,9 @@ export default function App() {
             st.groupId.startsWith('math-graph-'))
         )
     );
-    const selectedFreeVectors = allPageForceVectors.filter((st) =>
-      selectedStrokeIds.includes(st.id)
-    );
     const hasForceOverlay =
       Boolean(activeForceSim) ||
-      selectedFreeVectors.length > 0 ||
-      (allPageForceVectors.length > 0 &&
-        (activeTool === 'lasso' || activeTool === 'direct-node' || showSimulationPanel)) ||
+      (allPageForceVectors.length >= 2 && isDraggingSelectionRef.current !== null) ||
       forceSimAnim !== null ||
       draggingForceHandleRef.current !== null;
     const hasSpringOverlay =
@@ -18132,20 +18127,6 @@ export default function App() {
           }
         }
 
-        // ------------------------------------------------------------------
-        // STANDALONE & SELECTED FREE VECTORS (•──> or ──>):
-        // Draggable 360° tip/shaft (without visible circles!) + Origin magnetic snap
-        // + Discreet On-Canvas "Ανάλυση" & "+ Σύνθεση" micro-pills!
-        // ------------------------------------------------------------------
-        const unattachedPageVectors = allPageForceVectors.filter(
-          (vec) =>
-            !fSim || (fSim.primaryStrokeId !== vec.id && fSim.secondaryStrokeId !== vec.id)
-        );
-        const uncoveredFreeVectors = selectedFreeVectors.filter(
-          (vec) =>
-            !fSim || (fSim.primaryStrokeId !== vec.id && fSim.secondaryStrokeId !== vec.id)
-        );
-
         // Live preview of angle θ if 2 unjoined vectors' origins are brought within 8px of each other during drag
         if (!fSim || fSim.mode !== 'synthesis') {
           for (let i = 0; i < allPageForceVectors.length; i++) {
@@ -18189,114 +18170,6 @@ export default function App() {
                 }
               }
             }
-          }
-        }
-
-        if (unattachedPageVectors.length > 0) {
-          for (const vec of unattachedPageVectors) {
-            const ox = vec.points[0].x;
-            const oy = vec.points[0].y;
-            const pEnd = vec.points[vec.points.length - 1];
-            const tx = pEnd.x;
-            const ty = pEnd.y;
-            const vx = (tx - ox) / U;
-            const vy = (oy - ty) / U;
-            const fMag = Math.hypot(vx, vy);
-            const deg = Math.round((Math.atan2(vy, vx) * 180) / Math.PI);
-            const col = vec.color || '#dc2626';
-
-            handlesHit.push(
-              {
-                kind: 'free-vec-origin',
-                strokeId: vec.id,
-                x: ox,
-                y: oy,
-                r: 22,
-              },
-              {
-                kind: 'free-vec-origin',
-                strokeId: vec.id,
-                x: ox + 0.25 * (tx - ox),
-                y: oy + 0.25 * (ty - oy),
-                r: 18,
-              },
-              {
-                kind: 'free-vec-tip',
-                strokeId: vec.id,
-                x: tx,
-                y: ty,
-                r: 28,
-              },
-              {
-                kind: 'free-vec-tip',
-                strokeId: vec.id,
-                x: ox + 0.72 * (tx - ox),
-                y: oy + 0.72 * (ty - oy),
-                r: 20,
-              }
-            );
-
-            if (showNums && selectedStrokeIds.includes(vec.id)) {
-              drawHaloLabel(
-                `F = ${fMag.toFixed(1)} N (${deg}°)`,
-                (ox + tx) / 2,
-                Math.min(oy, ty) - 16,
-                col,
-                'bold 12px system-ui, -apple-system, sans-serif'
-              );
-            }
-          }
-        }
-
-        if (uncoveredFreeVectors.length > 0) {
-          if (uncoveredFreeVectors.length === 1) {
-            const v0 = uncoveredFreeVectors[0];
-            const ox = v0.points[0].x;
-            const oy = v0.points[0].y;
-            const ty = v0.points[v0.points.length - 1].y;
-            const barY = Math.min(h - 36, Math.max(oy, ty) + 22);
-            const bx0 = Math.max(16, Math.min(w - 200, ox - 6));
-            const wAn = drawPillButton(
-              'Ανάλυση F',
-              `quick-create-analysis:${v0.id}`,
-              bx0,
-              barY,
-              74,
-              21,
-              '#16a34a',
-              '#fff'
-            );
-            drawPillButton(
-              '+ Σύνθεση',
-              `quick-create-synthesis:${v0.id}`,
-              bx0 + wAn + 6,
-              barY,
-              78,
-              21,
-              '#2563eb',
-              '#fff'
-            );
-          } else if (uncoveredFreeVectors.length >= 2) {
-            const v1 = uncoveredFreeVectors[0];
-            const v2 = uncoveredFreeVectors[1];
-            const maxY = Math.max(
-              v1.points[0].y,
-              v1.points[v1.points.length - 1].y,
-              v2.points[0].y,
-              v2.points[v2.points.length - 1].y
-            );
-            const minX = Math.min(v1.points[0].x, v2.points[0].x);
-            const barY = Math.min(h - 36, maxY + 22);
-            drawPillButton(
-              '+ Σύνθεση F₁+F₂',
-              `quick-pair-synthesis:${v1.id}:${v2.id}`,
-              Math.max(16, Math.min(w - 160, minX)),
-              barY,
-              110,
-              21,
-              '#2563eb',
-              '#fff'
-            );
           }
         }
 
@@ -22258,39 +22131,12 @@ export default function App() {
           const s = targetPage.strokes[i];
           if (lockedLayerIdsForWeight.has(s.layerId)) continue;
           if (s.shapeType === 'spring-pointer' || Boolean(s.attachedToSpringId)) {
-            if (
-              !s.attachedToSpringId &&
-              s.points.length >= 2 &&
-              Math.hypot(
-                pt.x - s.points[s.points.length - 1].x,
-                pt.y - s.points[s.points.length - 1].y
-              ) <= 22
-            ) {
-              clearActiveOverlay();
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-              setRedoStack([]);
-              setSelectedStrokeIds([s.id]);
-              setActiveNodeStrokeId(s.id);
-              draggingForceHandleRef.current = {
-                simId: '',
-                kind: 'free-vec-tip',
-                strokeId: s.id,
-                startX: pt.x,
-                startY: pt.y,
-                origOriginX: s.points[0].x,
-                origOriginY: s.points[0].y,
-              };
-              activePointerIdRef.current = e.pointerId;
-              activePointerTypeRef.current = e.pointerType;
-              isDrawingRef.current = true;
-              return;
-            }
             const sb = getStrokeBounds(s);
             if (
-              pt.x >= sb.minX - 8 &&
-              pt.x <= sb.maxX + 8 &&
-              pt.y >= sb.minY - 8 &&
-              pt.y <= sb.maxY + 8
+              pt.x >= sb.minX - 10 &&
+              pt.x <= sb.maxX + 10 &&
+              pt.y >= sb.minY - 12 &&
+              pt.y <= sb.maxY + 12
             ) {
               directWeightHit = s;
               break;
@@ -22418,6 +22264,8 @@ export default function App() {
           selStrokesList.length > 0 &&
           selStrokesList.some(
             (st) =>
+              st.shapeType === 'hooked-weight' ||
+              st.shapeType === 'spring-pointer' ||
               Boolean(st.attachedToWeightId) ||
               Boolean(st.attachedToSpringId) ||
               (st.shapeType === 'spring' &&
@@ -22691,7 +22539,10 @@ export default function App() {
           }
 
           // C. Check inside rotated selection bounding box -> Move
-          if (Math.abs(localX) <= hw + 6 && Math.abs(localY) <= hh + 6) {
+          if (
+            Math.abs(localX) <= hw + 8 &&
+            Math.abs(localY) <= (isSelectedAttachedWeight ? Math.max(hh + 8, 18) : hh + 6)
+          ) {
             clearActiveOverlay();
             setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
@@ -23716,33 +23567,69 @@ export default function App() {
         const draggedSecondaryId =
           dragF.kind === 'origin' ? curFSim?.secondaryStrokeId || '' : '';
 
-        // Check if the dragged origin is within 64px of any other standalone force vector's origin -> Magnetic Snap!
-        let matchedOtherVec: StrokeObject | null = null;
-        let bestOriginDist = 64;
-        for (const other of activePage.strokes) {
-          if (
-            other.id === draggedPrimaryId ||
-            other.id === draggedSecondaryId ||
-            other.attachedToSpringId ||
-            other.points.length < 2 ||
-            (other.shapeType !== 'spring-pointer' &&
-              other.shapeType !== 'arrow' &&
-              !other.arrowEnd) ||
-            (other.groupId &&
-              (other.groupId.startsWith('axes-') ||
-                other.groupId.startsWith('wave-axes-') ||
-                other.groupId.startsWith('math-graph-')))
-          ) {
-            continue;
-          }
-          const dOrig = Math.hypot(nx - other.points[0].x, ny - other.points[0].y);
-          if (dOrig <= bestOriginDist) {
-            bestOriginDist = dOrig;
-            matchedOtherVec = other;
+        // Check if the dragged origin is within 76px of a spring's free end OR within 64px of another standalone force vector's origin -> Magnetic Snap!
+        let matchedSpring: { id: string; x: number; y: number; dist: number } | null = null;
+        if (!draggedSecondaryId) {
+          for (const other of activePage.strokes) {
+            if (other.id === draggedPrimaryId || other.shapeType !== 'spring') continue;
+            const spInfo = getSpringTerminalsAndWidthVec(other);
+            const existingSimOnSp = getValidSpringSims(activePage).find(
+              (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
+            );
+            let fixedEnd: 'start' | 'end' =
+              existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
+            if (!existingSimOnSp && !other.springSupport) {
+              const dStart = Math.hypot(spInfo.startTerm.x - nx, spInfo.startTerm.y - ny);
+              const dEnd = Math.hypot(spInfo.endTerm.x - nx, spInfo.endTerm.y - ny);
+              fixedEnd = dStart >= dEnd ? 'start' : 'end';
+            }
+            const freePt = fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+            const dSp = Math.hypot(nx - freePt.x, ny - freePt.y);
+            if (dSp <= 76 && (!matchedSpring || dSp < matchedSpring.dist)) {
+              matchedSpring = { id: other.id, x: freePt.x, y: freePt.y, dist: dSp };
+            }
           }
         }
 
-        if (matchedOtherVec) {
+        let matchedOtherVec: StrokeObject | null = null;
+        let bestOriginDist = 64;
+        if (!matchedSpring) {
+          for (const other of activePage.strokes) {
+            if (
+              other.id === draggedPrimaryId ||
+              other.id === draggedSecondaryId ||
+              other.attachedToSpringId ||
+              other.points.length < 2 ||
+              (other.shapeType !== 'spring-pointer' &&
+                other.shapeType !== 'arrow' &&
+                !other.arrowEnd) ||
+              (other.groupId &&
+                (other.groupId.startsWith('axes-') ||
+                  other.groupId.startsWith('wave-axes-') ||
+                  other.groupId.startsWith('math-graph-')))
+            ) {
+              continue;
+            }
+            const dOrig = Math.hypot(nx - other.points[0].x, ny - other.points[0].y);
+            if (dOrig <= bestOriginDist) {
+              bestOriginDist = dOrig;
+              matchedOtherVec = other;
+            }
+          }
+        }
+
+        if (matchedSpring) {
+          nx = Math.round(matchedSpring.x);
+          ny = Math.round(matchedSpring.y);
+          dragF.magnetTargetStrokeId = matchedSpring.id;
+          setNodeMagnetState({
+            strokeId: draggedPrimaryId,
+            draggedKeyPosIdx: 0,
+            targetX: nx,
+            targetY: ny,
+            progress: 100,
+          });
+        } else if (matchedOtherVec) {
           nx = Math.round(matchedOtherVec.points[0].x);
           ny = Math.round(matchedOtherVec.points[0].y);
           dragF.magnetTargetStrokeId = matchedOtherVec.id;
@@ -26632,7 +26519,7 @@ export default function App() {
               if (other.shapeType === 'spring') {
                 const spInfo = getSpringTerminalsAndWidthVec(other);
                 const existingSimOnSp = getValidSpringSims(activePage).find(
-                  (sm) => sm.eqSpringStrokeId === other.id
+                  (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
                 );
                 let fixedEnd: 'start' | 'end' =
                   existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
@@ -26655,9 +26542,9 @@ export default function App() {
                     : 9999;
                 const dMid = Math.hypot(candMidX - freePt.x, candMidY - freePt.y);
                 const d = Math.min(dTail, dHead, dMid);
-                const snapRadius = wasUnhookedInThisDrag ? 48 : 72;
+                const snapRadius = wasUnhookedInThisDrag ? 48 : 84;
                 if (d <= snapRadius && (!matchedPhysicsMagnet || d < matchedPhysicsMagnet.dist)) {
-                  const useHead = dHead < dTail - 8;
+                  const useHead = draggedSt.shapeType !== 'spring-pointer' && dHead < dTail - 8;
                   const refX = useHead ? candHeadX : candTailX;
                   const refY = useHead ? candHeadY : candTailY;
                   matchedPhysicsMagnet = {
@@ -27947,8 +27834,25 @@ export default function App() {
           finishedForceDrag.kind === 'free-vec-origin'
             ? finishedForceDrag.strokeId
             : fSim?.primaryStrokeId;
+        const targetStroke = activePage.strokes.find(
+          (s) => s.id === finishedForceDrag.magnetTargetStrokeId
+        );
         if (draggedVecId && draggedVecId !== finishedForceDrag.magnetTargetStrokeId) {
-          attachVectorsForSynthesis(finishedForceDrag.magnetTargetStrokeId, draggedVecId);
+          if (targetStroke?.shapeType === 'spring') {
+            if (fSim) {
+              updateActivePage(
+                (p) => ({
+                  ...p,
+                  forceSims: (p.forceSims || []).filter((f) => f.id !== fSim.id),
+                  activeForceSimId: p.activeForceSimId === fSim.id ? undefined : p.activeForceSimId,
+                }),
+                false
+              );
+            }
+            attachPointerToSpring(targetStroke.id, draggedVecId);
+          } else {
+            attachVectorsForSynthesis(finishedForceDrag.magnetTargetStrokeId, draggedVecId);
+          }
           renderStaticSceneRef.current();
           return;
         }
@@ -29165,12 +29069,12 @@ export default function App() {
         const midX = (tailX + headPt.x) / 2;
         const midY = (tailY + headPt.y) / 2;
         let matchedSpringId: string | null = null;
-        let bestDist = 75;
+        let bestDist = 82;
         for (const other of activePage.strokes) {
           if (other.id === newStroke.id || other.shapeType !== 'spring') continue;
           const spInfo = getSpringTerminalsAndWidthVec(other);
           const existingSimOnSp = getValidSpringSims(activePage).find(
-            (sm) => sm.eqSpringStrokeId === other.id
+            (sm) => sm.eqSpringStrokeId === other.id || sm.naturalSpringStrokeId === other.id
           );
           let fixedEnd: 'start' | 'end' =
             existingSimOnSp?.fixedEnd || other.springSupport?.fixedEnd || 'start';
