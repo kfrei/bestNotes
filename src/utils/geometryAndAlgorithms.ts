@@ -1036,8 +1036,8 @@ function buildPresetShape(
     };
   }
   if (preset === 'hooked-weight') {
-    const finalW = 22;
-    const finalH = 42;
+    const finalW = 25;
+    const finalH = 48;
     const cx = start.x;
     const cy = start.y;
     const halfW = finalW / 2;
