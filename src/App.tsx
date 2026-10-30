@@ -1283,7 +1283,8 @@ export default function App() {
       | 'incline-peak'
       | 'pendulum-bob'
       | 'calc-box'
-      | 'free-vec-tip';
+      | 'free-vec-tip'
+      | 'free-vec-origin';
     strokeId?: string;
     startX: number;
     startY: number;
@@ -1291,6 +1292,7 @@ export default function App() {
     origOriginY: number;
     origCalcX?: number;
     origCalcY?: number;
+    magnetTargetStrokeId?: string;
   } | null>(null);
   const forceOverlayHitRef = useRef<{
     simId: string;
@@ -1304,7 +1306,8 @@ export default function App() {
         | 'incline-peak'
         | 'pendulum-bob'
         | 'calc-box'
-        | 'free-vec-tip';
+        | 'free-vec-tip'
+        | 'free-vec-origin';
       strokeId?: string;
       x: number;
       y: number;
@@ -10216,8 +10219,8 @@ export default function App() {
       const s2 = page.strokes.find((s) => s.id === secondaryId);
       if (!s1 || !s2 || s1.points.length < 2 || s2.points.length < 2) return page;
 
-      const ox = Math.round(s1.points[0].x / U) * U;
-      const oy = Math.round(s1.points[0].y / U) * U;
+      const ox = Math.round(s1.points[0].x);
+      const oy = Math.round(s1.points[0].y);
       const p1End = s1.points[s1.points.length - 1];
       const p2End = s2.points[s2.points.length - 1];
 
@@ -10226,22 +10229,21 @@ export default function App() {
       const raw2x = (p2End.x - s2.points[0].x) / U;
       const raw2y = (s2.points[0].y - p2End.y) / U;
 
-      const f1x = Math.round(raw1x * 2) / 2 || 4;
-      const f1y = Math.round(raw1y * 2) / 2;
-      let f2x = Math.round(raw2x * 2) / 2;
-      let f2y = Math.round(raw2y * 2) / 2;
-      if (Math.abs(f2x) < 0.2 && Math.abs(f2y) < 0.2) {
+      let f1x = Math.round(raw1x * 10) / 10;
+      let f1y = Math.round(raw1y * 10) / 10;
+      if (Math.hypot(f1x, f1y) < 0.4) {
+        f1x = 4;
+        f1y = 0;
+      }
+      let f2x = Math.round(raw2x * 10) / 10;
+      let f2y = Math.round(raw2y * 10) / 10;
+      if (Math.hypot(f2x, f2y) < 0.4) {
         f2x = 0;
         f2y = 4;
       }
 
       const col1 = s1.color || '#dc2626';
-      const col2 =
-        !s2.color || s2.color.toLowerCase() === col1.toLowerCase()
-          ? col1.toLowerCase() === '#2563eb' || col1.toLowerCase() === '#2980b9'
-            ? '#dc2626'
-            : '#2563eb'
-          : s2.color;
+      const col2 = s2.color || '#2563eb';
 
       const nextStrokes = page.strokes.map((st) => {
         if (st.id === s1.id) {
@@ -10730,6 +10732,7 @@ export default function App() {
       (s) =>
         ((s.shapeType === 'spring-pointer' && !s.attachedToSpringId) ||
           s.shapeType === 'arrow' ||
+          Boolean(s.arrowEnd) ||
           (preferredMode && s.shapeType === 'line')) &&
         s.points.length >= 2
     );
@@ -14132,16 +14135,28 @@ export default function App() {
     const activeSim = getActiveCircuitSim(activePage);
     const activeSpringSim = getActiveSpringSim(activePage);
     const activeForceSim = getActiveForceSim(activePage);
-    const selectedFreeVectors = activePage.strokes.filter(
+    const allPageForceVectors = activePage.strokes.filter(
       (st) =>
-        selectedStrokeIds.includes(st.id) &&
-        (st.shapeType === 'spring-pointer' || st.shapeType === 'arrow') &&
+        (st.shapeType === 'spring-pointer' ||
+          st.shapeType === 'arrow' ||
+          Boolean(st.arrowEnd)) &&
         !st.attachedToSpringId &&
-        st.points.length >= 2
+        st.points.length >= 2 &&
+        !(
+          st.groupId &&
+          (st.groupId.startsWith('axes-') ||
+            st.groupId.startsWith('wave-axes-') ||
+            st.groupId.startsWith('math-graph-'))
+        )
+    );
+    const selectedFreeVectors = allPageForceVectors.filter((st) =>
+      selectedStrokeIds.includes(st.id)
     );
     const hasForceOverlay =
       Boolean(activeForceSim) ||
       selectedFreeVectors.length > 0 ||
+      (allPageForceVectors.length > 0 &&
+        (activeTool === 'lasso' || activeTool === 'direct-node' || showSimulationPanel)) ||
       forceSimAnim !== null ||
       draggingForceHandleRef.current !== null;
     const hasSpringOverlay =
@@ -16458,7 +16473,8 @@ export default function App() {
             | 'incline-peak'
             | 'pendulum-bob'
             | 'calc-box'
-            | 'free-vec-tip';
+            | 'free-vec-tip'
+            | 'free-vec-origin';
           strokeId?: string;
           x: number;
           y: number;
@@ -16870,7 +16886,7 @@ export default function App() {
             'bold 15px system-ui, -apple-system, sans-serif'
           );
 
-          // Origin dot
+          // Origin dot (no visible circle at arrowhead tip!)
           ctx.save();
           ctx.fillStyle = '#1e293b';
           ctx.strokeStyle = '#ffffff';
@@ -16879,19 +16895,29 @@ export default function App() {
           ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
-          // Tip drag ring
-          ctx.fillStyle = 'rgba(25, 118, 210, 0.16)';
-          ctx.strokeStyle = '#1976d2';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(tx, ty, 7.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
           ctx.restore();
 
           handlesHit.push(
-            { kind: 'analysis-tip', x: tx, y: ty, r: 22 },
-            { kind: 'origin', x: ox, y: oy, r: 18 }
+            { kind: 'origin', x: ox, y: oy, r: 20 },
+            {
+              kind: 'origin',
+              x: ox + 0.22 * (tx - ox),
+              y: oy + 0.22 * (ty - oy),
+              r: 16,
+            },
+            { kind: 'analysis-tip', x: tx, y: ty, r: 28 },
+            {
+              kind: 'analysis-tip',
+              x: ox + 0.74 * (tx - ox),
+              y: oy + 0.74 * (ty - oy),
+              r: 22,
+            },
+            {
+              kind: 'analysis-tip',
+              x: ox + 0.48 * (tx - ox),
+              y: oy + 0.48 * (ty - oy),
+              r: 18,
+            }
           );
 
           // Info Pill above/left ONLY when showNumericValues is enabled in Simulation Dashboard!
@@ -17054,7 +17080,7 @@ export default function App() {
           const deg = Math.round((Math.acos(cosTh) * 180) / Math.PI);
 
           // Angle arc θ between F1 and F2
-          if (m1 > 0.4 && m2 > 0.4 && deg > 2 && deg < 178) {
+          if (m1 > 0.3 && m2 > 0.3 && deg >= 1 && deg <= 180) {
             const a1 = Math.atan2(p1y - oy, p1x - ox);
             const a2 = Math.atan2(p2y - oy, p2x - ox);
             let diff = a2 - a1;
@@ -17067,16 +17093,16 @@ export default function App() {
             ctx.setLineDash([3, 2]);
             ctx.beginPath();
             ctx.moveTo(ox, oy);
-            ctx.arc(ox, oy, 32, a1, a1 + diff, diff < 0);
+            ctx.arc(ox, oy, 34, a1, a1 + diff, diff < 0);
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
             ctx.restore();
             const midA = a1 + diff / 2;
             drawHaloLabel(
-              showNums ? `${deg}°` : 'θ',
-              ox + 45 * Math.cos(midA),
-              oy + 45 * Math.sin(midA),
+              showNums ? `θ = ${deg}°` : 'θ',
+              ox + (showNums ? 52 : 45) * Math.cos(midA),
+              oy + (showNums ? 52 : 45) * Math.sin(midA),
               '#475569',
               showNums ? 'bold 12px system-ui, sans-serif' : 'italic bold 15px Georgia, serif'
             );
@@ -17157,28 +17183,36 @@ export default function App() {
           ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
-
-          ctx.fillStyle = 'rgba(211, 84, 0, 0.16)';
-          ctx.strokeStyle = '#d35400';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(p1x, p1y, 7.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = 'rgba(41, 128, 185, 0.16)';
-          ctx.strokeStyle = '#2980b9';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(p2x, p2y, 7.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
           ctx.restore();
 
           handlesHit.push(
-            { kind: 'f1-tip', x: p1x, y: p1y, r: 22 },
-            { kind: 'f2-tip', x: p2x, y: p2y, r: 22 },
-            { kind: 'origin', x: ox, y: oy, r: 18 }
+            { kind: 'origin', x: ox, y: oy, r: 18 },
+            { kind: 'f1-tip', x: p1x, y: p1y, r: 28 },
+            {
+              kind: 'f1-tip',
+              x: ox + 0.74 * (p1x - ox),
+              y: oy + 0.74 * (p1y - oy),
+              r: 22,
+            },
+            {
+              kind: 'f1-tip',
+              x: ox + 0.48 * (p1x - ox),
+              y: oy + 0.48 * (p1y - oy),
+              r: 18,
+            },
+            { kind: 'f2-tip', x: p2x, y: p2y, r: 28 },
+            {
+              kind: 'f2-tip',
+              x: ox + 0.74 * (p2x - ox),
+              y: oy + 0.74 * (p2y - oy),
+              r: 22,
+            },
+            {
+              kind: 'f2-tip',
+              x: ox + 0.48 * (p2x - ox),
+              y: oy + 0.48 * (p2y - oy),
+              r: 18,
+            }
           );
 
           // Calculations Box (Υπολογισμοί)
@@ -18099,16 +18133,67 @@ export default function App() {
         }
 
         // ------------------------------------------------------------------
-        // SELECTED FREE VECTORS (•──> or ──>):
-        // Always show a draggable 360° tip ring and discreet On-Canvas
-        // "Ανάλυση" & "+ Σύνθεση" micro-pills!
+        // STANDALONE & SELECTED FREE VECTORS (•──> or ──>):
+        // Draggable 360° tip/shaft (without visible circles!) + Origin magnetic snap
+        // + Discreet On-Canvas "Ανάλυση" & "+ Σύνθεση" micro-pills!
         // ------------------------------------------------------------------
+        const unattachedPageVectors = allPageForceVectors.filter(
+          (vec) =>
+            !fSim || (fSim.primaryStrokeId !== vec.id && fSim.secondaryStrokeId !== vec.id)
+        );
         const uncoveredFreeVectors = selectedFreeVectors.filter(
           (vec) =>
             !fSim || (fSim.primaryStrokeId !== vec.id && fSim.secondaryStrokeId !== vec.id)
         );
-        if (uncoveredFreeVectors.length > 0) {
-          for (const vec of uncoveredFreeVectors) {
+
+        // Live preview of angle θ if 2 unjoined vectors' origins are brought within 8px of each other during drag
+        if (!fSim || fSim.mode !== 'synthesis') {
+          for (let i = 0; i < allPageForceVectors.length; i++) {
+            for (let j = i + 1; j < allPageForceVectors.length; j++) {
+              const va = allPageForceVectors[i];
+              const vb = allPageForceVectors[j];
+              const oxA = va.points[0].x;
+              const oyA = va.points[0].y;
+              const oxB = vb.points[0].x;
+              const oyB = vb.points[0].y;
+              if (Math.hypot(oxA - oxB, oyA - oyB) <= 8) {
+                const p1End = va.points[va.points.length - 1];
+                const p2End = vb.points[vb.points.length - 1];
+                const a1 = Math.atan2(p1End.y - oyA, p1End.x - oxA);
+                const a2 = Math.atan2(p2End.y - oyA, p2End.x - oxA);
+                let diff = a2 - a1;
+                while (diff <= -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                const degPreview = Math.round((Math.abs(diff) * 180) / Math.PI);
+                if (degPreview >= 1) {
+                  ctx.save();
+                  ctx.fillStyle = 'rgba(100, 116, 139, 0.14)';
+                  ctx.strokeStyle = '#64748b';
+                  ctx.lineWidth = 1.25;
+                  ctx.setLineDash([3, 2]);
+                  ctx.beginPath();
+                  ctx.moveTo(oxA, oyA);
+                  ctx.arc(oxA, oyA, 34, a1, a1 + diff, diff < 0);
+                  ctx.closePath();
+                  ctx.fill();
+                  ctx.stroke();
+                  ctx.restore();
+                  const midA = a1 + diff / 2;
+                  drawHaloLabel(
+                    showNums ? `θ = ${degPreview}°` : 'θ',
+                    oxA + 45 * Math.cos(midA),
+                    oyA + 45 * Math.sin(midA),
+                    '#475569',
+                    'italic bold 15px Georgia, serif'
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        if (unattachedPageVectors.length > 0) {
+          for (const vec of unattachedPageVectors) {
             const ox = vec.points[0].x;
             const oy = vec.points[0].y;
             const pEnd = vec.points[vec.points.length - 1];
@@ -18120,30 +18205,38 @@ export default function App() {
             const deg = Math.round((Math.atan2(vy, vx) * 180) / Math.PI);
             const col = vec.color || '#dc2626';
 
-            // Discreet draggable ring at tip '>' for 360° resize & rotation
-            ctx.save();
-            ctx.fillStyle = 'rgba(37, 99, 235, 0.16)';
-            ctx.strokeStyle = col;
-            ctx.lineWidth = 1.6;
-            ctx.beginPath();
-            ctx.arc(tx, ty, 7.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(tx, ty, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
+            handlesHit.push(
+              {
+                kind: 'free-vec-origin',
+                strokeId: vec.id,
+                x: ox,
+                y: oy,
+                r: 22,
+              },
+              {
+                kind: 'free-vec-origin',
+                strokeId: vec.id,
+                x: ox + 0.25 * (tx - ox),
+                y: oy + 0.25 * (ty - oy),
+                r: 18,
+              },
+              {
+                kind: 'free-vec-tip',
+                strokeId: vec.id,
+                x: tx,
+                y: ty,
+                r: 28,
+              },
+              {
+                kind: 'free-vec-tip',
+                strokeId: vec.id,
+                x: ox + 0.72 * (tx - ox),
+                y: oy + 0.72 * (ty - oy),
+                r: 20,
+              }
+            );
 
-            handlesHit.push({
-              kind: 'free-vec-tip',
-              strokeId: vec.id,
-              x: tx,
-              y: ty,
-              r: 24,
-            });
-
-            if (showNums) {
+            if (showNums && selectedStrokeIds.includes(vec.id)) {
               drawHaloLabel(
                 `F = ${fMag.toFixed(1)} N (${deg}°)`,
                 (ox + tx) / 2,
@@ -18153,7 +18246,9 @@ export default function App() {
               );
             }
           }
+        }
 
+        if (uncoveredFreeVectors.length > 0) {
           if (uncoveredFreeVectors.length === 1) {
             const v0 = uncoveredFreeVectors[0];
             const ox = v0.points[0].x;
@@ -18287,6 +18382,7 @@ export default function App() {
     simFlowDirection,
     simShowDarkWireTrack,
     simSpeedMultiplier,
+    activeTool,
   ]);
 
   // Automatic External HDMI / 2nd Screen Projector Sync (Presentation API + BroadcastChannel)
@@ -18353,6 +18449,7 @@ export default function App() {
     simFlowDirection,
     simShowDarkWireTrack,
     simSpeedMultiplier,
+    activeTool,
   ]);
 
   useEffect(() => {
@@ -20968,14 +21065,29 @@ export default function App() {
             e.preventDefault();
             forceSimAnimRef.current = null;
             setForceSimAnim(null);
+            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
+            setRedoStack([]);
+            const targetVecStroke = h.strokeId
+              ? targetPage.strokes.find((s) => s.id === h.strokeId)
+              : curForceSim?.primaryStrokeId
+              ? targetPage.strokes.find((s) => s.id === curForceSim.primaryStrokeId)
+              : undefined;
+            const initOx =
+              targetVecStroke && targetVecStroke.points.length >= 2
+                ? targetVecStroke.points[0].x
+                : curForceSim?.originX ?? h.x;
+            const initOy =
+              targetVecStroke && targetVecStroke.points.length >= 2
+                ? targetVecStroke.points[0].y
+                : curForceSim?.originY ?? h.y;
             draggingForceHandleRef.current = {
               simId: fHit.simId,
               kind: h.kind,
               strokeId: h.strokeId,
               startX: pt.x,
               startY: pt.y,
-              origOriginX: curForceSim?.originX ?? 0,
-              origOriginY: curForceSim?.originY ?? 0,
+              origOriginX: initOx,
+              origOriginY: initOy,
               origCalcX: h.x - (h.w || 236) / 2,
               origCalcY: h.y - (h.h || 110) / 2,
             };
@@ -22615,6 +22727,8 @@ export default function App() {
           const isAttachedOrHookedWeight =
             s.shapeType === 'hooked-weight' ||
             s.shapeType === 'spring-pointer' ||
+            s.shapeType === 'arrow' ||
+            Boolean(s.arrowEnd) ||
             s.shapeType === 'spring' ||
             Boolean(s.attachedToSpringId) ||
             Boolean(s.attachedToWeightId) ||
@@ -23440,6 +23554,28 @@ export default function App() {
         return;
       }
 
+      const smoothVectorUnitsFromPointer = (ox: number, oy: number) => {
+        let rawX = (latestPt.x - ox) / U;
+        let rawY = (oy - latestPt.y) / U;
+        const rawMag = Math.hypot(rawX, rawY);
+        if (rawMag >= 0.4) {
+          const rawDeg = (Math.atan2(rawY, rawX) * 180) / Math.PI;
+          if (Math.abs(rawDeg) <= 2.5 || Math.abs(Math.abs(rawDeg) - 180) <= 2.5) {
+            rawY = 0;
+          } else if (Math.abs(rawDeg - 90) <= 2.5 || Math.abs(rawDeg + 90) <= 2.5) {
+            rawX = 0;
+          }
+        }
+        let cx = Math.round(rawX * 10) / 10;
+        let cy = Math.round(rawY * 10) / 10;
+        if (Math.hypot(cx, cy) < 0.8) {
+          const ang = Math.atan2(rawY, rawX);
+          cx = Math.round(Math.cos(ang) * 10) / 10 || 1;
+          cy = Math.round(Math.sin(ang) * 10) / 10;
+        }
+        return { cx, cy };
+      };
+
       if (dragF.kind === 'free-vec-tip' && dragF.strokeId) {
         const targetVecId = dragF.strokeId;
         updateActivePage((page) => {
@@ -23447,14 +23583,7 @@ export default function App() {
           if (!vStroke || vStroke.points.length < 2) return page;
           const ox = vStroke.points[0].x;
           const oy = vStroke.points[0].y;
-          const rawX = (latestPt.x - ox) / U;
-          const rawY = (oy - latestPt.y) / U;
-          let cx = Math.round(rawX * 2) / 2;
-          let cy = Math.round(rawY * 2) / 2;
-          if (Math.abs(cx) < 0.5 && Math.abs(cy) < 0.5) {
-            cx = rawX >= 0 ? 1 : -1;
-            cy = 0;
-          }
+          const { cx, cy } = smoothVectorUnitsFromPointer(ox, oy);
           const tx = ox + cx * U;
           const ty = oy - cy * U;
           return {
@@ -23498,15 +23627,7 @@ export default function App() {
           const pStroke = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
           const ox = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].x : fSim.originX;
           const oy = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].y : fSim.originY;
-          const rawX = (latestPt.x - ox) / U;
-          const rawY = (oy - latestPt.y) / U;
-          const isInt = fSim.snapToGrid !== false;
-          let cx = isInt ? Math.round(rawX) : Math.round(rawX * 10) / 10;
-          let cy = isInt ? Math.round(rawY) : Math.round(rawY * 10) / 10;
-          if (Math.abs(cx) < 0.5 && Math.abs(cy) < 0.5) {
-            cx = 1;
-            cy = 1;
-          }
+          const { cx, cy } = smoothVectorUnitsFromPointer(ox, oy);
           const tx = ox + cx * U;
           const ty = oy - cy * U;
           return {
@@ -23541,9 +23662,7 @@ export default function App() {
           const s1 = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
           const ox = s1 && s1.points.length >= 2 ? s1.points[0].x : fSim.originX;
           const oy = s1 && s1.points.length >= 2 ? s1.points[0].y : fSim.originY;
-          const rx = Math.round((latestPt.x - ox) / U);
-          const ry = Math.round((oy - latestPt.y) / U);
-          if (rx === 0 && ry === 0) return page;
+          const { cx: rx, cy: ry } = smoothVectorUnitsFromPointer(ox, oy);
           const tx = ox + rx * U;
           const ty = oy - ry * U;
           const targetStrokeId =
@@ -23582,10 +23701,88 @@ export default function App() {
         return;
       }
 
-      if (dragF.kind === 'origin') {
-        const nx = Math.round(Math.max(2 * U, Math.min(pW - 4 * U, latestPt.x)) / U) * U;
-        const ny = Math.round(Math.max(4 * U, Math.min(pH - 4 * U, latestPt.y)) / U) * U;
+      if (dragF.kind === 'origin' || dragF.kind === 'free-vec-origin') {
+        let nx = Math.round(
+          Math.max(24, Math.min(pW - 24, dragF.origOriginX + (latestPt.x - dragF.startX)))
+        );
+        let ny = Math.round(
+          Math.max(24, Math.min(pH - 24, dragF.origOriginY + (latestPt.y - dragF.startY)))
+        );
+        const curFSim = (activePage.forceSims || []).find((s) => s.id === dragF.simId);
+        const draggedPrimaryId =
+          dragF.kind === 'free-vec-origin'
+            ? dragF.strokeId || ''
+            : curFSim?.primaryStrokeId || '';
+        const draggedSecondaryId =
+          dragF.kind === 'origin' ? curFSim?.secondaryStrokeId || '' : '';
+
+        // Check if the dragged origin is within 64px of any other standalone force vector's origin -> Magnetic Snap!
+        let matchedOtherVec: StrokeObject | null = null;
+        let bestOriginDist = 64;
+        for (const other of activePage.strokes) {
+          if (
+            other.id === draggedPrimaryId ||
+            other.id === draggedSecondaryId ||
+            other.attachedToSpringId ||
+            other.points.length < 2 ||
+            (other.shapeType !== 'spring-pointer' &&
+              other.shapeType !== 'arrow' &&
+              !other.arrowEnd) ||
+            (other.groupId &&
+              (other.groupId.startsWith('axes-') ||
+                other.groupId.startsWith('wave-axes-') ||
+                other.groupId.startsWith('math-graph-')))
+          ) {
+            continue;
+          }
+          const dOrig = Math.hypot(nx - other.points[0].x, ny - other.points[0].y);
+          if (dOrig <= bestOriginDist) {
+            bestOriginDist = dOrig;
+            matchedOtherVec = other;
+          }
+        }
+
+        if (matchedOtherVec) {
+          nx = Math.round(matchedOtherVec.points[0].x);
+          ny = Math.round(matchedOtherVec.points[0].y);
+          dragF.magnetTargetStrokeId = matchedOtherVec.id;
+          setNodeMagnetState({
+            strokeId: draggedPrimaryId,
+            draggedKeyPosIdx: 0,
+            targetX: nx,
+            targetY: ny,
+            progress: 100,
+          });
+        } else if (dragF.magnetTargetStrokeId) {
+          dragF.magnetTargetStrokeId = undefined;
+          setNodeMagnetState(null);
+        }
+
         updateActivePage((page) => {
+          if (dragF.kind === 'free-vec-origin' && dragF.strokeId) {
+            const vSt = page.strokes.find((st) => st.id === dragF.strokeId);
+            if (!vSt || vSt.points.length < 2) return page;
+            const dx = nx - vSt.points[0].x;
+            const dy = ny - vSt.points[0].y;
+            if (dx === 0 && dy === 0) return page;
+            return {
+              ...page,
+              strokes: page.strokes.map((st) =>
+                st.id === dragF.strokeId
+                  ? {
+                      ...st,
+                      points: st.points.map((pt) => ({
+                        ...pt,
+                        x: pt.x + dx,
+                        y: pt.y + dy,
+                        ...(pt.cx !== undefined ? { cx: pt.cx + dx } : {}),
+                        ...(pt.cy !== undefined ? { cy: pt.cy + dy } : {}),
+                      })),
+                    }
+                  : st
+              ),
+            };
+          }
           const fSim = (page.forceSims || []).find((s) => s.id === dragF.simId);
           if (!fSim) return page;
           const pStroke = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
@@ -23761,32 +23958,6 @@ export default function App() {
     }
 
     // 0-spring. Interactive Spring Simulation Dragging (Symmetric Blue Amplitude Handles, Draggable Graph Cards, or Mass Pulling):
-    if (draggingForceHandleRef.current) {
-      const finishedForceDrag = draggingForceHandleRef.current;
-      draggingForceHandleRef.current = null;
-      if (finishedForceDrag.kind === 'pendulum-bob') {
-        const fSim = (activePage.forceSims || []).find((f) => f.id === finishedForceDrag.simId);
-        const pState = pendulumPhysRef.current[finishedForceDrag.simId];
-        if (fSim && pState && Math.abs(pState.ang) > 0.03 && (!fSim.anMode || fSim.anMode === 'none')) {
-          pState.av = 0;
-          pState.lastTime = performance.now();
-          updateActivePage(
-            (p) => ({
-              ...p,
-              forceSims: (p.forceSims || []).map((f) =>
-                f.id === fSim.id
-                  ? { ...f, isPaused: false, angleDeg: Math.round((pState.ang * 180) / Math.PI) }
-                  : f
-              ),
-            }),
-            false
-          );
-        }
-      }
-      renderStaticSceneRef.current();
-      return;
-    }
-
     if (draggingSpringAmpHandleRef.current) {
       const dragAmp = draggingSpringAmpHandleRef.current;
       const relX = latestPt.x - dragAmp.eqCenterX;
@@ -24473,6 +24644,7 @@ export default function App() {
               (other.isShape &&
                 (other.shapeType === 'line' ||
                   other.shapeType === 'arrow' ||
+                  other.shapeType === 'spring-pointer' ||
                   other.shapeType === 'double-arrow' ||
                   other.shapeType === 'sine' ||
                   other.shapeType === 'cosine' ||
@@ -24484,9 +24656,17 @@ export default function App() {
 
             const startPt = other.points[0];
             const endPt = other.points[other.points.length - 1];
+            const isBothForceVectors =
+              (activeTargetStroke.shapeType === 'spring-pointer' ||
+                activeTargetStroke.shapeType === 'arrow' ||
+                Boolean(activeTargetStroke.arrowEnd)) &&
+              (other.shapeType === 'spring-pointer' ||
+                other.shapeType === 'arrow' ||
+                Boolean(other.arrowEnd));
+            const startSnapTol = isBothForceVectors && draggedEndSide === 'start' ? 56 : 26;
             if (startPt) {
               const dStart = distance(latestPt, startPt);
-              if (dStart <= 26 && (!bestMatch || dStart < bestMatch.dist)) {
+              if (dStart <= startSnapTol && (!bestMatch || dStart < bestMatch.dist)) {
                 bestMatch = {
                   targetStrokeId: other.id,
                   targetEndSide: 'start',
@@ -24496,7 +24676,7 @@ export default function App() {
                 };
               }
             }
-            if (endPt) {
+            if (endPt && !isBothForceVectors) {
               const dEnd = distance(latestPt, endPt);
               if (dEnd <= 26 && (!bestMatch || dEnd < bestMatch.dist)) {
                 bestMatch = {
@@ -24541,10 +24721,26 @@ export default function App() {
                 progress: 0,
               });
 
+              const targetOtherSt = activePage.strokes.find((s) => s.id === timerObj.targetStrokeId);
+              const isVecOriginPair =
+                timerObj.targetStrokeId !== timerObj.strokeId &&
+                timerObj.draggedEndSide === 'start' &&
+                timerObj.targetEndSide === 'start' &&
+                (activeTargetStroke.shapeType === 'spring-pointer' ||
+                  activeTargetStroke.shapeType === 'arrow' ||
+                  Boolean(activeTargetStroke.arrowEnd)) &&
+                Boolean(
+                  targetOtherSt &&
+                    (targetOtherSt.shapeType === 'spring-pointer' ||
+                      targetOtherSt.shapeType === 'arrow' ||
+                      Boolean(targetOtherSt.arrowEnd))
+                );
+              const magnetDurationMs = isVecOriginPair ? 180 : 1000;
+
               const stepMagnet = (now: number) => {
                 if (nodeMagnetTimerRef.current !== timerObj) return;
                 const elapsed = now - timerObj.startTime;
-                const pct = Math.min(100, (elapsed / 1000) * 100);
+                const pct = Math.min(100, (elapsed / magnetDurationMs) * 100);
                 setNodeMagnetState({
                   strokeId: timerObj.strokeId,
                   draggedKeyPosIdx: timerObj.draggedKeyPosIdx,
@@ -24553,12 +24749,17 @@ export default function App() {
                   progress: pct,
                 });
 
-                if (elapsed >= 1000) {
+                if (elapsed >= magnetDurationMs) {
                   nodeMagnetTimerRef.current = null;
                   setNodeMagnetState(null);
                   setDraggingNodeIdx(null);
                   isDrawingRef.current = false;
                   clearActiveOverlay();
+
+                  if (isVecOriginPair) {
+                    attachVectorsForSynthesis(timerObj.targetStrokeId, timerObj.strokeId);
+                    return;
+                  }
 
                   if (timerObj.targetStrokeId === timerObj.strokeId) {
                     // Self-Closing Weld (1 stroke -> closed perimeter with 1 unified seam node)
@@ -26328,6 +26529,8 @@ export default function App() {
           } else if (
             draggedSt &&
             draggedSt.shapeType === 'line' &&
+            !draggedSt.arrowEnd &&
+            !draggedSt.arrowStart &&
             draggedSt.points.length >= 2 &&
             !(draggedSt.groupId && draggedSt.groupId.startsWith('axes-'))
           ) {
@@ -26405,7 +26608,9 @@ export default function App() {
             }
           } else if (
             draggedSt &&
-            (draggedSt.shapeType === 'spring-pointer' || draggedSt.shapeType === 'arrow') &&
+            (draggedSt.shapeType === 'spring-pointer' ||
+              draggedSt.shapeType === 'arrow' ||
+              Boolean(draggedSt.arrowEnd)) &&
             draggedSt.points.length >= 2
           ) {
             const candTailX = draggedSt.points[0].x + rawDx;
@@ -26468,13 +26673,15 @@ export default function App() {
                 }
               } else if (
                 !draggedSt.attachedToSpringId &&
-                (other.shapeType === 'spring-pointer' || other.shapeType === 'arrow') &&
+                (other.shapeType === 'spring-pointer' ||
+                  other.shapeType === 'arrow' ||
+                  Boolean(other.arrowEnd)) &&
                 !other.attachedToSpringId &&
                 other.points.length >= 2
               ) {
                 const otherTail = other.points[0];
                 const dVec = Math.hypot(candTailX - otherTail.x, candTailY - otherTail.y);
-                if (dVec <= 52 && (!matchedPhysicsMagnet || dVec < matchedPhysicsMagnet.dist)) {
+                if (dVec <= 64 && (!matchedPhysicsMagnet || dVec < matchedPhysicsMagnet.dist)) {
                   matchedPhysicsMagnet = {
                     kind: 'vector-to-vector',
                     springStrokeId: other.id,
@@ -26509,11 +26716,12 @@ export default function App() {
             st.points.length >= 2 &&
             st.points[0]?.twist !== 999 &&
             st.shapeType !== 'spring-pointer' &&
+            st.shapeType !== 'arrow' &&
+            !st.arrowEnd &&
             !st.attachedToSpringId &&
             !(st.groupId && (st.groupId.startsWith('axes-') || st.groupId.startsWith('wave-axes-'))) &&
             (!st.isShape ||
               st.shapeType === 'line' ||
-              st.shapeType === 'arrow' ||
               st.shapeType === 'double-arrow' ||
               st.shapeType === 'sine' ||
               st.shapeType === 'cosine' ||
@@ -27729,6 +27937,22 @@ export default function App() {
     if (draggingForceHandleRef.current) {
       const finishedForceDrag = draggingForceHandleRef.current;
       draggingForceHandleRef.current = null;
+      setNodeMagnetState(null);
+      if (
+        (finishedForceDrag.kind === 'origin' || finishedForceDrag.kind === 'free-vec-origin') &&
+        finishedForceDrag.magnetTargetStrokeId
+      ) {
+        const fSim = (activePage.forceSims || []).find((f) => f.id === finishedForceDrag.simId);
+        const draggedVecId =
+          finishedForceDrag.kind === 'free-vec-origin'
+            ? finishedForceDrag.strokeId
+            : fSim?.primaryStrokeId;
+        if (draggedVecId && draggedVecId !== finishedForceDrag.magnetTargetStrokeId) {
+          attachVectorsForSynthesis(finishedForceDrag.magnetTargetStrokeId, draggedVecId);
+          renderStaticSceneRef.current();
+          return;
+        }
+      }
       if (finishedForceDrag.kind === 'pendulum-bob') {
         const fSim = (activePage.forceSims || []).find((f) => f.id === finishedForceDrag.simId);
         const pState = pendulumPhysRef.current[finishedForceDrag.simId];
