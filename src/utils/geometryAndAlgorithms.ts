@@ -1056,14 +1056,25 @@ function buildPresetShape(
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const rawLen = Math.hypot(dx, dy);
-    const dirSign = dx < -10 ? -1 : 1;
-    const len = rawLen < 20 || Math.abs(dx - 110) < 2 ? 38 : Math.max(28, Math.min(72, Math.abs(dx) || rawLen));
+    const isDefaultTap = rawLen < 20 || (Math.abs(dx - 110) < 2 && Math.abs(dy - 75) < 2);
+    if (isDefaultTap) {
+      const gx = Math.round(start.x / 23) * 23;
+      const gy = Math.round(start.y / 23) * 23;
+      const defaultLen = 4 * 23; // 4 grid squares (4 N)
+      return {
+        shapeType: 'spring-pointer',
+        points: [
+          { x: gx, y: gy, pressure: 0.7 },
+          { x: gx + defaultLen, y: gy, cx: gx + defaultLen / 2, cy: gy, pressure: 0.7 },
+        ],
+      };
+    }
     const p0 = { x: start.x, y: start.y, pressure: 0.7 };
     const p1 = {
-      x: start.x + dirSign * len,
-      y: start.y,
-      cx: start.x + (dirSign * len) / 2,
-      cy: start.y,
+      x: end.x,
+      y: end.y,
+      cx: (start.x + end.x) / 2,
+      cy: (start.y + end.y) / 2,
       pressure: 0.7,
     };
     return {
