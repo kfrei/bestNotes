@@ -951,6 +951,28 @@ function buildPresetShape(
   const w = Math.max(40, maxX - minX);
   const h = Math.max(32, maxY - minY);
   if (preset === 'line' || preset === 'arrow' || preset === 'double-arrow') {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const rawLen = Math.hypot(dx, dy);
+    if (
+      preset === 'arrow' &&
+      (rawLen < 20 || (Math.abs(dx - 110) < 2 && Math.abs(dy - 75) < 2))
+    ) {
+      const defaultLen = 3 * 23; // 69px horizontal vector/pointer on single tap
+      return {
+        shapeType: 'arrow',
+        points: [
+          { x: start.x, y: start.y, pressure: 0.7 },
+          {
+            x: start.x + defaultLen,
+            y: start.y,
+            cx: start.x + defaultLen / 2,
+            cy: start.y,
+            pressure: 0.7,
+          },
+        ],
+      };
+    }
     let x2 = end.x;
     let y2 = end.y;
     const angleDeg = (Math.atan2(y2 - start.y, x2 - start.x) * 180) / Math.PI;

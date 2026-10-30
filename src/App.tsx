@@ -12692,20 +12692,40 @@ export default function App() {
       ) {
         pts = [...pts].reverse();
       }
-      const dx = freePt.x - pts[0].x;
-      const dy = freePt.y - pts[0].y;
-      const shiftedPts = pts.map((p, idx) => ({
-        ...p,
-        x: p.x + dx,
-        y: ptr.shapeType === 'spring-pointer' && idx > 0 ? freePt.y : p.y + dy,
-        cx: p.cx !== undefined ? p.cx + dx : undefined,
-        cy:
-          p.cy !== undefined
-            ? ptr.shapeType === 'spring-pointer'
-              ? freePt.y
-              : p.cy + dy
-            : undefined,
-      }));
+      const dirX = pts[pts.length - 1].x >= pts[0].x ? 1 : -1;
+      const rawHorizSpan = Math.abs(pts[pts.length - 1].x - pts[0].x);
+      const ptrLen = rawHorizSpan >= 42 && rawHorizSpan <= 78 ? rawHorizSpan : 55;
+      const endX = freePt.x + dirX * ptrLen;
+      const shiftedPts: BezierPoint[] = [
+        { x: freePt.x, y: freePt.y, pressure: 0.7 },
+        {
+          x: endX,
+          y: freePt.y,
+          cx: (freePt.x + endX) / 2,
+          cy: freePt.y,
+          pressure: 0.7,
+        },
+      ];
+
+      const springPtrPalette = ['#dc2626', '#9333ea', '#16a34a', '#2563eb', '#ea580c'];
+      const usedPtrColors = new Set(
+        page.strokes
+          .filter((s) => s.id !== ptr.id && Boolean(s.attachedToSpringId) && s.color)
+          .map((s) => s.color.toLowerCase())
+      );
+      const curColLower = (ptr.color || '').toLowerCase();
+      const isDefaultDarkColor =
+        !curColLower ||
+        curColLower === '#111827' ||
+        curColLower === '#000000' ||
+        curColLower === '#0f172a' ||
+        curColLower === '#1e293b' ||
+        curColLower === '#334155';
+      const nextPtrColor =
+        !isDefaultDarkColor && !usedPtrColors.has(curColLower)
+          ? ptr.color
+          : springPtrPalette.find((c) => !usedPtrColors.has(c.toLowerCase())) ||
+            springPtrPalette[usedPtrColors.size % springPtrPalette.length];
 
       return {
         ...page,
@@ -12715,7 +12735,7 @@ export default function App() {
             ? {
                 ...s,
                 shapeType: 'spring-pointer',
-                color: s.color || '#dc2626',
+                color: nextPtrColor,
                 arrowEnd: true,
                 attachedToSpringId: sp.id,
                 points: shiftedPts,
@@ -35350,6 +35370,7 @@ export default function App() {
                         {
                           id: 'arc',
                           title: 'Τόξο',
+                          isSimItem: false,
                           icon: (
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 4.5 17.5 A 12.5 12.5 0 0 1 27.5 17.5" />
@@ -35357,18 +35378,9 @@ export default function App() {
                           ),
                         },
                         {
-                          id: 'arrow',
-                          title: 'Διάνυσμα / Βέλος',
-                          icon: (
-                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="4" y1="11" x2="27" y2="11" />
-                              <polyline points="20,5.5 27,11 20,16.5" />
-                            </svg>
-                          ),
-                        },
-                        {
                           id: 'double-arrow',
                           title: 'Διπλό Βέλος',
+                          isSimItem: false,
                           icon: (
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                               <line x1="5" y1="11" x2="27" y2="11" />
@@ -35380,6 +35392,7 @@ export default function App() {
                         {
                           id: 'parallelogram',
                           title: 'Παραλληλόγραμμο',
+                          isSimItem: false,
                           icon: (
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round">
                               <polygon points="9,4.5 27.5,4.5 23,17.5 4.5,17.5" />
@@ -35389,6 +35402,7 @@ export default function App() {
                         {
                           id: 'trapezoid',
                           title: 'Τραπέζιο',
+                          isSimItem: false,
                           icon: (
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round">
                               <polygon points="9,4.5 23,4.5 27.5,17.5 4.5,17.5" />
@@ -35398,6 +35412,7 @@ export default function App() {
                         {
                           id: 'axes',
                           title: 'Άξονες Συντεταγμένων',
+                          isSimItem: false,
                           icon: (
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round">
                               <line x1="6" y1="18.5" x2="6" y2="3" />
@@ -35410,6 +35425,7 @@ export default function App() {
                         {
                           id: 'wave-axes',
                           title: 'Διάγραμμα Ταλάντωσης / Κύματος (Άξονες + 2 Διακεκομμένες ±A)',
+                          isSimItem: false,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
                               <line x1="6" y1="19.5" x2="6" y2="2.5" stroke="#111827" strokeWidth="2.0" />
@@ -35422,17 +35438,32 @@ export default function App() {
                           ),
                         },
                         {
-                          id: 'resistor',
-                          title: 'Αντιστάτης',
+                          id: 'arrow',
+                          title: 'Διάνυσμα Δύναμης / Βέλος / Δείκτης Επιμήκυνσης Ελατηρίου (με Μαγνήτη)',
+                          isSimItem: true,
+                          isFirstSimItem: true,
                           icon: (
-                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.95" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="2,11 6.5,11 8.5,4.5 12.2,17.5 15.9,4.5 19.6,17.5 23.3,4.5 26.5,17.5 28.5,11 32,11" />
+                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="4" y1="11" x2="27" y2="11" />
+                              <polyline points="20,5.5 27,11 20,16.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'inclined-plane',
+                          title: 'Κεκλιμένο Επίπεδο με Σώμα (Προσομοίωση Δυνάμεων)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="3,19.5 30,19.5 30,6.5" fill="rgba(148,163,184,0.28)" stroke="#111827" strokeWidth="1.8" />
+                              <polygon points="12.5,14.9 20.6,11.0 18.4,6.4 10.3,10.3" fill="rgba(59,130,246,0.25)" stroke="#2563eb" strokeWidth="1.75" />
                             </svg>
                           ),
                         },
                         {
                           id: 'spring',
-                          title: 'Ελατήριο',
+                          title: 'Ελατήριο (Νόμος του Hooke & Απλή Αρμονική Ταλάντωση)',
+                          isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 2 11 L 6 11 C 6.5 3.5, 11.5 3.5, 11 11 C 10.5 18.5, 8.5 18.5, 9 11 C 9.5 3.5, 16.5 3.5, 16 11 C 15.5 18.5, 13.5 18.5, 14 11 C 14.5 3.5, 21.5 3.5, 21 11 C 20.5 18.5, 18.5 18.5, 19 11 C 19.5 3.5, 26.5 3.5, 26 11 L 32 11" />
@@ -35441,7 +35472,8 @@ export default function App() {
                         },
                         {
                           id: 'hooked-weight',
-                          title: 'Βαρίδιο με τσιγκελάκι πάνω & κάτω (κρεμιούνται σε σειρά)',
+                          title: 'Βαρίδιο 0,1 kg με τσιγκελάκι πάνω & κάτω (κρεμιούνται σε σειρά στο ελατήριο)',
+                          isSimItem: true,
                           icon: (
                             <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#111827" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 16 5.5 L 16 4 C 16 1.5, 19.5 1.5, 19.5 3.5" />
@@ -35451,19 +35483,19 @@ export default function App() {
                           ),
                         },
                         {
-                          id: 'spring-pointer',
-                          title: 'Κόκκινος Δείκτης (Βελονάκι) για μέτρηση επιμήκυνσης στον Χάρακα (κολλάει & ξεκολλάει από το ελατήριο)',
+                          id: 'resistor',
+                          title: 'Αντιστάτης (Ηλεκτρικά Κυκλώματα)',
+                          isSimItem: true,
                           icon: (
-                            <svg className="w-7 h-5" viewBox="0 0 32 22" fill="none" stroke="#dc2626" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="5.5" cy="11" r="2.2" fill="#dc2626" />
-                              <line x1="6" y1="11" x2="26.5" y2="11" />
-                              <polyline points="19.5,6 26.5,11 19.5,16" />
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.95" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="2,11 6.5,11 8.5,4.5 12.2,17.5 15.9,4.5 19.6,17.5 23.3,4.5 26.5,17.5 28.5,11 32,11" />
                             </svg>
                           ),
                         },
                         {
                           id: 'bulb',
-                          title: 'Λαμπτήρας',
+                          title: 'Λαμπτήρας (Ηλεκτρικά Κυκλώματα)',
+                          isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 13.5 13.5 C 12.2 11.5, 10.5 9.8, 10.5 7.4 A 6.5 6.0 0 1 1 23.5 7.4 C 23.5 9.8, 21.8 11.5, 20.5 13.5 Z" />
@@ -35475,7 +35507,8 @@ export default function App() {
                         },
                         {
                           id: 'battery',
-                          title: 'Μπαταρία (+ / -)',
+                          title: 'Μπαταρία (+ / -) (Ηλεκτρικά Κυκλώματα)',
+                          isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M 11 5.5 L 25 5.5 L 25 16.5 L 11 16.5 L 11 13.5 L 8 13.5 L 8 8.5 L 11 8.5 Z" />
@@ -35487,7 +35520,8 @@ export default function App() {
                         },
                         {
                           id: 'voltage-source',
-                          title: 'Πηγή Τάσης (+ / -)',
+                          title: 'Πηγή Τάσης (+ / -) (Ηλεκτρικά Κυκλώματα)',
+                          isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                               <line x1="2" y1="11.5" x2="14.5" y2="11.5" />
@@ -35501,18 +35535,9 @@ export default function App() {
                           ),
                         },
                         {
-                          id: 'inclined-plane',
-                          title: 'Κεκλιμένο Επίπεδο με Σώμα',
-                          icon: (
-                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                              <polygon points="3,19.5 30,19.5 30,6.5" fill="rgba(148,163,184,0.28)" stroke="#111827" strokeWidth="1.8" />
-                              <polygon points="12.5,14.9 20.6,11.0 18.4,6.4 10.3,10.3" fill="rgba(59,130,246,0.25)" stroke="#2563eb" strokeWidth="1.75" />
-                            </svg>
-                          ),
-                        },
-                        {
                           id: 'fan',
                           title: 'Φτερωτή / Προπέλα (Ηλεκτρικός Κινητήρας)',
+                          isSimItem: true,
                           icon: (
                             <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
                               <line x1="2" y1="11" x2="9" y2="11" stroke="#111827" strokeWidth="1.9" />
@@ -35526,23 +35551,41 @@ export default function App() {
                           ),
                         },
                       ] as const
-                    ).map((sp) => (
-                      <button
-                        key={sp.id}
-                        onClick={() => {
-                          setShapePreset(sp.id as ShapePresetType);
-                          lastCreatedShapeIdsRef.current = [];
-                        }}
-                        title={sp.title}
-                        className={`flex items-center justify-center px-2.5 py-1.5 rounded-xl border transition cursor-pointer ${
-                          shapePreset === sp.id
-                            ? 'bg-sky-100/90 border-[#0066ff] ring-2 ring-[#0066ff]/30 shadow-xs'
-                            : 'bg-slate-100 border-slate-200/80 hover:bg-slate-200'
-                        }`}
-                      >
-                        {sp.icon}
-                      </button>
-                    ))}
+                    ).map((sp) => {
+                      const isSim = 'isSimItem' in sp && sp.isSimItem;
+                      const isFirstSim = 'isFirstSimItem' in sp && sp.isFirstSimItem;
+                      const isSelected =
+                        shapePreset === sp.id ||
+                        (sp.id === 'arrow' && shapePreset === 'spring-pointer');
+                      return (
+                        <React.Fragment key={sp.id}>
+                          {isFirstSim && (
+                            <div
+                              className="h-5 w-px bg-emerald-300/80 ml-2.5 mr-1 shrink-0"
+                              title="Αντικείμενα Προσομοιώσεων Φυσικής"
+                            />
+                          )}
+                          <button
+                            onClick={() => {
+                              setShapePreset(sp.id as ShapePresetType);
+                              lastCreatedShapeIdsRef.current = [];
+                            }}
+                            title={sp.title}
+                            className={`flex items-center justify-center px-2.5 py-1.5 rounded-xl border transition cursor-pointer ${
+                              isSelected
+                                ? isSim
+                                  ? 'bg-emerald-200/90 border-emerald-600 ring-2 ring-emerald-500/35 shadow-xs'
+                                  : 'bg-sky-100/90 border-[#0066ff] ring-2 ring-[#0066ff]/30 shadow-xs'
+                                : isSim
+                                  ? 'bg-emerald-50/95 border-emerald-200/90 hover:bg-emerald-100/90'
+                                  : 'bg-slate-100 border-slate-200/80 hover:bg-slate-200'
+                            }`}
+                          >
+                            {sp.icon}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
                 )}
 
