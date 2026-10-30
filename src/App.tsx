@@ -1326,7 +1326,10 @@ export default function App() {
       | 'mass-to-spring'
       | 'weight-to-weight'
       | 'pointer-to-spring'
-      | 'vector-to-vector';
+      | 'vector-to-vector'
+      | 'rod-to-support'
+      | 'bob-to-rod'
+      | 'block-to-incline';
     springStrokeId: string;
     supportStrokeId?: string;
     fixedEnd?: 'start' | 'end';
@@ -5898,6 +5901,17 @@ export default function App() {
           .filter((sm) => sm.naturalSpringStrokeId && !sm.showNaturalSpring)
           .map((sm) => sm.naturalSpringStrokeId!)
       );
+      const pageForceSims = pageObj.forceSims || [];
+      const activePageForceSim =
+        pageForceSims.find((fs) => fs.id === pageObj.activeForceSimId) || pageForceSims[0] || null;
+      if (activePageForceSim && activePageForceSim.mode === 'pendulum') {
+        if (activePageForceSim.primaryStrokeId) {
+          hiddenNaturalSpringIds.add(activePageForceSim.primaryStrokeId);
+        }
+        if (activePageForceSim.secondaryStrokeId) {
+          hiddenNaturalSpringIds.add(activePageForceSim.secondaryStrokeId);
+        }
+      }
       const activePageSpringSim =
         pageValidSpringSims.find((sm) => sm.id === pageObj.activeSpringSimId) ||
         pageValidSpringSims[0] ||
@@ -10309,6 +10323,437 @@ export default function App() {
     showToast('🧲 Τα 2 διανύσματα ενώθηκαν στην ίδια αρχή — Πατήστε «Σύνθεση» για τη συνισταμένη ΣF!');
   };
 
+  // ========================================================================
+  // MAGNETIC PENDULUM & INCLINE ASSEMBLY (Hand-Drawn Pencil + Shapes First!)
+  // 1) snapAndAttachRodToSupport: Snaps a drawn string/line (νήμα) to a ceiling line (ταβάνι)
+  // 2) attachBobToRodForPendulum: Snaps a circle/sphere (σφαιρίδιο) to the bottom of the string & activates Pendulum Sim!
+  // 3) attachBlockToInclineForSim: Snaps a rectangle/body onto an inclined plane & activates Incline Sim!
+  // 4) registerOrActivateForceSimFromLasso: Classifies Lasso-selected strokes into Analysis, Synthesis, Pendulum, or Incline!
+  // ========================================================================
+  const snapAndAttachRodToSupport = (
+    rodStrokeId: string,
+    supportStrokeId: string,
+    fixedEnd: 'start' | 'end',
+    snapPt: { x: number; y: number }
+  ) => {
+    setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
+    updateActivePage((page) => {
+      const rodSt = page.strokes.find((s) => s.id === rodStrokeId);
+      const supSt = page.strokes.find((s) => s.id === supportStrokeId);
+      if (!rodSt || !supSt || rodSt.points.length < 2) return page;
+      const p0 = rodSt.points[0];
+      const p1 = rodSt.points[rodSt.points.length - 1];
+      const fixedPt = fixedEnd === 'start' ? p0 : p1;
+      const dx = snapPt.x - fixedPt.x;
+      const dy = snapPt.y - fixedPt.y;
+      const nextPts =
+        fixedEnd === 'start'
+          ? [
+              { x: snapPt.x, y: snapPt.y, pressure: 0.7 },
+              {
+                x: p1.x + dx,
+                y: p1.y + dy,
+                cx: (snapPt.x + p1.x + dx) / 2,
+                cy: (snapPt.y + p1.y + dy) / 2,
+                pressure: 0.7,
+              },
+            ]
+          : [
+              { x: p0.x + dx, y: p0.y + dy, pressure: 0.7 },
+              {
+                x: snapPt.x,
+                y: snapPt.y,
+                cx: (p0.x + dx + snapPt.x) / 2,
+                cy: (p0.y + dy + snapPt.y) / 2,
+                pressure: 0.7,
+              },
+            ];
+      return {
+        ...page,
+        strokes: page.strokes.map((st) =>
+          st.id === rodStrokeId
+            ? {
+                ...st,
+                isShape: true,
+                shapeType: 'line',
+                points: nextPts,
+                rodSupport: { supportStrokeId, fixedEnd },
+              }
+            : st
+        ),
+      };
+    }, true);
+    showToast('🧲 Το νήμα αγκιστρώθηκε στο ταβάνι! Κολλήστε σφαιρίδιο στην κάτω άκρη για Εκκρεμές.');
+  };
+
+  const attachBobToRodForPendulum = (
+    rodStrokeId: string,
+    bobStrokeId: string,
+    explicitSupportId?: string
+  ) => {
+    setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
+    setForceSimSubTab('pendulum');
+    updateActivePage((page) => {
+      const rodSt = page.strokes.find((s) => s.id === rodStrokeId);
+      const bobSt = page.strokes.find((s) => s.id === bobStrokeId);
+      if (!rodSt || !bobSt || rodSt.points.length < 2) return page;
+
+      const p0 = rodSt.points[0];
+      const p1 = rodSt.points[rodSt.points.length - 1];
+      const fixedEnd: 'start' | 'end' =
+        rodSt.rodSupport?.fixedEnd || (p0.y <= p1.y ? 'start' : 'end');
+      let pivotPt = fixedEnd === 'start' ? { x: p0.x, y: p0.y } : { x: p1.x, y: p1.y };
+      const freePt = fixedEnd === 'start' ? { x: p1.x, y: p1.y } : { x: p0.x, y: p0.y };
+
+      // Check if there is a horizontal ceiling line near pivotPt
+      let supportId = explicitSupportId || rodSt.rodSupport?.supportStrokeId;
+      if (!supportId) {
+        for (const other of page.strokes) {
+          if (
+            other.id !== rodSt.id &&
+            other.id !== bobSt.id &&
+            other.shapeType === 'line' &&
+            other.points.length >= 2
+          ) {
+            const spA = other.points[0];
+            const spB = other.points[other.points.length - 1];
+            const abx = spB.x - spA.x;
+            const aby = spB.y - spA.y;
+            const lenSq = abx * abx + aby * aby;
+            if (lenSq < 35 * 35 || Math.abs(abx) < Math.abs(aby) * 1.3) continue;
+            const t = Math.max(
+              0.02,
+              Math.min(0.98, ((pivotPt.x - spA.x) * abx + (pivotPt.y - spA.y) * aby) / lenSq)
+            );
+            const projX = spA.x + t * abx;
+            const projY = spA.y + t * aby;
+            if (Math.hypot(pivotPt.x - projX, pivotPt.y - projY) <= 45) {
+              pivotPt = { x: projX, y: projY };
+              supportId = other.id;
+              break;
+            }
+          }
+        }
+      }
+
+      const rodLen = Math.max(70, Math.round(Math.hypot(freePt.x - pivotPt.x, freePt.y - pivotPt.y)));
+      let initAng = Math.atan2(freePt.x - pivotPt.x, Math.max(10, freePt.y - pivotPt.y));
+      if (Math.abs(initAng) < 0.06) {
+        initAng = 0; // Snap near-vertical string to exact equilibrium (Θ.Ι., θ = 0°)
+      }
+      const bx = pivotPt.x + rodLen * Math.sin(initAng);
+      const by = pivotPt.y + rodLen * Math.cos(initAng);
+
+      const bb = getStrokeBounds(bobSt);
+      const oldCx = (bb.minX + bb.maxX) / 2;
+      const oldCy = (bb.minY + bb.maxY) / 2;
+      const bdx = bx - oldCx;
+      const bdy = by - oldCy;
+
+      const curValid = getValidForceSims(page);
+      const existingSim = curValid.find(
+        (sm) =>
+          sm.mode === 'pendulum' &&
+          (sm.primaryStrokeId === rodSt.id || sm.secondaryStrokeId === bobSt.id)
+      );
+      const targetSimId =
+        existingSim?.id || `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const targetSimName = existingSim?.name || getNextDefaultForceSimName(page);
+
+      pendulumPhysRef.current[targetSimId] = {
+        ang: initAng,
+        av: 0,
+        lastTime: performance.now(),
+        trajectory: [],
+      };
+
+      const newSim: ForceSimConfig = {
+        id: targetSimId,
+        name: targetSimName,
+        mode: 'pendulum',
+        originX: pivotPt.x,
+        originY: pivotPt.y,
+        primaryStrokeId: rodSt.id,
+        secondaryStrokeId: bobSt.id,
+        supportStrokeId: supportId,
+        rodLengthPx: rodLen,
+        pendulumAngleRad: initAng,
+        pendulumAngVel: 0,
+        isPaused: Math.abs(initAng) < 0.05, // At equilibrium θ=0° wait for user to pull bob; if angled, swing!
+        showTrajectory: false,
+        showForces: false,
+        showResultant: false,
+        showNumericValues: false,
+        anMode: 'none',
+        step: 0,
+        showCalc: false,
+      };
+
+      const nextStrokes = page.strokes.map((st) => {
+        if (st.id === rodSt.id) {
+          return {
+            ...st,
+            isShape: true,
+            shapeType: 'line' as const,
+            rodSupport: supportId ? { supportStrokeId: supportId, fixedEnd: 'start' as const } : st.rodSupport,
+            points: [
+              { x: pivotPt.x, y: pivotPt.y, pressure: 0.7 },
+              {
+                x: bx,
+                y: by,
+                cx: (pivotPt.x + bx) / 2,
+                cy: (pivotPt.y + by) / 2,
+                pressure: 0.7,
+              },
+            ],
+          };
+        }
+        if (st.id === bobSt.id) {
+          return {
+            ...st,
+            points: st.points.map((pt) => ({
+              ...pt,
+              x: pt.x + bdx,
+              y: pt.y + bdy,
+              ...(pt.cx !== undefined ? { cx: pt.cx + bdx } : {}),
+              ...(pt.cy !== undefined ? { cy: pt.cy + bdy } : {}),
+            })),
+          };
+        }
+        return st;
+      });
+
+      const filteredSims = curValid.filter((sm) => sm.id !== existingSim?.id);
+      return {
+        ...page,
+        strokes: nextStrokes,
+        forceSims: [...filteredSims, newSim],
+        activeForceSimId: targetSimId,
+      };
+    }, true);
+    showToast(
+      '🕰️ Το εκκρεμές συνδέθηκε! Σύρετε το σφαιρίδιο από τη θέση ισορροπίας (Θ.Ι.) για εκτροπή & ταλάντωση!'
+    );
+  };
+
+  const attachBlockToInclineForSim = (inclineStrokeId: string, blockStrokeId: string) => {
+    setSelectedStrokeIds([]);
+    setActiveNodeStrokeId(null);
+    setForceSimSubTab('incline');
+    updateActivePage((page) => {
+      const incSt = page.strokes.find((s) => s.id === inclineStrokeId);
+      const blkSt = page.strokes.find((s) => s.id === blockStrokeId);
+      if (!incSt || !blkSt || incSt.points.length < 3) return page;
+
+      let pStart = incSt.points[0];
+      let pBaseCorner = incSt.points[1];
+      let pPeak = incSt.points[2];
+      if (incSt.shapeType !== 'incline-wedge') {
+        // Normalize any triangle / inclined-plane vertices into (pStart = bottom-left/right, pBaseCorner, pPeak = highest vertex)
+        const verts = incSt.points.slice(0, 3);
+        const sortedByY = [...verts].sort((a, b) => a.y - b.y);
+        pPeak = sortedByY[0];
+        const baseTwo = [sortedByY[1], sortedByY[2]];
+        if (
+          Math.abs(baseTwo[0].x - pPeak.x) > Math.abs(baseTwo[1].x - pPeak.x)
+        ) {
+          pStart = baseTwo[0];
+          pBaseCorner = baseTwo[1];
+        } else {
+          pStart = baseTwo[1];
+          pBaseCorner = baseTwo[0];
+        }
+      }
+
+      const lenPx = Math.max(140, Math.hypot(pPeak.x - pStart.x, pPeak.y - pStart.y));
+      const angDeg = Math.max(
+        15,
+        Math.min(
+          60,
+          Math.round((Math.atan2(Math.abs(pStart.y - pPeak.y), Math.abs(pPeak.x - pStart.x)) * 180) / Math.PI)
+        )
+      );
+      const groupId = incSt.groupId || `grp-incline-${Date.now()}`;
+      const blockPts = computeInclinedPlaneBlockPoints(pStart, pBaseCorner, pPeak);
+      const wedgePts: BezierPoint[] = [
+        { x: pStart.x, y: pStart.y, pressure: 0.7 },
+        {
+          x: pBaseCorner.x,
+          y: pBaseCorner.y,
+          cx: (pStart.x + pBaseCorner.x) / 2,
+          cy: (pStart.y + pBaseCorner.y) / 2,
+          pressure: 0.7,
+        },
+        {
+          x: pPeak.x,
+          y: pPeak.y,
+          cx: (pBaseCorner.x + pPeak.x) / 2,
+          cy: (pBaseCorner.y + pPeak.y) / 2,
+          pressure: 0.7,
+        },
+        {
+          x: pStart.x,
+          y: pStart.y,
+          cx: (pPeak.x + pStart.x) / 2,
+          cy: (pPeak.y + pStart.y) / 2,
+          pressure: 0.7,
+        },
+      ];
+
+      const curValid = getValidForceSims(page);
+      const existingSim = curValid.find(
+        (sm) =>
+          sm.mode === 'incline' &&
+          (sm.primaryStrokeId === incSt.id || sm.secondaryStrokeId === blkSt.id)
+      );
+      const targetSimId =
+        existingSim?.id || `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const targetSimName = existingSim?.name || getNextDefaultForceSimName(page);
+
+      const newSim: ForceSimConfig = {
+        id: targetSimId,
+        name: targetSimName,
+        mode: 'incline',
+        originX: pStart.x,
+        originY: pStart.y,
+        primaryStrokeId: incSt.id,
+        secondaryStrokeId: blkSt.id,
+        inclineAngleDeg: angDeg,
+        inclineLenPx: lenPx,
+        showForces: true,
+        showNumericValues: false,
+        anMode: 'none',
+        step: 0,
+        showCalc: false,
+      };
+
+      const nextStrokes = page.strokes.map((st) => {
+        if (st.id === incSt.id) {
+          return {
+            ...st,
+            isShape: true,
+            shapeType: 'incline-wedge' as const,
+            groupId,
+            points: wedgePts,
+          };
+        }
+        if (st.id === blkSt.id) {
+          return {
+            ...st,
+            isShape: true,
+            shapeType: 'incline-block' as const,
+            groupId,
+            points: blockPts,
+          };
+        }
+        return st;
+      });
+
+      const filteredSims = curValid.filter((sm) => sm.id !== existingSim?.id);
+      return {
+        ...page,
+        strokes: nextStrokes,
+        forceSims: [...filteredSims, newSim],
+        activeForceSimId: targetSimId,
+      };
+    }, true);
+    showToast('⛰️ Το σώμα τοποθετήθηκε στο κεκλιμένο επίπεδο — Πατήστε «Ανάλυση B» για τις συνιστώσες!');
+  };
+
+  const registerOrActivateForceSimFromLasso = (preferredMode?: ForceSimMode): boolean => {
+    const candidateStrokes =
+      selectedStrokeIds.length > 0
+        ? activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id))
+        : activePage.strokes;
+    if (candidateStrokes.length === 0) return false;
+
+    const bobShapes = ['circle', 'ellipse', 'sphere'];
+    const inclineShapes = ['incline-wedge', 'inclined-plane', 'triangle'];
+    const blockShapes = [
+      'incline-block',
+      'rectangle',
+      'parallelogram',
+      'cuboid',
+      'hooked-weight',
+      'trapezoid',
+    ];
+
+    // 1. Check for Pendulum (Circle/Sphere Bob + Line String [+ optional Horizontal Ceiling])
+    if (!preferredMode || preferredMode === 'pendulum') {
+      const bobs = candidateStrokes.filter((s) => bobShapes.includes(s.shapeType || ''));
+      const lines = candidateStrokes.filter(
+        (s) => s.shapeType === 'line' && s.points.length >= 2
+      );
+      for (const bob of bobs) {
+        const bb = getStrokeBounds(bob);
+        const bcx = (bb.minX + bb.maxX) / 2;
+        const bcy = (bb.minY + bb.maxY) / 2;
+        const br = Math.max(14, Math.hypot(bb.maxX - bb.minX, bb.maxY - bb.minY) / 2);
+        for (const ln of lines) {
+          const p0 = ln.points[0];
+          const p1 = ln.points[ln.points.length - 1];
+          const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+          if (len < 45) continue;
+          const d0 = Math.hypot(p0.x - bcx, p0.y - bcy);
+          const d1 = Math.hypot(p1.x - bcx, p1.y - bcy);
+          const minD = Math.min(d0, d1);
+          const topPt = d0 < d1 ? p1 : p0;
+          const botPt = d0 < d1 ? p0 : p1;
+          if (minD <= br + 75 && botPt.y > topPt.y + 20) {
+            attachBobToRodForPendulum(ln.id, bob.id);
+            setSimActiveCategory('forces');
+            setShowSimulationPanel(true);
+            return true;
+          }
+        }
+      }
+    }
+
+    // 2. Check for Inclined Plane (Wedge/Triangle + Block)
+    if (!preferredMode || preferredMode === 'incline') {
+      const wedges = candidateStrokes.filter(
+        (s) => inclineShapes.includes(s.shapeType || '') && s.points.length >= 3
+      );
+      const blocks = candidateStrokes.filter((s) => blockShapes.includes(s.shapeType || ''));
+      if (wedges.length > 0 && blocks.length > 0) {
+        attachBlockToInclineForSim(wedges[0].id, blocks[0].id);
+        setSimActiveCategory('forces');
+        setShowSimulationPanel(true);
+        return true;
+      }
+    }
+
+    // 3. Check for 2 Force Vectors -> Synthesis (F1 + F2)
+    const vecStrokes = candidateStrokes.filter(
+      (s) =>
+        ((s.shapeType === 'spring-pointer' && !s.attachedToSpringId) ||
+          s.shapeType === 'arrow' ||
+          (preferredMode && s.shapeType === 'line')) &&
+        s.points.length >= 2
+    );
+    if ((!preferredMode || preferredMode === 'synthesis') && vecStrokes.length >= 2) {
+      const v1 = vecStrokes[vecStrokes.length - 2];
+      const v2 = vecStrokes[vecStrokes.length - 1];
+      attachVectorsForSynthesis(v1.id, v2.id);
+      setSimActiveCategory('forces');
+      setShowSimulationPanel(true);
+      return true;
+    }
+
+    // 4. Check for 1 Force Vector -> Analysis (Fx, Fy)
+    if ((!preferredMode || preferredMode === 'analysis') && vecStrokes.length >= 1) {
+      const v0 = vecStrokes[vecStrokes.length - 1];
+      handleForceSimAction(null, `quick-create-analysis:${v0.id}`);
+      setSimActiveCategory('forces');
+      setShowSimulationPanel(true);
+      return true;
+    }
+
+    return false;
+  };
+
   const triggerForceSimStep = (
     simId: string,
     nextStep: number,
@@ -10350,6 +10795,11 @@ export default function App() {
         );
         return;
       }
+      // Try binding to user-drawn strokes on the page first (Pencil & Shapes First!)
+      if (registerOrActivateForceSimFromLasso(mode)) {
+        return;
+      }
+      return;
     }
 
     const usedStrokeIds = new Set<string>();
@@ -11246,13 +11696,35 @@ export default function App() {
         }),
         false
       );
+    } else if (action === 'toggle-numeric-values') {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id ? { ...s, showNumericValues: !s.showNumericValues } : s
+          ),
+        }),
+        false
+      );
     } else if (action === 'start-an-T') {
+      const pState = pendulumPhysRef.current[sim.id];
+      if (pState && Math.abs(pState.ang) < 0.08) {
+        pState.ang = Math.PI / 6;
+        pState.av = 0;
+      }
       updateActivePage(
         (page) => ({
           ...page,
           forceSims: (page.forceSims || []).map((s) =>
             s.id === sim.id
-              ? { ...s, showResultant: false, anMode: 'T', step: 1 }
+              ? {
+                  ...s,
+                  isPaused: true,
+                  showForces: true,
+                  showResultant: false,
+                  anMode: 'T',
+                  step: 1,
+                }
               : s
           ),
         }),
@@ -11260,12 +11732,24 @@ export default function App() {
       );
       triggerForceSimStep(sim.id, 1, undefined, 620);
     } else if (action === 'start-an-B') {
+      const pState = pendulumPhysRef.current[sim.id];
+      if (pState && Math.abs(pState.ang) < 0.08) {
+        pState.ang = Math.PI / 6;
+        pState.av = 0;
+      }
       updateActivePage(
         (page) => ({
           ...page,
           forceSims: (page.forceSims || []).map((s) =>
             s.id === sim.id
-              ? { ...s, showResultant: false, anMode: 'B', step: 1 }
+              ? {
+                  ...s,
+                  isPaused: true,
+                  showForces: true,
+                  showResultant: false,
+                  anMode: 'B',
+                  step: 1,
+                }
               : s
           ),
         }),
@@ -16122,43 +16606,57 @@ export default function App() {
           }
         };
 
+        const showNums = Boolean(fSim?.showNumericValues);
+
         const drawPillButton = (
           label: string,
           action: string,
           bx: number,
           by: number,
-          bw: number,
-          bh: number,
+          _bw: number,
+          _bh: number,
           bg: string,
-          fg: string,
+          _fg: string,
           borderColor?: string,
           disabled = false
-        ) => {
+        ): number => {
           ctx.save();
-          ctx.globalAlpha = disabled ? 0.45 : 1;
-          ctx.shadowColor = 'rgba(15, 23, 42, 0.14)';
-          ctx.shadowBlur = 5;
-          ctx.shadowOffsetY = 2;
-          ctx.fillStyle = bg;
+          ctx.font = '600 10px system-ui, -apple-system, sans-serif';
+          const textW = Math.ceil(ctx.measureText(label).width);
+          const actualW = Math.max(22, textW + 14);
+          const actualH = 21;
+          const isMuted = bg === '#e2e8f0' || bg === '#334155' || bg === '#475569';
+          const accentColor =
+            bg === '#b2ff59'
+              ? '#15803d'
+              : bg === '#e2e8f0'
+              ? '#64748b'
+              : bg;
+          ctx.globalAlpha = disabled ? 0.38 : 0.94;
+          ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
+          ctx.shadowBlur = 3;
+          ctx.shadowOffsetY = 1;
+          ctx.fillStyle = isMuted ? 'rgba(248, 250, 252, 0.90)' : 'rgba(255, 255, 255, 0.93)';
           ctx.beginPath();
-          ctx.roundRect(bx, by, bw, bh, 7);
+          ctx.roundRect(bx, by, actualW, actualH, 10.5);
           ctx.fill();
           ctx.shadowBlur = 0;
           ctx.shadowOffsetY = 0;
-          if (borderColor) {
-            ctx.strokeStyle = borderColor;
-            ctx.lineWidth = 1.6;
-            ctx.stroke();
-          }
-          ctx.fillStyle = fg;
-          ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+          ctx.strokeStyle =
+            borderColor === '#76ff03'
+              ? '#22c55e'
+              : borderColor || (isMuted ? 'rgba(148, 163, 184, 0.55)' : accentColor);
+          ctx.lineWidth = isMuted ? 1 : 1.15;
+          ctx.stroke();
+          ctx.fillStyle = accentColor;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(label, bx + bw / 2, by + bh / 2 + 0.5);
+          ctx.fillText(label, bx + actualW / 2, by + actualH / 2 + 0.5);
           ctx.restore();
           if (!disabled) {
-            buttonsHit.push({ action, x1: bx, y1: by, x2: bx + bw, y2: by + bh });
+            buttonsHit.push({ action, x1: bx, y1: by, x2: bx + actualW, y2: by + actualH });
           }
+          return actualW;
         };
 
         const drawCalcCard = (
@@ -16266,11 +16764,11 @@ export default function App() {
             ctx.restore();
             const midRad = -rad / 2;
             drawHaloLabel(
-              'θ',
-              ox + (arcR + 13) * Math.cos(midRad),
-              oy + (arcR + 13) * Math.sin(midRad),
+              showNums ? `θ = ${Math.round(deg)}°` : 'θ',
+              ox + (arcR + (showNums ? 24 : 13)) * Math.cos(midRad),
+              oy + (arcR + (showNums ? 24 : 13)) * Math.sin(midRad),
               '#334155',
-              'italic bold 16px Georgia, serif'
+              'italic bold 15px Georgia, serif'
             );
           }
 
@@ -16332,7 +16830,7 @@ export default function App() {
               '#d32f2f',
               3.4,
               getStepProg(4),
-              `Fx = ${fmtVal(cx)} N`,
+              showNums ? `Fx = ${fmtVal(cx)} N` : 'Fx',
               { x: ox + X / 2, y: oy + (signY >= 0 ? 19 : -18) }
             );
           }
@@ -16358,14 +16856,14 @@ export default function App() {
               '#d32f2f',
               3.4,
               getStepProg(6),
-              `Fy = ${fmtVal(cy)} N`,
-              { x: ox + (signX >= 0 ? -42 : 42), y: oy - Y / 2 }
+              showNums ? `Fy = ${fmtVal(cy)} N` : 'Fy',
+              { x: ox + (signX >= 0 ? (showNums ? -42 : -22) : showNums ? 42 : 22), y: oy - Y / 2 }
             );
           }
 
           // Label F on main vector + Origin dot + Draggable Tip Handle
           drawHaloLabel(
-            `F = ${F_mag.toFixed(1)} N`,
+            showNums ? `F = ${F_mag.toFixed(1)} N` : 'F',
             ox + X / 2 - 14 * Math.sin(rad),
             oy - Y / 2 - 14 * Math.cos(rad),
             '#1976d2',
@@ -16382,11 +16880,11 @@ export default function App() {
           ctx.fill();
           ctx.stroke();
           // Tip drag ring
-          ctx.fillStyle = 'rgba(25, 118, 210, 0.18)';
+          ctx.fillStyle = 'rgba(25, 118, 210, 0.16)';
           ctx.strokeStyle = '#1976d2';
-          ctx.lineWidth = 1.6;
+          ctx.lineWidth = 1.5;
           ctx.beginPath();
-          ctx.arc(tx, ty, 9, 0, Math.PI * 2);
+          ctx.arc(tx, ty, 7.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
           ctx.restore();
@@ -16396,25 +16894,27 @@ export default function App() {
             { kind: 'origin', x: ox, y: oy, r: 18 }
           );
 
-          // Info Pill above/left
-          const infoTxt = `F = ${F_mag.toFixed(1)} N,  θ = ${Math.round(deg)}°`;
-          ctx.save();
-          ctx.font = 'bold 13px ui-monospace, SFMono-Regular, Menlo, monospace';
-          const infoW = ctx.measureText(infoTxt).width + 22;
-          const infoX = Math.max(16, ox - 10);
-          const infoY = Math.max(16, Math.min(oy, ty) - 66);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
-          ctx.strokeStyle = '#cbd5e1';
-          ctx.lineWidth = 1.3;
-          ctx.beginPath();
-          ctx.roundRect(infoX, infoY, infoW, 28, 6);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = '#0f172a';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(infoTxt, infoX + 11, infoY + 14.5);
-          ctx.restore();
+          // Info Pill above/left ONLY when showNumericValues is enabled in Simulation Dashboard!
+          if (showNums) {
+            const infoTxt = `F = ${F_mag.toFixed(1)} N,  θ = ${Math.round(deg)}°`;
+            ctx.save();
+            ctx.font = 'bold 12px ui-monospace, SFMono-Regular, Menlo, monospace';
+            const infoW = ctx.measureText(infoTxt).width + 20;
+            const infoX = Math.max(16, ox - 10);
+            const infoY = Math.max(16, Math.min(oy, ty) - 56);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.roundRect(infoX, infoY, infoW, 24, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(infoTxt, infoX + 10, infoY + 12.5);
+            ctx.restore();
+          }
 
           // Calculations Box (Υπολογισμοί)
           if (fSim.showCalc && curStep >= 4) {
@@ -16451,61 +16951,62 @@ export default function App() {
             );
           }
 
-          // On-Canvas Control Bar below origin
-          const barY = Math.min(h - 46, Math.max(oy, ty) + 38);
-          let curBx = Math.max(16, ox - 10);
+          // Discreet On-Canvas Control Bar below origin
+          const barY = Math.min(h - 36, Math.max(oy, ty) + 24);
+          let curBx = Math.max(16, ox - 6);
           if (curStep === 0 && fSim.anMode !== 'F') {
-            drawPillButton('📐 Ανάλυση', 'start-analysis', curBx, barY, 102, 32, '#43a047', '#fff');
-            curBx += 110;
-            drawPillButton(
-              '➕ Σύνθεση F₁+F₂',
-              'convert-to-synthesis',
-              curBx,
-              barY,
-              134,
-              32,
-              '#2563eb',
-              '#fff'
-            );
-            curBx += 142;
+            curBx +=
+              drawPillButton('Ανάλυση', 'start-analysis', curBx, barY, 72, 21, '#16a34a', '#fff') +
+              6;
+            curBx +=
+              drawPillButton(
+                '+ Σύνθεση',
+                'convert-to-synthesis',
+                curBx,
+                barY,
+                82,
+                21,
+                '#2563eb',
+                '#fff'
+              ) + 6;
           } else {
-            drawPillButton('Επαναφορά', 'reset', curBx, barY, 92, 32, '#1976d2', '#fff');
-            curBx += 98;
-            drawPillButton(
-              '◀',
-              'prev-step',
-              curBx,
-              barY,
-              36,
-              32,
-              '#fb8c00',
-              '#fff',
-              undefined,
-              curStep <= 0 || curAnim !== null
-            );
-            curBx += 42;
-            drawPillButton(
-              '▶',
-              'next-step',
-              curBx,
-              barY,
-              36,
-              32,
-              '#fb8c00',
-              '#fff',
-              undefined,
-              curStep >= 6 || curAnim !== null
-            );
-            curBx += 44;
+            curBx +=
+              drawPillButton('Επαναφορά', 'reset', curBx, barY, 74, 21, '#1976d2', '#fff') + 5;
+            curBx +=
+              drawPillButton(
+                '◀',
+                'prev-step',
+                curBx,
+                barY,
+                24,
+                21,
+                '#ea580c',
+                '#fff',
+                undefined,
+                curStep <= 0 || curAnim !== null
+              ) + 4;
+            curBx +=
+              drawPillButton(
+                '▶',
+                'next-step',
+                curBx,
+                barY,
+                24,
+                21,
+                '#ea580c',
+                '#fff',
+                undefined,
+                curStep >= 6 || curAnim !== null
+              ) + 5;
             if (curStep >= 4) {
               drawPillButton(
                 'Υπολογισμοί',
                 'toggle-calc',
                 curBx,
                 barY,
-                104,
-                32,
-                fSim.showCalc ? '#ea580c' : '#ff9800',
+                82,
+                21,
+                fSim.showCalc ? '#ea580c' : '#d97706',
                 '#fff'
               );
             }
@@ -16573,11 +17074,11 @@ export default function App() {
             ctx.restore();
             const midA = a1 + diff / 2;
             drawHaloLabel(
-              `${deg}°`,
-              ox + 46 * Math.cos(midA),
-              oy + 46 * Math.sin(midA),
+              showNums ? `${deg}°` : 'θ',
+              ox + 45 * Math.cos(midA),
+              oy + 45 * Math.sin(midA),
               '#475569',
-              'bold 12px system-ui, sans-serif'
+              showNums ? 'bold 12px system-ui, sans-serif' : 'italic bold 15px Georgia, serif'
             );
           }
 
@@ -16619,27 +17120,33 @@ export default function App() {
                 '#1e293b',
                 4.0,
                 getStepProg(3),
-                `ΣF = ${Number.isInteger(mS) ? mS : mS.toFixed(2)} N`
+                showNums ? `ΣF = ${Number.isInteger(mS) ? mS : mS.toFixed(2)} N` : 'ΣF'
               );
             } else {
-              drawHaloLabel('ΣF = 0 N', ox, oy - 24, '#1e293b', 'bold 15px system-ui, sans-serif');
+              drawHaloLabel(
+                showNums ? 'ΣF = 0 N' : 'ΣF = 0',
+                ox,
+                oy - 24,
+                '#1e293b',
+                'bold 14.5px system-ui, sans-serif'
+              );
             }
           }
 
           // Labels F1 & F2 + Tip handles + Origin dot
           drawHaloLabel(
-            `F₁ (${Number.isInteger(m1) ? m1 : m1.toFixed(1)}N)`,
+            showNums ? `F₁ (${Number.isInteger(m1) ? m1 : m1.toFixed(1)}N)` : 'F₁',
             p1x + 16 * Math.cos(Math.atan2(p1y - oy, p1x - ox)),
             p1y + 16 * Math.sin(Math.atan2(p1y - oy, p1x - ox)),
             '#d35400',
-            'bold 13.5px system-ui, sans-serif'
+            'bold 14px system-ui, sans-serif'
           );
           drawHaloLabel(
-            `F₂ (${Number.isInteger(m2) ? m2 : m2.toFixed(1)}N)`,
+            showNums ? `F₂ (${Number.isInteger(m2) ? m2 : m2.toFixed(1)}N)` : 'F₂',
             p2x + 16 * Math.cos(Math.atan2(p2y - oy, p2x - ox)),
             p2y + 16 * Math.sin(Math.atan2(p2y - oy, p2x - ox)),
             '#2980b9',
-            'bold 13.5px system-ui, sans-serif'
+            'bold 14px system-ui, sans-serif'
           );
 
           ctx.save();
@@ -16647,23 +17154,23 @@ export default function App() {
           ctx.strokeStyle = '#fff';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(ox, oy, 6, 0, Math.PI * 2);
+          ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
 
-          ctx.fillStyle = 'rgba(211, 84, 0, 0.18)';
+          ctx.fillStyle = 'rgba(211, 84, 0, 0.16)';
           ctx.strokeStyle = '#d35400';
-          ctx.lineWidth = 1.6;
+          ctx.lineWidth = 1.5;
           ctx.beginPath();
-          ctx.arc(p1x, p1y, 8.5, 0, Math.PI * 2);
+          ctx.arc(p1x, p1y, 7.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
 
-          ctx.fillStyle = 'rgba(41, 128, 185, 0.18)';
+          ctx.fillStyle = 'rgba(41, 128, 185, 0.16)';
           ctx.strokeStyle = '#2980b9';
-          ctx.lineWidth = 1.6;
+          ctx.lineWidth = 1.5;
           ctx.beginPath();
-          ctx.arc(p2x, p2y, 8.5, 0, Math.PI * 2);
+          ctx.arc(p2x, p2y, 7.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
           ctx.restore();
@@ -16734,73 +17241,73 @@ export default function App() {
             );
           }
 
-          // On-Canvas Control Bar
-          const barY = Math.min(h - 46, Math.max(oy, p1y, p2y, ty) + 38);
-          let curBx = Math.max(16, ox - 30);
-          drawPillButton(
-            'Άμεση',
-            'mode-direct',
-            curBx,
-            barY,
-            66,
-            30,
-            !fSim.synthesisStepMode ? '#334155' : '#e2e8f0',
-            !fSim.synthesisStepMode ? '#fff' : '#334155'
-          );
-          curBx += 72;
-          drawPillButton(
-            'Βηματική',
-            'mode-step',
-            curBx,
-            barY,
-            80,
-            30,
-            fSim.synthesisStepMode ? '#334155' : '#e2e8f0',
-            fSim.synthesisStepMode ? '#fff' : '#334155'
-          );
-          curBx += 88;
+          // Discreet On-Canvas Control Bar
+          const barY = Math.min(h - 36, Math.max(oy, p1y, p2y, ty) + 24);
+          let curBx = Math.max(16, ox - 20);
+          curBx +=
+            drawPillButton(
+              'Άμεση',
+              'mode-direct',
+              curBx,
+              barY,
+              52,
+              21,
+              !fSim.synthesisStepMode ? '#0f172a' : '#e2e8f0',
+              '#fff'
+            ) + 5;
+          curBx +=
+            drawPillButton(
+              'Βηματική',
+              'mode-step',
+              curBx,
+              barY,
+              64,
+              21,
+              fSim.synthesisStepMode ? '#0f172a' : '#e2e8f0',
+              '#fff'
+            ) + 6;
           if (curStep === 0) {
-            drawPillButton('Σύνθεση', 'start-synthesis', curBx, barY, 84, 30, '#27ae60', '#fff');
+            drawPillButton('Σύνθεση', 'start-synthesis', curBx, barY, 64, 21, '#16a34a', '#fff');
           } else {
             if (fSim.synthesisStepMode) {
-              drawPillButton(
-                '◀',
-                'prev-step',
-                curBx,
-                barY,
-                34,
-                30,
-                '#e67e22',
-                '#fff',
-                undefined,
-                curStep <= 0 || curAnim !== null
-              );
-              curBx += 40;
-              drawPillButton(
-                '▶',
-                'next-step',
-                curBx,
-                barY,
-                34,
-                30,
-                '#e67e22',
-                '#fff',
-                undefined,
-                curStep >= 3 || curAnim !== null
-              );
-              curBx += 40;
+              curBx +=
+                drawPillButton(
+                  '◀',
+                  'prev-step',
+                  curBx,
+                  barY,
+                  24,
+                  21,
+                  '#ea580c',
+                  '#fff',
+                  undefined,
+                  curStep <= 0 || curAnim !== null
+                ) + 4;
+              curBx +=
+                drawPillButton(
+                  '▶',
+                  'next-step',
+                  curBx,
+                  barY,
+                  24,
+                  21,
+                  '#ea580c',
+                  '#fff',
+                  undefined,
+                  curStep >= 3 || curAnim !== null
+                ) + 5;
             }
-            drawPillButton('Επαναφορά', 'reset', curBx, barY, 88, 30, '#2980b9', '#fff');
-            curBx += 94;
+            curBx +=
+              drawPillButton('Επαναφορά', 'reset', curBx, barY, 72, 21, '#2563eb', '#fff') + 5;
             if (curStep >= 3) {
               drawPillButton(
                 'Υπολογισμοί',
                 'toggle-calc',
                 curBx,
                 barY,
-                100,
-                30,
-                '#8e44ad',
+                78,
+                21,
+                '#7e22ce',
                 '#fff'
               );
             }
@@ -16823,31 +17330,31 @@ export default function App() {
             ctx.save();
             ctx.fillStyle = 'rgba(76, 175, 80, 0.14)';
             ctx.strokeStyle = '#4caf50';
-            ctx.lineWidth = 2.2;
+            ctx.lineWidth = 2.0;
             ctx.beginPath();
             ctx.moveTo(pStart.x, pStart.y);
-            ctx.arc(pStart.x, pStart.y, 52, 0, -angle, true);
+            ctx.arc(pStart.x, pStart.y, 48, 0, -angle, true);
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
             ctx.restore();
             drawHaloLabel(
-              `θ = ${deg}°`,
-              pStart.x + 76 * Math.cos(-angle / 2),
-              pStart.y + 76 * Math.sin(-angle / 2),
+              showNums ? `θ = ${deg}°` : 'θ',
+              pStart.x + (showNums ? 74 : 62) * Math.cos(-angle / 2),
+              pStart.y + (showNums ? 74 : 62) * Math.sin(-angle / 2),
               '#2e7d32',
-              'bold 13.5px system-ui, sans-serif'
+              showNums ? 'bold 13px system-ui, sans-serif' : 'italic bold 15px Georgia, serif'
             );
 
             // Green Peak Drag Handle
             ctx.save();
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
-            ctx.shadowBlur = 6;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.22)';
+            ctx.shadowBlur = 4;
             ctx.fillStyle = '#4caf50';
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2.8;
+            ctx.lineWidth = 2.2;
             ctx.beginPath();
-            ctx.arc(pPeak.x, pPeak.y, 12, 0, Math.PI * 2);
+            ctx.arc(pPeak.x, pPeak.y, 9, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
             ctx.restore();
@@ -16883,6 +17390,9 @@ export default function App() {
             const bx = B_mag * Math.sin(angle);
             const by = B_mag * Math.cos(angle);
             const axLen = 145;
+            const B_N = 10;
+            const Bx_N = B_N * Math.sin(angle);
+            const By_N = B_N * Math.cos(angle);
 
             if (fSim.anMode === 'B' && curStep >= 1) {
               drawSimLineOrAxis(
@@ -16936,7 +17446,7 @@ export default function App() {
                 '#dc3545',
                 3.2,
                 getStepProg(4),
-                'Bx'
+                showNums ? `Bx = ${Bx_N.toFixed(1)} N` : 'Bx'
               );
             }
             if (fSim.anMode === 'B' && curStep >= 5) {
@@ -16961,12 +17471,21 @@ export default function App() {
                 '#dc3545',
                 3.2,
                 getStepProg(6),
-                'By'
+                showNums ? `By = ${By_N.toFixed(1)} N` : 'By'
               );
             }
 
             if (fSim.showForces) {
-              drawSimVector(cx, cy, cx, cy + B_mag, '#dc3545', 3.6, 1, 'B');
+              drawSimVector(
+                cx,
+                cy,
+                cx,
+                cy + B_mag,
+                '#dc3545',
+                3.6,
+                1,
+                showNums ? `B = ${B_N} N` : 'B'
+              );
               drawSimVector(
                 cx,
                 cy,
@@ -16975,14 +17494,11 @@ export default function App() {
                 '#0d6efd',
                 3.6,
                 1,
-                'N'
+                showNums ? `N = ${By_N.toFixed(1)} N` : 'N'
               );
             }
 
             if (fSim.showCalc) {
-              const B_N = 10;
-              const Bx_N = B_N * Math.sin(angle);
-              const By_N = B_N * Math.cos(angle);
               drawCalcCard(
                 Math.min(w - 255, pPeak.x + 28),
                 Math.max(24, pPeak.y - 10),
@@ -17009,70 +17525,69 @@ export default function App() {
               );
             }
 
-            // On-Canvas Control Bar below incline base
-            const barY = Math.min(h - 46, pStart.y + 28);
-            let curBx = Math.max(16, pStart.x + 10);
-            drawPillButton(
-              'Δυνάμεις',
-              'toggle-forces',
-              curBx,
-              barY,
-              86,
-              32,
-              fSim.showForces ? '#dc3545' : '#334155',
-              '#fff'
-            );
-            curBx += 94;
-            if (fSim.showForces) {
-              if (fSim.anMode === 'B' && curStep > 0) {
-                drawPillButton(
-                  '◀',
-                  'prev-step',
-                  curBx,
-                  barY,
-                  36,
-                  32,
-                  '#b2ff59',
-                  '#0f172a',
-                  '#76ff03',
-                  curAnim !== null
-                );
-                curBx += 42;
-              }
+            // Discreet On-Canvas Control Bar below incline base
+            const barY = Math.min(h - 36, pStart.y + 18);
+            let curBx = Math.max(16, pStart.x + 8);
+            curBx +=
               drawPillButton(
-                'Ανάλυση B',
-                'start-incline-an',
+                'Δυνάμεις',
+                'toggle-forces',
                 curBx,
                 barY,
-                96,
-                32,
-                fSim.anMode === 'B' ? '#b2ff59' : '#334155',
-                fSim.anMode === 'B' ? '#0f172a' : '#fff',
-                fSim.anMode === 'B' ? '#76ff03' : undefined
-              );
-              curBx += 102;
-              if (fSim.anMode === 'B' && curStep < 6) {
+                64,
+                21,
+                fSim.showForces ? '#dc3545' : '#334155',
+                '#fff'
+              ) + 5;
+            if (fSim.showForces) {
+              if (fSim.anMode === 'B' && curStep > 0) {
+                curBx +=
+                  drawPillButton(
+                    '◀',
+                    'prev-step',
+                    curBx,
+                    barY,
+                    24,
+                    21,
+                    '#16a34a',
+                    '#fff',
+                    undefined,
+                    curAnim !== null
+                  ) + 4;
+              }
+              curBx +=
                 drawPillButton(
-                  '▶',
-                  'next-step',
+                  'Ανάλυση B',
+                  'start-incline-an',
                   curBx,
                   barY,
-                  36,
-                  32,
-                  '#b2ff59',
-                  '#0f172a',
-                  '#76ff03',
-                  curAnim !== null
-                );
-                curBx += 42;
+                  72,
+                  21,
+                  fSim.anMode === 'B' ? '#16a34a' : '#334155',
+                  '#fff'
+                ) + 5;
+              if (fSim.anMode === 'B' && curStep < 6) {
+                curBx +=
+                  drawPillButton(
+                    '▶',
+                    'next-step',
+                    curBx,
+                    barY,
+                    24,
+                    21,
+                    '#16a34a',
+                    '#fff',
+                    undefined,
+                    curAnim !== null
+                  ) + 5;
               }
               drawPillButton(
                 'Υπολογισμοί',
                 'toggle-calc',
                 curBx,
                 barY,
-                100,
-                32,
+                78,
+                21,
                 fSim.showCalc ? '#15803d' : '#475569',
                 '#fff'
               );
@@ -17120,6 +17635,51 @@ export default function App() {
           const bx = PX + L * Math.sin(ang);
           const by = PY + L * Math.cos(ang);
 
+          // Vertical Dashed Equilibrium Line (Θ.Ι.) & Angle Arc θ when displaced
+          ctx.save();
+          ctx.strokeStyle = 'rgba(100, 116, 139, 0.55)';
+          ctx.lineWidth = 1.4;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.moveTo(PX, PY);
+          ctx.lineTo(PX, PY + L + 16);
+          ctx.stroke();
+          ctx.restore();
+          drawHaloLabel(
+            'Θ.Ι.',
+            PX,
+            PY + L + 28,
+            '#64748b',
+            '600 10.5px system-ui, -apple-system, sans-serif'
+          );
+
+          if (Math.abs(ang) > 0.04) {
+            const arcR = Math.min(48, Math.max(30, L * 0.22));
+            const startA = Math.PI / 2 - ang;
+            const endA = Math.PI / 2;
+            ctx.save();
+            ctx.fillStyle = 'rgba(14, 165, 233, 0.10)';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([3, 2]);
+            ctx.beginPath();
+            ctx.moveTo(PX, PY);
+            ctx.arc(PX, PY, arcR, startA, endA, ang < 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            const midA = Math.PI / 2 - ang / 2;
+            const degPend = Math.round((Math.abs(ang) * 180) / Math.PI);
+            drawHaloLabel(
+              showNums ? `θ = ${degPend}°` : 'θ',
+              PX + (arcR + 14) * Math.cos(midA),
+              PY + (arcR + 14) * Math.sin(midA),
+              '#334155',
+              showNums ? 'bold 11.5px system-ui, sans-serif' : 'italic bold 14px Georgia, serif'
+            );
+          }
+
           // Trajectory dots
           if (fSim.showTrajectory && !fSim.isPaused && !isDraggingBob) {
             const tr = pState.trajectory;
@@ -17158,17 +17718,16 @@ export default function App() {
           ctx.shadowBlur = 8;
           ctx.shadowOffsetY = 3;
           ctx.fillStyle = '#1e293b';
-          ctx.strokeStyle = fSim.isPaused ? '#38bdf8' : '#0f172a';
-          ctx.lineWidth = fSim.isPaused ? 2.4 : 1.8;
+          ctx.strokeStyle = fSim.isPaused || isDraggingBob ? '#38bdf8' : '#0f172a';
+          ctx.lineWidth = fSim.isPaused || isDraggingBob ? 2.4 : 1.8;
           ctx.beginPath();
           ctx.arc(bx, by, 19, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
           ctx.restore();
 
-          if (fSim.isPaused) {
-            handlesHit.push({ kind: 'pendulum-bob', x: bx, y: by, r: 28 });
-          }
+          // Always allow grabbing the pendulum bob to displace it from equilibrium!
+          handlesHit.push({ kind: 'pendulum-bob', x: bx, y: by, r: 30 });
 
           const wm_phys = 78;
           const VSCALE = 1.45;
@@ -17181,6 +17740,8 @@ export default function App() {
           const tm_vis = tm_phys * VSCALE;
           const wa = Math.PI / 2;
           const ta = Math.atan2(PY - by, PX - bx);
+          const B_N = 10;
+          const T_N = (tm_phys / wm_phys) * B_N;
 
           // Step-by-step Analysis of T or B when paused
           const axLen = 110;
@@ -17240,7 +17801,16 @@ export default function App() {
               );
             }
             if (curStep >= 4) {
-              drawSimVector(bx, by, vecTipX, by, '#0e6efd', 3.2, getStepProg(4), 'Tx');
+              drawSimVector(
+                bx,
+                by,
+                vecTipX,
+                by,
+                '#0e6efd',
+                3.2,
+                getStepProg(4),
+                showNums ? `Tx = ${(T_N * Math.abs(s)).toFixed(1)} N` : 'Tx'
+              );
             }
             if (curStep >= 5) {
               drawSimLineOrAxis(
@@ -17256,7 +17826,16 @@ export default function App() {
               );
             }
             if (curStep >= 6) {
-              drawSimVector(bx, by, bx, vecTipY, '#0e6efd', 3.2, getStepProg(6), 'Ty');
+              drawSimVector(
+                bx,
+                by,
+                bx,
+                vecTipY,
+                '#0e6efd',
+                3.2,
+                getStepProg(6),
+                showNums ? `Ty = ${(T_N * c).toFixed(1)} N` : 'Ty'
+              );
             }
           } else if (fSim.isPaused && fSim.showForces && fSim.anMode === 'B') {
             const wTipX = bx;
@@ -17322,7 +17901,16 @@ export default function App() {
               );
             }
             if (curStep >= 4) {
-              drawSimVector(bx, by, pBxX, pBxY, '#dc3545', 3.2, getStepProg(4), 'Bx');
+              drawSimVector(
+                bx,
+                by,
+                pBxX,
+                pBxY,
+                '#dc3545',
+                3.2,
+                getStepProg(4),
+                showNums ? `Bx = ${(B_N * Math.abs(s)).toFixed(1)} N` : 'Bx'
+              );
             }
             if (curStep >= 5) {
               drawSimLineOrAxis(
@@ -17338,12 +17926,30 @@ export default function App() {
               );
             }
             if (curStep >= 6) {
-              drawSimVector(bx, by, pByX, pByY, '#dc3545', 3.2, getStepProg(6), 'By');
+              drawSimVector(
+                bx,
+                by,
+                pByX,
+                pByY,
+                '#dc3545',
+                3.2,
+                getStepProg(6),
+                showNums ? `By = ${(B_N * c).toFixed(1)} N` : 'By'
+              );
             }
           }
 
           if (fSim.showForces) {
-            drawSimVector(bx, by, bx, by + wm_vis, '#dc3545', 3.6, 1, 'B');
+            drawSimVector(
+              bx,
+              by,
+              bx,
+              by + wm_vis,
+              '#dc3545',
+              3.6,
+              1,
+              showNums ? `B = ${B_N} N` : 'B'
+            );
             drawSimVector(
               bx,
               by,
@@ -17352,7 +17958,7 @@ export default function App() {
               '#0e6efd',
               3.6,
               1,
-              'T'
+              showNums ? `T = ${T_N.toFixed(1)} N` : 'T'
             );
           }
 
@@ -17390,106 +17996,103 @@ export default function App() {
             drawSimVector(bx, by, bx + sx, by + sy, '#27a69a', 3.8, 1, 'ΣF');
           }
 
-          // On-Canvas Control Bar below Pendulum swing
-          const barY = Math.min(h - 74, PY + L + wm_vis + 28);
-          let curBx = Math.max(16, PX - 190);
-          drawPillButton(
-            fSim.isPaused ? 'Συνέχεια' : 'Παύση',
-            'toggle-pause',
-            curBx,
-            barY,
-            82,
-            30,
-            fSim.isPaused ? '#dc3545' : '#0d6efd',
-            '#fff'
-          );
-          curBx += 88;
-          if (!fSim.isPaused) {
+          // Discreet On-Canvas Control Bar below Pendulum swing
+          const barY = Math.min(h - 56, PY + L + (fSim.showForces ? wm_vis + 24 : 46));
+          let curBx = Math.max(16, PX - 135);
+          curBx +=
             drawPillButton(
-              'Τροχιά',
-              'toggle-trajectory',
+              fSim.isPaused ? 'Συνέχεια' : 'Παύση',
+              'toggle-pause',
               curBx,
               barY,
-              70,
-              30,
-              fSim.showTrajectory ? '#e2e8f0' : '#334155',
-              fSim.showTrajectory ? '#0f172a' : '#fff'
-            );
-            curBx += 76;
-          }
-          drawPillButton(
-            'Δυνάμεις',
-            'toggle-forces',
-            curBx,
-            barY,
-            82,
-            30,
-            fSim.showForces ? '#dc3545' : '#334155',
-            '#fff'
-          );
-          curBx += 88;
-          if (fSim.showForces) {
-            drawPillButton(
-              'Συνισταμένη',
-              'toggle-resultant',
-              curBx,
-              barY,
-              102,
-              30,
-              fSim.showResultant ? '#27a69a' : '#334155',
+              64,
+              21,
+              fSim.isPaused ? '#dc3545' : '#0d6efd',
               '#fff'
-            );
-            curBx += 108;
-            if (fSim.isPaused) {
+            ) + 5;
+          if (!fSim.isPaused) {
+            curBx +=
+              drawPillButton(
+                'Τροχιά',
+                'toggle-trajectory',
+                curBx,
+                barY,
+                54,
+                21,
+                fSim.showTrajectory ? '#0284c7' : '#334155',
+                '#fff'
+              ) + 5;
+          }
+          curBx +=
+            drawPillButton(
+              'Δυνάμεις',
+              'toggle-forces',
+              curBx,
+              barY,
+              64,
+              21,
+              fSim.showForces ? '#dc3545' : '#334155',
+              '#fff'
+            ) + 5;
+          if (fSim.showForces) {
+            curBx +=
+              drawPillButton(
+                'Συνισταμένη',
+                'toggle-resultant',
+                curBx,
+                barY,
+                76,
+                21,
+                fSim.showResultant ? '#0d9488' : '#334155',
+                '#fff'
+              ) + 5;
+            curBx +=
               drawPillButton(
                 'Ανάλυση Τ',
                 'start-an-T',
                 curBx,
                 barY,
-                88,
-                30,
-                fSim.anMode === 'T' ? '#b2ff59' : '#334155',
-                fSim.anMode === 'T' ? '#0f172a' : '#fff',
-                fSim.anMode === 'T' ? '#76ff03' : undefined
-              );
-              curBx += 94;
+                68,
+                21,
+                fSim.anMode === 'T' ? '#16a34a' : '#334155',
+                '#fff'
+              ) + 5;
+            curBx +=
               drawPillButton(
                 'Ανάλυση B',
                 'start-an-B',
                 curBx,
                 barY,
-                88,
-                30,
-                fSim.anMode === 'B' ? '#b2ff59' : '#334155',
-                fSim.anMode === 'B' ? '#0f172a' : '#fff',
-                fSim.anMode === 'B' ? '#76ff03' : undefined
-              );
-            }
+                68,
+                21,
+                fSim.anMode === 'B' ? '#16a34a' : '#334155',
+                '#fff'
+              ) + 5;
           }
           if (fSim.isPaused && fSim.showForces && (fSim.anMode === 'T' || fSim.anMode === 'B')) {
-            const navY = barY + 36;
-            drawPillButton(
+            const navY = barY + 26;
+            const wPrev = drawPillButton(
               '◀',
               'prev-step',
-              PX - 44,
+              PX - 28,
               navY,
-              40,
-              30,
-              '#b2ff59',
-              '#0f172a',
-              '#76ff03',
+              24,
+              21,
+              '#16a34a',
+              '#fff',
+              undefined,
               curStep <= 0 || curAnim !== null
             );
             drawPillButton(
               '▶',
               'next-step',
-              PX + 4,
+              PX - 28 + wPrev + 5,
               navY,
-              40,
-              30,
-              '#b2ff59',
-              '#0f172a',
-              '#76ff03',
+              24,
+              21,
+              '#16a34a',
+              '#fff',
+              undefined,
               curStep >= 6 || curAnim !== null
             );
           }
@@ -17497,8 +18100,8 @@ export default function App() {
 
         // ------------------------------------------------------------------
         // SELECTED FREE VECTORS (•──> or ──>):
-        // Always show a draggable 360° tip ring, live F (N) & θ (°) badge,
-        // and 1-tap On-Canvas "📐 Ανάλυση F" & "➕ Σύνθεση F₁+F₂" buttons!
+        // Always show a draggable 360° tip ring and discreet On-Canvas
+        // "Ανάλυση" & "+ Σύνθεση" micro-pills!
         // ------------------------------------------------------------------
         const uncoveredFreeVectors = selectedFreeVectors.filter(
           (vec) =>
@@ -17517,18 +18120,18 @@ export default function App() {
             const deg = Math.round((Math.atan2(vy, vx) * 180) / Math.PI);
             const col = vec.color || '#dc2626';
 
-            // Glowing draggable ring at tip '>' for 360° resize & rotation
+            // Discreet draggable ring at tip '>' for 360° resize & rotation
             ctx.save();
-            ctx.fillStyle = 'rgba(37, 99, 235, 0.20)';
+            ctx.fillStyle = 'rgba(37, 99, 235, 0.16)';
             ctx.strokeStyle = col;
-            ctx.lineWidth = 2.0;
+            ctx.lineWidth = 1.6;
             ctx.beginPath();
-            ctx.arc(tx, ty, 9.5, 0, Math.PI * 2);
+            ctx.arc(tx, ty, 7.5, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
             ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.arc(tx, ty, 3.2, 0, Math.PI * 2);
+            ctx.arc(tx, ty, 2.5, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
 
@@ -17540,13 +18143,15 @@ export default function App() {
               r: 24,
             });
 
-            drawHaloLabel(
-              `F = ${fMag.toFixed(1)} N  (${deg}°)`,
-              (ox + tx) / 2,
-              Math.min(oy, ty) - 18,
-              col,
-              'bold 13px system-ui, -apple-system, sans-serif'
-            );
+            if (showNums) {
+              drawHaloLabel(
+                `F = ${fMag.toFixed(1)} N (${deg}°)`,
+                (ox + tx) / 2,
+                Math.min(oy, ty) - 16,
+                col,
+                'bold 12px system-ui, -apple-system, sans-serif'
+              );
+            }
           }
 
           if (uncoveredFreeVectors.length === 1) {
@@ -17554,25 +18159,25 @@ export default function App() {
             const ox = v0.points[0].x;
             const oy = v0.points[0].y;
             const ty = v0.points[v0.points.length - 1].y;
-            const barY = Math.min(h - 46, Math.max(oy, ty) + 28);
-            const bx0 = Math.max(16, Math.min(w - 255, ox - 10));
-            drawPillButton(
-              '📐 Ανάλυση F',
+            const barY = Math.min(h - 36, Math.max(oy, ty) + 22);
+            const bx0 = Math.max(16, Math.min(w - 200, ox - 6));
+            const wAn = drawPillButton(
+              'Ανάλυση F',
               `quick-create-analysis:${v0.id}`,
               bx0,
               barY,
-              104,
-              30,
-              '#43a047',
+              74,
+              21,
+              '#16a34a',
               '#fff'
             );
             drawPillButton(
-              '➕ Σύνθεση F₁+F₂',
+              '+ Σύνθεση',
               `quick-create-synthesis:${v0.id}`,
-              bx0 + 112,
+              bx0 + wAn + 6,
               barY,
-              130,
-              30,
+              78,
+              21,
               '#2563eb',
               '#fff'
             );
@@ -17586,14 +18191,14 @@ export default function App() {
               v2.points[v2.points.length - 1].y
             );
             const minX = Math.min(v1.points[0].x, v2.points[0].x);
-            const barY = Math.min(h - 46, maxY + 28);
+            const barY = Math.min(h - 36, maxY + 22);
             drawPillButton(
-              '➕ Σύνθεση F₁+F₂ (Ένωση Αρχών)',
+              '+ Σύνθεση F₁+F₂',
               `quick-pair-synthesis:${v1.id}:${v2.id}`,
-              Math.max(16, Math.min(w - 220, minX)),
+              Math.max(16, Math.min(w - 160, minX)),
               barY,
-              204,
-              32,
+              110,
+              21,
               '#2563eb',
               '#fff'
             );
@@ -23157,7 +23762,27 @@ export default function App() {
 
     // 0-spring. Interactive Spring Simulation Dragging (Symmetric Blue Amplitude Handles, Draggable Graph Cards, or Mass Pulling):
     if (draggingForceHandleRef.current) {
+      const finishedForceDrag = draggingForceHandleRef.current;
       draggingForceHandleRef.current = null;
+      if (finishedForceDrag.kind === 'pendulum-bob') {
+        const fSim = (activePage.forceSims || []).find((f) => f.id === finishedForceDrag.simId);
+        const pState = pendulumPhysRef.current[finishedForceDrag.simId];
+        if (fSim && pState && Math.abs(pState.ang) > 0.03 && (!fSim.anMode || fSim.anMode === 'none')) {
+          pState.av = 0;
+          pState.lastTime = performance.now();
+          updateActivePage(
+            (p) => ({
+              ...p,
+              forceSims: (p.forceSims || []).map((f) =>
+                f.id === fSim.id
+                  ? { ...f, isPaused: false, angleDeg: Math.round((pState.ang * 180) / Math.PI) }
+                  : f
+              ),
+            }),
+            false
+          );
+        }
+      }
       renderStaticSceneRef.current();
       return;
     }
@@ -25320,7 +25945,10 @@ export default function App() {
             | 'mass-to-spring'
             | 'weight-to-weight'
             | 'pointer-to-spring'
-            | 'vector-to-vector';
+            | 'vector-to-vector'
+            | 'rod-to-support'
+            | 'bob-to-rod'
+            | 'block-to-incline';
           springStrokeId: string;
           supportStrokeId?: string;
           fixedEnd?: 'start' | 'end';
@@ -25636,6 +26264,143 @@ export default function App() {
                     dist: d,
                   };
                 }
+              } else if (
+                (draggedSt.shapeType === 'circle' ||
+                  draggedSt.shapeType === 'ellipse' ||
+                  draggedSt.shapeType === 'sphere') &&
+                other.shapeType === 'line' &&
+                other.points.length >= 2
+              ) {
+                // Sphere/Circle Bob dragged near the bottom end of a hanging/angled string -> Pendulum!
+                const p0 = other.points[0];
+                const p1 = other.points[other.points.length - 1];
+                const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+                const fixedSide = other.rodSupport?.fixedEnd || (p0.y <= p1.y ? 'start' : 'end');
+                const topPt = fixedSide === 'start' ? p0 : p1;
+                const botPt = fixedSide === 'start' ? p1 : p0;
+                if (len >= 50 && botPt.y > topPt.y + 25) {
+                  const dBob = Math.hypot(candCx - botPt.x, candCy - botPt.y);
+                  if (dBob <= 58 && (!matchedPhysicsMagnet || dBob < matchedPhysicsMagnet.dist)) {
+                    matchedPhysicsMagnet = {
+                      kind: 'bob-to-rod',
+                      springStrokeId: other.id,
+                      massStrokeId: draggedSt.id,
+                      targetX: botPt.x,
+                      targetY: botPt.y,
+                      snapDx: botPt.x - candCx,
+                      snapDy: botPt.y - candCy,
+                      dist: dBob,
+                    };
+                  }
+                }
+              } else if (
+                (other.shapeType === 'incline-wedge' ||
+                  other.shapeType === 'inclined-plane' ||
+                  other.shapeType === 'triangle') &&
+                other.points.length >= 3
+              ) {
+                // Block dragged onto an inclined plane slope -> Inclined Plane Sim!
+                const verts = other.points.slice(0, 3);
+                const sortedByY = [...verts].sort((a, b) => a.y - b.y);
+                const pPeak = sortedByY[0];
+                const baseTwo = [sortedByY[1], sortedByY[2]];
+                const pStart =
+                  Math.abs(baseTwo[0].x - pPeak.x) > Math.abs(baseTwo[1].x - pPeak.x)
+                    ? baseTwo[0]
+                    : baseTwo[1];
+                const midSlopeX = (pStart.x + pPeak.x) / 2;
+                const midSlopeY = (pStart.y + pPeak.y) / 2;
+                const dInc = Math.hypot(candCx - midSlopeX, candCy - midSlopeY);
+                if (dInc <= 80 && (!matchedPhysicsMagnet || dInc < matchedPhysicsMagnet.dist)) {
+                  matchedPhysicsMagnet = {
+                    kind: 'block-to-incline',
+                    springStrokeId: other.id,
+                    massStrokeId: draggedSt.id,
+                    targetX: midSlopeX,
+                    targetY: midSlopeY,
+                    snapDx: midSlopeX - candCx,
+                    snapDy: midSlopeY - candCy,
+                    dist: dInc,
+                  };
+                }
+              }
+            }
+          } else if (
+            draggedSt &&
+            draggedSt.shapeType === 'line' &&
+            draggedSt.points.length >= 2 &&
+            !(draggedSt.groupId && draggedSt.groupId.startsWith('axes-'))
+          ) {
+            const p0 = draggedSt.points[0];
+            const p1 = draggedSt.points[draggedSt.points.length - 1];
+            const cand0 = { x: p0.x + rawDx, y: p0.y + rawDy };
+            const cand1 = { x: p1.x + rawDx, y: p1.y + rawDy };
+            const lineLen = Math.hypot(cand1.x - cand0.x, cand1.y - cand0.y);
+            if (lineLen >= 50 && Math.abs(cand1.y - cand0.y) > 25) {
+              const topSide: 'start' | 'end' = cand0.y <= cand1.y ? 'start' : 'end';
+              const topPt = topSide === 'start' ? cand0 : cand1;
+              const botPt = topSide === 'start' ? cand1 : cand0;
+              for (const other of activePage.strokes) {
+                if (other.id === draggedSt.id || hiddenOrLockedLayerIds.has(other.layerId)) {
+                  continue;
+                }
+                if (other.shapeType === 'line' && other.points.length >= 2) {
+                  const spA = other.points[0];
+                  const spB = other.points[other.points.length - 1];
+                  const abx = spB.x - spA.x;
+                  const aby = spB.y - spA.y;
+                  const lenSq = abx * abx + aby * aby;
+                  if (lenSq >= 36 * 36 && Math.abs(abx) > Math.abs(aby) * 1.35) {
+                    const t = Math.max(
+                      0.03,
+                      Math.min(
+                        0.97,
+                        ((topPt.x - spA.x) * abx + (topPt.y - spA.y) * aby) / lenSq
+                      )
+                    );
+                    const projX = spA.x + t * abx;
+                    const projY = spA.y + t * aby;
+                    const dSup = Math.hypot(topPt.x - projX, topPt.y - projY);
+                    if (
+                      dSup <= 38 &&
+                      draggedSt.rodSupport?.supportStrokeId !== other.id &&
+                      (!matchedPhysicsMagnet || dSup < matchedPhysicsMagnet.dist)
+                    ) {
+                      matchedPhysicsMagnet = {
+                        kind: 'rod-to-support',
+                        springStrokeId: draggedSt.id,
+                        supportStrokeId: other.id,
+                        fixedEnd: topSide,
+                        targetX: projX,
+                        targetY: projY,
+                        snapDx: projX - topPt.x,
+                        snapDy: projY - topPt.y,
+                        dist: dSup,
+                      };
+                    }
+                  }
+                } else if (
+                  other.shapeType === 'circle' ||
+                  other.shapeType === 'ellipse' ||
+                  other.shapeType === 'sphere'
+                ) {
+                  const ob = getStrokeBounds(other);
+                  const ocx = (ob.minX + ob.maxX) / 2;
+                  const ocy = (ob.minY + ob.maxY) / 2;
+                  const dBob = Math.hypot(botPt.x - ocx, botPt.y - ocy);
+                  if (dBob <= 52 && (!matchedPhysicsMagnet || dBob < matchedPhysicsMagnet.dist)) {
+                    matchedPhysicsMagnet = {
+                      kind: 'bob-to-rod',
+                      springStrokeId: draggedSt.id,
+                      massStrokeId: other.id,
+                      targetX: ocx,
+                      targetY: ocy,
+                      snapDx: ocx - botPt.x,
+                      snapDy: ocy - botPt.y,
+                      dist: dBob,
+                    };
+                  }
+                }
               }
             }
           } else if (
@@ -25867,12 +26632,15 @@ export default function App() {
               progress: 0,
             });
 
-            // 180ms Ultra-Fast Magnet for Hooks & Force Vector Origins (Pointer-to-Spring, Vector-to-Vector, Weight-to-Weight, Mass-to-Spring)
+            // 180ms Ultra-Fast Magnet for Hooks & Force/Pendulum/Incline Assembly
             const FAST_MAGNET_MS =
               physObj.kind === 'pointer-to-spring' ||
               physObj.kind === 'vector-to-vector' ||
               physObj.kind === 'weight-to-weight' ||
-              physObj.kind === 'mass-to-spring'
+              physObj.kind === 'mass-to-spring' ||
+              physObj.kind === 'rod-to-support' ||
+              physObj.kind === 'bob-to-rod' ||
+              physObj.kind === 'block-to-incline'
                 ? 180
                 : 380;
             const stepPhysicsMagnet = (now: number) => {
@@ -25918,6 +26686,17 @@ export default function App() {
                   attachPointerToSpring(physObj.springStrokeId, physObj.pointerStrokeId);
                 } else if (physObj.kind === 'vector-to-vector' && physObj.pointerStrokeId) {
                   attachVectorsForSynthesis(physObj.springStrokeId, physObj.pointerStrokeId);
+                } else if (physObj.kind === 'rod-to-support' && physObj.supportStrokeId && physObj.fixedEnd) {
+                  snapAndAttachRodToSupport(
+                    physObj.springStrokeId,
+                    physObj.supportStrokeId,
+                    physObj.fixedEnd,
+                    { x: physObj.targetX, y: physObj.targetY }
+                  );
+                } else if (physObj.kind === 'bob-to-rod' && physObj.massStrokeId) {
+                  attachBobToRodForPendulum(physObj.springStrokeId, physObj.massStrokeId);
+                } else if (physObj.kind === 'block-to-incline' && physObj.massStrokeId) {
+                  attachBlockToInclineForSim(physObj.springStrokeId, physObj.massStrokeId);
                 }
                 return;
               }
@@ -26948,7 +27727,27 @@ export default function App() {
     isDrawingRef.current = false;
 
     if (draggingForceHandleRef.current) {
+      const finishedForceDrag = draggingForceHandleRef.current;
       draggingForceHandleRef.current = null;
+      if (finishedForceDrag.kind === 'pendulum-bob') {
+        const fSim = (activePage.forceSims || []).find((f) => f.id === finishedForceDrag.simId);
+        const pState = pendulumPhysRef.current[finishedForceDrag.simId];
+        if (fSim && pState && Math.abs(pState.ang) > 0.03 && (!fSim.anMode || fSim.anMode === 'none')) {
+          pState.av = 0;
+          pState.lastTime = performance.now();
+          updateActivePage(
+            (p) => ({
+              ...p,
+              forceSims: (p.forceSims || []).map((f) =>
+                f.id === fSim.id
+                  ? { ...f, isPaused: false, angleDeg: Math.round((pState.ang * 180) / Math.PI) }
+                  : f
+              ),
+            }),
+            false
+          );
+        }
+      }
       renderStaticSceneRef.current();
       return;
     }
@@ -27123,6 +27922,32 @@ export default function App() {
           pendingPhys.pointerStrokeId
         ) {
           attachPointerToSpring(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
+        } else if (
+          pendingPhys.kind === 'vector-to-vector' &&
+          pendingPhys.pointerStrokeId
+        ) {
+          attachVectorsForSynthesis(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
+        } else if (
+          pendingPhys.kind === 'rod-to-support' &&
+          pendingPhys.supportStrokeId &&
+          pendingPhys.fixedEnd
+        ) {
+          snapAndAttachRodToSupport(
+            pendingPhys.springStrokeId,
+            pendingPhys.supportStrokeId,
+            pendingPhys.fixedEnd,
+            { x: pendingPhys.targetX, y: pendingPhys.targetY }
+          );
+        } else if (
+          pendingPhys.kind === 'bob-to-rod' &&
+          pendingPhys.massStrokeId
+        ) {
+          attachBobToRodForPendulum(pendingPhys.springStrokeId, pendingPhys.massStrokeId);
+        } else if (
+          pendingPhys.kind === 'block-to-incline' &&
+          pendingPhys.massStrokeId
+        ) {
+          attachBlockToInclineForSim(pendingPhys.springStrokeId, pendingPhys.massStrokeId);
         }
         return;
       }
@@ -27917,8 +28742,10 @@ export default function App() {
       setActiveNodeStrokeId(isShapeWithoutNodes(newStroke) ? null : newStroke.id);
       setActiveTool('lasso');
       setShowToolSubBar(true);
+    }
 
-      // If a hooked-weight was drawn/tapped directly beneath a spring's free end or another weight's bottom hook, snap & attach immediately!
+    // Instant Magnetic Physics Assembly when drawing with Pen/Pencil (hold-to-snap) or Shape Tool:
+    if (isShape || newStroke.arrowEnd) {
       if (newStroke.shapeType === 'hooked-weight') {
         const nb = getStrokeBounds(newStroke);
         const topHookX = (nb.minX + nb.maxX) / 2;
@@ -27980,7 +28807,132 @@ export default function App() {
           window.setTimeout(() => attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id), 10);
         }
       } else if (
-        (newStroke.shapeType === 'spring-pointer' || newStroke.shapeType === 'arrow') &&
+        newStroke.shapeType === 'line' &&
+        !newStroke.arrowEnd &&
+        !newStroke.arrowStart &&
+        newStroke.points.length >= 2 &&
+        Math.abs(newStroke.points[newStroke.points.length - 1].y - newStroke.points[0].y) >= 35
+      ) {
+        // String/Rod drawn starting or ending near a horizontal ceiling support line -> snap & attach!
+        const p0 = newStroke.points[0];
+        const p1 = newStroke.points[newStroke.points.length - 1];
+        const fixedEnd: 'start' | 'end' = p0.y <= p1.y ? 'start' : 'end';
+        const topPt = fixedEnd === 'start' ? p0 : p1;
+        let bestSup: { id: string; x: number; y: number; dist: number } | null = null;
+        for (const sup of activePage.strokes) {
+          if (
+            sup.id === newStroke.id ||
+            sup.shapeType !== 'line' ||
+            sup.arrowEnd ||
+            sup.points.length < 2
+          ) {
+            continue;
+          }
+          const sp0 = sup.points[0];
+          const sp1 = sup.points[sup.points.length - 1];
+          if (Math.abs(sp1.y - sp0.y) > 20 || Math.abs(sp1.x - sp0.x) < 35) continue;
+          const sdx = sp1.x - sp0.x;
+          const sdy = sp1.y - sp0.y;
+          const lenSq = sdx * sdx + sdy * sdy;
+          if (lenSq < 1) continue;
+          const t = Math.max(0.05, Math.min(0.95, ((topPt.x - sp0.x) * sdx + (topPt.y - sp0.y) * sdy) / lenSq));
+          const projX = sp0.x + t * sdx;
+          const projY = sp0.y + t * sdy;
+          const d = Math.hypot(topPt.x - projX, topPt.y - projY);
+          if (d <= 44 && (!bestSup || d < bestSup.dist)) {
+            bestSup = { id: sup.id, x: projX, y: projY, dist: d };
+          }
+        }
+        if (bestSup) {
+          const hit = bestSup;
+          window.setTimeout(
+            () => snapAndAttachRodToSupport(newStroke.id, hit.id, fixedEnd, { x: hit.x, y: hit.y }),
+            10
+          );
+        }
+      } else if (
+        newStroke.shapeType === 'circle' ||
+        newStroke.shapeType === 'ellipse' ||
+        newStroke.shapeType === 'sphere'
+      ) {
+        // Bob/Sphere drawn at the bottom end of a vertical/angled string -> auto-assemble Pendulum!
+        const bb = getStrokeBounds(newStroke);
+        const cx = (bb.minX + bb.maxX) / 2;
+        const cy = (bb.minY + bb.maxY) / 2;
+        const topY = bb.minY;
+        let matchedRodId: string | null = null;
+        let bestDist = 56;
+        for (const other of activePage.strokes) {
+          if (
+            other.id === newStroke.id ||
+            other.shapeType !== 'line' ||
+            other.arrowEnd ||
+            other.points.length < 2
+          ) {
+            continue;
+          }
+          const rp0 = other.points[0];
+          const rp1 = other.points[other.points.length - 1];
+          if (Math.abs(rp1.y - rp0.y) < 35) continue;
+          const botPt = rp0.y >= rp1.y ? rp0 : rp1;
+          const dCenter = Math.hypot(cx - botPt.x, cy - botPt.y);
+          const dTop = Math.hypot(cx - botPt.x, topY - botPt.y);
+          const d = Math.min(dCenter, dTop);
+          if (d < bestDist) {
+            bestDist = d;
+            matchedRodId = other.id;
+          }
+        }
+        if (matchedRodId) {
+          const rid = matchedRodId;
+          window.setTimeout(() => attachBobToRodForPendulum(rid, newStroke.id), 10);
+        }
+      } else if (
+        newStroke.shapeType === 'rectangle' ||
+        newStroke.shapeType === 'parallelogram' ||
+        newStroke.shapeType === 'cuboid'
+      ) {
+        // Block drawn directly on/near an Inclined Plane -> auto-assemble Inclined Plane Sim!
+        const bb = getStrokeBounds(newStroke);
+        const cx = (bb.minX + bb.maxX) / 2;
+        const cy = (bb.minY + bb.maxY) / 2;
+        let matchedInclineId: string | null = null;
+        let bestDist = 68;
+        for (const other of activePage.strokes) {
+          if (
+            other.id === newStroke.id ||
+            (other.shapeType !== 'incline-wedge' &&
+              other.shapeType !== 'inclined-plane' &&
+              other.shapeType !== 'triangle')
+          ) {
+            continue;
+          }
+          const ib = getStrokeBounds(other);
+          const ax = ib.maxX;
+          const ay = ib.minY;
+          const bx = ib.minX;
+          const by = ib.maxY;
+          const sdx = bx - ax;
+          const sdy = by - ay;
+          const lenSq = sdx * sdx + sdy * sdy;
+          if (lenSq < 100) continue;
+          const t = Math.max(0.15, Math.min(0.85, ((cx - ax) * sdx + (cy - ay) * sdy) / lenSq));
+          const projX = ax + t * sdx;
+          const projY = ay + t * sdy;
+          const d = Math.hypot(cx - projX, cy - projY);
+          if (d < bestDist) {
+            bestDist = d;
+            matchedInclineId = other.id;
+          }
+        }
+        if (matchedInclineId) {
+          const iid = matchedInclineId;
+          window.setTimeout(() => attachBlockToInclineForSim(iid, newStroke.id), 10);
+        }
+      } else if (
+        (newStroke.shapeType === 'spring-pointer' ||
+          newStroke.shapeType === 'arrow' ||
+          newStroke.arrowEnd) &&
         newStroke.points.length >= 2
       ) {
         const tailX = newStroke.points[0].x;
@@ -28026,7 +28978,9 @@ export default function App() {
           for (const other of activePage.strokes) {
             if (
               other.id === newStroke.id ||
-              (other.shapeType !== 'spring-pointer' && other.shapeType !== 'arrow') ||
+              (other.shapeType !== 'spring-pointer' &&
+                other.shapeType !== 'arrow' &&
+                !other.arrowEnd) ||
               other.attachedToSpringId ||
               other.points.length < 2
             ) {
@@ -33531,7 +34485,24 @@ export default function App() {
                       registerOrActivateSpringSimFromLasso();
                       return;
                     }
+                    const hasCircuitCompSelected = activePage.strokes.some(
+                      (s) =>
+                        selectedStrokeIds.includes(s.id) &&
+                        (s.shapeType === 'battery' ||
+                          s.shapeType === 'voltage-source' ||
+                          s.shapeType === 'bulb' ||
+                          s.shapeType === 'bulb-symbol' ||
+                          s.shapeType === 'resistor' ||
+                          s.shapeType === 'switch' ||
+                          s.shapeType === 'fan')
+                    );
+                    if (!hasCircuitCompSelected && registerOrActivateForceSimFromLasso()) {
+                      return;
+                    }
                     const ok = registerOrActivateSimFromLasso();
+                    if (!ok && registerOrActivateForceSimFromLasso()) {
+                      return;
+                    }
                     setSelectedStrokeIds([]);
                     setSelectedImageId(null);
                     setSelectedImageIds([]);
@@ -36560,11 +37531,8 @@ export default function App() {
                     onClick={() => {
                       const nextCat = simActiveCategory === 'forces' ? null : 'forces';
                       setSimActiveCategory(nextCat);
-                      if (nextCat === 'forces') {
-                        const existingValid = getValidForceSims(activePage);
-                        if (existingValid.length === 0) {
-                          createOrActivateForceSim(forceSimSubTab, false);
-                        }
+                      if (nextCat === 'forces' && selectedStrokeIds.length > 0) {
+                        registerOrActivateForceSimFromLasso();
                       }
                     }}
                     className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
@@ -37857,6 +38825,19 @@ export default function App() {
 
                         {/* 2. Active Force Simulations List (δυν01, δυν02, ...) */}
                         <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
+                          {selectedStrokeIds.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                registerOrActivateForceSimFromLasso();
+                              }}
+                              className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                              title="Δηλώνει τα επιλεγμένα με Λάσο σχήματα (διάνυσμα, 2 διανύσματα, εκκρεμές ή κεκλιμένο) ως προσομοίωση"
+                            >
+                              <span>➕ Προσθήκη από Λάσο ({getNextDefaultForceSimName(activePage)})</span>
+                            </button>
+                          )}
+
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                               Ενεργή Προσομοίωση:
@@ -37865,7 +38846,7 @@ export default function App() {
                               type="button"
                               onClick={() => createOrActivateForceSim(curMode, true)}
                               className="px-2 py-0.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-extrabold cursor-pointer transition"
-                              title="Δημιουργία νέας προσομοίωσης δυνάμεων στη σελίδα"
+                              title="Δημιουργία νέου έτοιμου προτύπου προσομοίωσης στη σελίδα"
                             >
                               + Νέο
                             </button>
@@ -37914,16 +38895,8 @@ export default function App() {
                                           const rem = (p.forceSims || []).filter(
                                             (x) => x.id !== sim.id
                                           );
-                                          const dropIds = new Set(
-                                            [
-                                              sim.primaryStrokeId,
-                                              sim.secondaryStrokeId,
-                                              sim.supportStrokeId,
-                                            ].filter(Boolean) as string[]
-                                          );
                                           return {
                                             ...p,
-                                            strokes: p.strokes.filter((st) => !dropIds.has(st.id)),
                                             forceSims: rem,
                                             activeForceSimId:
                                               p.activeForceSimId === sim.id
@@ -37937,7 +38910,7 @@ export default function App() {
                                           ? 'hover:bg-sky-800 text-sky-100 hover:text-white'
                                           : 'hover:bg-rose-50 text-slate-400 hover:text-rose-600'
                                       }`}
-                                      title={`Διαγραφή "${sim.name}"`}
+                                      title={`Αφαίρεση προσομοίωσης "${sim.name}" (τα σχήματα παραμένουν στη σελίδα)`}
                                     >
                                       ✕
                                     </button>
@@ -37946,9 +38919,25 @@ export default function App() {
                               })}
                             </div>
                           ) : (
-                            <p className="text-[10.5px] text-slate-500 text-center py-1">
-                              Πάτησε μια από τις 4 ενότητες παραπάνω ή σχεδίασε διάνυσμα / κεκλιμένο στη σελίδα!
+                            <p className="text-[10.5px] text-slate-500 text-center py-1 leading-snug">
+                              Σχεδίασε με μολύβι/σχήματα (1 διάνυσμα, 2 διανύσματα, ταβάνι+νήμα+σφαιρίδιο ή κεκλιμένο+σώμα) και πάτα <b>Sim</b>!
                             </p>
+                          )}
+
+                          {activeForce && (
+                            <div className="pt-1.5 border-t border-slate-200/80">
+                              <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                <span>🔢 Αριθμητικές Τιμές (N, °)</span>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(activeForce.showNumericValues)}
+                                  onChange={() =>
+                                    handleForceSimAction(activeForce, 'toggle-numeric-values')
+                                  }
+                                  className="accent-sky-600 w-4 h-4 cursor-pointer"
+                                />
+                              </label>
+                            </div>
                           )}
                         </div>
 

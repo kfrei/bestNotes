@@ -103,6 +103,10 @@ export interface StrokeObject {
     supportStrokeId: string;
     fixedEnd: 'start' | 'end';
   };
+  rodSupport?: {
+    supportStrokeId: string;
+    fixedEnd: 'start' | 'end';
+  };
   attachedToWeightId?: string; // ID of the parent weight directly above this weight in a vertical hook-to-hook chain
   attachedToSpringId?: string; // ID of the spring stroke ('spring') whose free end this pointer needle ('spring-pointer' or 'arrow') is attached to
 }
@@ -261,6 +265,7 @@ export interface ForceSimConfig {
   isPaused?: boolean; // default false (swinging)
   showTrajectory?: boolean; // default false
   // Shared display / step-by-step analysis state
+  showNumericValues?: boolean; // default false: hide numeric N / deg values on canvas unless enabled in Simulation Dashboard
   showForces?: boolean; // for incline (B, N) & pendulum (B, T)
   showResultant?: boolean; // for synthesis (ΣF) & pendulum (ΣF)
   anMode?: 'none' | 'F' | 'B' | 'T'; // active analysis breakdown mode
