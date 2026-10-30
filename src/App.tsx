@@ -1564,7 +1564,7 @@ export default function App() {
   const [cropPolygonPts, setCropPolygonPts] = useState<{ x: number; y: number }[]>([]);
   const edgeMapRef = useRef<{ id: string; map: Float32Array; w: number; h: number } | null>(null);
 
-  // Ruler (centered on A4 page: x = 460, y = 420)
+  // Ruler (vertical by default: x = 460, y = 540, angle = 90°)
   const [rulerState, setRulerState] = useState<{
     visible: boolean;
     x: number;
@@ -1574,9 +1574,9 @@ export default function App() {
   }>({
     visible: false,
     x: 460,
-    y: 420,
-    angle: 0,
-    showMm: false,
+    y: 540,
+    angle: 90,
+    showMm: true,
   });
   const rulerDragRef = useRef<{
     mode: 'move' | 'rotate';
@@ -29936,7 +29936,14 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => setRulerState((r) => ({ ...r, visible: !r.visible }))}
+                onClick={() =>
+                  setRulerState((r) => ({
+                    ...r,
+                    visible: !r.visible,
+                    angle: !r.visible ? 90 : r.angle,
+                    showMm: !r.visible ? true : r.showMm,
+                  }))
+                }
                 className={`p-2 rounded-full transition cursor-pointer ${
                   rulerState.visible ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'
                 }`}
