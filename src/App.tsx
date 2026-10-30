@@ -725,7 +725,7 @@ export default function App() {
           strokeColor?: string;
           fillColor?: string;
           fillStyle?: FillStyleType;
-          fillTransparency?: 25 | 45 | 90;
+          fillTransparency?: number;
           strokeWidth?: number;
           widthSlots?: number[];
           activeWidthSlotIdx?: number;
@@ -1083,9 +1083,18 @@ export default function App() {
     });
   }, []);
   const [showColorPopover, setShowColorPopover] = useState<boolean>(false);
+  const [showFillTransPopover, setShowFillTransPopover] = useState<boolean>(false);
+  const [fillTransPopoverPos, setFillTransPopoverPos] = useState<{ top: number; left: number }>({
+    top: 88,
+    left: 240,
+  });
   const [fillColor, setFillColor] = useState<string>(() => initialSession?.fillColor || '#fef08a');
   const [fillStyle, setFillStyle] = useState<FillStyleType>(() => initialSession?.fillStyle || 'none');
-  const [fillTransparency, setFillTransparency] = useState<25 | 45 | 90>(() => initialSession?.fillTransparency || 90);
+  const [fillTransparency, setFillTransparency] = useState<number>(() =>
+    typeof initialSession?.fillTransparency === 'number'
+      ? Math.max(5, Math.min(95, Math.round(initialSession.fillTransparency / 5) * 5))
+      : 90
+  );
   const [strokeWidth, setStrokeWidth] = useState<number>(() =>
     typeof initialSession?.strokeWidth === 'number' ? initialSession.strokeWidth : 2.0
   );
@@ -3526,6 +3535,7 @@ export default function App() {
     if (
       !showWidthPopover &&
       !showColorPopover &&
+      !showFillTransPopover &&
       !showLayersPanel &&
       !showShapeLibraryPanel &&
       !showThumbnailsModal &&
@@ -3554,6 +3564,7 @@ export default function App() {
         const triggerType = triggerEl.getAttribute('data-popover-trigger');
         if (triggerType !== 'width') setShowWidthPopover(false);
         if (triggerType !== 'color') setShowColorPopover(false);
+        if (triggerType !== 'fill-trans') setShowFillTransPopover(false);
         if (triggerType !== 'layers') setShowLayersPanel(false);
         if (triggerType !== 'library') setShowShapeLibraryPanel(false);
         if (triggerType !== 'thumbnails') setShowThumbnailsModal(false);
@@ -3569,6 +3580,7 @@ export default function App() {
       // Clicked anywhere outside -> close all open popovers/modals while preserving the last selected option
       setShowWidthPopover(false);
       setShowColorPopover(false);
+      setShowFillTransPopover(false);
       setShowLayersPanel(false);
       setShowShapeLibraryPanel(false);
       setShowThumbnailsModal(false);
@@ -3584,6 +3596,7 @@ export default function App() {
       if (e.key === 'Escape') {
         setShowWidthPopover(false);
         setShowColorPopover(false);
+        setShowFillTransPopover(false);
         setShowLayersPanel(false);
         setShowShapeLibraryPanel(false);
         setShowThumbnailsModal(false);
@@ -3605,6 +3618,7 @@ export default function App() {
   }, [
     showWidthPopover,
     showColorPopover,
+    showFillTransPopover,
     showLayersPanel,
     showShapeLibraryPanel,
     showThumbnailsModal,
@@ -5168,11 +5182,7 @@ export default function App() {
       const shadeColor = s.color || s.fillColor || '#2563eb';
       const fillTrans3D = s.fillTransparency ?? 90;
       const alphaScale3D =
-        (fillTrans3D === 25 || fillTrans3D === 20
-          ? 0.75
-          : fillTrans3D === 45 || fillTrans3D === 50
-          ? 0.55
-          : 0.11) / 0.24;
+        Math.max(0.05, Math.min(0.95, (100 - fillTrans3D) / 100)) / 0.24;
 
       const traceEllipseBilerp = (
         uc: number,
@@ -5675,13 +5685,9 @@ export default function App() {
         ctx.globalAlpha =
           fillTrans === 0
             ? 0.94
-            : fillTrans === 25 || fillTrans === 20
-            ? 0.75
-            : fillTrans === 45 || fillTrans === 50
-            ? 0.55
-            : isStencilCustomFill
+            : isStencilCustomFill && s.fillTransparency === undefined
             ? 0.85
-            : 0.11;
+            : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
         ctx.fill();
         ctx.restore();
       }
@@ -29909,77 +29915,69 @@ export default function App() {
     ]
   );
 
-  // Cycle Fill Transparency: 25% -> 45% -> 90% (default: 90% very transparent)
-  const cycleFillTransparency = useCallback(() => {
-    const baseIds =
-      selectedStrokeIds.length > 0
-        ? selectedStrokeIds
-        : activeNodeStrokeId
-        ? [activeNodeStrokeId]
-        : (activeTool === 'shape' || activeTool === 'pen' || activeTool === 'pencil') &&
-          lastCreatedShapeIdsRef.current.length > 0
-        ? lastCreatedShapeIdsRef.current
-        : [];
-    const baseSet = new Set(baseIds);
-    const groupIds = new Set(
-      activePage.strokes
-        .filter((s) => baseSet.has(s.id) && s.groupId)
-        .map((s) => s.groupId as string)
-    );
-    const targetStrokes = activePage.strokes.filter(
-      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
-    );
+  // Apply Fill Transparency (5% to 95% in 5% steps, default: 90% very transparent)
+  const applyFillTransparencyToSelection = useCallback(
+    (rawNextTrans: number) => {
+      const nextTrans = Math.max(5, Math.min(95, Math.round(rawNextTrans / 5) * 5));
+      setFillTransparency(nextTrans);
 
-    const rawCurrent =
-      targetStrokes.length > 0
-        ? targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency
-        : fillTransparency;
-    const currentTrans: 25 | 45 | 90 =
-      rawCurrent === 20 || rawCurrent === 25
-        ? 25
-        : rawCurrent === 45 || rawCurrent === 50
-        ? 45
-        : 90;
-    const nextTrans: 25 | 45 | 90 = currentTrans === 25 ? 45 : currentTrans === 45 ? 90 : 25;
-    setFillTransparency(nextTrans);
+      const baseIds =
+        selectedStrokeIds.length > 0
+          ? selectedStrokeIds
+          : activeNodeStrokeId
+          ? [activeNodeStrokeId]
+          : (activeTool === 'shape' || activeTool === 'pen' || activeTool === 'pencil') &&
+            lastCreatedShapeIdsRef.current.length > 0
+          ? lastCreatedShapeIdsRef.current
+          : [];
+      const baseSet = new Set(baseIds);
+      const groupIds = new Set(
+        activePage.strokes
+          .filter((s) => baseSet.has(s.id) && s.groupId)
+          .map((s) => s.groupId as string)
+      );
+      const targetStrokes = activePage.strokes.filter(
+        (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+      );
 
-    if (targetStrokes.length > 0) {
-      updateActivePage((page) => ({
-        ...page,
-        strokes: page.strokes.map((s) => {
-          if (!(baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))) return s;
-          if (s.shapeType === 'fan') {
-            if (s.points.length === 2) return s;
-            return { ...s, fillStyle: 'solid', fillColor: '#cbd5e1', fillTransparency: 20 };
-          }
-          if (s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub') {
-            return {
-              ...s,
-              fillStyle: 'solid',
-              fillColor: s.color,
-              fillTransparency: 0,
-            };
-          }
-          if (s.isShape || isFreehandLoopClosed(s.points, true)) {
-            return {
-              ...s,
-              fillStyle: s.fillStyle && s.fillStyle !== 'none' ? s.fillStyle : 'solid',
-              fillColor: s.color,
-              fillTransparency: nextTrans,
-            };
-          }
-          return s;
-        }),
-      }));
-    }
-  }, [
-    activeTool,
-    selectedStrokeIds,
-    activeNodeStrokeId,
-    activePage.strokes,
-    fillTransparency,
-    updateActivePage,
-  ]);
+      if (targetStrokes.length > 0) {
+        updateActivePage((page) => ({
+          ...page,
+          strokes: page.strokes.map((s) => {
+            if (!(baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))) return s;
+            if (s.shapeType === 'fan') {
+              if (s.points.length === 2) return s;
+              return { ...s, fillStyle: 'solid', fillColor: '#cbd5e1', fillTransparency: 20 };
+            }
+            if (s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub') {
+              return {
+                ...s,
+                fillStyle: 'solid',
+                fillColor: s.color,
+                fillTransparency: 0,
+              };
+            }
+            if (s.isShape || isFreehandLoopClosed(s.points, true)) {
+              return {
+                ...s,
+                fillStyle: s.fillStyle && s.fillStyle !== 'none' ? s.fillStyle : 'solid',
+                fillColor: s.color,
+                fillTransparency: nextTrans,
+              };
+            }
+            return s;
+          }),
+        }));
+      }
+    },
+    [
+      activeTool,
+      selectedStrokeIds,
+      activeNodeStrokeId,
+      activePage.strokes,
+      updateActivePage,
+    ]
+  );
 
   // GLOBAL KEYBOARD SHORTCUTS (Works identically in both Greek [Ελληνικά] & English [Αγγλικά] keyboard layouts!)
   // P / Π -> Pencil/Pen ('pen')
@@ -33732,13 +33730,10 @@ export default function App() {
                                           <polyline
                                             key={st.id}
                                             fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
-                                            fillOpacity={
-                                              st.fillTransparency === 25 || st.fillTransparency === 20
-                                                ? 0.75
-                                                : st.fillTransparency === 45 || st.fillTransparency === 50
-                                                ? 0.55
-                                                : 0.11
-                                            }
+                                            fillOpacity={Math.max(
+                                              0.05,
+                                              Math.min(0.95, (100 - (st.fillTransparency ?? 90)) / 100)
+                                            )}
                                             stroke={st.color}
                                             strokeWidth={Math.max(3.5, st.width * 1.8)}
                                             strokeLinecap="round"
@@ -34875,13 +34870,9 @@ export default function App() {
                       ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
                       : fillStyle !== 'none';
                   const rawTrans =
-                    targetStrokes.find((s) => s.fillTransparency)?.fillTransparency ?? fillTransparency;
-                  const effectiveTrans: 25 | 45 | 90 =
-                    rawTrans === 20 || rawTrans === 25
-                      ? 25
-                      : rawTrans === 45 || rawTrans === 50
-                      ? 45
-                      : 90;
+                    targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency > 0)
+                      ?.fillTransparency ?? fillTransparency;
+                  const effectiveTrans = Math.max(5, Math.min(95, Math.round(rawTrans / 5) * 5));
                   const effectiveDashed =
                     styleTargetStrokes.length > 0
                       ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
@@ -34901,11 +34892,31 @@ export default function App() {
                           {effectiveFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
                         </button>
                         <button
-                          onClick={() => cycleFillTransparency()}
-                          className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-sky-50 border border-slate-200/90 hover:border-sky-300 text-[11px] font-bold text-slate-600 hover:text-[#0066ff] transition cursor-pointer"
-                          title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για εναλλαγή: 25% → 45% → 90%)`}
+                          data-popover-trigger="fill-trans"
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const popW = 248;
+                            const idealLeft = rect.left + rect.width / 2 - popW / 2;
+                            const clampedLeft = Math.max(12, Math.min(window.innerWidth - popW - 12, idealLeft));
+                            setFillTransPopoverPos({
+                              top: Math.round(rect.bottom + 6),
+                              left: Math.round(clampedLeft),
+                            });
+                            setShowFillTransPopover((prev) => !prev);
+                            setShowWidthPopover(false);
+                            setShowColorPopover(false);
+                            setShowLayersPanel(false);
+                            setShowShapeLibraryPanel(false);
+                          }}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold transition cursor-pointer ${
+                            showFillTransPopover
+                              ? 'bg-sky-50 border-[#0066ff] text-[#0066ff] ring-2 ring-sky-200'
+                              : 'bg-slate-100 hover:bg-sky-50 border-slate-200/90 hover:border-sky-300 text-slate-600 hover:text-[#0066ff]'
+                          }`}
+                          title={`Διαφάνεια Γεμίσματος: ${effectiveTrans}% (Κλικ για μπάρα επιλογής 5% – 95% ανά 5%)`}
                         >
-                          {effectiveTrans}%
+                          <span>{effectiveTrans}%</span>
+                          <span className="text-[9px] opacity-75">▾</span>
                         </button>
                       </div>
                       <button
@@ -34943,6 +34954,108 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* Fill Transparency Small Dropdown Bar (5% to 95% in 5% steps) */}
+          {showFillTransPopover &&
+            (() => {
+              const selIds =
+                selectedStrokeIds.length > 0
+                  ? selectedStrokeIds
+                  : activeNodeStrokeId
+                  ? [activeNodeStrokeId]
+                  : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+                  ? lastCreatedShapeIdsRef.current
+                  : [];
+              const selSet = new Set(selIds);
+              const groupIds = new Set(
+                activePage.strokes
+                  .filter((s) => selSet.has(s.id) && s.groupId)
+                  .map((s) => s.groupId as string)
+              );
+              const targetStrokes = activePage.strokes.filter(
+                (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+              );
+              const rawTrans =
+                targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency > 0)
+                  ?.fillTransparency ?? fillTransparency;
+              const currentTrans = Math.max(5, Math.min(95, Math.round(rawTrans / 5) * 5));
+              const previewColor = targetStrokes[0]?.color || strokeColor || '#0066ff';
+              return (
+                <div
+                  data-ui-panel="true"
+                  data-popover-panel="fill-trans"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  style={{
+                    top: fillTransPopoverPos.top,
+                    left: fillTransPopoverPos.left,
+                  }}
+                  className="fixed z-50 bg-white/98 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 px-3 py-2.5 flex flex-col gap-2 w-[248px]"
+                >
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-2xs shrink-0"
+                        style={{
+                          backgroundColor: previewColor,
+                          opacity: Math.max(0.05, Math.min(0.95, (100 - currentTrans) / 100)),
+                        }}
+                      />
+                      <span>Διαφάνεια Γεμίσματος</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-[#0066ff] font-extrabold text-[11px]">
+                      {currentTrans}%
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => applyFillTransparencyToSelection(Math.max(5, currentTrans - 5))}
+                      disabled={currentTrans <= 5}
+                      className="w-6 h-6 shrink-0 rounded-full bg-slate-100 hover:bg-sky-50 disabled:opacity-40 border border-slate-200 text-slate-700 hover:text-[#0066ff] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                      title="Μείωση διαφάνειας (-5%)"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="range"
+                      min={5}
+                      max={95}
+                      step={5}
+                      value={currentTrans}
+                      onChange={(e) => applyFillTransparencyToSelection(parseInt(e.target.value, 10))}
+                      className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-[#0066ff]"
+                      style={{
+                        background: `linear-gradient(to right, ${previewColor} 0%, rgba(226,232,240,0.45) 100%)`,
+                      }}
+                    />
+                    <button
+                      onClick={() => applyFillTransparencyToSelection(Math.min(95, currentTrans + 5))}
+                      disabled={currentTrans >= 95}
+                      className="w-6 h-6 shrink-0 rounded-full bg-slate-100 hover:bg-sky-50 disabled:opacity-40 border border-slate-200 text-slate-700 hover:text-[#0066ff] font-bold text-xs flex items-center justify-center cursor-pointer transition"
+                      title="Αύξηση διαφάνειας (+5%)"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1 pt-0.5">
+                    {[10, 25, 50, 75, 90].map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => applyFillTransparencyToSelection(preset)}
+                        className={`flex-1 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                          currentTrans === preset
+                            ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-2xs'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-sky-50 hover:text-[#0066ff]'
+                        }`}
+                      >
+                        {preset}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
           {/* 12-Step Stroke Thickness Popover (for Pen, Pencil, Highlighter & Eraser) */}
           {showWidthPopover && (
@@ -41595,13 +41708,10 @@ export default function App() {
                               <polyline
                                 key={st.id}
                                 fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
-                                fillOpacity={
-                                  st.fillTransparency === 25 || st.fillTransparency === 20
-                                    ? 0.75
-                                    : st.fillTransparency === 45 || st.fillTransparency === 50
-                                    ? 0.55
-                                    : 0.11
-                                }
+                                fillOpacity={Math.max(
+                                  0.05,
+                                  Math.min(0.95, (100 - (st.fillTransparency ?? 90)) / 100)
+                                )}
                                 stroke={st.color}
                                 strokeWidth={Math.max(3, st.width * 1.6)}
                                 strokeLinecap="round"
