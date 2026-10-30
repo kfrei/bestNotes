@@ -82,6 +82,8 @@ import {
   SpringSimConfig,
   SpringGraphBox,
   HookeMeasurementRow,
+  ForceSimConfig,
+  ForceSimMode,
   StrokeObject,
   BezierPoint,
   ToolType,
@@ -739,7 +741,7 @@ export default function App() {
           activeLayerId?: string;
           showLayersPanel?: boolean;
           showSimulationPanel?: boolean;
-          simActiveCategory?: 'circuits' | 'springs' | null;
+          simActiveCategory?: 'circuits' | 'springs' | 'forces' | null;
           simPanelPos?: { x: number; y: number };
           isSimulating?: boolean;
           isSpringSimulating?: boolean;
@@ -1117,7 +1119,7 @@ export default function App() {
   const [showSimulationPanel, setShowSimulationPanel] = useState<boolean>(() =>
     Boolean(initialSession?.showSimulationPanel)
   );
-  const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs' | null>(
+  const [simActiveCategory, setSimActiveCategory] = useState<'circuits' | 'springs' | 'forces' | null>(
     () => initialSession?.simActiveCategory ?? null
   );
   const [isSimulating, setIsSimulating] = useState<boolean>(() => Boolean(initialSession?.isSimulating));
@@ -1243,6 +1245,76 @@ export default function App() {
       width: number;
       height: number;
     } | null;
+  } | null>(null);
+  // Forces Simulation State & Refs ('analysis' | 'synthesis' | 'incline' | 'pendulum')
+  const [forceSimSubTab, setForceSimSubTab] = useState<ForceSimMode>('analysis');
+  const [forceSimAnim, setForceSimAnim] = useState<{
+    simId: string;
+    targetStep: number;
+    startTime: number;
+    durationMs: number;
+    autoChainToStep?: number;
+  } | null>(null);
+  const forceSimAnimRef = useRef<{
+    simId: string;
+    targetStep: number;
+    startTime: number;
+    durationMs: number;
+    autoChainToStep?: number;
+  } | null>(null);
+  const pendulumPhysRef = useRef<
+    Record<
+      string,
+      {
+        ang: number;
+        av: number;
+        lastTime: number;
+        trajectory: { x: number; y: number }[];
+      }
+    >
+  >({});
+  const draggingForceHandleRef = useRef<{
+    simId: string;
+    kind:
+      | 'analysis-tip'
+      | 'origin'
+      | 'f1-tip'
+      | 'f2-tip'
+      | 'incline-peak'
+      | 'pendulum-bob'
+      | 'calc-box';
+    startX: number;
+    startY: number;
+    origOriginX: number;
+    origOriginY: number;
+    origCalcX?: number;
+    origCalcY?: number;
+  } | null>(null);
+  const forceOverlayHitRef = useRef<{
+    simId: string;
+    mode: ForceSimMode;
+    handles: {
+      kind:
+        | 'analysis-tip'
+        | 'origin'
+        | 'f1-tip'
+        | 'f2-tip'
+        | 'incline-peak'
+        | 'pendulum-bob'
+        | 'calc-box';
+      x: number;
+      y: number;
+      r: number;
+      w?: number;
+      h?: number;
+    }[];
+    buttons: {
+      action: string;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+    }[];
   } | null>(null);
   const pendingPhysicsMagnetRef = useRef<{
     kind: 'spring-to-support' | 'mass-to-spring' | 'weight-to-weight' | 'pointer-to-spring';
@@ -5971,6 +6043,19 @@ export default function App() {
           ) {
             continue;
           }
+          // While a pendulum force simulation is active on the current page, hide the static rod & bob strokes so only the 60fps swinging pendulum renders on the overlay!
+          if (isCurrentActivePage && showSimulationPanel && simActiveCategory === 'forces') {
+            const actForceSim =
+              (pageObj.forceSims || []).find((fs) => fs.id === pageObj.activeForceSimId) ||
+              (pageObj.forceSims || [])[0];
+            if (
+              actForceSim &&
+              actForceSim.mode === 'pendulum' &&
+              (s.id === actForceSim.primaryStrokeId || s.id === actForceSim.secondaryStrokeId)
+            ) {
+              continue;
+            }
+          }
           drawStrokeOnContext(ctx, s, false);
         }
       }
@@ -9969,6 +10054,893 @@ export default function App() {
     return `ελ${usedNames.size + 1}`;
   };
 
+  // ============================================================================
+  // FORCES SIMULATION ENGINE (δυν01, δυν02, ...):
+  //   1. 'analysis'  : Ανάλυση Δύναμης σε Συνιστώσες (F -> Fx, Fy)
+  //   2. 'synthesis' : Σύνθεση Δυνάμεων (F1 + F2 -> ΣF)
+  //   3. 'incline'   : Ανάλυση Δυνάμεων σε Κεκλιμένο Επίπεδο (B, N -> Bx, By)
+  //   4. 'pendulum'  : Δυνάμεις & Ανάλυση σε Απλό Εκκρεμές (B, T, ΣF -> Tx,Ty / Bx,By)
+  // ============================================================================
+  const getValidForceSims = (page: NotePage): ForceSimConfig[] => {
+    const strokeIdSet = new Set(page.strokes.map((s) => s.id));
+    return (page.forceSims || []).filter((sim) => {
+      if (sim.primaryStrokeId && !strokeIdSet.has(sim.primaryStrokeId)) return false;
+      if (
+        (sim.mode === 'synthesis' || sim.mode === 'incline' || sim.mode === 'pendulum') &&
+        sim.secondaryStrokeId &&
+        !strokeIdSet.has(sim.secondaryStrokeId)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  };
+
+  const getActiveForceSim = (page: NotePage): ForceSimConfig | null => {
+    const valid = getValidForceSims(page);
+    if (valid.length === 0) return null;
+    return (
+      valid.find((sim) => sim.id === page.activeForceSimId) ||
+      valid.find((sim) => sim.mode === forceSimSubTab) ||
+      valid[0]
+    );
+  };
+
+  const getNextDefaultForceSimName = (page?: NotePage): string => {
+    const usedNames = new Set<string>();
+    for (const p of activeNotebook.pages) {
+      for (const s of getValidForceSims(p)) {
+        usedNames.add(s.name.trim().toLowerCase());
+      }
+    }
+    if (page) {
+      for (const s of getValidForceSims(page)) {
+        usedNames.add(s.name.trim().toLowerCase());
+      }
+    }
+    for (let i = 1; i <= 99; i++) {
+      const candidate = `δυν${String(i).padStart(2, '0')}`;
+      if (!usedNames.has(candidate)) return candidate;
+    }
+    return `δυν${usedNames.size + 1}`;
+  };
+
+  const simplifyRootText = (n: number): string => {
+    const rounded = Math.round(n);
+    if (rounded <= 0) return '0';
+    const root = Math.sqrt(rounded);
+    if (Number.isInteger(root)) return root.toString();
+    let outside = 1;
+    let inside = rounded;
+    let d = 2;
+    while (d * d <= inside) {
+      if (inside % (d * d) === 0) {
+        inside = Math.floor(inside / (d * d));
+        outside *= d;
+      } else {
+        d++;
+      }
+    }
+    if (outside === 1) return `√${inside}`;
+    return `${outside}√${inside}`;
+  };
+
+  const buildForceArrowStroke = (
+    id: string,
+    ox: number,
+    oy: number,
+    tx: number,
+    ty: number,
+    color: string,
+    layerId: string,
+    groupId?: string
+  ): StrokeObject => ({
+    id,
+    tool: 'pen',
+    color,
+    width: 3.4,
+    opacity: 1,
+    lineStyle: 'solid',
+    arrowEnd: true,
+    isShape: true,
+    shapeType: 'arrow',
+    layerId,
+    groupId,
+    points: [
+      { x: ox, y: oy, pressure: 0.7 },
+      { x: tx, y: ty, cx: (ox + tx) / 2, cy: (oy + ty) / 2, pressure: 0.7 },
+    ],
+  });
+
+  const triggerForceSimStep = (
+    simId: string,
+    nextStep: number,
+    autoChainToStep?: number,
+    durationMs = 600
+  ) => {
+    const animObj = {
+      simId,
+      targetStep: nextStep,
+      startTime: performance.now(),
+      durationMs,
+      autoChainToStep,
+    };
+    forceSimAnimRef.current = animObj;
+    setForceSimAnim(animObj);
+    updateActivePage(
+      (page) => ({
+        ...page,
+        forceSims: (page.forceSims || []).map((s) =>
+          s.id === simId ? { ...s, step: nextStep } : s
+        ),
+      }),
+      false
+    );
+  };
+
+  const createOrActivateForceSim = (mode: ForceSimMode, forceCreateNew = false) => {
+    setForceSimSubTab(mode);
+    const valid = getValidForceSims(activePage);
+    if (!forceCreateNew) {
+      const existingOfMode = valid.find((s) => s.mode === mode);
+      if (existingOfMode) {
+        updateActivePage(
+          (page) => ({
+            ...page,
+            activeForceSimId: existingOfMode.id,
+          }),
+          false
+        );
+        return;
+      }
+    }
+
+    const usedStrokeIds = new Set<string>();
+    for (const s of valid) {
+      if (s.primaryStrokeId) usedStrokeIds.add(s.primaryStrokeId);
+      if (s.secondaryStrokeId) usedStrokeIds.add(s.secondaryStrokeId);
+      if (s.supportStrokeId) usedStrokeIds.add(s.supportStrokeId);
+    }
+
+    const U = A4_GRID_STEP_PX; // 23px per 1 N grid square
+    const newSimId = `fsim-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newSimName = getNextDefaultForceSimName(activePage);
+    const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+
+    updateActivePage((page) => {
+      const curValid = getValidForceSims(page);
+      const extraStrokes: StrokeObject[] = [];
+      let updatedStrokes = [...page.strokes];
+      let newSim: ForceSimConfig;
+
+      if (mode === 'analysis') {
+        // Check if user drew an unlinked arrow stroke on the page
+        const candidateArrow = !forceCreateNew
+          ? updatedStrokes.find(
+              (st) =>
+                st.shapeType === 'arrow' &&
+                !usedStrokeIds.has(st.id) &&
+                st.points.length >= 2
+            )
+          : undefined;
+        if (candidateArrow) {
+          const p0 = candidateArrow.points[0];
+          const p1 = candidateArrow.points[candidateArrow.points.length - 1];
+          const fx = Math.round(((p1.x - p0.x) / U) * 10) / 10;
+          const fy = Math.round(((p0.y - p1.y) / U) * 10) / 10;
+          newSim = {
+            id: newSimId,
+            name: newSimName,
+            mode: 'analysis',
+            originX: p0.x,
+            originY: p0.y,
+            primaryStrokeId: candidateArrow.id,
+            fxUnits: fx || 8,
+            fyUnits: fy || 6,
+            snapToGrid: true,
+            anMode: 'none',
+            step: 0,
+            showCalc: false,
+          };
+        } else {
+          const offsetCount = curValid.filter((s) => s.mode === 'analysis').length;
+          const ox = (8 + offsetCount * 2) * U;
+          const oy = (21 + offsetCount * 2) * U;
+          const fx = 8;
+          const fy = 6;
+          const arrowId = `st-${ts}-f-vec`;
+          extraStrokes.push(
+            buildForceArrowStroke(
+              arrowId,
+              ox,
+              oy,
+              ox + fx * U,
+              oy - fy * U,
+              '#1976d2',
+              activeLayerId
+            )
+          );
+          newSim = {
+            id: newSimId,
+            name: newSimName,
+            mode: 'analysis',
+            originX: ox,
+            originY: oy,
+            primaryStrokeId: arrowId,
+            fxUnits: fx,
+            fyUnits: fy,
+            snapToGrid: true,
+            anMode: 'none',
+            step: 0,
+            showCalc: false,
+          };
+        }
+      } else if (mode === 'synthesis') {
+        // Check if user drew 2 unlinked arrows with close tails (or 2 selected arrows)
+        const unlinkedArrows = updatedStrokes.filter(
+          (st) =>
+            st.shapeType === 'arrow' &&
+            !usedStrokeIds.has(st.id) &&
+            st.points.length >= 2
+        );
+        let pair: [StrokeObject, StrokeObject] | null = null;
+        if (!forceCreateNew && unlinkedArrows.length >= 2) {
+          for (let i = 0; i < unlinkedArrows.length && !pair; i++) {
+            for (let j = i + 1; j < unlinkedArrows.length; j++) {
+              const a1 = unlinkedArrows[i];
+              const a2 = unlinkedArrows[j];
+              if (
+                Math.hypot(a1.points[0].x - a2.points[0].x, a1.points[0].y - a2.points[0].y) <=
+                60
+              ) {
+                pair = [a1, a2];
+                break;
+              }
+            }
+          }
+        }
+        if (pair) {
+          const [a1, a2] = pair;
+          const ox = Math.round(a1.points[0].x / U) * U;
+          const oy = Math.round(a1.points[0].y / U) * U;
+          const p1End = a1.points[a1.points.length - 1];
+          const p2End = a2.points[a2.points.length - 1];
+          const f1x = Math.round((p1End.x - ox) / U) || 6;
+          const f1y = Math.round((oy - p1End.y) / U);
+          const f2x = Math.round((p2End.x - ox) / U);
+          const f2y = Math.round((oy - p2End.y) / U) || 4;
+          updatedStrokes = updatedStrokes.map((st) => {
+            if (st.id === a1.id) {
+              return buildForceArrowStroke(
+                st.id,
+                ox,
+                oy,
+                ox + f1x * U,
+                oy - f1y * U,
+                '#d35400',
+                st.layerId,
+                st.groupId
+              );
+            }
+            if (st.id === a2.id) {
+              return buildForceArrowStroke(
+                st.id,
+                ox,
+                oy,
+                ox + f2x * U,
+                oy - f2y * U,
+                '#2980b9',
+                st.layerId,
+                st.groupId
+              );
+            }
+            return st;
+          });
+          newSim = {
+            id: newSimId,
+            name: newSimName,
+            mode: 'synthesis',
+            originX: ox,
+            originY: oy,
+            primaryStrokeId: a1.id,
+            secondaryStrokeId: a2.id,
+            f1xUnits: f1x,
+            f1yUnits: f1y,
+            f2xUnits: f2x,
+            f2yUnits: f2y,
+            synthesisStepMode: false,
+            step: 0,
+            showCalc: false,
+          };
+        } else {
+          const offsetCount = curValid.filter((s) => s.mode === 'synthesis').length;
+          const ox = (10 + offsetCount * 2) * U;
+          const oy = (20 + offsetCount * 2) * U;
+          const f1x = 8;
+          const f1y = 0;
+          const f2x = 0;
+          const f2y = 6;
+          const f1Id = `st-${ts}-f1-vec`;
+          const f2Id = `st-${ts}-f2-vec`;
+          extraStrokes.push(
+            buildForceArrowStroke(
+              f1Id,
+              ox,
+              oy,
+              ox + f1x * U,
+              oy - f1y * U,
+              '#d35400',
+              activeLayerId
+            ),
+            buildForceArrowStroke(
+              f2Id,
+              ox,
+              oy,
+              ox + f2x * U,
+              oy - f2y * U,
+              '#2980b9',
+              activeLayerId
+            )
+          );
+          newSim = {
+            id: newSimId,
+            name: newSimName,
+            mode: 'synthesis',
+            originX: ox,
+            originY: oy,
+            primaryStrokeId: f1Id,
+            secondaryStrokeId: f2Id,
+            f1xUnits: f1x,
+            f1yUnits: f1y,
+            f2xUnits: f2x,
+            f2yUnits: f2y,
+            synthesisStepMode: false,
+            step: 0,
+            showCalc: false,
+          };
+        }
+      } else if (mode === 'incline') {
+        // Check if user already placed an inclined-plane (incline-wedge + incline-block)
+        const existingWedge = !forceCreateNew
+          ? updatedStrokes.find(
+              (st) =>
+                st.shapeType === 'incline-wedge' &&
+                !usedStrokeIds.has(st.id) &&
+                st.points.length >= 3
+            )
+          : undefined;
+        const existingBlock = existingWedge
+          ? updatedStrokes.find(
+              (st) =>
+                st.shapeType === 'incline-block' &&
+                st.groupId === existingWedge.groupId &&
+                st.points.length >= 4
+            )
+          : undefined;
+
+        if (existingWedge && existingBlock) {
+          const pStart = existingWedge.points[0];
+          const pPeak = existingWedge.points[2];
+          const lenPx = Math.max(140, Math.hypot(pPeak.x - pStart.x, pPeak.y - pStart.y));
+          const angDeg = Math.max(
+            15,
+            Math.min(
+              60,
+              Math.round(
+                (Math.atan2(pStart.y - pPeak.y, pPeak.x - pStart.x) * 180) / Math.PI
+              )
+            )
+          );
+          newSim = {
+            id: newSimId,
+            name: newSimName,
+            mode: 'incline',
+            originX: pStart.x,
+            originY: pStart.y,
+            primaryStrokeId: existingWedge.id,
+            secondaryStrokeId: existingBlock.id,
+            inclineAngleDeg: angDeg,
+            inclineLenPx: lenPx,
+            showForces: true,
+            anMode: 'none',
+            step: 0,
+            showCalc: false,
+          };
+        } else {
+          const offsetCount = curValid.filter((s) => s.mode === 'incline').length;
+          const baseX = (6 + offsetCount * 2) * U;
+          const baseY = (21 + offsetCount * 2) * U;
+          const lenPx = 380;
+          const angDeg = 30;
+          const angRad = (angDeg * Math.PI) / 180;
+          const topX = baseX + lenPx * Math.cos(angRad);
+          const topY = baseY - lenPx * Math.sin(angRad);
+          const pSlopeStart = { x: baseX, y: baseY };
+          const pBaseCorner = { x: topX, y: baseY };
+          const pSlopePeak = { x: topX, y: topY };
+          const groupId = `grp-incline-${ts}`;
+          const wedgeId = `st-${ts}-inc-wedge`;
+          const blockId = `st-${ts}-inc-block`;
+          const wedgePts = [
+            { x: pSlopeStart.x, y: pSlopeStart.y, pressure: 0.7 },
+            {
+              x: pBaseCorner.x,
+              y: pBaseCorner.y,
+              cx: (pSlopeStart.x + pBaseCorner.x) / 2,
+              cy: (pSlopeStart.y + pBaseCorner.y) / 2,
+              pressure: 0.7,
+            },
+            {
+              x: pSlopePeak.x,
+              y: pSlopePeak.y,
+              cx: (pBaseCorner.x + pSlopePeak.x) / 2,
+              cy: (pBaseCorner.y + pSlopePeak.y) / 2,
+              pressure: 0.7,
+            },
+            {
+              x: pSlopeStart.x,
+              y: pSlopeStart.y,
+              cx: (pSlopePeak.x + pSlopeStart.x) / 2,
+              cy: (pSlopePeak.y + pSlopeStart.y) / 2,
+              pressure: 0.7,
+            },
+          ];
+          const blockPts = computeInclinedPlaneBlockPoints(
+            pSlopeStart,
+            pBaseCorner,
+            pSlopePeak
+          );
+          extraStrokes.push(
+            {
+              id: wedgeId,
+              tool: 'pen',
+              color: '#111827',
+              fillColor: 'rgba(148, 163, 184, 0.22)',
+              fillStyle: 'solid',
+              width: 2.8,
+              opacity: 1,
+              points: wedgePts,
+              layerId: activeLayerId,
+              groupId,
+              isShape: true,
+              shapeType: 'incline-wedge',
+            },
+            {
+              id: blockId,
+              tool: 'pen',
+              color: '#1d4ed8',
+              fillColor: 'rgba(59, 130, 246, 0.22)',
+              fillStyle: 'solid',
+              width: 2.8,
+              opacity: 1,
+              points: blockPts,
+              layerId: activeLayerId,
+              groupId,
+              isShape: true,
+              shapeType: 'incline-block',
+            }
+          );
+          newSim = {
+            id: newSimId,
+            name: newSimName,
+            mode: 'incline',
+            originX: baseX,
+            originY: baseY,
+            primaryStrokeId: wedgeId,
+            secondaryStrokeId: blockId,
+            inclineAngleDeg: angDeg,
+            inclineLenPx: lenPx,
+            showForces: true,
+            anMode: 'none',
+            step: 0,
+            showCalc: false,
+          };
+        }
+      } else {
+        // mode === 'pendulum'
+        const offsetCount = curValid.filter((s) => s.mode === 'pendulum').length;
+        const px = (17 + offsetCount * 2) * U;
+        const py = (6 + offsetCount * 2) * U;
+        const rodLen = 230;
+        const initAng = Math.PI / 4;
+        const bx = px + rodLen * Math.sin(initAng);
+        const by = py + rodLen * Math.cos(initAng);
+        const bobR = 19;
+        const supportId = `st-${ts}-pend-sup`;
+        const rodId = `st-${ts}-pend-rod`;
+        const bobId = `st-${ts}-pend-bob`;
+        const groupId = `grp-pendulum-${ts}`;
+
+        const circlePts: BezierPoint[] = [];
+        for (let k = 0; k <= 16; k++) {
+          const th = (k / 16) * Math.PI * 2;
+          circlePts.push({
+            x: bx + bobR * Math.cos(th),
+            y: by + bobR * Math.sin(th),
+            pressure: 0.7,
+          });
+        }
+
+        extraStrokes.push(
+          {
+            id: supportId,
+            tool: 'pen',
+            color: '#334155',
+            width: 3.2,
+            opacity: 1,
+            isShape: true,
+            shapeType: 'line',
+            layerId: activeLayerId,
+            groupId,
+            points: [
+              { x: px - 60, y: py, pressure: 0.7 },
+              { x: px + 60, y: py, cx: px, cy: py, pressure: 0.7 },
+            ],
+          },
+          {
+            id: rodId,
+            tool: 'pen',
+            color: '#0f172a',
+            width: 2.2,
+            opacity: 1,
+            isShape: true,
+            shapeType: 'line',
+            layerId: activeLayerId,
+            groupId,
+            points: [
+              { x: px, y: py, pressure: 0.7 },
+              { x: bx, y: by, cx: (px + bx) / 2, cy: (py + by) / 2, pressure: 0.7 },
+            ],
+          },
+          {
+            id: bobId,
+            tool: 'pen',
+            color: '#0f172a',
+            fillColor: 'rgba(30, 41, 59, 0.86)',
+            fillStyle: 'solid',
+            width: 2.4,
+            opacity: 1,
+            isShape: true,
+            shapeType: 'circle',
+            layerId: activeLayerId,
+            groupId,
+            points: circlePts,
+          }
+        );
+
+        pendulumPhysRef.current[newSimId] = {
+          ang: initAng,
+          av: 0,
+          lastTime: performance.now(),
+          trajectory: [],
+        };
+
+        newSim = {
+          id: newSimId,
+          name: newSimName,
+          mode: 'pendulum',
+          originX: px,
+          originY: py,
+          primaryStrokeId: rodId,
+          secondaryStrokeId: bobId,
+          supportStrokeId: supportId,
+          rodLengthPx: rodLen,
+          pendulumAngleRad: initAng,
+          pendulumAngVel: 0,
+          isPaused: false,
+          showTrajectory: false,
+          showForces: true,
+          showResultant: false,
+          anMode: 'none',
+          step: 0,
+          showCalc: false,
+        };
+      }
+
+      return {
+        ...page,
+        strokes: [...updatedStrokes, ...extraStrokes],
+        forceSims: [...curValid, newSim],
+        activeForceSimId: newSim.id,
+      };
+    });
+  };
+
+  const handleForceSimAction = (sim: ForceSimConfig, action: string) => {
+    const U = A4_GRID_STEP_PX;
+    if (action === 'start-analysis') {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id ? { ...s, anMode: 'F', step: 1 } : s
+          ),
+        }),
+        false
+      );
+      triggerForceSimStep(sim.id, 1);
+    } else if (action === 'next-step') {
+      const maxStep = sim.mode === 'synthesis' ? 3 : 6;
+      const curStep = sim.step || 0;
+      if (curStep < maxStep) {
+        triggerForceSimStep(sim.id, curStep + 1);
+      }
+    } else if (action === 'prev-step') {
+      const curStep = sim.step || 0;
+      if (curStep > 0) {
+        forceSimAnimRef.current = null;
+        setForceSimAnim(null);
+        updateActivePage(
+          (page) => ({
+            ...page,
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === sim.id ? { ...s, step: curStep - 1 } : s
+            ),
+          }),
+          false
+        );
+      }
+    } else if (action === 'reset') {
+      forceSimAnimRef.current = null;
+      setForceSimAnim(null);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  step: 0,
+                  anMode: 'none',
+                  showCalc: false,
+                  showResultant: false,
+                }
+              : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'toggle-calc') {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id ? { ...s, showCalc: !s.showCalc } : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'toggle-snap-grid') {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? { ...s, snapToGrid: s.snapToGrid === false ? true : false }
+              : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'mode-direct') {
+      forceSimAnimRef.current = null;
+      setForceSimAnim(null);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id ? { ...s, synthesisStepMode: false, step: 0 } : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'mode-step') {
+      forceSimAnimRef.current = null;
+      setForceSimAnim(null);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id ? { ...s, synthesisStepMode: true, step: 0 } : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'start-synthesis') {
+      // Compute collinearity from f1, f2
+      const s1 = activePage.strokes.find((st) => st.id === sim.primaryStrokeId);
+      const s2 = activePage.strokes.find((st) => st.id === sim.secondaryStrokeId);
+      const ox = s1 && s1.points.length >= 2 ? s1.points[0].x : sim.originX;
+      const oy = s1 && s1.points.length >= 2 ? s1.points[0].y : sim.originY;
+      const f1x =
+        s1 && s1.points.length >= 2
+          ? (s1.points[s1.points.length - 1].x - ox) / U
+          : (sim.f1xUnits ?? 8);
+      const f1y =
+        s1 && s1.points.length >= 2
+          ? (oy - s1.points[s1.points.length - 1].y) / U
+          : (sim.f1yUnits ?? 0);
+      const f2x =
+        s2 && s2.points.length >= 2
+          ? (s2.points[s2.points.length - 1].x - ox) / U
+          : (sim.f2xUnits ?? 0);
+      const f2y =
+        s2 && s2.points.length >= 2
+          ? (oy - s2.points[s2.points.length - 1].y) / U
+          : (sim.f2yUnits ?? 6);
+      const isCollinear = Math.abs(f1x * f2y - f1y * f2x) < 0.05;
+      if (isCollinear) {
+        triggerForceSimStep(sim.id, 3, undefined, 650);
+      } else if (sim.synthesisStepMode) {
+        triggerForceSimStep(sim.id, 1, undefined, 580);
+      } else {
+        triggerForceSimStep(sim.id, 1, 3, 520);
+      }
+    } else if (action === 'toggle-forces') {
+      const nextForces = !sim.showForces;
+      if (!nextForces) {
+        forceSimAnimRef.current = null;
+        setForceSimAnim(null);
+      }
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  showForces: nextForces,
+                  ...(nextForces
+                    ? {}
+                    : { anMode: 'none', step: 0, showResultant: false }),
+                }
+              : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'start-incline-an') {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id ? { ...s, showForces: true, anMode: 'B', step: 1 } : s
+          ),
+        }),
+        false
+      );
+      triggerForceSimStep(sim.id, 1, undefined, 600);
+    } else if (action === 'toggle-pause') {
+      const nextPaused = !sim.isPaused;
+      const pState = pendulumPhysRef.current[sim.id];
+      if (pState) {
+        pState.trajectory = [];
+        pState.lastTime = performance.now();
+      }
+      if (!nextPaused) {
+        forceSimAnimRef.current = null;
+        setForceSimAnim(null);
+      }
+      // Also sync static rod & bob strokes on pause!
+      const curAng = pState ? pState.ang : (sim.pendulumAngleRad ?? Math.PI / 4);
+      const px = sim.originX;
+      const py = sim.originY;
+      const rodL = sim.rodLengthPx || 230;
+      const bx = px + rodL * Math.sin(curAng);
+      const by = py + rodL * Math.cos(curAng);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          strokes: page.strokes.map((st) => {
+            if (st.id === sim.primaryStrokeId) {
+              return {
+                ...st,
+                points: [
+                  { x: px, y: py, pressure: 0.7 },
+                  { x: bx, y: by, cx: (px + bx) / 2, cy: (py + by) / 2, pressure: 0.7 },
+                ],
+              };
+            }
+            if (st.id === sim.secondaryStrokeId && st.points.length >= 4) {
+              let minX = Infinity,
+                maxX = -Infinity,
+                minY = Infinity,
+                maxY = -Infinity;
+              for (const pt of st.points) {
+                if (pt.x < minX) minX = pt.x;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.y > maxY) maxY = pt.y;
+              }
+              const oldCx = (minX + maxX) / 2;
+              const oldCy = (minY + maxY) / 2;
+              const dx = bx - oldCx;
+              const dy = by - oldCy;
+              return {
+                ...st,
+                points: st.points.map((pt) => ({
+                  ...pt,
+                  x: pt.x + dx,
+                  y: pt.y + dy,
+                  ...(pt.cx !== undefined ? { cx: pt.cx + dx } : {}),
+                  ...(pt.cy !== undefined ? { cy: pt.cy + dy } : {}),
+                })),
+              };
+            }
+            return st;
+          }),
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  isPaused: nextPaused,
+                  pendulumAngleRad: curAng,
+                  ...(nextPaused ? {} : { anMode: 'none', step: 0 }),
+                }
+              : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'toggle-trajectory') {
+      const pState = pendulumPhysRef.current[sim.id];
+      if (pState) pState.trajectory = [];
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id ? { ...s, showTrajectory: !s.showTrajectory } : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'toggle-resultant') {
+      forceSimAnimRef.current = null;
+      setForceSimAnim(null);
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  showResultant: !s.showResultant,
+                  ...(!s.showResultant ? { anMode: 'none', step: 0 } : {}),
+                }
+              : s
+          ),
+        }),
+        false
+      );
+    } else if (action === 'start-an-T') {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? { ...s, showResultant: false, anMode: 'T', step: 1 }
+              : s
+          ),
+        }),
+        false
+      );
+      triggerForceSimStep(sim.id, 1, undefined, 620);
+    } else if (action === 'start-an-B') {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.id === sim.id
+              ? { ...s, showResultant: false, anMode: 'B', step: 1 }
+              : s
+          ),
+        }),
+        false
+      );
+      triggerForceSimStep(sim.id, 1, undefined, 620);
+    }
+  };
+
   const scrollToSpringSim = useCallback(
     (targetPageIdx: number, sim: SpringSimConfig) => {
       const clampedIdx = Math.max(0, Math.min(activeNotebook.pages.length - 1, targetPageIdx));
@@ -12341,6 +13313,18 @@ export default function App() {
 
     const activeSim = getActiveCircuitSim(activePage);
     const activeSpringSim = getActiveSpringSim(activePage);
+    const activeForceSim = getActiveForceSim(activePage);
+    const hasForceOverlay =
+      Boolean(activeForceSim) &&
+      ((showSimulationPanel && simActiveCategory === 'forces') ||
+        (activeForceSim!.step ?? 0) > 0 ||
+        Boolean(activeForceSim!.showForces) ||
+        Boolean(activeForceSim!.showResultant) ||
+        Boolean(activeForceSim!.showCalc) ||
+        activeForceSim!.mode === 'pendulum' ||
+        activeForceSim!.mode === 'incline' ||
+        forceSimAnim !== null ||
+        draggingForceHandleRef.current !== null);
     const hasSpringOverlay =
       Boolean(springSettleAnim?.springStrokeId) ||
       (Boolean(activeSpringSim) &&
@@ -12364,10 +13348,16 @@ export default function App() {
           draggingSpringGraphRef.current !== null));
     const hasAlignFlash = circuitAlignFlashStart !== null;
     const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
-    if (!hasProposal && !hasSpringOverlay && ((!isSimulating && !hasAlignFlash) || !activeSim)) {
+    if (
+      !hasProposal &&
+      !hasSpringOverlay &&
+      !hasForceOverlay &&
+      ((!isSimulating && !hasAlignFlash) || !activeSim)
+    ) {
       autoSwitchHitRef.current = null;
       proposalOverlayHitRef.current = null;
       springOverlayHitRef.current = null;
+      forceOverlayHitRef.current = null;
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
       return;
@@ -14599,6 +15589,1591 @@ export default function App() {
         springOverlayHitRef.current = null;
       }
 
+      // ======================================================================
+      // 7. FORCES SIMULATION OVERLAY (δυν01, δυν02, ...):
+      //    - 'analysis'  : Ανάλυση Δύναμης σε Συνιστώσες (F -> Fx, Fy)
+      //    - 'synthesis' : Σύνθεση Δυνάμεων (F1 + F2 -> ΣF)
+      //    - 'incline'   : Ανάλυση Δυνάμεων σε Κεκλιμένο Επίπεδο (B, N -> Bx, By)
+      //    - 'pendulum'  : Δυνάμεις & Ανάλυση σε Απλό Εκκρεμές (B, T, ΣF -> Tx,Ty / Bx,By)
+      // ======================================================================
+      if (activeForceSim && hasForceOverlay) {
+        const fSim = activeForceSim;
+        const U = A4_GRID_STEP_PX; // 23px = 1 N grid unit
+        const curStep = fSim.step || 0;
+        const curAnim = forceSimAnim || forceSimAnimRef.current;
+        let animProgress = 1;
+        if (curAnim && curAnim.simId === fSim.id) {
+          const elMs = now - curAnim.startTime;
+          animProgress = Math.max(0, Math.min(1, elMs / Math.max(100, curAnim.durationMs)));
+          if (elMs >= curAnim.durationMs) {
+            if (curAnim.autoChainToStep && curAnim.targetStep < curAnim.autoChainToStep) {
+              const nextSt = curAnim.targetStep + 1;
+              const nextAnimObj = {
+                ...curAnim,
+                targetStep: nextSt,
+                startTime: now,
+              };
+              forceSimAnimRef.current = nextAnimObj;
+              queueMicrotask(() =>
+                triggerForceSimStep(fSim.id, nextSt, curAnim.autoChainToStep, curAnim.durationMs)
+              );
+            } else {
+              forceSimAnimRef.current = null;
+              queueMicrotask(() => setForceSimAnim(null));
+            }
+          }
+        }
+        const getStepProg = (s: number): number =>
+          curAnim && curAnim.simId === fSim.id && curAnim.targetStep === s ? animProgress : 1;
+
+        let forceHandTip = null as { x: number; y: number } | null;
+        const handlesHit: {
+          kind:
+            | 'analysis-tip'
+            | 'origin'
+            | 'f1-tip'
+            | 'f2-tip'
+            | 'incline-peak'
+            | 'pendulum-bob'
+            | 'calc-box';
+          x: number;
+          y: number;
+          r: number;
+          w?: number;
+          h?: number;
+        }[] = [];
+        const buttonsHit: {
+          action: string;
+          x1: number;
+          y1: number;
+          x2: number;
+          y2: number;
+        }[] = [];
+
+        const drawHaloLabel = (
+          txt: string,
+          lx: number,
+          ly: number,
+          color: string,
+          font = 'bold 14px system-ui, -apple-system, sans-serif',
+          align: CanvasTextAlign = 'center'
+        ) => {
+          ctx.save();
+          ctx.font = font;
+          ctx.textAlign = align;
+          ctx.textBaseline = 'middle';
+          ctx.lineWidth = 3.6;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.94)';
+          ctx.lineJoin = 'round';
+          ctx.strokeText(txt, lx, ly);
+          ctx.fillStyle = color;
+          ctx.fillText(txt, lx, ly);
+          ctx.restore();
+        };
+
+        const drawSimLineOrAxis = (
+          x1: number,
+          y1: number,
+          x2: number,
+          y2: number,
+          color: string,
+          lineWidth: number,
+          dash: number[],
+          hasArrow: boolean,
+          prog: number,
+          labelTxt?: string,
+          labelColor?: string,
+          labelFont = 'italic bold 19px Georgia, "Times New Roman", serif'
+        ) => {
+          if (prog <= 0.01) return;
+          const cx2 = x1 + (x2 - x1) * prog;
+          const cy2 = y1 + (y2 - y1) * prog;
+          const ang = Math.atan2(y2 - y1, x2 - x1);
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = lineWidth;
+          ctx.lineCap = 'round';
+          ctx.setLineDash(dash);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(cx2, cy2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (hasArrow && Math.hypot(cx2 - x1, cy2 - y1) >= 8) {
+            const headLen = 9.5;
+            ctx.beginPath();
+            ctx.moveTo(cx2, cy2);
+            ctx.lineTo(
+              cx2 - headLen * Math.cos(ang - 0.42),
+              cy2 - headLen * Math.sin(ang - 0.42)
+            );
+            ctx.lineTo(
+              cx2 - headLen * Math.cos(ang + 0.42),
+              cy2 - headLen * Math.sin(ang + 0.42)
+            );
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.restore();
+          if (prog < 0.995) {
+            forceHandTip = { x: cx2, y: cy2 };
+          } else if (labelTxt) {
+            drawHaloLabel(
+              labelTxt,
+              x2 + 15 * Math.cos(ang),
+              y2 + 15 * Math.sin(ang),
+              labelColor || color,
+              labelFont
+            );
+          }
+        };
+
+        const drawSimVector = (
+          x1: number,
+          y1: number,
+          x2: number,
+          y2: number,
+          color: string,
+          lineWidth: number,
+          prog: number,
+          labelTxt?: string,
+          labelPos?: { x: number; y: number }
+        ) => {
+          const totalLen = Math.hypot(x2 - x1, y2 - y1);
+          if (prog <= 0.01 || totalLen < 2) return;
+          const cx2 = x1 + (x2 - x1) * prog;
+          const cy2 = y1 + (y2 - y1) * prog;
+          const ang = Math.atan2(y2 - y1, x2 - x1);
+          const headLen = Math.min(12.5, Math.max(8, totalLen * prog * 0.35));
+          const shaftEndX = cx2 - headLen * 0.65 * Math.cos(ang);
+          const shaftEndY = cy2 - headLen * 0.65 * Math.sin(ang);
+
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = lineWidth;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(shaftEndX, shaftEndY);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(cx2, cy2);
+          ctx.lineTo(
+            cx2 - headLen * Math.cos(ang - 0.44),
+            cy2 - headLen * Math.sin(ang - 0.44)
+          );
+          ctx.lineTo(
+            cx2 - headLen * Math.cos(ang + 0.44),
+            cy2 - headLen * Math.sin(ang + 0.44)
+          );
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+
+          if (prog < 0.995) {
+            forceHandTip = { x: cx2, y: cy2 };
+          } else if (labelTxt) {
+            const lx = labelPos ? labelPos.x : x2 + 18 * Math.cos(ang);
+            const ly = labelPos ? labelPos.y : y2 + 18 * Math.sin(ang);
+            drawHaloLabel(labelTxt, lx, ly, color, 'bold 14.5px system-ui, -apple-system, sans-serif');
+          }
+        };
+
+        const drawPillButton = (
+          label: string,
+          action: string,
+          bx: number,
+          by: number,
+          bw: number,
+          bh: number,
+          bg: string,
+          fg: string,
+          borderColor?: string,
+          disabled = false
+        ) => {
+          ctx.save();
+          ctx.globalAlpha = disabled ? 0.45 : 1;
+          ctx.shadowColor = 'rgba(15, 23, 42, 0.14)';
+          ctx.shadowBlur = 5;
+          ctx.shadowOffsetY = 2;
+          ctx.fillStyle = bg;
+          ctx.beginPath();
+          ctx.roundRect(bx, by, bw, bh, 7);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetY = 0;
+          if (borderColor) {
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+          }
+          ctx.fillStyle = fg;
+          ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, bx + bw / 2, by + bh / 2 + 0.5);
+          ctx.restore();
+          if (!disabled) {
+            buttonsHit.push({ action, x1: bx, y1: by, x2: bx + bw, y2: by + bh });
+          }
+        };
+
+        const drawCalcCard = (
+          defaultX: number,
+          defaultY: number,
+          title: string,
+          lines: { text: string; bold?: boolean; color?: string }[],
+          borderColor = '#f59e0b'
+        ) => {
+          const cardW = 236;
+          const lineH = 20;
+          const cardH = 34 + lines.length * lineH;
+          const cx = fSim.calcBoxPos?.x ?? defaultX;
+          const cy = fSim.calcBoxPos?.y ?? defaultY;
+          ctx.save();
+          ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
+          ctx.shadowBlur = 12;
+          ctx.shadowOffsetY = 4;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.97)';
+          ctx.strokeStyle = borderColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(cx, cy, cardW, cardH, 9);
+          ctx.fill();
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetY = 0;
+
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 12.5px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(title, cx + 12, cy + 16);
+
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(cx + 10, cy + 27);
+          ctx.lineTo(cx + cardW - 10, cy + 27);
+          ctx.stroke();
+
+          lines.forEach((ln, idx) => {
+            const ly = cy + 39 + idx * lineH;
+            ctx.fillStyle = ln.color || '#1e293b';
+            ctx.font = `${ln.bold ? 'bold' : '500'} 12.5px system-ui, -apple-system, sans-serif`;
+            ctx.fillText(ln.text, cx + 12, ly);
+          });
+          ctx.restore();
+
+          handlesHit.push({
+            kind: 'calc-box',
+            x: cx + cardW / 2,
+            y: cy + cardH / 2,
+            r: Math.max(cardW, cardH) / 2,
+            w: cardW,
+            h: cardH,
+          });
+        };
+
+        // ------------------------------------------------------------------
+        // MODE 1: 'analysis' (Ανάλυση Δύναμης σε Συνιστώσες F -> Fx, Fy)
+        // ------------------------------------------------------------------
+        if (fSim.mode === 'analysis') {
+          const pStroke = activePage.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          const ox =
+            pStroke && pStroke.points.length >= 2 ? pStroke.points[0].x : fSim.originX;
+          const oy =
+            pStroke && pStroke.points.length >= 2 ? pStroke.points[0].y : fSim.originY;
+          const tx =
+            pStroke && pStroke.points.length >= 2
+              ? pStroke.points[pStroke.points.length - 1].x
+              : ox + (fSim.fxUnits ?? 8) * U;
+          const ty =
+            pStroke && pStroke.points.length >= 2
+              ? pStroke.points[pStroke.points.length - 1].y
+              : oy - (fSim.fyUnits ?? 6) * U;
+
+          const X = tx - ox;
+          const Y = oy - ty;
+          const cx = X / U;
+          const cy = Y / U;
+          const F_mag = Math.hypot(cx, cy);
+          const rad = Math.atan2(cy, cx);
+          const deg = (rad * 180) / Math.PI;
+          const isIntSnap = fSim.snapToGrid !== false;
+          const fmtVal = (v: number) =>
+            isIntSnap && Math.abs(v - Math.round(v)) < 0.05
+              ? Math.round(v).toString()
+              : v.toFixed(1);
+
+          // Angle arc θ at (ox, oy)
+          const arcR = 36;
+          if (Math.hypot(X, Y) > 25 && Math.abs(rad) > 0.03) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(25, 118, 210, 0.10)';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1.25;
+            ctx.setLineDash([3, 2]);
+            ctx.beginPath();
+            ctx.moveTo(ox, oy);
+            ctx.arc(ox, oy, arcR, 0, -rad, rad > 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            const midRad = -rad / 2;
+            drawHaloLabel(
+              'θ',
+              ox + (arcR + 13) * Math.cos(midRad),
+              oy + (arcR + 13) * Math.sin(midRad),
+              '#334155',
+              'italic bold 16px Georgia, serif'
+            );
+          }
+
+          // Step 1..6: Axes Ox, Oy, Dashed Projections px, py, Red Components Fx, Fy
+          const signX = cx >= 0 ? 1 : -1;
+          const signY = cy >= 0 ? 1 : -1;
+          const axLenX = Math.max(Math.abs(X) + 55, 220) * signX;
+          const axLenY = Math.max(Math.abs(Y) + 55, 190) * signY;
+
+          if (curStep >= 1) {
+            drawSimLineOrAxis(
+              ox,
+              oy,
+              ox + axLenX,
+              oy,
+              '#1e293b',
+              2.0,
+              [],
+              true,
+              getStepProg(1),
+              'x',
+              '#0f172a'
+            );
+          }
+          if (curStep >= 2) {
+            drawSimLineOrAxis(
+              ox,
+              oy,
+              ox,
+              oy - axLenY,
+              '#1e293b',
+              2.0,
+              [],
+              true,
+              getStepProg(2),
+              'y',
+              '#0f172a'
+            );
+          }
+          if (curStep >= 3) {
+            drawSimLineOrAxis(
+              tx,
+              ty,
+              tx,
+              oy,
+              '#475569',
+              1.7,
+              [5, 4],
+              false,
+              getStepProg(3)
+            );
+          }
+          if (curStep >= 4) {
+            drawSimVector(
+              ox,
+              oy,
+              tx,
+              oy,
+              '#d32f2f',
+              3.4,
+              getStepProg(4),
+              `Fx = ${fmtVal(cx)} N`,
+              { x: ox + X / 2, y: oy + (signY >= 0 ? 19 : -18) }
+            );
+          }
+          if (curStep >= 5) {
+            drawSimLineOrAxis(
+              tx,
+              ty,
+              ox,
+              ty,
+              '#475569',
+              1.7,
+              [5, 4],
+              false,
+              getStepProg(5)
+            );
+          }
+          if (curStep >= 6) {
+            drawSimVector(
+              ox,
+              oy,
+              ox,
+              ty,
+              '#d32f2f',
+              3.4,
+              getStepProg(6),
+              `Fy = ${fmtVal(cy)} N`,
+              { x: ox + (signX >= 0 ? -42 : 42), y: oy - Y / 2 }
+            );
+          }
+
+          // Label F on main vector + Origin dot + Draggable Tip Handle
+          drawHaloLabel(
+            `F = ${F_mag.toFixed(1)} N`,
+            ox + X / 2 - 14 * Math.sin(rad),
+            oy - Y / 2 - 14 * Math.cos(rad),
+            '#1976d2',
+            'bold 15px system-ui, -apple-system, sans-serif'
+          );
+
+          // Origin dot
+          ctx.save();
+          ctx.fillStyle = '#1e293b';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          // Tip drag ring
+          ctx.fillStyle = 'rgba(25, 118, 210, 0.18)';
+          ctx.strokeStyle = '#1976d2';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(tx, ty, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          handlesHit.push(
+            { kind: 'analysis-tip', x: tx, y: ty, r: 22 },
+            { kind: 'origin', x: ox, y: oy, r: 18 }
+          );
+
+          // Info Pill above/left
+          const infoTxt = `F = ${F_mag.toFixed(1)} N,  θ = ${Math.round(deg)}°`;
+          ctx.save();
+          ctx.font = 'bold 13px ui-monospace, SFMono-Regular, Menlo, monospace';
+          const infoW = ctx.measureText(infoTxt).width + 22;
+          const infoX = Math.max(16, ox - 10);
+          const infoY = Math.max(16, Math.min(oy, ty) - 66);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.roundRect(infoX, infoY, infoW, 28, 6);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#0f172a';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(infoTxt, infoX + 11, infoY + 14.5);
+          ctx.restore();
+
+          // Calculations Box (Υπολογισμοί)
+          if (fSim.showCalc && curStep >= 4) {
+            const calcLines: { text: string; bold?: boolean; color?: string }[] = [
+              { text: `Fx = F · συν(${deg.toFixed(0)}°)` },
+              {
+                text: `Fx = ${F_mag.toFixed(1)} · ${Math.cos(rad).toFixed(3)}`,
+              },
+              {
+                text: `Fx = ${cx.toFixed(1)} N`,
+                bold: true,
+                color: '#d32f2f',
+              },
+            ];
+            if (curStep >= 6) {
+              calcLines.push(
+                { text: `Fy = F · ημ(${deg.toFixed(0)}°)` },
+                {
+                  text: `Fy = ${F_mag.toFixed(1)} · ${Math.sin(rad).toFixed(3)}`,
+                },
+                {
+                  text: `Fy = ${cy.toFixed(1)} N`,
+                  bold: true,
+                  color: '#d32f2f',
+                }
+              );
+            }
+            drawCalcCard(
+              Math.min(w - 255, ox + Math.max(X, 120) + 38),
+              Math.max(24, oy - 190),
+              '📐 Υπολογισμοί Συνιστωσών',
+              calcLines,
+              '#ff9800'
+            );
+          }
+
+          // On-Canvas Control Bar below origin
+          const barY = Math.min(h - 46, Math.max(oy, ty) + 38);
+          let curBx = Math.max(16, ox - 10);
+          if (curStep === 0 && fSim.anMode !== 'F') {
+            drawPillButton('Ανάλυση', 'start-analysis', curBx, barY, 92, 32, '#43a047', '#fff');
+            curBx += 100;
+          } else {
+            drawPillButton('Επαναφορά', 'reset', curBx, barY, 92, 32, '#1976d2', '#fff');
+            curBx += 98;
+            drawPillButton(
+              '◀',
+              'prev-step',
+              curBx,
+              barY,
+              36,
+              32,
+              '#fb8c00',
+              '#fff',
+              undefined,
+              curStep <= 0 || curAnim !== null
+            );
+            curBx += 42;
+            drawPillButton(
+              '▶',
+              'next-step',
+              curBx,
+              barY,
+              36,
+              32,
+              '#fb8c00',
+              '#fff',
+              undefined,
+              curStep >= 6 || curAnim !== null
+            );
+            curBx += 44;
+            if (curStep >= 4) {
+              drawPillButton(
+                'Υπολογισμοί',
+                'toggle-calc',
+                curBx,
+                barY,
+                104,
+                32,
+                fSim.showCalc ? '#ea580c' : '#ff9800',
+                '#fff'
+              );
+            }
+          }
+        }
+
+        // ------------------------------------------------------------------
+        // MODE 2: 'synthesis' (Σύνθεση Δυνάμεων F1 + F2 = ΣF)
+        // ------------------------------------------------------------------
+        else if (fSim.mode === 'synthesis') {
+          const s1 = activePage.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          const s2 = activePage.strokes.find((st) => st.id === fSim.secondaryStrokeId);
+          const ox = s1 && s1.points.length >= 2 ? s1.points[0].x : fSim.originX;
+          const oy = s1 && s1.points.length >= 2 ? s1.points[0].y : fSim.originY;
+          const p1x =
+            s1 && s1.points.length >= 2
+              ? s1.points[s1.points.length - 1].x
+              : ox + (fSim.f1xUnits ?? 8) * U;
+          const p1y =
+            s1 && s1.points.length >= 2
+              ? s1.points[s1.points.length - 1].y
+              : oy - (fSim.f1yUnits ?? 0) * U;
+          const p2x =
+            s2 && s2.points.length >= 2
+              ? s2.points[s2.points.length - 1].x
+              : ox + (fSim.f2xUnits ?? 0) * U;
+          const p2y =
+            s2 && s2.points.length >= 2
+              ? s2.points[s2.points.length - 1].y
+              : oy - (fSim.f2yUnits ?? 6) * U;
+
+          const f1x = Math.round(((p1x - ox) / U) * 10) / 10;
+          const f1y = Math.round(((oy - p1y) / U) * 10) / 10;
+          const f2x = Math.round(((p2x - ox) / U) * 10) / 10;
+          const f2y = Math.round(((oy - p2y) / U) * 10) / 10;
+          const tx = ox + (p1x - ox) + (p2x - ox);
+          const ty = oy + (p1y - oy) + (p2y - oy);
+
+          const m1 = Math.hypot(f1x, f1y);
+          const m2 = Math.hypot(f2x, f2y);
+          const mS = Math.hypot(f1x + f2x, f1y + f2y);
+          const dot = f1x * f2x + f1y * f2y;
+          const cross = f1x * f2y - f1y * f2x;
+          const cosTh = Math.max(-1, Math.min(1, dot / Math.max(1e-6, m1 * m2)));
+          const deg = Math.round((Math.acos(cosTh) * 180) / Math.PI);
+
+          // Angle arc θ between F1 and F2
+          if (m1 > 0.4 && m2 > 0.4 && deg > 2 && deg < 178) {
+            const a1 = Math.atan2(p1y - oy, p1x - ox);
+            const a2 = Math.atan2(p2y - oy, p2x - ox);
+            let diff = a2 - a1;
+            while (diff <= -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            ctx.save();
+            ctx.fillStyle = 'rgba(100, 116, 139, 0.12)';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.25;
+            ctx.setLineDash([3, 2]);
+            ctx.beginPath();
+            ctx.moveTo(ox, oy);
+            ctx.arc(ox, oy, 32, a1, a1 + diff, diff < 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            const midA = a1 + diff / 2;
+            drawHaloLabel(
+              `${deg}°`,
+              ox + 46 * Math.cos(midA),
+              oy + 46 * Math.sin(midA),
+              '#475569',
+              'bold 12px system-ui, sans-serif'
+            );
+          }
+
+          // Parallelogram dashed lines (steps 1 & 2) + Resultant ΣF (step 3)
+          const isCollinear = Math.abs(cross) < 0.05;
+          if (!isCollinear && curStep >= 1) {
+            drawSimLineOrAxis(
+              p1x,
+              p1y,
+              tx,
+              ty,
+              '#64748b',
+              1.8,
+              [6, 4],
+              false,
+              getStepProg(1)
+            );
+          }
+          if (!isCollinear && curStep >= 2) {
+            drawSimLineOrAxis(
+              p2x,
+              p2y,
+              tx,
+              ty,
+              '#64748b',
+              1.8,
+              [6, 4],
+              false,
+              getStepProg(2)
+            );
+          }
+          if (curStep >= 3) {
+            if (mS > 0.1) {
+              drawSimVector(
+                ox,
+                oy,
+                tx,
+                ty,
+                '#1e293b',
+                4.0,
+                getStepProg(3),
+                `ΣF = ${Number.isInteger(mS) ? mS : mS.toFixed(2)} N`
+              );
+            } else {
+              drawHaloLabel('ΣF = 0 N', ox, oy - 24, '#1e293b', 'bold 15px system-ui, sans-serif');
+            }
+          }
+
+          // Labels F1 & F2 + Tip handles + Origin dot
+          drawHaloLabel(
+            `F₁ (${Number.isInteger(m1) ? m1 : m1.toFixed(1)}N)`,
+            p1x + 16 * Math.cos(Math.atan2(p1y - oy, p1x - ox)),
+            p1y + 16 * Math.sin(Math.atan2(p1y - oy, p1x - ox)),
+            '#d35400',
+            'bold 13.5px system-ui, sans-serif'
+          );
+          drawHaloLabel(
+            `F₂ (${Number.isInteger(m2) ? m2 : m2.toFixed(1)}N)`,
+            p2x + 16 * Math.cos(Math.atan2(p2y - oy, p2x - ox)),
+            p2y + 16 * Math.sin(Math.atan2(p2y - oy, p2x - ox)),
+            '#2980b9',
+            'bold 13.5px system-ui, sans-serif'
+          );
+
+          ctx.save();
+          ctx.fillStyle = '#1e293b';
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(211, 84, 0, 0.18)';
+          ctx.strokeStyle = '#d35400';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(p1x, p1y, 8.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(41, 128, 185, 0.18)';
+          ctx.strokeStyle = '#2980b9';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(p2x, p2y, 8.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          handlesHit.push(
+            { kind: 'f1-tip', x: p1x, y: p1y, r: 22 },
+            { kind: 'f2-tip', x: p2x, y: p2y, r: 22 },
+            { kind: 'origin', x: ox, y: oy, r: 18 }
+          );
+
+          // Calculations Box (Υπολογισμοί)
+          if (fSim.showCalc && curStep >= 3) {
+            const cLines: { text: string; bold?: boolean; color?: string }[] = [
+              {
+                text: `F₁ = ${m1.toFixed(1)} N,  F₂ = ${m2.toFixed(1)} N,  θ = ${deg}°`,
+                bold: true,
+              },
+            ];
+            if (isCollinear && dot >= 0) {
+              cLines.push(
+                { text: 'Συγγραμμικές Ομόρροπες (θ = 0°):' },
+                { text: 'ΣF = F₁ + F₂' },
+                {
+                  text: `ΣF = ${m1.toFixed(1)} + ${m2.toFixed(1)} = ${mS.toFixed(1)} N`,
+                  bold: true,
+                  color: '#16a34a',
+                }
+              );
+            } else if (isCollinear && dot < 0) {
+              cLines.push(
+                { text: 'Συγγραμμικές Αντίρροπες (θ = 180°):' },
+                { text: 'ΣF = |F₁ - F₂|' },
+                {
+                  text: `ΣF = |${m1.toFixed(1)} - ${m2.toFixed(1)}| = ${mS.toFixed(1)} N`,
+                  bold: true,
+                  color: '#16a34a',
+                }
+              );
+            } else if (Math.abs(dot) < 0.08) {
+              const sqSum = Math.round(m1 * m1 + m2 * m2);
+              cLines.push(
+                { text: 'Κάθετες Δυνάμεις (θ = 90°):' },
+                { text: 'ΣF² = F₁² + F₂²  (Πυθαγόρειο)' },
+                { text: `ΣF = √(${m1.toFixed(0)}² + ${m2.toFixed(0)}²) = √${sqSum}` },
+                {
+                  text: `ΣF = ${simplifyRootText(sqSum)} N ≈ ${mS.toFixed(2)} N`,
+                  bold: true,
+                  color: '#16a34a',
+                }
+              );
+            } else {
+              cLines.push(
+                { text: `Τυχαία Γωνία (θ = ${deg}°):` },
+                { text: 'ΣF = √(F₁² + F₂² + 2·F₁·F₂·συνθ)' },
+                {
+                  text: `ΣF = ${mS.toFixed(2)} N`,
+                  bold: true,
+                  color: '#16a34a',
+                }
+              );
+            }
+            drawCalcCard(
+              Math.min(w - 255, Math.max(ox, p1x, p2x, tx) + 34),
+              Math.max(24, Math.min(oy, p1y, p2y, ty) - 20),
+              '➕ Υπολογισμός Συνισταμένης',
+              cLines,
+              '#8e44ad'
+            );
+          }
+
+          // On-Canvas Control Bar
+          const barY = Math.min(h - 46, Math.max(oy, p1y, p2y, ty) + 38);
+          let curBx = Math.max(16, ox - 30);
+          drawPillButton(
+            'Άμεση',
+            'mode-direct',
+            curBx,
+            barY,
+            66,
+            30,
+            !fSim.synthesisStepMode ? '#334155' : '#e2e8f0',
+            !fSim.synthesisStepMode ? '#fff' : '#334155'
+          );
+          curBx += 72;
+          drawPillButton(
+            'Βηματική',
+            'mode-step',
+            curBx,
+            barY,
+            80,
+            30,
+            fSim.synthesisStepMode ? '#334155' : '#e2e8f0',
+            fSim.synthesisStepMode ? '#fff' : '#334155'
+          );
+          curBx += 88;
+          if (curStep === 0) {
+            drawPillButton('Σύνθεση', 'start-synthesis', curBx, barY, 84, 30, '#27ae60', '#fff');
+          } else {
+            if (fSim.synthesisStepMode) {
+              drawPillButton(
+                '◀',
+                'prev-step',
+                curBx,
+                barY,
+                34,
+                30,
+                '#e67e22',
+                '#fff',
+                undefined,
+                curStep <= 0 || curAnim !== null
+              );
+              curBx += 40;
+              drawPillButton(
+                '▶',
+                'next-step',
+                curBx,
+                barY,
+                34,
+                30,
+                '#e67e22',
+                '#fff',
+                undefined,
+                curStep >= 3 || curAnim !== null
+              );
+              curBx += 40;
+            }
+            drawPillButton('Επαναφορά', 'reset', curBx, barY, 88, 30, '#2980b9', '#fff');
+            curBx += 94;
+            if (curStep >= 3) {
+              drawPillButton(
+                'Υπολογισμοί',
+                'toggle-calc',
+                curBx,
+                barY,
+                100,
+                30,
+                '#8e44ad',
+                '#fff'
+              );
+            }
+          }
+        }
+
+        // ------------------------------------------------------------------
+        // MODE 3: 'incline' (Ανάλυση Δυνάμεων σε Κεκλιμένο Επίπεδο)
+        // ------------------------------------------------------------------
+        else if (fSim.mode === 'incline') {
+          const wedgeSt = activePage.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          const blockSt = activePage.strokes.find((st) => st.id === fSim.secondaryStrokeId);
+          if (wedgeSt && wedgeSt.points.length >= 3) {
+            const pStart = wedgeSt.points[0];
+            const pPeak = wedgeSt.points[2];
+            const angle = Math.atan2(pStart.y - pPeak.y, pPeak.x - pStart.x);
+            const deg = Math.round((angle * 180) / Math.PI);
+
+            // Green Angle Arc θ at pStart + Green Draggable Peak Handle at pPeak
+            ctx.save();
+            ctx.fillStyle = 'rgba(76, 175, 80, 0.14)';
+            ctx.strokeStyle = '#4caf50';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(pStart.x, pStart.y);
+            ctx.arc(pStart.x, pStart.y, 52, 0, -angle, true);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            drawHaloLabel(
+              `θ = ${deg}°`,
+              pStart.x + 76 * Math.cos(-angle / 2),
+              pStart.y + 76 * Math.sin(-angle / 2),
+              '#2e7d32',
+              'bold 13.5px system-ui, sans-serif'
+            );
+
+            // Green Peak Drag Handle
+            ctx.save();
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+            ctx.shadowBlur = 6;
+            ctx.fillStyle = '#4caf50';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.8;
+            ctx.beginPath();
+            ctx.arc(pPeak.x, pPeak.y, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            handlesHit.push({ kind: 'incline-peak', x: pPeak.x, y: pPeak.y, r: 24 });
+
+            // Compute block center of mass (cx, cy)
+            let cx = (pStart.x + pPeak.x) / 2 - 22 * Math.sin(angle);
+            let cy = (pStart.y + pPeak.y) / 2 - 22 * Math.cos(angle);
+            if (blockSt && blockSt.points.length >= 4) {
+              let sx = 0,
+                sy = 0;
+              for (let k = 0; k < 4; k++) {
+                sx += blockSt.points[k].x;
+                sy += blockSt.points[k].y;
+              }
+              cx = sx / 4;
+              cy = sy / 4;
+            }
+
+            // Center of mass dot
+            ctx.save();
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 3.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            const B_mag = 110;
+            const N_mag = B_mag * Math.cos(angle);
+            const aX_draw = -angle + Math.PI;
+            const aY_draw = -angle + Math.PI / 2;
+            const aY_norm = -angle - Math.PI / 2;
+            const bx = B_mag * Math.sin(angle);
+            const by = B_mag * Math.cos(angle);
+            const axLen = 145;
+
+            if (fSim.anMode === 'B' && curStep >= 1) {
+              drawSimLineOrAxis(
+                cx - axLen * Math.cos(aX_draw),
+                cy - axLen * Math.sin(aX_draw),
+                cx + axLen * Math.cos(aX_draw),
+                cy + axLen * Math.sin(aX_draw),
+                '#334155',
+                1.8,
+                [6, 4],
+                true,
+                getStepProg(1),
+                'x',
+                '#0f172a'
+              );
+            }
+            if (fSim.anMode === 'B' && curStep >= 2) {
+              drawSimLineOrAxis(
+                cx - axLen * Math.cos(aY_norm),
+                cy - axLen * Math.sin(aY_norm),
+                cx + axLen * Math.cos(aY_norm),
+                cy + axLen * Math.sin(aY_norm),
+                '#334155',
+                1.8,
+                [6, 4],
+                true,
+                getStepProg(2),
+                'y',
+                '#0f172a'
+              );
+            }
+            if (fSim.anMode === 'B' && curStep >= 3) {
+              drawSimLineOrAxis(
+                cx,
+                cy + B_mag,
+                cx + bx * Math.cos(aX_draw),
+                cy + bx * Math.sin(aX_draw),
+                '#64748b',
+                1.7,
+                [3, 3],
+                false,
+                getStepProg(3)
+              );
+            }
+            if (fSim.anMode === 'B' && curStep >= 4) {
+              drawSimVector(
+                cx,
+                cy,
+                cx + bx * Math.cos(aX_draw),
+                cy + bx * Math.sin(aX_draw),
+                '#dc3545',
+                3.2,
+                getStepProg(4),
+                'Bx'
+              );
+            }
+            if (fSim.anMode === 'B' && curStep >= 5) {
+              drawSimLineOrAxis(
+                cx,
+                cy + B_mag,
+                cx + by * Math.cos(aY_draw),
+                cy + by * Math.sin(aY_draw),
+                '#64748b',
+                1.7,
+                [3, 3],
+                false,
+                getStepProg(5)
+              );
+            }
+            if (fSim.anMode === 'B' && curStep >= 6) {
+              drawSimVector(
+                cx,
+                cy,
+                cx + by * Math.cos(aY_draw),
+                cy + by * Math.sin(aY_draw),
+                '#dc3545',
+                3.2,
+                getStepProg(6),
+                'By'
+              );
+            }
+
+            if (fSim.showForces) {
+              drawSimVector(cx, cy, cx, cy + B_mag, '#dc3545', 3.6, 1, 'B');
+              drawSimVector(
+                cx,
+                cy,
+                cx + N_mag * Math.cos(aY_norm),
+                cy + N_mag * Math.sin(aY_norm),
+                '#0d6efd',
+                3.6,
+                1,
+                'N'
+              );
+            }
+
+            if (fSim.showCalc) {
+              const B_N = 10;
+              const Bx_N = B_N * Math.sin(angle);
+              const By_N = B_N * Math.cos(angle);
+              drawCalcCard(
+                Math.min(w - 255, pPeak.x + 28),
+                Math.max(24, pPeak.y - 10),
+                `⛰️ Κεκλιμένο (θ = ${deg}°)`,
+                [
+                  { text: `Βάρος: B = ${B_N.toFixed(1)} N`, bold: true },
+                  {
+                    text: `Bx = B·ημ(${deg}°) = ${Bx_N.toFixed(2)} N`,
+                    bold: true,
+                    color: '#dc3545',
+                  },
+                  {
+                    text: `By = B·συν(${deg}°) = ${By_N.toFixed(2)} N`,
+                    bold: true,
+                    color: '#dc3545',
+                  },
+                  {
+                    text: `Κάθετη Αντίδραση: N = By = ${By_N.toFixed(2)} N`,
+                    bold: true,
+                    color: '#0d6efd',
+                  },
+                ],
+                '#16a34a'
+              );
+            }
+
+            // On-Canvas Control Bar below incline base
+            const barY = Math.min(h - 46, pStart.y + 28);
+            let curBx = Math.max(16, pStart.x + 10);
+            drawPillButton(
+              'Δυνάμεις',
+              'toggle-forces',
+              curBx,
+              barY,
+              86,
+              32,
+              fSim.showForces ? '#dc3545' : '#334155',
+              '#fff'
+            );
+            curBx += 94;
+            if (fSim.showForces) {
+              if (fSim.anMode === 'B' && curStep > 0) {
+                drawPillButton(
+                  '◀',
+                  'prev-step',
+                  curBx,
+                  barY,
+                  36,
+                  32,
+                  '#b2ff59',
+                  '#0f172a',
+                  '#76ff03',
+                  curAnim !== null
+                );
+                curBx += 42;
+              }
+              drawPillButton(
+                'Ανάλυση B',
+                'start-incline-an',
+                curBx,
+                barY,
+                96,
+                32,
+                fSim.anMode === 'B' ? '#b2ff59' : '#334155',
+                fSim.anMode === 'B' ? '#0f172a' : '#fff',
+                fSim.anMode === 'B' ? '#76ff03' : undefined
+              );
+              curBx += 102;
+              if (fSim.anMode === 'B' && curStep < 6) {
+                drawPillButton(
+                  '▶',
+                  'next-step',
+                  curBx,
+                  barY,
+                  36,
+                  32,
+                  '#b2ff59',
+                  '#0f172a',
+                  '#76ff03',
+                  curAnim !== null
+                );
+                curBx += 42;
+              }
+              drawPillButton(
+                'Υπολογισμοί',
+                'toggle-calc',
+                curBx,
+                barY,
+                100,
+                32,
+                fSim.showCalc ? '#15803d' : '#475569',
+                '#fff'
+              );
+            }
+          }
+        }
+
+        // ------------------------------------------------------------------
+        // MODE 4: 'pendulum' (Δυνάμεις & Ανάλυση σε Απλό Εκκρεμές)
+        // ------------------------------------------------------------------
+        else if (fSim.mode === 'pendulum') {
+          const PX = fSim.originX;
+          const PY = fSim.originY;
+          const L = fSim.rodLengthPx || 230;
+          let pState = pendulumPhysRef.current[fSim.id];
+          if (!pState) {
+            pState = {
+              ang: fSim.pendulumAngleRad ?? Math.PI / 4,
+              av: fSim.pendulumAngVel ?? 0,
+              lastTime: now,
+              trajectory: [],
+            };
+            pendulumPhysRef.current[fSim.id] = pState;
+          }
+
+          const isDraggingBob =
+            draggingForceHandleRef.current?.simId === fSim.id &&
+            draggingForceHandleRef.current?.kind === 'pendulum-bob';
+
+          if (!fSim.isPaused && !isDraggingBob) {
+            const dt = Math.min(0.05, Math.max(0.001, (now - pState.lastTime) / 1000));
+            const subSteps = 4;
+            const subDt = (dt * 60) / subSteps;
+            const G = 0.4;
+            const TS = 0.1;
+            for (let k = 0; k < subSteps; k++) {
+              const aa = ((-1 * G) / L) * Math.sin(pState.ang) * 100;
+              pState.av += aa * TS * subDt;
+              pState.ang += pState.av * TS * subDt;
+            }
+          }
+          pState.lastTime = now;
+
+          const ang = pState.ang;
+          const bx = PX + L * Math.sin(ang);
+          const by = PY + L * Math.cos(ang);
+
+          // Trajectory dots
+          if (fSim.showTrajectory && !fSim.isPaused && !isDraggingBob) {
+            const tr = pState.trajectory;
+            if (
+              tr.length === 0 ||
+              Math.hypot(bx - tr[tr.length - 1].x, by - tr[tr.length - 1].y) > 5.5
+            ) {
+              tr.push({ x: bx, y: by });
+              if (tr.length > 180) tr.shift();
+            }
+            ctx.save();
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.48)';
+            for (const pt of tr) {
+              ctx.beginPath();
+              ctx.arc(pt.x, pt.y, 2.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.restore();
+          }
+
+          // Draw Rod + Pivot + Bob
+          ctx.save();
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(PX, PY);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+
+          ctx.fillStyle = '#0f172a';
+          ctx.beginPath();
+          ctx.arc(PX, PY, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.shadowColor = 'rgba(15, 23, 42, 0.28)';
+          ctx.shadowBlur = 8;
+          ctx.shadowOffsetY = 3;
+          ctx.fillStyle = '#1e293b';
+          ctx.strokeStyle = fSim.isPaused ? '#38bdf8' : '#0f172a';
+          ctx.lineWidth = fSim.isPaused ? 2.4 : 1.8;
+          ctx.beginPath();
+          ctx.arc(bx, by, 19, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          if (fSim.isPaused) {
+            handlesHit.push({ kind: 'pendulum-bob', x: bx, y: by, r: 28 });
+          }
+
+          const wm_phys = 78;
+          const VSCALE = 1.45;
+          const wm_vis = wm_phys * VSCALE;
+          const tm_phys = Math.max(
+            0,
+            wm_phys * Math.cos(ang) +
+              (fSim.isPaused || isDraggingBob ? 0 : Math.abs(pState.av * pState.av * L * 0.6))
+          );
+          const tm_vis = tm_phys * VSCALE;
+          const wa = Math.PI / 2;
+          const ta = Math.atan2(PY - by, PX - bx);
+
+          // Step-by-step Analysis of T or B when paused
+          const axLen = 110;
+          const isLeft = bx < PX;
+          const s = Math.sin(ang);
+          const c = Math.cos(ang);
+
+          if (fSim.isPaused && fSim.showForces && fSim.anMode === 'T') {
+            const vecTipX = bx + tm_vis * Math.cos(ta);
+            const vecTipY = by + tm_vis * Math.sin(ta);
+            const xax1 = isLeft ? { x: bx - axLen, y: by } : { x: bx + axLen, y: by };
+            const xax2 = isLeft ? { x: bx + axLen, y: by } : { x: bx - axLen, y: by };
+            const yax1 = { x: bx, y: by + axLen };
+            const yax2 = { x: bx, y: by - axLen };
+
+            if (curStep >= 1) {
+              drawSimLineOrAxis(
+                xax1.x,
+                xax1.y,
+                xax2.x,
+                xax2.y,
+                '#0f172a',
+                1.8,
+                [5, 4],
+                true,
+                getStepProg(1),
+                'x',
+                '#0f172a'
+              );
+            }
+            if (curStep >= 2) {
+              drawSimLineOrAxis(
+                yax1.x,
+                yax1.y,
+                yax2.x,
+                yax2.y,
+                '#0f172a',
+                1.8,
+                [5, 4],
+                true,
+                getStepProg(2),
+                'y',
+                '#0f172a'
+              );
+            }
+            if (curStep >= 3) {
+              drawSimLineOrAxis(
+                vecTipX,
+                vecTipY,
+                vecTipX,
+                by,
+                '#64748b',
+                1.7,
+                [3, 3],
+                false,
+                getStepProg(3)
+              );
+            }
+            if (curStep >= 4) {
+              drawSimVector(bx, by, vecTipX, by, '#0e6efd', 3.2, getStepProg(4), 'Tx');
+            }
+            if (curStep >= 5) {
+              drawSimLineOrAxis(
+                vecTipX,
+                vecTipY,
+                bx,
+                vecTipY,
+                '#64748b',
+                1.7,
+                [3, 3],
+                false,
+                getStepProg(5)
+              );
+            }
+            if (curStep >= 6) {
+              drawSimVector(bx, by, bx, vecTipY, '#0e6efd', 3.2, getStepProg(6), 'Ty');
+            }
+          } else if (fSim.isPaused && fSim.showForces && fSim.anMode === 'B') {
+            const wTipX = bx;
+            const wTipY = by + wm_vis;
+            const yax1 = { x: bx + axLen * s, y: by + axLen * c };
+            const yax2 = { x: bx - 160 * s, y: by - 160 * c };
+            const p1 = { x: bx - axLen * c, y: by + axLen * s };
+            const p2 = { x: bx + axLen * c, y: by - axLen * s };
+            const xax1 = isLeft ? (p1.x < p2.x ? p1 : p2) : p1.x > p2.x ? p1 : p2;
+            const xax2 = isLeft ? (p1.x < p2.x ? p2 : p1) : p1.x > p2.x ? p2 : p1;
+
+            const wy = wm_vis * Math.cos(ang);
+            const vByX = wy * Math.sin(ang);
+            const vByY = wy * Math.cos(ang);
+            const vBxX = -vByX;
+            const vBxY = wm_vis - vByY;
+            const pByX = bx + vByX;
+            const pByY = by + vByY;
+            const pBxX = bx + vBxX;
+            const pBxY = by + vBxY;
+
+            if (curStep >= 1) {
+              drawSimLineOrAxis(
+                xax1.x,
+                xax1.y,
+                xax2.x,
+                xax2.y,
+                '#7cb342',
+                1.8,
+                [5, 4],
+                true,
+                getStepProg(1),
+                'x',
+                '#558b2f'
+              );
+            }
+            if (curStep >= 2) {
+              drawSimLineOrAxis(
+                yax1.x,
+                yax1.y,
+                yax2.x,
+                yax2.y,
+                '#7cb342',
+                1.8,
+                [5, 4],
+                true,
+                getStepProg(2),
+                'y',
+                '#558b2f'
+              );
+            }
+            if (curStep >= 3) {
+              drawSimLineOrAxis(
+                wTipX,
+                wTipY,
+                pBxX,
+                pBxY,
+                '#64748b',
+                1.7,
+                [3, 3],
+                false,
+                getStepProg(3)
+              );
+            }
+            if (curStep >= 4) {
+              drawSimVector(bx, by, pBxX, pBxY, '#dc3545', 3.2, getStepProg(4), 'Bx');
+            }
+            if (curStep >= 5) {
+              drawSimLineOrAxis(
+                wTipX,
+                wTipY,
+                pByX,
+                pByY,
+                '#64748b',
+                1.7,
+                [3, 3],
+                false,
+                getStepProg(5)
+              );
+            }
+            if (curStep >= 6) {
+              drawSimVector(bx, by, pByX, pByY, '#dc3545', 3.2, getStepProg(6), 'By');
+            }
+          }
+
+          if (fSim.showForces) {
+            drawSimVector(bx, by, bx, by + wm_vis, '#dc3545', 3.6, 1, 'B');
+            drawSimVector(
+              bx,
+              by,
+              bx + tm_vis * Math.cos(ta),
+              by + tm_vis * Math.sin(ta),
+              '#0e6efd',
+              3.6,
+              1,
+              'T'
+            );
+          }
+
+          if (fSim.showForces && fSim.showResultant) {
+            const wx = wm_vis * Math.cos(wa);
+            const wy = wm_vis * Math.sin(wa);
+            const tx = tm_vis * Math.cos(ta);
+            const ty = tm_vis * Math.sin(ta);
+            const sx = wx + tx;
+            const sy = wy + ty;
+            if (fSim.isPaused || isDraggingBob) {
+              drawSimLineOrAxis(
+                bx + wx,
+                by + wy,
+                bx + sx,
+                by + sy,
+                '#64748b',
+                1.6,
+                [5, 4],
+                false,
+                1
+              );
+              drawSimLineOrAxis(
+                bx + tx,
+                by + ty,
+                bx + sx,
+                by + sy,
+                '#64748b',
+                1.6,
+                [5, 4],
+                false,
+                1
+              );
+            }
+            drawSimVector(bx, by, bx + sx, by + sy, '#27a69a', 3.8, 1, 'ΣF');
+          }
+
+          // On-Canvas Control Bar below Pendulum swing
+          const barY = Math.min(h - 74, PY + L + wm_vis + 28);
+          let curBx = Math.max(16, PX - 190);
+          drawPillButton(
+            fSim.isPaused ? 'Συνέχεια' : 'Παύση',
+            'toggle-pause',
+            curBx,
+            barY,
+            82,
+            30,
+            fSim.isPaused ? '#dc3545' : '#0d6efd',
+            '#fff'
+          );
+          curBx += 88;
+          if (!fSim.isPaused) {
+            drawPillButton(
+              'Τροχιά',
+              'toggle-trajectory',
+              curBx,
+              barY,
+              70,
+              30,
+              fSim.showTrajectory ? '#e2e8f0' : '#334155',
+              fSim.showTrajectory ? '#0f172a' : '#fff'
+            );
+            curBx += 76;
+          }
+          drawPillButton(
+            'Δυνάμεις',
+            'toggle-forces',
+            curBx,
+            barY,
+            82,
+            30,
+            fSim.showForces ? '#dc3545' : '#334155',
+            '#fff'
+          );
+          curBx += 88;
+          if (fSim.showForces) {
+            drawPillButton(
+              'Συνισταμένη',
+              'toggle-resultant',
+              curBx,
+              barY,
+              102,
+              30,
+              fSim.showResultant ? '#27a69a' : '#334155',
+              '#fff'
+            );
+            curBx += 108;
+            if (fSim.isPaused) {
+              drawPillButton(
+                'Ανάλυση Τ',
+                'start-an-T',
+                curBx,
+                barY,
+                88,
+                30,
+                fSim.anMode === 'T' ? '#b2ff59' : '#334155',
+                fSim.anMode === 'T' ? '#0f172a' : '#fff',
+                fSim.anMode === 'T' ? '#76ff03' : undefined
+              );
+              curBx += 94;
+              drawPillButton(
+                'Ανάλυση B',
+                'start-an-B',
+                curBx,
+                barY,
+                88,
+                30,
+                fSim.anMode === 'B' ? '#b2ff59' : '#334155',
+                fSim.anMode === 'B' ? '#0f172a' : '#fff',
+                fSim.anMode === 'B' ? '#76ff03' : undefined
+              );
+            }
+          }
+          if (fSim.isPaused && fSim.showForces && (fSim.anMode === 'T' || fSim.anMode === 'B')) {
+            const navY = barY + 36;
+            drawPillButton(
+              '◀',
+              'prev-step',
+              PX - 44,
+              navY,
+              40,
+              30,
+              '#b2ff59',
+              '#0f172a',
+              '#76ff03',
+              curStep <= 0 || curAnim !== null
+            );
+            drawPillButton(
+              '▶',
+              'next-step',
+              PX + 4,
+              navY,
+              40,
+              30,
+              '#b2ff59',
+              '#0f172a',
+              '#76ff03',
+              curStep >= 6 || curAnim !== null
+            );
+          }
+        }
+
+        // Draw our BestNotes Hand-with-Pencil at the leading tip of any active step animation!
+        if (forceHandTip) {
+          const handImg = mathGraphHandImgObjRef.current;
+          if (handImg && handImg.complete && handImg.naturalWidth > 0) {
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 4;
+            ctx.drawImage(
+              handImg,
+              forceHandTip.x - 3.71,
+              forceHandTip.y - 18.17,
+              112,
+              84.56
+            );
+            ctx.restore();
+          }
+        }
+
+        forceOverlayHitRef.current = {
+          simId: fSim.id,
+          mode: fSim.mode,
+          handles: handlesHit,
+          buttons: buttonsHit,
+        };
+      } else {
+        forceOverlayHitRef.current = null;
+      }
+
       ctx.restore();
       if (
         isSimulating ||
@@ -14607,6 +17182,9 @@ export default function App() {
         springSettleAnim !== null ||
         springPhaseShiftAnim !== null ||
         hookeLineAnim !== null ||
+        forceSimAnim !== null ||
+        forceSimAnimRef.current !== null ||
+        (activeForceSim && activeForceSim.mode === 'pendulum' && !activeForceSim.isPaused) ||
         (circuitAlignFlashStart !== null && now - circuitAlignFlashStart <= 560)
       ) {
         rafId = window.requestAnimationFrame(renderSimFrame);
@@ -14625,6 +17203,8 @@ export default function App() {
     springSettleAnim,
     springPhaseShiftAnim,
     hookeLineAnim,
+    forceSimAnim,
+    forceSimSubTab,
     selectedHookeSpringId,
     rulerState,
     showSimulationPanel,
@@ -14636,6 +17216,8 @@ export default function App() {
     activePage.strokes,
     activePage.springSims,
     activePage.activeSpringSimId,
+    activePage.forceSims,
+    activePage.activeForceSimId,
     activePage.layers,
     activePage.template,
     simShowElectrons,
@@ -17292,6 +19874,62 @@ export default function App() {
       }
     }
 
+    // 0a-forces. Interactive Forces Simulation Canvas Buttons & Handles:
+    //            - On-Canvas Pill Buttons (Ανάλυση, Σύνθεση, Δυνάμεις, Παύση, Τροχιά, Συνισταμένη, ◀, ▶, Υπολογισμοί)
+    //            - Draggable Vector Tips (F, F1, F2), Origin Dot, Green Incline Peak Handle, Paused Pendulum Bob & Calc Card
+    if (forceOverlayHitRef.current) {
+      const fHit = forceOverlayHitRef.current;
+      const curForceSim = getActiveForceSim(targetPage);
+      if (curForceSim && curForceSim.id === fHit.simId) {
+        for (const btn of fHit.buttons) {
+          if (
+            pt.x >= btn.x1 - 4 &&
+            pt.x <= btn.x2 + 4 &&
+            pt.y >= btn.y1 - 4 &&
+            pt.y <= btn.y2 + 4
+          ) {
+            e.preventDefault();
+            handleForceSimAction(curForceSim, btn.action);
+            isDrawingRef.current = false;
+            activePointerIdRef.current = null;
+            activePointerTypeRef.current = null;
+            return;
+          }
+        }
+        for (const h of fHit.handles) {
+          const isHit =
+            h.kind === 'calc-box'
+              ? Math.abs(pt.x - h.x) <= (h.w || 236) / 2 &&
+                Math.abs(pt.y - h.y) <= (h.h || 110) / 2
+              : Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
+          if (isHit) {
+            e.preventDefault();
+            forceSimAnimRef.current = null;
+            setForceSimAnim(null);
+            draggingForceHandleRef.current = {
+              simId: fHit.simId,
+              kind: h.kind,
+              startX: pt.x,
+              startY: pt.y,
+              origOriginX: curForceSim.originX,
+              origOriginY: curForceSim.originY,
+              origCalcX: h.x - (h.w || 236) / 2,
+              origCalcY: h.y - (h.h || 110) / 2,
+            };
+            activePointerIdRef.current = e.pointerId;
+            activePointerTypeRef.current = e.pointerType;
+            try {
+              e.currentTarget.setPointerCapture(e.pointerId);
+            } catch {
+              // ignore
+            }
+            isDrawingRef.current = true;
+            return;
+          }
+        }
+      }
+    }
+
     // 0a-spring. Interactive Spring Simulation Canvas Handles:
     //            1) Blue Square Handles (□) on the +A / -A blue dashed lines (symmetric amplitude sliding)
     //            2) Draggable Live Graph Cards (x(t), υ(t), α(t)) & their "✕" close buttons
@@ -19687,7 +22325,288 @@ export default function App() {
       }
     }
 
+    // 0-forces. Interactive Forces Simulation Handle Dragging:
+    if (draggingForceHandleRef.current) {
+      const dragF = draggingForceHandleRef.current;
+      const U = A4_GRID_STEP_PX;
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+
+      if (dragF.kind === 'calc-box') {
+        const nextX = Math.round(
+          Math.max(8, Math.min(pW - 244, (dragF.origCalcX ?? 40) + (latestPt.x - dragF.startX)))
+        );
+        const nextY = Math.round(
+          Math.max(8, Math.min(pH - 130, (dragF.origCalcY ?? 40) + (latestPt.y - dragF.startY)))
+        );
+        updateActivePage(
+          (page) => ({
+            ...page,
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === dragF.simId ? { ...s, calcBoxPos: { x: nextX, y: nextY } } : s
+            ),
+          }),
+          false
+        );
+        return;
+      }
+
+      if (dragF.kind === 'analysis-tip') {
+        updateActivePage((page) => {
+          const fSim = (page.forceSims || []).find((s) => s.id === dragF.simId);
+          if (!fSim) return page;
+          const pStroke = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          const ox = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].x : fSim.originX;
+          const oy = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].y : fSim.originY;
+          const rawX = (latestPt.x - ox) / U;
+          const rawY = (oy - latestPt.y) / U;
+          const isInt = fSim.snapToGrid !== false;
+          let cx = isInt ? Math.round(rawX) : Math.round(rawX * 10) / 10;
+          let cy = isInt ? Math.round(rawY) : Math.round(rawY * 10) / 10;
+          if (Math.abs(cx) < 0.5 && Math.abs(cy) < 0.5) {
+            cx = 1;
+            cy = 1;
+          }
+          const tx = ox + cx * U;
+          const ty = oy - cy * U;
+          return {
+            ...page,
+            strokes: page.strokes.map((st) =>
+              st.id === fSim.primaryStrokeId
+                ? buildForceArrowStroke(st.id, ox, oy, tx, ty, st.color || '#1976d2', st.layerId, st.groupId)
+                : st
+            ),
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === dragF.simId ? { ...s, fxUnits: cx, fyUnits: cy } : s
+            ),
+          };
+        }, false);
+        return;
+      }
+
+      if (dragF.kind === 'f1-tip' || dragF.kind === 'f2-tip') {
+        updateActivePage((page) => {
+          const fSim = (page.forceSims || []).find((s) => s.id === dragF.simId);
+          if (!fSim) return page;
+          const s1 = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          const ox = s1 && s1.points.length >= 2 ? s1.points[0].x : fSim.originX;
+          const oy = s1 && s1.points.length >= 2 ? s1.points[0].y : fSim.originY;
+          const rx = Math.round((latestPt.x - ox) / U);
+          const ry = Math.round((oy - latestPt.y) / U);
+          if (rx === 0 && ry === 0) return page;
+          const tx = ox + rx * U;
+          const ty = oy - ry * U;
+          const targetStrokeId =
+            dragF.kind === 'f1-tip' ? fSim.primaryStrokeId : fSim.secondaryStrokeId;
+          const defaultCol = dragF.kind === 'f1-tip' ? '#d35400' : '#2980b9';
+          return {
+            ...page,
+            strokes: page.strokes.map((st) =>
+              st.id === targetStrokeId
+                ? buildForceArrowStroke(st.id, ox, oy, tx, ty, st.color || defaultCol, st.layerId, st.groupId)
+                : st
+            ),
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === dragF.simId
+                ? {
+                    ...s,
+                    ...(dragF.kind === 'f1-tip'
+                      ? { f1xUnits: rx, f1yUnits: ry }
+                      : { f2xUnits: rx, f2yUnits: ry }),
+                    ...(s.synthesisStepMode ? { step: 0, showCalc: false } : {}),
+                  }
+                : s
+            ),
+          };
+        }, false);
+        return;
+      }
+
+      if (dragF.kind === 'origin') {
+        const nx = Math.round(Math.max(2 * U, Math.min(pW - 4 * U, latestPt.x)) / U) * U;
+        const ny = Math.round(Math.max(4 * U, Math.min(pH - 4 * U, latestPt.y)) / U) * U;
+        updateActivePage((page) => {
+          const fSim = (page.forceSims || []).find((s) => s.id === dragF.simId);
+          if (!fSim) return page;
+          const pStroke = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          const oldOx = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].x : fSim.originX;
+          const oldOy = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].y : fSim.originY;
+          const dx = nx - oldOx;
+          const dy = ny - oldOy;
+          if (dx === 0 && dy === 0) return page;
+          return {
+            ...page,
+            strokes: page.strokes.map((st) => {
+              if (st.id === fSim.primaryStrokeId || st.id === fSim.secondaryStrokeId) {
+                return {
+                  ...st,
+                  points: st.points.map((pt) => ({
+                    ...pt,
+                    x: pt.x + dx,
+                    y: pt.y + dy,
+                    ...(pt.cx !== undefined ? { cx: pt.cx + dx } : {}),
+                    ...(pt.cy !== undefined ? { cy: pt.cy + dy } : {}),
+                  })),
+                };
+              }
+              return st;
+            }),
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === dragF.simId ? { ...s, originX: nx, originY: ny } : s
+            ),
+          };
+        }, false);
+        return;
+      }
+
+      if (dragF.kind === 'incline-peak') {
+        updateActivePage((page) => {
+          const fSim = (page.forceSims || []).find((s) => s.id === dragF.simId);
+          if (!fSim) return page;
+          const wedge = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          if (!wedge || wedge.points.length < 3) return page;
+          const pStart = wedge.points[0];
+          const lenPx =
+            fSim.inclineLenPx ||
+            Math.max(140, Math.hypot(wedge.points[2].x - pStart.x, wedge.points[2].y - pStart.y));
+          const dy = pStart.y - latestPt.y;
+          let na = Math.asin(Math.max(0, Math.min(1, dy / lenPx)));
+          const minAng = (15 * Math.PI) / 180;
+          const maxAng = (60 * Math.PI) / 180;
+          na = Math.max(minAng, Math.min(maxAng, na));
+          const topX = pStart.x + lenPx * Math.cos(na);
+          const topY = pStart.y - lenPx * Math.sin(na);
+          const pSlopeStart = { x: pStart.x, y: pStart.y };
+          const pBaseCorner = { x: topX, y: pStart.y };
+          const pSlopePeak = { x: topX, y: topY };
+          const nextWedgePts = [
+            { x: pSlopeStart.x, y: pSlopeStart.y, pressure: 0.7 },
+            {
+              x: pBaseCorner.x,
+              y: pBaseCorner.y,
+              cx: (pSlopeStart.x + pBaseCorner.x) / 2,
+              cy: (pSlopeStart.y + pBaseCorner.y) / 2,
+              pressure: 0.7,
+            },
+            {
+              x: pSlopePeak.x,
+              y: pSlopePeak.y,
+              cx: (pBaseCorner.x + pSlopePeak.x) / 2,
+              cy: (pBaseCorner.y + pSlopePeak.y) / 2,
+              pressure: 0.7,
+            },
+            {
+              x: pSlopeStart.x,
+              y: pSlopeStart.y,
+              cx: (pSlopePeak.x + pSlopeStart.x) / 2,
+              cy: (pSlopePeak.y + pSlopeStart.y) / 2,
+              pressure: 0.7,
+            },
+          ];
+          const nextBlockPts = computeInclinedPlaneBlockPoints(
+            pSlopeStart,
+            pBaseCorner,
+            pSlopePeak
+          );
+          return {
+            ...page,
+            strokes: page.strokes.map((st) => {
+              if (st.id === fSim.primaryStrokeId) {
+                return { ...st, points: nextWedgePts };
+              }
+              if (st.id === fSim.secondaryStrokeId) {
+                return { ...st, points: nextBlockPts };
+              }
+              return st;
+            }),
+            forceSims: (page.forceSims || []).map((s) =>
+              s.id === dragF.simId
+                ? { ...s, inclineAngleDeg: Math.round((na * 180) / Math.PI) }
+                : s
+            ),
+          };
+        }, false);
+        return;
+      }
+
+      if (dragF.kind === 'pendulum-bob') {
+        const curForceSim = getActiveForceSim(activePage);
+        if (curForceSim && curForceSim.id === dragF.simId) {
+          const dx = latestPt.x - curForceSim.originX;
+          const dy = Math.max(20, latestPt.y - curForceSim.originY);
+          const nextAng = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, Math.atan2(dx, dy)));
+          pendulumPhysRef.current[curForceSim.id] = {
+            ang: nextAng,
+            av: 0,
+            lastTime: performance.now(),
+            trajectory: [],
+          };
+          const px = curForceSim.originX;
+          const py = curForceSim.originY;
+          const rodL = curForceSim.rodLengthPx || 230;
+          const bx = px + rodL * Math.sin(nextAng);
+          const by = py + rodL * Math.cos(nextAng);
+          updateActivePage(
+            (page) => ({
+              ...page,
+              strokes: page.strokes.map((st) => {
+                if (st.id === curForceSim.primaryStrokeId) {
+                  return {
+                    ...st,
+                    points: [
+                      { x: px, y: py, pressure: 0.7 },
+                      { x: bx, y: by, cx: (px + bx) / 2, cy: (py + by) / 2, pressure: 0.7 },
+                    ],
+                  };
+                }
+                if (st.id === curForceSim.secondaryStrokeId && st.points.length >= 4) {
+                  let minX = Infinity,
+                    maxX = -Infinity,
+                    minY = Infinity,
+                    maxY = -Infinity;
+                  for (const pt of st.points) {
+                    if (pt.x < minX) minX = pt.x;
+                    if (pt.x > maxX) maxX = pt.x;
+                    if (pt.y < minY) minY = pt.y;
+                    if (pt.y > maxY) maxY = pt.y;
+                  }
+                  const oldCx = (minX + maxX) / 2;
+                  const oldCy = (minY + maxY) / 2;
+                  const sdx = bx - oldCx;
+                  const sdy = by - oldCy;
+                  return {
+                    ...st,
+                    points: st.points.map((pt) => ({
+                      ...pt,
+                      x: pt.x + sdx,
+                      y: pt.y + sdy,
+                      ...(pt.cx !== undefined ? { cx: pt.cx + sdx } : {}),
+                      ...(pt.cy !== undefined ? { cy: pt.cy + sdy } : {}),
+                    })),
+                  };
+                }
+                return st;
+              }),
+              forceSims: (page.forceSims || []).map((s) =>
+                s.id === dragF.simId
+                  ? { ...s, pendulumAngleRad: nextAng, anMode: 'none', step: 0 }
+                  : s
+              ),
+            }),
+            false
+          );
+        }
+        return;
+      }
+    }
+
     // 0-spring. Interactive Spring Simulation Dragging (Symmetric Blue Amplitude Handles, Draggable Graph Cards, or Mass Pulling):
+    if (draggingForceHandleRef.current) {
+      draggingForceHandleRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
+
     if (draggingSpringAmpHandleRef.current) {
       const dragAmp = draggingSpringAmpHandleRef.current;
       const relX = latestPt.x - dragAmp.eqCenterX;
@@ -23448,6 +26367,12 @@ export default function App() {
     cancelAddNodeLongPress();
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
+
+    if (draggingForceHandleRef.current) {
+      draggingForceHandleRef.current = null;
+      renderStaticSceneRef.current();
+      return;
+    }
 
     if (draggingSpringAmpHandleRef.current) {
       draggingSpringAmpHandleRef.current = null;
@@ -32933,8 +35858,8 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Top-Level Physics Simulation Category Switcher: "Κυκλώματα" vs "Ελατήρια" */}
-                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200/80">
+                {/* Top-Level Physics Simulation Category Switcher: "Κυκλώματα" vs "Ελατήρια" vs "Δυνάμεις" */}
+                <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200/80">
                   <button
                     type="button"
                     onClick={() => {
@@ -32995,7 +35920,7 @@ export default function App() {
                         }
                       }
                     }}
-                    className={`py-1.5 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
                       simActiveCategory === 'circuits'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -33009,14 +35934,35 @@ export default function App() {
                     onClick={() =>
                       setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
                     }
-                    className={`py-1.5 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
                       simActiveCategory === 'springs'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                     }`}
                   >
                     <span>🌀</span>
                     <span>Ελατήρια</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextCat = simActiveCategory === 'forces' ? null : 'forces';
+                      setSimActiveCategory(nextCat);
+                      if (nextCat === 'forces') {
+                        const existingValid = getValidForceSims(activePage);
+                        if (existingValid.length === 0) {
+                          createOrActivateForceSim(forceSimSubTab, false);
+                        }
+                      }
+                    }}
+                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
+                      simActiveCategory === 'forces'
+                        ? 'bg-[#1b2a4a] text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                    }`}
+                  >
+                    <span>🎯</span>
+                    <span>Δυνάμεις</span>
                   </button>
                 </div>
 
@@ -34259,6 +37205,482 @@ export default function App() {
                               </div>
                             )}
                           </>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : simActiveCategory === 'forces' ? (
+                  (() => {
+                    const validForceSims = getValidForceSims(activePage);
+                    const activeForce = getActiveForceSim(activePage);
+                    const curMode = activeForce?.mode || forceSimSubTab;
+                    const curStep = activeForce?.step || 0;
+
+                    return (
+                      <div className="space-y-2">
+                        {/* 1. 4 Sub-Modes Grid (Ανάλυση, Σύνθεση, Κεκλιμένο, Εκκρεμές) */}
+                        <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                          {(
+                            [
+                              { id: 'analysis', label: '📐 Ανάλυση F' },
+                              { id: 'synthesis', label: '➕ Σύνθεση F₁+F₂' },
+                              { id: 'incline', label: '⛰️ Κεκλιμένο' },
+                              { id: 'pendulum', label: '🕰️ Εκκρεμές' },
+                            ] as const
+                          ).map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => createOrActivateForceSim(tab.id, false)}
+                              className={`py-1.5 px-2 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer flex items-center justify-center gap-1 ${
+                                curMode === tab.id
+                                  ? 'bg-[#1976d2] text-white shadow-2xs'
+                                  : 'text-slate-600 hover:bg-white/80'
+                              }`}
+                            >
+                              <span>{tab.label}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* 2. Active Force Simulations List (δυν01, δυν02, ...) */}
+                        <div className="bg-slate-50 rounded-xl p-2 border border-slate-200/90 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                              Ενεργή Προσομοίωση:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => createOrActivateForceSim(curMode, true)}
+                              className="px-2 py-0.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-extrabold cursor-pointer transition"
+                              title="Δημιουργία νέας προσομοίωσης δυνάμεων στη σελίδα"
+                            >
+                              + Νέο
+                            </button>
+                          </div>
+
+                          {validForceSims.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {validForceSims.map((sim) => {
+                                const isCurrent = activeForce?.id === sim.id;
+                                return (
+                                  <div
+                                    key={sim.id}
+                                    className={`inline-flex items-center rounded-lg border text-[11px] font-extrabold transition ${
+                                      isCurrent
+                                        ? 'bg-sky-600 text-white border-sky-700 shadow-2xs'
+                                        : 'bg-white text-slate-700 border-slate-200 hover:border-sky-400'
+                                    }`}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setForceSimSubTab(sim.mode);
+                                        updateActivePage(
+                                          (p) => ({ ...p, activeForceSimId: sim.id }),
+                                          false
+                                        );
+                                      }}
+                                      className="px-2 py-1 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>
+                                        {sim.mode === 'analysis'
+                                          ? '📐'
+                                          : sim.mode === 'synthesis'
+                                          ? '➕'
+                                          : sim.mode === 'incline'
+                                          ? '⛰️'
+                                          : '🕰️'}
+                                      </span>
+                                      <span>{sim.name}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        updateActivePage((p) => {
+                                          const rem = (p.forceSims || []).filter(
+                                            (x) => x.id !== sim.id
+                                          );
+                                          const dropIds = new Set(
+                                            [
+                                              sim.primaryStrokeId,
+                                              sim.secondaryStrokeId,
+                                              sim.supportStrokeId,
+                                            ].filter(Boolean) as string[]
+                                          );
+                                          return {
+                                            ...p,
+                                            strokes: p.strokes.filter((st) => !dropIds.has(st.id)),
+                                            forceSims: rem,
+                                            activeForceSimId:
+                                              p.activeForceSimId === sim.id
+                                                ? rem[0]?.id
+                                                : p.activeForceSimId,
+                                          };
+                                        });
+                                      }}
+                                      className={`px-1.5 py-1 rounded-r-lg transition cursor-pointer ${
+                                        isCurrent
+                                          ? 'hover:bg-sky-800 text-sky-100 hover:text-white'
+                                          : 'hover:bg-rose-50 text-slate-400 hover:text-rose-600'
+                                      }`}
+                                      title={`Διαγραφή "${sim.name}"`}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-[10.5px] text-slate-500 text-center py-1">
+                              Πάτησε μια από τις 4 ενότητες παραπάνω ή σχεδίασε διάνυσμα / κεκλιμένο στη σελίδα!
+                            </p>
+                          )}
+                        </div>
+
+                        {/* 3. Mode-Specific Interactive Controls */}
+                        {activeForce && activeForce.mode === 'analysis' && (
+                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
+                            <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                              <span>🧲 Κλείδωμα σε Ακέραια N (Πλέγμα)</span>
+                              <input
+                                type="checkbox"
+                                checked={activeForce.snapToGrid !== false}
+                                onChange={() =>
+                                  handleForceSimAction(activeForce, 'toggle-snap-grid')
+                                }
+                                className="accent-sky-600 w-4 h-4 cursor-pointer"
+                              />
+                            </label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {curStep === 0 && activeForce.anMode !== 'F' ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleForceSimAction(activeForce, 'start-analysis')
+                                  }
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] cursor-pointer transition"
+                                >
+                                  ✏️ Ανάλυση με Μολύβι (6 Βήματα)
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForceSimAction(activeForce, 'prev-step')}
+                                    disabled={curStep <= 0}
+                                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
+                                  >
+                                    ◀
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForceSimAction(activeForce, 'next-step')}
+                                    disabled={curStep >= 6}
+                                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
+                                  >
+                                    ▶ (Βήμα {curStep}/6)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForceSimAction(activeForce, 'reset')}
+                                    className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] cursor-pointer"
+                                  >
+                                    Επαναφορά
+                                  </button>
+                                </>
+                              )}
+                              {curStep >= 4 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleForceSimAction(activeForce, 'toggle-calc')
+                                  }
+                                  className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                    activeForce.showCalc
+                                      ? 'bg-orange-600 text-white'
+                                      : 'bg-orange-500 hover:bg-orange-600 text-white'
+                                  }`}
+                                >
+                                  🧮 {activeForce.showCalc ? 'Απόκρυψη Υπολογισμών' : 'Εμφάνιση Υπολογισμών'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {activeForce && activeForce.mode === 'synthesis' && (
+                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
+                            <div className="grid grid-cols-2 gap-1 bg-slate-200/80 p-1 rounded-lg">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleForceSimAction(activeForce, 'mode-direct')
+                                }
+                                className={`py-1 rounded-md text-[10.5px] font-extrabold cursor-pointer ${
+                                  !activeForce.synthesisStepMode
+                                    ? 'bg-slate-800 text-white'
+                                    : 'text-slate-700'
+                                }`}
+                              >
+                                Άμεση
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleForceSimAction(activeForce, 'mode-step')}
+                                className={`py-1 rounded-md text-[10.5px] font-extrabold cursor-pointer ${
+                                  activeForce.synthesisStepMode
+                                    ? 'bg-slate-800 text-white'
+                                    : 'text-slate-700'
+                                }`}
+                              >
+                                Βηματική
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {curStep === 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleForceSimAction(activeForce, 'start-synthesis')
+                                  }
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] cursor-pointer transition"
+                                >
+                                  ✏️ Σύνθεση Δυνάμεων (F₁ + F₂)
+                                </button>
+                              ) : (
+                                <>
+                                  {activeForce.synthesisStepMode && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleForceSimAction(activeForce, 'prev-step')
+                                        }
+                                        disabled={curStep <= 0}
+                                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
+                                      >
+                                        ◀
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleForceSimAction(activeForce, 'next-step')
+                                        }
+                                        disabled={curStep >= 3}
+                                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
+                                      >
+                                        ▶ ({curStep}/3)
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleForceSimAction(activeForce, 'reset')}
+                                    className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] cursor-pointer"
+                                  >
+                                    Επαναφορά
+                                  </button>
+                                </>
+                              )}
+                              {curStep >= 3 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleForceSimAction(activeForce, 'toggle-calc')
+                                  }
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] cursor-pointer transition"
+                                >
+                                  🧮 {activeForce.showCalc ? 'Απόκρυψη Υπολογισμών' : 'Εμφάνιση Υπολογισμών'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {activeForce && activeForce.mode === 'incline' && (
+                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
+                            <p className="text-[10px] text-slate-600 leading-snug">
+                              🟢 Σύρε την <b>πράσινη λαβή</b> στην κορυφή του κεκλιμένου επιπέδου (15°–60°) για αλλαγή γωνίας θ!
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleForceSimAction(activeForce, 'toggle-forces')
+                                }
+                                className={`flex-1 py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                  activeForce.showForces
+                                    ? 'bg-rose-600 text-white'
+                                    : 'bg-slate-700 text-white'
+                                }`}
+                              >
+                                Δυνάμεις (B, N)
+                              </button>
+                              {activeForce.showForces && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleForceSimAction(activeForce, 'start-incline-an')
+                                  }
+                                  className={`flex-1 py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                    activeForce.anMode === 'B'
+                                      ? 'bg-lime-400 text-slate-900 border border-lime-600'
+                                      : 'bg-slate-700 text-white'
+                                  }`}
+                                >
+                                  ✏️ Ανάλυση B
+                                </button>
+                              )}
+                            </div>
+                            {activeForce.showForces && activeForce.anMode === 'B' && (
+                              <div className="flex items-center justify-between gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'prev-step')}
+                                  disabled={curStep <= 0}
+                                  className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                >
+                                  ◀ Προηγ.
+                                </button>
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  Βήμα {curStep}/6
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleForceSimAction(activeForce, 'next-step')}
+                                  disabled={curStep >= 6}
+                                  className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                >
+                                  Επόμ. ▶
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {activeForce && activeForce.mode === 'pendulum' && (
+                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleForceSimAction(activeForce, 'toggle-pause')
+                                }
+                                className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                  activeForce.isPaused
+                                    ? 'bg-rose-600 text-white'
+                                    : 'bg-blue-600 text-white'
+                                }`}
+                              >
+                                {activeForce.isPaused ? '▶ Συνέχεια' : '⏸ Παύση'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleForceSimAction(activeForce, 'toggle-forces')
+                                }
+                                className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                  activeForce.showForces
+                                    ? 'bg-rose-600 text-white'
+                                    : 'bg-slate-700 text-white'
+                                }`}
+                              >
+                                Δυνάμεις (B, T)
+                              </button>
+                            </div>
+                            {!activeForce.isPaused && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleForceSimAction(activeForce, 'toggle-trajectory')
+                                }
+                                className={`w-full py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                  activeForce.showTrajectory
+                                    ? 'bg-slate-200 text-slate-900 border border-slate-400'
+                                    : 'bg-slate-700 text-white'
+                                }`}
+                              >
+                                ⋯ Τροχιά Εκκρεμούς
+                              </button>
+                            )}
+                            {activeForce.showForces && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleForceSimAction(activeForce, 'toggle-resultant')
+                                }
+                                className={`w-full py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                  activeForce.showResultant
+                                    ? 'bg-teal-600 text-white'
+                                    : 'bg-slate-700 text-white'
+                                }`}
+                              >
+                                Συνισταμένη (ΣF)
+                              </button>
+                            )}
+                            {activeForce.isPaused && activeForce.showForces && (
+                              <>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleForceSimAction(activeForce, 'start-an-T')
+                                    }
+                                    className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                      activeForce.anMode === 'T'
+                                        ? 'bg-lime-400 text-slate-900 border border-lime-600'
+                                        : 'bg-slate-700 text-white'
+                                    }`}
+                                  >
+                                    ✏️ Ανάλυση Τ
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleForceSimAction(activeForce, 'start-an-B')
+                                    }
+                                    className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
+                                      activeForce.anMode === 'B'
+                                        ? 'bg-lime-400 text-slate-900 border border-lime-600'
+                                        : 'bg-slate-700 text-white'
+                                    }`}
+                                  >
+                                    ✏️ Ανάλυση B
+                                  </button>
+                                </div>
+                                {(activeForce.anMode === 'T' || activeForce.anMode === 'B') && (
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleForceSimAction(activeForce, 'prev-step')
+                                      }
+                                      disabled={curStep <= 0}
+                                      className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                    >
+                                      ◀ Προηγ.
+                                    </button>
+                                    <span className="text-[11px] font-bold text-slate-700">
+                                      Βήμα {curStep}/6
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleForceSimAction(activeForce, 'next-step')
+                                      }
+                                      disabled={curStep >= 6}
+                                      className="flex-1 py-1 rounded-lg bg-lime-400 hover:bg-lime-500 disabled:opacity-40 text-slate-900 font-extrabold text-xs cursor-pointer"
+                                    >
+                                      Επόμ. ▶
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     );

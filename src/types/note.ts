@@ -229,6 +229,46 @@ export interface SpringSimConfig {
   };
 }
 
+export type ForceSimMode = 'analysis' | 'synthesis' | 'incline' | 'pendulum';
+
+export interface ForceSimConfig {
+  id: string;
+  name: string; // e.g. 'δυν01', 'δυν02'
+  mode: ForceSimMode;
+  originX: number; // Canvas logical X (origin of F/F1+F2, incline base start X, or pendulum pivot X)
+  originY: number; // Canvas logical Y
+  // Linked strokes on the page (so user can draw/move/delete them with their own tools!)
+  primaryStrokeId?: string; // 'analysis' -> F arrow; 'synthesis' -> F1 arrow; 'incline' -> incline-wedge; 'pendulum' -> rod line
+  secondaryStrokeId?: string; // 'synthesis' -> F2 arrow; 'incline' -> incline-block; 'pendulum' -> bob circle/sphere
+  supportStrokeId?: string; // optional ceiling/floor support stroke
+  // Mode 1: 'analysis' (Ανάλυση Δύναμης σε Συνιστώσες F -> Fx, Fy)
+  fxUnits?: number; // default 8 (in grid units, 1 unit = A4_GRID_STEP_PX = 23px)
+  fyUnits?: number; // default 6
+  snapToGrid?: boolean; // default true (integer Newtons on grid like forceanalysisinteger, or false for 0.1N floats)
+  // Mode 2: 'synthesis' (Σύνθεση Δυνάμεων F1 + F2 = ΣF)
+  f1xUnits?: number; // default 8
+  f1yUnits?: number; // default 0
+  f2xUnits?: number; // default 0
+  f2yUnits?: number; // default 6
+  synthesisStepMode?: boolean; // false = Άμεση, true = Βηματική
+  // Mode 3: 'incline' (Κεκλιμένο Επίπεδο)
+  inclineAngleDeg?: number; // default 30 (range 15..60)
+  inclineLenPx?: number; // default 360
+  // Mode 4: 'pendulum' (Εκκρεμές)
+  rodLengthPx?: number; // default 230
+  pendulumAngleRad?: number; // default Math.PI / 4
+  pendulumAngVel?: number; // default 0
+  isPaused?: boolean; // default false (swinging)
+  showTrajectory?: boolean; // default false
+  // Shared display / step-by-step analysis state
+  showForces?: boolean; // for incline (B, N) & pendulum (B, T)
+  showResultant?: boolean; // for synthesis (ΣF) & pendulum (ΣF)
+  anMode?: 'none' | 'F' | 'B' | 'T'; // active analysis breakdown mode
+  step?: number; // 0..6 (or 0..3 for synthesis)
+  showCalc?: boolean; // Show Υπολογισμοί card on canvas
+  calcBoxPos?: { x: number; y: number }; // Optional custom position for Υπολογισμοί card
+}
+
 export interface NotePage {
   id: string;
   title: string;
@@ -249,6 +289,8 @@ export interface NotePage {
   activeCircuitSimId?: string;
   springSims?: SpringSimConfig[];
   activeSpringSimId?: string;
+  forceSims?: ForceSimConfig[];
+  activeForceSimId?: string;
 }
 
 export interface Notebook {
