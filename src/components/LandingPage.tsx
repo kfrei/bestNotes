@@ -1619,26 +1619,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </>
               )}
             </div>
+          </div>
 
-            <nav className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold text-slate-700">
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 ml-auto">
+            <nav className="flex items-center gap-1.5 sm:gap-2.5 mr-2.5 sm:mr-5 text-xs sm:text-sm font-bold text-slate-700">
               <button
                 type="button"
                 onClick={() => scrollToElementId('simulations-section', undefined, 'start')}
-                className="px-3.5 py-2 rounded-xl hover:bg-slate-100 hover:text-[#0066ff] transition cursor-pointer whitespace-nowrap"
+                className="px-3 py-2 rounded-xl hover:bg-slate-100 hover:text-[#0066ff] transition cursor-pointer whitespace-nowrap"
               >
                 Προσομοιώσεις
               </button>
               <button
                 type="button"
                 onClick={() => scrollToElementId('science-notes-hub', undefined, 'start')}
-                className="px-3.5 py-2 rounded-xl hover:bg-slate-100 hover:text-[#0066ff] transition cursor-pointer whitespace-nowrap"
+                className="px-3 py-2 rounded-xl hover:bg-slate-100 hover:text-[#0066ff] transition cursor-pointer whitespace-nowrap"
               >
-                Αντικείμενα
+                Σημειώσεις
               </button>
             </nav>
-          </div>
-
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             {currentUser ? (
               <div className="flex items-center gap-2.5">
                 <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
