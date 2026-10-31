@@ -1374,7 +1374,7 @@ export default function App() {
   } | null>(null);
   const draggingAtomHandleRef = useRef<{
     simId: string;
-    kind: 'atom-nucleus' | 'valence-electron';
+    kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize';
     atomId: string;
     electronIdx?: number;
     startX: number;
@@ -1400,6 +1400,15 @@ export default function App() {
       electronIdx: number;
       x: number;
       y: number;
+      r: number;
+    }[];
+    resizeHandles: {
+      simId: string;
+      atomId: string;
+      cx: number;
+      cy: number;
+      hx: number;
+      hy: number;
       r: number;
     }[];
     buttons: {
@@ -19444,6 +19453,15 @@ export default function App() {
           y: number;
           r: number;
         }[] = [];
+        const resizeHandlesHit: {
+          simId: string;
+          atomId: string;
+          cx: number;
+          cy: number;
+          hx: number;
+          hy: number;
+          r: number;
+        }[] = [];
         const atomButtonsHit: {
           simId: string;
           action: string;
@@ -19805,15 +19823,20 @@ export default function App() {
           aSim.atoms.forEach((atom, atomIdx) => {
             const el = getPeriodicElementByZ(atom.z);
             const numShells = el.shells.length;
-            const maxOrbitR =
-              atom.outerRadiusPx || getNaturalOuterOrbitRadiusPx(atom.z);
+            const natOuterR = getNaturalOuterOrbitRadiusPx(atom.z);
+            const maxOrbitR = atom.outerRadiusPx || natOuterR;
+            const scaleFactor = maxOrbitR / natOuterR;
             atomOuterRadiusMap.set(atom.id, maxOrbitR);
+            const baseMinR =
+              numShells === 1
+                ? natOuterR
+                : numShells === 2
+                ? Math.max(30, Math.round(natOuterR * 0.48))
+                : 28;
             const minOrbitR =
               numShells === 1
                 ? maxOrbitR
-                : numShells === 2
-                ? Math.max(30, Math.round(maxOrbitR * 0.48))
-                : 28;
+                : Math.max(18, Math.round(baseMinR * scaleFactor));
             const atomColor = atom.color || '#8b5cf6';
 
             // Έλεγχος αν οι εσωτερικές τροχιές πρέπει να είναι αχνές διακεκομμένες χωρίς ηλεκτρόνια:
@@ -19944,19 +19967,49 @@ export default function App() {
               });
             }
 
-            // Σχεδίαση Πυρήνα (Nucleus) με ακτίνα ανάλογη του ατομικού αριθμού Z (π.χ. Z=1 μικρότερος από Z=6)
-            const nucR = getNaturalNucleusRadiusPx(atom.z);
-            const isSelectedAtom =
-              aSim.selectedAtomId === atom.id ||
-              (!aSim.selectedAtomId && atomIdx === aSim.atoms.length - 1);
+            // Σχεδίαση Πυρήνα (Nucleus) με ακτίνα ανάλογη του ατομικού αριθμού Z & ομοιόμορφη κλιμάκωση
+            const nucR = Math.max(
+              7,
+              Math.min(26, getNaturalNucleusRadiusPx(atom.z) * Math.pow(scaleFactor, 0.75))
+            );
+            const isSelectedAtom = aSim.selectedAtomId === atom.id;
 
             ctx.save();
             if (isSelectedAtom) {
-              ctx.strokeStyle = 'rgba(37, 99, 235, 0.42)';
-              ctx.lineWidth = 3;
+              // Διακριτική φωτεινή άλω γύρω από τον πυρήνα (ΧΩΡΙΣ διακεκομμένο ορθογώνιο πλαίσιο!)
+              ctx.strokeStyle = 'rgba(37, 99, 235, 0.48)';
+              ctx.lineWidth = 3.2;
               ctx.beginPath();
-              ctx.arc(atom.x, atom.y, nucR + 4, 0, Math.PI * 2);
+              ctx.arc(atom.x, atom.y, nucR + 4.5, 0, Math.PI * 2);
               ctx.stroke();
+
+              // Μικρό στρογγυλό χερούλι ομοιόμορφης αυξομείωσης μεγέθους (⤡) πάνω στην εξωτερική τροχιά (κάτω-δεξιά 45°)
+              const handleAng = Math.PI / 4;
+              const hx = atom.x + maxOrbitR * Math.cos(handleAng);
+              const hy = atom.y + maxOrbitR * Math.sin(handleAng);
+              ctx.fillStyle = '#2563eb';
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(hx, hy, 8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 10px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('⤡', hx, hy + 0.5);
+
+              resizeHandlesHit.push({
+                simId: aSim.id,
+                atomId: atom.id,
+                cx: atom.x,
+                cy: atom.y,
+                hx,
+                hy,
+                r: 15,
+              });
             }
             ctx.fillStyle = 'rgba(168, 85, 247, 0.65)';
             ctx.strokeStyle = atomColor;
@@ -20693,6 +20746,7 @@ export default function App() {
           simId: pageAtomSims[pageAtomSims.length - 1]?.id || '',
           nuclei: nucleiHit,
           electrons: electronsHit,
+          resizeHandles: resizeHandlesHit,
           buttons: atomButtonsHit,
         };
       } else {
@@ -23540,10 +23594,10 @@ export default function App() {
       }
     }
 
-    // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Valence Electrons & Nuclei:
+    // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Resize Handles, Valence Electrons & Nuclei:
     if (atomOverlayHitRef.current) {
       const aHit = atomOverlayHitRef.current;
-      // 1) On-Canvas Reaction Buttons ([ ➔ ], [ 🧪 Εμφάνιση Αντίδρασης ], [ ⚛️ Δομή Ατόμων ], [ ↺ ])
+      // 1) On-Canvas Reaction Buttons ([ ➔ ], [ ⚛️ ], clickable reactants/products)
       for (const btn of aHit.buttons) {
         if (
           pt.x >= btn.x1 - 4 &&
@@ -23561,6 +23615,35 @@ export default function App() {
           isDrawingRef.current = false;
           activePointerIdRef.current = null;
           activePointerTypeRef.current = null;
+          return;
+        }
+      }
+
+      // 1b) Uniform Radial Resize Handle (⤡) on the selected atom's outer orbit
+      for (const rh of aHit.resizeHandles || []) {
+        if (Math.hypot(pt.x - rh.hx, pt.y - rh.hy) <= rh.r) {
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          draggingAtomHandleRef.current = {
+            simId: rh.simId,
+            kind: 'atom-resize',
+            atomId: rh.atomId,
+            startX: pt.x,
+            startY: pt.y,
+            origAtomX: rh.cx,
+            origAtomY: rh.cy,
+            curX: pt.x,
+            curY: pt.y,
+          };
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
           return;
         }
       }
@@ -23595,9 +23678,14 @@ export default function App() {
         }
       }
 
-      // 3) Atom Nucleus (click to select atom for Periodic Table assignment, or drag to reposition the atom!)
+      // 3) Atom Nucleus or Atom Selection with Lasso (click to select atom without dashed box, or drag to reposition!)
       for (const nucHit of aHit.nuclei) {
-        if (Math.hypot(pt.x - nucHit.x, pt.y - nucHit.y) <= nucHit.r) {
+        const distToAtomCenter = Math.hypot(pt.x - nucHit.x, pt.y - nucHit.y);
+        const hitThreshold =
+          activeTool === 'lasso' || activeTool === 'direct-node'
+            ? nucHit.outerR + 8
+            : nucHit.r + 4;
+        if (distToAtomCenter <= hitThreshold) {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
           if (activeNodeStrokeId) setActiveNodeStrokeId(null);
@@ -23605,9 +23693,10 @@ export default function App() {
             (page) => ({
               ...page,
               activeAtomSimId: nucHit.simId,
-              atomSims: (page.atomSims || []).map((s) =>
-                s.id === nucHit.simId ? { ...s, selectedAtomId: nucHit.atomId } : s
-              ),
+              atomSims: (page.atomSims || []).map((s) => ({
+                ...s,
+                selectedAtomId: s.id === nucHit.simId ? nucHit.atomId : undefined,
+              })),
             }),
             false
           );
@@ -23632,6 +23721,19 @@ export default function App() {
           isDrawingRef.current = true;
           return;
         }
+      }
+
+      // Αν ο χρήστης έκανε κλικ εκτός οποιουδήποτε ατόμου στον καμβά, αποεπίλεξε το τρέχον άτομο!
+      if ((targetPage.atomSims || []).some((s) => Boolean(s.selectedAtomId))) {
+        updateActivePage(
+          (page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.selectedAtomId ? { ...s, selectedAtomId: undefined } : s
+            ),
+          }),
+          false
+        );
       }
     }
 
@@ -26042,7 +26144,7 @@ export default function App() {
       }
     }
 
-    // 0-atoms. Interactive Atom Simulation Handle Dragging (Nucleus reposition or Outer Valence Electron drag):
+    // 0-atoms. Interactive Atom Simulation Handle Dragging (Nucleus reposition, Uniform Resize, or Outer Valence Electron drag):
     if (draggingAtomHandleRef.current) {
       const dragAt = draggingAtomHandleRef.current;
       dragAt.curX = latestPt.x;
@@ -26065,6 +26167,29 @@ export default function App() {
                     ...s,
                     atoms: s.atoms.map((a) =>
                       a.id === dragAt.atomId ? { ...a, x: nextX, y: nextY } : a
+                    ),
+                  }
+                : s
+            ),
+          }),
+          false
+        );
+      } else if (dragAt.kind === 'atom-resize') {
+        const nextRadius = Math.round(
+          Math.max(
+            26,
+            Math.min(165, Math.hypot(latestPt.x - dragAt.origAtomX, latestPt.y - dragAt.origAtomY))
+          )
+        );
+        updateActivePage(
+          (page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id === dragAt.simId
+                ? {
+                    ...s,
+                    atoms: s.atoms.map((a) =>
+                      a.id === dragAt.atomId ? { ...a, outerRadiusPx: nextRadius } : a
                     ),
                   }
                 : s
@@ -32947,6 +33072,48 @@ export default function App() {
           }));
           setSelectedTextId(null);
           showToast('🗑️ Διαγράφηκε το πλαίσιο κειμένου!');
+          return;
+        }
+
+        // Αν υπάρχει επιλεγμένο Άτομο στον καμβά, το Delete / Backspace διαγράφει το άτομο!
+        const simWithSelectedAtom = (activePage.atomSims || []).find(
+          (s) => Boolean(s.selectedAtomId) && s.showAtomsBelowReaction !== false
+        );
+        if (simWithSelectedAtom && simWithSelectedAtom.selectedAtomId) {
+          e.preventDefault();
+          const delAtomId = simWithSelectedAtom.selectedAtomId;
+          const targetSimId = simWithSelectedAtom.id;
+          updateActivePage((page) => {
+            const nextSims = (page.atomSims || [])
+              .map((s) => {
+                if (s.id !== targetSimId) return s;
+                const remAtoms = s.atoms.filter((a) => a.id !== delAtomId);
+                const remBonds = (s.bonds || []).filter(
+                  (b) => b.fromAtomId !== delAtomId && b.toAtomId !== delAtomId
+                );
+                if (remAtoms.length === 0 && !s.showReactionEquation) {
+                  return null;
+                }
+                return {
+                  ...s,
+                  atoms: remAtoms,
+                  bonds: remBonds,
+                  selectedAtomId: undefined,
+                  showAtomsBelowReaction: remAtoms.length > 0,
+                };
+              })
+              .filter((s): s is AtomSimConfig => s !== null);
+            return {
+              ...page,
+              atomSims: nextSims,
+              activeAtomSimId:
+                page.activeAtomSimId === targetSimId &&
+                !nextSims.some((s) => s.id === targetSimId)
+                  ? nextSims[0]?.id
+                  : page.activeAtomSimId,
+            };
+          });
+          showToast('🗑️ Διαγράφηκε το επιλεγμένο άτομο!');
           return;
         }
       }
