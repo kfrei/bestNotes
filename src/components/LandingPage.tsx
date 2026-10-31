@@ -139,8 +139,7 @@ const LIVE_SIMULATION_GIFS: ScienceNoteAsset[] = [
   },
 ];
 
-const SCIENCE_NOTES: ScienceNoteAsset[] = [
-  ...LIVE_SIMULATION_GIFS,
+const STATIC_SCIENCE_NOTES: ScienceNoteAsset[] = [
   {
     id: 'water-cycle',
     tabLabel: '1. Whiteboard • Κύκλος Νερού',
@@ -218,14 +217,16 @@ const SCIENCE_NOTES: ScienceNoteAsset[] = [
   },
 ];
 
+const SCIENCE_NOTES: ScienceNoteAsset[] = [
+  ...LIVE_SIMULATION_GIFS,
+  ...STATIC_SCIENCE_NOTES,
+];
+
 const SHOWCASE_TABS: { id: ShowcaseTabId; label: string; badge?: string }[] = [
   { id: 'sim-forces', label: '🎯 Δυνάμεις', badge: 'LIVE' },
   { id: 'sim-springs', label: '🌀 Ελατήρια', badge: 'LIVE' },
   { id: 'sim-circuits', label: '⚡ Κυκλώματα', badge: 'LIVE' },
   { id: 'sim-atoms', label: '⚛️ Άτομο & Χημεία', badge: 'LIVE' },
-  { id: 'water-cycle', label: 'Κύκλος Νερού' },
-  { id: 'photosynthesis', label: 'Φωτοσύνθεση' },
-  { id: 'acids', label: 'Τα Οξέα' },
   { id: 'sine-3d', label: 'Ημίτονα & 3D', badge: 'PRO' },
   { id: 'layers-groups', label: 'Layers & Groups', badge: 'PRO' },
 ];
@@ -695,10 +696,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return () => window.clearInterval(interval);
   }, [isPaused]);
 
+  const [highlightedZoneId, setHighlightedZoneId] = useState<string | null>(null);
+
   // Subtle cross-fade & zoom pulse cycle on the below-the-fold gallery
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setActiveBentoIndex((prev) => (prev + 1) % SCIENCE_NOTES.length);
+      setActiveBentoIndex((prev) => (prev + 1) % LIVE_SIMULATION_GIFS.length);
     }, 4200);
     return () => window.clearInterval(timer);
   }, []);
@@ -708,8 +711,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setTabProgress(0);
   };
 
-  const activeScienceNote = SCIENCE_NOTES.find((n) => n.id === activeTab) || null;
-  const secondaryNotes = SCIENCE_NOTES.filter((n) => n.id !== activeTab);
+  const scrollToElementId = (elId: string, highlightId?: string) => {
+    const el = document.getElementById(elId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (highlightId) {
+        setHighlightedZoneId(highlightId);
+        window.setTimeout(() => {
+          setHighlightedZoneId((curr) => (curr === highlightId ? null : curr));
+        }, 2200);
+      }
+    }
+  };
+
+  const activeScienceNote = LIVE_SIMULATION_GIFS.find((n) => n.id === activeTab) || null;
+  const secondaryNotes = LIVE_SIMULATION_GIFS.filter((n) => n.id !== activeTab);
 
   return (
     <div
@@ -848,7 +864,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             <nav className="hidden lg:flex items-center gap-5 text-xs xl:text-sm font-semibold text-slate-700">
-              {SCIENCE_NOTES.map((note) => (
+              {LIVE_SIMULATION_GIFS.map((note) => (
                 <button
                   key={note.id}
                   type="button"
@@ -863,9 +879,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <button
                 type="button"
                 onClick={() => handleSelectTab('sine-3d')}
-                className="hover:text-[#0066ff] transition cursor-pointer"
+                className={`transition cursor-pointer ${
+                  activeTab === 'sine-3d' ? 'text-[#0066ff] font-extrabold' : 'hover:text-[#0066ff]'
+                }`}
               >
                 3D &amp; Μαθηματικά
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToElementId('science-notes-hub')}
+                className="px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-bold transition cursor-pointer"
+              >
+                Σημειώσεις &amp; Ενότητες ↓
               </button>
             </nav>
           </div>
@@ -1026,8 +1051,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
         >
-          {/* Folder Tab Headers */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1.5 px-2">
+          {/* Folder Tab Headers (Only Live Simulations + PRO Tabs) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 px-2">
             {SHOWCASE_TABS.map((tab) => {
               const isSelected = activeTab === tab.id;
               return (
@@ -1526,7 +1551,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
 
                     <div className="relative h-64 rounded-xl bg-white border border-slate-200 p-3 grid grid-cols-3 gap-2.5 items-center">
-                      {SCIENCE_NOTES.slice(0, 3).map((note, idx) => (
+                      {LIVE_SIMULATION_GIFS.slice(0, 3).map((note, idx) => (
                         <DraggableCard
                           key={note.id}
                           resetSignal={dragResetCounter}
@@ -1562,22 +1587,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
 
         {/* ===================================================================
-            4. INTERACTIVE DRAGGABLE SCIENCE & SIMULATION STUDIO WALL
+            4. LIVE INTERACTIVE SIMULATIONS WALL (Only the 4 Animated GIFs)
            =================================================================== */}
         <section className="mt-24 max-w-6xl mx-auto bn-scroll-reveal">
           <div className="text-center max-w-3xl mx-auto mb-10">
             <span className="px-3.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-extrabold uppercase tracking-wider">
-              Ζωντανές Προσομοιώσεις «Explain» &amp; Σημειώσεις • Σύρε τις Καρτέλες με το Ποντίκι
+              Ζωντανές Προσομοιώσεις «Explain» • Κίνηση Κατευθείαν από το Μολύβι σας
             </span>
             <h2 className="mt-3 text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-950">
-              Δυνάμεις, Ελατήρια, Κυκλώματα, Άτομα &amp; Σημειώσεις που «Ζωντανεύουν» από το Μολύβι σας
+              Δυνάμεις, Ελατήρια, Κυκλώματα &amp; Άτομα σε Ζωντανή Κίνηση
             </h2>
             <p className="mt-2.5 text-sm sm:text-base text-slate-600">
-              Ένα ολοκληρωμένο εκπαιδευτικό οικοσύστημα <b>Φυσικής, Χημείας, Βιολογίας &amp; Μαθηματικών</b> από το Δημοτικό μέχρι το Πανεπιστήμιο — πιάσε οποιαδήποτε καρτέλα με το ποντίκι, κάνε Zoom ή άνοιξέ την στον Καμβά!
+              Σχεδίασε με το μολύβι σου διανύσματα δυνάμεων, ελατήρια, ηλεκτρικά κυκλώματα ή χημικές αντιδράσεις και δες τα να <b>«ζωντανεύουν» αυτόματα</b> πάνω στο board!
             </p>
           </div>
 
-          {/* Interactive Draggable Grid */}
           <div
             className="relative rounded-3xl border border-slate-200 bg-[#f8fafc] p-6 sm:p-8 shadow-xl overflow-hidden"
             style={{
@@ -1586,8 +1610,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               backgroundSize: '26px 26px',
             }}
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-              {SCIENCE_NOTES.map((note, idx) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+              {LIVE_SIMULATION_GIFS.map((note, idx) => {
                 const isSpotlight = activeBentoIndex === idx;
                 return (
                   <DraggableCard
@@ -1596,8 +1620,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     badgeText="✋ Σύρε με το ποντίκι"
                     onClickCard={() => setZoomedNote(note)}
                     className={`rounded-3xl bg-white border-2 p-4 shadow-lg flex flex-col justify-between transition-all ${
-                      idx === 0 ? 'lg:col-span-2' : ''
-                    } ${
                       isSpotlight
                         ? 'border-[#0066ff] shadow-2xl ring-4 ring-[#0066ff]/15'
                         : 'border-slate-200/90 hover:border-slate-300'
@@ -1634,15 +1656,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           src={note.src}
                           alt={note.title}
                           loading="lazy"
-                          className={`w-full ${
-                            idx === 0 ? 'h-64 sm:h-72' : 'h-56'
-                          } object-contain mx-auto transition-transform duration-700 ${
-                            note.src.endsWith('.gif')
-                              ? ''
-                              : isSpotlight
-                                ? 'bn-ken-burns'
-                                : 'group-hover/drag:scale-[1.38]'
-                          }`}
+                          className="w-full h-60 sm:h-64 object-contain mx-auto"
                         />
                       </div>
 
@@ -1677,103 +1691,185 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </section>
 
         {/* ===================================================================
-            5. FULL-PAGE ALTERNATING GOODNOTES SHOWCASE SECTIONS
+            5. DEDICATED SCIENCE NOTES & LESSONS HUB:
+               - COMPACT MINI-CARDS ROW AT TOP (All 5 Together)
+               - SMOOTH SCROLL ON CLICK TO EACH NOTE'S DEDICATED ZONE BELOW
            =================================================================== */}
-        <section className="mt-24 max-w-6xl mx-auto space-y-20">
-          <div className="text-center max-w-3xl mx-auto">
-            <span className="px-3.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-[#0066ff] text-xs font-extrabold uppercase tracking-wider">
-              Αναλυτική Παρουσίαση Προσομοιώσεων &amp; Σημειώσεων • ExplainBoards
-            </span>
-            <h2 className="mt-3 text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-950">
-              Δες κάθε Προσομοίωση &amp; Σημείωση σε Πλήρες Μέγεθος &amp; Ζωντανή Κίνηση
-            </h2>
+        <section id="science-notes-hub" className="mt-28 max-w-6xl mx-auto scroll-mt-24">
+          {/* Header + Compact Mini-Cards Strip (Όλα μαζί μικρά στην αρχή) */}
+          <div className="rounded-3xl bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 p-6 sm:p-8 shadow-lg">
+            <div className="text-center max-w-3xl mx-auto mb-7">
+              <span className="px-3.5 py-1 rounded-full bg-sky-100 border border-sky-200 text-[#0066ff] text-xs font-extrabold uppercase tracking-wider">
+                Διαδραστικές Σημειώσεις, PDF &amp; Μαθήματα ανά Ενότητα
+              </span>
+              <h2 className="mt-3 text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-950">
+                Εξερεύνησε κάθε Μάθημα &amp; Σημείωση στη Δική του Ενότητα
+              </h2>
+              <p className="mt-2 text-sm sm:text-base text-slate-600">
+                Κάνε κλικ σε οποιαδήποτε από τις <b>μικρές κάρτες ενοτήτων</b> παρακάτω για <b>ομαλή κύλιση (smooth scroll)</b> απευθείας στη δική της ξεχωριστή ζώνη παρουσίασης!
+              </p>
+            </div>
+
+            {/* Row of All 5 Compact Mini-Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+              {STATIC_SCIENCE_NOTES.map((note, idx) => (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={() => scrollToElementId(`note-zone-${note.id}`, note.id)}
+                  className="group text-left rounded-2xl bg-white hover:bg-sky-50/60 border-2 border-slate-200 hover:border-[#0066ff] p-2.5 shadow-sm hover:shadow-xl transition-all duration-200 flex flex-col justify-between cursor-pointer hover:-translate-y-1"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <span
+                        className="px-2 py-0.5 rounded-md text-white text-[9.5px] font-extrabold truncate"
+                        style={{ backgroundColor: note.subjectColor }}
+                      >
+                        0{idx + 1} • {note.subjectBadge}
+                      </span>
+                    </div>
+
+                    <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-[#fffdf9] h-28">
+                      <img
+                        src={note.src}
+                        alt={note.shortTitle}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+
+                    <h3 className="mt-2 text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-[#0066ff] transition truncate">
+                      {note.shortTitle}
+                    </h3>
+                    <p className="mt-0.5 text-[10px] font-semibold text-slate-500 truncate">
+                      {note.formulaBadge}
+                    </p>
+                  </div>
+
+                  <div className="mt-2.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10.5px] font-extrabold text-[#0066ff]">
+                    <span>Μετάβαση στη Ζώνη</span>
+                    <span className="group-hover:translate-y-0.5 transition-transform">↓</span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {SCIENCE_NOTES.map((note, index) => {
-            const isEven = index % 2 === 0;
-            return (
-              <div
-                key={note.id}
-                className={`flex flex-col ${
-                  isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'
-                } items-center gap-8 lg:gap-12 rounded-3xl bg-[#fffdf9] border border-slate-200/90 p-6 sm:p-10 shadow-xl`}
-              >
-                {/* Image Showcase Side (Draggable + Deep Zoom) */}
-                <div className="w-full lg:w-7/12 relative">
-                  <DraggableCard
-                    resetSignal={dragResetCounter}
-                    badgeText="✋ Σύρε την εικόνα ή Πάτα για Zoom"
-                    onClickCard={() => setZoomedNote(note)}
-                    className="relative rounded-2xl overflow-hidden bg-white border-2 border-slate-200 shadow-2xl p-3"
+          {/* Separate Dedicated Full-Width Zone for Each Static Science Note */}
+          <div className="mt-16 space-y-16">
+            {STATIC_SCIENCE_NOTES.map((note, index) => {
+              const isEven = index % 2 === 0;
+              const isHighlighted = highlightedZoneId === note.id;
+              return (
+                <div
+                  key={note.id}
+                  id={`note-zone-${note.id}`}
+                  className={`scroll-mt-24 rounded-3xl border-2 p-6 sm:p-10 shadow-xl transition-all duration-500 ${
+                    isHighlighted
+                      ? 'bg-sky-50/70 border-[#0066ff] ring-4 ring-[#0066ff]/20'
+                      : isEven
+                        ? 'bg-[#fffdf9] border-slate-200/90'
+                        : 'bg-slate-50/90 border-slate-200/90'
+                  }`}
+                >
+                  {/* Zone Top Bar with Section Number & Back-to-Top Link */}
+                  <div className="flex items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-200/80 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="px-3 py-1 rounded-full text-white text-xs font-extrabold shadow-2xs"
+                        style={{ backgroundColor: note.subjectColor }}
+                      >
+                        ΕΝΟΤΗΤΑ 0{index + 1} • {note.subjectBadge}
+                      </span>
+                      <span className="text-xs sm:text-sm font-extrabold text-slate-700">
+                        {note.shortTitle}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => scrollToElementId('science-notes-hub')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold transition cursor-pointer shadow-2xs"
+                    >
+                      <span>↑ Όλες οι Ενότητες</span>
+                    </button>
+                  </div>
+
+                  <div
+                    className={`flex flex-col ${
+                      isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'
+                    } items-center gap-8 lg:gap-12`}
                   >
-                    <img
-                      src={note.src}
-                      alt={note.title}
-                      loading="lazy"
-                      className={`w-full max-h-[420px] object-contain mx-auto ${
-                        note.src.endsWith('.gif') ? '' : 'bn-ken-burns'
-                      }`}
-                    />
-                  </DraggableCard>
+                    {/* Image Showcase Side (Draggable + Deep Zoom) */}
+                    <div className="w-full lg:w-7/12 relative">
+                      <DraggableCard
+                        resetSignal={dragResetCounter}
+                        badgeText="✋ Σύρε την εικόνα ή Πάτα για Zoom"
+                        onClickCard={() => setZoomedNote(note)}
+                        className="relative rounded-2xl overflow-hidden bg-white border-2 border-slate-200 shadow-2xl p-3"
+                      >
+                        <img
+                          src={note.src}
+                          alt={note.title}
+                          loading="lazy"
+                          className="w-full max-h-[420px] object-contain mx-auto bn-ken-burns"
+                        />
+                      </DraggableCard>
+                    </div>
+
+                    {/* Text & Interactive Features Side */}
+                    <div className="w-full lg:w-5/12 space-y-4">
+                      <div className="inline-flex items-center gap-2 flex-wrap">
+                        <span className="px-3 py-1 rounded-full bg-yellow-100 border border-yellow-300 text-yellow-950 text-xs font-extrabold">
+                          {note.formulaBadge}
+                        </span>
+                      </div>
+
+                      <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-950 leading-tight">
+                        {note.title}
+                      </h3>
+
+                      <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                        {note.description}
+                      </p>
+
+                      {/* Clean Callout Box */}
+                      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
+                        <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">
+                          Βασικές Έννοιες &amp; Εξισώσεις:
+                        </div>
+                        <div className="text-xs sm:text-sm font-extrabold text-slate-950">
+                          ✨ {note.highlightText}
+                        </div>
+                        <div className="text-xs font-semibold text-slate-600">
+                          ✓ {note.secondaryHighlightText}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex items-center gap-3 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={onEnterApp}
+                          className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs sm:text-sm font-extrabold shadow-md transition cursor-pointer"
+                        >
+                          <span>Άνοιγμα στον Καμβά</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setZoomedNote(note)}
+                          className="inline-flex items-center gap-1.5 px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-bold transition cursor-pointer"
+                        >
+                          <ZoomIn className="w-4 h-4 text-[#0066ff]" />
+                          <span>Πλήρες Zoom</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-
-                {/* Text & Interactive Features Side */}
-                <div className="w-full lg:w-5/12 space-y-4">
-                  <div className="inline-flex items-center gap-2">
-                    <span
-                      className="px-3 py-1 rounded-full text-white text-xs font-extrabold"
-                      style={{ backgroundColor: note.subjectColor }}
-                    >
-                      0{index + 1} • {note.subjectBadge}
-                    </span>
-                    <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
-                      {note.formulaBadge}
-                    </span>
-                  </div>
-
-                  <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-950 leading-tight">
-                    {note.title}
-                  </h3>
-
-                  <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-                    {note.description}
-                  </p>
-
-                  {/* Clean Callout Box */}
-                  <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2">
-                    <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">
-                      Βασικές Έννοιες &amp; Εξισώσεις:
-                    </div>
-                    <div className="text-xs sm:text-sm font-extrabold text-slate-950">
-                      ✨ {note.highlightText}
-                    </div>
-                    <div className="text-xs font-semibold text-slate-600">
-                      ✓ {note.secondaryHighlightText}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-center gap-3 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={onEnterApp}
-                      className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs sm:text-sm font-extrabold shadow-md transition cursor-pointer"
-                    >
-                      <span>Άνοιγμα στον Καμβά</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setZoomedNote(note)}
-                      className="inline-flex items-center gap-1.5 px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-bold transition cursor-pointer"
-                    >
-                      <ZoomIn className="w-4 h-4 text-[#0066ff]" />
-                      <span>Πλήρες Zoom</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </section>
       </main>
 
