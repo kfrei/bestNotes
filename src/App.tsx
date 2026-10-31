@@ -17016,33 +17016,30 @@ export default function App() {
             'bold 15px system-ui, -apple-system, sans-serif'
           );
 
-          // When dragging the vector tip, display very small fluorescent green dots on all grid points
-          // where Fx, Fy, and F are all integers (Pythagorean triples in all 4 quadrants)
+          // When dragging the vector tip, display tiny fluorescent green dots ONLY inside the imaginary box
+          // formed by the positive x, y axes (so ~4-5 dots: (3,4), (4,3), (6,8), (8,6), etc.)
           const isDraggingAnalysisTip =
             draggingForceHandleRef.current?.simId === fSim.id &&
             (draggingForceHandleRef.current?.kind === 'analysis-tip' ||
               draggingForceHandleRef.current?.kind === 'free-vec-tip');
           if (isDraggingAnalysisTip) {
+            const maxBoxX = Math.min(12, Math.max(8, Math.floor((Math.abs(axLenX) - 6) / U)));
+            const maxBoxY = Math.min(12, Math.max(8, Math.floor((Math.abs(axLenY) - 6) / U)));
             ctx.save();
             ctx.fillStyle = '#39ff14';
-            ctx.strokeStyle = 'rgba(21, 128, 61, 0.55)';
-            ctx.lineWidth = 0.8;
-            ctx.shadowColor = 'rgba(57, 255, 20, 0.9)';
-            ctx.shadowBlur = 4.5;
-            for (let ix = -28; ix <= 28; ix++) {
-              if (ix === 0) continue;
+            ctx.shadowColor = 'rgba(57, 255, 20, 0.75)';
+            ctx.shadowBlur = 1.5;
+            for (let ix = 1; ix <= maxBoxX; ix++) {
               const gx = ox + ix * U;
               if (gx < 10 || gx > w - 10) continue;
-              for (let iy = -28; iy <= 28; iy++) {
-                if (iy === 0) continue;
+              for (let iy = 1; iy <= maxBoxY; iy++) {
                 const gy = oy - iy * U;
                 if (gy < 10 || gy > h - 10) continue;
                 if (isNearExactInt(Math.hypot(ix, iy), 1e-5)) {
                   const isCurrentDot = Math.abs(cx - ix) < 0.05 && Math.abs(cy - iy) < 0.05;
                   ctx.beginPath();
-                  ctx.arc(gx, gy, isCurrentDot ? 3.2 : 2.3, 0, Math.PI * 2);
+                  ctx.arc(gx, gy, isCurrentDot ? 1.7 : 1.25, 0, Math.PI * 2);
                   ctx.fill();
-                  ctx.stroke();
                 }
               }
             }
@@ -17050,14 +17047,11 @@ export default function App() {
           } else if (isIntLocked) {
             ctx.save();
             ctx.fillStyle = '#39ff14';
-            ctx.strokeStyle = 'rgba(21, 128, 61, 0.6)';
-            ctx.lineWidth = 0.9;
-            ctx.shadowColor = 'rgba(57, 255, 20, 0.85)';
-            ctx.shadowBlur = 4;
+            ctx.shadowColor = 'rgba(57, 255, 20, 0.75)';
+            ctx.shadowBlur = 1.5;
             ctx.beginPath();
-            ctx.arc(tx, ty, 2.6, 0, Math.PI * 2);
+            ctx.arc(tx, ty, 1.5, 0, Math.PI * 2);
             ctx.fill();
-            ctx.stroke();
             ctx.restore();
           }
 
@@ -17351,14 +17345,12 @@ export default function App() {
             if (mOther >= 0.95 && isNearExactInt(otherX) && isNearExactInt(otherY) && isNearExactInt(mOther)) {
               ctx.save();
               ctx.fillStyle = '#39ff14';
-              ctx.strokeStyle = 'rgba(21, 128, 61, 0.55)';
-              ctx.lineWidth = 0.8;
-              ctx.shadowColor = 'rgba(57, 255, 20, 0.9)';
-              ctx.shadowBlur = 4.5;
-              for (let ix = -28; ix <= 28; ix++) {
+              ctx.shadowColor = 'rgba(57, 255, 20, 0.75)';
+              ctx.shadowBlur = 1.5;
+              for (let ix = 0; ix <= 10; ix++) {
                 const gx = ox + ix * U;
                 if (gx < 10 || gx > w - 10) continue;
-                for (let iy = -28; iy <= 28; iy++) {
+                for (let iy = 0; iy <= 10; iy++) {
                   if (ix === 0 && iy === 0) continue;
                   const gy = oy - iy * U;
                   if (gy < 10 || gy > h - 10) continue;
@@ -17373,9 +17365,8 @@ export default function App() {
                     const isCurrentDot =
                       Math.abs(curX - ix) < 0.05 && Math.abs(curY - iy) < 0.05;
                     ctx.beginPath();
-                    ctx.arc(gx, gy, isCurrentDot ? 3.2 : 2.3, 0, Math.PI * 2);
+                    ctx.arc(gx, gy, isCurrentDot ? 1.7 : 1.25, 0, Math.PI * 2);
                     ctx.fill();
-                    ctx.stroke();
                   }
                 }
               }
@@ -17388,14 +17379,11 @@ export default function App() {
             ]) {
               ctx.save();
               ctx.fillStyle = '#39ff14';
-              ctx.strokeStyle = 'rgba(21, 128, 61, 0.6)';
-              ctx.lineWidth = 0.9;
-              ctx.shadowColor = 'rgba(57, 255, 20, 0.85)';
-              ctx.shadowBlur = 4;
+              ctx.shadowColor = 'rgba(57, 255, 20, 0.75)';
+              ctx.shadowBlur = 1.5;
               ctx.beginPath();
-              ctx.arc(tipPt.x, tipPt.y, 2.6, 0, Math.PI * 2);
+              ctx.arc(tipPt.x, tipPt.y, 1.5, 0, Math.PI * 2);
               ctx.fill();
-              ctx.stroke();
               ctx.restore();
             }
           }
