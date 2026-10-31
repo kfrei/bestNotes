@@ -11,6 +11,19 @@ import {
   distance,
   isFreehandLoopClosed,
 } from './geometryAndAlgorithms';
+import {
+  getPeriodicElementByZ,
+  validateAndCorrectChemicalEquation,
+  get3DMoleculeModel,
+  inferReactionFromCanvasAtoms,
+  getNaturalNucleusRadiusPx,
+  getNaturalOuterOrbitRadiusPx,
+} from './periodicTableData';
+
+export interface PdfExportOptions {
+  activePageId?: string;
+  liveSimCanvas?: HTMLCanvasElement | null;
+}
 
 const PDF_SCALE = 1.5; // High-clarity A4 PDF page render
 
@@ -496,9 +509,353 @@ function dataUrlToUint8Array(dataUrl: string): Uint8Array {
 }
 
 /**
- * Renders all pages of a Notebook into a standard multi-page PDF-1.4 binary Blob (`application/pdf`).
+ * Renders a static snapshot of all active simulations on a page (atoms, 3D molecules, circuits,
+ * force vectors/pendulums/inclines, and spring graphs) when exporting to PDF without a live simCanvas.
  */
-export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob> {
+function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: NotePage) {
+  // 1. Atom & Chemistry Simulations (Bohr Orbits, Paired Electrons, Bonds, Reaction Header & 3D Molecule)
+  const atomPalette = ['#2563eb', '#dc2626', '#7c3aed', '#0d9488', '#d97706', '#db2777'];
+  for (const aSim of page.atomSims || []) {
+    if (!aSim.atoms || aSim.atoms.length === 0) continue;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    for (const at of aSim.atoms) {
+      const rOut = at.outerRadiusPx || getNaturalOuterOrbitRadiusPx(at.z);
+      if (at.x - rOut < minX) minX = at.x - rOut;
+      if (at.x + rOut > maxX) maxX = at.x + rOut;
+      if (at.y - rOut < minY) minY = at.y - rOut;
+      if (at.y + rOut > maxY) maxY = at.y + rOut;
+    }
+    const simCenterX = Number.isFinite(minX) ? (minX + maxX) / 2 : 360;
+    const topBarY = Math.max(28, (Number.isFinite(minY) ? minY : 180) - 54);
+
+    if (aSim.showReactionEquation) {
+      const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
+      const rawForCheck =
+        aSim.userRawReactionText || aSim.reactionEquationText || inferred.equationDisplay;
+      const chemVal = validateAndCorrectChemicalEquation(rawForCheck);
+      ctx.save();
+      ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const eqText = chemVal.correctedEquation || rawForCheck;
+      const cardW = Math.max(210, ctx.measureText(eqText).width + 86);
+      const cardX = Math.max(16, simCenterX - cardW / 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+      ctx.strokeStyle = chemVal.hasCorrections ? '#fca5a5' : '#cbd5e1';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(cardX, topBarY, cardW, 38, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      let curX = cardX + 18;
+      const midY = topBarY + 19;
+      for (const seg of chemVal.segments) {
+        const w = ctx.measureText(seg.text).width;
+        if (seg.isCorrection && seg.text.trim()) {
+          ctx.fillStyle = 'rgba(254, 226, 226, 0.92)';
+          ctx.strokeStyle = '#f87171';
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          ctx.roundRect(curX - 2, midY - 11, w + 4, 22, 5);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#dc2626';
+        } else {
+          ctx.fillStyle = '#0f172a';
+        }
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(seg.text, curX, midY);
+        curX += w + (seg.isCorrection ? 3 : 0);
+      }
+      ctx.restore();
+    }
+
+    if (aSim.showAtomsBelowReaction !== false) {
+      const colorByZ = new Map<number, string>();
+      aSim.atoms.forEach((atom, atomIdx) => {
+        if (!colorByZ.has(atom.z)) {
+          colorByZ.set(atom.z, atom.color || atomPalette[colorByZ.size % atomPalette.length]);
+        }
+        const el = getPeriodicElementByZ(atom.z);
+        const col = atom.customColor
+          ? atom.color || colorByZ.get(atom.z)!
+          : colorByZ.get(atom.z)!;
+        const rOuter = atom.outerRadiusPx || getNaturalOuterOrbitRadiusPx(atom.z);
+        const rNuc = Math.max(13, Math.min(26, getNaturalNucleusRadiusPx(atom.z)));
+        const nShells = Math.max(1, el.shells.length);
+
+        for (let s = 0; s < nShells; s++) {
+          const isOuter = s === nShells - 1;
+          const r_s =
+            nShells === 1
+              ? rOuter
+              : rNuc + 14 + ((rOuter - (rNuc + 14)) * (s + 1)) / nShells;
+          ctx.save();
+          ctx.strokeStyle = col;
+          ctx.globalAlpha = isOuter ? 0.85 : 0.35;
+          ctx.lineWidth = isOuter ? 1.8 : 1.1;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.arc(atom.x, atom.y, r_s, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+
+          const eCount = Math.max(0, el.shells[s] + (isOuter ? atom.extraElectrons || 0 : 0));
+          const numPairs = Math.floor(eCount / 2);
+          const hasUnpaired = eCount % 2 === 1;
+          const totalSlots = Math.max(1, numPairs + (hasUnpaired ? 1 : 0));
+          const pairHalfAng = Math.min(0.16, 6.5 / r_s);
+          const eAngles: number[] = [];
+          for (let g = 0; g < totalSlots; g++) {
+            const slotAng = atomIdx * 0.55 - Math.PI / 2 + (g * Math.PI * 2) / totalSlots;
+            if (g < numPairs) {
+              eAngles.push(slotAng - pairHalfAng);
+              eAngles.push(slotAng + pairHalfAng);
+            } else {
+              eAngles.push(slotAng);
+            }
+          }
+          for (const ang of eAngles) {
+            const ex = atom.x + r_s * Math.cos(ang);
+            const ey = atom.y + r_s * Math.sin(ang);
+            ctx.save();
+            ctx.fillStyle = col;
+            ctx.globalAlpha = isOuter ? 0.96 : 0.5;
+            ctx.beginPath();
+            ctx.arc(ex, ey, isOuter ? 4.2 : 3.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        // Nucleus
+        ctx.save();
+        ctx.fillStyle = col;
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.arc(atom.x, atom.y, rNuc, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = 1;
+        ctx.stroke();
+
+        // Symbol badge below nucleus
+        const isSingleAtom = aSim.atoms.length === 1;
+        const labelTxt = isSingleAtom ? `${el.symbol} , ${el.nameEl}` : el.symbol;
+        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const bw = Math.max(32, ctx.measureText(labelTxt).width + 20);
+        const bx = atom.x - bw / 2;
+        const by = atom.y + rNuc + 4;
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, bw, 22, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = col;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(labelTxt, atom.x + 3, by + 11);
+        ctx.restore();
+      });
+    }
+
+    if (aSim.show3DMolecule) {
+      const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
+      const mol3D = get3DMoleculeModel(
+        aSim.activeReactionTerm || aSim.reactionEquationText || inferred.equationDisplay,
+        aSim.atoms.map((a) => a.z),
+        aSim.selected3DMolId || aSim.activeReactionTerm
+      );
+      const boxW = 440;
+      const boxH = 224;
+      const defaultBoxX = Math.max(18, simCenterX - boxW / 2);
+      const defaultBoxY =
+        aSim.showReactionEquation === false && aSim.showAtomsBelowReaction === false
+          ? Math.max(36, (aSim.atoms[0]?.y ?? 220) - boxH / 2)
+          : aSim.showAtomsBelowReaction === false
+          ? topBarY + 50
+          : Math.max(topBarY + 60, (Number.isFinite(maxY) ? maxY : 320) + 38);
+      const boxX = aSim.mol3DBoxX ?? defaultBoxX;
+      const boxY = aSim.mol3DBoxY ?? defaultBoxY;
+      const cx3d = boxX + boxW * 0.45;
+      const cy3d = boxY + 118;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText(`🧊 ${mol3D.nameEl}`, boxX + 14, boxY + 20);
+
+      const yaw = aSim.rot3DYaw ?? 0.42;
+      const pitch = aSim.rot3DPitch ?? 0.24;
+      const cosY = Math.cos(yaw),
+        sinY = Math.sin(yaw);
+      const cosP = Math.cos(pitch),
+        sinP = Math.sin(pitch);
+      const scale3D = 64;
+      const proj = (x: number, y: number, z3d: number) => {
+        const x1 = x * cosY + z3d * sinY;
+        const z1 = -x * sinY + z3d * cosY;
+        const y2 = y * cosP - z1 * sinP;
+        const z2 = y * sinP + z1 * cosP;
+        const persp = 1 / (1 - z2 * 0.14);
+        return { px: cx3d + x1 * scale3D * persp, py: cy3d + y2 * scale3D * persp, z2, persp };
+      };
+      const projAtoms = mol3D.atoms.map((at, idx) => {
+        const p = proj(at.x, at.y, at.z3d);
+        return { ...at, idx, px: p.px, py: p.py, depth: p.z2, rPx: 22 * at.radiusFactor * p.persp };
+      });
+      for (const b of mol3D.bonds) {
+        const a1 = projAtoms[b.fromIdx];
+        const a2 = projAtoms[b.toIdx];
+        if (!a1 || !a2) continue;
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(a1.px, a1.py);
+        ctx.lineTo(a2.px, a2.py);
+        ctx.stroke();
+      }
+      for (const at of [...projAtoms].sort((a, b) => a.depth - b.depth)) {
+        ctx.fillStyle = at.color;
+        ctx.beginPath();
+        ctx.arc(at.px, at.py, at.rPx, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(at.symbol, at.px, at.py);
+      }
+      ctx.restore();
+    }
+  }
+
+  // 2. Circuit Simulations (Electrons along circuit wires & glowing bulbs)
+  for (const cSim of page.circuitSims || []) {
+    const idSet = new Set(cSim.strokeIds || []);
+    const simStrokes = (page.strokes || []).filter((s) => idSet.has(s.id));
+    for (const st of simStrokes) {
+      if (st.shapeType === 'bulb' && st.points.length >= 2) {
+        let minX = Infinity,
+          maxX = -Infinity,
+          minY = Infinity,
+          maxY = -Infinity;
+        for (const p of st.points) {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.y > maxY) maxY = p.y;
+        }
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        ctx.save();
+        const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, 34);
+        grad.addColorStop(0, 'rgba(250, 204, 21, 0.72)');
+        grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 34, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (st.shapeType === 'line' && st.points.length >= 2) {
+        const p0 = st.points[0];
+        const p1 = st.points[st.points.length - 1];
+        const segLen = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        const count = Math.max(1, Math.floor(segLen / 28));
+        ctx.save();
+        for (let k = 0; k < count; k++) {
+          const t = (k + 0.5) / count;
+          const ex = p0.x + (p1.x - p0.x) * t;
+          const ey = p0.y + (p1.y - p0.y) * t;
+          ctx.fillStyle = '#facc15';
+          ctx.strokeStyle = '#ca8a04';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(ex, ey, 3.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+  }
+
+  // 3. Force Vector / Pendulum / Inclined Plane Simulations
+  for (const fSim of page.forceSims || []) {
+    ctx.save();
+    if (fSim.mode === 'analysis') {
+      const ox = fSim.originX;
+      const oy = fSim.originY;
+      const fxPx = (fSim.fxUnits ?? 8) * A4_GRID_STEP_PX;
+      const fyPx = -(fSim.fyUnits ?? 6) * A4_GRID_STEP_PX;
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(ox + fxPx, oy);
+      ctx.lineTo(ox + fxPx, oy + fyPx);
+      ctx.lineTo(ox, oy + fyPx);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Fx & Fy arrows
+      ctx.strokeStyle = '#16a34a';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(ox + fxPx, oy);
+      ctx.stroke();
+      ctx.strokeStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(ox, oy + fyPx);
+      ctx.stroke();
+    } else if (fSim.mode === 'pendulum') {
+      const px = fSim.originX;
+      const py = fSim.originY;
+      const L = fSim.rodLengthPx || 230;
+      const ang = fSim.pendulumAngleRad ?? Math.PI / 5;
+      const bx = px + L * Math.sin(ang);
+      const by = py + L * Math.cos(ang);
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.arc(bx, by, 16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/**
+ * Renders all pages of a Notebook into a standard multi-page PDF-1.4 binary Blob (`application/pdf`).
+ * Includes all live simulations (atoms, 3D molecules, circuits, springs, pendulums, force vectors).
+ */
+export async function exportNotebookToPdfBlob(
+  notebook: Notebook,
+  options?: PdfExportOptions
+): Promise<Blob> {
   const pageImages: {
     jpegBytes: Uint8Array;
     pixelW: number;
@@ -550,6 +907,20 @@ export async function exportNotebookToPdfBlob(notebook: Notebook): Promise<Blob>
     for (const st of page.strokes || []) {
       if (visibleLayerIds.size > 0 && st.layerId && !visibleLayerIds.has(st.layerId)) continue;
       drawStrokeForPdf(ctx, st);
+    }
+
+    // Composite live simulation canvas on active page OR static simulation snapshot on other pages!
+    if (
+      options?.activePageId === page.id &&
+      options?.liveSimCanvas &&
+      options.liveSimCanvas.width > 0 &&
+      options.liveSimCanvas.height > 0
+    ) {
+      ctx.save();
+      ctx.drawImage(options.liveSimCanvas, 0, 0, logicalW, logicalH);
+      ctx.restore();
+    } else {
+      drawPageSimulationsSnapshotForPdf(ctx, page);
     }
 
     for (const tx of page.texts || []) {
@@ -811,7 +1182,8 @@ async function uploadOrUpdateDriveFile(
  */
 export async function syncNotebookPdfToGoogleDrive(
   accessToken: string,
-  notebook: Notebook
+  notebook: Notebook,
+  options?: PdfExportOptions
 ): Promise<{
   folderId: string;
   pdfFileId: string;
@@ -833,7 +1205,7 @@ export async function syncNotebookPdfToGoogleDrive(
   }
 
   // 3. Export notebook pages to a real multi-page PDF Blob
-  const pdfBlob = await exportNotebookToPdfBlob(notebook);
+  const pdfBlob = await exportNotebookToPdfBlob(notebook, options);
   const safeTitle = (notebook.title || 'Σημείωση').trim().replace(/[/\\?%*:|"<>]/g, '-');
   const pdfFileName = safeTitle.toLowerCase().endsWith('.pdf') ? safeTitle : `${safeTitle}.pdf`;
 
@@ -863,3 +1235,828 @@ export async function syncNotebookPdfToGoogleDrive(
     webViewLink: rootUploaded.webViewLink,
   };
 }
+
+/**
+ * Exports a Notebook as a standalone, self-contained Interactive "Live PDF" (.live.html) file.
+ * Has zero editing/drawing tools, looks like a clean PDF reader, draws a subtle interactive
+ * border ONLY around animated simulations with Play/Stop controls, and allows full interaction
+ * with circuits (switch ON/OFF), pendulums (drag & drop), springs (drag & drop), force vectors
+ * (angle drag, synthesis & analysis), and 2D/3D atoms & molecules.
+ */
+export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<Blob> {
+  const pagesPayload: any[] = [];
+
+  for (const page of notebook.pages) {
+    const logicalW = getPageLogicalWidth(page);
+    const logicalH = getPageLogicalHeight(page);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(logicalW * PDF_SCALE);
+    canvas.height = Math.round(logicalH * PDF_SCALE);
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(PDF_SCALE, PDF_SCALE);
+
+    if (page.backgroundDataUrl) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, logicalW, logicalH);
+      const bgImg = await loadImageElement(page.backgroundDataUrl);
+      if (bgImg) {
+        ctx.drawImage(bgImg, 0, 0, logicalW, logicalH);
+      }
+    } else {
+      drawPaperTemplateForPdf(ctx, page.template, logicalW, logicalH);
+    }
+
+    const visibleLayerIds = new Set(
+      (page.layers || []).filter((l) => l.visible).map((l) => l.id)
+    );
+
+    for (const im of page.images || []) {
+      if (visibleLayerIds.size > 0 && im.layerId && !visibleLayerIds.has(im.layerId)) continue;
+      const imgEl = await loadImageElement(im.dataUrl);
+      if (!imgEl) continue;
+      ctx.save();
+      if (im.rotation) {
+        const cx = im.x + im.width / 2;
+        const cy = im.y + im.height / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate((im.rotation * Math.PI) / 180);
+        ctx.translate(-cx, -cy);
+      }
+      ctx.drawImage(imgEl, im.x, im.y, im.width, im.height);
+      ctx.restore();
+    }
+
+    // Collect stroke IDs that will be dynamically animated in the Live PDF player
+    // (pendulum rod/bob, oscillating spring/mass, and draggable force vectors)
+    const dynamicStrokeIds = new Set<string>();
+    for (const sp of page.springSims || []) {
+      if (sp.eqSpringStrokeId) dynamicStrokeIds.add(sp.eqSpringStrokeId);
+      if (sp.massStrokeId) dynamicStrokeIds.add(sp.massStrokeId);
+    }
+    for (const fs of page.forceSims || []) {
+      if (fs.primaryStrokeId) dynamicStrokeIds.add(fs.primaryStrokeId);
+      if (fs.secondaryStrokeId) dynamicStrokeIds.add(fs.secondaryStrokeId);
+    }
+
+    for (const st of page.strokes || []) {
+      if (visibleLayerIds.size > 0 && st.layerId && !visibleLayerIds.has(st.layerId)) continue;
+      if (dynamicStrokeIds.has(st.id)) continue;
+      drawStrokeForPdf(ctx, st);
+    }
+
+    for (const tx of page.texts || []) {
+      if (!tx.text) continue;
+      ctx.save();
+      ctx.fillStyle = tx.color || '#111827';
+      const fSize = tx.fontSize || 20;
+      ctx.font = `${tx.bold ? 'bold ' : ''}${fSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      const lines = tx.text.split(/\r?\n/);
+      lines.forEach((line, idx) => {
+        ctx.fillText(line, tx.x + 12, tx.y + 6 + (idx + 0.85) * fSize * 1.35);
+      });
+      ctx.restore();
+    }
+
+    // Enrich atomSims with precomputed 2D element info & 3D molecule geometry for standalone player
+    const enrichedAtomSims = (page.atomSims || []).map((aSim) => {
+      const inferred = inferReactionFromCanvasAtoms((aSim.atoms || []).map((a) => a.z));
+      const rawEq =
+        aSim.userRawReactionText || aSim.reactionEquationText || inferred.equationDisplay;
+      const chemVal = validateAndCorrectChemicalEquation(rawEq);
+      const mol3D = get3DMoleculeModel(
+        aSim.activeReactionTerm || aSim.reactionEquationText || inferred.equationDisplay,
+        (aSim.atoms || []).map((a) => a.z),
+        aSim.selected3DMolId || aSim.activeReactionTerm
+      );
+      return {
+        ...aSim,
+        chemVal,
+        mol3D,
+        atomsMeta: (aSim.atoms || []).map((at) => {
+          const el = getPeriodicElementByZ(at.z);
+          return {
+            ...at,
+            symbol: el.symbol,
+            nameEl: el.nameEl,
+            massNum: el.a,
+            shells: el.shells,
+            rNuc: Math.max(13, Math.min(26, getNaturalNucleusRadiusPx(at.z))),
+            rOuter: at.outerRadiusPx || getNaturalOuterOrbitRadiusPx(at.z),
+          };
+        }),
+      };
+    });
+
+    pagesPayload.push({
+      id: page.id,
+      title: page.title,
+      width: logicalW,
+      height: logicalH,
+      bgDataUrl: canvas.toDataURL('image/jpeg', 0.92),
+      strokes: page.strokes || [],
+      circuitSims: page.circuitSims || [],
+      springSims: page.springSims || [],
+      forceSims: page.forceSims || [],
+      atomSims: enrichedAtomSims,
+    });
+  }
+
+  const safeDocTitle = (notebook.title || 'ExplainBoards Live PDF')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const html = `<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${safeDocTitle} — Live PDF (Διαδραστικές Προσομοιώσεις)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  body { background: #1e293b; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+  header { position: sticky; top: 0; z-index: 50; background: #0f172a; border-bottom: 1px solid #334155; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; box-shadow: 0 4px 16px rgba(0,0,0,0.28); }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .badge-live { background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.03em; display: inline-flex; align-items: center; gap: 5px; }
+  .doc-title { font-size: 15px; font-weight: 700; color: #f1f5f9; }
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .btn { background: #1e293b; border: 1px solid #475569; color: #e2e8f0; font-size: 12px; font-weight: 700; padding: 6px 13px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .btn:hover { background: #334155; color: #fff; }
+  .btn-play { background: #059669; border-color: #10b981; color: #fff; }
+  .btn-play.paused { background: #d97706; border-color: #f59e0b; }
+  .hint-bar { background: rgba(15, 23, 42, 0.85); color: #94a3b8; font-size: 12px; text-align: center; padding: 6px 12px; border-bottom: 1px solid #1e293b; }
+  .hint-bar b { color: #38bdf8; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 12px 48px; gap: 28px; overflow: auto; }
+  .page-wrap { position: relative; background: #fff; border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,0.42); overflow: hidden; transform-origin: top center; }
+  .page-bg { display: block; width: 100%; height: 100%; pointer-events: none; }
+  .sim-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: default; }
+  @media print {
+    header, .hint-bar { display: none !important; }
+    body { background: #fff; }
+    main { padding: 0; gap: 0; }
+    .page-wrap { box-shadow: none; border-radius: 0; page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="badge-live">🎬 LIVE PDF</span>
+    <span class="doc-title">${safeDocTitle}</span>
+  </div>
+  <div class="controls">
+    <button id="globalPlayBtn" class="btn btn-play" onclick="toggleGlobalPlay()">⏸ Παύση Όλων των Animations</button>
+    <button class="btn" onclick="changeZoom(-0.12)">➖</button>
+    <span id="zoomLabel" style="font-size:12px;font-weight:700;min-width:44px;text-align:center;">100%</span>
+    <button class="btn" onclick="changeZoom(0.12)">➕</button>
+    <button class="btn" onclick="window.print()">🖨️ Εκτύπωση / PDF</button>
+  </div>
+</header>
+<div class="hint-bar">
+  🔒 <b>Λειτουργία Ανάγνωσης &amp; Ζωντανών Προσομοιώσεων (Χωρίς Εργαλεία Σχεδίασης):</b> Κάντε κλικ στα περιγράμματα των προσομοιώσεων για <b>Play/Stop</b>, ανοίξτε/κλείστε τον <b>διακόπτη κυκλώματος (ON/OFF)</b>, σύρετε το <b>εκκρεμές</b>, το <b>ελατήριο</b>, τα <b>διανύσματα δυνάμεων</b> ή περιστρέψτε το <b>3D μόριο</b>!
+</div>
+<main id="pagesContainer"></main>
+<script>
+const PAGES = ${JSON.stringify(pagesPayload)};
+let globalPlaying = true;
+let currentZoom = 1;
+
+function toggleGlobalPlay() {
+  globalPlaying = !globalPlaying;
+  const btn = document.getElementById('globalPlayBtn');
+  if (btn) {
+    btn.textContent = globalPlaying ? '⏸ Παύση Όλων των Animations' : '▶ Εκκίνηση Όλων των Animations';
+    btn.className = globalPlaying ? 'btn btn-play' : 'btn btn-play paused';
+  }
+}
+
+function changeZoom(delta) {
+  currentZoom = Math.max(0.5, Math.min(1.8, Math.round((currentZoom + delta) * 100) / 100));
+  document.getElementById('zoomLabel').textContent = Math.round(currentZoom * 100) + '%';
+  document.querySelectorAll('.page-wrap').forEach((el, idx) => {
+    const pg = PAGES[idx];
+    el.style.width = (pg.width * currentZoom) + 'px';
+    el.style.height = (pg.height * currentZoom) + 'px';
+  });
+}
+
+const container = document.getElementById('pagesContainer');
+const pageStates = PAGES.map((pg, pIdx) => {
+  const wrap = document.createElement('div');
+  wrap.className = 'page-wrap';
+  wrap.style.width = pg.width + 'px';
+  wrap.style.height = pg.height + 'px';
+
+  const img = document.createElement('img');
+  img.className = 'page-bg';
+  img.src = pg.bgDataUrl;
+  wrap.appendChild(img);
+
+  const cv = document.createElement('canvas');
+  cv.className = 'sim-canvas';
+  cv.width = pg.width * 2;
+  cv.height = pg.height * 2;
+  wrap.appendChild(cv);
+  container.appendChild(wrap);
+
+  // Per-simulation interactive state
+  const circuits = (pg.circuitSims || []).map((c) => ({
+    ...c,
+    playing: true,
+    switchClosed: true,
+  }));
+  const springs = (pg.springSims || []).map((s) => ({
+    ...s,
+    playing: true,
+    dispPx: (s.amplitudePx || 50) * 0.7,
+    velPx: 0,
+  }));
+  const forces = (pg.forceSims || []).map((f) => ({
+    ...f,
+    playing: !f.isPaused,
+    angleRad: f.pendulumAngleRad ?? Math.PI / 5,
+    angVel: 0,
+    showDecomp: true,
+    showRes: true,
+    fxPx: (f.fxUnits ?? 8) * 23,
+    fyPx: -(f.fyUnits ?? 6) * 23,
+    f1xPx: (f.f1xUnits ?? 8) * 23,
+    f1yPx: -(f.f1yUnits ?? 0) * 23,
+    f2xPx: (f.f2xUnits ?? 0) * 23,
+    f2yPx: -(f.f2yUnits ?? 6) * 23,
+  }));
+  const atoms = (pg.atomSims || []).map((a) => ({
+    ...a,
+    playing: a.isRotating !== false,
+    yawOffset: 0,
+    rot3DYaw: a.rot3DYaw ?? 0.42,
+    rot3DPitch: a.rot3DPitch ?? 0.24,
+    show3DMolecule: Boolean(a.show3DMolecule),
+    showChargeCloud: a.showChargeCloud !== false,
+  }));
+
+  return { pg, cv, ctx: cv.getContext('2d'), circuits, springs, forces, atoms, hitButtons: [], dragTarget: null };
+});
+
+function drawSimBorderAndHeader(ctx, x, y, w, h, title, isPlaying, simRef, hitButtons, extraBtns) {
+  ctx.save();
+  ctx.strokeStyle = isPlaying ? 'rgba(14, 165, 233, 0.78)' : 'rgba(148, 163, 184, 0.65)';
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([7, 5]);
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 14);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Top-left label badge
+  ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  const lblW = ctx.measureText(title).width + 16;
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+  ctx.beginPath();
+  ctx.roundRect(x + 8, y - 11, lblW, 20, 999);
+  ctx.fill();
+  ctx.fillStyle = '#e0f2fe';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(title, x + 16, y - 1);
+
+  // Top-right Play/Stop button + extra buttons
+  let curRightX = x + w - 8;
+  const playLabel = isPlaying ? '⏸ Stop' : '▶ Play';
+  const playW = ctx.measureText(playLabel).width + 18;
+  curRightX -= playW;
+  ctx.fillStyle = isPlaying ? '#059669' : '#d97706';
+  ctx.beginPath();
+  ctx.roundRect(curRightX, y - 11, playW, 20, 999);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText(playLabel, curRightX + playW / 2, y - 1);
+  hitButtons.push({ x1: curRightX, y1: y - 13, x2: curRightX + playW, y2: y + 11, onClick: () => { simRef.playing = !simRef.playing; } });
+
+  for (const eb of (extraBtns || [])) {
+    const bw = ctx.measureText(eb.label).width + 16;
+    curRightX -= (bw + 6);
+    ctx.fillStyle = eb.active ? '#2563eb' : '#334155';
+    ctx.beginPath();
+    ctx.roundRect(curRightX, y - 11, bw, 20, 999);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(eb.label, curRightX + bw / 2, y - 1);
+    hitButtons.push({ x1: curRightX, y1: y - 13, x2: curRightX + bw, y2: y + 11, onClick: eb.onClick });
+  }
+  ctx.restore();
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color, width, label) {
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const head = 11;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6));
+  ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+  if (label) {
+    ctx.font = 'bold 12px -apple-system, sans-serif';
+    ctx.fillText(label, x2 + 12 * Math.cos(ang), y2 + 12 * Math.sin(ang));
+  }
+  ctx.restore();
+}
+
+let lastNow = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, Math.max(0.001, (now - lastNow) / 1000));
+  lastNow = now;
+
+  pageStates.forEach((st) => {
+    const ctx = st.ctx;
+    const w = st.pg.width;
+    const h = st.pg.height;
+    ctx.save();
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    st.hitButtons = [];
+
+    // 1. CIRCUITS
+    st.circuits.forEach((cSim) => {
+      const idSet = new Set(cSim.strokeIds || []);
+      const simStrokes = (st.pg.strokes || []).filter((s) => idSet.has(s.id));
+      if (simStrokes.length === 0) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      simStrokes.forEach((s) => (s.points || []).forEach((p) => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }));
+      if (!Number.isFinite(minX)) return;
+      const isAct = globalPlaying && cSim.playing;
+      drawSimBorderAndHeader(
+        ctx,
+        minX - 24,
+        minY - 24,
+        maxX - minX + 48,
+        maxY - minY + 48,
+        '⚡ Κύκλωμα',
+        isAct,
+        cSim,
+        st.hitButtons,
+        [{
+          label: cSim.switchClosed ? '🟢 Διακόπτης ON' : '🔴 Διακόπτης OFF',
+          active: cSim.switchClosed,
+          onClick: () => { cSim.switchClosed = !cSim.switchClosed; }
+        }]
+      );
+
+      if (cSim.switchClosed) {
+        simStrokes.forEach((s) => {
+          if (s.shapeType === 'bulb' && s.points.length >= 2) {
+            const cx = (s.points[0].x + s.points[1].x) / 2;
+            const cy = (s.points[0].y + s.points[1].y) / 2;
+            const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, 36);
+            grad.addColorStop(0, 'rgba(250, 204, 21, 0.78)');
+            grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 36, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (s.shapeType === 'line' && s.points.length >= 2) {
+            const p0 = s.points[0];
+            const p1 = s.points[s.points.length - 1];
+            const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+            const cnt = Math.max(1, Math.floor(len / 28));
+            const phase = isAct ? ((now * 0.0018) % 1) : 0.35;
+            for (let k = 0; k < cnt; k++) {
+              const t = (k + phase) / cnt;
+              const ex = p0.x + (p1.x - p0.x) * t;
+              const ey = p0.y + (p1.y - p0.y) * t;
+              ctx.fillStyle = '#facc15';
+              ctx.strokeStyle = '#ca8a04';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(ex, ey, 3.8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
+          }
+        });
+      }
+    });
+
+    // 2. SPRINGS
+    st.springs.forEach((spSim) => {
+      const spStroke = (st.pg.strokes || []).find((s) => s.id === spSim.eqSpringStrokeId);
+      if (!spStroke || spStroke.points.length < 2) return;
+      const pTop = spStroke.points[0];
+      const pBot = spStroke.points[1] || { x: pTop.x, y: pTop.y + 140 };
+      const eqLen = Math.hypot(pBot.x - pTop.x, pBot.y - pTop.y) || 140;
+      const isAct = globalPlaying && spSim.playing && (!st.dragTarget || st.dragTarget.sim !== spSim);
+      if (isAct) {
+        const omega = 2.6 * Math.sqrt((spSim.stiffness || 1) / Math.max(0.2, spSim.mass || 1));
+        const acc = -omega * omega * spSim.dispPx;
+        spSim.velPx += acc * dt;
+        spSim.dispPx += spSim.velPx * dt;
+      }
+      const curEndY = pTop.y + eqLen + spSim.dispPx;
+      drawSimBorderAndHeader(
+        ctx,
+        pTop.x - 75,
+        pTop.y - 24,
+        150,
+        eqLen + (spSim.amplitudePx || 55) + 95,
+        '🌀 Ελατήριο (Drag & Drop)',
+        globalPlaying && spSim.playing,
+        spSim,
+        st.hitButtons,
+        []
+      );
+      // Draw spring coils
+      ctx.save();
+      ctx.strokeStyle = spStroke.color || '#2563eb';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(pTop.x, pTop.y);
+      const coils = 9;
+      for (let i = 1; i <= coils * 2; i++) {
+        const ty = pTop.y + ((curEndY - 22 - pTop.y) * i) / (coils * 2 + 1);
+        const tx = pTop.x + (i % 2 === 0 ? -14 : 14);
+        ctx.lineTo(tx, ty);
+      }
+      ctx.lineTo(pTop.x, curEndY - 18);
+      ctx.stroke();
+      // Draw hanging mass block
+      ctx.fillStyle = '#dbeafe';
+      ctx.strokeStyle = '#1d4ed8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(pTop.x - 22, curEndY - 18, 44, 36, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      spSim._massCenter = { x: pTop.x, y: curEndY, eqY: pTop.y + eqLen };
+    });
+
+    // 3. FORCES / PENDULUM / INCLINE
+    st.forces.forEach((fSim) => {
+      const ox = fSim.originX;
+      const oy = fSim.originY;
+      if (fSim.mode === 'pendulum') {
+        const L = fSim.rodLengthPx || 220;
+        const isAct = globalPlaying && fSim.playing && (!st.dragTarget || st.dragTarget.sim !== fSim);
+        if (isAct) {
+          const gOverL = (9.81 * 32) / Math.max(80, L);
+          const angAcc = -gOverL * Math.sin(fSim.angleRad);
+          fSim.angVel += angAcc * dt;
+          fSim.angVel *= 0.999;
+          fSim.angleRad += fSim.angVel * dt;
+        }
+        const bx = ox + L * Math.sin(fSim.angleRad);
+        const by = oy + L * Math.cos(fSim.angleRad);
+        fSim._bobPt = { x: bx, y: by };
+
+        drawSimBorderAndHeader(
+          ctx,
+          ox - L - 28,
+          oy - 24,
+          L * 2 + 56,
+          L + 75,
+          '⏱️ Εκκρεμές (Drag & Drop)',
+          globalPlaying && fSim.playing,
+          fSim,
+          st.hitButtons,
+          [{
+            label: fSim.showDecomp ? '📐 Δυνάμεις ON' : '📐 Δυνάμεις OFF',
+            active: fSim.showDecomp,
+            onClick: () => { fSim.showDecomp = !fSim.showDecomp; }
+          }]
+        );
+
+        ctx.save();
+        ctx.strokeStyle = '#94a3b8';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.lineTo(ox, oy + L + 16);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+
+        if (fSim.showDecomp) {
+          drawArrow(ctx, bx, by, bx, by + 56, '#dc2626', 2.2, 'B');
+          drawArrow(ctx, bx, by, bx - 52 * Math.sin(fSim.angleRad), by - 52 * Math.cos(fSim.angleRad), '#0284c7', 2.2, 'T');
+        }
+
+        ctx.fillStyle = '#2563eb';
+        ctx.strokeStyle = '#1e3a8a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(bx, by, 16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        // Force Analysis / Synthesis
+        drawSimBorderAndHeader(
+          ctx,
+          ox - 190,
+          oy - 190,
+          380,
+          310,
+          fSim.mode === 'synthesis' ? '🎯 Σύνθεση Δυνάμεων' : '🎯 Ανάλυση Δύναμης (Drag Κορυφή)',
+          globalPlaying && fSim.playing,
+          fSim,
+          st.hitButtons,
+          [
+            {
+              label: fSim.showDecomp ? 'Fx/Fy ON' : 'Fx/Fy OFF',
+              active: fSim.showDecomp,
+              onClick: () => { fSim.showDecomp = !fSim.showDecomp; }
+            },
+            {
+              label: fSim.showRes ? 'ΣF ON' : 'ΣF OFF',
+              active: fSim.showRes,
+              onClick: () => { fSim.showRes = !fSim.showRes; }
+            }
+          ]
+        );
+        const tx = ox + fSim.fxPx;
+        const ty = oy + fSim.fyPx;
+        fSim._tipPt = { x: tx, y: ty };
+        if (fSim.showDecomp) {
+          ctx.save();
+          ctx.strokeStyle = '#94a3b8';
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(tx, oy);
+          ctx.lineTo(tx, ty);
+          ctx.lineTo(ox, ty);
+          ctx.stroke();
+          ctx.restore();
+          drawArrow(ctx, ox, oy, tx, oy, '#16a34a', 2.4, 'Fx');
+          drawArrow(ctx, ox, oy, ox, ty, '#dc2626', 2.4, 'Fy');
+        }
+        if (fSim.showRes) {
+          drawArrow(ctx, ox, oy, tx, ty, '#2563eb', 3.2, 'F');
+        }
+      }
+    });
+
+    // 4. ATOMS & 3D MOLECULES
+    const atomPalette = ['#2563eb', '#dc2626', '#7c3aed', '#0d9488', '#d97706', '#db2777'];
+    st.atoms.forEach((aSim) => {
+      const metas = aSim.atomsMeta || [];
+      if (metas.length === 0) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      metas.forEach((m) => {
+        if (m.x - m.rOuter < minX) minX = m.x - m.rOuter;
+        if (m.x + m.rOuter > maxX) maxX = m.x + m.rOuter;
+        if (m.y - m.rOuter < minY) minY = m.y - m.rOuter;
+        if (m.y + m.rOuter > maxY) maxY = m.y + m.rOuter;
+      });
+      const simCenterX = (minX + maxX) / 2;
+      const topBarY = Math.max(28, minY - 54);
+      const isAct = globalPlaying && aSim.playing;
+      if (isAct && (!st.dragTarget || st.dragTarget.sim !== aSim)) {
+        aSim.yawOffset = (aSim.yawOffset + dt * 0.45) % (Math.PI * 2);
+      }
+
+      const bX = Math.min(minX - 28, simCenterX - 230);
+      const bW = Math.max(maxX - minX + 56, 460);
+      const bH = (aSim.show3DMolecule ? 260 : 0) + (maxY - topBarY) + 64;
+      drawSimBorderAndHeader(
+        ctx,
+        bX,
+        topBarY - 18,
+        bW,
+        bH,
+        '⚛️ Άτομο & 3D Μόριο',
+        isAct,
+        aSim,
+        st.hitButtons,
+        [
+          {
+            label: aSim.show3DMolecule ? '🧊 3D ON' : '🧊 3D OFF',
+            active: aSim.show3DMolecule,
+            onClick: () => { aSim.show3DMolecule = !aSim.show3DMolecule; }
+          }
+        ]
+      );
+
+      if (aSim.showAtomsBelowReaction !== false) {
+        const colorByZ = new Map();
+        metas.forEach((atom, atomIdx) => {
+          if (!colorByZ.has(atom.z)) colorByZ.set(atom.z, atom.color || atomPalette[colorByZ.size % atomPalette.length]);
+          const col = colorByZ.get(atom.z);
+          const nShells = Math.max(1, atom.shells.length);
+          for (let s = 0; s < nShells; s++) {
+            const isOuter = s === nShells - 1;
+            const r_s = nShells === 1 ? atom.rOuter : atom.rNuc + 14 + ((atom.rOuter - (atom.rNuc + 14)) * (s + 1)) / nShells;
+            ctx.save();
+            ctx.strokeStyle = col;
+            ctx.globalAlpha = isOuter ? 0.85 : 0.35;
+            ctx.lineWidth = isOuter ? 1.8 : 1.1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.arc(atom.x, atom.y, r_s, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            const eCount = Math.max(0, atom.shells[s] + (isOuter ? atom.extraElectrons || 0 : 0));
+            const numPairs = Math.floor(eCount / 2);
+            const hasUnpaired = eCount % 2 === 1;
+            const totalSlots = Math.max(1, numPairs + (hasUnpaired ? 1 : 0));
+            const pairHalfAng = Math.min(0.16, 6.5 / r_s);
+            const baseRot = (isAct ? now * 0.00036 * (s % 2 === 0 ? 1 : -0.75) : 0) + atomIdx * 0.55;
+            for (let g = 0; g < totalSlots; g++) {
+              const slotAng = baseRot - Math.PI / 2 + (g * Math.PI * 2) / totalSlots;
+              const angs = g < numPairs ? [slotAng - pairHalfAng, slotAng + pairHalfAng] : [slotAng];
+              angs.forEach((ang) => {
+                ctx.save();
+                ctx.fillStyle = col;
+                ctx.globalAlpha = isOuter ? 0.95 : 0.5;
+                ctx.beginPath();
+                ctx.arc(atom.x + r_s * Math.cos(ang), atom.y + r_s * Math.sin(ang), isOuter ? 4.2 : 3.1, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+              });
+            }
+          }
+          ctx.save();
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.arc(atom.x, atom.y, atom.rNuc, 0, Math.PI * 2);
+          ctx.fill();
+          const lbl = metas.length === 1 ? (atom.symbol + ' , ' + atom.nameEl) : atom.symbol;
+          ctx.font = 'bold 12px -apple-system, sans-serif';
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(atom.symbol, atom.x, atom.y);
+          ctx.fillStyle = col;
+          ctx.fillText(lbl, atom.x, atom.y + atom.rNuc + 14);
+          ctx.restore();
+        });
+      }
+
+      if (aSim.show3DMolecule && aSim.mol3D) {
+        const mol3D = aSim.mol3D;
+        const boxW = 420, boxH = 216;
+        const boxX = aSim.mol3DBoxX ?? Math.max(18, simCenterX - boxW / 2);
+        const boxY = aSim.mol3DBoxY ?? Math.max(topBarY + 50, maxY + 34);
+        const cx3d = boxX + boxW * 0.5, cy3d = boxY + 116;
+        aSim._mol3DBox = { x1: boxX, y1: boxY, x2: boxX + boxW, y2: boxY + boxH };
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 13px -apple-system, sans-serif';
+        ctx.fillText('🧊 ' + mol3D.nameEl + ' (Σύρετε με το ποντίκι για 3D περιστροφή)', boxX + 14, boxY + 20);
+
+        const yaw = aSim.rot3DYaw + aSim.yawOffset;
+        const pitch = aSim.rot3DPitch;
+        const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+        const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+        const scale3D = 62;
+        const projAtoms = (mol3D.atoms || []).map((at, idx) => {
+          const x1 = at.x * cosY + at.z3d * sinY;
+          const z1 = -at.x * sinY + at.z3d * cosY;
+          const y2 = at.y * cosP - z1 * sinP;
+          const z2 = at.y * sinP + z1 * cosP;
+          const persp = 1 / (1 - z2 * 0.14);
+          return { ...at, idx, px: cx3d + x1 * scale3D * persp, py: cy3d + y2 * scale3D * persp, depth: z2, rPx: 21 * at.radiusFactor * persp };
+        });
+        (mol3D.bonds || []).forEach((b) => {
+          const a1 = projAtoms[b.fromIdx], a2 = projAtoms[b.toIdx];
+          if (!a1 || !a2) return;
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 5;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(a1.px, a1.py);
+          ctx.lineTo(a2.px, a2.py);
+          ctx.stroke();
+        });
+        [...projAtoms].sort((a, b) => a.depth - b.depth).forEach((at) => {
+          ctx.fillStyle = at.color;
+          ctx.beginPath();
+          ctx.arc(at.px, at.py, at.rPx, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 12px -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(at.symbol, at.px, at.py);
+        });
+        ctx.restore();
+      }
+    });
+
+    ctx.restore();
+  });
+
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// Pointer events for interactive simulations (Zero drawing/editing tools!)
+pageStates.forEach((st) => {
+  const getPt = (e) => {
+    const r = st.cv.getBoundingClientRect();
+    return {
+      x: ((e.clientX - r.left) / r.width) * st.pg.width,
+      y: ((e.clientY - r.top) / r.height) * st.pg.height,
+    };
+  };
+
+  st.cv.addEventListener('pointerdown', (e) => {
+    const pt = getPt(e);
+    for (const btn of st.hitButtons) {
+      if (pt.x >= btn.x1 && pt.x <= btn.x2 && pt.y >= btn.y1 && pt.y <= btn.y2) {
+        btn.onClick();
+        return;
+      }
+    }
+    for (const fSim of st.forces) {
+      if (fSim.mode === 'pendulum' && fSim._bobPt && Math.hypot(pt.x - fSim._bobPt.x, pt.y - fSim._bobPt.y) <= 28) {
+        st.dragTarget = { kind: 'pendulum', sim: fSim };
+        st.cv.setPointerCapture(e.pointerId);
+        return;
+      }
+      if (fSim.mode !== 'pendulum' && fSim._tipPt && Math.hypot(pt.x - fSim._tipPt.x, pt.y - fSim._tipPt.y) <= 28) {
+        st.dragTarget = { kind: 'force-tip', sim: fSim };
+        st.cv.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+    for (const spSim of st.springs) {
+      if (spSim._massCenter && Math.hypot(pt.x - spSim._massCenter.x, pt.y - spSim._massCenter.y) <= 34) {
+        st.dragTarget = { kind: 'spring-mass', sim: spSim };
+        st.cv.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+    for (const aSim of st.atoms) {
+      const b = aSim._mol3DBox;
+      if (b && pt.x >= b.x1 && pt.x <= b.x2 && pt.y >= b.y1 && pt.y <= b.y2) {
+        st.dragTarget = { kind: 'mol3d', sim: aSim, startX: pt.x, startY: pt.y, origYaw: aSim.rot3DYaw, origPitch: aSim.rot3DPitch };
+        st.cv.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+  });
+
+  st.cv.addEventListener('pointermove', (e) => {
+    if (!st.dragTarget) return;
+    const pt = getPt(e);
+    const dtg = st.dragTarget;
+    if (dtg.kind === 'pendulum') {
+      dtg.sim.angleRad = Math.max(-1.35, Math.min(1.35, Math.atan2(pt.x - dtg.sim.originX, Math.max(20, pt.y - dtg.sim.originY))));
+      dtg.sim.angVel = 0;
+    } else if (dtg.kind === 'force-tip') {
+      dtg.sim.fxPx = Math.max(-180, Math.min(180, pt.x - dtg.sim.originX));
+      dtg.sim.fyPx = Math.max(-180, Math.min(180, pt.y - dtg.sim.originY));
+    } else if (dtg.kind === 'spring-mass') {
+      dtg.sim.dispPx = Math.max(-85, Math.min(85, pt.y - dtg.sim._massCenter.eqY));
+      dtg.sim.velPx = 0;
+    } else if (dtg.kind === 'mol3d') {
+      dtg.sim.rot3DYaw = dtg.origYaw + (pt.x - dtg.startX) * 0.0085;
+      dtg.sim.rot3DPitch = Math.max(-1.35, Math.min(1.35, dtg.origPitch - (pt.y - dtg.startY) * 0.0075));
+    }
+  });
+
+  const endDrag = () => { st.dragTarget = null; };
+  st.cv.addEventListener('pointerup', endDrag);
+  st.cv.addEventListener('pointercancel', endDrag);
+});
+</script>
+</body>
+</html>`;
+
+  return new Blob([html], { type: 'text/html;charset=utf-8' });
+}
+

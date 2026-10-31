@@ -74,7 +74,11 @@ import {
   type User,
 } from './firebase';
 import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
-import { syncNotebookPdfToGoogleDrive, exportNotebookToPdfBlob } from './utils/googleDrivePdfSync';
+import {
+  syncNotebookPdfToGoogleDrive,
+  exportNotebookToPdfBlob,
+  exportNotebookToLivePdfHtml,
+} from './utils/googleDrivePdfSync';
 import {
   Notebook,
   NotePage,
@@ -1553,6 +1557,24 @@ export default function App() {
     }
     return false;
   });
+  const [isLivePdfMode, setIsLivePdfMode] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('livepdf') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const livePdfSimButtonsRef = useRef<
+    {
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      kind: 'circuit-play' | 'circuit-switch' | 'spring-play' | 'force-play' | 'atom-play';
+      simId?: string;
+    }[]
+  >([]);
   const [isExternalProjectorOpen, setIsExternalProjectorOpen] = useState<boolean>(false);
   const projectorWinRef = useRef<Window | null>(null);
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(() =>
@@ -3525,8 +3547,11 @@ export default function App() {
 
   const handleDownloadActiveNotebookPdf = useCallback(async () => {
     try {
-      showToast(`📄 Δημιουργία PDF «${activeNotebook.title}.pdf»...`);
-      const blob = await exportNotebookToPdfBlob(activeNotebook);
+      showToast(`📄 Δημιουργία PDF «${activeNotebook.title}.pdf» (με όλες τις προσομοιώσεις)...`);
+      const blob = await exportNotebookToPdfBlob(activeNotebook, {
+        activePageId: activePage.id,
+        liveSimCanvas: simCanvasRef.current,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const safeTitle = (activeNotebook.title || 'Σημείωση').replace(/[\\/:*?"<>|]/g, '_').trim();
@@ -3540,6 +3565,25 @@ export default function App() {
     } catch (err: any) {
       showToast(`❌ Σφάλμα εξαγωγής PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
     }
+  }, [activeNotebook, activePage.id, showToast]);
+
+  const handleDownloadLivePdfHtml = useCallback(async () => {
+    try {
+      showToast(`🎬 Δημιουργία Διαδραστικού Live PDF «${activeNotebook.title}.live.html»...`);
+      const blob = await exportNotebookToLivePdfHtml(activeNotebook);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeTitle = (activeNotebook.title || 'Σημείωση').replace(/[\\/:*?"<>|]/g, '_').trim();
+      a.href = url;
+      a.download = `${safeTitle}.live.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast(`📥 Κατέβηκε το Διαδραστικό Live PDF «${safeTitle}.live.html»!`);
+    } catch (err: any) {
+      showToast(`❌ Σφάλμα εξαγωγής Live PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
+    }
   }, [activeNotebook, showToast]);
 
   const handleShareNotebookPdf = useCallback(
@@ -3549,7 +3593,10 @@ export default function App() {
       const fileName = `${safeTitle}.pdf`;
       try {
         showToast(`📤 Προετοιμασία PDF «${fileName}» για Κοινοποίηση (AirDrop, Viber, Messenger, Goodnotes)...`);
-        const blob = await exportNotebookToPdfBlob(nb);
+        const blob = await exportNotebookToPdfBlob(nb, {
+          activePageId: activePage.id,
+          liveSimCanvas: simCanvasRef.current,
+        });
         const pdfFile = new File([blob], fileName, {
           type: 'application/pdf',
           lastModified: Date.now(),
@@ -15451,7 +15498,14 @@ export default function App() {
           draggingSpringGraphRef.current !== null));
     const hasAlignFlash = circuitAlignFlashStart !== null;
     const hasProposal = circuitProposal !== null && circuitProposal.pageId === activePage.id;
+    const hasAnySimInLivePdf =
+      isLivePdfMode &&
+      (Boolean(activeSim) ||
+        Boolean(activeSpringSim) ||
+        Boolean(activeForceSim) ||
+        pageAtomSims.length > 0);
     if (
+      !hasAnySimInLivePdf &&
       !hasProposal &&
       !hasSpringOverlay &&
       !hasForceOverlay &&
@@ -15463,6 +15517,7 @@ export default function App() {
       springOverlayHitRef.current = null;
       forceOverlayHitRef.current = null;
       atomOverlayHitRef.current = null;
+      livePdfSimButtonsRef.current = [];
       ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
       ctx.clearRect(0, 0, canvas.width / CANVAS_DPR, canvas.height / CANVAS_DPR);
       return;
@@ -21028,8 +21083,204 @@ export default function App() {
         atomOverlayHitRef.current = null;
       }
 
+      // 7. LIVE PDF MODE: Subtle Interactive Border & Play/Stop Pill ONLY around Animated Simulations!
+      if (isLivePdfMode) {
+        const nextLiveBtns: typeof livePdfSimButtonsRef.current = [];
+        const drawLiveSimFrame = (
+          bx: number,
+          by: number,
+          bw: number,
+          bh: number,
+          title: string,
+          playing: boolean,
+          playKind: 'circuit-play' | 'spring-play' | 'force-play' | 'atom-play',
+          simId?: string,
+          extraSwitchState?: boolean
+        ) => {
+          ctx.save();
+          ctx.strokeStyle = playing ? 'rgba(14, 165, 233, 0.78)' : 'rgba(148, 163, 184, 0.65)';
+          ctx.lineWidth = 1.8;
+          ctx.setLineDash([7, 5]);
+          ctx.beginPath();
+          ctx.roundRect(bx, by, bw, bh, 14);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          const lblW = ctx.measureText(title).width + 16;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+          ctx.beginPath();
+          ctx.roundRect(bx + 10, by - 11, lblW, 20, 999);
+          ctx.fill();
+          ctx.fillStyle = '#e0f2fe';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(title, bx + 18, by - 1);
+
+          let curRightX = bx + bw - 10;
+          const playLabel = playing ? '⏸ Stop' : '▶ Play';
+          const playW = ctx.measureText(playLabel).width + 18;
+          curRightX -= playW;
+          ctx.fillStyle = playing ? '#059669' : '#d97706';
+          ctx.beginPath();
+          ctx.roundRect(curRightX, by - 11, playW, 20, 999);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(playLabel, curRightX + playW / 2, by - 1);
+          nextLiveBtns.push({
+            x1: curRightX,
+            y1: by - 13,
+            x2: curRightX + playW,
+            y2: by + 11,
+            kind: playKind,
+            simId,
+          });
+
+          if (typeof extraSwitchState === 'boolean') {
+            const swLabel = extraSwitchState ? '🟢 Διακόπτης ON' : '🔴 Διακόπτης OFF';
+            const swW = ctx.measureText(swLabel).width + 18;
+            curRightX -= swW + 6;
+            ctx.fillStyle = extraSwitchState ? '#2563eb' : '#475569';
+            ctx.beginPath();
+            ctx.roundRect(curRightX, by - 11, swW, 20, 999);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(swLabel, curRightX + swW / 2, by - 1);
+            nextLiveBtns.push({
+              x1: curRightX,
+              y1: by - 13,
+              x2: curRightX + swW,
+              y2: by + 11,
+              kind: 'circuit-switch',
+              simId,
+            });
+          }
+          ctx.restore();
+        };
+
+        // 7a. Circuit border
+        if (activeSim && visibleStrokes.length > 0) {
+          let cMinX = Infinity,
+            cMaxX = -Infinity,
+            cMinY = Infinity,
+            cMaxY = -Infinity;
+          for (const st of visibleStrokes) {
+            for (const p of st.points) {
+              if (p.x < cMinX) cMinX = p.x;
+              if (p.x > cMaxX) cMaxX = p.x;
+              if (p.y < cMinY) cMinY = p.y;
+              if (p.y > cMaxY) cMaxY = p.y;
+            }
+          }
+          if (Number.isFinite(cMinX)) {
+            drawLiveSimFrame(
+              cMinX - 24,
+              cMinY - 24,
+              cMaxX - cMinX + 48,
+              cMaxY - cMinY + 48,
+              '⚡ Κύκλωμα',
+              isSimulating,
+              'circuit-play',
+              activeSim.id,
+              simCircuitSwitchClosed
+            );
+          }
+        }
+
+        // 7b. Spring border
+        if (activeSpringSim && springOverlayHitRef.current) {
+          const spHit = springOverlayHitRef.current;
+          const bx = spHit.eqCenterX - 92;
+          const by = Math.max(20, spHit.eqCenterY - (activeSpringSim.naturalLengthPx || 140) - 36);
+          const bw = 184;
+          const bh = (activeSpringSim.naturalLengthPx || 140) + (activeSpringSim.amplitudePx || 55) + 110;
+          drawLiveSimFrame(
+            bx,
+            by,
+            bw,
+            bh,
+            '🌀 Ελατήριο (Drag & Drop)',
+            isSpringSimulating && !isSpringPaused,
+            'spring-play',
+            activeSpringSim.id
+          );
+        }
+
+        // 7c. Force / Pendulum / Incline border
+        if (activeForceSim) {
+          const ox = activeForceSim.originX;
+          const oy = activeForceSim.originY;
+          if (activeForceSim.mode === 'pendulum') {
+            const L = activeForceSim.rodLengthPx || 230;
+            drawLiveSimFrame(
+              ox - L - 28,
+              Math.max(18, oy - 28),
+              L * 2 + 56,
+              L + 84,
+              '⏱️ Εκκρεμές (Drag & Drop)',
+              !activeForceSim.isPaused,
+              'force-play',
+              activeForceSim.id
+            );
+          } else {
+            drawLiveSimFrame(
+              Math.max(16, ox - 200),
+              Math.max(18, oy - 200),
+              400,
+              320,
+              activeForceSim.mode === 'synthesis'
+                ? '🎯 Σύνθεση Δυνάμεων'
+                : activeForceSim.mode === 'incline'
+                ? '📐 Κεκλιμένο Επίπεδο'
+                : '🎯 Ανάλυση Δύναμης (Drag Κορυφή)',
+              true,
+              'force-play',
+              activeForceSim.id
+            );
+          }
+        }
+
+        // 7d. Atom & 3D Molecule border
+        for (const aSim of pageAtomSims) {
+          let aMinX = Infinity,
+            aMaxX = -Infinity,
+            aMinY = Infinity,
+            aMaxY = -Infinity;
+          for (const at of aSim.atoms) {
+            const rOut = at.outerRadiusPx || getNaturalOuterOrbitRadiusPx(at.z);
+            if (at.x - rOut < aMinX) aMinX = at.x - rOut;
+            if (at.x + rOut > aMaxX) aMaxX = at.x + rOut;
+            if (at.y - rOut < aMinY) aMinY = at.y - rOut;
+            if (at.y + rOut > aMaxY) aMaxY = at.y + rOut;
+          }
+          if (Number.isFinite(aMinX)) {
+            const cx = (aMinX + aMaxX) / 2;
+            const bx = Math.max(14, Math.min(aMinX - 24, cx - 230));
+            const by = Math.max(18, aMinY - 72);
+            const bw = Math.max(aMaxX - aMinX + 48, 460);
+            const bh = (aSim.show3DMolecule ? 250 : 0) + (aMaxY - by) + 46;
+            drawLiveSimFrame(
+              bx,
+              by,
+              bw,
+              bh,
+              '⚛️ Άτομο & Χημεία',
+              aSim.isRotating !== false,
+              'atom-play',
+              aSim.id
+            );
+          }
+        }
+
+        livePdfSimButtonsRef.current = nextLiveBtns;
+      } else {
+        livePdfSimButtonsRef.current = [];
+      }
+
       ctx.restore();
       if (
+        isLivePdfMode ||
         isSimulating ||
         (isSpringSimulating && !isSpringPaused) ||
         hasProposal ||
@@ -21053,6 +21304,7 @@ export default function App() {
       window.cancelAnimationFrame(rafId);
     };
   }, [
+    isLivePdfMode,
     isSimulating,
     isSpringSimulating,
     isSpringPaused,
@@ -23685,6 +23937,58 @@ export default function App() {
 
     // 0a-0. Interactive Circuit Completion Proposal ("✨ Ολοκλήρωση"):
     //       1-Tap on "✓ Αποδοχή" check button, "✕" cancel button, or drag any of the 4 Corner Nodes (tl, tr, br, bl)!
+    // 0-livepdf. Interactive Play/Stop & Switch Pills on Simulation Borders in Live PDF Mode
+    if (isLivePdfMode && livePdfSimButtonsRef.current.length > 0) {
+      for (const lBtn of livePdfSimButtonsRef.current) {
+        if (
+          pt.x >= lBtn.x1 - 4 &&
+          pt.x <= lBtn.x2 + 4 &&
+          pt.y >= lBtn.y1 - 4 &&
+          pt.y <= lBtn.y2 + 4
+        ) {
+          e.preventDefault();
+          if (lBtn.kind === 'circuit-play') {
+            setIsSimulating((v) => !v);
+          } else if (lBtn.kind === 'circuit-switch') {
+            setSimCircuitSwitchClosed((v) => !v);
+          } else if (lBtn.kind === 'spring-play') {
+            if (!isSpringSimulating) {
+              setIsSpringSimulating(true);
+              setIsSpringPaused(false);
+            } else {
+              setIsSpringPaused((p) => !p);
+            }
+          } else if (lBtn.kind === 'force-play') {
+            updateActivePage(
+              (page) => ({
+                ...page,
+                forceSims: (page.forceSims || []).map((s) =>
+                  !lBtn.simId || s.id === lBtn.simId ? { ...s, isPaused: !s.isPaused } : s
+                ),
+              }),
+              false
+            );
+          } else if (lBtn.kind === 'atom-play') {
+            updateActivePage(
+              (page) => ({
+                ...page,
+                atomSims: (page.atomSims || []).map((s) =>
+                  !lBtn.simId || s.id === lBtn.simId
+                    ? { ...s, isRotating: s.isRotating === false ? true : false }
+                    : s
+                ),
+              }),
+              false
+            );
+          }
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+      }
+    }
+
     if (circuitProposal && circuitProposal.pageId === targetPage.id && proposalOverlayHitRef.current) {
       const hit = proposalOverlayHitRef.current;
       if (
@@ -24390,7 +24694,7 @@ export default function App() {
         return;
       }
     }
-    if (isSimulating || showSimulationPanel) {
+    if (isSimulating || showSimulationPanel || isLivePdfMode) {
       const hitSwitchKnob = targetPage.strokes.find((s) => {
         if (s.shapeType !== 'switch-knob' && s.shapeType !== 'switch-blade') return false;
         const sb = getStrokeBounds(s);
@@ -24411,6 +24715,11 @@ export default function App() {
         });
         return;
       }
+    }
+
+    // In Live PDF Mode, block all drawing, erasing, lasso selection, and text creation — only simulation interactions above are active!
+    if (isLivePdfMode) {
+      return;
     }
 
     // 0. Wave Axes ('wave-axes') Interactive Dashed Guide Handles ([ ↕ ] independent, [ ±A ] symmetric height, [ ⇅ ] parallel):
@@ -36334,6 +36643,51 @@ export default function App() {
                 <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>
               </button>
 
+              {/* Direct 1-Click PDF Export Button (includes all live simulations!) */}
+              <button
+                onClick={() => void handleDownloadActiveNotebookPdf()}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#0066ff] text-[11px] font-semibold text-sky-100 hover:text-white transition cursor-pointer"
+                title={`Εξαγωγή σε PDF «${activeNotebook.title}.pdf» (με όλα όσα βλέπετε στον καμβά & τις προσομοιώσεις)`}
+              >
+                <FileText className="w-3.5 h-3.5 text-sky-300" />
+                <span className="hidden sm:inline">PDF</span>
+              </button>
+
+              {/* Live PDF Interactive Player & Standalone Export Button (No Edit Tools, Only Simulation Interaction + Play/Stop) */}
+              <button
+                onClick={() => {
+                  const next = !isLivePdfMode;
+                  setIsLivePdfMode(next);
+                  if (next) {
+                    setSelectedStrokeIds([]);
+                    setActiveNodeStrokeId(null);
+                    setSelectedTextId(null);
+                    setEditingTextId(null);
+                    setShowSimulationPanel(false);
+                    setShowLayersPanel(false);
+                    setShowShapeLibraryPanel(false);
+                    if ((activePage.circuitSims || []).length > 0) setIsSimulating(true);
+                    if ((activePage.springSims || []).length > 0) {
+                      setIsSpringSimulating(true);
+                      setIsSpringPaused(false);
+                    }
+                    showToast(
+                      '🎬 Λειτουργία Live PDF: Χωρίς εργαλεία σχεδίασης — αλληλεπιδράστε ελεύθερα με τις προσομοιώσεις ή κατεβάστε το αρχείο Live PDF!'
+                    );
+                  } else {
+                    showToast('✏️ Επιστροφή σε Λειτουργία Επεξεργασίας.');
+                  }
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  isLivePdfMode
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-300 shadow-xs'
+                    : 'bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white shadow-xs'
+                }`}
+                title="Live PDF: Προβολή & Εξαγωγή Διαδραστικού Αρχείου χωρίς εργαλεία επεξεργασίας (Play/Stop, διακόπτης κυκλώματος, εκκρεμές, ελατήριο, διανύσματα, 3D μόρια)"
+              >
+                <span>{isLivePdfMode ? '🎬 Live PDF ON' : '▶️ Live PDF'}</span>
+              </button>
+
               {/* Native iPadOS / System Share PDF Button (AirDrop, Viber, Messenger, Goodnotes, Mail, Files) */}
               <button
                 onClick={() => void handleShareNotebookPdf(activeNotebook)}
@@ -38178,6 +38532,80 @@ export default function App() {
       ) : (
         <>
           {/* =========================================================================
+              2A. LIVE PDF INTERACTIVE PLAYER BAR (Appears ONLY when isLivePdfMode is ON)
+             ========================================================================= */}
+          {isLivePdfMode && (
+            <div
+              data-sticky-app-nav="true"
+              style={{ touchAction: 'manipulation' }}
+              className="sticky top-0 z-30 flex items-center justify-between px-4 py-2 bg-[#0f172a] text-white border-b border-slate-700 shadow-md shrink-0 gap-3 overflow-x-auto"
+            >
+              <div className="flex items-center gap-2 text-xs">
+                <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-600 text-[11px] font-extrabold tracking-wide">
+                  🎬 LIVE PDF
+                </span>
+                <span className="text-slate-300 font-medium hidden md:inline">
+                  Χωρίς εργαλεία σχεδίασης/επεξεργασίας — Κάντε κλικ στις προσομοιώσεις (Διακόπτης ON/OFF, Εκκρεμές, Ελατήριο, Διανύσματα, 3D Μόρια)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const anyPlaying =
+                      isSimulating ||
+                      (isSpringSimulating && !isSpringPaused) ||
+                      (activePage.forceSims || []).some((s) => !s.isPaused) ||
+                      (activePage.atomSims || []).some((s) => s.isRotating !== false);
+                    const nextPlay = !anyPlaying;
+                    if ((activePage.circuitSims || []).length > 0) setIsSimulating(nextPlay);
+                    if ((activePage.springSims || []).length > 0) {
+                      setIsSpringSimulating(true);
+                      setIsSpringPaused(!nextPlay);
+                    }
+                    updateActivePage(
+                      (page) => ({
+                        ...page,
+                        forceSims: (page.forceSims || []).map((s) => ({ ...s, isPaused: !nextPlay })),
+                        atomSims: (page.atomSims || []).map((s) => ({ ...s, isRotating: nextPlay })),
+                      }),
+                      false
+                    );
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer"
+                  title="Εκκίνηση / Παύση όλων των προσομοιώσεων της σελίδας"
+                >
+                  <span>⏯️ Play / Stop Όλων</span>
+                </button>
+
+                <button
+                  onClick={() => void handleDownloadLivePdfHtml()}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition cursor-pointer"
+                  title="Λήψη αυτόνομου διαδραστικού αρχείου Live PDF (.live.html) που ανοίγει παντού χωρίς εργαλεία επεξεργασίας"
+                >
+                  <span>📥 Λήψη Αρχείου Live PDF (.html)</span>
+                </button>
+
+                <button
+                  onClick={() => void handleDownloadActiveNotebookPdf()}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs font-semibold transition cursor-pointer"
+                  title="Λήψη κλασικού στατικού αρχείου PDF (.pdf) με στιγμιότυπο όλων των προσομοιώσεων"
+                >
+                  <span>📄 Κλασικό PDF (.pdf)</span>
+                </button>
+
+                <button
+                  onClick={() => setIsLivePdfMode(false)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600 border border-slate-600 text-slate-200 hover:text-white text-xs font-bold transition cursor-pointer"
+                  title="Επιστροφή στα εργαλεία σχεδίασης και επεξεργασίας"
+                >
+                  <span>✕ Έξοδος</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
               2. AUTHENTIC GOODNOTES 6 LIGHT TOOLBAR (#F4F5F7)
                  Always Sticky / Pinned below Header like a Native iPad App!
              ========================================================================= */}
@@ -38185,7 +38613,7 @@ export default function App() {
             data-sticky-app-nav="true"
             style={{ touchAction: 'manipulation' }}
             className={`${
-              isCleanProjectorMode ? 'hidden' : 'sticky top-0 z-30 flex'
+              isCleanProjectorMode || isLivePdfMode ? 'hidden' : 'sticky top-0 z-30 flex'
             } items-center justify-between px-4 py-1.5 bg-[#f4f5f7] border-b border-slate-300/80 shadow-xs shrink-0 gap-2 overflow-x-auto overscroll-contain`}
           >
             {/* Left Quick Status: Pencil Only Mode + Tidy Handwriting + Paste */}
@@ -38984,6 +39412,7 @@ export default function App() {
 
           {/* Contextual Sub-Bar (Appears for Shape, Text, Lasso Selection, or Eraser) */}
           {!isCleanProjectorMode &&
+            !isLivePdfMode &&
             !isMoveOnlyLassoSelection &&
             (activeTool === 'shape' ||
               activeTool === 'text' ||
