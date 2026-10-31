@@ -19910,8 +19910,12 @@ export default function App() {
               is3DMode ? '#ffffff' : '#1d4ed8',
               is3DMode ? '#0369a1' : '#93c5fd'
             );
-          } else if (aSim.atoms.length >= 2) {
-            // Όταν υπάρχουν >=2 άτομα δίπλα-δίπλα, εμφάνισε διακριτικό κουμπί για εμφάνιση της Αντίδρασης!
+          } else if (
+            aSim.atoms.length >= 2 &&
+            aSim.showAtomsBelowReaction !== false &&
+            !aSim.show3DMolecule
+          ) {
+            // Όταν υπάρχουν >=2 ορατά 2D άτομα δίπλα-δίπλα στον καμβά, εμφάνισε διακριτικό κουμπί για εμφάνιση της Αντίδρασης!
             drawAtomPillButton(
               aSim.id,
               '🧪 Αντίδραση (➔)',
@@ -34212,7 +34216,7 @@ export default function App() {
       const pH = getPageLogicalHeight(activePage);
       const centerX = Math.max(240, Math.min(pW - 240, Math.round((minX + maxX) / 2)));
       const boxX = Math.max(16, Math.min(pW - 456, Math.round(centerX - 220)));
-      const boxY = Math.max(24, Math.min(pH - 240, Math.round(minY)));
+      const boxY = Math.max(24, Math.min(pH - 240, Math.round(maxY + 16)));
 
       const builtCompound = buildAtomNodesAndBondsForTerm(cleanFormula, centerX, boxY + 110);
 
@@ -34226,7 +34230,7 @@ export default function App() {
         isRotating: true,
         showReactionEquation: false,
         reactionEquationText: mol3D.formula,
-        userRawReactionText: rawRecognized,
+        userRawReactionText: cleanFormula,
         activeReactionTerm: cleanFormula,
         reactionArrowStep: 2,
         showAtomsBelowReaction: false,
@@ -34237,12 +34241,11 @@ export default function App() {
         mol3DBoxY: boxY,
       };
 
-      const removeIdSet = new Set(selStrokes.map((s) => s.id));
+      // Κρατάμε τη χειρόγραφη ένωση με μολύβι στον καμβά (δεν τη σβήνουμε ούτε την κάνουμε αντίδραση) και εμφανίζουμε μόνο το 3D μοντέλο!
       updateActivePage((page) => {
         const curValid = getValidAtomSims(page);
         return {
           ...page,
-          strokes: page.strokes.filter((s) => !removeIdSet.has(s.id)),
           atomSims: [...curValid, newAtomSim],
           activeAtomSimId: newSimId,
         };

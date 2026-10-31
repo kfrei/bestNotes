@@ -715,7 +715,10 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
   const lhsSyms = userLhs.flatMap((t) => t.atoms.map((a) => a.sym));
   const rhsSyms = userRhs.flatMap((t) => t.atoms.map((a) => a.sym));
 
-  const matchedSpec = CANONICAL_REACTIONS.find((spec) => spec.matchElements(lhsSyms, rhsSyms, ascii.toUpperCase()));
+  const hasReactionStructure = ascii.includes('->') || ascii.includes('+');
+  const matchedSpec = hasReactionStructure
+    ? CANONICAL_REACTIONS.find((spec) => spec.matchElements(lhsSyms, rhsSyms, ascii.toUpperCase()))
+    : undefined;
 
   if (!matchedSpec) {
     const formatted = formatChemEquationText(userRawInput);
