@@ -1375,7 +1375,7 @@ export default function App() {
   } | null>(null);
   const draggingAtomHandleRef = useRef<{
     simId: string;
-    kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize' | 'mol-3d-box';
+    kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize' | 'mol-3d-box' | 'mol-3d-rotate';
     atomId: string;
     electronIdx?: number;
     startX: number;
@@ -1420,6 +1420,11 @@ export default function App() {
       y2: number;
       origX: number;
       origY: number;
+      cx3d: number;
+      cy3d: number;
+      molR: number;
+      origYaw: number;
+      origPitch: number;
     }[];
     buttons: {
       simId: string;
@@ -19607,6 +19612,11 @@ export default function App() {
           y2: number;
           origX: number;
           origY: number;
+          cx3d: number;
+          cy3d: number;
+          molR: number;
+          origYaw: number;
+          origPitch: number;
         }[] = [];
         const atomButtonsHit: {
           simId: string;
@@ -20578,6 +20588,8 @@ export default function App() {
                 : Math.max(topBarY + 60, (Number.isFinite(maxSimY) ? maxSimY : 320) + 38);
             const boxX = aSim.mol3DBoxX ?? defaultBoxX;
             const boxY = aSim.mol3DBoxY ?? defaultBoxY;
+            const cx3d = boxX + boxW * 0.42;
+            const cy3d = boxY + 118;
 
             mol3DBoxesHit.push({
               simId: aSim.id,
@@ -20587,6 +20599,11 @@ export default function App() {
               y2: boxY + boxH,
               origX: boxX,
               origY: boxY,
+              cx3d,
+              cy3d,
+              molR: 92,
+              origYaw: aSim.rot3DYaw ?? 0.42,
+              origPitch: aSim.rot3DPitch ?? 0.24,
             });
 
             // Πλαίσιο 3D Μορίου (Draggable)
@@ -20640,8 +20657,6 @@ export default function App() {
             );
 
             // Κέντρο 3D προβολής
-            const cx3d = boxX + boxW * 0.42;
-            const cy3d = boxY + 118;
             const scale3D = 64;
             const yaw =
               (aSim.rot3DYaw ?? 0.42) +
@@ -23913,7 +23928,7 @@ export default function App() {
         }
       }
 
-      // 4) Draggable 3D Molecule Card (σύρε το 3D πλαίσιο ελεύθερα στον καμβά)
+      // 4) Draggable 3D Molecule Card & Smooth 3D Molecule Rotation with Mouse
       for (const b3d of aHit.mol3DBoxes || []) {
         if (
           pt.x >= b3d.x1 &&
@@ -23924,14 +23939,16 @@ export default function App() {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
           if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          const isOverMolecule =
+            pt.y >= b3d.y1 + 32 && Math.hypot(pt.x - b3d.cx3d, pt.y - b3d.cy3d) <= b3d.molR;
           draggingAtomHandleRef.current = {
             simId: b3d.simId,
-            kind: 'mol-3d-box',
+            kind: isOverMolecule ? 'mol-3d-rotate' : 'mol-3d-box',
             atomId: b3d.simId,
             startX: pt.x,
             startY: pt.y,
-            origAtomX: b3d.origX,
-            origAtomY: b3d.origY,
+            origAtomX: isOverMolecule ? b3d.origYaw : b3d.origX,
+            origAtomY: isOverMolecule ? b3d.origPitch : b3d.origY,
             curX: pt.x,
             curY: pt.y,
           };
@@ -26418,6 +26435,28 @@ export default function App() {
                   }
                 : s
             ),
+          }),
+          false
+        );
+      } else if (dragAt.kind === 'mol-3d-rotate') {
+        const targetYaw = dragAt.origAtomX + (latestPt.x - dragAt.startX) * 0.0085;
+        const targetPitch = Math.max(
+          -1.35,
+          Math.min(1.35, dragAt.origAtomY - (latestPt.y - dragAt.startY) * 0.0075)
+        );
+        updateActivePage(
+          (page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) => {
+              if (s.id !== dragAt.simId) return s;
+              const curYaw = s.rot3DYaw ?? dragAt.origAtomX;
+              const curPitch = s.rot3DPitch ?? dragAt.origAtomY;
+              return {
+                ...s,
+                rot3DYaw: curYaw + (targetYaw - curYaw) * 0.28,
+                rot3DPitch: curPitch + (targetPitch - curPitch) * 0.28,
+              };
+            }),
           }),
           false
         );
