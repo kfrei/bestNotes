@@ -20315,14 +20315,14 @@ export default function App() {
             let chargeStr = '';
             if (extraE < 0) {
               const lost = Math.abs(extraE);
-              chargeStr = lost === 1 ? '⁺' : `${lost}⁺`;
+              chargeStr = lost === 1 ? '+' : `${lost}+`;
             } else if (extraE > 0) {
-              chargeStr = extraE === 1 ? '⁻' : `${extraE}⁻`;
+              chargeStr = extraE === 1 ? '−' : `${extraE}−`;
             }
 
             const aStr = String(el.a);
             const zStr = String(el.z);
-            const symText = `${el.symbol}${chargeStr}`;
+            const symOnlyText = el.symbol;
             const isSingleAtomView = aSim.atoms.length === 1;
             const nameSuffix = isSingleAtomView ? ` , ${el.nameEl}` : '';
 
@@ -20333,7 +20333,13 @@ export default function App() {
               ctx.measureText(zStr).width
             );
             ctx.font = 'bold 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            const symW = ctx.measureText(symText).width;
+            const symOnlyW = ctx.measureText(symOnlyText).width;
+            let chargeW = 0;
+            if (chargeStr) {
+              ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              chargeW = ctx.measureText(chargeStr).width + 1;
+            }
+            const symW = symOnlyW + chargeW;
             let nameW = 0;
             if (isSingleAtomView) {
               ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -20388,11 +20394,21 @@ export default function App() {
             ctx.fillText(aStr, labelStartX + azWidth + 1, labelCenterY - 4.8);
             ctx.fillText(zStr, labelStartX + azWidth + 1, labelCenterY + 5.2);
 
-            // Σύμβολο Στοιχείου (+ φορτίο ιόντος αν υπάρχει)
+            // Σύμβολο Στοιχείου
             ctx.font = 'bold 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             ctx.fillStyle = pal.nucleusStroke;
             ctx.textAlign = 'left';
-            ctx.fillText(symText, labelStartX + azWidth + 3.5, labelCenterY + 0.5);
+            ctx.fillText(symOnlyText, labelStartX + azWidth + 3.5, labelCenterY + 0.5);
+
+            // Εκθέτης φορτίου ιόντος (π.χ. 2+, 2−, +, −) πάνω δεξιά από το σύμβολο
+            if (chargeStr) {
+              ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              ctx.fillText(
+                chargeStr,
+                labelStartX + azWidth + 3.5 + symOnlyW + 0.5,
+                labelCenterY - 4.8
+              );
+            }
 
             // Ελληνικό όνομα στοιχείου ΜΟΝΟ όταν έχουμε 1 μεμονωμένο άτομο (όχι σε ένωση)
             if (isSingleAtomView) {
