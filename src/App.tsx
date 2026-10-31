@@ -1388,6 +1388,8 @@ export default function App() {
     origAtomY: number;
     curX: number;
     curY: number;
+    origCentralR?: number;
+    origAtomsSnapshot?: { id: string; x: number; y: number; r: number }[];
   } | null>(null);
   const atomOverlayHitRef = useRef<{
     simId: string;
@@ -20009,22 +20011,25 @@ export default function App() {
             (a, b) => b - a
           );
           const atomPaletteMap = new Map<string, ReturnType<typeof buildPaletteFromHex>>();
-          aSim.atoms.forEach((at, idx) => {
+          aSim.atoms.forEach((at) => {
             if (at.customColor && at.color) {
               // Ο χρήστης επέλεξε τον πυρήνα και του άλλαξε χρώμα από τα χρώματα του μολυβιού πάνω δεξιά!
               atomPaletteMap.set(at.id, buildPaletteFromHex(at.color));
             } else if (aSim.atoms.length === 1 && at.color) {
               atomPaletteMap.set(at.id, buildPaletteFromHex(at.color));
             } else {
-              const palIdx =
-                uniqueZsDesc.length >= 2
-                  ? uniqueZsDesc.indexOf(at.z) % ATOM_COLOR_PALETTES.length
-                  : idx % ATOM_COLOR_PALETTES.length;
+              // Ίδια χημικά στοιχεία (ίδιο Z) στην ένωση (π.χ. O₂, H₂, H₂O) έχουν ΠΑΝΤΑ το ίδιο χρώμα!
+              const palIdx = Math.max(0, uniqueZsDesc.indexOf(at.z)) % ATOM_COLOR_PALETTES.length;
               atomPaletteMap.set(at.id, ATOM_COLOR_PALETTES[palIdx]);
             }
           });
 
           // 2. Σχεδίαση κάθε Ατόμου (Πυρήνας ανάλογος του Z, Τροχιές ανάλογες του μεγέθους ατόμου, Ζευγαράκια 2-2 e⁻, Σύμβολο Στοιχείου)
+          const hasCompoundBonds = (aSim.bonds || []).length > 0 && aSim.atoms.length >= 2;
+          const centralAtomId = aSim.atoms[0]?.id;
+          const hasAnySelectedAtom = Boolean(
+            aSim.selectedAtomId && aSim.atoms.some((a) => a.id === aSim.selectedAtomId)
+          );
           const atomOuterRadiusMap = new Map<string, number>();
           aSim.atoms.forEach((atom, atomIdx) => {
             const el = getPeriodicElementByZ(atom.z);
@@ -20293,8 +20298,12 @@ export default function App() {
             ctx.fillText(symText, labelStartX + azWidth + 3.5, labelCenterY + 0.5);
             ctx.restore();
 
-            // Κουμπάκι ομοιόμορφης αυξομείωσης μεγέθους (⤡) σε φωσφορούχο πράσινο lime που αναβοσβήνει απαλά!
-            if (isSelectedAtom) {
+            // Κουμπάκι ομοιόμορφης/αναλογικής αυξομείωσης μεγέθους (⤡) σε φωσφορούχο πράσινο lime που αναβοσβήνει απαλά!
+            // Αν έχουμε ένωση (hasCompoundBonds), με κλικ σε οποιονδήποτε πυρήνα εμφανίζεται ΜΟΝΟ 1 βελάκι στο κεντρικό άτομο και αλλάζει αναλογικά μέγεθος όλη η ένωση!
+            const showResizeHandleOnThisAtom = hasCompoundBonds
+              ? hasAnySelectedAtom && atom.id === centralAtomId
+              : isSelectedAtom;
+            if (showResizeHandleOnThisAtom) {
               const handleAng = Math.PI / 4;
               const hx = atom.x + maxOrbitR * Math.cos(handleAng);
               const hy = atom.y + maxOrbitR * Math.sin(handleAng);
@@ -23861,12 +23870,17 @@ export default function App() {
         }
       }
 
-      // 1b) Uniform Radial Resize Handle (⤡) on the selected atom's outer orbit
+      // 1b) Uniform Radial Resize Handle (⤡) on the selected atom's outer orbit (or central atom for proportional molecule scaling)
       for (const rh of aHit.resizeHandles || []) {
         if (Math.hypot(pt.x - rh.hx, pt.y - rh.hy) <= rh.r) {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
           if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          const targetSimForResize = (targetPage.atomSims || []).find((s) => s.id === rh.simId);
+          const centralAt = targetSimForResize?.atoms.find((a) => a.id === rh.atomId);
+          const centralOrigR = centralAt
+            ? centralAt.outerRadiusPx || getNaturalOuterOrbitRadiusPx(centralAt.z)
+            : Math.hypot(rh.hx - rh.cx, rh.hy - rh.cy);
           draggingAtomHandleRef.current = {
             simId: rh.simId,
             kind: 'atom-resize',
@@ -23877,6 +23891,13 @@ export default function App() {
             origAtomY: rh.cy,
             curX: pt.x,
             curY: pt.y,
+            origCentralR: centralOrigR,
+            origAtomsSnapshot: (targetSimForResize?.atoms || []).map((a) => ({
+              id: a.id,
+              x: a.x,
+              y: a.y,
+              r: a.outerRadiusPx || getNaturalOuterOrbitRadiusPx(a.z),
+            })),
           };
           activePointerIdRef.current = e.pointerId;
           activePointerTypeRef.current = e.pointerType;
@@ -23942,6 +23963,7 @@ export default function App() {
             }),
             false
           );
+          const targetSimForNuc = (targetPage.atomSims || []).find((s) => s.id === nucHit.simId);
           draggingAtomHandleRef.current = {
             simId: nucHit.simId,
             kind: 'atom-nucleus',
@@ -23952,6 +23974,12 @@ export default function App() {
             origAtomY: nucHit.y,
             curX: pt.x,
             curY: pt.y,
+            origAtomsSnapshot: (targetSimForNuc?.atoms || []).map((a) => ({
+              id: a.id,
+              x: a.x,
+              y: a.y,
+              r: a.outerRadiusPx || getNaturalOuterOrbitRadiusPx(a.z),
+            })),
           };
           activePointerIdRef.current = e.pointerId;
           activePointerTypeRef.current = e.pointerType;
@@ -26430,25 +26458,37 @@ export default function App() {
       if (dragAt.kind === 'atom-nucleus') {
         const pW = getPageLogicalWidth(activePage);
         const pH = getPageLogicalHeight(activePage);
-        const nextX = Math.round(
-          Math.max(60, Math.min(pW - 60, dragAt.origAtomX + (latestPt.x - dragAt.startX)))
-        );
-        const nextY = Math.round(
-          Math.max(70, Math.min(pH - 60, dragAt.origAtomY + (latestPt.y - dragAt.startY)))
-        );
+        const dx = latestPt.x - dragAt.startX;
+        const dy = latestPt.y - dragAt.startY;
+        const nextX = Math.round(Math.max(60, Math.min(pW - 60, dragAt.origAtomX + dx)));
+        const nextY = Math.round(Math.max(70, Math.min(pH - 60, dragAt.origAtomY + dy)));
         updateActivePage(
           (page) => ({
             ...page,
-            atomSims: (page.atomSims || []).map((s) =>
-              s.id === dragAt.simId
-                ? {
-                    ...s,
-                    atoms: s.atoms.map((a) =>
-                      a.id === dragAt.atomId ? { ...a, x: nextX, y: nextY } : a
-                    ),
-                  }
-                : s
-            ),
+            atomSims: (page.atomSims || []).map((s) => {
+              if (s.id !== dragAt.simId) return s;
+              const isCompound = (s.bonds || []).length > 0 && s.atoms.length >= 2;
+              if (isCompound && dragAt.origAtomsSnapshot?.length) {
+                return {
+                  ...s,
+                  atoms: s.atoms.map((a) => {
+                    const snap = dragAt.origAtomsSnapshot!.find((it) => it.id === a.id);
+                    if (!snap) return a;
+                    return {
+                      ...a,
+                      x: Math.round(Math.max(40, Math.min(pW - 40, snap.x + dx))),
+                      y: Math.round(Math.max(50, Math.min(pH - 40, snap.y + dy))),
+                    };
+                  }),
+                };
+              }
+              return {
+                ...s,
+                atoms: s.atoms.map((a) =>
+                  a.id === dragAt.atomId ? { ...a, x: nextX, y: nextY } : a
+                ),
+              };
+            }),
           }),
           false
         );
@@ -26462,16 +26502,33 @@ export default function App() {
         updateActivePage(
           (page) => ({
             ...page,
-            atomSims: (page.atomSims || []).map((s) =>
-              s.id === dragAt.simId
-                ? {
-                    ...s,
-                    atoms: s.atoms.map((a) =>
-                      a.id === dragAt.atomId ? { ...a, outerRadiusPx: nextRadius } : a
-                    ),
-                  }
-                : s
-            ),
+            atomSims: (page.atomSims || []).map((s) => {
+              if (s.id !== dragAt.simId) return s;
+              const isCompound = (s.bonds || []).length > 0 && s.atoms.length >= 2;
+              if (isCompound && dragAt.origAtomsSnapshot?.length) {
+                const baseR = Math.max(12, dragAt.origCentralR || 64);
+                const scaleRatio = Math.max(0.42, Math.min(2.6, nextRadius / baseR));
+                return {
+                  ...s,
+                  atoms: s.atoms.map((a) => {
+                    const snap = dragAt.origAtomsSnapshot!.find((it) => it.id === a.id);
+                    if (!snap) return a;
+                    return {
+                      ...a,
+                      outerRadiusPx: Math.round(Math.max(16, Math.min(185, snap.r * scaleRatio))),
+                      x: Math.round(dragAt.origAtomX + (snap.x - dragAt.origAtomX) * scaleRatio),
+                      y: Math.round(dragAt.origAtomY + (snap.y - dragAt.origAtomY) * scaleRatio),
+                    };
+                  }),
+                };
+              }
+              return {
+                ...s,
+                atoms: s.atoms.map((a) =>
+                  a.id === dragAt.atomId ? { ...a, outerRadiusPx: nextRadius } : a
+                ),
+              };
+            }),
           }),
           false
         );
@@ -32690,25 +32747,25 @@ export default function App() {
       setFillColor(c);
       recordRecentColor(c);
 
-      // Αν υπάρχει επιλεγμένος πυρήνας ατόμου (selectedAtomId), άλλαξε όλες τις αποχρώσεις του ατόμου (πυρήνας, τροχιές, ηλεκτρόνια) στο επιλεγμένο χρώμα!
+      // Αν υπάρχει επιλεγμένος πυρήνας ατόμου (selectedAtomId), άλλαξε όλες τις αποχρώσεις του ατόμου (και των ίδιων ατόμων Z στην ένωση) στο επιλεγμένο χρώμα!
       updateActivePage((page) => {
         if (!page.atomSims || !page.atomSims.some((s) => Boolean(s.selectedAtomId))) {
           return page;
         }
         return {
           ...page,
-          atomSims: page.atomSims.map((s) =>
-            s.selectedAtomId
-              ? {
-                  ...s,
-                  atoms: s.atoms.map((a) =>
-                    a.id === s.selectedAtomId
-                      ? { ...a, color: c, customColor: true }
-                      : a
-                  ),
-                }
-              : s
-          ),
+          atomSims: page.atomSims.map((s) => {
+            if (!s.selectedAtomId) return s;
+            const selAtom = s.atoms.find((a) => a.id === s.selectedAtomId);
+            return {
+              ...s,
+              atoms: s.atoms.map((a) =>
+                a.id === s.selectedAtomId || (selAtom && a.z === selAtom.z)
+                  ? { ...a, color: c, customColor: true }
+                  : a
+              ),
+            };
+          }),
         };
       });
 
