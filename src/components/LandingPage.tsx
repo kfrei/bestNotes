@@ -227,8 +227,8 @@ const SHOWCASE_TABS: { id: ShowcaseTabId; label: string; badge?: string }[] = [
   { id: 'sim-springs', label: '🌀 Ελατήρια', badge: 'LIVE' },
   { id: 'sim-circuits', label: '⚡ Κυκλώματα', badge: 'LIVE' },
   { id: 'sim-atoms', label: '⚛️ Άτομο & Χημεία', badge: 'LIVE' },
-  { id: 'sine-3d', label: 'Ημίτονα & 3D', badge: 'PRO' },
   { id: 'layers-groups', label: 'Layers & Groups', badge: 'PRO' },
+  { id: 'sine-3d', label: 'Ημίτονα & 3D', badge: 'PRO' },
 ];
 
 /* ============================================================================
