@@ -16975,7 +16975,7 @@ export default function App() {
               3.4,
               getStepProg(4),
               showNums ? `Fx = ${fmtVal(cx)} N` : 'Fx',
-              { x: ox + X / 2, y: oy + (signY >= 0 ? 19 : -18) }
+              { x: ox + X / 2, y: oy + (signY >= 0 ? 16 : -17) }
             );
           }
           if (curStep >= 5) {
@@ -17141,7 +17141,7 @@ export default function App() {
           }
 
           // Discreet On-Canvas Control Bar below origin (without Υπολογισμοί button)
-          const barY = Math.min(h - 36, Math.max(oy, ty) + 24);
+          const barY = Math.min(h - 32, Math.max(oy, ty) + 33);
           let curBx = Math.max(16, ox - 6);
           if (curStep === 0 && fSim.anMode !== 'F') {
             curBx +=
@@ -17484,7 +17484,7 @@ export default function App() {
           }
 
           // Discreet On-Canvas Control Bar (without Υπολογισμοί button)
-          const barY = Math.min(h - 36, Math.max(oy, p1y, p2y, ty) + 24);
+          const barY = Math.min(h - 32, Math.max(oy, p1y, p2y, ty) + 31);
           let curBx = Math.max(16, ox - 20);
           curBx +=
             drawPillButton(
