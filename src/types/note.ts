@@ -282,7 +282,8 @@ export interface AtomNode {
   y: number; // Canvas logical center Y
   outerRadiusPx?: number; // Custom outer radius if created from user drawing
   extraElectrons?: number; // Positive = gained electrons (anion, e.g. +1 for Cl-), negative = lost electrons (cation, e.g. -1 for Na+)
-  color?: string; // Accent color from drawn strokes (default '#7c3aed' / '#2563eb')
+  color?: string; // Accent color from drawn strokes or pencil color picker (default '#7c3aed' / '#2563eb')
+  customColor?: boolean; // True when user explicitly changed the atom's color from the top-right pencil color palette
 }
 
 export interface AtomBond {

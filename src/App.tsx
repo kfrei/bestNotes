@@ -19942,65 +19942,67 @@ export default function App() {
             }
           }
 
+          // Συνάρτηση παραγωγής πλήρους παλέτας αποχρώσεων (πυρήνας, τροχιές, ηλεκτρόνια) από οποιοδήποτε hex χρώμα (π.χ. από τα χρώματα του μολυβιού πάνω δεξιά!)
+          const buildPaletteFromHex = (hexStr: string) => {
+            const clean = hexStr.replace('#', '').trim();
+            const fullHex =
+              clean.length === 3
+                ? clean
+                    .split('')
+                    .map((ch) => ch + ch)
+                    .join('')
+                : clean.padEnd(6, '0').slice(0, 6);
+            const r = parseInt(fullHex.slice(0, 2), 16) || 139;
+            const g = parseInt(fullHex.slice(2, 4), 16) || 92;
+            const b = parseInt(fullHex.slice(4, 6), 16) || 246;
+            const mix = (
+              c1: [number, number, number],
+              c2: [number, number, number],
+              t: number
+            ) => [
+              Math.round(c1[0] + (c2[0] - c1[0]) * t),
+              Math.round(c1[1] + (c2[1] - c1[1]) * t),
+              Math.round(c1[2] + (c2[2] - c1[2]) * t),
+            ];
+            const dark = mix([r, g, b], [15, 23, 42], 0.26);
+            const midDark = mix([r, g, b], [15, 23, 42], 0.14);
+            const light = mix([r, g, b], [255, 255, 255], 0.36);
+            return {
+              nucleusFill: `rgba(${r}, ${g}, ${b}, 0.76)`,
+              nucleusStroke: `rgb(${dark[0]}, ${dark[1]}, ${dark[2]})`,
+              outerOrbit: `rgb(${r}, ${g}, ${b})`,
+              innerOrbit: `rgba(${r}, ${g}, ${b}, 0.64)`,
+              outerElectron: `rgb(${midDark[0]}, ${midDark[1]}, ${midDark[2]})`,
+              innerElectron: `rgb(${light[0]}, ${light[1]}, ${light[2]})`,
+            };
+          };
+
           // Χρωματικές παλέτες ανά διαφορετικό χημικό στοιχείο (1ο στοιχείο: Αποχρώσεις Μπλε, 2ο: Αποχρώσεις Κόκκινου, 3ο: Αποχρώσεις Πράσινου, κ.ο.κ.)
           const ATOM_COLOR_PALETTES = [
-            {
-              // Αποχρώσεις Μπλε
-              nucleusFill: 'rgba(59, 130, 246, 0.78)',
-              nucleusStroke: '#1d4ed8',
-              outerOrbit: '#0284c7',
-              innerOrbit: 'rgba(37, 99, 235, 0.65)',
-              outerElectron: '#1d4ed8',
-              innerElectron: '#60a5fa',
-            },
-            {
-              // Αποχρώσεις Κόκκινου
-              nucleusFill: 'rgba(239, 68, 68, 0.78)',
-              nucleusStroke: '#b91c1c',
-              outerOrbit: '#e11d48',
-              innerOrbit: 'rgba(220, 38, 38, 0.62)',
-              outerElectron: '#dc2626',
-              innerElectron: '#f87171',
-            },
-            {
-              // Αποχρώσεις Πράσινου
-              nucleusFill: 'rgba(16, 185, 129, 0.78)',
-              nucleusStroke: '#047857',
-              outerOrbit: '#059669',
-              innerOrbit: 'rgba(16, 185, 129, 0.62)',
-              outerElectron: '#15803d',
-              innerElectron: '#34d399',
-            },
-            {
-              // Αποχρώσεις Πορτοκαλί/Κεχριμπαρί
-              nucleusFill: 'rgba(245, 158, 11, 0.80)',
-              nucleusStroke: '#b45309',
-              outerOrbit: '#d97706',
-              innerOrbit: 'rgba(217, 119, 6, 0.62)',
-              outerElectron: '#c2410c',
-              innerElectron: '#fbbf24',
-            },
-            {
-              // Αποχρώσεις Μωβ
-              nucleusFill: 'rgba(168, 85, 247, 0.75)',
-              nucleusStroke: '#6d28d9',
-              outerOrbit: '#7c3aed',
-              innerOrbit: 'rgba(124, 58, 237, 0.62)',
-              outerElectron: '#6d28d9',
-              innerElectron: '#a78bfa',
-            },
+            buildPaletteFromHex('#2563eb'), // Αποχρώσεις Μπλε
+            buildPaletteFromHex('#ef4444'), // Αποχρώσεις Κόκκινου
+            buildPaletteFromHex('#10b981'), // Αποχρώσεις Πράσινου
+            buildPaletteFromHex('#f59e0b'), // Αποχρώσεις Πορτοκαλί/Κεχριμπαρί
+            buildPaletteFromHex('#8b5cf6'), // Αποχρώσεις Μωβ
           ];
 
           const uniqueZsDesc = Array.from(new Set(aSim.atoms.map((a) => a.z))).sort(
             (a, b) => b - a
           );
-          const atomPaletteMap = new Map<string, (typeof ATOM_COLOR_PALETTES)[0]>();
+          const atomPaletteMap = new Map<string, ReturnType<typeof buildPaletteFromHex>>();
           aSim.atoms.forEach((at, idx) => {
-            const palIdx =
-              uniqueZsDesc.length >= 2
-                ? uniqueZsDesc.indexOf(at.z) % ATOM_COLOR_PALETTES.length
-                : idx % ATOM_COLOR_PALETTES.length;
-            atomPaletteMap.set(at.id, ATOM_COLOR_PALETTES[palIdx]);
+            if (at.customColor && at.color) {
+              // Ο χρήστης επέλεξε τον πυρήνα και του άλλαξε χρώμα από τα χρώματα του μολυβιού πάνω δεξιά!
+              atomPaletteMap.set(at.id, buildPaletteFromHex(at.color));
+            } else if (aSim.atoms.length === 1 && at.color) {
+              atomPaletteMap.set(at.id, buildPaletteFromHex(at.color));
+            } else {
+              const palIdx =
+                uniqueZsDesc.length >= 2
+                  ? uniqueZsDesc.indexOf(at.z) % ATOM_COLOR_PALETTES.length
+                  : idx % ATOM_COLOR_PALETTES.length;
+              atomPaletteMap.set(at.id, ATOM_COLOR_PALETTES[palIdx]);
+            }
           });
 
           // 2. Σχεδίαση κάθε Ατόμου (Πυρήνας ανάλογος του Z, Τροχιές ανάλογες του μεγέθους ατόμου, Ζευγαράκια 2-2 e⁻, Σύμβολο Στοιχείου)
@@ -20165,40 +20167,16 @@ export default function App() {
 
             ctx.save();
             if (isSelectedAtom) {
-              // Διακριτική φωτεινή άλω γύρω από τον πυρήνα (ΧΩΡΙΣ διακεκομμένο ορθογώνιο πλαίσιο!)
-              ctx.strokeStyle = 'rgba(37, 99, 235, 0.48)';
+              // Φωσφορούχα πράσινη lime άλως γύρω από τον επιλεγμένο πυρήνα
+              ctx.save();
+              ctx.shadowColor = 'rgba(163, 230, 53, 0.75)';
+              ctx.shadowBlur = 8;
+              ctx.strokeStyle = '#84cc16';
               ctx.lineWidth = 3.2;
               ctx.beginPath();
               ctx.arc(atom.x, atom.y, nucR + 4.5, 0, Math.PI * 2);
               ctx.stroke();
-
-              // Μικρό στρογγυλό χερούλι ομοιόμορφης αυξομείωσης μεγέθους (⤡) πάνω στην εξωτερική τροχιά (κάτω-δεξιά 45°)
-              const handleAng = Math.PI / 4;
-              const hx = atom.x + maxOrbitR * Math.cos(handleAng);
-              const hy = atom.y + maxOrbitR * Math.sin(handleAng);
-              ctx.fillStyle = '#2563eb';
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.arc(hx, hy, 8, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
-
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 10px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText('⤡', hx, hy + 0.5);
-
-              resizeHandlesHit.push({
-                simId: aSim.id,
-                atomId: atom.id,
-                cx: atom.x,
-                cy: atom.y,
-                hx,
-                hy,
-                r: 15,
-              });
+              ctx.restore();
             }
             ctx.fillStyle = pal.nucleusFill;
             ctx.strokeStyle = pal.nucleusStroke;
@@ -20265,9 +20243,11 @@ export default function App() {
               : atom.x - badgeW / 2 + 3;
             const labelCenterY = atom.y + nucR + 13;
 
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-            ctx.strokeStyle = 'rgba(203, 213, 225, 0.88)';
-            ctx.lineWidth = 1;
+            ctx.fillStyle = isSelectedAtom
+              ? 'rgba(247, 254, 231, 0.96)'
+              : 'rgba(255, 255, 255, 0.92)';
+            ctx.strokeStyle = isSelectedAtom ? '#84cc16' : 'rgba(203, 213, 225, 0.88)';
+            ctx.lineWidth = isSelectedAtom ? 2 : 1;
             ctx.beginPath();
             ctx.roundRect(
               labelStartX - 3,
@@ -20293,6 +20273,48 @@ export default function App() {
             ctx.textAlign = 'left';
             ctx.fillText(symText, labelStartX + azWidth + 3.5, labelCenterY + 0.5);
             ctx.restore();
+
+            // Κουμπάκι ομοιόμορφης αυξομείωσης μεγέθους (⤡) σε φωσφορούχο πράσινο lime που αναβοσβήνει απαλά!
+            if (isSelectedAtom) {
+              const handleAng = Math.PI / 4;
+              const hx = atom.x + maxOrbitR * Math.cos(handleAng);
+              const hy = atom.y + maxOrbitR * Math.sin(handleAng);
+              const limePulse = 0.5 + 0.5 * Math.sin(now * 0.0055);
+
+              ctx.save();
+              // Εξωτερικό απαλό φωσφορούχο lime φωτοστέφανο που αναβοσβήνει
+              ctx.fillStyle = `rgba(163, 230, 53, ${0.22 + limePulse * 0.38})`;
+              ctx.beginPath();
+              ctx.arc(hx, hy, 10 + limePulse * 4, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Κύριο στρογγυλό κουμπάκι σε φωσφορούχο πράσινο lime
+              ctx.fillStyle = `rgba(163, 230, 53, ${0.84 + limePulse * 0.16})`;
+              ctx.strokeStyle = '#4d7c0f';
+              ctx.lineWidth = 1.8;
+              ctx.beginPath();
+              ctx.arc(hx, hy, 8.8 + limePulse * 0.8, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+
+              // Βελάκια ⤡ με έντονη αντίθεση
+              ctx.fillStyle = '#1a2e05';
+              ctx.font = 'bold 10.5px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('⤡', hx, hy + 0.5);
+              ctx.restore();
+
+              resizeHandlesHit.push({
+                simId: aSim.id,
+                atomId: atom.id,
+                cx: atom.x,
+                cy: atom.y,
+                hx,
+                hy,
+                r: 16,
+              });
+            }
           });
 
           // 4. Σχεδίαση Δεσμών (Ετεροπολικός / Ομοιοπολικός) & 2s Animation μετακίνησης ηλεκτρονίων
@@ -32596,6 +32618,29 @@ export default function App() {
       setStrokeColor(c);
       setFillColor(c);
       recordRecentColor(c);
+
+      // Αν υπάρχει επιλεγμένος πυρήνας ατόμου (selectedAtomId), άλλαξε όλες τις αποχρώσεις του ατόμου (πυρήνας, τροχιές, ηλεκτρόνια) στο επιλεγμένο χρώμα!
+      updateActivePage((page) => {
+        if (!page.atomSims || !page.atomSims.some((s) => Boolean(s.selectedAtomId))) {
+          return page;
+        }
+        return {
+          ...page,
+          atomSims: page.atomSims.map((s) =>
+            s.selectedAtomId
+              ? {
+                  ...s,
+                  atoms: s.atoms.map((a) =>
+                    a.id === s.selectedAtomId
+                      ? { ...a, color: c, customColor: true }
+                      : a
+                  ),
+                }
+              : s
+          ),
+        };
+      });
+
       const activeTxtId = selectedTextId || editingTextId;
       if (activeTxtId) {
         updateActivePage((page) => {
@@ -45162,7 +45207,7 @@ export default function App() {
                               key={c}
                               type="button"
                               onClick={() => {
-                                setStrokeColor(c);
+                                applyColorToSelection(c);
                                 if (activeTool === 'eraser') setActiveTool('pen');
                                 setSqueezePalettePos(null);
                               }}
