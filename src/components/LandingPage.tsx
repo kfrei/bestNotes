@@ -310,12 +310,6 @@ const DraggableCard: React.FC<{
         isDragging ? 'z-50 shadow-2xl ring-2 ring-[#0066ff]' : ''
       } ${className}`}
     >
-      {badgeText && (
-        <div className="pointer-events-none absolute -top-2.5 right-3 z-30 px-2 py-0.5 rounded-full bg-slate-900/85 text-white text-[9px] font-bold tracking-wide shadow-sm opacity-85 group-hover/drag:opacity-100 group-hover/drag:bg-[#0066ff] transition flex items-center gap-1">
-          <Move className="w-2.5 h-2.5" />
-          <span>{badgeText}</span>
-        </div>
-      )}
       {children}
     </div>
   );
