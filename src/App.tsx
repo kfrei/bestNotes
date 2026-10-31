@@ -16966,17 +16966,22 @@ export default function App() {
             );
           }
           if (curStep >= 4) {
-            drawSimVector(
-              ox,
-              oy,
-              tx,
-              oy,
-              '#d32f2f',
-              3.4,
-              getStepProg(4),
-              showNums ? `Fx = ${fmtVal(cx)} N` : 'Fx',
-              { x: ox + X / 2, y: oy + (signY >= 0 ? 16 : -17) }
-            );
+            const fxProg = getStepProg(4);
+            drawSimVector(ox, oy, tx, oy, '#d32f2f', 3.4, fxProg);
+            if (fxProg >= 0.995) {
+              const fxText = showNums
+                ? `Fx = Fσυν(θ),   Fx = ${fmtVal(cx)} N`
+                : 'Fx = Fσυν(θ)';
+              const fxLabelX =
+                signX >= 0 ? Math.max(ox + X / 2, ox + (showNums ? 82 : 44)) : ox + X / 2;
+              drawHaloLabel(
+                fxText,
+                fxLabelX,
+                oy + (signY >= 0 ? 16 : -17),
+                '#d32f2f',
+                'bold 14px system-ui, -apple-system, sans-serif'
+              );
+            }
           }
           if (curStep >= 5) {
             drawSimLineOrAxis(
@@ -16992,17 +16997,40 @@ export default function App() {
             );
           }
           if (curStep >= 6) {
-            drawSimVector(
-              ox,
-              oy,
-              ox,
-              ty,
-              '#d32f2f',
-              3.4,
-              getStepProg(6),
-              showNums ? `Fy = ${fmtVal(cy)} N` : 'Fy',
-              { x: ox + (signX >= 0 ? (showNums ? -42 : -22) : showNums ? 42 : 22), y: oy - Y / 2 }
-            );
+            const fyProg = getStepProg(6);
+            drawSimVector(ox, oy, ox, ty, '#d32f2f', 3.4, fyProg);
+            if (fyProg >= 0.995) {
+              const fyLabelX = ox + (signX >= 0 ? -10 : 10);
+              const fyAlign: CanvasTextAlign = signX >= 0 ? 'right' : 'left';
+              const fyMidY = oy - Y / 2;
+              if (showNums) {
+                drawHaloLabel(
+                  'Fy = Fημ(θ)',
+                  fyLabelX,
+                  fyMidY - 10,
+                  '#d32f2f',
+                  'bold 13.5px system-ui, -apple-system, sans-serif',
+                  fyAlign
+                );
+                drawHaloLabel(
+                  `Fy = ${fmtVal(cy)} N`,
+                  fyLabelX,
+                  fyMidY + 10,
+                  '#d32f2f',
+                  'bold 14px system-ui, -apple-system, sans-serif',
+                  fyAlign
+                );
+              } else {
+                drawHaloLabel(
+                  'Fy = Fημ(θ)',
+                  fyLabelX,
+                  fyMidY,
+                  '#d32f2f',
+                  'bold 14px system-ui, -apple-system, sans-serif',
+                  fyAlign
+                );
+              }
+            }
           }
 
           const isIntLocked = isForceSimAtIntegerValues(fSim, activePage);
