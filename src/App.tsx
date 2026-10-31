@@ -20220,7 +20220,9 @@ export default function App() {
               outerR: maxOrbitR,
             });
 
-            // 3. Ισοτοπικός Συμβολισμός κάτω από τον Πυρήνα: ΜΟΝΟ Σύμβολο Στοιχείου & A, Z (π.χ. ¹₁H , ¹⁶₈O χωρίς το ελληνικό όνομα)
+            // 3. Ισοτοπικός Συμβολισμός κάτω από τον Πυρήνα:
+            // Αν έχουμε 1 μόνο άτομο: δείξε και το ελληνικό όνομα δίπλα στο σύμβολο (π.χ. ¹²₆C , Άνθρακας).
+            // Αν έχουμε ένωση (>=2 άτομα): δείξε ΜΟΝΟ το σύμβολο (π.χ. ¹₁H , ¹⁶₈O).
             const extraE = isAnimThisSim && easeP < 0.85 ? 0 : atom.extraElectrons || 0;
             let chargeStr = '';
             if (extraE < 0) {
@@ -20233,6 +20235,8 @@ export default function App() {
             const aStr = String(el.a);
             const zStr = String(el.z);
             const symText = `${el.symbol}${chargeStr}`;
+            const isSingleAtomView = aSim.atoms.length === 1;
+            const nameSuffix = isSingleAtomView ? ` , ${el.nameEl}` : '';
 
             ctx.save();
             ctx.font = 'bold 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -20242,7 +20246,12 @@ export default function App() {
             );
             ctx.font = 'bold 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const symW = ctx.measureText(symText).width;
-            const badgeW = azWidth + symW + 11;
+            let nameW = 0;
+            if (isSingleAtomView) {
+              ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              nameW = ctx.measureText(nameSuffix).width;
+            }
+            const badgeW = azWidth + symW + nameW + 11;
             const badgeH = 22;
 
             // Τοποθέτηση ταμπελακίου ΚΑΤΩ από τον πυρήνα
@@ -20296,6 +20305,13 @@ export default function App() {
             ctx.fillStyle = pal.nucleusStroke;
             ctx.textAlign = 'left';
             ctx.fillText(symText, labelStartX + azWidth + 3.5, labelCenterY + 0.5);
+
+            // Ελληνικό όνομα στοιχείου ΜΟΝΟ όταν έχουμε 1 μεμονωμένο άτομο (όχι σε ένωση)
+            if (isSingleAtomView) {
+              ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              ctx.fillStyle = '#334155';
+              ctx.fillText(nameSuffix, labelStartX + azWidth + 3.5 + symW, labelCenterY + 0.5);
+            }
             ctx.restore();
 
             // Κουμπάκι ομοιόμορφης/αναλογικής αυξομείωσης μεγέθους (⤡) σε φωσφορούχο πράσινο lime που αναβοσβήνει απαλά!
