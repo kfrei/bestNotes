@@ -12194,8 +12194,13 @@ export default function App() {
           ? page.strokes.filter((s) => !selectedSet.has(s.id))
           : page.strokes;
 
-      // Αν υπάρχει ήδη ενεργή προσομοίωση ατόμου στη σελίδα, πρόσθεσε το νέο άτομο δίπλα στα υπάρχοντα ώστε να μπορούν να αλληλεπιδράσουν!
-      if (activeSim) {
+      // Αν υπάρχει ήδη ενεργή προσομοίωση ατόμου κοντά (και ΔΕΝ είναι κλειστή αντίδραση), πρόσθεσε το νέο άτομο δίπλα ώστε να αλληλεπιδράσουν!
+      const isNearActiveSim =
+        activeSim &&
+        !activeSim.showReactionEquation &&
+        activeSim.atoms.some((a) => Math.hypot(a.x - cx, a.y - cy) < 340);
+
+      if (activeSim && isNearActiveSim) {
         const updatedAtoms = [...activeSim.atoms, newAtomNode];
         const inferred = inferReactionFromCanvasAtoms(updatedAtoms.map((a) => a.z));
         return {
@@ -12208,6 +12213,7 @@ export default function App() {
                   ...s,
                   atoms: updatedAtoms,
                   selectedAtomId: newAtomId,
+                  showAtomsBelowReaction: true,
                   reactionEquationText: inferred.equationDisplay,
                 }
               : s
@@ -12252,6 +12258,103 @@ export default function App() {
     (z: number, addAsNewAtom = false) => {
       const ts = Date.now();
       const natRadius = getNaturalOuterOrbitRadiusPx(z);
+
+      // 1. Αν ο χρήστης έχει επιλέξει με Lasso/Select ένα χειρόγραφο σχήμα ατόμου στον καμβά,
+      // ζωντάνεψε ΑΚΡΙΒΩΣ αυτό το επιλεγμένο σχήμα στη θέση του με το στοιχείο z που πάτησε!
+      if (selectedStrokeIds.length > 0) {
+        const selectedStrokes = activePage.strokes.filter((s) =>
+          selectedStrokeIds.includes(s.id)
+        );
+        if (selectedStrokes.length > 0) {
+          let minX = Infinity,
+            maxX = -Infinity,
+            minY = Infinity,
+            maxY = -Infinity;
+          let strokeColor = '#8b5cf6';
+          for (const st of selectedStrokes) {
+            if (st.color && st.color !== '#000000') strokeColor = st.color;
+            for (const p of st.points) {
+              if (p.x < minX) minX = p.x;
+              if (p.x > maxX) maxX = p.x;
+              if (p.y < minY) minY = p.y;
+              if (p.y > maxY) maxY = p.y;
+            }
+          }
+          const cx = Number.isFinite(minX) ? Math.round((minX + maxX) / 2) : 360;
+          const cy = Number.isFinite(minY) ? Math.round((minY + maxY) / 2) : 340;
+          const drawnR = Number.isFinite(minX)
+            ? Math.max(42, Math.min(125, Math.round(Math.max(maxX - minX, maxY - minY) / 2)))
+            : natRadius;
+
+          const selectedSet = new Set(selectedStrokeIds);
+          const newAtomId = `atom-${ts}-${Math.random().toString(36).slice(2, 6)}`;
+          const newAtomNode: AtomNode = {
+            id: newAtomId,
+            z,
+            x: cx,
+            y: cy,
+            outerRadiusPx: drawnR,
+            extraElectrons: 0,
+            color: strokeColor,
+          };
+
+          updateActivePage((page) => {
+            const curValid = getValidAtomSims(page);
+            const activeSim = getActiveAtomSim(page);
+            const remainingStrokes = page.strokes.filter((s) => !selectedSet.has(s.id));
+
+            // Αν υπάρχει ήδη ενεργό άτομο κοντά (και δεν είναι μπάρα αντίδρασης), πρόσθεσέ το στην ίδια σκηνή ώστε να κάνουν δεσμό!
+            const isNearActiveSim =
+              activeSim &&
+              !activeSim.showReactionEquation &&
+              activeSim.atoms.some((a) => Math.hypot(a.x - cx, a.y - cy) < 340);
+
+            if (activeSim && isNearActiveSim) {
+              const updatedAtoms = [...activeSim.atoms, newAtomNode];
+              const inferred = inferReactionFromCanvasAtoms(updatedAtoms.map((a) => a.z));
+              return {
+                ...page,
+                strokes: remainingStrokes,
+                activeAtomSimId: activeSim.id,
+                atomSims: curValid.map((s) =>
+                  s.id === activeSim.id
+                    ? {
+                        ...s,
+                        atoms: updatedAtoms,
+                        selectedAtomId: newAtomId,
+                        showAtomsBelowReaction: true,
+                        reactionEquationText: inferred.equationDisplay,
+                      }
+                    : s
+                ),
+              };
+            }
+
+            const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
+            const newSim: AtomSimConfig = {
+              id: newSimId,
+              name: getNextDefaultAtomSimName(page),
+              atoms: [newAtomNode],
+              selectedAtomId: newAtomId,
+              bonds: [],
+              shellDisplayMode: 'auto',
+              isRotating: true,
+              showReactionEquation: false,
+              showAtomsBelowReaction: true,
+            };
+            return {
+              ...page,
+              strokes: remainingStrokes,
+              atomSims: [...curValid, newSim],
+              activeAtomSimId: newSimId,
+            };
+          });
+
+          setSelectedStrokeIds([]);
+          setActiveNodeStrokeId(null);
+          return;
+        }
+      }
       updateActivePage((page) => {
         const curValid = getValidAtomSims(page);
         const activeSim = getActiveAtomSim(page);
@@ -12337,7 +12440,7 @@ export default function App() {
         };
       });
     },
-    [getValidAtomSims, getActiveAtomSim, getNextDefaultAtomSimName]
+    [selectedStrokeIds, activePage, getValidAtomSims, getActiveAtomSim, getNextDefaultAtomSimName]
   );
 
   const bondAtomsByElectronDrag = useCallback(
