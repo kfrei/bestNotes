@@ -939,10 +939,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           2. HERO SECTION + ANIMATED SIMULATIONS & SCIENCE SHOWCASE TABS
          ===================================================================== */}
       <main id="hero-top-section" className="max-w-7xl mx-auto px-4 sm:px-8 pt-10 pb-28 scroll-mt-20">
-        <div className="text-center max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100/90 border border-amber-300 text-amber-950 text-xs font-extrabold mb-4 shadow-2xs">
+        {/* --- Α. ΚΕΝΤΡΙΚΕΣ ΠΛΗΡΟΦΟΡΙΕΣ (Τίτλος, Υπότιτλος & Ταυτότητα Μαθημάτων) --- */}
+        <div className="text-center max-w-3xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 border border-amber-200/90 text-amber-900 text-xs font-bold mb-5">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Ζωντανές Προσομοιώσεις («Explain») • Δυνάμεις, Ελατήρια, Κυκλώματα &amp; 3D Μόρια • MathOCR &amp; ChemOCR</span>
+            <span>Διαδραστικός Καμβάς Εκπαίδευσης • MathOCR, ChemOCR &amp; 3D.OCR</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl md:text-[50px] font-extrabold tracking-tight text-slate-950 leading-[1.14]">
@@ -959,53 +960,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </>
             )}
           </h1>
-          <p className="mt-4 text-base sm:text-lg text-slate-700 font-medium leading-relaxed">
-            Εξηγήστε (<span className="font-extrabold text-[#df1b3f]">«Explain»</span>) πάνω στα boards σας{' '}
-            <b>φαινόμενα, έννοιες, χημικές αντιδράσεις &amp; διαγράμματα</b> με διαδραστικές προσομοιώσεις που{' '}
-            <span className="underline decoration-amber-400 decoration-2 font-bold">«ζωντανεύουν» κατευθείαν από το μολύβι σας</span>!
-            <br className="hidden sm:inline" /> Ένα ολοκληρωμένο πακέτο εργαλείων{' '}
-            <b className="text-slate-900">Φυσικής, Χημείας, Βιολογίας &amp; Μαθηματικών</b> — από το{' '}
-            <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-900 font-extrabold text-sm">Δημοτικό</span> μέχρι το{' '}
-            <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 font-extrabold text-sm">Πανεπιστήμιο</span>.
+
+          <p className="mt-4 text-base sm:text-lg text-slate-600 font-medium leading-relaxed max-w-2xl mx-auto">
+            Εξηγήστε πάνω στα boards σας φαινόμενα, έννοιες, χημικές αντιδράσεις &amp; διαγράμματα με διαδραστικές προσομοιώσεις που{' '}
+            <span className="text-slate-900 font-bold">«ζωντανεύουν» κατευθείαν από το μολύβι σας</span>.
           </p>
 
-          {/* Subject & Simulation Quick Pills */}
-          <div className="mt-5 flex items-center justify-center gap-2 flex-wrap text-xs font-extrabold">
-            <button
-              type="button"
-              onClick={() => handleSelectTab('sim-forces')}
-              className="px-3 py-1.5 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 transition cursor-pointer"
-            >
-              🎯 Ανάλυση &amp; Σύνθεση Δυνάμεων
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectTab('sim-springs')}
-              className="px-3 py-1.5 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-900 border border-sky-300 transition cursor-pointer"
-            >
-              🌀 Ελατήρια &amp; Ταλαντώσεις Hooke
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectTab('sim-circuits')}
-              className="px-3 py-1.5 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 transition cursor-pointer"
-            >
-              ⚡ Ηλεκτρικά Κυκλώματα (V=I·R)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSelectTab('sim-atoms')}
-              className="px-3 py-1.5 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 transition cursor-pointer"
-            >
-              ⚛️ Άτομα, 3D Μόρια &amp; ChemOCR
-            </button>
+          {/* Καθαρή Μπάρα Πληροφοριών (Μη-κλικάρισμα / Διαχωρισμένη από τα κουμπιά) */}
+          <div className="mt-5 inline-flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs sm:text-sm text-slate-700">
+            <div className="flex items-center gap-2 font-bold text-slate-800">
+              <span className="text-base leading-none">📚</span>
+              <span>Φυσική • Χημεία • Βιολογία • Μαθηματικά</span>
+            </div>
+            <span className="hidden sm:inline text-slate-300 font-light">|</span>
+            <div className="flex items-center gap-1.5 text-slate-600 font-medium">
+              <span className="text-base leading-none">🎓</span>
+              <span>
+                Από το <strong className="text-slate-900 font-bold">Δημοτικό</strong> μέχρι το{' '}
+                <strong className="text-slate-900 font-bold">Πανεπιστήμιο</strong>
+              </span>
+            </div>
           </div>
 
-          <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
+          {/* --- Β. ΚΥΡΙΑ ΚΟΥΜΠΙΑ ΕΝΕΡΓΕΙΑΣ (Ξεκάθαρα διαχωρισμένα) --- */}
+          <div className="mt-8 flex items-center justify-center gap-3.5 flex-wrap">
             <button
               type="button"
               onClick={onEnterApp}
-              className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#46c8f5] hover:bg-[#2bb8eb] text-slate-950 text-sm font-extrabold shadow-sm hover:shadow-md transition cursor-pointer"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#46c8f5] hover:bg-[#2bb8eb] text-slate-950 text-sm sm:text-base font-extrabold shadow-sm hover:shadow-md transition cursor-pointer"
             >
               <span>Δωρεάν Έναρξη στον Καμβά</span>
               <ChevronRight className="w-4 h-4" />
@@ -1015,33 +997,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenAuthModal('signup')}
-                className="inline-flex items-center gap-2 px-5 py-3.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold transition cursor-pointer"
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-800 text-sm sm:text-base font-bold transition cursor-pointer"
               >
                 <span>Εγγραφή με Google / Email</span>
               </button>
             )}
-
-            <button
-              type="button"
-              onClick={() => setDragResetCounter((c) => c + 1)}
-              className="inline-flex items-center gap-1.5 px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition cursor-pointer"
-              title="Επαναφορά όλων των καρτών που έσυρες με το ποντίκι"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Επαναφορά Draggable Καρτών</span>
-            </button>
           </div>
         </div>
 
         {/* ===================================================================
-            3. FOLDER-STYLE SHOWCASE TABS (Live Simulation GIFs + Science Notes + PRO Tabs)
+            3. FOLDER-STYLE SHOWCASE TABS (Live Simulation GIFs + PRO Tabs)
            =================================================================== */}
         <div
           id="simulations-section"
-          className="mt-10 max-w-6xl mx-auto scroll-mt-20"
+          className="mt-12 pt-8 border-t border-slate-200/70 max-w-6xl mx-auto scroll-mt-20"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
         >
+          <div className="flex items-center justify-between gap-2 px-3 mb-3">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+              Επιλέξτε Ζωντανή Προσομοίωση ή Εργαλείο PRO:
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400 hidden sm:inline">
+              Κάντε κλικ σε κάθε καρτέλα για προεπισκόπηση
+            </span>
+          </div>
           {/* Folder Tab Headers (Only Live Simulations + PRO Tabs) */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 px-2">
             {SHOWCASE_TABS.map((tab) => {
