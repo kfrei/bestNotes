@@ -1377,6 +1377,7 @@ export default function App() {
     notebookId: string;
     items: { id: string; formula: string }[];
   }>({ notebookId: '', items: [] });
+  const mol3DAutoYawRef = useRef<Record<string, { offset: number; lastNow: number }>>({});
   const draggingAtomHandleRef = useRef<{
     simId: string;
     kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize' | 'mol-3d-box' | 'mol-3d-rotate';
@@ -20706,14 +20707,28 @@ export default function App() {
               );
             });
 
-            // Κέντρο 3D προβολής
+            // Κέντρο 3D προβολής: συνεχής αργή δεξιόστροφη 360° περιστροφή όταν δεν το περιστρέφει ο χρήστης με το ποντίκι
             const scale3D = 64;
-            const yaw =
-              (aSim.rot3DYaw ?? 0.42) +
-              (aSim.isRotating !== false ? Math.sin(now * 0.00075) * 0.48 : 0);
+            const prevAutoYaw = mol3DAutoYawRef.current[aSim.id] ?? {
+              offset: 0,
+              lastNow: now,
+            };
+            const dtYaw = Math.max(0, Math.min(100, now - prevAutoYaw.lastNow));
+            const isUserRotating3D =
+              draggingAtomHandleRef.current?.kind === 'mol-3d-rotate' &&
+              draggingAtomHandleRef.current.simId === aSim.id;
+            const nextAutoYawOffset =
+              aSim.isRotating !== false && !isUserRotating3D
+                ? (prevAutoYaw.offset + dtYaw * 0.00045) % (Math.PI * 2)
+                : prevAutoYaw.offset;
+            mol3DAutoYawRef.current[aSim.id] = {
+              offset: nextAutoYawOffset,
+              lastNow: now,
+            };
+            const yaw = (aSim.rot3DYaw ?? 0.42) + nextAutoYawOffset;
             const pitch =
               (aSim.rot3DPitch ?? 0.24) +
-              (aSim.isRotating !== false ? Math.cos(now * 0.00055) * 0.16 : 0);
+              (aSim.isRotating !== false ? Math.cos(now * 0.00045) * 0.08 : 0);
             const cosY = Math.cos(yaw),
               sinY = Math.sin(yaw);
             const cosP = Math.cos(pitch),
