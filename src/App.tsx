@@ -20379,18 +20379,33 @@ export default function App() {
               const pulseAlpha = 0.28 + 0.64 * (0.5 + 0.5 * Math.sin(now * 0.0055));
 
               ctx.save();
-              // Διάφανο κυκλάκι — μόνο το περίγραμμα και τα βελάκια αναβοσβήνουν απαλά
-              ctx.strokeStyle = `rgba(100, 116, 139, ${pulseAlpha})`;
-              ctx.lineWidth = 1.6;
+              // Διάφανο κυκλάκι — μόνο το περίγραμμα και το μεγάλο διπλό βελάκι αναβοσβήνουν απαλά
+              ctx.strokeStyle = `rgba(71, 85, 105, ${pulseAlpha})`;
+              ctx.lineWidth = 1.8;
               ctx.beginPath();
-              ctx.arc(hx, hy, 9, 0, Math.PI * 2);
+              ctx.arc(hx, hy, 11.5, 0, Math.PI * 2);
               ctx.stroke();
 
-              ctx.fillStyle = `rgba(71, 85, 105, ${pulseAlpha})`;
-              ctx.font = 'bold 10.5px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText('⤡', hx, hy + 0.5);
+              // Μεγάλο, ευδιάκριτο διαγώνιο διπλό βελάκι (↖↘) μέσα στο κυκλάκι
+              const d = 5.4;
+              const ah = 4.4;
+              ctx.strokeStyle = `rgba(51, 65, 85, ${Math.min(1, pulseAlpha + 0.08)})`;
+              ctx.lineWidth = 2.0;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              ctx.beginPath();
+              // Διαγώνιος άξονας
+              ctx.moveTo(hx - d, hy - d);
+              ctx.lineTo(hx + d, hy + d);
+              // Πάνω-αριστερά αιχμή (↖)
+              ctx.moveTo(hx - d + ah, hy - d);
+              ctx.lineTo(hx - d, hy - d);
+              ctx.lineTo(hx - d, hy - d + ah);
+              // Κάτω-δεξιά αιχμή (↘)
+              ctx.moveTo(hx + d - ah, hy + d);
+              ctx.lineTo(hx + d, hy + d);
+              ctx.lineTo(hx + d, hy + d - ah);
+              ctx.stroke();
               ctx.restore();
 
               resizeHandlesHit.push({
@@ -20400,7 +20415,7 @@ export default function App() {
                 cy: atom.y,
                 hx,
                 hy,
-                r: 16,
+                r: 18,
               });
             }
           });
