@@ -11605,7 +11605,7 @@ export default function App() {
         (page) => ({
           ...page,
           forceSims: (page.forceSims || []).map((s) =>
-            s.id === sim.id ? { ...s, showCalc: !s.showCalc } : s
+            s.id === sim.id ? { ...s, showCalc: !s.showCalc, calcBoxPos: undefined } : s
           ),
         }),
         false
@@ -16810,12 +16810,19 @@ export default function App() {
           lines: { text: string; bold?: boolean; color?: string }[],
           borderColor = '#f59e0b'
         ) => {
-          const cardW = 236;
+          ctx.save();
+          ctx.font = 'bold 12.5px system-ui, -apple-system, sans-serif';
+          let maxW = ctx.measureText(title).width;
+          for (const ln of lines) {
+            ctx.font = `${ln.bold ? 'bold' : '500'} 12.5px system-ui, -apple-system, sans-serif`;
+            const lw = ctx.measureText(ln.text).width;
+            if (lw > maxW) maxW = lw;
+          }
+          const cardW = Math.ceil(Math.max(172, maxW + 22));
           const lineH = 20;
           const cardH = 34 + lines.length * lineH;
           const cx = fSim?.calcBoxPos?.x ?? defaultX;
           const cy = fSim?.calcBoxPos?.y ?? defaultY;
-          ctx.save();
           ctx.shadowColor = 'rgba(15, 23, 42, 0.18)';
           ctx.shadowBlur = 12;
           ctx.shadowOffsetY = 4;
@@ -17112,14 +17119,14 @@ export default function App() {
           }
           handlesHit.push({ kind: 'origin', x: ox, y: oy, r: 13 });
 
-          // Info Pill above/left ONLY when showNumericValues is enabled in Simulation Dashboard!
+          // Info Pill above/right of y-axis ONLY when showNumericValues is enabled in Simulation Dashboard!
           if (showNums) {
             const infoTxt = `F = ${isIntLocked ? Math.round(F_mag) : F_mag.toFixed(1)} N,  θ = ${Math.round(deg)}°`;
             ctx.save();
             ctx.font = 'bold 12px ui-monospace, SFMono-Regular, Menlo, monospace';
             const infoW = ctx.measureText(infoTxt).width + 20;
-            const infoX = Math.max(16, ox - 10);
-            const infoY = Math.max(16, Math.min(oy, ty) - 56);
+            const infoX = Math.max(16, ox + 16);
+            const infoY = Math.max(16, Math.min(oy, ty, oy - axLenY) - 6);
             ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
             ctx.strokeStyle = '#cbd5e1';
             ctx.lineWidth = 1.2;
@@ -17160,7 +17167,7 @@ export default function App() {
               },
             ];
             drawCalcCard(
-              Math.min(w - 255, ox + Math.max(X, 120) + 38),
+              Math.min(w - 210, Math.max(ox + Math.max(X, 0) + 46, ox + 178)),
               Math.max(24, oy - 190),
               '📐 Υπολογισμοί Συνιστωσών',
               calcLines,
