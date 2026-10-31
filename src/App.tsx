@@ -42427,19 +42427,13 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setShowPeriodicTableModal((v) => !v)}
-                          className={`w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-between shadow-sm transition cursor-pointer ${
+                          className={`w-full py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center shadow-sm transition cursor-pointer ${
                             showPeriodicTableModal
                               ? 'bg-indigo-700 text-white ring-2 ring-indigo-300'
                               : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                           }`}
                         >
-                          <span className="flex items-center gap-1.5">
-                            <span>📅</span>
-                            <span>Περιοδικός Πίνακας (H – Rn)</span>
-                          </span>
-                          <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-md">
-                            {showPeriodicTableModal ? 'Ανοιχτός' : 'Άνοιγμα'}
-                          </span>
+                          <span>Περιοδικός Πίνακας</span>
                         </button>
 
                         {/* 2. Ενεργή Προσομοίωση Ατόμου & Λίστα Ατόμων στη σκηνή */}
