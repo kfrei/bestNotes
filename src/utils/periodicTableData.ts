@@ -268,7 +268,7 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
   }
   if (norm.includes('MGO') || (norm.includes('MG') && norm.includes('O'))) {
     return {
-      equationDisplay: 'Mg + O → Mg²⁺O²⁻',
+      equationDisplay: '2Mg + O₂ → 2MgO',
       bondType: 'ionic',
       atomZList: [12, 8], // Mg, O
       transfers: [{ fromAtomIdx: 0, toAtomIdx: 1, count: 2 }],
@@ -277,7 +277,7 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
   }
   if (norm.includes('CAO') || (norm.includes('CA') && norm.includes('O'))) {
     return {
-      equationDisplay: 'Ca + O → Ca²⁺O²⁻',
+      equationDisplay: '2Ca + O₂ → 2CaO',
       bondType: 'ionic',
       atomZList: [20, 8], // Ca, O
       transfers: [{ fromAtomIdx: 0, toAtomIdx: 1, count: 2 }],
@@ -557,9 +557,17 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
   },
   {
     id: 'co2',
-    matchElements: (lhs, rhs) => {
+    matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('C') && all.has('O') && !all.has('H') && !all.has('Ca') && !all.has('Na');
+      const cleanRaw = raw.replace(/\s+/g, '');
+      return (
+        all.has('C') &&
+        all.has('O') &&
+        !all.has('H') &&
+        !all.has('Ca') &&
+        !all.has('Na') &&
+        !cleanRaw.includes('CO+')
+      );
     },
     lhs: [
       { coeff: '', atoms: [{ sym: 'C', sub: '' }] },
@@ -681,16 +689,16 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'nacl',
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Na') && all.has('Cl') && (raw.includes('CL2') || raw.includes('2NA'));
+      return all.has('Na') && all.has('Cl') && !all.has('O') && !all.has('H') && (raw.includes('CL2') || raw.includes('2NA'));
     },
     lhs: [
-      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Na', atoms: [{ sym: 'Na', sub: '' }] },
-      { coeff: '', atoms: [{ sym: 'Cl', sub: '2', reason: 'Διατομικό Cl₂' }] },
+      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Na για ισοστάθμιση 2 ατόμων Na', atoms: [{ sym: 'Na', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'Cl', sub: '2', reason: 'Το Χλώριο είναι διατομικό μόριο (Cl₂)' }] },
     ],
     rhs: [
       {
         coeff: '2',
-        coeffReason: 'Συντελεστής 2 στο 2NaCl',
+        coeffReason: 'Συντελεστής 2 στο 2NaCl για ισοστάθμιση 2 ατόμων Cl',
         atoms: [
           { sym: 'Na', sub: '' },
           { sym: 'Cl', sub: '' },
@@ -698,7 +706,287 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
       },
     ],
   },
+  {
+    id: 'cao',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return (
+        all.has('Ca') &&
+        all.has('O') &&
+        !all.has('C') &&
+        !all.has('H') &&
+        !all.has('Cl') &&
+        !all.has('S') &&
+        !all.has('N') &&
+        !raw.includes('⁺') &&
+        !raw.includes('⁻')
+      );
+    },
+    lhs: [
+      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Ca για ισοστάθμιση 2 ατόμων Ca', atoms: [{ sym: 'Ca', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Το Οξυγόνο είναι διατομικό μόριο (O₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2CaO για ισοστάθμιση 2 ατόμων O',
+        atoms: [
+          { sym: 'Ca', sub: '' },
+          { sym: 'O', sub: '', reason: 'Στο CaO η αναλογία Ca²⁺:O²⁻ είναι 1:1' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'mgo',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return (
+        all.has('Mg') &&
+        all.has('O') &&
+        !all.has('C') &&
+        !all.has('H') &&
+        !all.has('Cl') &&
+        !all.has('S') &&
+        !all.has('N') &&
+        !raw.includes('⁺') &&
+        !raw.includes('⁻')
+      );
+    },
+    lhs: [
+      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Mg για ισοστάθμιση 2 ατόμων Mg', atoms: [{ sym: 'Mg', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Το Οξυγόνο είναι διατομικό μόριο (O₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2MgO για ισοστάθμιση 2 ατόμων O',
+        atoms: [
+          { sym: 'Mg', sub: '' },
+          { sym: 'O', sub: '', reason: 'Στο MgO η αναλογία Mg²⁺:O²⁻ είναι 1:1' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'na2o',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Na') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('Cl') && !all.has('S') && !all.has('N');
+    },
+    lhs: [
+      { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4Na για ισοστάθμιση 4 ατόμων Na', atoms: [{ sym: 'Na', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Το Οξυγόνο είναι διατομικό μόριο (O₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2Na₂O για ισοστάθμιση 2 ατόμων O',
+        atoms: [
+          { sym: 'Na', sub: '2', reason: 'Δείκτης ₂ στο Na₂O (σθένος Na = 1, O = 2)' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'k2o',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('K') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('Cl') && !all.has('S') && !all.has('N');
+    },
+    lhs: [
+      { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4K για ισοστάθμιση 4 ατόμων K', atoms: [{ sym: 'K', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Το Οξυγόνο είναι διατομικό μόριο (O₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2K₂O για ισοστάθμιση 2 ατόμων O',
+        atoms: [
+          { sym: 'K', sub: '2', reason: 'Δείκτης ₂ στο K₂O (σθένος K = 1, O = 2)' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'al2o3',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Al') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('Cl') && !all.has('S');
+    },
+    lhs: [
+      { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4Al για ισοστάθμιση 4 ατόμων Al', atoms: [{ sym: 'Al', sub: '' }] },
+      { coeff: '3', coeffReason: 'Συντελεστής 3 στο 3O₂ για ισοστάθμιση 6 ατόμων O', atoms: [{ sym: 'O', sub: '2', reason: 'Διατομικό O₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2Al₂O₃',
+        atoms: [
+          { sym: 'Al', sub: '2', reason: 'Δείκτης ₂ στο Al₂O₃ (σθένος Al = 3, O = 2)' },
+          { sym: 'O', sub: '3', reason: 'Δείκτης ₃ στο Al₂O₃' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'fe2o3',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Fe') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('S') && !raw.includes('FE3O4');
+    },
+    lhs: [
+      { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4Fe για ισοστάθμιση 4 ατόμων Fe', atoms: [{ sym: 'Fe', sub: '' }] },
+      { coeff: '3', coeffReason: 'Συντελεστής 3 στο 3O₂ για ισοστάθμιση 6 ατόμων O', atoms: [{ sym: 'O', sub: '2', reason: 'Διατομικό O₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2Fe₂O₃',
+        atoms: [
+          { sym: 'Fe', sub: '2', reason: 'Δείκτης ₂ στο Fe₂O₃' },
+          { sym: 'O', sub: '3', reason: 'Δείκτης ₃ στο Fe₂O₃' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'cuo',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Cu') && all.has('O') && !all.has('H') && !all.has('S') && !all.has('N') && !all.has('C');
+    },
+    lhs: [
+      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Cu για ισοστάθμιση 2 ατόμων Cu', atoms: [{ sym: 'Cu', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Διατομικό O₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2CuO για ισοστάθμιση 2 ατόμων O',
+        atoms: [
+          { sym: 'Cu', sub: '' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'zno',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Zn') && all.has('O') && !all.has('H') && !all.has('S') && !all.has('N') && !all.has('C');
+    },
+    lhs: [
+      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Zn για ισοστάθμιση 2 ατόμων Zn', atoms: [{ sym: 'Zn', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Διατομικό O₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2ZnO για ισοστάθμιση 2 ατόμων O',
+        atoms: [
+          { sym: 'Zn', sub: '' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+  },
 ];
+
+// Αυτόματος αλγεβρικός ισοσταθμιστής συντελεστών για ΟΠΟΙΑΔΗΠΟΤΕ χημική εξίσωση (LHS -> RHS)
+function tryAutoBalanceReactionSpec(
+  userLhs: ParsedTermToken[],
+  userRhs: ParsedTermToken[]
+): CanonicalReactionSpec | undefined {
+  if (userLhs.length === 0 || userRhs.length === 0) return undefined;
+  const totalTerms = userLhs.length + userRhs.length;
+  if (totalTerms < 2 || totalTerms > 5) return undefined;
+  if (userLhs.some((t) => t.atoms.length === 0) || userRhs.some((t) => t.atoms.length === 0)) {
+    return undefined;
+  }
+
+  const lhsElemSet = new Set(userLhs.flatMap((t) => t.atoms.map((a) => a.sym)));
+  const rhsElemSet = new Set(userRhs.flatMap((t) => t.atoms.map((a) => a.sym)));
+  if (lhsElemSet.size === 0 || lhsElemSet.size !== rhsElemSet.size) return undefined;
+  for (const sym of lhsElemSet) {
+    if (!rhsElemSet.has(sym)) return undefined;
+  }
+  const elements = Array.from(lhsElemSet);
+
+  const countAtomInTerm = (term: ParsedTermToken, sym: string): number =>
+    term.atoms
+      .filter((a) => a.sym === sym)
+      .reduce((acc, a) => acc + Math.max(1, parseInt(a.sub || '1', 10) || 1), 0);
+
+  const isBalancedWithCoeffs = (coeffs: number[]): boolean => {
+    for (const sym of elements) {
+      let lSum = 0;
+      for (let i = 0; i < userLhs.length; i++) {
+        lSum += coeffs[i] * countAtomInTerm(userLhs[i], sym);
+      }
+      let rSum = 0;
+      for (let j = 0; j < userRhs.length; j++) {
+        rSum += coeffs[userLhs.length + j] * countAtomInTerm(userRhs[j], sym);
+      }
+      if (lSum !== rSum || lSum === 0) return false;
+    }
+    return true;
+  };
+
+  const gcd2 = (a: number, b: number): number => (b === 0 ? a : gcd2(b, a % b));
+  const gcdArr = (arr: number[]): number => arr.reduce((g, x) => gcd2(g, x), arr[0] || 1);
+
+  let bestCoeffs: number[] | null = null;
+  let bestSum = Infinity;
+  const maxC = totalTerms <= 3 ? 12 : totalTerms === 4 ? 10 : 6;
+  const cur: number[] = new Array(totalTerms).fill(1);
+
+  const search = (idx: number, runningSum: number) => {
+    if (runningSum >= bestSum) return;
+    if (idx === totalTerms) {
+      if (gcdArr(cur) === 1 && isBalancedWithCoeffs(cur)) {
+        bestSum = runningSum;
+        bestCoeffs = [...cur];
+      }
+      return;
+    }
+    for (let c = 1; c <= maxC; c++) {
+      if (runningSum + c + (totalTerms - 1 - idx) >= bestSum) break;
+      cur[idx] = c;
+      search(idx + 1, runningSum + c);
+    }
+  };
+  search(0, 0);
+
+  if (!bestCoeffs) return undefined;
+  const solved: number[] = bestCoeffs;
+
+  return {
+    id: 'auto_balanced',
+    matchElements: () => true,
+    lhs: userLhs.map((t, i) => {
+      const c = solved[i];
+      const formulaStr = t.atoms.map((a) => `${a.sym}${toSubscriptDigits(a.sub)}`).join('');
+      return {
+        coeff: c === 1 ? '' : String(c),
+        coeffReason: c > 1 ? `Συντελεστής ${c} στο ${c}${formulaStr} για ισοστάθμιση των ατόμων` : undefined,
+        atoms: t.atoms.map((a) => ({ sym: a.sym, sub: a.sub })),
+      };
+    }),
+    rhs: userRhs.map((t, j) => {
+      const c = solved[userLhs.length + j];
+      const formulaStr = t.atoms.map((a) => `${a.sym}${toSubscriptDigits(a.sub)}`).join('');
+      return {
+        coeff: c === 1 ? '' : String(c),
+        coeffReason: c > 1 ? `Συντελεστής ${c} στο ${c}${formulaStr} για ισοστάθμιση των ατόμων` : undefined,
+        atoms: t.atoms.map((a) => ({ sym: a.sym, sub: a.sub })),
+      };
+    }),
+  };
+}
 
 export function validateAndCorrectChemicalEquation(userRawInput: string): ChemValidationResult {
   const ascii = normalizeAsciiChem(userRawInput);
@@ -717,7 +1005,8 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
 
   const hasReactionStructure = ascii.includes('->') || ascii.includes('+');
   const matchedSpec = hasReactionStructure
-    ? CANONICAL_REACTIONS.find((spec) => spec.matchElements(lhsSyms, rhsSyms, ascii.toUpperCase()))
+    ? CANONICAL_REACTIONS.find((spec) => spec.matchElements(lhsSyms, rhsSyms, ascii.toUpperCase())) ||
+      tryAutoBalanceReactionSpec(userLhs, userRhs)
     : undefined;
 
   if (!matchedSpec) {
