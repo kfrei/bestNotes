@@ -7642,13 +7642,13 @@ export async function transcribeEquationForGraphWithGemini(
 
   const parts: any[] = [
     {
-      text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Απλής Αρμονικής Ταλάντωσης (Φυσικής) για σχεδίαση διαγράμματος${contextHint}.
-Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
+      text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Απλής Αρμονικής & Φθίνουσας Ταλάντωσης (Φυσικής) για σχεδίαση διαγράμματος${contextHint}.
+Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), x = A_0 e^(-Λt) συν(ωt), x = A_0 e^(-Λt) ημ(ωt), A = A_0 e^(-Λt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
 Κανόνες:
-1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
+1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "x = A_0*e^(-Λ*t)*συν(ω*t)", "x = A_0*e^(-Λ*t)*ημ(ω*t)", "A = A_0*e^(-Λ*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
 2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. u_1 = 10 και u_2 = 2 + 5t, ή y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "u_1 = 10\\nu_2 = 2 + 5*t") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
-3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159), ΤΑΧΥΤΗΤΑ u = u_max & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή και ΔΕΝ είναι άγνωστη παράμετρος!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)") — ΜΗΝ το αντικαθιστάς με 3.14 και ΜΗΝ το μπερδεύεις με τα γράμματα n ή r! Στις εξισώσεις ταχύτητας ταλάντωσης (π.χ. u = u_max συν(ωt)), το u είναι ΠΑΝΤΑ πεζό "u" και το πλάτος είναι πεζό "u_max" (ΠΟΤΕ κεφαλαίο Umax). Επίσης πρόσεξε πολύ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos, τρία γράμματα σ-υ-ν όπου το σ μοιάζει με μικρό 6/c και το υν με uv): ΜΗΝ το μπερδεύεις ποτέ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
-4. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1 — εξαιρουμένου του π που είναι σταθερά!), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y.
+3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159), ΤΑΧΥΤΗΤΑ u = u_max, ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ e^(-Λt) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή και ΔΕΝ είναι άγνωστη παράμετρος!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)") — ΜΗΝ το αντικαθιστάς με 3.14 και ΜΗΝ το μπερδεύεις με τα γράμματα n ή r! Στις εξισώσεις ταχύτητας ταλάντωσης (π.χ. u = u_max συν(ωt)), το u είναι ΠΑΝΤΑ πεζό "u" και το πλάτος είναι πεζό "u_max" (ΠΟΤΕ κεφαλαίο Umax). Στις εξισώσεις Φθίνουσας Ταλάντωσης (π.χ. x = A_0 e^(-Λt) συν(ωt) ή ημ(ωt)), το αρχικό πλάτος είναι "A_0" (ακόμη κι αν ο δείκτης 0 μοιάζει με μικρό o, δηλ. Ao -> γράψε A_0) και ο εκθέτης του e είναι "-Λ*t" (όπου Λ η σταθερά απόσβεσης — ΜΗΝ μπερδεύεις το χειρόγραφο κεφαλαίο Λ με Α ή 1!). Επίσης πρόσεξε ΠΑΡΑ ΠΟΛΥ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos, τρία γράμματα σ-υ-ν όπου το σ μοιάζει με μικρό 6/c και το υν με uv): ΜΗΝ το μπερδεύεις ΠΟΤΕ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
+4. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης (απλής αρμονικής ή φθίνουσας) και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1 — εξαιρουμένου του π που είναι σταθερά!), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y. Αν είναι εξίσωση ταλάντωσης (π.χ. x = A_0*e^(-Λ*t)*συν(ω*t)), κράτησε στο "normalizedEquation" την ίδια ακριβώς μορφή με το "equation"!
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
@@ -8645,6 +8645,8 @@ function tryBuildOscillationDiagramStrokes(
   let expanded = expandLatexConstructs(raw)
     .replace(/\\Sigma\b/g, 'Σ')
     .replace(/\\Delta\b/g, 'D')
+    .replace(/\\Lambda\b/g, 'Λ')
+    .replace(/\\lambda\b/g, 'λ')
     .replace(/\\omega\b/g, 'ω')
     .replace(/\\pi\b|\bpi\b|Π/gi, 'π')
     .replace(/3\.14159\d*|3\.14\b/g, 'π')
@@ -8659,6 +8661,9 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/σ\s*[uυv]\s*[vν]/gi, 'συν')
     .replace(/\\left\b|\\right\b/g, '')
     .replace(/_\{([^}]*)\}/g, '_$1')
+    .replace(/₀/g, '_0')
+    .replace(/\b([AE])\s*_\s*[oO0]\b/g, '$1_0')
+    .replace(/\b([AE])[oO0]\b/g, '$1_0')
     .replace(/m[αa][xχ]/gi, 'max')
     .replace(/\\(?:cdot|times)\b/g, '*')
     .replace(/[·×∙]/g, '*')
@@ -9155,6 +9160,369 @@ function tryBuildOscillationDiagramStrokes(
       texts,
       groupId,
       kindLabel: isForceDisplacement ? `Διάγραμμα ${yAxisTitle}(x)` : 'Διάγραμμα a(x)',
+    };
+  }
+
+  // CASE 5B: Damped Oscillation (Φθίνουσα Ταλάντωση) `x = A_0 e^(-Λt) συν(ωt)` / `ημ(ωt)`
+  // and Exponential Amplitude / Energy Decay `A = A_0 e^(-Λt)`, `E = E_0 e^(-2Λt)`
+  const dampedOscMatch = compact.match(
+    /^(x|y|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A_?[0oO]|A|[xuvυ]_?[0oO]|[uvυ]_?max|[aα]_?max|ΣF_?max|F_?max)?\*?(?:e\^\(?-[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\)?|exp\(-[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\))\*?(ημιτ|ημ|sin|συνημ|συν|cos)\(?(.*?)[tτxχ]([^)]*)\)?$/i
+  );
+  const dampedOscRevMatch = !dampedOscMatch
+    ? compact.match(
+        /^(x|y|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A_?[0oO]|A|[xuvυ]_?[0oO]|[uvυ]_?max|[aα]_?max|ΣF_?max|F_?max)?\*?(ημιτ|ημ|sin|συνημ|συν|cos)\(?(.*?)[tτxχ]([^)]*)\)?\*?(?:e\^\(?-[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\)?|exp\(-[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\))$/i
+      )
+    : null;
+
+  if (dampedOscMatch || dampedOscRevMatch) {
+    const m = (dampedOscMatch || dampedOscRevMatch)!;
+    const rawVar = m[1].trim();
+    const yVar =
+      /^(?:u|υ|v)$/i.test(rawVar)
+        ? 'u'
+        : /^(?:a|α)$/i.test(rawVar)
+        ? 'a'
+        : /^ΣF$/i.test(rawVar)
+        ? 'ΣF'
+        : /^F$/i.test(rawVar)
+        ? 'F'
+        : /^y$/i.test(rawVar)
+        ? 'y'
+        : 'x';
+
+    const isNeg = m[2] === '-';
+    const ampStr = (m[3] || '').replace(/\*/g, '');
+    const numAmp = /^(?:[0-9.]+|(?:[0-9.]+)?π(?:\^[0-9]+)?)$/.test(ampStr) ? ampStr : '';
+    const trig = m[4].toLowerCase();
+    const baseIsCos = trig === 'συν' || trig === 'συνημ' || trig === 'cos';
+    const baseSign = isNeg ? -1 : 1;
+
+    let phaseRad = 0;
+    const rawPhase = (m[6] || '').replace(/[()\s{}]/g, '');
+    if (rawPhase) {
+      const phasePiMatch = rawPhase.match(/^([+-])(?:([0-9.]+)\*?)?π(?:\/([0-9.]+))?$/);
+      if (phasePiMatch) {
+        const sgn = phasePiMatch[1] === '-' ? -1 : 1;
+        const pNum = phasePiMatch[2] ? parseFloat(phasePiMatch[2]) : 1;
+        const pDen = phasePiMatch[3] ? parseFloat(phasePiMatch[3]) : 1;
+        phaseRad = sgn * (pNum / Math.max(1e-6, pDen)) * Math.PI;
+      } else {
+        const parsedPhase = parseFloat(rawPhase);
+        if (Number.isFinite(parsedPhase)) {
+          phaseRad = parsedPhase;
+        }
+      }
+    }
+
+    const hasSubZero = /_?0|_?o/i.test(ampStr) || !ampStr || /^A_?0$/i.test(ampStr);
+    const baseSym =
+      yVar === 'u'
+        ? 'u_0'
+        : yVar === 'a'
+        ? 'a_0'
+        : yVar === 'ΣF'
+        ? 'ΣF_0'
+        : yVar === 'F'
+        ? 'F_0'
+        : hasSubZero
+        ? 'A_0'
+        : 'A';
+    const posLabel = numAmp ? `+${numAmp}` : `+${baseSym}`;
+    const negLabel = numAmp ? `-${numAmp}` : `-${baseSym}`;
+
+    const axisLeftX = centerX - halfW * 0.74;
+    const axisRightX = centerX + halfW * 0.92;
+    const ampPx = halfH * 0.68;
+    const waveW = axisRightX - axisLeftX - 16;
+    const decayRate = 1.75; // Decays to ~17% across 3.25 periods
+
+    // 1. Vertical axis on left
+    strokes.push({
+      id: `st-${nowId}-axy`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: axisLeftX, y: centerY + halfH * 0.9, pressure: 0.7 },
+        { x: axisLeftX, y: centerY - halfH * 0.9, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-y',
+    });
+
+    // 2. Horizontal t-axis from axisLeftX to axisRightX
+    strokes.push({
+      id: `st-${nowId}-axx`,
+      tool: 'pen',
+      color: axisColor,
+      width: 2.5,
+      opacity: 1,
+      arrowEnd: true,
+      points: [
+        { x: axisLeftX, y: centerY, pressure: 0.7 },
+        { x: axisRightX, y: centerY, pressure: 0.7 },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'wave-axis-x',
+    });
+
+    // 3. Upper & Lower Exponentially Decaying Blue Dashed Envelope Curves (+A_0 e^(-Λt) & -A_0 e^(-Λt))
+    const envSteps = 64;
+    const topEnvPts: { x: number; y: number; pressure: number }[] = [];
+    const botEnvPts: { x: number; y: number; pressure: number }[] = [];
+    for (let i = 0; i <= envSteps; i++) {
+      const u = i / envSteps;
+      const envAmp = ampPx * Math.exp(-decayRate * u);
+      const px = axisLeftX + u * waveW;
+      topEnvPts.push({ x: px, y: centerY - envAmp, pressure: 0.65 });
+      botEnvPts.push({ x: px, y: centerY + envAmp, pressure: 0.65 });
+    }
+    strokes.push(
+      {
+        id: `st-${nowId}-gd-top`,
+        tool: 'pen',
+        color: blueGuide,
+        width: 1.9,
+        opacity: 0.95,
+        lineStyle: 'dashed',
+        points: topEnvPts,
+        layerId,
+        groupId,
+        isShape: false,
+      },
+      {
+        id: `st-${nowId}-gd-bot`,
+        tool: 'pen',
+        color: blueGuide,
+        width: 1.9,
+        opacity: 0.95,
+        lineStyle: 'dashed',
+        points: botEnvPts,
+        layerId,
+        groupId,
+        isShape: false,
+      }
+    );
+
+    addRulerTick(axisLeftX - 4.5, centerY - ampPx, axisLeftX + 4.5, centerY - ampPx, 'ytick-p');
+    addRulerTick(axisLeftX - 4.5, centerY + ampPx, axisLeftX + 4.5, centerY + ampPx, 'ytick-n');
+
+    // 4. Damped oscillating wave curve (3.25 periods inside the decaying envelope)
+    const steps = 160;
+    const wavePts: { x: number; y: number; pressure: number }[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      const theta = u * Math.PI * 6.5; // 3.25 periods
+      const env = Math.exp(-decayRate * u);
+      const osc = baseSign * (baseIsCos ? Math.cos(theta + phaseRad) : Math.sin(theta + phaseRad));
+      wavePts.push({
+        x: axisLeftX + u * waveW,
+        y: centerY - env * osc * ampPx,
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-wave`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: wavePts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+
+    // 5. Labels: yVar at top, t at right, +A_0 and -A_0 to the left of vertical axis
+    texts.push(
+      createMathGraphLabelText(
+        yVar,
+        axisLeftX + 8,
+        centerY - halfH * 0.9 + 6,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-ly`
+      ),
+      createMathGraphLabelText(
+        't',
+        axisRightX + 7,
+        centerY + 2,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-lx`
+      ),
+      createMathGraphLabelText(
+        posLabel,
+        axisLeftX - 7,
+        centerY - ampPx,
+        'right',
+        15,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-lp`
+      ),
+      createMathGraphLabelText(
+        negLabel,
+        axisLeftX - 7,
+        centerY + ampPx,
+        'right',
+        15,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-ln`
+      )
+    );
+
+    return {
+      strokes,
+      texts,
+      groupId,
+      kindLabel: `Διάγραμμα Φθίνουσας Ταλάντωσης ${yVar}(t)`,
+    };
+  }
+
+  // CASE 5C: Damped Oscillation Amplitude or Energy Decay `A = A_0 e^(-Λt)` or `E = E_0 e^(-2Λt)`
+  const ampDecayMatch = compact.match(
+    /^(A|E)(?:\([tτ]\))?=([0-9.]+|A_?[0oO]|E_?[0oO])?\*?(?:e\^\(?-[a-zA-Zα-ωΑ-Ω0-9.*/_+]*[tτ][a-zA-Zα-ωΑ-Ω0-9.*/_+]*\)?|exp\(-[a-zA-Zα-ωΑ-Ω0-9.*/_+]*[tτ][a-zA-Zα-ωΑ-Ω0-9.*/_+]*\))$/i
+  );
+  if (ampDecayMatch) {
+    const yVar = ampDecayMatch[1].toUpperCase() === 'E' ? 'E' : 'A';
+    const rawInit = (ampDecayMatch[2] || '').replace(/\*/g, '');
+    const initLabel = /^[0-9.]+$/.test(rawInit) ? rawInit : `${yVar}_0`;
+
+    const axisLeftX = centerX - halfW * 0.72;
+    const axisRightX = centerX + halfW * 0.9;
+    const axisBottomY = centerY + halfH * 0.62;
+    const axisTopY = centerY - halfH * 0.85;
+    const startY = centerY - halfH * 0.56;
+    const ampH = axisBottomY - startY;
+    const curveW = axisRightX - axisLeftX - 18;
+
+    strokes.push(
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: axisBottomY + 14, pressure: 0.7 },
+          { x: axisLeftX, y: axisTopY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      },
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX - 14, y: axisBottomY, pressure: 0.7 },
+          { x: axisRightX, y: axisBottomY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      }
+    );
+
+    addRulerTick(axisLeftX - 4.5, startY, axisLeftX + 4.5, startY, 'ytick-a0');
+
+    const decayPts: { x: number; y: number; pressure: number }[] = [];
+    const steps = 72;
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      decayPts.push({
+        x: axisLeftX + u * curveW,
+        y: axisBottomY - ampH * Math.exp(-2.8 * u),
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-decay`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: decayPts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+
+    texts.push(
+      createMathGraphLabelText(
+        yVar,
+        axisLeftX + 8,
+        axisTopY + 6,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-ly`
+      ),
+      createMathGraphLabelText(
+        't',
+        axisRightX + 7,
+        axisBottomY + 2,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-lx`
+      ),
+      createMathGraphLabelText(
+        initLabel,
+        axisLeftX - 7,
+        startY,
+        'right',
+        15,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-la0`
+      ),
+      createMathGraphLabelText(
+        '0',
+        axisLeftX - 8,
+        axisBottomY + 13,
+        'right',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-l0`
+      )
+    );
+
+    return {
+      strokes,
+      texts,
+      groupId,
+      kindLabel: `Διάγραμμα Φθίνουσας Ταλάντωσης ${yVar}(t)`,
     };
   }
 
