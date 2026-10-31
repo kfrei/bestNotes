@@ -20191,14 +20191,12 @@ export default function App() {
 
             ctx.save();
             if (isSelectedAtom) {
-              // Φωσφορούχα πράσινη lime άλως γύρω από τον επιλεγμένο πυρήνα
+              // Απαλή γκρι άλως γύρω από τον επιλεγμένο πυρήνα
               ctx.save();
-              ctx.shadowColor = 'rgba(163, 230, 53, 0.75)';
-              ctx.shadowBlur = 8;
-              ctx.strokeStyle = '#84cc16';
-              ctx.lineWidth = 3.2;
+              ctx.strokeStyle = 'rgba(148, 163, 184, 0.55)';
+              ctx.lineWidth = 2.6;
               ctx.beginPath();
-              ctx.arc(atom.x, atom.y, nucR + 4.5, 0, Math.PI * 2);
+              ctx.arc(atom.x, atom.y, nucR + 4, 0, Math.PI * 2);
               ctx.stroke();
               ctx.restore();
             }
@@ -20277,10 +20275,10 @@ export default function App() {
             const labelCenterY = atom.y + nucR + 13;
 
             ctx.fillStyle = isSelectedAtom
-              ? 'rgba(247, 254, 231, 0.96)'
+              ? 'rgba(248, 250, 252, 0.96)'
               : 'rgba(255, 255, 255, 0.92)';
-            ctx.strokeStyle = isSelectedAtom ? '#84cc16' : 'rgba(203, 213, 225, 0.88)';
-            ctx.lineWidth = isSelectedAtom ? 2 : 1;
+            ctx.strokeStyle = isSelectedAtom ? '#94a3b8' : 'rgba(203, 213, 225, 0.88)';
+            ctx.lineWidth = isSelectedAtom ? 1.6 : 1;
             ctx.beginPath();
             ctx.roundRect(
               labelStartX - 3,
@@ -20314,8 +20312,7 @@ export default function App() {
             }
             ctx.restore();
 
-            // Κουμπάκι ομοιόμορφης/αναλογικής αυξομείωσης μεγέθους (⤡) σε φωσφορούχο πράσινο lime που αναβοσβήνει απαλά!
-            // Αν έχουμε ένωση (hasCompoundBonds), με κλικ σε οποιονδήποτε πυρήνα εμφανίζεται ΜΟΝΟ 1 βελάκι στο κεντρικό άτομο και αλλάζει αναλογικά μέγεθος όλη η ένωση!
+            // Κουμπάκι ομοιόμορφης/αναλογικής αυξομείωσης μεγέθους (⤡): διάφανο κυκλάκι με απαλό γκρι περίγραμμα και βελάκια που αναβοσβήνουν απαλά!
             const showResizeHandleOnThisAtom = hasCompoundBonds
               ? hasAnySelectedAtom && atom.id === centralAtomId
               : isSelectedAtom;
@@ -20323,26 +20320,17 @@ export default function App() {
               const handleAng = Math.PI / 4;
               const hx = atom.x + maxOrbitR * Math.cos(handleAng);
               const hy = atom.y + maxOrbitR * Math.sin(handleAng);
-              const limePulse = 0.5 + 0.5 * Math.sin(now * 0.0055);
+              const pulseAlpha = 0.28 + 0.64 * (0.5 + 0.5 * Math.sin(now * 0.0055));
 
               ctx.save();
-              // Εξωτερικό απαλό φωσφορούχο lime φωτοστέφανο που αναβοσβήνει
-              ctx.fillStyle = `rgba(163, 230, 53, ${0.22 + limePulse * 0.38})`;
+              // Διάφανο κυκλάκι — μόνο το περίγραμμα και τα βελάκια αναβοσβήνουν απαλά
+              ctx.strokeStyle = `rgba(100, 116, 139, ${pulseAlpha})`;
+              ctx.lineWidth = 1.6;
               ctx.beginPath();
-              ctx.arc(hx, hy, 10 + limePulse * 4, 0, Math.PI * 2);
-              ctx.fill();
-
-              // Κύριο στρογγυλό κουμπάκι σε φωσφορούχο πράσινο lime
-              ctx.fillStyle = `rgba(163, 230, 53, ${0.84 + limePulse * 0.16})`;
-              ctx.strokeStyle = '#4d7c0f';
-              ctx.lineWidth = 1.8;
-              ctx.beginPath();
-              ctx.arc(hx, hy, 8.8 + limePulse * 0.8, 0, Math.PI * 2);
-              ctx.fill();
+              ctx.arc(hx, hy, 9, 0, Math.PI * 2);
               ctx.stroke();
 
-              // Βελάκια ⤡ με έντονη αντίθεση
-              ctx.fillStyle = '#1a2e05';
+              ctx.fillStyle = `rgba(71, 85, 105, ${pulseAlpha})`;
               ctx.font = 'bold 10.5px sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
