@@ -19901,9 +19901,7 @@ export default function App() {
             const badgeW = azWidth + symW + nameW + 11;
             const badgeH = 22;
 
-            // Έξυπνη τοποθέτηση της ετικέτας ώστε να μην πέφτει ποτέ πάνω στους ομοιοπολικούς δεσμούς!
-            let hasBondRight = false;
-            let hasBondLeft = false;
+            // Τοποθέτηση ταμπελακίου ΚΑΤΩ από τον πυρήνα
             let hasBondDown = false;
             for (const b of aSim.bonds || []) {
               const otherId =
@@ -19917,27 +19915,13 @@ export default function App() {
               if (!otherAt) continue;
               const bdx = otherAt.x - atom.x;
               const bdy = otherAt.y - atom.y;
-              if (bdx > 25 && Math.abs(bdy) < 35) hasBondRight = true;
-              if (bdx < -25 && Math.abs(bdy) < 35) hasBondLeft = true;
               if (bdy > 25 && Math.abs(bdx) < 35) hasBondDown = true;
             }
 
-            let labelStartX = atom.x + nucR + 6;
-            let labelCenterY = atom.y;
-            if (hasBondRight && !hasBondLeft) {
-              // Αριστερό άτομο (π.χ. αριστερό H στο CH4 ή H2O): βάλε την ετικέτα αριστερά από τον πυρήνα
-              labelStartX = atom.x - nucR - badgeW - 3;
-              labelCenterY = atom.y;
-            } else if (hasBondRight && hasBondLeft) {
-              // Κεντρικό άτομο (π.χ. C στο CH4/CO2, O στο H2O, N στο NH3)
-              if (!hasBondDown) {
-                labelStartX = atom.x - badgeW / 2 + 3;
-                labelCenterY = atom.y + nucR + 15;
-              } else {
-                labelStartX = atom.x + nucR + 6;
-                labelCenterY = atom.y - nucR - 13;
-              }
-            }
+            const labelStartX = hasBondDown
+              ? atom.x + 12
+              : atom.x - badgeW / 2 + 3;
+            const labelCenterY = atom.y + nucR + 13;
 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
             ctx.strokeStyle = 'rgba(203, 213, 225, 0.88)';
