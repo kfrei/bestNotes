@@ -12594,14 +12594,17 @@ export default function App() {
       };
 
       // Κλικ πάνω σε συγκεκριμένο Αντιδρών ή Προϊόν στην μπάρα της αντίδρασης:
-      // 1ο κλικ = Εμφάνιση της δομής του από κάτω
-      // 2ο κλικ στο ίδιο = Εξαφάνιση
-      // Κλικ σε άλλο ενώ υπάρχει ήδη ένα κάτω = Σβήνει το πρώτο και δείχνει μόνο το νέο!
+      // Αν το κουμπί δίπλα είναι σε '2d' -> δείχνει 2D άτομα, τροχιές & δεσμούς από κάτω.
+      // Αν το κουμπί δίπλα είναι σε '3d' -> δείχνει το 3D μοντέλο της ένωσης/στοιχείου!
+      // 2ο κλικ στο ίδιο -> Εξαφάνιση!
       if (action.startsWith('click-reaction-term:')) {
         const termText = action.slice('click-reaction-term:'.length).trim();
         if (!termText) return;
+        const viewMode = sim.reactionViewMode || '2d';
         const isSameAlreadyOpen =
-          sim.activeReactionTerm === termText && sim.showAtomsBelowReaction !== false;
+          sim.activeReactionTerm === termText &&
+          ((viewMode === '2d' && sim.showAtomsBelowReaction !== false && !sim.show3DMolecule) ||
+            (viewMode === '3d' && !!sim.show3DMolecule));
 
         if (isSameAlreadyOpen) {
           // 2ο κλικ στο ίδιο -> εξαφάνιση!
@@ -12616,6 +12619,29 @@ export default function App() {
                     activeReactionTerm: undefined,
                     showAtomsBelowReaction: false,
                     show3DMolecule: false,
+                    showBondLabel: false,
+                  }
+                : s
+            ),
+          }));
+          return;
+        }
+
+        if (viewMode === '3d') {
+          atomReactionAnimRef.current = null;
+          setAtomReactionAnim(null);
+          updateActivePage((page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id === sim.id
+                ? {
+                    ...s,
+                    activeReactionTerm: termText,
+                    selected3DMolId: termText,
+                    showAtomsBelowReaction: false,
+                    show3DMolecule: true,
+                    showChargeCloud: s.showChargeCloud ?? true,
+                    showBondLabel: false,
                   }
                 : s
             ),
@@ -12636,6 +12662,7 @@ export default function App() {
                   activeReactionTerm: termText,
                   showAtomsBelowReaction: true,
                   show3DMolecule: false,
+                  showBondLabel: false,
                 }
               : s
           ),
@@ -12649,6 +12676,94 @@ export default function App() {
           atomReactionAnimRef.current = nextAnim;
           setAtomReactionAnim(nextAnim);
         }
+        return;
+      }
+
+      // Εναλλαγή 2D <-> 3D από το κουμπί δίπλα στην εξίσωση αντίδρασης
+      if (action === 'toggle-reaction-view-mode') {
+        const nextMode: '2d' | '3d' = sim.reactionViewMode === '3d' ? '2d' : '3d';
+        const hasOpenView =
+          !!sim.activeReactionTerm ||
+          sim.showAtomsBelowReaction !== false ||
+          !!sim.show3DMolecule;
+
+        if (!hasOpenView) {
+          updateActivePage((page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id === sim.id ? { ...s, reactionViewMode: nextMode } : s
+            ),
+          }));
+          return;
+        }
+
+        const inferred = inferReactionFromCanvasAtoms(sim.atoms.map((a) => a.z));
+        const eqStr = sim.reactionEquationText || inferred.equationDisplay;
+        const rhsPart = (eqStr.split(/→|->|-->/)[1] || eqStr).trim();
+        const primaryProductTerm = (rhsPart.split('+')[0] || rhsPart).trim();
+        const targetTerm = sim.activeReactionTerm || primaryProductTerm || 'H₂O';
+
+        if (nextMode === '3d') {
+          atomReactionAnimRef.current = null;
+          setAtomReactionAnim(null);
+          updateActivePage((page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id === sim.id
+                ? {
+                    ...s,
+                    reactionViewMode: '3d',
+                    activeReactionTerm: targetTerm,
+                    selected3DMolId: targetTerm,
+                    showAtomsBelowReaction: false,
+                    show3DMolecule: true,
+                    showChargeCloud: s.showChargeCloud ?? true,
+                    showBondLabel: false,
+                  }
+                : s
+            ),
+          }));
+        } else {
+          const built = buildAlignedTermForSim(sim, targetTerm);
+          updateActivePage((page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id === sim.id
+                ? {
+                    ...s,
+                    reactionViewMode: '2d',
+                    atoms: built.atoms,
+                    bonds: built.bonds,
+                    selectedAtomId: built.atoms[0]?.id,
+                    activeReactionTerm: targetTerm,
+                    showAtomsBelowReaction: true,
+                    show3DMolecule: false,
+                    showBondLabel: false,
+                  }
+                : s
+            ),
+          }));
+          if (built.bonds.length > 0) {
+            const nextAnim = {
+              simId: sim.id,
+              startTime: performance.now(),
+              durationMs: 2000,
+            };
+            atomReactionAnimRef.current = nextAnim;
+            setAtomReactionAnim(nextAnim);
+          }
+        }
+        return;
+      }
+
+      // Κλικ πάνω στην περιοχή του χημικού δεσμού (στα 2 κοινά e⁻): 1ο κλικ εμφανίζει τη λεζάντα του δεσμού, 2ο κλικ την κρύβει!
+      if (action === 'toggle-bond-label') {
+        updateActivePage((page) => ({
+          ...page,
+          atomSims: (page.atomSims || []).map((s) =>
+            s.id === sim.id ? { ...s, showBondLabel: !s.showBondLabel } : s
+          ),
+        }));
         return;
       }
 
@@ -19622,15 +19737,15 @@ export default function App() {
                   if (sg.wrongText) w += ctx.measureText(sg.wrongText).width + 3;
                   w += ctx.measureText(sg.text).width + (sg.isCorrection ? 4 : 0);
                 }
-                w += 12; // οριζόντιο padding του clickable pill κάθε όρου
+                w += 6; // καθαρό διάστημα γύρω από κάθε ένωση/στοιχείο (χωρίς πλαίσιο κουμπιού)
               });
               return w;
             };
             const lhsW = measureTermGroupsWidth(lhsTermGroups);
             const rhsW = measureTermGroupsWidth(rhsTermGroups);
-            const arrowBtnW = 46;
-            const eqTotalW = lhsW + arrowBtnW + rhsW + 26;
-            const cardW = Math.max(210, eqTotalW + 52);
+            const arrowPlainW = ctx.measureText(' → ').width + 8;
+            const eqTotalW = lhsW + arrowPlainW + rhsW + 24;
+            const cardW = Math.max(195, eqTotalW + 52);
             const cardH = 38;
             const cardX = Math.max(16, simCenterX - cardW / 2);
 
@@ -19677,7 +19792,7 @@ export default function App() {
             ) => {
               let xCursor = startX;
               ctx.save();
-              ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              ctx.font = 'bold 15.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
               ctx.textAlign = 'left';
               ctx.textBaseline = 'middle';
 
@@ -19700,29 +19815,16 @@ export default function App() {
                   termInnerW += ctx.measureText(sg.text).width + (sg.isCorrection ? 4 : 0);
                 }
 
-                const pillX = xCursor;
-                const pillW = Math.max(22, termInnerW + 10);
-                const pillY = topBarY + 6;
-                const pillH = cardH - 12;
+                const hitX = xCursor;
+                const hitW = Math.max(18, termInnerW + 6);
+                const hitY = topBarY + 6;
+                const hitH = cardH - 12;
                 const isTermActive =
-                  aSim.showAtomsBelowReaction !== false &&
-                  !aSim.show3DMolecule &&
-                  aSim.activeReactionTerm === termPlainText;
+                  aSim.activeReactionTerm === termPlainText &&
+                  (aSim.showAtomsBelowReaction !== false || !!aSim.show3DMolecule);
 
-                // Φόντο clickable όρου (έντονο μπλε όταν είναι επιλεγμένο από κάτω, διακριτικό pill αλλιώς)
-                ctx.save();
-                ctx.fillStyle = isTermActive
-                  ? 'rgba(219, 234, 254, 0.95)'
-                  : 'rgba(241, 245, 249, 0.75)';
-                ctx.strokeStyle = isTermActive ? '#2563eb' : 'rgba(203, 213, 225, 0.85)';
-                ctx.lineWidth = isTermActive ? 1.5 : 1;
-                ctx.beginPath();
-                ctx.roundRect(pillX, pillY, pillW, pillH, 7);
-                ctx.fill();
-                ctx.stroke();
-                ctx.restore();
-
-                let innerX = pillX + 5;
+                // Χωρίς μικρά πλαίσια/κουμπιά γύρω από τις ενώσεις — μόνο καθαρό κείμενο εξίσωσης!
+                let innerX = hitX + 3;
                 for (const sg of grp) {
                   if (sg.wrongText) {
                     const ww = ctx.measureText(sg.wrongText).width;
@@ -19750,7 +19852,7 @@ export default function App() {
                     ctx.fillText(sg.text, innerX + 1, centerY);
                     innerX += tw + 4;
                   } else {
-                    ctx.fillStyle = isTermActive ? '#1d4ed8' : '#0f172a';
+                    ctx.fillStyle = isTermActive ? '#2563eb' : '#0f172a';
                     ctx.fillText(sg.text, innerX, centerY);
                     innerX += tw;
                   }
@@ -19760,60 +19862,52 @@ export default function App() {
                   atomButtonsHit.push({
                     simId: aSim.id,
                     action: `click-reaction-term:${termPlainText}`,
-                    x1: pillX,
-                    y1: pillY,
-                    x2: pillX + pillW,
-                    y2: pillY + pillH,
+                    x1: hitX,
+                    y1: hitY,
+                    x2: hitX + hitW,
+                    y2: hitY + hitH,
                   });
                 }
 
-                xCursor = pillX + pillW + 2;
+                xCursor = hitX + hitW + 2;
               });
 
               ctx.restore();
               return xCursor;
             };
 
-            let curX = drawInteractiveTermGroups(lhsTermGroups, cardX + 12, topBarY + cardH / 2) + 8;
+            let curX = drawInteractiveTermGroups(lhsTermGroups, cardX + 14, topBarY + cardH / 2) + 4;
 
-            // Κουμπί Βέλους Αντίδρασης [ ➔ ] (με διαδοχικά κλικ περνάει από το ένα mode στο άλλο!)
-            const arrowBg = isAnimThisSim
-              ? '#16a34a'
-              : aSim.show3DMolecule
-              ? '#0284c7'
-              : '#2563eb';
-            const usedArrowW = drawAtomPillButton(
-              aSim.id,
-              '➔',
-              'play-reaction-arrow',
-              curX,
-              topBarY + 7,
-              42,
-              24,
-              arrowBg,
-              '#ffffff'
-            );
-            curX += usedArrowW + 8;
+            // Καθαρό βέλος εξίσωσης (→) χωρίς κουμπί και χωρίς να είναι clickable
+            ctx.save();
+            ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = '#475569';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            const arrowStr = ' → ';
+            ctx.fillText(arrowStr, curX, topBarY + cardH / 2);
+            curX += ctx.measureText(arrowStr).width + 4;
+            ctx.restore();
 
             if (rhsTermGroups.length > 0) {
               curX = drawInteractiveTermGroups(rhsTermGroups, curX, topBarY + cardH / 2) + 8;
             }
 
-            // Δίπλα στην αντίδραση: ΜΟΝΟ το εικονίδιο Δομής Ατόμου [ ⚛️ ] χωρίς λόγια (και χωρίς το κουμπί ↺)
-            const iconBtnW = 30;
-            const iconBtnX = cardX + cardW - iconBtnW - 10;
-            const isStructureShown = aSim.showAtomsBelowReaction !== false;
+            // Δίπλα στην αντίδραση: Κουμπί εναλλαγής [ 2D ] <-> [ 3D ]
+            const modeBtnW = 34;
+            const modeBtnX = cardX + cardW - modeBtnW - 10;
+            const is3DMode = aSim.reactionViewMode === '3d';
             drawAtomPillButton(
               aSim.id,
-              '⚛️',
-              'toggle-atoms-below',
-              iconBtnX,
+              is3DMode ? '3D' : '2D',
+              'toggle-reaction-view-mode',
+              modeBtnX,
               topBarY + 7,
-              iconBtnW,
+              modeBtnW,
               24,
-              isStructureShown ? '#dcfce7' : '#f1f5f9',
-              isStructureShown ? '#15803d' : '#475569',
-              isStructureShown ? '#86efac' : '#cbd5e1'
+              is3DMode ? '#0284c7' : '#eff6ff',
+              is3DMode ? '#ffffff' : '#1d4ed8',
+              is3DMode ? '#0369a1' : '#93c5fd'
             );
           } else if (aSim.atoms.length >= 2) {
             // Όταν υπάρχουν >=2 άτομα δίπλα-δίπλα, εμφάνισε διακριτικό κουμπί για εμφάνιση της Αντίδρασης!
@@ -19848,7 +19942,68 @@ export default function App() {
             }
           }
 
-          // 2. Σχεδίαση κάθε Ατόμου (Πυρήνας ανάλογος του Z, Τροχιές ανάλογες του μεγέθους ατόμου, Ζευγαράκια 2-2 e⁻, Ισοτοπικός Συμβολισμός)
+          // Χρωματικές παλέτες ανά διαφορετικό χημικό στοιχείο (1ο στοιχείο: Αποχρώσεις Μπλε, 2ο: Αποχρώσεις Κόκκινου, 3ο: Αποχρώσεις Πράσινου, κ.ο.κ.)
+          const ATOM_COLOR_PALETTES = [
+            {
+              // Αποχρώσεις Μπλε
+              nucleusFill: 'rgba(59, 130, 246, 0.78)',
+              nucleusStroke: '#1d4ed8',
+              outerOrbit: '#0284c7',
+              innerOrbit: 'rgba(37, 99, 235, 0.65)',
+              outerElectron: '#1d4ed8',
+              innerElectron: '#60a5fa',
+            },
+            {
+              // Αποχρώσεις Κόκκινου
+              nucleusFill: 'rgba(239, 68, 68, 0.78)',
+              nucleusStroke: '#b91c1c',
+              outerOrbit: '#e11d48',
+              innerOrbit: 'rgba(220, 38, 38, 0.62)',
+              outerElectron: '#dc2626',
+              innerElectron: '#f87171',
+            },
+            {
+              // Αποχρώσεις Πράσινου
+              nucleusFill: 'rgba(16, 185, 129, 0.78)',
+              nucleusStroke: '#047857',
+              outerOrbit: '#059669',
+              innerOrbit: 'rgba(16, 185, 129, 0.62)',
+              outerElectron: '#15803d',
+              innerElectron: '#34d399',
+            },
+            {
+              // Αποχρώσεις Πορτοκαλί/Κεχριμπαρί
+              nucleusFill: 'rgba(245, 158, 11, 0.80)',
+              nucleusStroke: '#b45309',
+              outerOrbit: '#d97706',
+              innerOrbit: 'rgba(217, 119, 6, 0.62)',
+              outerElectron: '#c2410c',
+              innerElectron: '#fbbf24',
+            },
+            {
+              // Αποχρώσεις Μωβ
+              nucleusFill: 'rgba(168, 85, 247, 0.75)',
+              nucleusStroke: '#6d28d9',
+              outerOrbit: '#7c3aed',
+              innerOrbit: 'rgba(124, 58, 237, 0.62)',
+              outerElectron: '#6d28d9',
+              innerElectron: '#a78bfa',
+            },
+          ];
+
+          const uniqueZsDesc = Array.from(new Set(aSim.atoms.map((a) => a.z))).sort(
+            (a, b) => b - a
+          );
+          const atomPaletteMap = new Map<string, (typeof ATOM_COLOR_PALETTES)[0]>();
+          aSim.atoms.forEach((at, idx) => {
+            const palIdx =
+              uniqueZsDesc.length >= 2
+                ? uniqueZsDesc.indexOf(at.z) % ATOM_COLOR_PALETTES.length
+                : idx % ATOM_COLOR_PALETTES.length;
+            atomPaletteMap.set(at.id, ATOM_COLOR_PALETTES[palIdx]);
+          });
+
+          // 2. Σχεδίαση κάθε Ατόμου (Πυρήνας ανάλογος του Z, Τροχιές ανάλογες του μεγέθους ατόμου, Ζευγαράκια 2-2 e⁻, Σύμβολο Στοιχείου)
           const atomOuterRadiusMap = new Map<string, number>();
           aSim.atoms.forEach((atom, atomIdx) => {
             const el = getPeriodicElementByZ(atom.z);
@@ -19867,7 +20022,7 @@ export default function App() {
               numShells === 1
                 ? maxOrbitR
                 : Math.max(18, Math.round(baseMinR * scaleFactor));
-            const atomColor = atom.color || '#8b5cf6';
+            const pal = atomPaletteMap.get(atom.id) || ATOM_COLOR_PALETTES[0];
 
             // Έλεγχος αν οι εσωτερικές τροχιές πρέπει να είναι αχνές διακεκομμένες χωρίς ηλεκτρόνια:
             // Αυτόματα όταν >3 τροχιές, ή όταν επιλεγεί 'valence-only', ή όταν έχουμε αντίδραση με >3 τροχιές
@@ -19911,11 +20066,15 @@ export default function App() {
                 }
               }
 
-              // Κύκλος τροχιάς
+              // Κύκλος τροχιάς με τις αποχρώσεις του συγκεκριμένου στοιχείου
               ctx.save();
               ctx.strokeStyle =
-                isOuter && eCount === 0 ? 'rgba(139, 92, 246, 0.32)' : atomColor;
-              ctx.lineWidth = isOuter ? 1.85 : 1.3;
+                isOuter && eCount === 0
+                  ? 'rgba(148, 163, 184, 0.35)'
+                  : isOuter
+                  ? pal.outerOrbit
+                  : pal.innerOrbit;
+              ctx.lineWidth = isOuter ? 1.85 : 1.35;
               ctx.setLineDash([5, 4]);
               ctx.beginPath();
               ctx.arc(atom.x, atom.y, r_s, 0, Math.PI * 2);
@@ -19964,7 +20123,7 @@ export default function App() {
                 if (isBeingDragged) {
                   // Ελαστική διακεκομμένη γραμμή από την εξωτερική στιβάδα στο ηλεκτρόνιο που σέρνει ο χρήστης
                   ctx.save();
-                  ctx.strokeStyle = '#2563eb';
+                  ctx.strokeStyle = pal.outerElectron;
                   ctx.lineWidth = 1.4;
                   ctx.setLineDash([3, 3]);
                   ctx.beginPath();
@@ -19975,7 +20134,7 @@ export default function App() {
                 }
 
                 ctx.save();
-                ctx.fillStyle = isOuter ? '#7c3aed' : '#6366f1';
+                ctx.fillStyle = isOuter ? pal.outerElectron : pal.innerElectron;
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
@@ -19997,10 +20156,10 @@ export default function App() {
               });
             }
 
-            // Σχεδίαση Πυρήνα (Nucleus) με ακτίνα ανάλογη του ατομικού αριθμού Z & ομοιόμορφη κλιμάκωση
+            // Σχεδίαση Πυρήνα (Nucleus) με ακτίνα ανάλογη του ατομικού αριθμού Z (π.χ. Οξυγόνο >2x μεγαλύτερο από Υδρογόνο!)
             const nucR = Math.max(
               7,
-              Math.min(26, getNaturalNucleusRadiusPx(atom.z) * Math.pow(scaleFactor, 0.75))
+              Math.min(28, getNaturalNucleusRadiusPx(atom.z) * Math.pow(scaleFactor, 0.75))
             );
             const isSelectedAtom = aSim.selectedAtomId === atom.id;
 
@@ -20041,9 +20200,9 @@ export default function App() {
                 r: 15,
               });
             }
-            ctx.fillStyle = 'rgba(168, 85, 247, 0.65)';
-            ctx.strokeStyle = atomColor;
-            ctx.lineWidth = 2.1;
+            ctx.fillStyle = pal.nucleusFill;
+            ctx.strokeStyle = pal.nucleusStroke;
+            ctx.lineWidth = 2.2;
             ctx.beginPath();
             ctx.arc(atom.x, atom.y, nucR, 0, Math.PI * 2);
             ctx.fill();
@@ -20059,7 +20218,7 @@ export default function App() {
               outerR: maxOrbitR,
             });
 
-            // 3. Ισοτοπικός Συμβολισμός δίπλα στον Πυρήνα: π.χ. ¹₁H , Υδρογόνο / ¹²₆C , Άνθρακας
+            // 3. Ισοτοπικός Συμβολισμός κάτω από τον Πυρήνα: ΜΟΝΟ Σύμβολο Στοιχείου & A, Z (π.χ. ¹₁H , ¹⁶₈O χωρίς το ελληνικό όνομα)
             const extraE = isAnimThisSim && easeP < 0.85 ? 0 : atom.extraElectrons || 0;
             let chargeStr = '';
             if (extraE < 0) {
@@ -20072,7 +20231,6 @@ export default function App() {
             const aStr = String(el.a);
             const zStr = String(el.z);
             const symText = `${el.symbol}${chargeStr}`;
-            const nameText = ` , ${el.nameEl}`;
 
             ctx.save();
             ctx.font = 'bold 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -20082,9 +20240,7 @@ export default function App() {
             );
             ctx.font = 'bold 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const symW = ctx.measureText(symText).width;
-            ctx.font = '600 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            const nameW = ctx.measureText(nameText).width;
-            const badgeW = azWidth + symW + nameW + 11;
+            const badgeW = azWidth + symW + 11;
             const badgeH = 22;
 
             // Τοποθέτηση ταμπελακίου ΚΑΤΩ από τον πυρήνα
@@ -20109,7 +20265,7 @@ export default function App() {
               : atom.x - badgeW / 2 + 3;
             const labelCenterY = atom.y + nucR + 13;
 
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
             ctx.strokeStyle = 'rgba(203, 213, 225, 0.88)';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -20133,18 +20289,9 @@ export default function App() {
 
             // Σύμβολο Στοιχείου (+ φορτίο ιόντος αν υπάρχει)
             ctx.font = 'bold 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = '#1e1b4b';
+            ctx.fillStyle = pal.nucleusStroke;
             ctx.textAlign = 'left';
-            ctx.fillText(symText, labelStartX + azWidth + 3, labelCenterY + 0.5);
-
-            // Όνομα Στοιχείου στα Ελληνικά (π.χ. , Υδρογόνο)
-            ctx.font = '600 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = '#334155';
-            ctx.fillText(
-              nameText,
-              labelStartX + azWidth + 3 + symW,
-              labelCenterY + 0.5
-            );
+            ctx.fillText(symText, labelStartX + azWidth + 3.5, labelCenterY + 0.5);
             ctx.restore();
           });
 
@@ -20175,6 +20322,18 @@ export default function App() {
                 const endY = toAt.y - uy * rTo + ny * offsetPerp;
                 const ctrlX = (startX + endX) / 2 + nx * (offsetPerp - 34);
                 const ctrlY = (startY + endY) / 2 + ny * (offsetPerp - 34);
+
+                // Περιοχή κλικ πάνω στη ζώνη μεταφοράς του δεσμού για εμφάνιση/απόκρυψη λεζάντας
+                const curveMidX = 0.25 * startX + 0.5 * ctrlX + 0.25 * endX;
+                const curveMidY = 0.25 * startY + 0.5 * ctrlY + 0.25 * endY;
+                atomButtonsHit.push({
+                  simId: aSim.id,
+                  action: 'toggle-bond-label',
+                  x1: curveMidX - 18,
+                  y1: curveMidY - 18,
+                  x2: curveMidX + 18,
+                  y2: curveMidY + 18,
+                });
 
                 // Καμπύλη τροχιάς μεταφοράς ηλεκτρονίου
                 ctx.save();
@@ -20211,7 +20370,7 @@ export default function App() {
                 }
               }
 
-              if (allBonds.length === 1) {
+              if (allBonds.length === 1 && aSim.showBondLabel) {
                 const midX = (fromAt.x + toAt.x) / 2;
                 const midY = Math.max(fromAt.y + rFrom, toAt.y + rTo) + 22;
                 ctx.save();
@@ -20248,7 +20407,21 @@ export default function App() {
               ctx.stroke();
               ctx.restore();
 
-              // Σχεδίαση των bond.count κοινών ζευγών ηλεκτρονίων (2 ηλεκτρόνια ανά ζεύγος!)
+              // Περιοχή κλικ πολύ κοντά / πάνω στη ζώνη του δεσμού με τα 2 κοινά e⁻:
+              // 1ο κλικ εμφανίζει τη λεζάντα του δεσμού, 2ο κλικ την κρύβει!
+              atomButtonsHit.push({
+                simId: aSim.id,
+                action: 'toggle-bond-label',
+                x1: midOverlapX - 18,
+                y1: midOverlapY - 18,
+                x2: midOverlapX + 18,
+                y2: midOverlapY + 18,
+              });
+
+              const palFrom = atomPaletteMap.get(fromAt.id) || ATOM_COLOR_PALETTES[0];
+              const palTo = atomPaletteMap.get(toAt.id) || ATOM_COLOR_PALETTES[1];
+
+              // Σχεδίαση των bond.count κοινών ζευγών ηλεκτρονίων (2 ηλεκτρόνια ανά ζεύγος, ένα στο χρώμα κάθε ατόμου!)
               const gentleWobble =
                 aSim.isRotating !== false ? Math.sin(now * 0.0022) * 1.8 : 0;
               for (let pIdx = 0; pIdx < bond.count; pIdx++) {
@@ -20274,7 +20447,7 @@ export default function App() {
                 const e2y = init2Y + (target2Y - init2Y) * easeP;
 
                 ctx.save();
-                ctx.fillStyle = '#0284c7';
+                ctx.fillStyle = palFrom.outerElectron;
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
@@ -20282,7 +20455,7 @@ export default function App() {
                 ctx.fill();
                 ctx.stroke();
 
-                ctx.fillStyle = '#7c3aed';
+                ctx.fillStyle = palTo.outerElectron;
                 ctx.beginPath();
                 ctx.arc(e2x, e2y, 4.4, 0, Math.PI * 2);
                 ctx.fill();
@@ -20290,7 +20463,7 @@ export default function App() {
                 ctx.restore();
               }
 
-              if (allBonds.length === 1) {
+              if (allBonds.length === 1 && aSim.showBondLabel) {
                 const bondLabel =
                   bond.count === 1
                     ? 'Απλός Ομοιοπολικός Δεσμός'
@@ -20311,8 +20484,8 @@ export default function App() {
             }
           }
 
-          // Συγκεντρωτική λεζάντα δεσμών κάτω από το μόριο όταν υπάρχουν πολλαπλοί δεσμοί (π.χ. 4 απλοί ομοιοπολικοί στο CH4)
-          if (allBonds.length > 1 && Number.isFinite(maxSimY)) {
+          // Συγκεντρωτική λεζάντα δεσμών κάτω από το μόριο (εμφανίζεται ΜΟΝΟ με κλικ στην περιοχή του δεσμού!)
+          if (allBonds.length > 1 && Number.isFinite(maxSimY) && aSim.showBondLabel) {
             const firstKind = allBonds[0].kind;
             const firstCount = allBonds[0].count;
             const totalSharedPairs = allBonds.reduce((acc, b) => acc + b.count, 0);

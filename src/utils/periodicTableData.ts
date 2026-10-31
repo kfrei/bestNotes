@@ -1365,6 +1365,38 @@ export function buildProcedural3DMoleculeFromFormula(formulaRaw: string): Molecu
   const isMetalEl = (el: PeriodicElement) =>
     el.category !== 'nonmetal' && el.category !== 'noble' && el.category !== 'metalloid';
 
+  // 0. Μονοατομικό στοιχείο (π.χ. C, Na, Mg, Fe, He, Ne, Ar)
+  if (groups.length === 1 && groups[0].count === 1) {
+    const el = groups[0].el;
+    const chi = PAULING_ELECTRONEGATIVITY[el.z] ?? 2.0;
+    const col = CPK_ATOM_COLORS[el.z] || '#38bdf8';
+    return {
+      id: canonicalAscii,
+      formula: el.symbol,
+      nameEl: `${el.nameEl} (${el.symbol})`,
+      geometryLabel: 'Μονοατομικό Στοιχείο 3D',
+      bondAngleText: '—',
+      polarityLabel: 'Μη Πολικό (Ελεύθερο Άτομο)',
+      atoms: [
+        {
+          id: `${el.symbol}1`,
+          z: el.z,
+          symbol: el.symbol,
+          x: 0,
+          y: 0,
+          z3d: 0,
+          radiusFactor: el.z === 1 ? 0.92 : el.z <= 10 ? 1.25 : 1.38,
+          color: col,
+          electronegativity: chi,
+          partialCharge: 0,
+          chargeLabel: '',
+        },
+      ],
+      bonds: [],
+      lonePairs: [],
+    };
+  }
+
   // 1. Διατομικό ομοπυρηνικό μόριο (π.χ. H2, O2, N2, Cl2, F2)
   if (groups.length === 1 && groups[0].count === 2) {
     const el = groups[0].el;
@@ -1723,12 +1755,12 @@ export function get3DMoleculeModel(reactionText?: string, atomZList?: number[], 
 // & ΔΟΜΗΣΗ ΑΤΟΜΩΝ/ΜΟΡΙΟΥ ΟΤΑΝ Ο ΧΡΗΣΤΗΣ ΚΑΝΕΙ ΚΛΙΚ ΣΕ ΑΝΤΙΔΡΩΝ Ή ΠΡΟΪΟΝ
 // ============================================================================
 export function getNaturalNucleusRadiusPx(z: number): number {
-  if (z <= 1) return 9.5;   // Υδρογόνο (Z=1): εμφανώς μικρότερος πυρήνας!
-  if (z === 2) return 11;   // Ήλιο (Z=2)
-  if (z <= 5) return 12.5;  // Li, Be, B
-  if (z <= 10) return 14.5; // C (Z=6), N, O, F, Ne
-  if (z <= 18) return 16.5; // Na, Mg, Cl, Ar
-  return 18;
+  if (z <= 1) return 8;     // Υδρογόνο (Z=1): εμφανώς μικρός πυρήνας (8px)!
+  if (z === 2) return 10.5; // Ήλιο (Z=2)
+  if (z <= 5) return 13;    // Li, Be, B
+  if (z <= 10) return 16.5; // C (Z=6), N, O (Z=8), F, Ne: πάνω από 2x μεγαλύτερος από του Υδρογόνου!
+  if (z <= 18) return 19.5; // Na, Mg, Cl, Ar
+  return 22;
 }
 
 export function getNaturalOuterOrbitRadiusPx(z: number): number {

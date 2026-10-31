@@ -305,6 +305,8 @@ export interface AtomSimConfig {
   reactionEquationText?: string; // e.g. 'C + O₂ → CO₂' or 'Na + Cl → Na⁺Cl⁻'
   userRawReactionText?: string; // Raw user input (e.g. 'H2 + O2 -> H2O' or 'H + O -> HO') so missing/wrong subscripts & coefficients are highlighted in red
   activeReactionTerm?: string; // Currently clicked reactant/product term in the reaction bar (e.g. 'C', '2H₂', 'CH₄')
+  reactionViewMode?: '2d' | '3d'; // '2d' (Bohr atoms & orbits) or '3d' (3D VSEPR model) when clicking a term in the reaction bar
+  showBondLabel?: boolean; // Whether the bond description text below the molecule is visible (toggled by clicking the bond region)
   reactionArrowStep?: number; // Cycles modes on successive clicks of the reaction arrow ➔
   showAtomsBelowReaction?: boolean; // Whether the Bohr atom/molecule structure is visible below the reaction bar
   show3DMolecule?: boolean; // Show 3D molecular geometry (H2O, CH4, CO2, NH3, NaCl) below/beside the reaction
