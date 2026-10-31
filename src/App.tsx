@@ -1373,6 +1373,10 @@ export default function App() {
     startTime: number;
     durationMs: number;
   } | null>(null);
+  const recent3DMoleculesRef = useRef<{
+    notebookId: string;
+    items: { id: string; formula: string }[];
+  }>({ notebookId: '', items: [] });
   const draggingAtomHandleRef = useRef<{
     simId: string;
     kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize' | 'mol-3d-box' | 'mol-3d-rotate';
@@ -20577,6 +20581,20 @@ export default function App() {
             );
             const showCloud = aSim.showChargeCloud !== false;
 
+            const curNbId = activeNotebook?.id || '';
+            if (recent3DMoleculesRef.current.notebookId !== curNbId) {
+              recent3DMoleculesRef.current = { notebookId: curNbId, items: [] };
+            }
+            if (
+              mol3D.id &&
+              !recent3DMoleculesRef.current.items.some((it) => it.id === mol3D.id)
+            ) {
+              recent3DMoleculesRef.current.items = [
+                { id: mol3D.id, formula: mol3D.formula },
+                ...recent3DMoleculesRef.current.items,
+              ].slice(0, 5);
+            }
+
             const boxW = 440;
             const boxH = 224;
             const defaultBoxX = Math.max(18, simCenterX - boxW / 2);
@@ -20588,7 +20606,7 @@ export default function App() {
                 : Math.max(topBarY + 60, (Number.isFinite(maxSimY) ? maxSimY : 320) + 38);
             const boxX = aSim.mol3DBoxX ?? defaultBoxX;
             const boxY = aSim.mol3DBoxY ?? defaultBoxY;
-            const cx3d = boxX + boxW * 0.42;
+            const cx3d = boxX + boxW * 0.45;
             const cy3d = boxY + 118;
 
             mol3DBoxesHit.push({
@@ -20655,6 +20673,25 @@ export default function App() {
               '#cbd5e1',
               '#475569'
             );
+
+            // Αριστερά με γκρι αχνό: Τα έως 5 πιο πρόσφατα 3D μόρια που εμφανίστηκαν μετά το πιο πρόσφατο άνοιγμα του τετραδίου!
+            recent3DMoleculesRef.current.items.slice(0, 5).forEach((recItem, rIdx) => {
+              const isCurMol = recItem.id === mol3D.id;
+              const recX = boxX + 10;
+              const recY = boxY + 42 + rIdx * 25;
+              drawAtomPillButton(
+                aSim.id,
+                recItem.formula,
+                `select-3d-mol:${recItem.id}`,
+                recX,
+                recY,
+                40,
+                19,
+                isCurMol ? 'rgba(148, 163, 184, 0.22)' : 'rgba(148, 163, 184, 0.08)',
+                isCurMol ? 'rgba(226, 232, 240, 0.85)' : 'rgba(148, 163, 184, 0.52)',
+                isCurMol ? 'rgba(148, 163, 184, 0.42)' : 'rgba(148, 163, 184, 0.18)'
+              );
+            });
 
             // Κέντρο 3D προβολής
             const scale3D = 64;

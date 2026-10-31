@@ -1307,7 +1307,171 @@ const GREEK_COMPOUND_NAMES: Record<string, string> = {
   HNO3: 'Νιτρικό Οξύ',
   NAOH: 'Υδροξείδιο του Νατρίου',
   KOH: 'Υδροξείδιο του Καλίου',
+  SIO2: 'Διοξείδιο του Πυριτίου',
+  SI2O3: 'Τριοξείδιο του Πυριτίου',
+  SIO3: 'Τριοξείδιο του Πυριτίου',
+  SIO: 'Μονοξείδιο του Πυριτίου',
+  AL2O3: 'Τριοξείδιο του Αργιλίου',
+  FE2O3: 'Τριοξείδιο του Σιδήρου',
+  FEO: 'Οξείδιο του Σιδήρου',
+  FE3O4: 'Επιτεταρτοξείδιο του Σιδήρου',
+  B2O3: 'Τριοξείδιο του Βορίου',
+  P2O5: 'Πεντοξείδιο του Φωσφόρου',
+  P2O3: 'Τριοξείδιο του Φωσφόρου',
+  P4O10: 'Πεντοξείδιο του Φωσφόρου',
+  N2O5: 'Πεντοξείδιο του Αζώτου',
+  N2O3: 'Τριοξείδιο του Αζώτου',
+  N2O4: 'Τετροξείδιο του Αζώτου',
+  CL2O7: 'Επτοξείδιο του Χλωρίου',
+  CL2O: 'Μονοξείδιο του Χλωρίου',
+  CLO2: 'Διοξείδιο του Χλωρίου',
+  CUO: 'Οξείδιο του Χαλκού',
+  CU2O: 'Υποξείδιο του Χαλκού',
+  ZNO: 'Οξείδιο του Ψευδαργύρου',
+  NA2O: 'Οξείδιο του Νατρίου',
+  K2O: 'Οξείδιο του Καλίου',
+  LI2O: 'Οξείδιο του Λιθίου',
+  ALCL3: 'Τριχλωριούχο Αργίλιο',
+  FECL3: 'Τριχλωριούχος Σίδηρος',
+  FECL2: 'Διχλωριούχος Σίδηρος',
+  CUCL2: 'Διχλωριούχος Χαλκός',
+  ZNCL2: 'Χλωριούχος Ψευδάργυρος',
+  AGCL: 'Χλωριούχος Άργυρος',
+  H3PO4: 'Φωσφορικό Οξύ',
+  H2CO3: 'Ανθρακικό Οξύ',
+  H2SO3: 'Θειώδες Οξύ',
+  HNO2: 'Νιτρώδες Οξύ',
+  HCLO4: 'Υπερχλωρικό Οξύ',
+  HCLO: 'Υποχλωριώδες Οξύ',
+  CACO3: 'Ανθρακικό Ασβέστιο',
+  NA2CO3: 'Ανθρακικό Νάτριο',
+  NAHCO3: 'Όξινο Ανθρακικό Νάτριο',
+  CUSO4: 'Θειικός Χαλκός',
+  KNO3: 'Νιτρικό Κάλιο',
+  NANO3: 'Νιτρικό Νάτριο',
+  CH3OH: 'Μεθανόλη',
+  C2H5OH: 'Αιθανόλη',
+  CH3COOH: 'Οξικό Οξύ',
+  C6H6: 'Βενζόλιο',
+  C6H12O6: 'Γλυκόζη',
+  C3H8: 'Προπάνιο',
+  C4H10: 'Βουτάνιο',
+  C3H6: 'Προπένιο',
+  C3H4: 'Προπίνιο',
 };
+
+const ELEMENT_GENITIVE_EL: Record<number, string> = {
+  1: 'του Υδρογόνου',
+  3: 'του Λιθίου',
+  4: 'του Βηρυλλίου',
+  5: 'του Βορίου',
+  6: 'του Άνθρακα',
+  7: 'του Αζώτου',
+  8: 'του Οξυγόνου',
+  9: 'του Φθορίου',
+  11: 'του Νατρίου',
+  12: 'του Μαγνησίου',
+  13: 'του Αργιλίου',
+  14: 'του Πυριτίου',
+  15: 'του Φωσφόρου',
+  16: 'του Θείου',
+  17: 'του Χλωρίου',
+  19: 'του Καλίου',
+  20: 'του Ασβεστίου',
+  22: 'του Τιτανίου',
+  24: 'του Χρωμίου',
+  25: 'του Μαγγανίου',
+  26: 'του Σιδήρου',
+  27: 'του Κοβαλτίου',
+  28: 'του Νικελίου',
+  29: 'του Χαλκού',
+  30: 'του Ψευδαργύρου',
+  32: 'του Γερμανίου',
+  33: 'του Αρσενικού',
+  34: 'του Σεληνίου',
+  35: 'του Βρωμίου',
+  38: 'του Στροντίου',
+  47: 'του Αργύρου',
+  50: 'του Κασσιτέρου',
+  53: 'του Ιωδίου',
+  54: 'του Ξένου',
+  56: 'του Βαρίου',
+  78: 'του Λευκοχρύσου',
+  79: 'του Χρυσού',
+  80: 'του Υδραργύρου',
+  82: 'του Μολύβδου',
+};
+
+function inferGreekCompoundName(
+  groups: { el: PeriodicElement; count: number }[],
+  upperKey: string,
+  prettyFormula: string
+): string {
+  if (GREEK_COMPOUND_NAMES[upperKey]) return GREEK_COMPOUND_NAMES[upperKey];
+
+  // Αυτόματη Ελληνική Ονοματολογία για δυαδικές ενώσεις A_m B_n (Οξείδια, Αλογονίδια, Θειούχα, Υδρίδια, Νιτρίδια)
+  if (groups.length === 2) {
+    const [g1, g2] = groups;
+    const gen1 = ELEMENT_GENITIVE_EL[g1.el.z] || `του ${g1.el.nameEl}`;
+    const n2 = g2.count;
+
+    // 1. Οξείδια (π.χ. Si2O3 -> Τριοξείδιο του Πυριτίου, Cl2O7 -> Επτοξείδιο του Χλωρίου, MnO2 -> Διοξείδιο του Μαγγανίου)
+    if (g2.el.z === 8) {
+      const oxidePrefix: Record<number, string> = {
+        1: g1.el.category === 'nonmetal' || g1.el.category === 'metalloid' ? 'Μονοξείδιο' : 'Οξείδιο',
+        2: 'Διοξείδιο',
+        3: 'Τριοξείδιο',
+        4: 'Τετροξείδιο',
+        5: 'Πεντοξείδιο',
+        6: 'Εξοξείδιο',
+        7: 'Επτοξείδιο',
+        8: 'Οκτοξείδιο',
+      };
+      const oxWord = oxidePrefix[n2] || 'Οξείδιο';
+      return `${oxWord} ${gen1}`;
+    }
+
+    // 2. Αλογονίδια (F, Cl, Br, I)
+    const halideStem: Record<number, string> = {
+      9: 'φθοριούχο',
+      17: 'χλωριούχο',
+      35: 'βρωμιούχο',
+      53: 'ιωδιούχο',
+    };
+    if (halideStem[g2.el.z] && g1.el.z !== 1) {
+      const numPref: Record<number, string> = {
+        1: '',
+        2: 'Δι',
+        3: 'Τρι',
+        4: 'Τετρα',
+        5: 'Πεντα',
+        6: 'Εξα',
+      };
+      const pref = numPref[n2] ?? '';
+      const stem = halideStem[g2.el.z];
+      const capWord = pref ? `${pref}${stem}` : stem[0].toUpperCase() + stem.slice(1);
+      const isMasc = [6, 15, 26, 29, 30, 47, 50, 78, 79, 80, 82].includes(g1.el.z);
+      const adj = isMasc ? `${capWord}ς` : capWord;
+      return `${adj} ${g1.el.nameEl}`;
+    }
+
+    // 3. Θειούχα (S)
+    if (g2.el.z === 16 && g1.el.z !== 1) {
+      const numPref: Record<number, string> = { 1: '', 2: 'Δι', 3: 'Τρι', 4: 'Τετρα', 5: 'Πεντα' };
+      const pref = numPref[n2] ?? '';
+      const base = pref ? `${pref}θειούχο` : 'Θειούχο';
+      const isMasc = [6, 15, 26, 29, 30, 47, 50, 78, 79, 80, 82].includes(g1.el.z);
+      return `${isMasc ? `${base}ς` : base} ${g1.el.nameEl}`;
+    }
+
+    // 4. Υδρίδια (H)
+    if (g2.el.z === 1) {
+      return `Υδρίδιο ${gen1}`;
+    }
+  }
+
+  return `Ένωση ${prettyFormula}`;
+}
 
 /**
  * Καθαρίζει τυπικά OCR σφάλματα σε χειρόγραφους χημικούς τύπους (π.χ. "H20" -> "H2O", "C02" -> "CO2", "S02" -> "SO2").
@@ -1363,7 +1527,7 @@ export function buildProcedural3DMoleculeFromFormula(formulaRaw: string): Molecu
   if (PRESET_3D_MOLECULES[upperKey]) return PRESET_3D_MOLECULES[upperKey];
 
   const prettyFormula = formatChemEquationText(canonicalAscii);
-  const greekName = GREEK_COMPOUND_NAMES[upperKey] || `Ένωση ${prettyFormula}`;
+  const greekName = inferGreekCompoundName(groups, upperKey, prettyFormula);
   const fullNameEl = `${greekName} (${prettyFormula})`;
   const isMetalEl = (el: PeriodicElement) =>
     el.category !== 'nonmetal' && el.category !== 'noble' && el.category !== 'metalloid';
