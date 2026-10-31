@@ -12936,9 +12936,10 @@ export default function App() {
         }));
         return;
       }
-      if (action === 'toggle-3d-molecule') {
+      if (action === 'close-3d-molecule' || action === 'toggle-3d-molecule') {
+        const shouldClose = action === 'close-3d-molecule' ? true : Boolean(sim.show3DMolecule);
         if (
-          sim.show3DMolecule &&
+          shouldClose &&
           sim.showReactionEquation === false &&
           sim.showAtomsBelowReaction === false
         ) {
@@ -12954,7 +12955,7 @@ export default function App() {
             s.id === sim.id
               ? {
                   ...s,
-                  show3DMolecule: !s.show3DMolecule,
+                  show3DMolecule: action === 'close-3d-molecule' ? false : !s.show3DMolecule,
                   showChargeCloud: s.showChargeCloud ?? true,
                 }
               : s
@@ -20607,12 +20608,12 @@ export default function App() {
             ctx.fillText(`🧊 ${mol3D.nameEl}`, boxX + 14, boxY + 18);
             ctx.restore();
 
-            // Toggle Χρωματικού Νέφους Φορτίου δ⁺/δ⁻ + Κουμπί Κλεισίματος (✕)
+            // Toggle Χρωματικού Νέφους Φορτίου δ⁺/δ⁻ (αριστερά) + Κουμπί Κλεισίματος (✕) (πάνω δεξιά)
             drawAtomPillButton(
               aSim.id,
               showCloud ? '☁️ Νέφος ON' : '☁️ Νέφος OFF',
               'toggle-charge-cloud',
-              boxX + boxW - 106,
+              boxX + boxW - 158,
               boxY + 8,
               66,
               20,
@@ -20624,8 +20625,8 @@ export default function App() {
             drawAtomPillButton(
               aSim.id,
               '✕',
-              'toggle-3d-molecule',
-              boxX + boxW - 32,
+              'close-3d-molecule',
+              boxX + boxW - 36,
               boxY + 8,
               22,
               20,
@@ -23782,8 +23783,8 @@ export default function App() {
     // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Resize Handles, Valence Electrons & Nuclei:
     if (atomOverlayHitRef.current) {
       const aHit = atomOverlayHitRef.current;
-      // 1) On-Canvas Reaction Buttons ([ ➔ ], [ ⚛️ ], clickable reactants/products)
-      for (const btn of aHit.buttons) {
+      // 1) On-Canvas Reaction Buttons ([ ➔ ], [ 2D/3D ], clickable reactants/products, 3D window controls)
+      for (const btn of [...aHit.buttons].reverse()) {
         if (
           pt.x >= btn.x1 - 4 &&
           pt.x <= btn.x2 + 4 &&
