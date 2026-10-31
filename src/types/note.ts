@@ -274,6 +274,37 @@ export interface ForceSimConfig {
   calcBoxPos?: { x: number; y: number }; // Optional custom position for Υπολογισμοί card
 }
 
+export interface AtomNode {
+  id: string;
+  z: number; // Atomic number Z (1..86)
+  x: number; // Canvas logical center X
+  y: number; // Canvas logical center Y
+  outerRadiusPx?: number; // Custom outer radius if created from user drawing
+  extraElectrons?: number; // Positive = gained electrons (anion, e.g. +1 for Cl-), negative = lost electrons (cation, e.g. -1 for Na+)
+  color?: string; // Accent color from drawn strokes (default '#7c3aed' / '#2563eb')
+}
+
+export interface AtomBond {
+  id: string;
+  kind: 'ionic' | 'covalent';
+  fromAtomId: string;
+  toAtomId: string;
+  count: number; // Number of transferred electrons (ionic) or shared electron pairs (covalent: 1, 2, 3)
+}
+
+export interface AtomSimConfig {
+  id: string;
+  name: string; // e.g. 'ατ01', 'ατ02'
+  atoms: AtomNode[];
+  selectedAtomId?: string; // Which atom node in `atoms` receives clicks from the Periodic Table
+  bonds?: AtomBond[];
+  shellDisplayMode: 'auto' | 'all' | 'valence-only'; // 'auto': <=3 shells show all, >3 show outer (with faint dashed inner shells)
+  isRotating?: boolean; // default true (slow orbital rotation of electron pairs)
+  showReactionEquation?: boolean; // Show chemical reaction equation header above atoms
+  reactionEquationText?: string; // e.g. 'C + O₂ → CO₂' or 'Na + Cl → Na⁺Cl⁻'
+  showAtomsBelowReaction?: boolean; // default true; when created via ChemOCR, user can toggle showing/hiding the atom structures below
+}
+
 export interface NotePage {
   id: string;
   title: string;
@@ -296,6 +327,8 @@ export interface NotePage {
   activeSpringSimId?: string;
   forceSims?: ForceSimConfig[];
   activeForceSimId?: string;
+  atomSims?: AtomSimConfig[];
+  activeAtomSimId?: string;
 }
 
 export interface Notebook {

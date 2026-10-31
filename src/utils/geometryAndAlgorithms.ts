@@ -4653,6 +4653,107 @@ export async function transcribeHandwrittenMathWithGemini(
 }
 
 /**
+ * Transcribes handwritten Chemical Reactions / Equations (ChemOCR) using Gemini Vision
+ * (e.g. "C + O2 -> CO2", "2H2 + O2 -> 2H2O", "Na + Cl -> NaCl") and normalizes 0 -> O in O2/CO2/H2O.
+ */
+export async function transcribeHandwrittenChemistryWithGemini(
+  imageDataUrl: string,
+  notebookTitle = ''
+): Promise<{ rawEquation: string; formattedText: string } | null> {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return null;
+  const apiKey = (partA + partB).split('').reverse().join('');
+
+  const compact = await downscaleImageDataUrlForVision(imageDataUrl);
+  if (!compact) return null;
+
+  const contextHint =
+    notebookTitle && !/^(νέα\s+)?σημείωση\s*\d*$/i.test(notebookTitle.trim())
+      ? ` (από σχολική σημείωση με θέμα "${notebookTitle}")`
+      : '';
+
+  const parts: any[] = [
+    {
+      text: `Είσαι εξειδικευμένο σύστημα ChemOCR (Αναγνώριση Χειρόγραφων Χημικών Αντιδράσεων & Χημικών Τύπων)${contextHint}.
+Διάβασε με απόλυτη ακρίβεια τη χειρόγραφη χημική αντίδραση ή χημικό τύπο στην εικόνα:
+1. Διόρθωσε αυτόματα συχνές οπτικές ομοιότητες χειρογράφου στη Χημεία:
+   - Το "02" ή "C02" ή "H20" ή "Mg0" είναι ΠΑΝΤΑ το στοιχείο Οξυγόνο "O" (κεφαλαίο αγγλικό O), δηλαδή "O2", "CO2", "H2O", "MgO".
+   - Το "C1" ή "NaC1" ή "HC1" είναι ΠΑΝΤΑ Χλώριο "Cl" (κεφαλαίο C + πεζό l), δηλαδή "Cl", "NaCl", "HCl".
+2. Για το βέλος της αντίδρασης χρησιμοποίησε " -> " στο "rawEquation" και " → " στο "formattedText".
+3. Στο "formattedText" χρησιμοποίησε δείκτες Unicode (₀₁₂₃₄₅₆₇₈₉) για τους αριθμούς ατόμων (π.χ. "C + O₂ → CO₂", "2H₂ + O₂ → 2H₂O", "Na + Cl → NaCl").
+Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
+{"rawEquation": "C + O2 -> CO2", "formattedText": "C + O₂ → CO₂"}
+χωρίς κανένα άλλο σχόλιο.`,
+    },
+    {
+      inlineData: {
+        mimeType: compact.mimeType,
+        data: compact.base64,
+      },
+    },
+  ];
+
+  const candidateModels = getPrioritizedVisionModels();
+
+  const tryChemWithModel = async (
+    modelName: string,
+    timeoutMs = 24000
+  ): Promise<{ rawEquation: string; formattedText: string } | null> => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const cleanName = modelName.replace(/^models\//, '');
+      const { ok, rawText } = await fetchVisionCompletionRawText(
+        cleanName,
+        parts,
+        apiKey,
+        ctrl.signal
+      );
+      if (!ok || !rawText) {
+        if (cachedWorkingVisionModel === cleanName) cachedWorkingVisionModel = null;
+        return null;
+      }
+      const parsed = safeParseVisionJson(rawText);
+      const rawEq = (
+        typeof parsed?.rawEquation === 'string'
+          ? parsed.rawEquation
+          : typeof parsed?.formattedText === 'string'
+          ? parsed.formattedText
+          : typeof parsed?.text === 'string'
+          ? parsed.text
+          : ''
+      )
+        .trim()
+        .replace(/C02/gi, 'CO2')
+        .replace(/H20/gi, 'H2O')
+        .replace(/\b02\b/g, 'O2');
+      const fmtTxt = (
+        typeof parsed?.formattedText === 'string' && parsed.formattedText.trim()
+          ? parsed.formattedText.trim()
+          : rawEq
+      )
+        .replace(/C02/gi, 'CO₂')
+        .replace(/H20/gi, 'H₂O')
+        .replace(/\b02\b/g, 'O₂');
+      if (rawEq.length > 0) {
+        cachedWorkingVisionModel = cleanName;
+        return { rawEquation: rawEq, formattedText: fmtTxt };
+      }
+    } catch {
+      if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
+        cachedWorkingVisionModel = null;
+      }
+    } finally {
+      window.clearTimeout(timer);
+    }
+    return null;
+  };
+
+  return runVisionWithStaggeredHedge(candidateModels, tryChemWithModel, 1300, 24000);
+}
+
+/**
  * Returns the two cubic Bézier control points `(cp1x, cp1y, cp2x, cp2y)` for a segment `pA -> pB`
  * when either `pA` has outgoing Illustrator handle `(outDx, outDy)` or `pB` has incoming handle `(inDx, inDy)`,
  * or `null` if the segment does not use cubic Bézier tangent handles.
