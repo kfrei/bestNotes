@@ -10201,6 +10201,28 @@ export default function App() {
   const isNearExactInt = (v: number, tol = 0.035): boolean =>
     Math.abs(v - Math.round(v)) <= tol;
 
+  const hasOpenForceCalc = (activePage.forceSims || []).some((s) => Boolean(s.showCalc));
+  useEffect(() => {
+    if (!hasOpenForceCalc) return;
+    const onDocPointerDown = (ev: PointerEvent) => {
+      const target = ev.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('[data-force-calc-toggle="true"]')) return;
+      if (target.tagName === 'CANVAS') return;
+      updateActivePage(
+        (page) => ({
+          ...page,
+          forceSims: (page.forceSims || []).map((s) =>
+            s.showCalc ? { ...s, showCalc: false } : s
+          ),
+        }),
+        false
+      );
+    };
+    window.addEventListener('pointerdown', onDocPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onDocPointerDown, true);
+  }, [hasOpenForceCalc]);
+
   const isForceSimAtIntegerValues = (fSim: ForceSimConfig | null, page: NotePage): boolean => {
     if (!fSim) return false;
     const U = A4_GRID_STEP_PX;
@@ -21029,6 +21051,53 @@ export default function App() {
       const fHit = forceOverlayHitRef.current;
       const curForceSim = getActiveForceSim(targetPage);
       if (!fHit.simId || (curForceSim && curForceSim.id === fHit.simId)) {
+        // 1) Check 'calc-box' FIRST so clicking inside the calculation box drags it instead of dismissing it
+        const calcHandle = fHit.handles.find((h) => h.kind === 'calc-box');
+        if (
+          calcHandle &&
+          Math.abs(pt.x - calcHandle.x) <= (calcHandle.w || 236) / 2 &&
+          Math.abs(pt.y - calcHandle.y) <= (calcHandle.h || 110) / 2
+        ) {
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          forceSimAnimRef.current = null;
+          setForceSimAnim(null);
+          draggingForceHandleRef.current = {
+            simId: fHit.simId,
+            kind: 'calc-box',
+            startX: pt.x,
+            startY: pt.y,
+            origOriginX: curForceSim?.originX ?? calcHandle.x,
+            origOriginY: curForceSim?.originY ?? calcHandle.y,
+            origCalcX: calcHandle.x - (calcHandle.w || 236) / 2,
+            origCalcY: calcHandle.y - (calcHandle.h || 110) / 2,
+          };
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
+          return;
+        }
+
+        // If calculations are open and user clicked anywhere outside calc-box, close them & uncheck checkbox!
+        const hadOpenCalc = (targetPage.forceSims || []).some((s) => Boolean(s.showCalc));
+        if (hadOpenCalc) {
+          updateActivePage(
+            (page) => ({
+              ...page,
+              forceSims: (page.forceSims || []).map((s) =>
+                s.showCalc ? { ...s, showCalc: false } : s
+              ),
+            }),
+            false
+          );
+        }
+
         for (const btn of fHit.buttons) {
           if (
             pt.x >= btn.x1 - 4 &&
@@ -21039,7 +21108,10 @@ export default function App() {
             e.preventDefault();
             if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
             if (activeNodeStrokeId) setActiveNodeStrokeId(null);
-            handleForceSimAction(curForceSim || null, btn.action);
+            handleForceSimAction(
+              curForceSim ? { ...curForceSim, showCalc: false } : null,
+              btn.action
+            );
             isDrawingRef.current = false;
             activePointerIdRef.current = null;
             activePointerTypeRef.current = null;
@@ -21047,11 +21119,8 @@ export default function App() {
           }
         }
         for (const h of fHit.handles) {
-          const isHit =
-            h.kind === 'calc-box'
-              ? Math.abs(pt.x - h.x) <= (h.w || 236) / 2 &&
-                Math.abs(pt.y - h.y) <= (h.h || 110) / 2
-              : Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
+          if (h.kind === 'calc-box') continue;
+          const isHit = Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
           if (isHit) {
             e.preventDefault();
             if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
@@ -21094,6 +21163,14 @@ export default function App() {
             isDrawingRef.current = true;
             return;
           }
+        }
+
+        if (hadOpenCalc) {
+          e.preventDefault();
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
         }
       }
     }
@@ -39424,7 +39501,10 @@ export default function App() {
                           (activeForce.mode === 'analysis' || activeForce.mode === 'synthesis') && (
                             <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90">
                               {isForceSimAtIntegerValues(activeForce, activePage) ? (
-                                <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                <label
+                                  data-force-calc-toggle="true"
+                                  className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer"
+                                >
                                   <span className="flex items-center gap-1.5">
                                     <span>🧮 Υπολογισμοί</span>
                                     <span className="text-[9.5px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
