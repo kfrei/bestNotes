@@ -1820,14 +1820,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       <div className="pt-2 flex items-center gap-3 flex-wrap">
                         <button
                           type="button"
-                          onClick={onEnterApp}
-                          className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs sm:text-sm font-extrabold shadow-md transition cursor-pointer"
-                        >
-                          <span>Άνοιγμα στον Καμβά</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setZoomedNote(note)}
                           className="inline-flex items-center gap-1.5 px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-bold transition cursor-pointer"
                         >
