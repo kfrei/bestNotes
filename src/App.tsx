@@ -6122,7 +6122,20 @@ export default function App() {
         const activeNodeTarget = activeNodeStrokeId
           ? pageObj.strokes.find((s) => s.id === activeNodeStrokeId)
           : undefined;
-        if (selBounds && (activeTool !== 'direct-node' || isShapeWithoutNodes(activeNodeTarget))) {
+        const isSelectedForceSimVector =
+          selectedImageIds.length === 0 &&
+          !selectedImageId &&
+          selectedStrokeIds.length > 0 &&
+          (pageObj.forceSims || []).some((fs) =>
+            selectedStrokeIds.some(
+              (sid) => fs.primaryStrokeId === sid || fs.secondaryStrokeId === sid
+            )
+          );
+        if (
+          selBounds &&
+          !isSelectedForceSimVector &&
+          (activeTool !== 'direct-node' || isShapeWithoutNodes(activeNodeTarget))
+        ) {
           const pad = 8;
           const hw = selBounds.hw + pad;
           const hh = selBounds.hh + pad;
@@ -10185,6 +10198,78 @@ export default function App() {
     return `${outside}√${inside}`;
   };
 
+  const isNearExactInt = (v: number, tol = 0.035): boolean =>
+    Math.abs(v - Math.round(v)) <= tol;
+
+  const isForceSimAtIntegerValues = (fSim: ForceSimConfig | null, page: NotePage): boolean => {
+    if (!fSim) return false;
+    const U = A4_GRID_STEP_PX;
+    if (fSim.mode === 'analysis') {
+      const pStroke = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
+      const ox = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].x : fSim.originX;
+      const oy = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].y : fSim.originY;
+      const tx =
+        pStroke && pStroke.points.length >= 2
+          ? pStroke.points[pStroke.points.length - 1].x
+          : ox + (fSim.fxUnits ?? 8) * U;
+      const ty =
+        pStroke && pStroke.points.length >= 2
+          ? pStroke.points[pStroke.points.length - 1].y
+          : oy - (fSim.fyUnits ?? 6) * U;
+      const cx = (tx - ox) / U;
+      const cy = (oy - ty) / U;
+      const fMag = Math.hypot(cx, cy);
+      return (
+        Math.abs(cx) >= 0.95 &&
+        Math.abs(cy) >= 0.95 &&
+        isNearExactInt(cx) &&
+        isNearExactInt(cy) &&
+        isNearExactInt(fMag)
+      );
+    }
+    if (fSim.mode === 'synthesis') {
+      const s1 = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
+      const s2 = page.strokes.find((st) => st.id === fSim.secondaryStrokeId);
+      const ox = s1 && s1.points.length >= 2 ? s1.points[0].x : fSim.originX;
+      const oy = s1 && s1.points.length >= 2 ? s1.points[0].y : fSim.originY;
+      const p1x =
+        s1 && s1.points.length >= 2
+          ? s1.points[s1.points.length - 1].x
+          : ox + (fSim.f1xUnits ?? 8) * U;
+      const p1y =
+        s1 && s1.points.length >= 2
+          ? s1.points[s1.points.length - 1].y
+          : oy - (fSim.f1yUnits ?? 0) * U;
+      const p2x =
+        s2 && s2.points.length >= 2
+          ? s2.points[s2.points.length - 1].x
+          : ox + (fSim.f2xUnits ?? 0) * U;
+      const p2y =
+        s2 && s2.points.length >= 2
+          ? s2.points[s2.points.length - 1].y
+          : oy - (fSim.f2yUnits ?? 6) * U;
+      const f1x = (p1x - ox) / U;
+      const f1y = (oy - p1y) / U;
+      const f2x = (p2x - ox) / U;
+      const f2y = (oy - p2y) / U;
+      const m1 = Math.hypot(f1x, f1y);
+      const m2 = Math.hypot(f2x, f2y);
+      const mS = Math.hypot(f1x + f2x, f1y + f2y);
+      return (
+        m1 >= 0.95 &&
+        m2 >= 0.95 &&
+        isNearExactInt(f1x) &&
+        isNearExactInt(f1y) &&
+        isNearExactInt(f2x) &&
+        isNearExactInt(f2y) &&
+        isNearExactInt(m1) &&
+        isNearExactInt(m2) &&
+        isNearExactInt(mS)
+      );
+    }
+    return false;
+  };
+
   const buildForceArrowStroke = (
     id: string,
     ox: number,
@@ -10194,7 +10279,7 @@ export default function App() {
     color: string,
     layerId: string,
     groupId?: string,
-    shapeType: 'spring-pointer' | 'arrow' = 'spring-pointer'
+    shapeType: 'spring-pointer' | 'arrow' = 'arrow'
   ): StrokeObject => ({
     id,
     tool: 'pen',
@@ -16898,16 +16983,38 @@ export default function App() {
             );
           }
 
+          const isIntLocked = isForceSimAtIntegerValues(fSim, activePage);
+
           // Label F on main vector + Origin dot + Draggable Tip Handle
           drawHaloLabel(
-            showNums ? `F = ${F_mag.toFixed(1)} N` : 'F',
+            showNums ? `F = ${isIntLocked ? Math.round(F_mag) : F_mag.toFixed(1)} N` : 'F',
             ox + X / 2 - 14 * Math.sin(rad),
             oy - Y / 2 - 14 * Math.cos(rad),
             '#1976d2',
             'bold 15px system-ui, -apple-system, sans-serif'
           );
 
-          // Origin dot (no visible circle at arrowhead tip!)
+          // Visual Magnetic Lock Indicator at tip (tx, ty) when Fx, Fy, F are all integers!
+          if (isIntLocked) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(tx, ty, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            drawHaloLabel(
+              '🧲',
+              tx + 16 * Math.cos(rad),
+              ty - 16 * Math.sin(rad),
+              '#059669',
+              'bold 13px system-ui, sans-serif'
+            );
+          }
+
+          // Origin dot
           ctx.save();
           ctx.fillStyle = '#1e293b';
           ctx.strokeStyle = '#ffffff';
@@ -16918,32 +17025,27 @@ export default function App() {
           ctx.stroke();
           ctx.restore();
 
-          handlesHit.push(
-            { kind: 'origin', x: ox, y: oy, r: 20 },
-            {
-              kind: 'origin',
-              x: ox + 0.22 * (tx - ox),
-              y: oy + 0.22 * (ty - oy),
-              r: 16,
-            },
-            { kind: 'analysis-tip', x: tx, y: ty, r: 28 },
-            {
+          // Put 'analysis-tip' along the entire vector shaft and tip FIRST so clicking anywhere on F drags the tip in any direction!
+          handlesHit.push({ kind: 'analysis-tip', x: tx, y: ty, r: 34 });
+          for (let frac = 0.88; frac >= 0.18; frac -= 0.14) {
+            handlesHit.push({
               kind: 'analysis-tip',
-              x: ox + 0.74 * (tx - ox),
-              y: oy + 0.74 * (ty - oy),
-              r: 22,
-            },
-            {
-              kind: 'analysis-tip',
-              x: ox + 0.48 * (tx - ox),
-              y: oy + 0.48 * (ty - oy),
-              r: 18,
-            }
-          );
+              x: ox + frac * (tx - ox),
+              y: oy + frac * (ty - oy),
+              r: 24,
+            });
+          }
+          if (curStep >= 4) {
+            handlesHit.push({ kind: 'analysis-tip', x: tx, y: oy, r: 22 });
+          }
+          if (curStep >= 6) {
+            handlesHit.push({ kind: 'analysis-tip', x: ox, y: ty, r: 22 });
+          }
+          handlesHit.push({ kind: 'origin', x: ox, y: oy, r: 13 });
 
           // Info Pill above/left ONLY when showNumericValues is enabled in Simulation Dashboard!
           if (showNums) {
-            const infoTxt = `F = ${F_mag.toFixed(1)} N,  θ = ${Math.round(deg)}°`;
+            const infoTxt = `F = ${isIntLocked ? Math.round(F_mag) : F_mag.toFixed(1)} N,  θ = ${Math.round(deg)}°`;
             ctx.save();
             ctx.font = 'bold 12px ui-monospace, SFMono-Regular, Menlo, monospace';
             const infoW = ctx.measureText(infoTxt).width + 20;
@@ -16963,32 +17065,31 @@ export default function App() {
             ctx.restore();
           }
 
-          // Calculations Box (Υπολογισμοί)
-          if (fSim.showCalc && curStep >= 4) {
+          // Calculations Box (Υπολογισμοί) — Active when showCalc is checked and force is locked at integer values
+          if (fSim.showCalc && isIntLocked) {
+            const fInt = Math.round(F_mag);
+            const fxInt = Math.round(cx);
+            const fyInt = Math.round(cy);
             const calcLines: { text: string; bold?: boolean; color?: string }[] = [
-              { text: `Fx = F · συν(${deg.toFixed(0)}°)` },
+              { text: `F = ${fInt} N,  θ ≈ ${deg.toFixed(0)}°`, bold: true },
+              { text: `Fx = F · συν(${deg.toFixed(0)}°) = ${fInt} · ${(fxInt / fInt).toFixed(2)}` },
               {
-                text: `Fx = ${F_mag.toFixed(1)} · ${Math.cos(rad).toFixed(3)}`,
-              },
-              {
-                text: `Fx = ${cx.toFixed(1)} N`,
+                text: `Fx = ${fxInt} N`,
                 bold: true,
                 color: '#d32f2f',
               },
+              { text: `Fy = F · ημ(${deg.toFixed(0)}°) = ${fInt} · ${(fyInt / fInt).toFixed(2)}` },
+              {
+                text: `Fy = ${fyInt} N`,
+                bold: true,
+                color: '#d32f2f',
+              },
+              {
+                text: `F = √(${Math.abs(fxInt)}² + ${Math.abs(fyInt)}²) = ${fInt} N`,
+                bold: true,
+                color: '#059669',
+              },
             ];
-            if (curStep >= 6) {
-              calcLines.push(
-                { text: `Fy = F · ημ(${deg.toFixed(0)}°)` },
-                {
-                  text: `Fy = ${F_mag.toFixed(1)} · ${Math.sin(rad).toFixed(3)}`,
-                },
-                {
-                  text: `Fy = ${cy.toFixed(1)} N`,
-                  bold: true,
-                  color: '#d32f2f',
-                }
-              );
-            }
             drawCalcCard(
               Math.min(w - 255, ox + Math.max(X, 120) + 38),
               Math.max(24, oy - 190),
@@ -16998,7 +17099,7 @@ export default function App() {
             );
           }
 
-          // Discreet On-Canvas Control Bar below origin
+          // Discreet On-Canvas Control Bar below origin (without Υπολογισμοί button)
           const barY = Math.min(h - 36, Math.max(oy, ty) + 24);
           let curBx = Math.max(16, ox - 6);
           if (curStep === 0 && fSim.anMode !== 'F') {
@@ -17045,18 +17146,6 @@ export default function App() {
                 undefined,
                 curStep >= 6 || curAnim !== null
               ) + 5;
-            if (curStep >= 4) {
-              drawPillButton(
-                'Υπολογισμοί',
-                'toggle-calc',
-                curBx,
-                barY,
-                82,
-                21,
-                fSim.showCalc ? '#ea580c' : '#d97706',
-                '#fff'
-              );
-            }
           }
         }
 
@@ -17099,6 +17188,7 @@ export default function App() {
           const cross = f1x * f2y - f1y * f2x;
           const cosTh = Math.max(-1, Math.min(1, dot / Math.max(1e-6, m1 * m2)));
           const deg = Math.round((Math.acos(cosTh) * 180) / Math.PI);
+          const isIntLocked = isForceSimAtIntegerValues(fSim, activePage);
 
           // Angle arc θ between F1 and F2
           if (m1 > 0.3 && m2 > 0.3 && deg >= 1 && deg <= 180) {
@@ -17167,7 +17257,7 @@ export default function App() {
                 '#1e293b',
                 4.0,
                 getStepProg(3),
-                showNums ? `ΣF = ${Number.isInteger(mS) ? mS : mS.toFixed(2)} N` : 'ΣF'
+                showNums ? `ΣF = ${isIntLocked || Number.isInteger(mS) ? Math.round(mS) : mS.toFixed(2)} N` : 'ΣF'
               );
             } else {
               drawHaloLabel(
@@ -17182,19 +17272,36 @@ export default function App() {
 
           // Labels F1 & F2 + Tip handles + Origin dot
           drawHaloLabel(
-            showNums ? `F₁ (${Number.isInteger(m1) ? m1 : m1.toFixed(1)}N)` : 'F₁',
+            showNums ? `F₁ (${isIntLocked || Number.isInteger(m1) ? Math.round(m1) : m1.toFixed(1)}N)` : 'F₁',
             p1x + 16 * Math.cos(Math.atan2(p1y - oy, p1x - ox)),
             p1y + 16 * Math.sin(Math.atan2(p1y - oy, p1x - ox)),
             '#d35400',
             'bold 14px system-ui, sans-serif'
           );
           drawHaloLabel(
-            showNums ? `F₂ (${Number.isInteger(m2) ? m2 : m2.toFixed(1)}N)` : 'F₂',
+            showNums ? `F₂ (${isIntLocked || Number.isInteger(m2) ? Math.round(m2) : m2.toFixed(1)}N)` : 'F₂',
             p2x + 16 * Math.cos(Math.atan2(p2y - oy, p2x - ox)),
             p2y + 16 * Math.sin(Math.atan2(p2y - oy, p2x - ox)),
             '#2980b9',
             'bold 14px system-ui, sans-serif'
           );
+
+          if (isIntLocked) {
+            for (const tipPt of [
+              { x: p1x, y: p1y },
+              { x: p2x, y: p2y },
+            ]) {
+              ctx.save();
+              ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
+              ctx.strokeStyle = '#10b981';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(tipPt.x, tipPt.y, 10, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
 
           ctx.save();
           ctx.fillStyle = '#1e293b';
@@ -17207,40 +17314,35 @@ export default function App() {
           ctx.restore();
 
           handlesHit.push(
-            { kind: 'origin', x: ox, y: oy, r: 18 },
-            { kind: 'f1-tip', x: p1x, y: p1y, r: 28 },
-            {
-              kind: 'f1-tip',
-              x: ox + 0.74 * (p1x - ox),
-              y: oy + 0.74 * (p1y - oy),
-              r: 22,
-            },
-            {
-              kind: 'f1-tip',
-              x: ox + 0.48 * (p1x - ox),
-              y: oy + 0.48 * (p1y - oy),
-              r: 18,
-            },
-            { kind: 'f2-tip', x: p2x, y: p2y, r: 28 },
-            {
-              kind: 'f2-tip',
-              x: ox + 0.74 * (p2x - ox),
-              y: oy + 0.74 * (p2y - oy),
-              r: 22,
-            },
-            {
-              kind: 'f2-tip',
-              x: ox + 0.48 * (p2x - ox),
-              y: oy + 0.48 * (p2y - oy),
-              r: 18,
-            }
+            { kind: 'f1-tip', x: p1x, y: p1y, r: 34 },
+            { kind: 'f2-tip', x: p2x, y: p2y, r: 34 }
           );
+          for (let frac = 0.88; frac >= 0.18; frac -= 0.14) {
+            handlesHit.push(
+              {
+                kind: 'f1-tip',
+                x: ox + frac * (p1x - ox),
+                y: oy + frac * (p1y - oy),
+                r: 24,
+              },
+              {
+                kind: 'f2-tip',
+                x: ox + frac * (p2x - ox),
+                y: oy + frac * (p2y - oy),
+                r: 24,
+              }
+            );
+          }
+          handlesHit.push({ kind: 'origin', x: ox, y: oy, r: 13 });
 
-          // Calculations Box (Υπολογισμοί)
-          if (fSim.showCalc && curStep >= 3) {
+          // Calculations Box (Υπολογισμοί) — Active when showCalc is checked and forces are locked at integer values
+          if (fSim.showCalc && isIntLocked) {
+            const m1Int = Math.round(m1);
+            const m2Int = Math.round(m2);
+            const mSInt = Math.round(mS);
             const cLines: { text: string; bold?: boolean; color?: string }[] = [
               {
-                text: `F₁ = ${m1.toFixed(1)} N,  F₂ = ${m2.toFixed(1)} N,  θ = ${deg}°`,
+                text: `F₁ = ${m1Int} N,  F₂ = ${m2Int} N,  θ = ${deg}°`,
                 bold: true,
               },
             ];
@@ -17249,7 +17351,7 @@ export default function App() {
                 { text: 'Συγγραμμικές Ομόρροπες (θ = 0°):' },
                 { text: 'ΣF = F₁ + F₂' },
                 {
-                  text: `ΣF = ${m1.toFixed(1)} + ${m2.toFixed(1)} = ${mS.toFixed(1)} N`,
+                  text: `ΣF = ${m1Int} + ${m2Int} = ${mSInt} N`,
                   bold: true,
                   color: '#16a34a',
                 }
@@ -17259,29 +17361,29 @@ export default function App() {
                 { text: 'Συγγραμμικές Αντίρροπες (θ = 180°):' },
                 { text: 'ΣF = |F₁ - F₂|' },
                 {
-                  text: `ΣF = |${m1.toFixed(1)} - ${m2.toFixed(1)}| = ${mS.toFixed(1)} N`,
+                  text: `ΣF = |${m1Int} - ${m2Int}| = ${mSInt} N`,
                   bold: true,
                   color: '#16a34a',
                 }
               );
             } else if (Math.abs(dot) < 0.08) {
-              const sqSum = Math.round(m1 * m1 + m2 * m2);
+              const sqSum = m1Int * m1Int + m2Int * m2Int;
               cLines.push(
                 { text: 'Κάθετες Δυνάμεις (θ = 90°):' },
                 { text: 'ΣF² = F₁² + F₂²  (Πυθαγόρειο)' },
-                { text: `ΣF = √(${m1.toFixed(0)}² + ${m2.toFixed(0)}²) = √${sqSum}` },
+                { text: `ΣF = √(${m1Int}² + ${m2Int}²) = √${sqSum}` },
                 {
-                  text: `ΣF = ${simplifyRootText(sqSum)} N ≈ ${mS.toFixed(2)} N`,
+                  text: `ΣF = ${mSInt} N`,
                   bold: true,
                   color: '#16a34a',
                 }
               );
             } else {
               cLines.push(
-                { text: `Τυχαία Γωνία (θ = ${deg}°):` },
+                { text: `Γωνία θ = ${deg}°:` },
                 { text: 'ΣF = √(F₁² + F₂² + 2·F₁·F₂·συνθ)' },
                 {
-                  text: `ΣF = ${mS.toFixed(2)} N`,
+                  text: `ΣF = ${mSInt} N`,
                   bold: true,
                   color: '#16a34a',
                 }
@@ -17296,7 +17398,7 @@ export default function App() {
             );
           }
 
-          // Discreet On-Canvas Control Bar
+          // Discreet On-Canvas Control Bar (without Υπολογισμοί button)
           const barY = Math.min(h - 36, Math.max(oy, p1y, p2y, ty) + 24);
           let curBx = Math.max(16, ox - 20);
           curBx +=
@@ -17354,18 +17456,6 @@ export default function App() {
             }
             curBx +=
               drawPillButton('Επαναφορά', 'reset', curBx, barY, 72, 21, '#2563eb', '#fff') + 5;
-            if (curStep >= 3) {
-              drawPillButton(
-                'Υπολογισμοί',
-                'toggle-calc',
-                curBx,
-                barY,
-                78,
-                21,
-                '#7e22ce',
-                '#fff'
-              );
-            }
           }
         }
 
@@ -20947,6 +21037,8 @@ export default function App() {
             pt.y <= btn.y2 + 4
           ) {
             e.preventDefault();
+            if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+            if (activeNodeStrokeId) setActiveNodeStrokeId(null);
             handleForceSimAction(curForceSim || null, btn.action);
             isDrawingRef.current = false;
             activePointerIdRef.current = null;
@@ -20962,6 +21054,8 @@ export default function App() {
               : Math.hypot(pt.x - h.x, pt.y - h.y) <= h.r;
           if (isHit) {
             e.preventDefault();
+            if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+            if (activeNodeStrokeId) setActiveNodeStrokeId(null);
             forceSimAnimRef.current = null;
             setForceSimAnim(null);
             setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
@@ -22156,7 +22250,13 @@ export default function App() {
         for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
           const s = targetPage.strokes[i];
           if (lockedLayerIdsForWeight.has(s.layerId)) continue;
-          if (s.shapeType === 'spring-pointer' || Boolean(s.attachedToSpringId)) {
+          const isForceSimStroke = (targetPage.forceSims || []).some(
+            (fs) => fs.primaryStrokeId === s.id || fs.secondaryStrokeId === s.id
+          );
+          if (
+            !isForceSimStroke &&
+            (s.shapeType === 'spring-pointer' || Boolean(s.attachedToSpringId))
+          ) {
             const sb = getStrokeBounds(s);
             if (
               pt.x >= sb.minX - 10 &&
@@ -23431,7 +23531,12 @@ export default function App() {
         return;
       }
 
-      const smoothVectorUnitsFromPointer = (ox: number, oy: number) => {
+      const smoothVectorUnitsFromPointer = (
+        ox: number,
+        oy: number,
+        mode: 'analysis' | 'synthesis' | 'free' = 'analysis',
+        otherVec?: { x: number; y: number }
+      ) => {
         let rawX = (latestPt.x - ox) / U;
         let rawY = (oy - latestPt.y) / U;
         const rawMag = Math.hypot(rawX, rawY);
@@ -23443,6 +23548,59 @@ export default function App() {
             rawX = 0;
           }
         }
+
+        // Magnetic pull toward all-integer Pythagorean points:
+        // - In 'analysis': (ix, iy) where |ix|>=1, |iy|>=1 and sqrt(ix^2 + iy^2) is an integer (e.g. 3-4-5, 6-8-10, 5-12-13, 9-12-15, etc. in any quadrant)
+        // - In 'synthesis': (ix, iy) where F1, F2, and ΣF are all integers (or clean integer axis ticks so setting up F1/F2 is effortless)
+        let bestSnap: { x: number; y: number; dist: number } | null = null;
+        const minIx = Math.floor(rawX) - 1;
+        const maxIx = Math.ceil(rawX) + 1;
+        const minIy = Math.floor(rawY) - 1;
+        const maxIy = Math.ceil(rawY) + 1;
+
+        for (let ix = minIx; ix <= maxIx; ix++) {
+          for (let iy = minIy; iy <= maxIy; iy++) {
+            const dist = Math.hypot(rawX - ix, rawY - iy);
+            const mSelf = Math.hypot(ix, iy);
+            if (mSelf < 1) continue;
+
+            if (mode === 'analysis' || mode === 'free') {
+              const isPythagoreanAllInt =
+                Math.abs(ix) >= 1 &&
+                Math.abs(iy) >= 1 &&
+                isNearExactInt(mSelf, 1e-5);
+              if (isPythagoreanAllInt && dist <= 0.68) {
+                if (!bestSnap || dist < bestSnap.dist) {
+                  bestSnap = { x: ix, y: iy, dist };
+                }
+              }
+            } else if (mode === 'synthesis') {
+              const isSelfIntMag = isNearExactInt(mSelf, 1e-5);
+              if (!isSelfIntMag) continue;
+              const oxU = otherVec?.x ?? 0;
+              const oyU = otherVec?.y ?? 0;
+              const mOther = Math.hypot(oxU, oyU);
+              const mSum = Math.hypot(ix + oxU, iy + oyU);
+              const isFullSynthInt =
+                mOther >= 0.95 &&
+                isNearExactInt(oxU) &&
+                isNearExactInt(oyU) &&
+                isNearExactInt(mOther) &&
+                isNearExactInt(mSum, 1e-5);
+              const isAxisIntTick = (ix === 0 || iy === 0) && dist <= 0.36;
+              if ((isFullSynthInt && dist <= 0.68) || isAxisIntTick) {
+                if (!bestSnap || dist < bestSnap.dist) {
+                  bestSnap = { x: ix, y: iy, dist };
+                }
+              }
+            }
+          }
+        }
+
+        if (bestSnap) {
+          return { cx: bestSnap.x, cy: bestSnap.y, snappedInt: true };
+        }
+
         let cx = Math.round(rawX * 10) / 10;
         let cy = Math.round(rawY * 10) / 10;
         if (Math.hypot(cx, cy) < 0.8) {
@@ -23450,7 +23608,7 @@ export default function App() {
           cx = Math.round(Math.cos(ang) * 10) / 10 || 1;
           cy = Math.round(Math.sin(ang) * 10) / 10;
         }
-        return { cx, cy };
+        return { cx, cy, snappedInt: false };
       };
 
       if (dragF.kind === 'free-vec-tip' && dragF.strokeId) {
@@ -23460,7 +23618,7 @@ export default function App() {
           if (!vStroke || vStroke.points.length < 2) return page;
           const ox = vStroke.points[0].x;
           const oy = vStroke.points[0].y;
-          const { cx, cy } = smoothVectorUnitsFromPointer(ox, oy);
+          const { cx, cy } = smoothVectorUnitsFromPointer(ox, oy, 'free');
           const tx = ox + cx * U;
           const ty = oy - cy * U;
           return {
@@ -23476,13 +23634,24 @@ export default function App() {
                     st.color || '#dc2626',
                     st.layerId,
                     st.groupId,
-                    st.shapeType === 'arrow' ? 'arrow' : 'spring-pointer'
+                    'arrow'
                   )
                 : st
             ),
             forceSims: (page.forceSims || []).map((s) => {
               if (s.mode === 'analysis' && s.primaryStrokeId === targetVecId) {
-                return { ...s, fxUnits: cx, fyUnits: cy };
+                const locked =
+                  Math.abs(cx) >= 0.95 &&
+                  Math.abs(cy) >= 0.95 &&
+                  isNearExactInt(cx) &&
+                  isNearExactInt(cy) &&
+                  isNearExactInt(Math.hypot(cx, cy));
+                return {
+                  ...s,
+                  fxUnits: cx,
+                  fyUnits: cy,
+                  ...(locked ? {} : { showCalc: false }),
+                };
               }
               if (s.mode === 'synthesis' && s.primaryStrokeId === targetVecId) {
                 return { ...s, f1xUnits: cx, f1yUnits: cy };
@@ -23504,9 +23673,15 @@ export default function App() {
           const pStroke = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
           const ox = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].x : fSim.originX;
           const oy = pStroke && pStroke.points.length >= 2 ? pStroke.points[0].y : fSim.originY;
-          const { cx, cy } = smoothVectorUnitsFromPointer(ox, oy);
+          const { cx, cy } = smoothVectorUnitsFromPointer(ox, oy, 'analysis');
           const tx = ox + cx * U;
           const ty = oy - cy * U;
+          const locked =
+            Math.abs(cx) >= 0.95 &&
+            Math.abs(cy) >= 0.95 &&
+            isNearExactInt(cx) &&
+            isNearExactInt(cy) &&
+            isNearExactInt(Math.hypot(cx, cy));
           return {
             ...page,
             strokes: page.strokes.map((st) =>
@@ -23520,12 +23695,19 @@ export default function App() {
                     st.color || '#1976d2',
                     st.layerId,
                     st.groupId,
-                    st.shapeType === 'arrow' ? 'arrow' : 'spring-pointer'
+                    'arrow'
                   )
                 : st
             ),
             forceSims: (page.forceSims || []).map((s) =>
-              s.id === dragF.simId ? { ...s, fxUnits: cx, fyUnits: cy } : s
+              s.id === dragF.simId
+                ? {
+                    ...s,
+                    fxUnits: cx,
+                    fyUnits: cy,
+                    ...(locked ? {} : { showCalc: false }),
+                  }
+                : s
             ),
           };
         }, false);
@@ -23537,14 +23719,41 @@ export default function App() {
           const fSim = (page.forceSims || []).find((s) => s.id === dragF.simId);
           if (!fSim) return page;
           const s1 = page.strokes.find((st) => st.id === fSim.primaryStrokeId);
+          const s2 = page.strokes.find((st) => st.id === fSim.secondaryStrokeId);
           const ox = s1 && s1.points.length >= 2 ? s1.points[0].x : fSim.originX;
           const oy = s1 && s1.points.length >= 2 ? s1.points[0].y : fSim.originY;
-          const { cx: rx, cy: ry } = smoothVectorUnitsFromPointer(ox, oy);
+          const otherStroke = dragF.kind === 'f1-tip' ? s2 : s1;
+          const otherX =
+            otherStroke && otherStroke.points.length >= 2
+              ? (otherStroke.points[otherStroke.points.length - 1].x - ox) / U
+              : dragF.kind === 'f1-tip'
+              ? fSim.f2xUnits ?? 0
+              : fSim.f1xUnits ?? 8;
+          const otherY =
+            otherStroke && otherStroke.points.length >= 2
+              ? (oy - otherStroke.points[otherStroke.points.length - 1].y) / U
+              : dragF.kind === 'f1-tip'
+              ? fSim.f2yUnits ?? 6
+              : fSim.f1yUnits ?? 0;
+          const { cx: rx, cy: ry } = smoothVectorUnitsFromPointer(ox, oy, 'synthesis', {
+            x: otherX,
+            y: otherY,
+          });
           const tx = ox + rx * U;
           const ty = oy - ry * U;
           const targetStrokeId =
             dragF.kind === 'f1-tip' ? fSim.primaryStrokeId : fSim.secondaryStrokeId;
           const defaultCol = dragF.kind === 'f1-tip' ? '#d35400' : '#2980b9';
+          const lockedSynth =
+            Math.hypot(rx, ry) >= 0.95 &&
+            Math.hypot(otherX, otherY) >= 0.95 &&
+            isNearExactInt(rx) &&
+            isNearExactInt(ry) &&
+            isNearExactInt(otherX) &&
+            isNearExactInt(otherY) &&
+            isNearExactInt(Math.hypot(rx, ry)) &&
+            isNearExactInt(Math.hypot(otherX, otherY)) &&
+            isNearExactInt(Math.hypot(rx + otherX, ry + otherY));
           return {
             ...page,
             strokes: page.strokes.map((st) =>
@@ -23558,7 +23767,7 @@ export default function App() {
                     st.color || defaultCol,
                     st.layerId,
                     st.groupId,
-                    st.shapeType === 'arrow' ? 'arrow' : 'spring-pointer'
+                    'arrow'
                   )
                 : st
             ),
@@ -23570,6 +23779,7 @@ export default function App() {
                       ? { f1xUnits: rx, f1yUnits: ry }
                       : { f2xUnits: rx, f2yUnits: ry }),
                     ...(s.synthesisStepMode ? { step: 0, showCalc: false } : {}),
+                    ...(lockedSynth ? {} : { showCalc: false }),
                   }
                 : s
             ),
@@ -39210,164 +39420,33 @@ export default function App() {
                         </div>
 
                         {/* 3. Mode-Specific Interactive Controls */}
-                        {activeForce && activeForce.mode === 'analysis' && (
-                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
-                            <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
-                              <span>🧲 Κλείδωμα σε Ακέραια N (Πλέγμα)</span>
-                              <input
-                                type="checkbox"
-                                checked={activeForce.snapToGrid !== false}
-                                onChange={() =>
-                                  handleForceSimAction(activeForce, 'toggle-snap-grid')
-                                }
-                                className="accent-sky-600 w-4 h-4 cursor-pointer"
-                              />
-                            </label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {curStep === 0 && activeForce.anMode !== 'F' ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleForceSimAction(activeForce, 'start-analysis')
-                                  }
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] cursor-pointer transition"
-                                >
-                                  ✏️ Ανάλυση με Μολύβι (6 Βήματα)
-                                </button>
+                        {activeForce &&
+                          (activeForce.mode === 'analysis' || activeForce.mode === 'synthesis') && (
+                            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90">
+                              {isForceSimAtIntegerValues(activeForce, activePage) ? (
+                                <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 cursor-pointer">
+                                  <span className="flex items-center gap-1.5">
+                                    <span>🧮 Υπολογισμοί</span>
+                                    <span className="text-[9.5px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                                      🧲
+                                    </span>
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(activeForce.showCalc)}
+                                    onChange={() =>
+                                      handleForceSimAction(activeForce, 'toggle-calc')
+                                    }
+                                    className="accent-sky-600 w-4 h-4 cursor-pointer"
+                                  />
+                                </label>
                               ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleForceSimAction(activeForce, 'prev-step')}
-                                    disabled={curStep <= 0}
-                                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
-                                  >
-                                    ◀
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleForceSimAction(activeForce, 'next-step')}
-                                    disabled={curStep >= 6}
-                                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
-                                  >
-                                    ▶ (Βήμα {curStep}/6)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleForceSimAction(activeForce, 'reset')}
-                                    className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] cursor-pointer"
-                                  >
-                                    Επαναφορά
-                                  </button>
-                                </>
-                              )}
-                              {curStep >= 4 && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleForceSimAction(activeForce, 'toggle-calc')
-                                  }
-                                  className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] cursor-pointer transition ${
-                                    activeForce.showCalc
-                                      ? 'bg-orange-600 text-white'
-                                      : 'bg-orange-500 hover:bg-orange-600 text-white'
-                                  }`}
-                                >
-                                  🧮 {activeForce.showCalc ? 'Απόκρυψη Υπολογισμών' : 'Εμφάνιση Υπολογισμών'}
-                                </button>
+                                <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 select-none">
+                                  <span>🧮 Υπολογισμοί</span>
+                                </div>
                               )}
                             </div>
-                          </div>
-                        )}
-
-                        {activeForce && activeForce.mode === 'synthesis' && (
-                          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
-                            <div className="grid grid-cols-2 gap-1 bg-slate-200/80 p-1 rounded-lg">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleForceSimAction(activeForce, 'mode-direct')
-                                }
-                                className={`py-1 rounded-md text-[10.5px] font-extrabold cursor-pointer ${
-                                  !activeForce.synthesisStepMode
-                                    ? 'bg-slate-800 text-white'
-                                    : 'text-slate-700'
-                                }`}
-                              >
-                                Άμεση
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleForceSimAction(activeForce, 'mode-step')}
-                                className={`py-1 rounded-md text-[10.5px] font-extrabold cursor-pointer ${
-                                  activeForce.synthesisStepMode
-                                    ? 'bg-slate-800 text-white'
-                                    : 'text-slate-700'
-                                }`}
-                              >
-                                Βηματική
-                              </button>
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {curStep === 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleForceSimAction(activeForce, 'start-synthesis')
-                                  }
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] cursor-pointer transition"
-                                >
-                                  ✏️ Σύνθεση Δυνάμεων (F₁ + F₂)
-                                </button>
-                              ) : (
-                                <>
-                                  {activeForce.synthesisStepMode && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleForceSimAction(activeForce, 'prev-step')
-                                        }
-                                        disabled={curStep <= 0}
-                                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
-                                      >
-                                        ◀
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleForceSimAction(activeForce, 'next-step')
-                                        }
-                                        disabled={curStep >= 3}
-                                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-extrabold text-xs cursor-pointer"
-                                      >
-                                        ▶ ({curStep}/3)
-                                      </button>
-                                    </>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleForceSimAction(activeForce, 'reset')}
-                                    className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] cursor-pointer"
-                                  >
-                                    Επαναφορά
-                                  </button>
-                                </>
-                              )}
-                              {curStep >= 3 && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleForceSimAction(activeForce, 'toggle-calc')
-                                  }
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] cursor-pointer transition"
-                                >
-                                  🧮 {activeForce.showCalc ? 'Απόκρυψη Υπολογισμών' : 'Εμφάνιση Υπολογισμών'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                          )}
 
                         {activeForce && activeForce.mode === 'incline' && (
                           <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/90 space-y-2">
