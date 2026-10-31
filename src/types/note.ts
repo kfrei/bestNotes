@@ -304,7 +304,9 @@ export interface AtomSimConfig {
   showReactionEquation?: boolean; // Show chemical reaction equation header above atoms
   reactionEquationText?: string; // e.g. 'C + O₂ → CO₂' or 'Na + Cl → Na⁺Cl⁻'
   userRawReactionText?: string; // Raw user input (e.g. 'H2 + O2 -> H2O' or 'H + O -> HO') so missing/wrong subscripts & coefficients are highlighted in red
-  showAtomsBelowReaction?: boolean; // default true; when created via ChemOCR, user can toggle showing/hiding the atom structures below
+  activeReactionTerm?: string; // Currently clicked reactant/product term in the reaction bar (e.g. 'C', '2H₂', 'CH₄')
+  reactionArrowStep?: number; // Cycles modes on successive clicks of the reaction arrow ➔
+  showAtomsBelowReaction?: boolean; // Whether the Bohr atom/molecule structure is visible below the reaction bar
   show3DMolecule?: boolean; // Show 3D molecular geometry (H2O, CH4, CO2, NH3, NaCl) below/beside the reaction
   showChargeCloud?: boolean; // Show electrostatic charge distribution cloud (δ⁻ red/orange, δ⁺ blue/cyan) on the 3D spheres
   selected3DMolId?: string; // Optional override for 3D molecule ('H2O' | 'CH4' | 'CO2' | 'NH3' | 'NaCl')

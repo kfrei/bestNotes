@@ -719,11 +719,25 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
 
   if (!matchedSpec) {
     const formatted = formatChemEquationText(userRawInput);
+    const arrowParts = formatted.split('→');
+    const fallbackSegs: ChemDiffSegment[] = [];
+    arrowParts.forEach((sideStr, sIdx) => {
+      if (sIdx > 0) {
+        fallbackSegs.push({ text: ' → ', isCorrection: false });
+      }
+      const plusTerms = sideStr.split('+').map((t) => t.trim()).filter(Boolean);
+      plusTerms.forEach((termStr, tIdx) => {
+        if (tIdx > 0) {
+          fallbackSegs.push({ text: ' + ', isCorrection: false });
+        }
+        fallbackSegs.push({ text: termStr, isCorrection: false });
+      });
+    });
     return {
       hasCorrections: false,
       userRawFormatted: formatted,
       correctedEquation: formatted,
-      segments: [{ text: formatted, isCorrection: false }],
+      segments: fallbackSegs.length > 0 ? fallbackSegs : [{ text: formatted, isCorrection: false }],
       explanationNotes: [],
     };
   }
@@ -1214,4 +1228,314 @@ export function get3DMoleculeModel(reactionText?: string, atomZList?: number[], 
   }
 
   return PRESET_3D_MOLECULES.H2O;
+}
+
+// ============================================================================
+// ΦΥΣΙΚΗ ΚΛΙΜΑΚΩΣΗ ΑΚΤΙΝΑΣ ΠΥΡΗΝΑ & ΤΡΟΧΙΩΝ ΑΝΑΛΟΓΑ ΜΕ ΤΟΝ ΑΤΟΜΙΚΟ ΑΡΙΘΜΟ Z
+// & ΔΟΜΗΣΗ ΑΤΟΜΩΝ/ΜΟΡΙΟΥ ΟΤΑΝ Ο ΧΡΗΣΤΗΣ ΚΑΝΕΙ ΚΛΙΚ ΣΕ ΑΝΤΙΔΡΩΝ Ή ΠΡΟΪΟΝ
+// ============================================================================
+export function getNaturalNucleusRadiusPx(z: number): number {
+  if (z <= 1) return 9.5;   // Υδρογόνο (Z=1): εμφανώς μικρότερος πυρήνας!
+  if (z === 2) return 11;   // Ήλιο (Z=2)
+  if (z <= 5) return 12.5;  // Li, Be, B
+  if (z <= 10) return 14.5; // C (Z=6), N, O, F, Ne
+  if (z <= 18) return 16.5; // Na, Mg, Cl, Ar
+  return 18;
+}
+
+export function getNaturalOuterOrbitRadiusPx(z: number): number {
+  const el = getPeriodicElementByZ(z);
+  const shells = el.shells.length;
+  if (shells <= 1) return 38; // 1 στιβάδα (H, He): μικρή τροχιά!
+  if (shells === 2) return 66; // 2 στιβάδες (C, N, O...)
+  if (shells === 3) return 82; // 3 στιβάδες (Na, Mg, Cl...)
+  if (shells === 4) return 94;
+  return 104;
+}
+
+export function buildAtomNodesAndBondsForTerm(
+  termRaw: string,
+  centerX: number,
+  centerY: number
+): {
+  atoms: {
+    id: string;
+    z: number;
+    x: number;
+    y: number;
+    outerRadiusPx: number;
+    extraElectrons: number;
+    color: string;
+  }[];
+  bonds: {
+    id: string;
+    kind: 'ionic' | 'covalent';
+    fromAtomId: string;
+    toAtomId: string;
+    count: number;
+  }[];
+} {
+  const ascii = normalizeAsciiChem(termRaw)
+    .replace(/\s+/g, '')
+    .replace(/[⁺⁻²³]/g, '');
+  const parsed = parseFormulaToken(ascii);
+  const ts = Date.now();
+
+  // Συνολική φόρμουλα χωρίς τον μπροστινό συντελεστή (π.χ. "2H2" -> "H2", "2H2O" -> "H2O", "CH4" -> "CH4")
+  const formulaUpper = parsed.atoms
+    .map((a) => `${a.sym.toUpperCase()}${a.sub}`)
+    .join('');
+
+  // 1. CH4 (Μεθάνιο): 1 Άνθρακας στο κέντρο + 4 μικρά Υδρογόνα γύρω του (πάνω, κάτω, αριστερά, δεξιά) με 4 απλούς ομοιοπολικούς δεσμούς!
+  if (formulaUpper === 'CH4') {
+    const rC = getNaturalOuterOrbitRadiusPx(6); // 66
+    const rH = getNaturalOuterOrbitRadiusPx(1); // 38
+    const dist = rC + rH - 4; // 100px ώστε οι τροχιές να εφάπτονται/επικαλύπτονται ελαφρά
+    const cId = `atom-${ts}-c`;
+    const hIds = [0, 1, 2, 3].map((i) => `atom-${ts}-h${i}`);
+    const offsets = [
+      { dx: -dist, dy: 0 }, // Αριστερά
+      { dx: dist, dy: 0 },  // Δεξιά
+      { dx: 0, dy: -dist }, // Πάνω
+      { dx: 0, dy: dist },  // Κάτω
+    ];
+    return {
+      atoms: [
+        {
+          id: cId,
+          z: 6,
+          x: Math.round(centerX),
+          y: Math.round(centerY),
+          outerRadiusPx: rC,
+          extraElectrons: 0,
+          color: '#0284c7',
+        },
+        ...offsets.map((off, idx) => ({
+          id: hIds[idx],
+          z: 1,
+          x: Math.round(centerX + off.dx),
+          y: Math.round(centerY + off.dy),
+          outerRadiusPx: rH,
+          extraElectrons: 0,
+          color: '#8b5cf6',
+        })),
+      ],
+      bonds: hIds.map((hId, idx) => ({
+        id: `abond-${ts}-ch4-${idx}`,
+        kind: 'covalent' as const,
+        fromAtomId: cId,
+        toAtomId: hId,
+        count: 1,
+      })),
+    };
+  }
+
+  // 2. H2O (Νερό): 1 Οξυγόνο στο κέντρο + 2 μικρά Υδρογόνα αριστερά/δεξιά με 2 απλούς ομοιοπολικούς δεσμούς!
+  if (formulaUpper === 'H2O' || formulaUpper === 'OH2') {
+    const rO = getNaturalOuterOrbitRadiusPx(8); // 66
+    const rH = getNaturalOuterOrbitRadiusPx(1); // 38
+    const dist = rO + rH - 4; // 100
+    const oId = `atom-${ts}-o`;
+    const h1Id = `atom-${ts}-h1`;
+    const h2Id = `atom-${ts}-h2`;
+    return {
+      atoms: [
+        {
+          id: h1Id,
+          z: 1,
+          x: Math.round(centerX - dist),
+          y: Math.round(centerY),
+          outerRadiusPx: rH,
+          extraElectrons: 0,
+          color: '#8b5cf6',
+        },
+        {
+          id: oId,
+          z: 8,
+          x: Math.round(centerX),
+          y: Math.round(centerY),
+          outerRadiusPx: rO,
+          extraElectrons: 0,
+          color: '#0284c7',
+        },
+        {
+          id: h2Id,
+          z: 1,
+          x: Math.round(centerX + dist),
+          y: Math.round(centerY),
+          outerRadiusPx: rH,
+          extraElectrons: 0,
+          color: '#8b5cf6',
+        },
+      ],
+      bonds: [
+        { id: `abond-${ts}-h2o-1`, kind: 'covalent', fromAtomId: h1Id, toAtomId: oId, count: 1 },
+        { id: `abond-${ts}-h2o-2`, kind: 'covalent', fromAtomId: oId, toAtomId: h2Id, count: 1 },
+      ],
+    };
+  }
+
+  // 3. CO2 (Διοξείδιο του Άνθρακα): O = C = O με 2 διπλούς ομοιοπολικούς δεσμούς!
+  if (formulaUpper === 'CO2') {
+    const rC = getNaturalOuterOrbitRadiusPx(6); // 66
+    const rO = getNaturalOuterOrbitRadiusPx(8); // 66
+    const dist = rC + rO - 4; // 128
+    const o1Id = `atom-${ts}-o1`;
+    const cId = `atom-${ts}-c`;
+    const o2Id = `atom-${ts}-o2`;
+    return {
+      atoms: [
+        { id: o1Id, z: 8, x: Math.round(centerX - dist), y: Math.round(centerY), outerRadiusPx: rO, extraElectrons: 0, color: '#8b5cf6' },
+        { id: cId, z: 6, x: Math.round(centerX), y: Math.round(centerY), outerRadiusPx: rC, extraElectrons: 0, color: '#0284c7' },
+        { id: o2Id, z: 8, x: Math.round(centerX + dist), y: Math.round(centerY), outerRadiusPx: rO, extraElectrons: 0, color: '#8b5cf6' },
+      ],
+      bonds: [
+        { id: `abond-${ts}-co2-1`, kind: 'covalent', fromAtomId: o1Id, toAtomId: cId, count: 2 },
+        { id: `abond-${ts}-co2-2`, kind: 'covalent', fromAtomId: cId, toAtomId: o2Id, count: 2 },
+      ],
+    };
+  }
+
+  // 4. NH3 (Αμμωνία): 1 Άζωτο στο κέντρο + 3 μικρά Υδρογόνα (αριστερά, δεξιά, κάτω) με 3 απλούς ομοιοπολικούς δεσμούς!
+  if (formulaUpper === 'NH3' || formulaUpper === 'H3N') {
+    const rN = getNaturalOuterOrbitRadiusPx(7); // 66
+    const rH = getNaturalOuterOrbitRadiusPx(1); // 38
+    const dist = rN + rH - 4; // 100
+    const nId = `atom-${ts}-n`;
+    const hIds = [`atom-${ts}-h1`, `atom-${ts}-h2`, `atom-${ts}-h3`];
+    const offsets = [
+      { dx: -dist, dy: 0 },
+      { dx: dist, dy: 0 },
+      { dx: 0, dy: dist },
+    ];
+    return {
+      atoms: [
+        { id: nId, z: 7, x: Math.round(centerX), y: Math.round(centerY), outerRadiusPx: rN, extraElectrons: 0, color: '#0284c7' },
+        ...offsets.map((off, idx) => ({
+          id: hIds[idx],
+          z: 1,
+          x: Math.round(centerX + off.dx),
+          y: Math.round(centerY + off.dy),
+          outerRadiusPx: rH,
+          extraElectrons: 0,
+          color: '#8b5cf6',
+        })),
+      ],
+      bonds: hIds.map((hId, idx) => ({
+        id: `abond-${ts}-nh3-${idx}`,
+        kind: 'covalent' as const,
+        fromAtomId: nId,
+        toAtomId: hId,
+        count: 1,
+      })),
+    };
+  }
+
+  // 5. Διατομικά μόρια ίδιου στοιχείου (π.χ. H2, O2, N2, Cl2, F2)
+  if (parsed.atoms.length === 1 && parsed.atoms[0].sub === '2') {
+    const el = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(1);
+    const rOut = getNaturalOuterOrbitRadiusPx(el.z);
+    const dist = rOut * 2 - 4;
+    const val = el.shells[el.shells.length - 1] || 1;
+    const pairsCount = el.z === 1 ? 1 : Math.max(1, Math.min(3, 8 - val));
+    const a1Id = `atom-${ts}-1`;
+    const a2Id = `atom-${ts}-2`;
+    return {
+      atoms: [
+        { id: a1Id, z: el.z, x: Math.round(centerX - dist / 2), y: Math.round(centerY), outerRadiusPx: rOut, extraElectrons: 0, color: '#8b5cf6' },
+        { id: a2Id, z: el.z, x: Math.round(centerX + dist / 2), y: Math.round(centerY), outerRadiusPx: rOut, extraElectrons: 0, color: '#0284c7' },
+      ],
+      bonds: [
+        { id: `abond-${ts}-di`, kind: 'covalent', fromAtomId: a1Id, toAtomId: a2Id, count: pairsCount },
+      ],
+    };
+  }
+
+  // 6. Μεμονωμένο άτομο (π.χ. C, Mg, Na, Ca, K, O, H)
+  if (parsed.atoms.length === 1 && (!parsed.atoms[0].sub || parsed.atoms[0].sub === '1')) {
+    const el = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(6);
+    const rOut = getNaturalOuterOrbitRadiusPx(el.z);
+    return {
+      atoms: [
+        {
+          id: `atom-${ts}-single`,
+          z: el.z,
+          x: Math.round(centerX),
+          y: Math.round(centerY),
+          outerRadiusPx: rOut,
+          extraElectrons: 0,
+          color: '#0284c7',
+        },
+      ],
+      bonds: [],
+    };
+  }
+
+  // 7. Τριατομικά ιοντικά AB2 (π.χ. MgCl2, CaCl2)
+  if (parsed.atoms.length === 2 && parsed.atoms[1].sub === '2') {
+    const elA = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(12);
+    const elB = getPeriodicElementBySymbol(parsed.atoms[1].sym) || getPeriodicElementByZ(17);
+    const rA = getNaturalOuterOrbitRadiusPx(elA.z);
+    const rB = getNaturalOuterOrbitRadiusPx(elB.z);
+    const isIonic = elA.category === 'metal' && elB.category !== 'metal';
+    const dist = rA + rB + (isIonic ? 24 : -4);
+    const b1Id = `atom-${ts}-b1`;
+    const aId = `atom-${ts}-a`;
+    const b2Id = `atom-${ts}-b2`;
+    return {
+      atoms: [
+        { id: b1Id, z: elB.z, x: Math.round(centerX - dist), y: Math.round(centerY), outerRadiusPx: rB, extraElectrons: isIonic ? 1 : 0, color: '#8b5cf6' },
+        { id: aId, z: elA.z, x: Math.round(centerX), y: Math.round(centerY), outerRadiusPx: rA, extraElectrons: isIonic ? -2 : 0, color: '#0284c7' },
+        { id: b2Id, z: elB.z, x: Math.round(centerX + dist), y: Math.round(centerY), outerRadiusPx: rB, extraElectrons: isIonic ? 1 : 0, color: '#8b5cf6' },
+      ],
+      bonds: isIonic
+        ? [
+            { id: `abond-${ts}-ion1`, kind: 'ionic', fromAtomId: aId, toAtomId: b1Id, count: 1 },
+            { id: `abond-${ts}-ion2`, kind: 'ionic', fromAtomId: aId, toAtomId: b2Id, count: 1 },
+          ]
+        : [
+            { id: `abond-${ts}-cov1`, kind: 'covalent', fromAtomId: b1Id, toAtomId: aId, count: 1 },
+            { id: `abond-${ts}-cov2`, kind: 'covalent', fromAtomId: aId, toAtomId: b2Id, count: 1 },
+          ],
+    };
+  }
+
+  // 8. Δυαδικές ενώσεις AB (π.χ. HCl, NaCl, MgO, CaO, LiF, KCl)
+  if (parsed.atoms.length >= 2) {
+    const el1 = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(11);
+    const el2 = getPeriodicElementBySymbol(parsed.atoms[1].sym) || getPeriodicElementByZ(17);
+    const r1 = getNaturalOuterOrbitRadiusPx(el1.z);
+    const r2 = getNaturalOuterOrbitRadiusPx(el2.z);
+    const isIonic =
+      (el1.category === 'metal' && el2.category !== 'metal') ||
+      (el2.category === 'metal' && el1.category !== 'metal');
+    const dist = r1 + r2 + (isIonic ? 26 : -4);
+    const vMetal = Math.min(2, el1.shells[el1.shells.length - 1] || 1);
+    const a1Id = `atom-${ts}-1`;
+    const a2Id = `atom-${ts}-2`;
+    return {
+      atoms: [
+        { id: a1Id, z: el1.z, x: Math.round(centerX - dist / 2), y: Math.round(centerY), outerRadiusPx: r1, extraElectrons: isIonic ? -vMetal : 0, color: '#8b5cf6' },
+        { id: a2Id, z: el2.z, x: Math.round(centerX + dist / 2), y: Math.round(centerY), outerRadiusPx: r2, extraElectrons: isIonic ? vMetal : 0, color: '#0284c7' },
+      ],
+      bonds: [
+        {
+          id: `abond-${ts}-ab`,
+          kind: isIonic ? 'ionic' : 'covalent',
+          fromAtomId: a1Id,
+          toAtomId: a2Id,
+          count: isIonic ? vMetal : 1,
+        },
+      ],
+    };
+  }
+
+  // Fallback
+  const rC = getNaturalOuterOrbitRadiusPx(6);
+  return {
+    atoms: [
+      { id: `atom-${ts}-def`, z: 6, x: Math.round(centerX), y: Math.round(centerY), outerRadiusPx: rC, extraElectrons: 0, color: '#0284c7' },
+    ],
+    bonds: [],
+  };
 }
