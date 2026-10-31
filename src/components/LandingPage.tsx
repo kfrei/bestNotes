@@ -315,6 +315,765 @@ const DraggableCard: React.FC<{
   );
 };
 
+/**
+ * Ζωντανή βήμα-προς-βήμα προσομοίωση για την καρτέλα "Layers & Groups PRO":
+ * 1. Χτίζει σταδιακά τα 4 ελατήρια με τα βαράκια (0,1 kg), τον κατακόρυφο χάρακα (0..3 cm), τον πίνακα μετρήσεων και το διάγραμμα Fελ - Δl.
+ * 2. Δείχνει την ταλάντωση (πάνω-κάτω κίνηση) κάθε ελατηρίου & των βαρών καθώς κρεμιούνται.
+ * 3. Επιλέγει (Select) Ελατήριο + Βελάκι + Βαράκια μαζί σε ένα ενιαίο Group (🔗 Group) και δείχνει τη μετακίνησή τους ως μία ομάδα!
+ */
+const AnimatedHookeWeightsGroupShowcase: React.FC = () => {
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  useEffect(() => {
+    let rafId = 0;
+    const startMs = performance.now();
+    const CYCLE_SEC = 12.5;
+    const loop = (now: number) => {
+      const t = ((now - startMs) / 1000) % CYCLE_SEC;
+      setElapsedSec(t);
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  // Χρονισμός βημάτων (0..12.5s):
+  // t >= 0.2s: 1ο ελατήριο (δεξιά, 0 βάρη, 0 cm, μωβ βελάκι)
+  // t >= 2.0s: 2ο ελατήριο (1 βάρος 0,1 kg, 1 cm, κόκκινο βελάκι + ταλάντωση πάνω-κάτω)
+  // t >= 4.4s: 3ο ελατήριο (2 βάρη 0,1 kg, 2 cm, μπλε βελάκι + ταλάντωση πάνω-κάτω)
+  // t >= 6.8s: 4ο ελατήριο (3 βάρη 0,1 kg, 3 cm, πράσινο βελάκι + ταλάντωση πάνω-κάτω)
+  // t >= 9.2s: Select Ελατήριο + Βελάκι + Βαράκια σε 1 Group (🔗 Group) & ομαδική κίνηση!
+  const stepTimes = [0.2, 2.0, 4.4, 6.8];
+  const isGroupSelectPhase = elapsedSec >= 9.2;
+  const groupSelectProgress = isGroupSelectPhase
+    ? Math.min(1, (elapsedSec - 9.2) / 0.7)
+    : 0;
+  // Μικρή ομαλή κίνηση όλου του Group (Ελατήριο + Βελάκι + 3 Βαράκια) όταν έχει γίνει Group!
+  const groupShiftX =
+    elapsedSec >= 10.0 ? Math.sin((elapsedSec - 10.0) * 3.2) * 8 : 0;
+  const groupShiftY =
+    elapsedSec >= 10.0 ? Math.cos((elapsedSec - 10.0) * 3.2) * 3.5 : 0;
+
+  // Κατασκευή SVG μονοπατιού ελατηρίου με σπείρες από (x, topY) έως (x, bottomY)
+  const buildSpringSvgPath = (cx: number, topY: number, bottomY: number, coils = 9) => {
+    const lead = 10;
+    const bodyTop = topY + lead;
+    const bodyBot = Math.max(bodyTop + 20, bottomY - lead);
+    const totalH = bodyBot - bodyTop;
+    const stepH = totalH / coils;
+    const rx = 12;
+    let d = `M ${cx} ${topY} L ${cx} ${bodyTop}`;
+    for (let i = 0; i < coils; i++) {
+      const y0 = bodyTop + i * stepH;
+      const yMid = y0 + stepH * 0.5;
+      const y1 = y0 + stepH;
+      d += ` C ${cx + rx} ${y0 + stepH * 0.15}, ${cx + rx} ${yMid - stepH * 0.1}, ${cx} ${yMid}`;
+      d += ` C ${cx - rx} ${yMid + stepH * 0.1}, ${cx - rx} ${y1 - stepH * 0.15}, ${cx} ${y1}`;
+    }
+    d += ` L ${cx} ${bottomY}`;
+    return d;
+  };
+
+  // Τα 4 ελατήρια από δεξιά προς αριστερά (όπως στην εικόνα: 0 cm δεξιά, 1 cm, 2 cm, 3 cm αριστερά)
+  const columns = [
+    {
+      idx: 0,
+      weights: 0,
+      x: 310,
+      cm: 0,
+      baseBotY: 112,
+      color: '#9333ea',
+      badgeBg: '#f3e8ff',
+      label: '◀ 0 cm',
+      massStr: '0',
+      forceStr: '0',
+    },
+    {
+      idx: 1,
+      weights: 1,
+      x: 236,
+      cm: 1,
+      baseBotY: 146,
+      color: '#dc2626',
+      badgeBg: '#fee2e2',
+      label: '◀ 1 cm',
+      massStr: '0,1',
+      forceStr: '1',
+    },
+    {
+      idx: 2,
+      weights: 2,
+      x: 162,
+      cm: 2,
+      baseBotY: 180,
+      color: '#2563eb',
+      badgeBg: '#dbeafe',
+      label: '◀ 2 cm',
+      massStr: '0,2',
+      forceStr: '2',
+    },
+    {
+      idx: 3,
+      weights: 3,
+      x: 86,
+      cm: 3,
+      baseBotY: 214,
+      color: '#16a34a',
+      badgeBg: '#dcfce7',
+      label: '◀ 3 cm',
+      massStr: '0,3',
+      forceStr: '3',
+    },
+  ];
+
+  const rulerX = 398;
+  const rulerZeroY = 112;
+  const cmStepPx = 34; // 1 cm = 34px πάνω στον χάρακα
+
+  return (
+    <div className="bn-tab-stage p-4 sm:p-6 min-h-[545px] flex flex-col lg:flex-row items-stretch justify-center gap-5">
+      {/* ΑΡΙΣΤΕΡΑ: ΚΑΜΒΑΣ ΠΕΙΡΑΜΑΤΟΣ ΝΟΜΟΥ HOOKE ΜΕ ΒΑΡΑΚΙΑ, ΧΑΡΑΚΑ, ΠΙΝΑΚΑ, ΓΡΑΦΗΜΑ & GROUP SELECTION */}
+      <div className="w-full lg:w-8/12 rounded-2xl bg-[#fffdf7] border border-slate-200 shadow-lg p-3 sm:p-4 flex flex-col justify-between relative overflow-hidden">
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10.5px] font-extrabold">
+              Layers &amp; Groups PRO
+            </span>
+            <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+              Πείραμα Ελατηρίων &amp; Ομαδοποίηση (Ελατήριο + Βελάκι + Βαράκια σε Group)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold">
+            <span
+              className={`px-2.5 py-0.5 rounded-full border transition-all ${
+                isGroupSelectPhase
+                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs scale-105'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}
+            >
+              {isGroupSelectPhase
+                ? '🔗 Επιλεγμένο Group: Ελατήριο + Βελάκι + 3 Βαράκια!'
+                : '⚖️ Κρέμασμα Βαρών (0,1 kg) & Ταλάντωση...'}
+            </span>
+          </div>
+        </div>
+
+        <svg
+          className="w-full h-[460px] rounded-xl border border-slate-200/90 bg-[#fcfaf2] shadow-inner"
+          viewBox="0 0 600 465"
+        >
+          <defs>
+            <pattern id="hookeGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+              <path
+                d="M 24 0 L 0 0 0 24"
+                fill="none"
+                stroke="rgba(148, 163, 184, 0.23)"
+                strokeWidth="1"
+              />
+            </pattern>
+          </defs>
+          <rect width="600" height="465" fill="url(#hookeGrid)" />
+
+          {/* Οριζόντια μπάρα στήριξης στην οροφή */}
+          <line
+            x1="28"
+            y1="22"
+            x2="365"
+            y2="22"
+            stroke="#0f172a"
+            strokeWidth="5.5"
+            strokeLinecap="round"
+          />
+
+          {/* Σχεδίαση των 4 Ελατηρίων, των Βελών Δείκτη & των Βαρών 0,1 kg με Ταλάντωση */}
+          {columns.map((col) => {
+            const appearT = stepTimes[col.idx];
+            if (elapsedSec < appearT) return null;
+            const dt = elapsedSec - appearT;
+            const fade = Math.min(1, dt / 0.35);
+
+            // Απόσβεση ταλάντωσης πάνω-κάτω καθώς κρεμιούνται τα βαράκια!
+            const bounceAmp = col.weights === 0 ? 0 : 12 + col.weights * 3.5;
+            const bounceY =
+              dt < 2.2 && col.weights > 0
+                ? Math.exp(-2.6 * dt) * Math.sin(dt * 15.5) * bounceAmp
+                : Math.sin(elapsedSec * 2.2 + col.idx) * (col.weights > 0 ? 1.1 : 0);
+
+            const isThisColumnGrouped = col.idx === 3 && isGroupSelectPhase;
+            const gx = isThisColumnGrouped ? groupShiftX : 0;
+            const gy = isThisColumnGrouped ? groupShiftY : 0;
+
+            const curX = col.x + gx;
+            const curBotY = col.baseBotY + bounceY + gy;
+            const springPath = buildSpringSvgPath(curX, 22 + gy, curBotY, 9);
+
+            return (
+              <g key={col.idx} opacity={fade}>
+                {/* Αν είναι η φάση Group Selection στο 4ο ελατήριο (Ελατήριο + Βελάκι + 3 Βαράκια), δείξε το πλαίσιο Group! */}
+                {isThisColumnGrouped && (
+                  <g>
+                    <rect
+                      x={curX - 28}
+                      y={16 + gy}
+                      width={86 * groupSelectProgress}
+                      height={318 * groupSelectProgress}
+                      rx="10"
+                      fill="rgba(16, 185, 129, 0.08)"
+                      stroke="#10b981"
+                      strokeWidth="2.2"
+                      strokeDasharray="6 4"
+                    />
+                    {groupSelectProgress > 0.75 && (
+                      <g transform={`translate(${curX - 26}, ${4 + gy})`}>
+                        <rect
+                          x="0"
+                          y="0"
+                          width="178"
+                          height="18"
+                          rx="6"
+                          fill="#059669"
+                        />
+                        <text
+                          x="89"
+                          y="12.5"
+                          textAnchor="middle"
+                          fill="#ffffff"
+                          fontSize="9.5"
+                          fontWeight="bold"
+                        >
+                          🔗 Group: Ελατήριο + Βελάκι + Βαράκια
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                )}
+
+                {/* Ελατήριο */}
+                <path
+                  d={springPath}
+                  fill="none"
+                  stroke="#0f172a"
+                  strokeWidth="2.1"
+                  strokeLinecap="round"
+                />
+
+                {/* Κόμβος σύνδεσης & Βελάκι Δείκτη (Pointer Arrow) */}
+                <circle cx={curX} cy={curBotY} r="3.2" fill={col.color} />
+                <line
+                  x1={curX}
+                  y1={curBotY}
+                  x2={curX + 36}
+                  y2={curBotY}
+                  stroke={col.color}
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                />
+                <polyline
+                  points={`${curX + 29},${curBotY - 4.5} ${curX + 37},${curBotY} ${curX + 29},${curBotY + 4.5}`}
+                  fill="none"
+                  stroke={col.color}
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                {/* Διακεκομμένη γραμμή μέτρησης προς τον κατακόρυφο χάρακα */}
+                <line
+                  x1={curX + 38}
+                  y1={curBotY}
+                  x2={rulerX}
+                  y2={curBotY}
+                  stroke={col.color}
+                  strokeWidth="1.5"
+                  strokeDasharray="5 4"
+                />
+
+                {/* Κρεμαστά Βαράκια (0,1 kg το καθένα) */}
+                {Array.from({ length: col.weights }).map((_, wIdx) => {
+                  const wy = curBotY + 6 + wIdx * 36;
+                  return (
+                    <g key={wIdx}>
+                      {/* Πάνω γάντζος */}
+                      <path
+                        d={`M ${curX} ${wy - 6} L ${curX} ${wy}`}
+                        stroke="#1e293b"
+                        strokeWidth="2"
+                      />
+                      {/* Σώμα σταθμού 0,1 kg */}
+                      <rect
+                        x={curX - 13}
+                        y={wy}
+                        width="26"
+                        height="26"
+                        rx="2.5"
+                        fill="#cbd5e1"
+                        stroke="#1e293b"
+                        strokeWidth="1.8"
+                      />
+                      <text
+                        x={curX}
+                        y={wy + 11.5}
+                        textAnchor="middle"
+                        fill="#0f172a"
+                        fontSize="8.5"
+                        fontWeight="bold"
+                      >
+                        0,1
+                      </text>
+                      <text
+                        x={curX}
+                        y={wy + 21}
+                        textAnchor="middle"
+                        fill="#0f172a"
+                        fontSize="8"
+                        fontWeight="bold"
+                      >
+                        kg
+                      </text>
+                      {/* Κάτω γάντζος */}
+                      <path
+                        d={`M ${curX} ${wy + 26} C ${curX + 5} ${wy + 26}, ${curX + 5} ${wy + 32}, ${curX} ${wy + 32} C ${curX - 4} ${wy + 32}, ${curX - 4} ${wy + 29}, ${curX - 1} ${wy + 29}`}
+                        fill="none"
+                        stroke="#1e293b"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })}
+
+          {/* ΚΑΤΑΚΟΡΥΦΟΣ ΧΑΡΑΚΑΣ (0 έως 10 cm) ΔΕΞΙΑ */}
+          <g transform={`translate(${rulerX}, ${rulerZeroY - 4})`}>
+            <rect
+              x="0"
+              y="0"
+              width="52"
+              height="346"
+              rx="6"
+              fill="rgba(226, 232, 240, 0.85)"
+              stroke="#94a3b8"
+              strokeWidth="1.5"
+            />
+            {Array.from({ length: 11 }).map((_, cmVal) => {
+              const yTick = 4 + cmVal * cmStepPx;
+              return (
+                <g key={cmVal}>
+                  <line
+                    x1="0"
+                    y1={yTick}
+                    x2="13"
+                    y2={yTick}
+                    stroke="#475569"
+                    strokeWidth="1.5"
+                  />
+                  <line
+                    x1="39"
+                    y1={yTick}
+                    x2="52"
+                    y2={yTick}
+                    stroke="#475569"
+                    strokeWidth="1.5"
+                  />
+                  {cmVal < 10 && (
+                    <>
+                      <line
+                        x1="0"
+                        y1={yTick + cmStepPx * 0.5}
+                        x2="8"
+                        y2={yTick + cmStepPx * 0.5}
+                        stroke="#94a3b8"
+                        strokeWidth="1.1"
+                      />
+                      <line
+                        x1="44"
+                        y1={yTick + cmStepPx * 0.5}
+                        x2="52"
+                        y2={yTick + cmStepPx * 0.5}
+                        stroke="#94a3b8"
+                        strokeWidth="1.1"
+                      />
+                    </>
+                  )}
+                  <text
+                    x="26"
+                    y={yTick + 3.5}
+                    textAnchor="middle"
+                    fill="#0f172a"
+                    fontSize="9.5"
+                    fontWeight="bold"
+                  >
+                    {cmVal}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Κουμπάκια Χάρακα (↻ και cm) */}
+            <circle cx="70" cy="245" r="12" fill="#ffffff" stroke="#94a3b8" strokeWidth="1.4" />
+            <text x="70" y="249" textAnchor="middle" fill="#475569" fontSize="11" fontWeight="bold">
+              ↻
+            </text>
+            <circle cx="70" cy="274" r="13" fill="#0066ff" />
+            <text x="70" y="277.5" textAnchor="middle" fill="#ffffff" fontSize="9.5" fontWeight="bold">
+              cm
+            </text>
+          </g>
+
+          {/* Ταμπελάκια Μετρήσεων Δίπλα στον Χάρακα (◀ 0 cm, ◀ 1 cm, ◀ 2 cm, ◀ 3 cm) */}
+          {columns.map((col) => {
+            if (elapsedSec < stepTimes[col.idx] + 0.25) return null;
+            const yMark = rulerZeroY + col.cm * cmStepPx;
+            return (
+              <g key={`lbl-${col.idx}`}>
+                <line
+                  x1={rulerX}
+                  y1={yMark}
+                  x2={rulerX + 52}
+                  y2={yMark}
+                  stroke={col.color}
+                  strokeWidth="1.8"
+                />
+                <rect
+                  x={rulerX + 60}
+                  y={yMark - 10}
+                  width="54"
+                  height="20"
+                  rx="6"
+                  fill="#ffffff"
+                  stroke={col.color}
+                  strokeWidth="1.4"
+                />
+                <text
+                  x={rulerX + 87}
+                  y={yMark + 3.5}
+                  textAnchor="middle"
+                  fill={col.color}
+                  fontSize="10"
+                  fontWeight="bold"
+                >
+                  {col.label}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* ΠΙΝΑΚΑΣ ΜΕΤΡΗΣΕΩΝ ΝΟΜΟΥ HOOKE & ΔΙΑΓΡΑΜΜΑ Fελ(N) - Δl(cm) ΚΑΤΩ ΑΡΙΣΤΕΡΑ */}
+          <g transform="translate(118, 224)">
+            {/* Διακεκομμένο πλαίσιο widgets */}
+            <rect
+              x="0"
+              y="0"
+              width="256"
+              height="232"
+              rx="8"
+              fill="rgba(255, 255, 255, 0.55)"
+              stroke="#60a5fa"
+              strokeWidth="1.3"
+              strokeDasharray="4 4"
+            />
+
+            {/* Πίνακας Μετρήσεων */}
+            <rect
+              x="6"
+              y="5"
+              width="244"
+              height="86"
+              rx="7"
+              fill="#ffffff"
+              stroke="#cbd5e1"
+              strokeWidth="1.3"
+            />
+            <text x="26" y="19" textAnchor="middle" fill="#1e293b" fontSize="8.5" fontWeight="bold">
+              Βάρη
+            </text>
+            <text x="72" y="19" textAnchor="middle" fill="#1e293b" fontSize="8.5" fontWeight="bold">
+              m (kg)
+            </text>
+            <text x="130" y="19" textAnchor="middle" fill="#1e293b" fontSize="8.5" fontWeight="bold">
+              W=Fελ(N)
+            </text>
+            <text x="186" y="19" textAnchor="middle" fill="#1e293b" fontSize="8.5" fontWeight="bold">
+              Δl (cm)
+            </text>
+            <circle cx="228" cy="16" r="3.5" fill="#0284c7" />
+            <line x1="8" y1="24" x2="248" y2="24" stroke="#e2e8f0" strokeWidth="1" />
+
+            {columns.map((col, rIdx) => {
+              const isRowVisible = elapsedSec >= stepTimes[rIdx] + 0.35;
+              const isLatestRow =
+                isRowVisible &&
+                (rIdx === 3 || elapsedSec < stepTimes[rIdx + 1] + 0.35);
+              const ry = 26 + rIdx * 15.5;
+              return (
+                <g key={`row-${rIdx}`} opacity={isRowVisible ? 1 : 0.25}>
+                  {isLatestRow && (
+                    <rect
+                      x="8"
+                      y={ry}
+                      width="240"
+                      height="15"
+                      rx="3"
+                      fill="#dbeafe"
+                    />
+                  )}
+                  <text
+                    x="26"
+                    y={ry + 10.5}
+                    textAnchor="middle"
+                    fill="#0f172a"
+                    fontSize="8.5"
+                    fontWeight="bold"
+                  >
+                    {isRowVisible ? col.weights : '—'}
+                  </text>
+                  <text
+                    x="72"
+                    y={ry + 10.5}
+                    textAnchor="middle"
+                    fill="#0f172a"
+                    fontSize="8.5"
+                    fontWeight="bold"
+                  >
+                    {isRowVisible ? col.massStr : '—'}
+                  </text>
+                  <text
+                    x="130"
+                    y={ry + 10.5}
+                    textAnchor="middle"
+                    fill="#0f172a"
+                    fontSize="8.5"
+                    fontWeight="bold"
+                  >
+                    {isRowVisible ? col.forceStr : '—'}
+                  </text>
+                  <text
+                    x="186"
+                    y={ry + 10.5}
+                    textAnchor="middle"
+                    fill="#0f172a"
+                    fontSize="8.5"
+                    fontWeight="bold"
+                  >
+                    {isRowVisible ? col.cm : '—'}
+                  </text>
+                  <circle
+                    cx="228"
+                    cy={ry + 7.5}
+                    r="4.2"
+                    fill={isRowVisible ? '#0284c7' : '#ffffff'}
+                    stroke="#0284c7"
+                    strokeWidth="1.2"
+                  />
+                </g>
+              );
+            })}
+
+            {/* Διάγραμμα Fελ(N) - Δl(cm) */}
+            <g transform="translate(28, 104)">
+              {/* Άξονες */}
+              <line x1="0" y1="112" x2="0" y2="8" stroke="#0f172a" strokeWidth="1.8" />
+              <polyline
+                points="-4,14 0,7 4,14"
+                fill="none"
+                stroke="#0f172a"
+                strokeWidth="1.8"
+              />
+              <text x="8" y="16" fill="#0f172a" fontSize="10.5" fontWeight="bold" fontStyle="italic">
+                Fελ (N)
+              </text>
+
+              <line x1="0" y1="112" x2="188" y2="112" stroke="#0f172a" strokeWidth="1.8" />
+              <polyline
+                points="182,108 189,112 182,116"
+                fill="none"
+                stroke="#0f172a"
+                strokeWidth="1.8"
+              />
+              <text x="135" y="105" fill="#0f172a" fontSize="10" fontWeight="bold" fontStyle="italic">
+                Δl (cm)
+              </text>
+
+              {/* Κουμπάκι [✓ Γραμμή] */}
+              <rect
+                x="118"
+                y="6"
+                width="62"
+                height="18"
+                rx="5"
+                fill="#f0fdf4"
+                stroke="#16a34a"
+                strokeWidth="1.2"
+              />
+              <rect x="123" y="10" width="10" height="10" rx="2" fill="#16a34a" />
+              <text x="128" y="18" textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">
+                ✓
+              </text>
+              <text x="156" y="18" textAnchor="middle" fill="#15803d" fontSize="8.5" fontWeight="bold">
+                Γραμμή
+              </text>
+
+              {/* Ευθεία Νόμου Hooke & Σημεία (0,0), (1,1), (2,2), (3,3) */}
+              {(() => {
+                const activeCount = stepTimes.filter((st) => elapsedSec >= st + 0.35).length;
+                const pts = [
+                  { x: 0, y: 112, label: '0' },
+                  { x: 42, y: 82, label: '1' },
+                  { x: 84, y: 52, label: '2' },
+                  { x: 126, y: 22, label: '3' },
+                ].slice(0, activeCount);
+
+                return (
+                  <>
+                    {pts.length >= 2 && (
+                      <line
+                        x1={pts[0].x}
+                        y1={pts[0].y}
+                        x2={pts[pts.length - 1].x}
+                        y2={pts[pts.length - 1].y}
+                        stroke="#0284c7"
+                        strokeWidth="2.4"
+                      />
+                    )}
+                    {pts.map((p, idx) => (
+                      <g key={`gpt-${idx}`}>
+                        {idx > 0 && (
+                          <>
+                            <line
+                              x1={p.x}
+                              y1={112}
+                              x2={p.x}
+                              y2={p.y}
+                              stroke="#38bdf8"
+                              strokeWidth="1.1"
+                              strokeDasharray="3 3"
+                            />
+                            <line
+                              x1={0}
+                              y1={p.y}
+                              x2={p.x}
+                              y2={p.y}
+                              stroke="#38bdf8"
+                              strokeWidth="1.1"
+                              strokeDasharray="3 3"
+                            />
+                            <text
+                              x={p.x}
+                              y="123"
+                              textAnchor="middle"
+                              fill="#0f172a"
+                              fontSize="8.5"
+                              fontWeight="bold"
+                            >
+                              {p.label}
+                            </text>
+                            <text
+                              x="-8"
+                              y={p.y + 3}
+                              textAnchor="end"
+                              fill="#0f172a"
+                              fontSize="8.5"
+                              fontWeight="bold"
+                            >
+                              {p.label}
+                            </text>
+                          </>
+                        )}
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r="4.2"
+                          fill="#0284c7"
+                          stroke="#e0f2fe"
+                          strokeWidth="1.8"
+                        />
+                      </g>
+                    ))}
+                  </>
+                );
+              })()}
+            </g>
+          </g>
+        </svg>
+      </div>
+
+      {/* ΔΕΞΙΑ: ΕΛΕΓΧΟΣ LAYERS & GROUP ΕΡΓΑΛΕΙΩΝ */}
+      <div className="w-full lg:w-4/12 rounded-2xl bg-white border border-slate-200 shadow-lg p-5 flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-[#0066ff]" />
+              <span className="text-xs font-extrabold text-slate-900">
+                Διαχείριση Layers &amp; Groups
+              </span>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold">
+              🔗 Group Ενεργό
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            <div
+              className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
+                isGroupSelectPhase
+                  ? 'bg-emerald-50 border-emerald-500 shadow-sm ring-2 ring-emerald-500/20'
+                  : 'bg-sky-50 border-[#0066ff]'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-bold text-[#1b2a4a]">
+                <GripVertical className="w-4 h-4 text-[#0066ff]" />
+                <span>1. Group: Ελατήριο + Βελάκι + Βαράκια</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-600">
+                <Eye className="w-3.5 h-3.5 text-[#0066ff]" />
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/70 border border-amber-300 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-slate-800">
+                <GripVertical className="w-4 h-4 text-amber-600" />
+                <span>2. Χάρακας cm &amp; Οροφή (Κλειδωμένο)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5 text-slate-700" />
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-slate-700">
+                <GripVertical className="w-4 h-4 text-slate-400" />
+                <span>3. Πίνακας &amp; Διάγραμμα Fελ - Δl</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5 text-[#0066ff]" />
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-[11.5px] text-emerald-950 space-y-1.5">
+            <div className="font-extrabold flex items-center gap-1.5">
+              <span>🔗 Ομαδοποίηση (Group) με 1 Κλικ:</span>
+            </div>
+            <p className="text-[11px] text-slate-700 leading-relaxed">
+              Επίλεξε με το Λάσο το <b>Ελατήριο</b>, το <b>Βελάκι δείκτη</b> και τα <b>Βαράκια (0,1 kg)</b> και πάτα <b>Group</b>! Έτσι τα αντιγράφεις ή τα μετακινείς όλα μαζί ως ένα ενιαίο αντικείμενο.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 leading-relaxed">
+          💡 <b>Κλείδωμα Layer:</b> Κλείδωσε τον χάρακα και το υπόβαθρο στο Layer 2 ώστε να μετακινείς ελεύθερα τα Groups των ελατηρίων στο Layer 1!
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const isExplainBoardsBrand =
   typeof window !== 'undefined' &&
   (window.location.hostname.toLowerCase().includes('explainboard') ||
@@ -833,7 +1592,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           1. TOP STICKY NAVIGATION BAR (Logo + Προσομοιώσεις + Αντικείμενα + Auth)
          ===================================================================== */}
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs bn-safe-top-header">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-10 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-6 sm:gap-8 shrink-0">
             <div
               onClick={() => scrollToElementId('hero-top-section', undefined, 'start')}
@@ -932,7 +1691,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* =====================================================================
           2. HERO SECTION + ANIMATED SIMULATIONS & SCIENCE SHOWCASE TABS
          ===================================================================== */}
-      <main id="hero-top-section" className="max-w-7xl mx-auto px-4 sm:px-8 pt-10 pb-28 scroll-mt-20">
+      <main id="hero-top-section" className="max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-10 pt-10 pb-28 scroll-mt-20">
         {/* --- Α. ΚΕΝΤΡΙΚΕΣ ΠΛΗΡΟΦΟΡΙΕΣ (Τίτλος & Υπότιτλος) --- */}
         <div className="text-center max-w-3xl mx-auto">
           <h1 className="text-3xl sm:text-5xl md:text-[50px] font-extrabold tracking-tight text-slate-950 leading-[1.14]">
@@ -985,7 +1744,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
            =================================================================== */}
         <div
           id="simulations-section"
-          className="mt-12 pt-8 border-t border-slate-200/70 max-w-6xl mx-auto scroll-mt-20"
+          className="mt-12 pt-8 border-t border-slate-200/70 max-w-[1360px] w-full mx-auto scroll-mt-20"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
         >
@@ -1149,7 +1908,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   resetSignal={dragResetCounter}
                   badgeText="✋ Σύρε τον Καμβά ή Κάνε Κλικ για Zoom"
                   onClickCard={() => setZoomedNote(activeScienceNote)}
-                  className="relative w-full max-w-2xl rounded-3xl bg-white border-2 border-slate-200/95 shadow-2xl p-4 sm:p-5 z-10"
+                  className="relative w-full max-w-3xl rounded-3xl bg-white border-2 border-slate-200/95 shadow-2xl p-4 sm:p-5 z-10"
                 >
                   {/* Sheet Top Info Bar */}
                   <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-100 flex-wrap">
@@ -1405,230 +2164,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             )}
 
             {/* ===============================================================
-                TAB 7 (PRO #2): LAYERS & GROUPS
+                TAB 7 (PRO #2): LAYERS & GROUPS (Animated Hooke Experiment + Group Selection)
                =============================================================== */}
-            {activeTab === 'layers-groups' && (
-              <div className="bn-tab-stage p-6 sm:p-8 min-h-[535px] flex flex-col lg:flex-row items-stretch justify-center gap-6">
-                <div className="w-full lg:w-5/12 rounded-2xl bg-white border border-slate-200 shadow-lg p-5 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-[#0066ff]" />
-                        <span className="text-xs font-extrabold text-slate-900">
-                          Διαχείριση Ενθέτων (Layers)
-                        </span>
-                      </div>
-                      <span className="px-2.5 py-0.5 rounded-full bg-sky-50 text-[#0066ff] text-[10px] font-bold">
-                        + Νέο Layer
-                      </span>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-sky-50 border border-[#0066ff] text-xs shadow-2xs">
-                        <div className="flex items-center gap-2 font-bold text-[#1b2a4a]">
-                          <GripVertical className="w-4 h-4 text-[#0066ff]" />
-                          <span>1. Υπογραμμίσεις &amp; MathOCR (12)</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Eye className="w-3.5 h-3.5 text-[#0066ff]" />
-                          <Lock className="w-3.5 h-3.5 text-slate-400" />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/70 border border-amber-300 text-xs">
-                        <div className="flex items-center gap-2 font-semibold text-slate-800">
-                          <GripVertical className="w-4 h-4 text-amber-600" />
-                          <span>2. Κύκλος Νερού / Φωτοσύνθεση (Κλειδωμένο)</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Eye className="w-3.5 h-3.5 text-slate-700" />
-                          <Lock className="w-3.5 h-3.5 text-amber-600" />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs opacity-65">
-                        <div className="flex items-center gap-2 font-semibold text-slate-500">
-                          <GripVertical className="w-4 h-4 text-slate-400" />
-                          <span>3. Λύσεις Ασκήσεων (Κρυφό Layer)</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <EyeOff className="w-3.5 h-3.5 text-slate-400" />
-                          <Lock className="w-3.5 h-3.5 text-slate-400" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 leading-relaxed">
-                    💡 <b>Για Καθηγητές &amp; Μαθητές:</b> Κλείδωσε το σχεδιάγραμμα (Κύκλος του Νερού, Φωτοσύνθεση, Οξέα, Αιμοφόρα Αγγεία ή Μάζα) στο Layer 2 ώστε η σβήστρα να σβήνει <b>μόνο τις πράξεις σου</b> στο Layer 1!
-                  </div>
-                </div>
-
-                <div className="w-full lg:w-7/12 rounded-2xl bg-[#fffdf7] border border-slate-200 shadow-lg p-5 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-                      <span className="text-xs font-extrabold text-slate-900">
-                        ⬚ Ορθογώνιο Λάσο, Ελεύθερο Λάσο &amp; Καρτέλες Επιστημών
-                      </span>
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold flex-wrap">
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                          <Copy className="w-3 h-3" /> Αντίγραφο
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white flex items-center gap-1">
-                          ∑ MathOCR
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1">
-                          <Plus className="w-3 h-3" /> (+) Βιβλιοθήκη
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="relative h-64 rounded-xl bg-white border border-slate-200 p-3 grid grid-cols-3 gap-2.5 items-center">
-                      {LIVE_SIMULATION_GIFS.slice(0, 3).map((note, idx) => (
-                        <DraggableCard
-                          key={note.id}
-                          resetSignal={dragResetCounter}
-                          badgeText="✋ Σύρε"
-                          className={`rounded-xl p-2 border-2 ${
-                            idx === 1
-                              ? 'border-dashed border-[#22c55e] bg-emerald-50/30 bn-animate-lasso'
-                              : 'border-slate-200 bg-slate-50'
-                          }`}
-                        >
-                          <img
-                            src={note.src}
-                            alt={note.shortTitle}
-                            loading="lazy"
-                            className="w-full h-36 object-cover rounded-lg"
-                          />
-                          <div className="mt-1.5 text-[10px] font-extrabold text-slate-800 truncate text-center">
-                            {note.shortTitle}
-                          </div>
-                        </DraggableCard>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-slate-600">
-                    <span>🟢 Ορθογώνια Επιλογή (Διαγώνια Έλξη)</span>
-                    <span className="text-[#0066ff]">🔵 Ελεύθερο Λάσο &amp; ∑ MathOCR</span>
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeTab === 'layers-groups' && <AnimatedHookeWeightsGroupShowcase />}
           </div>
         </div>
 
         {/* ===================================================================
-            4. LIVE INTERACTIVE SIMULATIONS WALL (Only the 4 Animated GIFs)
-           =================================================================== */}
-        <section className="mt-24 max-w-6xl mx-auto bn-scroll-reveal">
-          <div className="text-center max-w-3xl mx-auto mb-10">
-            <span className="px-3.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-extrabold uppercase tracking-wider">
-              Ζωντανές Προσομοιώσεις «Explain» • Κίνηση Κατευθείαν από το Μολύβι σας
-            </span>
-            <h2 className="mt-3 text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-950">
-              Δυνάμεις, Ελατήρια, Κυκλώματα &amp; Άτομα σε Ζωντανή Κίνηση
-            </h2>
-            <p className="mt-2.5 text-sm sm:text-base text-slate-600">
-              Σχεδίασε με το μολύβι σου διανύσματα δυνάμεων, ελατήρια, ηλεκτρικά κυκλώματα ή χημικές αντιδράσεις και δες τα να <b>«ζωντανεύουν» αυτόματα</b> πάνω στο board!
-            </p>
-          </div>
-
-          <div
-            className="relative rounded-3xl border border-slate-200 bg-[#f8fafc] p-6 sm:p-8 shadow-xl overflow-hidden"
-            style={{
-              backgroundImage:
-                'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)',
-              backgroundSize: '26px 26px',
-            }}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-              {LIVE_SIMULATION_GIFS.map((note, idx) => {
-                const isSpotlight = activeBentoIndex === idx;
-                return (
-                  <DraggableCard
-                    key={note.id}
-                    resetSignal={dragResetCounter}
-                    badgeText="✋ Σύρε με το ποντίκι"
-                    onClickCard={() => setZoomedNote(note)}
-                    className={`rounded-3xl bg-white border-2 p-4 shadow-lg flex flex-col justify-between transition-all ${
-                      isSpotlight
-                        ? 'border-[#0066ff] shadow-2xl ring-4 ring-[#0066ff]/15'
-                        : 'border-slate-200/90 hover:border-slate-300'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span
-                          className="px-2.5 py-1 rounded-lg text-white text-xs font-extrabold"
-                          style={{ backgroundColor: note.subjectColor }}
-                        >
-                          {note.subjectBadge}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-900 text-[10px] font-extrabold">
-                            {note.formulaBadge}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setZoomedNote(note);
-                            }}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] hover:text-white text-slate-700 transition cursor-pointer"
-                            title="Μεγέθυνση (Zoom)"
-                          >
-                            <ZoomIn className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-[#fffdf9]">
-                        <img
-                          src={note.src}
-                          alt={note.title}
-                          loading="lazy"
-                          className="w-full h-60 sm:h-64 object-contain mx-auto"
-                        />
-                      </div>
-
-                      <h3 className="mt-3.5 text-base font-extrabold text-slate-900">
-                        {note.title}
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                        {note.description}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-0.5 rounded-md bg-slate-100 text-[10.5px] font-extrabold text-slate-800 truncate">
-                        ✨ {note.highlightText}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEnterApp();
-                        }}
-                        className="text-xs font-extrabold text-[#0066ff] hover:underline shrink-0 cursor-pointer"
-                      >
-                        Άνοιγμα →
-                      </button>
-                    </div>
-                  </DraggableCard>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* ===================================================================
-            5. DEDICATED SCIENCE NOTES & LESSONS HUB:
+            4. DEDICATED SCIENCE NOTES & LESSONS HUB:
                - COMPACT MINI-CARDS ROW AT TOP (All 5 Together)
                - SMOOTH SCROLL ON CLICK TO EACH NOTE'S DEDICATED ZONE BELOW
            =================================================================== */}
-        <section id="science-notes-hub" className="mt-28 max-w-6xl mx-auto scroll-mt-24">
+        <section id="science-notes-hub" className="mt-24 max-w-[1360px] w-full mx-auto scroll-mt-24">
           {/* Header + Compact Mini-Cards Strip (Όλα μαζί μικρά στην αρχή) */}
           <div className="rounded-3xl bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 p-6 sm:p-8 shadow-lg">
             <div className="text-center max-w-3xl mx-auto mb-7">
