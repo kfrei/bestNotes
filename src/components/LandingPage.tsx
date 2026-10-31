@@ -1429,6 +1429,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [dragResetCounter, setDragResetCounter] = useState<number>(0);
   const [zoomedNote, setZoomedNote] = useState<ScienceNoteAsset | null>(null);
   const [activeBentoIndex, setActiveBentoIndex] = useState<number>(0);
+  const [isScrolled, setIsScrolled] = useState<boolean>(false);
 
   // Auto-cycle through the 5 animated Science Image Tabs + 2 PRO tabs
   useEffect(() => {
@@ -1488,6 +1489,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     <div
       data-ui-panel="true"
       style={{ touchAction: 'pan-y' }}
+      onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > 8)}
       className="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-white text-slate-900 select-none"
     >
       {/* Keyframe animations: Stronger Ken-Burns Zoom, Hand-drawn Circles & Expanding Selection Frames */}
@@ -1589,9 +1591,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       `}</style>
 
       {/* =====================================================================
-          1. TOP STICKY NAVIGATION BAR (Logo + Προσομοιώσεις + Αντικείμενα + Auth)
+          1. TOP STICKY NAVIGATION BAR (Logo + Προσομοιώσεις + Σημειώσεις + Auth)
          ===================================================================== */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs bn-safe-top-header">
+      <header
+        className={`sticky top-0 z-50 border-b transition-all duration-200 bn-safe-top-header ${
+          isScrolled
+            ? 'bg-white/75 backdrop-blur-md border-slate-200/85 shadow-[0_6px_22px_-4px_rgba(15,23,42,0.11)]'
+            : 'bg-white/95 border-slate-200/60 shadow-none'
+        }`}
+      >
         <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-10 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-6 sm:gap-8 shrink-0">
             <div
