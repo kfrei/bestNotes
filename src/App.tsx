@@ -21215,12 +21215,7 @@ export default function App() {
       snapType !== 'parabola' &&
       snapType !== 'hyperbola' &&
       snapType !== 'arc';
-    const liveFillStyle: FillStyleType =
-      isFillableSnapShape && Boolean(snappedCurrentStrokeRef.current) && (activeTool === 'pen' || activeTool === 'pencil')
-        ? 'solid'
-        : isFillableSnapShape
-        ? fillStyle
-        : 'none';
+    const liveFillStyle: FillStyleType = isFillableSnapShape ? fillStyle : 'none';
     const previewStroke: StrokeObject = {
       id: 'live',
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
@@ -31888,9 +31883,7 @@ export default function App() {
             },
           ];
           const polyFillStyle: FillStyleType =
-            activeTool === 'pen' || activeTool === 'pencil'
-              ? 'solid'
-              : fillStyle !== 'none'
+            fillStyle !== 'none'
               ? fillStyle
               : primaryStroke.fillStyle && primaryStroke.fillStyle !== 'none'
               ? primaryStroke.fillStyle
@@ -32003,18 +31996,15 @@ export default function App() {
       shapeType !== 'hyperbola' &&
       shapeType !== 'arc';
 
-    // When drawing with Pen ('pen' or 'pencil'), if the stroke snapped into a shape by holding the pencil (isShape === true),
-    // automatically fill that shape with color while keeping the Pen tool itself in 'none' (unfilled)!
+    // Respect the selected fillStyle ('none' for outline-only when "Χωρίς Γέμισμα" is active).
     const commitFillStyle: FillStyleType =
       shapeType === 'hooked-weight'
         ? fillStyle !== 'none'
           ? fillStyle
           : 'solid'
-        : canAutoFillStroke && isShape && (activeTool === 'pen' || activeTool === 'pencil')
-          ? 'solid'
-          : canAutoFillStroke
-            ? fillStyle
-            : 'none';
+        : canAutoFillStroke
+          ? fillStyle
+          : 'none';
 
     const existingFreePtrCount =
       shapeType === 'spring-pointer'
