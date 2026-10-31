@@ -711,10 +711,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setTabProgress(0);
   };
 
-  const scrollToElementId = (elId: string, highlightId?: string) => {
+  const scrollToElementId = (
+    elId: string,
+    highlightId?: string,
+    blockPos: ScrollLogicalPosition = 'start'
+  ) => {
     const el = document.getElementById(elId);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.scrollIntoView({ behavior: 'smooth', block: blockPos });
       if (highlightId) {
         setHighlightedZoneId(highlightId);
         window.setTimeout(() => {
@@ -832,26 +836,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       `}</style>
 
       {/* =====================================================================
-          1. TOP NAVIGATION BAR (Goodnotes.com Minimalist Header)
+          1. TOP STICKY NAVIGATION BAR (Logo + Προσομοιώσεις + Αντικείμενα + Auth)
          ===================================================================== */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100 bn-safe-top-header">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-6 lg:gap-8">
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs bn-safe-top-header">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-6 sm:gap-8 shrink-0">
             <div
-              onClick={onEnterApp}
-              className="flex items-center gap-2.5 cursor-pointer group"
+              onClick={() => scrollToElementId('hero-top-section', undefined, 'start')}
+              className="flex items-center gap-2.5 cursor-pointer group shrink-0"
             >
               {isExplainBoardsBrand ? (
                 <img
                   src="/explainboards-logo.png"
                   alt="ExplainBoards"
-                  className="h-9 sm:h-10 w-auto object-contain group-hover:scale-[1.02] transition shrink-0"
+                  className="h-10 sm:h-11 w-auto min-w-[165px] object-contain group-hover:scale-[1.02] transition shrink-0"
                 />
               ) : (
                 <>
                   <BestNotesLogoIcon className="w-9 h-9 group-hover:scale-105 transition shrink-0" />
                   <span
-                    className="text-[22px] font-semibold tracking-[-0.03em] text-[#111315] inline-flex items-start leading-none"
+                    className="text-[22px] font-semibold tracking-[-0.03em] text-[#111315] inline-flex items-start leading-none shrink-0"
                     style={{ fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" }}
                   >
                     BestNotes
@@ -863,39 +867,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               )}
             </div>
 
-            <nav className="hidden lg:flex items-center gap-5 text-xs xl:text-sm font-semibold text-slate-700">
-              {LIVE_SIMULATION_GIFS.map((note) => (
-                <button
-                  key={note.id}
-                  type="button"
-                  onClick={() => handleSelectTab(note.id)}
-                  className={`transition cursor-pointer ${
-                    activeTab === note.id ? 'text-[#0066ff] font-extrabold' : 'hover:text-[#0066ff]'
-                  }`}
-                >
-                  {note.shortTitle}
-                </button>
-              ))}
+            <nav className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold text-slate-700">
               <button
                 type="button"
-                onClick={() => handleSelectTab('sine-3d')}
-                className={`transition cursor-pointer ${
-                  activeTab === 'sine-3d' ? 'text-[#0066ff] font-extrabold' : 'hover:text-[#0066ff]'
-                }`}
+                onClick={() => scrollToElementId('simulations-section', undefined, 'start')}
+                className="px-3.5 py-2 rounded-xl hover:bg-slate-100 hover:text-[#0066ff] transition cursor-pointer whitespace-nowrap"
               >
-                3D &amp; Μαθηματικά
+                Προσομοιώσεις
               </button>
               <button
                 type="button"
-                onClick={() => scrollToElementId('science-notes-hub')}
-                className="px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-bold transition cursor-pointer"
+                onClick={() => scrollToElementId('science-notes-hub', undefined, 'start')}
+                className="px-3.5 py-2 rounded-xl hover:bg-slate-100 hover:text-[#0066ff] transition cursor-pointer whitespace-nowrap"
               >
-                Σημειώσεις &amp; Ενότητες ↓
+                Αντικείμενα
               </button>
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             {currentUser ? (
               <div className="flex items-center gap-2.5">
                 <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
@@ -948,7 +938,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* =====================================================================
           2. HERO SECTION + ANIMATED SIMULATIONS & SCIENCE SHOWCASE TABS
          ===================================================================== */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-8 pt-10 pb-28">
+      <main id="hero-top-section" className="max-w-7xl mx-auto px-4 sm:px-8 pt-10 pb-28 scroll-mt-20">
         <div className="text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100/90 border border-amber-300 text-amber-950 text-xs font-extrabold mb-4 shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
@@ -1047,7 +1037,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             3. FOLDER-STYLE SHOWCASE TABS (Live Simulation GIFs + Science Notes + PRO Tabs)
            =================================================================== */}
         <div
-          className="mt-10 max-w-6xl mx-auto"
+          id="simulations-section"
+          className="mt-10 max-w-6xl mx-auto scroll-mt-20"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
         >
@@ -1716,7 +1707,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <button
                   key={note.id}
                   type="button"
-                  onClick={() => scrollToElementId(`note-zone-${note.id}`, note.id)}
+                  onClick={() => scrollToElementId(`note-zone-${note.id}`, note.id, 'center')}
                   className="group text-left rounded-2xl bg-white hover:bg-sky-50/60 border-2 border-slate-200 hover:border-[#0066ff] p-2.5 shadow-sm hover:shadow-xl transition-all duration-200 flex flex-col justify-between cursor-pointer hover:-translate-y-1"
                 >
                   <div>
