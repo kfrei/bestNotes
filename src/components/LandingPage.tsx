@@ -134,8 +134,23 @@ const LIVE_SIMULATION_GIFS: ScienceNoteAsset[] = [
     highlightText: 'Ζευγαράκια Ηλεκτρονίων 2-2 σε Αργή Περιστροφή • Ετεροπολικός & Ομοιοπολικός Δεσμός',
     secondaryHighlightText: 'Γράπωσε εξωτερικό e⁻ σε διπλανό άτομο ή πάτα το βέλος ➔ για 2s Animation Αντίδρασης!',
     description:
-      'Ζωγράφισε πυρήνα και τροχιές, επίλεξε στοιχείο από τον Draggable Περιοδικό Πίνακα (H έως Rn) με πλήρη συμβολισμό ᴬᶻX, σύρε ηλεκτρόνια σθένους για δημιουργία δεσμών ή αναγνώρισε χειρόγραφες χημικές αντιδράσεις με ChemOCR!',
+      'Ζωγράφισε πυρήνα και τροχιές, επίλεξε στοιχείο από τον Draggable Περιοδικός Πίνακα (H έως Rn) με πλήρη συμβολισμό ᴬᶻX, σύρε ηλεκτρόνια σθένους για δημιουργία δεσμών ή αναγνώρισε χειρόγραφες χημικές αντιδράσεις με ChemOCR!',
     formulaBadge: '⚛️ Na + Cl ➔ Na⁺Cl⁻',
+  },
+  {
+    id: 'layers-groups',
+    tabLabel: '🔗 Layers & Groups',
+    shortTitle: 'Layers & Groups (Βαράκια)',
+    title: 'Πείραμα Ελατηρίων & Ομαδοποίηση (Ελατήριο + Βελάκι + Βαράκια σε Group)',
+    subjectBadge: 'Layers & Groups PRO',
+    subjectColor: '#4f46e5',
+    src: '__animated_hooke_group__',
+    highlightColor: '#6ee7b7',
+    highlightText: '🔗 Επιλογή (Select) Ελατήριο + Βελάκι + 3 Βαράκια (0,1 kg) σε 1 Ενιαίο Group!',
+    secondaryHighlightText: 'Σταδιακό κρέμασμα βαρών με ταλάντωση πάνω-κάτω • Χάρακας cm • Πίνακας & Γράφημα Fελ - Δl',
+    description:
+      'Οργάνωσε τον καμβά σου σε Layers και ένωσε με το Λάσο το Ελατήριο, το Βελάκι δείκτη και τα Βαράκια (0,1 kg) σε ένα ενιαίο Group για να τα μετακινείς ή να τα αντιγράφεις όλα μαζί!',
+    formulaBadge: '🔗 Group: Ελατήριο + Βελάκι + Βαράκια',
   },
 ];
 
@@ -321,7 +336,10 @@ const DraggableCard: React.FC<{
  * 2. Δείχνει την ταλάντωση (πάνω-κάτω κίνηση) κάθε ελατηρίου & των βαρών καθώς κρεμιούνται.
  * 3. Επιλέγει (Select) Ελατήριο + Βελάκι + Βαράκια μαζί σε ένα ενιαίο Group (🔗 Group) και δείχνει τη μετακίνησή τους ως μία ομάδα!
  */
-const AnimatedHookeWeightsGroupShowcase: React.FC = () => {
+const AnimatedHookeWeightsGroupShowcase: React.FC<{
+  className?: string;
+  showStatusBanner?: boolean;
+}> = ({ className = 'w-full h-[370px]', showStatusBanner = false }) => {
   const [elapsedSec, setElapsedSec] = useState(0);
 
   useEffect(() => {
@@ -431,38 +449,31 @@ const AnimatedHookeWeightsGroupShowcase: React.FC = () => {
   const cmStepPx = 34; // 1 cm = 34px πάνω στον χάρακα
 
   return (
-    <div className="bn-tab-stage p-4 sm:p-6 min-h-[545px] flex flex-col lg:flex-row items-stretch justify-center gap-5">
-      {/* ΑΡΙΣΤΕΡΑ: ΚΑΜΒΑΣ ΠΕΙΡΑΜΑΤΟΣ ΝΟΜΟΥ HOOKE ΜΕ ΒΑΡΑΚΙΑ, ΧΑΡΑΚΑ, ΠΙΝΑΚΑ, ΓΡΑΦΗΜΑ & GROUP SELECTION */}
-      <div className="w-full lg:w-8/12 rounded-2xl bg-[#fffdf7] border border-slate-200 shadow-lg p-3 sm:p-4 flex flex-col justify-between relative overflow-hidden">
-        <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10.5px] font-extrabold">
-              Layers &amp; Groups PRO
-            </span>
-            <span className="text-xs sm:text-sm font-extrabold text-slate-900">
-              Πείραμα Ελατηρίων &amp; Ομαδοποίηση (Ελατήριο + Βελάκι + Βαράκια σε Group)
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold">
-            <span
-              className={`px-2.5 py-0.5 rounded-full border transition-all ${
-                isGroupSelectPhase
-                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs scale-105'
-                  : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}
-            >
-              {isGroupSelectPhase
-                ? '🔗 Επιλεγμένο Group: Ελατήριο + Βελάκι + 3 Βαράκια!'
-                : '⚖️ Κρέμασμα Βαρών (0,1 kg) & Ταλάντωση...'}
-            </span>
-          </div>
+    <div className="w-full relative overflow-hidden bg-[#fcfaf2]">
+      {showStatusBanner && (
+        <div className="flex items-center justify-between gap-2 flex-wrap px-3 pt-2.5 pb-1.5 bg-[#fffdf7] border-b border-slate-200/70">
+          <span className="text-[11px] font-extrabold text-slate-800">
+            Πείραμα Ελατηρίων &amp; Ομαδοποίηση (Ελατήριο + Βελάκι + Βαράκια σε Group)
+          </span>
+          <span
+            className={`px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold transition-all ${
+              isGroupSelectPhase
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                : 'bg-slate-100 text-slate-600 border-slate-200'
+            }`}
+          >
+            {isGroupSelectPhase
+              ? '🔗 Επιλεγμένο Group: Ελατήριο + Βελάκι + 3 Βαράκια!'
+              : '⚖️ Κρέμασμα Βαρών (0,1 kg) & Ταλάντωση...'}
+          </span>
         </div>
+      )}
 
-        <svg
-          className="w-full h-[460px] rounded-xl border border-slate-200/90 bg-[#fcfaf2] shadow-inner"
-          viewBox="0 0 600 465"
-        >
+      <svg
+        className={`${className} block bg-[#fcfaf2]`}
+        viewBox="0 0 600 465"
+        preserveAspectRatio="xMidYMid meet"
+      >
           <defs>
             <pattern id="hookeGrid" width="24" height="24" patternUnits="userSpaceOnUse">
               <path
@@ -998,78 +1009,6 @@ const AnimatedHookeWeightsGroupShowcase: React.FC = () => {
             </g>
           </g>
         </svg>
-      </div>
-
-      {/* ΔΕΞΙΑ: ΕΛΕΓΧΟΣ LAYERS & GROUP ΕΡΓΑΛΕΙΩΝ */}
-      <div className="w-full lg:w-4/12 rounded-2xl bg-white border border-slate-200 shadow-lg p-5 flex flex-col justify-between">
-        <div>
-          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[#0066ff]" />
-              <span className="text-xs font-extrabold text-slate-900">
-                Διαχείριση Layers &amp; Groups
-              </span>
-            </div>
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold">
-              🔗 Group Ενεργό
-            </span>
-          </div>
-
-          <div className="space-y-2.5">
-            <div
-              className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
-                isGroupSelectPhase
-                  ? 'bg-emerald-50 border-emerald-500 shadow-sm ring-2 ring-emerald-500/20'
-                  : 'bg-sky-50 border-[#0066ff]'
-              }`}
-            >
-              <div className="flex items-center gap-2 font-bold text-[#1b2a4a]">
-                <GripVertical className="w-4 h-4 text-[#0066ff]" />
-                <span>1. Group: Ελατήριο + Βελάκι + Βαράκια</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-slate-600">
-                <Eye className="w-3.5 h-3.5 text-[#0066ff]" />
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/70 border border-amber-300 text-xs">
-              <div className="flex items-center gap-2 font-semibold text-slate-800">
-                <GripVertical className="w-4 h-4 text-amber-600" />
-                <span>2. Χάρακας cm &amp; Οροφή (Κλειδωμένο)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Eye className="w-3.5 h-3.5 text-slate-700" />
-                <Lock className="w-3.5 h-3.5 text-amber-600" />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-              <div className="flex items-center gap-2 font-semibold text-slate-700">
-                <GripVertical className="w-4 h-4 text-slate-400" />
-                <span>3. Πίνακας &amp; Διάγραμμα Fελ - Δl</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Eye className="w-3.5 h-3.5 text-[#0066ff]" />
-                <Lock className="w-3.5 h-3.5 text-slate-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-[11.5px] text-emerald-950 space-y-1.5">
-            <div className="font-extrabold flex items-center gap-1.5">
-              <span>🔗 Ομαδοποίηση (Group) με 1 Κλικ:</span>
-            </div>
-            <p className="text-[11px] text-slate-700 leading-relaxed">
-              Επίλεξε με το Λάσο το <b>Ελατήριο</b>, το <b>Βελάκι δείκτη</b> και τα <b>Βαράκια (0,1 kg)</b> και πάτα <b>Group</b>! Έτσι τα αντιγράφεις ή τα μετακινείς όλα μαζί ως ένα ενιαίο αντικείμενο.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 leading-relaxed">
-          💡 <b>Κλείδωμα Layer:</b> Κλείδωσε τον χάρακα και το υπόβαθρο στο Layer 2 ώστε να μετακινείς ελεύθερα τα Groups των ελατηρίων στο Layer 1!
-        </div>
-      </div>
     </div>
   );
 };
@@ -1872,12 +1811,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </span>
                     </div>
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                      <img
-                        src={secondaryNotes[0].src}
-                        alt={secondaryNotes[0].shortTitle}
-                        {...({ fetchpriority: 'low' } as any)}
-                        className="w-full h-32 object-cover bn-fade-zoom-cycle"
-                      />
+                      {secondaryNotes[0].id === 'layers-groups' ? (
+                        <AnimatedHookeWeightsGroupShowcase className="w-full h-32" />
+                      ) : (
+                        <img
+                          src={secondaryNotes[0].src}
+                          alt={secondaryNotes[0].shortTitle}
+                          {...({ fetchpriority: 'low' } as any)}
+                          className="w-full h-32 object-cover bn-fade-zoom-cycle"
+                        />
+                      )}
                     </div>
                     <div className="mt-1.5 flex items-center justify-between text-[9.5px] font-bold text-slate-500">
                       <span className="truncate">{secondaryNotes[0].formulaBadge}</span>
@@ -1901,12 +1844,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </span>
                     </div>
                     <div className="overflow-hidden rounded-xl border border-amber-300 bg-white">
-                      <img
-                        src={secondaryNotes[1].src}
-                        alt={secondaryNotes[1].shortTitle}
-                        {...({ fetchpriority: 'low' } as any)}
-                        className="w-full h-28 object-cover bn-ken-burns"
-                      />
+                      {secondaryNotes[1].id === 'layers-groups' ? (
+                        <AnimatedHookeWeightsGroupShowcase className="w-full h-28" />
+                      ) : (
+                        <img
+                          src={secondaryNotes[1].src}
+                          alt={secondaryNotes[1].shortTitle}
+                          {...({ fetchpriority: 'low' } as any)}
+                          className="w-full h-28 object-cover bn-ken-burns"
+                        />
+                      )}
                     </div>
                     <div className="mt-1.5 text-[9.5px] font-bold text-amber-900 truncate">
                       {secondaryNotes[1].highlightText}
@@ -1955,14 +1902,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                   {/* Main High-Resolution Note Canvas with Deep Zoom */}
                   <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-[#fffdf9] shadow-inner">
-                    <img
-                      src={activeScienceNote.src}
-                      alt={activeScienceNote.title}
-                      {...({ fetchpriority: 'high' } as any)}
-                      className={`w-full max-h-[370px] object-contain mx-auto ${
-                        activeScienceNote.src.endsWith('.gif') ? '' : 'bn-ken-burns'
-                      }`}
-                    />
+                    {activeScienceNote.id === 'layers-groups' ? (
+                      <AnimatedHookeWeightsGroupShowcase
+                        className="w-full h-[370px]"
+                        showStatusBanner
+                      />
+                    ) : (
+                      <img
+                        src={activeScienceNote.src}
+                        alt={activeScienceNote.title}
+                        {...({ fetchpriority: 'high' } as any)}
+                        className={`w-full max-h-[370px] object-contain mx-auto ${
+                          activeScienceNote.src.endsWith('.gif') ? '' : 'bn-ken-burns'
+                        }`}
+                      />
+                    )}
                   </div>
 
                   {/* Clean Caption Bar under the Image */}
@@ -1994,12 +1948,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </span>
                     </div>
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                      <img
-                        src={secondaryNotes[2].src}
-                        alt={secondaryNotes[2].shortTitle}
-                        {...({ fetchpriority: 'low' } as any)}
-                        className="w-full h-32 object-cover bn-fade-zoom-cycle"
-                      />
+                      {secondaryNotes[2].id === 'layers-groups' ? (
+                        <AnimatedHookeWeightsGroupShowcase className="w-full h-32" />
+                      ) : (
+                        <img
+                          src={secondaryNotes[2].src}
+                          alt={secondaryNotes[2].shortTitle}
+                          {...({ fetchpriority: 'low' } as any)}
+                          className="w-full h-32 object-cover bn-fade-zoom-cycle"
+                        />
+                      )}
                     </div>
                     <div className="mt-1.5 flex items-center justify-between text-[9.5px] font-bold text-slate-500">
                       <span className="truncate">{secondaryNotes[2].formulaBadge}</span>
@@ -2017,18 +1975,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     className="hidden lg:block absolute right-6 bottom-6 w-56 rounded-2xl bg-sky-50/95 shadow-xl border border-sky-200 p-2.5 -rotate-2 z-20"
                   >
                     <div className="flex items-center justify-between text-[10px] font-extrabold text-sky-950 mb-1.5">
-                      <span className="truncate">🔍 {secondaryNotes[3].shortTitle}</span>
-                      <span className="px-1.5 py-0.5 rounded bg-[#0066ff] text-white text-[8.5px]">
-                        MathOCR
+                      <span className="truncate">🔗 {secondaryNotes[3].shortTitle}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[8.5px]">
+                        Group
                       </span>
                     </div>
                     <div className="overflow-hidden rounded-xl border border-sky-200 bg-white">
-                      <img
-                        src={secondaryNotes[3].src}
-                        alt={secondaryNotes[3].shortTitle}
-                        {...({ fetchpriority: 'low' } as any)}
-                        className="w-full h-28 object-cover bn-ken-burns"
-                      />
+                      {secondaryNotes[3].id === 'layers-groups' ? (
+                        <AnimatedHookeWeightsGroupShowcase className="w-full h-28" />
+                      ) : (
+                        <img
+                          src={secondaryNotes[3].src}
+                          alt={secondaryNotes[3].shortTitle}
+                          {...({ fetchpriority: 'low' } as any)}
+                          className="w-full h-28 object-cover bn-ken-burns"
+                        />
+                      )}
                     </div>
                     <div className="mt-1.5 text-[9.5px] font-bold text-sky-900 truncate">
                       {secondaryNotes[3].highlightText}
@@ -2173,11 +2135,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
               </div>
             )}
-
-            {/* ===============================================================
-                TAB 7 (PRO #2): LAYERS & GROUPS (Animated Hooke Experiment + Group Selection)
-               =============================================================== */}
-            {activeTab === 'layers-groups' && <AnimatedHookeWeightsGroupShowcase />}
           </div>
         </div>
 
@@ -2394,11 +2351,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             <div className="relative rounded-2xl overflow-hidden bg-[#fffdf9] border border-slate-200 flex items-center justify-center">
-              <img
-                src={zoomedNote.src}
-                alt={zoomedNote.title}
-                className="max-h-[75vh] w-auto object-contain mx-auto bn-ken-burns"
-              />
+              {zoomedNote.id === 'layers-groups' ? (
+                <AnimatedHookeWeightsGroupShowcase
+                  className="w-full h-[70vh]"
+                  showStatusBanner
+                />
+              ) : (
+                <img
+                  src={zoomedNote.src}
+                  alt={zoomedNote.title}
+                  className="max-h-[75vh] w-auto object-contain mx-auto bn-ken-burns"
+                />
+              )}
             </div>
           </div>
         </div>
