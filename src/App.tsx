@@ -17016,24 +17016,49 @@ export default function App() {
             'bold 15px system-ui, -apple-system, sans-serif'
           );
 
-          // Visual Magnetic Lock Indicator at tip (tx, ty) when Fx, Fy, F are all integers!
-          if (isIntLocked) {
+          // When dragging the vector tip, display very small fluorescent green dots on all grid points
+          // where Fx, Fy, and F are all integers (Pythagorean triples in all 4 quadrants)
+          const isDraggingAnalysisTip =
+            draggingForceHandleRef.current?.simId === fSim.id &&
+            (draggingForceHandleRef.current?.kind === 'analysis-tip' ||
+              draggingForceHandleRef.current?.kind === 'free-vec-tip');
+          if (isDraggingAnalysisTip) {
             ctx.save();
-            ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
-            ctx.strokeStyle = '#10b981';
-            ctx.lineWidth = 2;
+            ctx.fillStyle = '#39ff14';
+            ctx.strokeStyle = 'rgba(21, 128, 61, 0.55)';
+            ctx.lineWidth = 0.8;
+            ctx.shadowColor = 'rgba(57, 255, 20, 0.9)';
+            ctx.shadowBlur = 4.5;
+            for (let ix = -28; ix <= 28; ix++) {
+              if (ix === 0) continue;
+              const gx = ox + ix * U;
+              if (gx < 10 || gx > w - 10) continue;
+              for (let iy = -28; iy <= 28; iy++) {
+                if (iy === 0) continue;
+                const gy = oy - iy * U;
+                if (gy < 10 || gy > h - 10) continue;
+                if (isNearExactInt(Math.hypot(ix, iy), 1e-5)) {
+                  const isCurrentDot = Math.abs(cx - ix) < 0.05 && Math.abs(cy - iy) < 0.05;
+                  ctx.beginPath();
+                  ctx.arc(gx, gy, isCurrentDot ? 3.2 : 2.3, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.stroke();
+                }
+              }
+            }
+            ctx.restore();
+          } else if (isIntLocked) {
+            ctx.save();
+            ctx.fillStyle = '#39ff14';
+            ctx.strokeStyle = 'rgba(21, 128, 61, 0.6)';
+            ctx.lineWidth = 0.9;
+            ctx.shadowColor = 'rgba(57, 255, 20, 0.85)';
+            ctx.shadowBlur = 4;
             ctx.beginPath();
-            ctx.arc(tx, ty, 10, 0, Math.PI * 2);
+            ctx.arc(tx, ty, 2.6, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
             ctx.restore();
-            drawHaloLabel(
-              '🧲',
-              tx + 16 * Math.cos(rad),
-              ty - 16 * Math.sin(rad),
-              '#059669',
-              'bold 13px system-ui, sans-serif'
-            );
           }
 
           // Origin dot
@@ -17308,17 +17333,67 @@ export default function App() {
             'bold 14px system-ui, sans-serif'
           );
 
-          if (isIntLocked) {
+          const isDraggingSynthTip =
+            draggingForceHandleRef.current?.simId === fSim.id &&
+            (draggingForceHandleRef.current?.kind === 'f1-tip' ||
+              draggingForceHandleRef.current?.kind === 'f2-tip' ||
+              draggingForceHandleRef.current?.kind === 'free-vec-tip');
+          if (isDraggingSynthTip) {
+            const draggingF1 =
+              draggingForceHandleRef.current?.kind === 'f1-tip' ||
+              (draggingForceHandleRef.current?.kind === 'free-vec-tip' &&
+                draggingForceHandleRef.current?.strokeId === fSim.primaryStrokeId);
+            const otherX = draggingF1 ? f2x : f1x;
+            const otherY = draggingF1 ? f2y : f1y;
+            const curX = draggingF1 ? f1x : f2x;
+            const curY = draggingF1 ? f1y : f2y;
+            const mOther = Math.hypot(otherX, otherY);
+            if (mOther >= 0.95 && isNearExactInt(otherX) && isNearExactInt(otherY) && isNearExactInt(mOther)) {
+              ctx.save();
+              ctx.fillStyle = '#39ff14';
+              ctx.strokeStyle = 'rgba(21, 128, 61, 0.55)';
+              ctx.lineWidth = 0.8;
+              ctx.shadowColor = 'rgba(57, 255, 20, 0.9)';
+              ctx.shadowBlur = 4.5;
+              for (let ix = -28; ix <= 28; ix++) {
+                const gx = ox + ix * U;
+                if (gx < 10 || gx > w - 10) continue;
+                for (let iy = -28; iy <= 28; iy++) {
+                  if (ix === 0 && iy === 0) continue;
+                  const gy = oy - iy * U;
+                  if (gy < 10 || gy > h - 10) continue;
+                  const mSelf = Math.hypot(ix, iy);
+                  const mSum = Math.hypot(ix + otherX, iy + otherY);
+                  if (
+                    mSelf >= 1 &&
+                    mSum >= 1 &&
+                    isNearExactInt(mSelf, 1e-5) &&
+                    isNearExactInt(mSum, 1e-5)
+                  ) {
+                    const isCurrentDot =
+                      Math.abs(curX - ix) < 0.05 && Math.abs(curY - iy) < 0.05;
+                    ctx.beginPath();
+                    ctx.arc(gx, gy, isCurrentDot ? 3.2 : 2.3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                  }
+                }
+              }
+              ctx.restore();
+            }
+          } else if (isIntLocked) {
             for (const tipPt of [
               { x: p1x, y: p1y },
               { x: p2x, y: p2y },
             ]) {
               ctx.save();
-              ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
-              ctx.strokeStyle = '#10b981';
-              ctx.lineWidth = 2;
+              ctx.fillStyle = '#39ff14';
+              ctx.strokeStyle = 'rgba(21, 128, 61, 0.6)';
+              ctx.lineWidth = 0.9;
+              ctx.shadowColor = 'rgba(57, 255, 20, 0.85)';
+              ctx.shadowBlur = 4;
               ctx.beginPath();
-              ctx.arc(tipPt.x, tipPt.y, 10, 0, Math.PI * 2);
+              ctx.arc(tipPt.x, tipPt.y, 2.6, 0, Math.PI * 2);
               ctx.fill();
               ctx.stroke();
               ctx.restore();
@@ -21161,6 +21236,7 @@ export default function App() {
               // ignore
             }
             isDrawingRef.current = true;
+            renderStaticSceneRef.current();
             return;
           }
         }
