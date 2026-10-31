@@ -2,6 +2,8 @@ import {
   Notebook,
   NotePage,
   StrokeObject,
+  TextObject,
+  HookeMeasurementRow,
   A4_GRID_STEP_PX,
   getPageLogicalWidth,
   getPageLogicalHeight,
@@ -10,7 +12,23 @@ import {
   computeResistorOrSpringPoints,
   distance,
   isFreehandLoopClosed,
+  ensureWaveBezierPoints,
+  getCubicSegmentControlPoints,
 } from './geometryAndAlgorithms';
+
+function getStrokeBounds(s: StrokeObject): { minX: number; maxX: number; minY: number; maxY: number } {
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+  for (const p of s.points || []) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return Number.isFinite(minX) ? { minX, maxX, minY, maxY } : { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+}
 import {
   getPeriodicElementByZ,
   validateAndCorrectChemicalEquation,
@@ -199,6 +217,33 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
       ctx.lineTo(botStemBot.x, botStemBot.y);
       traceEllipseBilerp(0.5, 0.932, 0.19, 0.064, -Math.PI * 0.5, Math.PI * 1.15, true);
       ctx.stroke();
+
+      // Crisp mass label ("0,1 kg" -> W = m·10 = 1 N) inside the weight body
+      const bodyCenter = bilerp(0.5, 0.5);
+      const bodyW = Math.hypot(bTR.x - bTL.x, bTR.y - bTL.y);
+      const bodyH = Math.hypot(bBL.x - bTL.x, bBL.y - bTL.y);
+      if (bodyW >= 11 && bodyH >= 12) {
+        const rotAng = Math.atan2(bTR.y - bTL.y, bTR.x - bTL.x);
+        ctx.save();
+        ctx.translate(bodyCenter.x, bodyCenter.y);
+        ctx.rotate(rotAng);
+        ctx.fillStyle = s.color || '#0f172a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (bodyW >= 28 || bodyH < 18) {
+          const fSz = Math.max(7, Math.min(10.5, Math.min(bodyW * 0.28, bodyH * 0.45)));
+          ctx.font = `800 ${fSz.toFixed(1)}px system-ui, -apple-system, sans-serif`;
+          ctx.fillText('0,1 kg', 0, 0.5);
+        } else {
+          const fSz = Math.max(6.8, Math.min(9.5, Math.min(bodyW * 0.48, bodyH * 0.34)));
+          ctx.font = `800 ${fSz.toFixed(1)}px system-ui, -apple-system, sans-serif`;
+          ctx.fillText('0,1', 0, -fSz * 0.48);
+          ctx.font = `700 ${(fSz * 0.88).toFixed(1)}px system-ui, -apple-system, sans-serif`;
+          ctx.fillText('kg', 0, fSz * 0.52);
+        }
+        ctx.restore();
+      }
+
       ctx.restore();
       return;
     }
@@ -384,30 +429,23 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
       );
     }
     ctx.closePath();
-  } else if ((s.shapeType === 'sine' || s.shapeType === 'cosine') && s.points.length >= 2) {
-    const pPeak = s.points[0];
-    const pEnd = s.points[1];
-    const pStart = s.points[2] || { x: pPeak.x - (pEnd.x - pPeak.x) / 3, y: pEnd.y, twist: 2 };
-    const dx = pEnd.x - pStart.x;
-    const dy = pEnd.y - pStart.y;
-    const spanL = Math.hypot(dx, dy) || 1;
-    const ux = dx / spanL;
-    const uy = dy / spanL;
-    const nx = uy;
-    const ny = -ux;
-    const amp = (pPeak.x - pStart.x) * nx + (pPeak.y - pStart.y) * ny;
-    const halfCycles = Math.max(1, pStart.twist || 2);
-    for (let i = 0; i <= 72; i++) {
-      const t = i / 72;
-      const along = t * spanL;
-      const waveOffset =
-        s.shapeType === 'sine'
-          ? amp * Math.sin(t * halfCycles * Math.PI)
-          : -amp * Math.cos(t * halfCycles * Math.PI);
-      const x = pStart.x + along * ux + waveOffset * nx;
-      const y = pStart.y + along * uy + waveOffset * ny;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+  } else if (
+    (s.shapeType === 'sine' || s.shapeType === 'cosine') &&
+    s.points.length >= 2 &&
+    s.points.length <= 3 &&
+    s.points[0]?.outDx === undefined
+  ) {
+    const wavePts = ensureWaveBezierPoints(s);
+    ctx.moveTo(wavePts[0].x, wavePts[0].y);
+    for (let i = 1; i < wavePts.length; i++) {
+      const prevPt = wavePts[i - 1];
+      const pt = wavePts[i];
+      const cubicCtrl = getCubicSegmentControlPoints(prevPt, pt);
+      if (cubicCtrl) {
+        ctx.bezierCurveTo(cubicCtrl.cp1x, cubicCtrl.cp1y, cubicCtrl.cp2x, cubicCtrl.cp2y, pt.x, pt.y);
+      } else {
+        ctx.lineTo(pt.x, pt.y);
+      }
     }
   } else if ((s.shapeType === 'parabola' || s.shapeType === 'arc') && s.points.length === 3) {
     const [p0, pMid, p2] = s.points;
@@ -438,53 +476,121 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     ctx.moveTo(s.points[0].x, s.points[0].y);
     if (s.points.length === 1) {
       ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
+    } else if (
+      !s.groupId?.startsWith('math-graph-grp-') &&
+      (s.shapeType === 'wave-guide-top' ||
+        s.shapeType === 'wave-guide-bottom' ||
+        s.shapeType === 'wave-axis-x' ||
+        s.shapeType === 'wave-axis-y')
+    ) {
+      const endPt = s.points[s.points.length - 1];
+      ctx.lineTo(endPt.x, endPt.y);
     } else {
       for (let i = 1; i < s.points.length; i++) {
+        const prevPt = s.points[i - 1];
         const pt = s.points[i];
-        if (pt.cx !== undefined && pt.cy !== undefined) {
+        const cubicCtrl = getCubicSegmentControlPoints(prevPt, pt);
+        if (cubicCtrl) {
+          ctx.bezierCurveTo(cubicCtrl.cp1x, cubicCtrl.cp1y, cubicCtrl.cp2x, cubicCtrl.cp2y, pt.x, pt.y);
+        } else if (pt.cx !== undefined && pt.cy !== undefined) {
           ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
         } else {
           ctx.lineTo(pt.x, pt.y);
         }
       }
+      if (s.points.length === 2 && distance(s.points[0], s.points[1]) < 0.4) {
+        ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
+      }
     }
   }
 
+  const isFanRingBackplate = s.shapeType === 'fan' && s.points.length > 2;
   const isClosedSplineOrFreehand = s.points[0]?.twist === 999 || isFreehandLoopClosed(s.points, true);
   const canFillShape =
-    (s.shapeType !== 'line' || isClosedSplineOrFreehand) &&
-    s.shapeType !== 'arrow' &&
-    s.shapeType !== 'double-arrow' &&
-    s.shapeType !== 'resistor' &&
-    s.shapeType !== 'spring' &&
-    s.shapeType !== 'sine' &&
-    s.shapeType !== 'cosine' &&
-    s.fillStyle &&
-    s.fillStyle !== 'none' &&
-    s.points.length > 2 &&
-    (s.isShape || isClosedSplineOrFreehand);
+    isFanRingBackplate ||
+    ((s.shapeType !== 'line' || isClosedSplineOrFreehand) &&
+      s.shapeType !== 'arrow' &&
+      s.shapeType !== 'double-arrow' &&
+      s.shapeType !== 'resistor' &&
+      s.shapeType !== 'spring' &&
+      s.shapeType !== 'sine' &&
+      s.shapeType !== 'cosine' &&
+      s.fillStyle &&
+      s.fillStyle !== 'none' &&
+      s.points.length > 2 &&
+      (s.isShape || isClosedSplineOrFreehand));
 
   if (canFillShape) {
-    const shadeColor = s.color || s.fillColor || '#2563eb';
-    const fillTrans = s.fillTransparency ?? 90;
-    ctx.save();
-    ctx.fillStyle = shadeColor;
-    ctx.globalAlpha =
-      fillTrans === 25 || fillTrans === 20
-        ? 0.75
-        : fillTrans === 45 || fillTrans === 50
-        ? 0.55
-        : 0.11;
-    ctx.fill();
-    ctx.restore();
+    if (isFanRingBackplate) {
+      ctx.save();
+      ctx.fillStyle = '#cbd5e1';
+      ctx.globalAlpha = 0.78;
+      ctx.fill();
+      ctx.restore();
+    } else {
+      const isStencilCustomFill =
+        s.shapeType === 'fan-blade' ||
+        s.shapeType === 'fan-hub' ||
+        s.shapeType === 'incline-wedge' ||
+        s.shapeType === 'incline-block' ||
+        s.shapeType === 'switch' ||
+        s.shapeType === 'switch-knob';
+      const shadeColor = isStencilCustomFill
+        ? s.fillColor || s.color || '#2563eb'
+        : s.color || s.fillColor || '#2563eb';
+      const fillTrans =
+        s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub'
+          ? 0
+          : s.fillTransparency ?? 90;
+      ctx.save();
+      ctx.fillStyle = shadeColor;
+      ctx.globalAlpha =
+        fillTrans === 0
+          ? 0.94
+          : isStencilCustomFill && s.fillTransparency === undefined
+          ? 0.85
+          : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100));
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   ctx.stroke();
 
+  if ((s.arrowStart || s.shapeType === 'double-arrow') && s.points.length >= 2) {
+    const first = s.points[0];
+    const second = s.points[Math.min(s.points.length - 1, 1)];
+    const cubicStart = getCubicSegmentControlPoints(first, second);
+    const refStart =
+      cubicStart && Math.hypot(first.x - cubicStart.cp1x, first.y - cubicStart.cp1y) > 2
+        ? { x: cubicStart.cp1x, y: cubicStart.cp1y }
+        : second;
+    const angle = Math.atan2(first.y - refStart.y, first.x - refStart.x);
+    const headLen = Math.max(12, s.width * 4);
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    ctx.lineTo(
+      first.x - headLen * Math.cos(angle - Math.PI / 6),
+      first.y - headLen * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.moveTo(first.x, first.y);
+    ctx.lineTo(
+      first.x - headLen * Math.cos(angle + Math.PI / 6),
+      first.y - headLen * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.stroke();
+  }
+
   if ((s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') && s.points.length >= 2) {
     const last = s.points[s.points.length - 1];
     const prev = s.points[Math.max(0, s.points.length - 2)];
-    const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+    const cubicEnd = getCubicSegmentControlPoints(prev, last);
+    const refEnd =
+      cubicEnd && Math.hypot(last.x - cubicEnd.cp2x, last.y - cubicEnd.cp2y) > 2
+        ? { x: cubicEnd.cp2x, y: cubicEnd.cp2y }
+        : prev;
+    const angle = Math.atan2(last.y - refEnd.y, last.x - refEnd.x);
     const headLen = Math.max(12, s.width * 4);
     ctx.setLineDash([]);
     ctx.beginPath();
@@ -747,53 +853,353 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
     }
   }
 
-  // 2. Circuit Simulations (Electrons along circuit wires & glowing bulbs)
-  for (const cSim of page.circuitSims || []) {
-    const idSet = new Set(cSim.strokeIds || []);
-    const simStrokes = (page.strokes || []).filter((s) => idSet.has(s.id));
-    for (const st of simStrokes) {
-      if (st.shapeType === 'bulb' && st.points.length >= 2) {
-        let minX = Infinity,
-          maxX = -Infinity,
-          minY = Infinity,
-          maxY = -Infinity;
-        for (const p of st.points) {
-          if (p.x < minX) minX = p.x;
-          if (p.x > maxX) maxX = p.x;
-          if (p.y < minY) minY = p.y;
-          if (p.y > maxY) maxY = p.y;
+  // 2. Spring Simulations — Hooke's Law Table of Values & Elastic Deformation Diagram F_ελ(N) – Δl(cm)
+  const springSims = page.springSims || [];
+  const hookeSim = springSims.find(
+    (sm) => Boolean(sm.showHookeCanvasTable) || Boolean(sm.graphs?.hooke?.visible)
+  );
+  if (hookeSim) {
+    const oneMmPx = 4.6;
+    const w = getPageLogicalWidth(page);
+    const isDarkGrid = page.template === 'dark-grid';
+    const axisInk = isDarkGrid ? '#f8fafc' : '#0f172a';
+
+    const getSpringLengthPx = (sp: StrokeObject): number => {
+      if (sp.points.length >= 4) {
+        const sTerm = {
+          x: (sp.points[0].x + sp.points[3].x) / 2,
+          y: (sp.points[0].y + sp.points[3].y) / 2,
+        };
+        const eTerm = {
+          x: (sp.points[1].x + sp.points[2].x) / 2,
+          y: (sp.points[1].y + sp.points[2].y) / 2,
+        };
+        return Math.max(8, Math.hypot(eTerm.x - sTerm.x, eTerm.y - sTerm.y));
+      }
+      if (sp.points.length >= 2) {
+        const p0 = sp.points[0];
+        const p1 = sp.points[sp.points.length - 1];
+        return Math.max(8, Math.hypot(p1.x - p0.x, p1.y - p0.y));
+      }
+      return 92;
+    };
+
+    const getWeightChainCount = (rootWeightId: string): number => {
+      const visited = new Set<string>();
+      const queue = [rootWeightId];
+      while (queue.length > 0) {
+        const currId = queue.shift()!;
+        if (visited.has(currId)) continue;
+        const st = (page.strokes || []).find((s) => s.id === currId);
+        if (!st) continue;
+        visited.add(currId);
+        for (const s of page.strokes || []) {
+          if (s.attachedToWeightId === currId && !visited.has(s.id)) {
+            queue.push(s.id);
+          }
         }
-        const cx = (minX + maxX) / 2;
-        const cy = (minY + maxY) / 2;
-        ctx.save();
-        const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, 34);
-        grad.addColorStop(0, 'rgba(250, 204, 21, 0.72)');
-        grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 34, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else if (st.shapeType === 'line' && st.points.length >= 2) {
-        const p0 = st.points[0];
-        const p1 = st.points[st.points.length - 1];
-        const segLen = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-        const count = Math.max(1, Math.floor(segLen / 28));
-        ctx.save();
-        for (let k = 0; k < count; k++) {
-          const t = (k + 0.5) / count;
-          const ex = p0.x + (p1.x - p0.x) * t;
-          const ey = p0.y + (p1.y - p0.y) * t;
-          ctx.fillStyle = '#facc15';
-          ctx.strokeStyle = '#ca8a04';
+      }
+      return visited.size;
+    };
+
+    const plottedSet = new Set<number>(hookeSim.hookePlottedWeights || []);
+    for (const sm of springSims) {
+      for (const pw of sm.hookePlottedWeights || []) {
+        plottedSet.add(pw);
+      }
+    }
+
+    const byWeight = new Map<number, HookeMeasurementRow>();
+    const allSprings = (page.strokes || []).filter((s) => s.shapeType === 'spring');
+    for (const sp of allSprings) {
+      const ptr = (page.strokes || []).find(
+        (s) => s.attachedToSpringId === sp.id && s.points.length >= 2
+      );
+      if (!ptr) continue;
+      const spLen = getSpringLengthPx(sp);
+      const sm = springSims.find((m) => m.eqSpringStrokeId === sp.id);
+      const ptrColor = ptr.color || '#dc2626';
+      if (sm) {
+        const chainCount = getWeightChainCount(sm.massStrokeId);
+        const forceN = chainCount * 1.0;
+        const smL0Mm = Math.round(sm.naturalLengthPx / oneMmPx);
+        const smDeltaLMm = Math.round(Math.abs(spLen - sm.naturalLengthPx) / oneMmPx);
+        byWeight.set(chainCount, {
+          id: `hm-pdf-${sp.id}-${chainCount}`,
+          weightsCount: chainCount,
+          forceN,
+          lengthMm: smL0Mm + smDeltaLMm,
+          deltaLMm: smDeltaLMm,
+          plotted: plottedSet.has(chainCount),
+          springStrokeId: sp.id,
+          pointerColor: ptrColor,
+        });
+      } else {
+        const spLMm = Math.round(spLen / oneMmPx);
+        byWeight.set(0, {
+          id: `hm-pdf-${sp.id}-0`,
+          weightsCount: 0,
+          forceN: 0,
+          lengthMm: spLMm,
+          deltaLMm: 0,
+          plotted: plottedSet.has(0),
+          springStrokeId: sp.id,
+          pointerColor: ptrColor,
+        });
+      }
+    }
+
+    const recordedRows = Array.from(byWeight.values()).sort(
+      (a, b) => a.weightsCount - b.weightsCount || a.deltaLMm - b.deltaLMm
+    );
+
+    const eqSpring =
+      (page.strokes || []).find((s) => s.id === hookeSim.eqSpringStrokeId) || allSprings[0];
+    const eqSpBounds = eqSpring
+      ? getStrokeBounds(eqSpring)
+      : { minX: 200, maxX: 260, minY: 80, maxY: 260 };
+    const hCfg = hookeSim.graphs?.hooke || { visible: false };
+    const defaultHookeW = 248;
+    const hW = Math.max(160, Math.min(520, hCfg.width || defaultHookeW));
+    const uiScale = Math.max(0.66, Math.min(1.24, hW / defaultHookeW));
+    const hPlotH = Math.max(70, Math.min(280, (hCfg.height || 62) * 2));
+    const baseDefaultX = Math.max(20, eqSpBounds.maxX + 56);
+    const defaultHookeX = Math.min(baseDefaultX, w - hW - 14);
+    const defaultHookeY = Math.max(48, eqSpBounds.minY + 8);
+    const rawHx = hCfg.customMoved && hCfg.x !== undefined ? hCfg.x : defaultHookeX;
+    const hx = Math.max(8, Math.min(w - hW - 14, rawHx));
+    const hy = hCfg.customMoved && hCfg.y !== undefined ? hCfg.y : defaultHookeY;
+
+    let diagramTopY = hy;
+
+    // 2A. Hooke's Law Canvas Table of Values
+    if (hookeSim.showHookeCanvasTable) {
+      const rowH = Math.max(16, Math.round(20 * uiScale));
+      const headerH = Math.max(18, Math.round(22 * uiScale));
+      const displayRowCount = Math.max(1, recordedRows.length);
+      const tblW = hW;
+      const tblH = headerH + displayRowCount * rowH + 5;
+      const tblX = hx;
+      const tblY = hy;
+      diagramTopY = tblY + tblH + Math.round(20 * uiScale);
+
+      ctx.save();
+      ctx.fillStyle = isDarkGrid ? 'rgba(15, 23, 42, 0.93)' : 'rgba(255, 255, 255, 0.95)';
+      ctx.strokeStyle = isDarkGrid ? '#334155' : '#cbd5e1';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(tblX, tblY, tblW, tblH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      const hdrY = tblY + 1;
+      ctx.fillStyle = isDarkGrid ? '#1e293b' : '#f1f5f9';
+      ctx.beginPath();
+      ctx.roundRect(tblX + 1, hdrY, tblW - 2, headerH, [7, 7, 0, 0]);
+      ctx.fill();
+
+      const colX = [
+        tblX + tblW * 0.11,
+        tblX + tblW * 0.30,
+        tblX + tblW * 0.53,
+        tblX + tblW * 0.76,
+        tblX + tblW * 0.92,
+      ];
+      ctx.font = `bold ${Math.max(8, Math.round(10 * uiScale))}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = isDarkGrid ? '#e2e8f0' : '#1e293b';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Βάρη', colX[0], hdrY + headerH / 2);
+      ctx.fillText('m (kg)', colX[1], hdrY + headerH / 2);
+      ctx.fillText('W=Fελ(N)', colX[2], hdrY + headerH / 2);
+      ctx.fillText('Δl (cm)', colX[3], hdrY + headerH / 2);
+
+      ctx.beginPath();
+      ctx.arc(colX[4], hdrY + headerH / 2, Math.max(3.5, 4.2 * uiScale), 0, Math.PI * 2);
+      ctx.fillStyle = '#0284c7';
+      ctx.fill();
+
+      const rowsStartY = hdrY + headerH;
+      if (recordedRows.length === 0) {
+        ctx.font = `italic ${Math.max(8, Math.round(9.2 * uiScale))}px system-ui, -apple-system, sans-serif`;
+        ctx.fillStyle = isDarkGrid ? '#94a3b8' : '#64748b';
+        ctx.fillText(
+          'Βάλε δείκτη (βελονάκι) σε ελατήριο δίπλα στον χάρακα',
+          tblX + tblW / 2,
+          rowsStartY + rowH / 2
+        );
+      } else {
+        for (let rIdx = 0; rIdx < recordedRows.length; rIdx++) {
+          const r = recordedRows[rIdx];
+          const ry = rowsStartY + rIdx * rowH;
+          ctx.strokeStyle = isDarkGrid ? 'rgba(51, 65, 85, 0.6)' : 'rgba(226, 232, 240, 0.9)';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(ex, ey, 3.6, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.moveTo(tblX + 4, ry);
+          ctx.lineTo(tblX + tblW - 4, ry);
           ctx.stroke();
+
+          const rowFontPx = Math.max(8.5, Math.round(10.2 * uiScale));
+          ctx.font = `600 ${rowFontPx}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = isDarkGrid ? '#f1f5f9' : '#334155';
+          const massKgStr =
+            r.forceN === 0 ? '0' : (r.forceN / 10).toFixed(1).replace('.', ',');
+          const forceStr = Number(r.forceN.toFixed(1)).toString().replace('.', ',');
+          const deltaLCmStr = Number((r.deltaLMm / 10).toFixed(1))
+            .toString()
+            .replace('.', ',');
+          ctx.fillText(String(r.weightsCount), colX[0], ry + rowH / 2 + 1);
+          ctx.fillText(massKgStr, colX[1], ry + rowH / 2 + 1);
+          ctx.fillText(forceStr, colX[2], ry + rowH / 2 + 1);
+          ctx.fillText(deltaLCmStr, colX[3], ry + rowH / 2 + 1);
+
+          const dotX = colX[4];
+          const dotY = ry + rowH / 2;
+          const dotR = Math.max(4.5, 5.5 * uiScale);
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+          if (r.plotted) {
+            ctx.fillStyle = '#0284c7';
+            ctx.fill();
+            ctx.strokeStyle = '#0369a1';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+          }
         }
+      }
+      ctx.restore();
+    }
+
+    // 2B. Hooke's Law Diagram F_ελ(N) – Δl(cm)
+    if (hookeSim.graphs?.hooke?.visible) {
+      const leftPad = Math.max(22, Math.round(30 * uiScale));
+      const rightPad = Math.max(12, Math.round(16 * uiScale));
+      const axisLeftX = hx + leftPad;
+      const axisRightX = hx + hW - rightPad;
+      const axisTopY = diagramTopY + Math.round(14 * uiScale);
+      const axisBotY = axisTopY + hPlotH;
+      const plotSpanW = Math.max(70, axisRightX - axisLeftX - Math.round(18 * uiScale));
+      const plotSpanH = Math.max(52, axisBotY - axisTopY - Math.round(18 * uiScale));
+
+      const deltaL1Mm = 10;
+      const maxRowForce = Math.max(4, ...recordedRows.map((r) => r.forceN));
+      const maxRowDeltaL = Math.max(deltaL1Mm * 4, ...recordedRows.map((r) => r.deltaLMm));
+
+      ctx.save();
+      ctx.strokeStyle = axisInk;
+      ctx.fillStyle = axisInk;
+      ctx.lineWidth = Math.max(1.8, 2.3 * uiScale);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(axisLeftX, axisBotY);
+      ctx.lineTo(axisLeftX, axisTopY);
+      ctx.moveTo(axisLeftX - 5, axisTopY + 7);
+      ctx.lineTo(axisLeftX, axisTopY);
+      ctx.lineTo(axisLeftX + 5, axisTopY + 7);
+      ctx.moveTo(axisLeftX, axisBotY);
+      ctx.lineTo(axisRightX, axisBotY);
+      ctx.moveTo(axisRightX - 7, axisBotY - 5);
+      ctx.lineTo(axisRightX, axisBotY);
+      ctx.lineTo(axisRightX - 7, axisBotY + 5);
+      ctx.stroke();
+
+      const titleFontPx = Math.max(11, Math.round(14 * uiScale));
+      ctx.font = `italic bold ${titleFontPx}px Georgia, "Times New Roman", serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Fελ (N)', axisLeftX + 7, axisTopY + 4);
+      ctx.textAlign = 'right';
+      ctx.fillText('Δl (cm)', axisRightX - 2, axisBotY - Math.max(10, Math.round(13 * uiScale)));
+      ctx.font = `bold ${Math.max(9.5, Math.round(11 * uiScale))}px system-ui, -apple-system, sans-serif`;
+      ctx.fillText('0', axisLeftX - 5, axisBotY + 9);
+
+      const isLineDrawn =
+        Boolean(hookeSim.hookeLineDrawn) || springSims.some((sm) => sm.hookeLineDrawn);
+      const plottedRows = recordedRows.filter((r) => r.plotted);
+
+      for (const row of plottedRows) {
+        const px =
+          axisLeftX + (Math.max(0, row.deltaLMm) / Math.max(1, maxRowDeltaL)) * plotSpanW;
+        const py =
+          axisBotY - (Math.max(0, row.forceN) / Math.max(1, maxRowForce)) * plotSpanH;
+        if (row.deltaLMm > 0 || row.forceN > 0) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(2, 132, 199, 0.58)';
+          ctx.lineWidth = 1.35;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px, axisBotY);
+          ctx.moveTo(px, py);
+          ctx.lineTo(axisLeftX, py);
+          ctx.stroke();
+          ctx.restore();
+
+          const tickFontPx = Math.max(8.5, Math.round(10 * uiScale));
+          const rowDeltaLCm = Number((row.deltaLMm / 10).toFixed(1))
+            .toString()
+            .replace('.', ',');
+          ctx.save();
+          ctx.font = `bold ${tickFontPx}px system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = axisInk;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(rowDeltaLCm, px, axisBotY + 4);
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(
+            `${Number(row.forceN.toFixed(1)).toString().replace('.', ',')}`,
+            axisLeftX - 5,
+            py
+          );
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(2, 132, 199, 0.2)';
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(5.5, 7 * uiScale), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0284c7';
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(3.5, 4.3 * uiScale), 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
+
+      if (isLineDrawn) {
+        const maxPlottedDeltaL =
+          plottedRows.length > 0 ? Math.max(...plottedRows.map((r) => r.deltaLMm)) : 0;
+        const lineMaxDeltaL = maxPlottedDeltaL > 0 ? maxPlottedDeltaL : maxRowDeltaL;
+        let endRayDeltaL = lineMaxDeltaL;
+        let endRayForce = (lineMaxDeltaL / Math.max(1, deltaL1Mm)) * 1.0;
+        if (endRayForce > maxRowForce) {
+          endRayForce = maxRowForce;
+          endRayDeltaL = endRayForce * deltaL1Mm;
+        }
+        const rayEndX =
+          axisLeftX + (endRayDeltaL / Math.max(1, maxRowDeltaL)) * plotSpanW;
+        const rayEndY = axisBotY - (endRayForce / Math.max(1, maxRowForce)) * plotSpanH;
+
+        ctx.save();
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = Math.max(2.0, 2.7 * uiScale);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(axisLeftX, axisBotY);
+        ctx.lineTo(rayEndX, rayEndY);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.restore();
     }
   }
 
@@ -846,6 +1252,184 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
     }
     ctx.restore();
   }
+}
+
+/**
+ * Renders a `TextObject` onto the PDF 2D canvas context with:
+ * - Valid CSS `ctx.font` ordering (`italic` BEFORE `bold ${fSize}px`, preventing Canvas fallback to 10px!)
+ * - Exact padding matching the canvas DOM (`px-1 py-0` for `math-graph-txt-` labels vs `px-3 py-1.5` for text boxes)
+ * - True superscripts (`^2`, `^{2}`), subscripts (`_max`, `_0`, `_1`, `_{max}`), stacked fractions (`\frac{1}{2}`), and math symbols!
+ */
+function drawTextObjectForPdf(
+  ctx: CanvasRenderingContext2D,
+  tx: TextObject,
+  page: NotePage
+) {
+  const rawSource = (tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '';
+  if (!rawSource.trim()) return;
+
+  ctx.save();
+  const isMathLabel =
+    tx.id.startsWith('math-graph-txt-') || Boolean(tx.groupId?.startsWith('math-graph-grp-'));
+  const fSize = tx.fontSize || 20;
+  const isItalic = tx.fontFamily === 'neohellenic' || Boolean(tx.isMath);
+  const fontStyle = isItalic ? 'italic ' : '';
+  const fontWeight = tx.bold ? 'bold ' : tx.isMath ? '600 ' : '500 ';
+  const fontStack =
+    tx.fontFamily === 'calligraphic'
+      ? '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
+      : tx.fontFamily === 'neohellenic'
+      ? '"GFS Neohellenic", "Arima", Georgia, "Times New Roman", serif'
+      : tx.fontFamily === 'handwritten'
+      ? '"Playpen Sans", "Arima", "Mansalva", cursive, sans-serif'
+      : tx.fontFamily === 'mansalva'
+      ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
+      : tx.fontFamily === 'marker'
+      ? '"ExplainBoardsPen", "Mynerve", "Mansalva", cursive, sans-serif'
+      : tx.isMath
+      ? '"GFS Neohellenic", Georgia, "Times New Roman", serif'
+      : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+  const makeFont = (sz: number, boldOverride?: boolean) =>
+    `${fontStyle}${boldOverride ? 'bold ' : fontWeight}${Math.max(7, sz).toFixed(1)}px ${fontStack}`;
+
+  const cleanLatexLine = (str: string): string =>
+    str
+      .replace(/\\displaystyle\b|\\left\b|\\right\b/g, '')
+      .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+      .replace(/\\sigma\s*\\upsilon\s*\\nu/gi, 'συν')
+      .replace(/\\eta\s*\\mu/gi, 'ημ')
+      .replace(/\\omega\b/g, 'ω')
+      .replace(/\\Lambda\b/g, 'Λ')
+      .replace(/\\lambda\b/g, 'λ')
+      .replace(/\\Delta\b/g, 'Δ')
+      .replace(/\\Sigma\b/g, 'Σ')
+      .replace(/\\pi\b/g, 'π')
+      .replace(/\\alpha\b/g, 'α')
+      .replace(/\\beta\b/g, 'β')
+      .replace(/\\gamma\b/g, 'γ')
+      .replace(/\\theta\b/g, 'θ')
+      .replace(/\\mu\b/g, 'μ')
+      .replace(/\\cdot\b|\\times\b/g, '·')
+      .replace(/\\le\b/g, '≤')
+      .replace(/\\ge\b/g, '≥')
+      .replace(/\\ne\b/g, '≠')
+      .replace(/\\pm\b/g, '±')
+      .replace(/\\Rightarrow\b/g, '⇒')
+      .replace(/\\Leftrightarrow\b/g, '⇔')
+      .replace(/\\sin\b/g, 'sin')
+      .replace(/\\cos\b/g, 'cos')
+      .replace(/\\tan\b/g, 'tan')
+      .replace(/\\ln\b/g, 'ln')
+      .replace(/\\log\b/g, 'log');
+
+  const drawRichMathLine = (lineStr: string, startX: number, baseY: number, lineColor: string) => {
+    const cleaned = cleanLatexLine(lineStr);
+    const tokenRe =
+      /(\\frac\{[^{}]*\}\{[^{}]*\}|\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
+    const parts = cleaned.split(tokenRe).filter(Boolean);
+    let curX = startX;
+
+    ctx.fillStyle = lineColor;
+    ctx.strokeStyle = lineColor;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+
+    for (const part of parts) {
+      if (part.startsWith('\\frac{')) {
+        const m = part.match(/^\\frac\{([^{}]*)\}\{([^{}]*)\}$/);
+        if (m) {
+          const numTxt = m[1].trim();
+          const denTxt = m[2].trim();
+          const fracSz = fSize * 0.74;
+          ctx.font = makeFont(fracSz, true);
+          const numW = ctx.measureText(numTxt).width;
+          const denW = ctx.measureText(denTxt).width;
+          const barW = Math.max(numW, denW) + 4;
+          const midX = curX + barW / 2;
+          ctx.textAlign = 'center';
+          ctx.fillText(numTxt, midX, baseY - fSize * 0.34);
+          ctx.fillText(denTxt, midX, baseY + fSize * 0.36);
+          ctx.lineWidth = Math.max(1.2, fSize * 0.07);
+          ctx.beginPath();
+          ctx.moveTo(curX + 1, baseY - fSize * 0.24);
+          ctx.lineTo(curX + barW - 1, baseY - fSize * 0.24);
+          ctx.stroke();
+          ctx.textAlign = 'left';
+          curX += barW + 2;
+          continue;
+        }
+      }
+      if ((part.startsWith('^') || part.startsWith('_')) && part.length > 1) {
+        const isSup = part[0] === '^';
+        let inner = part.slice(1);
+        if (
+          (inner.startsWith('(') && inner.endsWith(')')) ||
+          (inner.startsWith('{') && inner.endsWith('}'))
+        ) {
+          inner = inner.slice(1, -1);
+        }
+        const subSz = fSize * 0.72;
+        ctx.font = makeFont(subSz);
+        const yOff = isSup ? -fSize * 0.36 : fSize * 0.22;
+        ctx.fillText(inner, curX, baseY + yOff);
+        curX += ctx.measureText(inner).width + 0.8;
+        continue;
+      }
+      const plain = part.replace(/[{}]/g, '');
+      if (!plain) continue;
+      ctx.font = makeFont(fSize);
+      ctx.fillText(plain, curX, baseY);
+      curX += ctx.measureText(plain).width;
+    }
+  };
+
+  ctx.font = makeFont(fSize);
+  const rawParas = rawSource.split(/\r?\n/);
+  const wrappedLines: string[] = [];
+  const maxLineW = !tx.isMath && tx.boxWidth ? Math.max(24, tx.boxWidth - 24) : 0;
+
+  for (const para of rawParas) {
+    if (!maxLineW || para.includes('^') || para.includes('_') || para.includes('\\')) {
+      wrappedLines.push(para);
+      continue;
+    }
+    const words = para.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      wrappedLines.push('');
+      continue;
+    }
+    let currentLine = words[0];
+    for (let wIdx = 1; wIdx < words.length; wIdx++) {
+      const candidate = `${currentLine} ${words[wIdx]}`;
+      if (ctx.measureText(candidate).width <= maxLineW) {
+        currentLine = candidate;
+      } else {
+        wrappedLines.push(currentLine);
+        currentLine = words[wIdx];
+      }
+    }
+    wrappedLines.push(currentLine);
+  }
+
+  const padX = isMathLabel ? 4 : 12;
+  const padY = isMathLabel ? 0 : 6;
+  const lineH = isMathLabel ? fSize * 1.05 : fSize * 1.35;
+  const multiM = tx.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
+  const multiGrp = multiM ? multiM[1] : null;
+
+  wrappedLines.forEach((line, idx) => {
+    const rowFnColor = multiGrp
+      ? (page.strokes || []).find(
+          (s) => s.groupId === multiGrp && s.id.includes(`-crv-fn${idx + 1}-`)
+        )?.color
+      : undefined;
+    const effectiveColor = rowFnColor || tx.color || '#111827';
+    const baseY = tx.y + padY + (idx + 0.82) * lineH;
+    drawRichMathLine(line, tx.x + padX, baseY, effectiveColor);
+  });
+
+  ctx.restore();
 }
 
 /**
@@ -924,52 +1508,7 @@ export async function exportNotebookToPdfBlob(
     }
 
     for (const tx of page.texts || []) {
-      if (!tx.text) continue;
-      ctx.save();
-      ctx.fillStyle = tx.color || '#111827';
-      const fontStack =
-        tx.fontFamily === 'calligraphic'
-          ? '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
-          : tx.fontFamily === 'neohellenic'
-          ? 'italic "GFS Neohellenic", "Arima", cursive, serif'
-          : tx.fontFamily === 'handwritten'
-          ? '"Playpen Sans", "Arima", "Mansalva", cursive, sans-serif'
-          : tx.fontFamily === 'mansalva'
-          ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
-          : tx.fontFamily === 'marker'
-          ? '"ExplainBoardsPen", "Mynerve", "Mansalva", cursive, sans-serif'
-          : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      const fSize = tx.fontSize || 20;
-      ctx.font = `${tx.bold ? 'bold ' : ''}${fSize}px ${fontStack}`;
-      const rawParas = tx.text.split(/\r?\n/);
-      const wrappedLines: string[] = [];
-      const maxLineW = tx.boxWidth ? Math.max(24, tx.boxWidth - 24) : 0;
-      for (const para of rawParas) {
-        if (!maxLineW) {
-          wrappedLines.push(para);
-          continue;
-        }
-        const words = para.split(/\s+/).filter(Boolean);
-        if (words.length === 0) {
-          wrappedLines.push('');
-          continue;
-        }
-        let currentLine = words[0];
-        for (let wIdx = 1; wIdx < words.length; wIdx++) {
-          const candidate = `${currentLine} ${words[wIdx]}`;
-          if (ctx.measureText(candidate).width <= maxLineW) {
-            currentLine = candidate;
-          } else {
-            wrappedLines.push(currentLine);
-            currentLine = words[wIdx];
-          }
-        }
-        wrappedLines.push(currentLine);
-      }
-      wrappedLines.forEach((line, idx) => {
-        ctx.fillText(line, tx.x + 12, tx.y + 6 + (idx + 0.85) * fSize * 1.35);
-      });
-      ctx.restore();
+      drawTextObjectForPdf(ctx, tx, page);
     }
 
     const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.91);
@@ -1305,16 +1844,7 @@ export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<B
     }
 
     for (const tx of page.texts || []) {
-      if (!tx.text) continue;
-      ctx.save();
-      ctx.fillStyle = tx.color || '#111827';
-      const fSize = tx.fontSize || 20;
-      ctx.font = `${tx.bold ? 'bold ' : ''}${fSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      const lines = tx.text.split(/\r?\n/);
-      lines.forEach((line, idx) => {
-        ctx.fillText(line, tx.x + 12, tx.y + 6 + (idx + 0.85) * fSize * 1.35);
-      });
-      ctx.restore();
+      drawTextObjectForPdf(ctx, tx, page);
     }
 
     // Enrich atomSims with precomputed 2D element info & 3D molecule geometry for standalone player
