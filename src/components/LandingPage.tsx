@@ -1693,7 +1693,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
          ===================================================================== */}
       <main id="hero-top-section" className="max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-10 pt-10 pb-28 scroll-mt-20">
         {/* --- Α. ΚΕΝΤΡΙΚΕΣ ΠΛΗΡΟΦΟΡΙΕΣ (Τίτλος & Υπότιτλος) --- */}
-        <div className="text-center max-w-3xl mx-auto">
+        <div className="text-center max-w-4xl mx-auto">
           <h1 className="text-3xl sm:text-5xl md:text-[50px] font-extrabold tracking-tight text-slate-950 leading-[1.14]">
             Δώστε ζωή &amp; κίνηση στο μολύβι σας με το{' '}
             {isExplainBoardsBrand ? (
@@ -1709,12 +1709,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             )}
           </h1>
 
-          <p className="mt-4 text-base sm:text-lg text-slate-600 font-medium leading-relaxed max-w-2xl mx-auto">
-            Εξηγήστε πάνω στα boards σας φαινόμενα, έννοιες, χημικές αντιδράσεις &amp; διαγράμματα με διαδραστικές προσομοιώσεις που{' '}
-            <span className="text-slate-900 font-bold">«ζωντανεύουν» κατευθείαν από το μολύβι σας</span>!
-            <br className="hidden sm:inline" /> Ένα ολοκληρωμένο πακέτο εργαλείων{' '}
-            <strong className="text-slate-900 font-bold">Φυσικής, Χημείας, Βιολογίας &amp; Μαθηματικών</strong>.
-          </p>
+          <div className="mt-5 max-w-[840px] mx-auto">
+            <p className="text-base sm:text-lg text-slate-600 font-medium leading-relaxed">
+              Εξηγήστε πάνω στα boards σας φαινόμενα, έννοιες, χημικές αντιδράσεις &amp; διαγράμματα με διαδραστικές προσομοιώσεις που{' '}
+              <span className="text-slate-900 font-bold">«ζωντανεύουν» κατευθείαν από το μολύβι σας</span>!
+            </p>
+            <p className="mt-3.5 text-lg sm:text-xl md:text-[21px] text-slate-600 font-medium leading-snug">
+              Ένα ολοκληρωμένο πακέτο εργαλείων{' '}
+              <strong className="text-slate-900 font-bold">Φυσικής, Χημείας, Βιολογίας &amp; Μαθηματικών</strong>.
+            </p>
+          </div>
 
           {/* --- Β. ΚΥΡΙΑ ΚΟΥΜΠΙΑ ΕΝΕΡΓΕΙΑΣ (Ξεκάθαρα διαχωρισμένα) --- */}
           <div className="mt-8 flex items-center justify-center gap-3.5 flex-wrap">
