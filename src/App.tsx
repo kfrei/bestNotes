@@ -169,6 +169,7 @@ import {
   validateAndCorrectChemicalEquation,
   get3DMoleculeModel,
   PRESET_3D_MOLECULES,
+  normalizeHandwrittenCompoundFormula,
   getNaturalNucleusRadiusPx,
   getNaturalOuterOrbitRadiusPx,
   buildAtomNodesAndBondsForTerm,
@@ -1374,7 +1375,7 @@ export default function App() {
   } | null>(null);
   const draggingAtomHandleRef = useRef<{
     simId: string;
-    kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize';
+    kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize' | 'mol-3d-box';
     atomId: string;
     electronIdx?: number;
     startX: number;
@@ -1410,6 +1411,15 @@ export default function App() {
       hx: number;
       hy: number;
       r: number;
+    }[];
+    mol3DBoxes?: {
+      simId: string;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      origX: number;
+      origY: number;
     }[];
     buttons: {
       simId: string;
@@ -12812,6 +12822,17 @@ export default function App() {
         return;
       }
       if (action === 'toggle-3d-molecule') {
+        if (
+          sim.show3DMolecule &&
+          sim.showReactionEquation === false &&
+          sim.showAtomsBelowReaction === false
+        ) {
+          updateActivePage((page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).filter((s) => s.id !== sim.id),
+          }));
+          return;
+        }
         updateActivePage((page) => ({
           ...page,
           atomSims: (page.atomSims || []).map((s) =>
@@ -19462,6 +19483,15 @@ export default function App() {
           hy: number;
           r: number;
         }[] = [];
+        const mol3DBoxesHit: {
+          simId: string;
+          x1: number;
+          y1: number;
+          x2: number;
+          y2: number;
+          origX: number;
+          origY: number;
+        }[] = [];
         const atomButtonsHit: {
           simId: string;
           action: string;
@@ -20331,21 +20361,35 @@ export default function App() {
           if (aSim.show3DMolecule) {
             const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
             const mol3D = get3DMoleculeModel(
-              aSim.reactionEquationText || inferred.equationDisplay,
+              aSim.activeReactionTerm || aSim.reactionEquationText || inferred.equationDisplay,
               aSim.atoms.map((a) => a.z),
               aSim.selected3DMolId
             );
             const showCloud = aSim.showChargeCloud !== false;
 
-            const boxW = 468;
-            const boxH = 228;
-            const boxX = Math.max(18, simCenterX - boxW / 2);
-            const boxY =
-              aSim.showAtomsBelowReaction === false
+            const boxW = 440;
+            const boxH = 224;
+            const defaultBoxX = Math.max(18, simCenterX - boxW / 2);
+            const defaultBoxY =
+              aSim.showReactionEquation === false && aSim.showAtomsBelowReaction === false
+                ? Math.max(36, (aSim.atoms[0]?.y ?? 220) - boxH / 2)
+                : aSim.showAtomsBelowReaction === false
                 ? topBarY + 50
                 : Math.max(topBarY + 60, (Number.isFinite(maxSimY) ? maxSimY : 320) + 38);
+            const boxX = aSim.mol3DBoxX ?? defaultBoxX;
+            const boxY = aSim.mol3DBoxY ?? defaultBoxY;
 
-            // Πλαίσιο 3D Μορίου
+            mol3DBoxesHit.push({
+              simId: aSim.id,
+              x1: boxX,
+              y1: boxY,
+              x2: boxX + boxW,
+              y2: boxY + boxH,
+              origX: boxX,
+              origY: boxY,
+            });
+
+            // Πλαίσιο 3D Μορίου (Draggable)
             ctx.save();
             ctx.shadowColor = 'rgba(15, 23, 42, 0.16)';
             ctx.shadowBlur = 14;
@@ -20359,58 +20403,40 @@ export default function App() {
             ctx.stroke();
             ctx.restore();
 
-            // Header μπάρα 3D Μορίου + Επιλογέας (H2O, CH4, CO2, NH3, NaCl) + Toggle Νέφους Φορτίου
+            // Header μπάρα 3D Μορίου: Μόνο το Όνομα και ο Τύπος (π.χ. Νερό (H₂O), Μεθάνιο (CH₄)) χωρίς έτοιμα κουμπάκια!
             ctx.save();
-            ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             ctx.fillStyle = '#f8fafc';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(
-              `🧊 3D: ${mol3D.nameEl} (${mol3D.bondAngleText})`,
-              boxX + 14,
-              boxY + 18
-            );
+            ctx.fillText(`🧊 ${mol3D.nameEl}`, boxX + 14, boxY + 18);
             ctx.restore();
 
-            // Κουμπιά επιλογής μορίου (H2O, CH4, CO2, NH3, NaCl)
-            let pillX = boxX + 205;
-            const molOptions: { id: string; label: string }[] = [
-              { id: 'H2O', label: 'H₂O' },
-              { id: 'CH4', label: 'CH₄' },
-              { id: 'CO2', label: 'CO₂' },
-              { id: 'NH3', label: 'NH₃' },
-              { id: 'NaCl', label: 'NaCl' },
-            ];
-            for (const mOpt of molOptions) {
-              const isAct = mol3D.id === mOpt.id;
-              const pw = 34;
-              drawAtomPillButton(
-                aSim.id,
-                mOpt.label,
-                `select-3d-mol:${mOpt.id}`,
-                pillX,
-                boxY + 8,
-                pw,
-                20,
-                isAct ? '#0284c7' : 'rgba(51, 65, 85, 0.9)',
-                isAct ? '#ffffff' : '#cbd5e1',
-                isAct ? '#38bdf8' : '#475569'
-              );
-              pillX += pw + 4;
-            }
-
-            // Toggle Χρωματικού Νέφους Φορτίου δ⁺/δ⁻
+            // Toggle Χρωματικού Νέφους Φορτίου δ⁺/δ⁻ + Κουμπί Κλεισίματος (✕)
             drawAtomPillButton(
               aSim.id,
               showCloud ? '☁️ Νέφος ON' : '☁️ Νέφος OFF',
               'toggle-charge-cloud',
-              boxX + boxW - 76,
+              boxX + boxW - 106,
               boxY + 8,
               66,
               20,
               showCloud ? '#be185d' : 'rgba(51, 65, 85, 0.9)',
               '#ffffff',
               showCloud ? '#f472b6' : '#475569'
+            );
+
+            drawAtomPillButton(
+              aSim.id,
+              '✕',
+              'toggle-3d-molecule',
+              boxX + boxW - 32,
+              boxY + 8,
+              22,
+              20,
+              'rgba(51, 65, 85, 0.9)',
+              '#cbd5e1',
+              '#475569'
             );
 
             // Κέντρο 3D προβολής
@@ -20665,15 +20691,15 @@ export default function App() {
               }
             }
 
-            // 6δ. Υπόμνημα (Legend) Κατανομής Φορτίου & Διπολικής Ροπής στη δεξιά πλευρά της 3D κάρτας
-            const legX = boxX + boxW - 148;
-            const legY = boxY + 46;
+            // 6δ. Υπόμνημα (Legend) Κατανομής Φορτίου (Μόνο δ⁻ και δ⁺, χωρίς γωνίες, χ, ή μ)
+            const legX = boxX + boxW - 146;
+            const legY = boxY + 62;
             ctx.save();
             ctx.fillStyle = 'rgba(30, 41, 59, 0.88)';
             ctx.strokeStyle = '#475569';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.roundRect(legX, legY, 136, 134, 10);
+            ctx.roundRect(legX, legY, 134, 68, 10);
             ctx.fill();
             ctx.stroke();
 
@@ -20698,46 +20724,14 @@ export default function App() {
             ctx.fill();
             ctx.fillStyle = '#bae6fd';
             ctx.fillText('δ⁺ Έλλειμμα e⁻', legX + 24, legY + 52);
-
-            // Γωνία δεσμού & Γεωμετρία
-            ctx.fillStyle = '#fde047';
-            ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillText(`Γωνία: ${mol3D.bondAngleText}`, legX + 8, legY + 74);
-
-            // Ηλεκτραρνητικότητες Pauling
-            ctx.fillStyle = '#cbd5e1';
-            ctx.font = '600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            const uniqueSyms = Array.from(new Set(mol3D.atoms.map((a) => a.symbol)));
-            uniqueSyms.slice(0, 2).forEach((sym, sIdx) => {
-              const foundAt = mol3D.atoms.find((a) => a.symbol === sym);
-              if (foundAt) {
-                ctx.fillText(
-                  `χ(${sym}) = ${foundAt.electronegativity.toFixed(2)}`,
-                  legX + 8,
-                  legY + 92 + sIdx * 14
-                );
-              }
-            });
-
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = 'bold 8.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillText(
-              mol3D.dipoleVector ? 'Πολικό (μ ≠ 0)' : 'Μη Πολικό (μ = 0)',
-              legX + 8,
-              legY + 122
-            );
             ctx.restore();
 
-            // Κάτω μπάρα επεξήγησης πολικότητας
+            // Κάτω μπάρα: ΜΟΝΟ αν είναι Ισχυρά Πολικό Μόριο / Μη Πολικό Μόριο / Πολικό Μόριο (χωρίς μ, γωνίες ή VSEPR)
             ctx.save();
-            ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             ctx.fillStyle = '#bae6fd';
             ctx.textAlign = 'center';
-            ctx.fillText(
-              `${mol3D.geometryLabel} • ${mol3D.polarityLabel}`,
-              boxX + boxW / 2,
-              boxY + boxH - 13
-            );
+            ctx.fillText(mol3D.polarityLabel, boxX + boxW / 2, boxY + boxH - 14);
             ctx.restore();
           }
         }
@@ -20747,6 +20741,7 @@ export default function App() {
           nuclei: nucleiHit,
           electrons: electronsHit,
           resizeHandles: resizeHandlesHit,
+          mol3DBoxes: mol3DBoxesHit,
           buttons: atomButtonsHit,
         };
       } else {
@@ -23723,6 +23718,40 @@ export default function App() {
         }
       }
 
+      // 4) Draggable 3D Molecule Card (σύρε το 3D πλαίσιο ελεύθερα στον καμβά)
+      for (const b3d of aHit.mol3DBoxes || []) {
+        if (
+          pt.x >= b3d.x1 &&
+          pt.x <= b3d.x2 &&
+          pt.y >= b3d.y1 &&
+          pt.y <= b3d.y2
+        ) {
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          draggingAtomHandleRef.current = {
+            simId: b3d.simId,
+            kind: 'mol-3d-box',
+            atomId: b3d.simId,
+            startX: pt.x,
+            startY: pt.y,
+            origAtomX: b3d.origX,
+            origAtomY: b3d.origY,
+            curX: pt.x,
+            curY: pt.y,
+          };
+          activePointerIdRef.current = e.pointerId;
+          activePointerTypeRef.current = e.pointerType;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          isDrawingRef.current = true;
+          return;
+        }
+      }
+
       // Αν ο χρήστης έκανε κλικ εκτός οποιουδήποτε ατόμου στον καμβά, αποεπίλεξε το τρέχον άτομο!
       if ((targetPage.atomSims || []).some((s) => Boolean(s.selectedAtomId))) {
         updateActivePage(
@@ -26191,6 +26220,30 @@ export default function App() {
                     atoms: s.atoms.map((a) =>
                       a.id === dragAt.atomId ? { ...a, outerRadiusPx: nextRadius } : a
                     ),
+                  }
+                : s
+            ),
+          }),
+          false
+        );
+      } else if (dragAt.kind === 'mol-3d-box') {
+        const pW = getPageLogicalWidth(activePage);
+        const pH = getPageLogicalHeight(activePage);
+        const nextBoxX = Math.round(
+          Math.max(8, Math.min(pW - 448, dragAt.origAtomX + (latestPt.x - dragAt.startX)))
+        );
+        const nextBoxY = Math.round(
+          Math.max(8, Math.min(pH - 232, dragAt.origAtomY + (latestPt.y - dragAt.startY)))
+        );
+        updateActivePage(
+          (page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id === dragAt.simId
+                ? {
+                    ...s,
+                    mol3DBoxX: nextBoxX,
+                    mol3DBoxY: nextBoxY,
                   }
                 : s
             ),
@@ -33872,6 +33925,202 @@ export default function App() {
     ]
   );
 
+  // 🧊 3D.OCR (από χειρόγραφη ένωση με Λάσο, π.χ. H2O, CH4, CO2, NH3, SO2, BF3, NaCl...):
+  // Αναγνωρίζει την ένωση και εμφανίζει απευθείας το Draggable 3D Μόριο με νέφος φορτίου δ⁺/δ⁻!
+  const handleConvertLassoTo3DMoleculeOCR = useCallback(async () => {
+    if (isConvertingHandwriting) return;
+    const baseIds =
+      selectedStrokeIds.length > 0
+        ? selectedStrokeIds
+        : activeNodeStrokeId
+        ? [activeNodeStrokeId]
+        : [];
+    const baseSet = new Set(baseIds);
+    const groupIds = new Set(
+      activePage.strokes
+        .filter((s) => baseSet.has(s.id) && s.groupId)
+        .map((s) => s.groupId as string)
+    );
+    const selStrokes = activePage.strokes.filter(
+      (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+    );
+    if (selStrokes.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα με το Λάσο τη χειρόγραφη χημική ένωση (π.χ. H2O, CH4, CO2, NH3)!');
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const st of selStrokes) {
+      const b = getStrokeBounds(st);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+    const pad = 32;
+    const rawW = Math.max(48, Math.ceil(maxX - minX));
+    const rawH = Math.max(32, Math.ceil(maxY - minY));
+    const scale = 2;
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = (rawW + pad * 2) * scale;
+    cropCanvas.height = (rawH + pad * 2) * scale;
+    const cropCtx = cropCanvas.getContext('2d');
+    if (!cropCtx) return;
+
+    cropCtx.fillStyle = '#ffffff';
+    cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+    cropCtx.save();
+    cropCtx.scale(scale, scale);
+    cropCtx.translate(-minX + pad, -minY + pad);
+    for (const st of selStrokes) {
+      drawStrokeOnContext(cropCtx, st);
+    }
+    cropCtx.restore();
+
+    const cropDataUrl = cropCanvas.toDataURL('image/png');
+    setIsConvertingHandwriting(true);
+    showToast('🧊 3D.OCR: Αναγνώριση χημικής ένωσης & δημιουργία 3D Μορίου...');
+
+    try {
+      const chemRes = await Promise.race([
+        transcribeHandwrittenChemistryWithGemini(cropDataUrl, activeNotebook?.title || ''),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 28000)),
+      ]);
+
+      const rawRecognized =
+        chemRes?.rawEquation?.trim() || chemRes?.formattedText?.trim() || 'H2O';
+      const cleanFormula = normalizeHandwrittenCompoundFormula(rawRecognized) || 'H2O';
+      const mol3D = get3DMoleculeModel(cleanFormula, undefined, cleanFormula);
+
+      const ts = Date.now();
+      const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const centerX = Math.max(240, Math.min(pW - 240, Math.round((minX + maxX) / 2)));
+      const boxX = Math.max(16, Math.min(pW - 456, Math.round(centerX - 220)));
+      const boxY = Math.max(24, Math.min(pH - 240, Math.round(minY)));
+
+      const builtCompound = buildAtomNodesAndBondsForTerm(cleanFormula, centerX, boxY + 110);
+
+      const newAtomSim: AtomSimConfig = {
+        id: newSimId,
+        name: getNextDefaultAtomSimName(activePage),
+        atoms: builtCompound.atoms,
+        selectedAtomId: undefined,
+        bonds: builtCompound.bonds,
+        shellDisplayMode: 'auto',
+        isRotating: true,
+        showReactionEquation: false,
+        reactionEquationText: mol3D.formula,
+        userRawReactionText: rawRecognized,
+        activeReactionTerm: cleanFormula,
+        reactionArrowStep: 2,
+        showAtomsBelowReaction: false,
+        show3DMolecule: true,
+        showChargeCloud: true,
+        selected3DMolId: cleanFormula,
+        mol3DBoxX: boxX,
+        mol3DBoxY: boxY,
+      };
+
+      const removeIdSet = new Set(selStrokes.map((s) => s.id));
+      updateActivePage((page) => {
+        const curValid = getValidAtomSims(page);
+        return {
+          ...page,
+          strokes: page.strokes.filter((s) => !removeIdSet.has(s.id)),
+          atomSims: [...curValid, newAtomSim],
+          activeAtomSimId: newSimId,
+        };
+      });
+
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      showToast(`🧊 3D.OCR: Δημιουργήθηκε το 3D Μόριο «${mol3D.nameEl}» (${mol3D.polarityLabel})! Σύρε το πλαίσιο ελεύθερα.`);
+    } finally {
+      setIsConvertingHandwriting(false);
+    }
+  }, [
+    isConvertingHandwriting,
+    selectedStrokeIds,
+    activeNodeStrokeId,
+    activePage,
+    activeNotebook?.title,
+    getNextDefaultAtomSimName,
+    getValidAtomSims,
+    updateActivePage,
+    showToast,
+  ]);
+
+  // 🧊 3D.OCR από πλαίσιο κειμένου (Text Box):
+  const handleCreate3DMoleculeFromTextBox = useCallback(
+    (targetTxtId?: string) => {
+      const txtId = targetTxtId || selectedTextId || editingTextId;
+      if (!txtId) return;
+      const targetTxt = (activePage.texts || []).find((t) => t.id === txtId);
+      if (!targetTxt || !targetTxt.text.trim()) return;
+
+      const rawUserStr = targetTxt.chemRawInput || targetTxt.text.trim();
+      const cleanFormula = normalizeHandwrittenCompoundFormula(rawUserStr) || 'H2O';
+      const mol3D = get3DMoleculeModel(cleanFormula, undefined, cleanFormula);
+
+      const ts = Date.now();
+      const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const boxX = Math.max(16, Math.min(pW - 456, Math.round(targetTxt.x)));
+      const boxY = Math.max(24, Math.min(pH - 240, Math.round(targetTxt.y + 44)));
+      const builtCompound = buildAtomNodesAndBondsForTerm(cleanFormula, boxX + 220, boxY + 110);
+
+      const newAtomSim: AtomSimConfig = {
+        id: newSimId,
+        name: getNextDefaultAtomSimName(activePage),
+        atoms: builtCompound.atoms,
+        selectedAtomId: undefined,
+        bonds: builtCompound.bonds,
+        shellDisplayMode: 'auto',
+        isRotating: true,
+        showReactionEquation: false,
+        reactionEquationText: mol3D.formula,
+        userRawReactionText: rawUserStr,
+        activeReactionTerm: cleanFormula,
+        reactionArrowStep: 2,
+        showAtomsBelowReaction: false,
+        show3DMolecule: true,
+        showChargeCloud: true,
+        selected3DMolId: cleanFormula,
+        mol3DBoxX: boxX,
+        mol3DBoxY: boxY,
+      };
+
+      updateActivePage((page) => {
+        const curValid = getValidAtomSims(page);
+        return {
+          ...page,
+          atomSims: [...curValid, newAtomSim],
+          activeAtomSimId: newSimId,
+        };
+      });
+
+      setEditingTextId(null);
+      showToast(`🧊 3D.OCR: Δημιουργήθηκε το 3D Μόριο «${mol3D.nameEl}» (${mol3D.polarityLabel})! Σύρε το πλαίσιο ελεύθερα.`);
+    },
+    [
+      selectedTextId,
+      editingTextId,
+      activePage,
+      getNextDefaultAtomSimName,
+      getValidAtomSims,
+      updateActivePage,
+      showToast,
+    ]
+  );
+
   // Progressive 1.75s Diagram Animation helper:
   // 1) Fast fade-in of coordinate axes (0..260ms)
   // 2) Progressive drawing of the plotted curve from left-to-right or from the top peak around the circumference (200..1620ms)
@@ -39243,6 +39492,18 @@ export default function App() {
                           <span>{isConvertingHandwriting ? 'ChemOCR...' : '🧪 ChemOCR'}</span>
                         </button>
                         <button
+                          onClick={() => void handleConvertLassoTo3DMoleculeOCR()}
+                          disabled={isConvertingHandwriting}
+                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                            isConvertingHandwriting
+                              ? 'bg-sky-300 text-white cursor-wait'
+                              : 'bg-sky-700 hover:bg-sky-800 text-white'
+                          }`}
+                          title="3D.OCR: Αναγνώριση χειρόγραφης χημικής ένωσης (π.χ. H₂O, CH₄, CO₂, NH₃, SO₂, BF₃...) και εμφάνιση του Draggable 3D Μορίου με χρωματικό νέφος φορτίου!"
+                        >
+                          <span>{isConvertingHandwriting ? '3D.OCR...' : '🧊 3D.OCR'}</span>
+                        </button>
+                        <button
                           onClick={() => void handleConvertLassoToMathGraph()}
                           disabled={isConvertingHandwriting}
                           className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
@@ -42996,48 +43257,17 @@ export default function App() {
                               </button>
 
                               {activeAtomSim.show3DMolecule && (
-                                <>
-                                  <label className="flex items-center justify-between text-[10.5px] font-bold text-slate-700 pt-0.5 cursor-pointer">
-                                    <span>☁️ Χρωματικό νέφος φορτίου (🔴 δ⁻ / 🔵 δ⁺)</span>
-                                    <input
-                                      type="checkbox"
-                                      checked={activeAtomSim.showChargeCloud !== false}
-                                      onChange={() =>
-                                        handleAtomSimAction(activeAtomSim, 'toggle-charge-cloud')
-                                      }
-                                      className="accent-pink-600 w-4 h-4 cursor-pointer"
-                                    />
-                                  </label>
-                                  <div className="grid grid-cols-5 gap-1 pt-0.5">
-                                    {(
-                                      [
-                                        { id: 'H2O', label: 'H₂O' },
-                                        { id: 'CH4', label: 'CH₄' },
-                                        { id: 'CO2', label: 'CO₂' },
-                                        { id: 'NH3', label: 'NH₃' },
-                                        { id: 'NaCl', label: 'NaCl' },
-                                      ] as const
-                                    ).map((m) => (
-                                      <button
-                                        key={m.id}
-                                        type="button"
-                                        onClick={() =>
-                                          handleAtomSimAction(
-                                            activeAtomSim,
-                                            `select-3d-mol:${m.id}`
-                                          )
-                                        }
-                                        className={`py-1 rounded text-[10px] font-extrabold transition cursor-pointer ${
-                                          activeAtomSim.selected3DMolId === m.id
-                                            ? 'bg-sky-700 text-white'
-                                            : 'bg-white border border-slate-200 text-slate-700 hover:bg-sky-50'
-                                        }`}
-                                      >
-                                        {m.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </>
+                                <label className="flex items-center justify-between text-[10.5px] font-bold text-slate-700 pt-0.5 cursor-pointer">
+                                  <span>☁️ Χρωματικό νέφος φορτίου (🔴 δ⁻ / 🔵 δ⁺)</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={activeAtomSim.showChargeCloud !== false}
+                                    onChange={() =>
+                                      handleAtomSimAction(activeAtomSim, 'toggle-charge-cloud')
+                                    }
+                                    className="accent-pink-600 w-4 h-4 cursor-pointer"
+                                  />
+                                </label>
                               )}
                             </div>
                           </div>
@@ -44194,6 +44424,15 @@ export default function App() {
                                 title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
                               >
                                 🧪 Chem / Δείκτες
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => handleCreate3DMoleculeFromTextBox(txt.id)}
+                                className="px-2 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-bold cursor-pointer"
+                                title="3D.OCR: Άμεση δημιουργία του Draggable 3D Μορίου με χρωματικό νέφος φορτίου από την ένωση του πλαισίου κειμένου!"
+                              >
+                                🧊 3D.OCR
                               </button>
                               <button
                                 type="button"

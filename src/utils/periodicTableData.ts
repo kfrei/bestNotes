@@ -897,8 +897,8 @@ export const PRESET_3D_MOLECULES: Record<string, Molecule3DModel> = {
     nameEl: 'Νερό (H₂O)',
     geometryLabel: 'Γωνιακή 3D Γεωμετρία (VSEPR AX₂E₂)',
     bondAngleText: '104.5°',
-    polarityLabel: 'Ισχυρά Πολικό Μόριο (μ = 1.85 D) • Αρνητικό νέφος δ⁻ στο O, θετικό δ⁺ στα 2 H',
-    dipoleVector: { dx: 0, dy: -1, dz: 0, label: 'p⃗ (Διπολική Ροπή μ = 1.85 D)' },
+    polarityLabel: 'Ισχυρά Πολικό Μόριο',
+    dipoleVector: { dx: 0, dy: -1, dz: 0, label: 'p⃗' },
     atoms: [
       {
         id: 'O1',
@@ -955,7 +955,7 @@ export const PRESET_3D_MOLECULES: Record<string, Molecule3DModel> = {
     nameEl: 'Μεθάνιο (CH₄)',
     geometryLabel: 'Τετραεδρική 3D Γεωμετρία (VSEPR AX₄)',
     bondAngleText: '109.5°',
-    polarityLabel: 'Μη Πολικό Συμμετρικό Μόριο (μ = 0 D) • Ελαφρύ δ⁻ στο C, δ⁺ στις 4 κορυφές H',
+    polarityLabel: 'Μη Πολικό Μόριο',
     atoms: [
       {
         id: 'C1',
@@ -1037,7 +1037,7 @@ export const PRESET_3D_MOLECULES: Record<string, Molecule3DModel> = {
     nameEl: 'Διοξείδιο του Άνθρακα (CO₂)',
     geometryLabel: 'Γραμμική 3D Γεωμετρία (O = C = O)',
     bondAngleText: '180.0°',
-    polarityLabel: 'Πολικοί δεσμοί C=O αλλά Μη Πολικό Μόριο (μ_ολ = 0 D λόγω συμμετρίας 180°)',
+    polarityLabel: 'Μη Πολικό Μόριο',
     atoms: [
       {
         id: 'O1',
@@ -1091,8 +1091,8 @@ export const PRESET_3D_MOLECULES: Record<string, Molecule3DModel> = {
     nameEl: 'Αμμωνία (NH₃)',
     geometryLabel: 'Τριγωνική Πυραμίδα 3D (VSEPR AX₃E)',
     bondAngleText: '107.0°',
-    polarityLabel: 'Πολικό Μόριο (μ = 1.47 D) • Αρνητικό νέφος δ⁻ στην κορυφή N, θετικό δ⁺ στη βάση 3H',
-    dipoleVector: { dx: 0, dy: -1, dz: 0, label: 'p⃗ (μ = 1.47 D)' },
+    polarityLabel: 'Ισχυρά Πολικό Μόριο',
+    dipoleVector: { dx: 0, dy: -1, dz: 0, label: 'p⃗' },
     atoms: [
       {
         id: 'N1',
@@ -1160,8 +1160,8 @@ export const PRESET_3D_MOLECULES: Record<string, Molecule3DModel> = {
     nameEl: 'Χλωριούχο Νάτριο (Na⁺Cl⁻)',
     geometryLabel: 'Ετεροπολικός (Ιοντικός) Δεσμός 3D',
     bondAngleText: '180.0°',
-    polarityLabel: 'Πλήρης μεταφορά ηλεκτρονίου (Δχ = 2.23) • Κατιόν Na⁺ (μπλε δ⁺) & Ανιόν Cl⁻ (κόκκινο δ⁻)',
-    dipoleVector: { dx: -1, dy: 0, dz: 0, label: 'Ιοντικό Δίπολο Na⁺ → Cl⁻' },
+    polarityLabel: 'Ιοντική Ένωση (Ισχυρά Πολική)',
+    dipoleVector: { dx: -1, dy: 0, dz: 0, label: 'Na⁺ → Cl⁻' },
     atoms: [
       {
         id: 'Na1',
@@ -1195,25 +1195,513 @@ export const PRESET_3D_MOLECULES: Record<string, Molecule3DModel> = {
   },
 };
 
-export function get3DMoleculeModel(reactionText?: string, atomZList?: number[], forcedMolId?: string): Molecule3DModel {
-  if (forcedMolId && PRESET_3D_MOLECULES[forcedMolId]) {
-    return PRESET_3D_MOLECULES[forcedMolId];
+const PAULING_ELECTRONEGATIVITY: Record<number, number> = {
+  1: 2.20,  // H
+  2: 0.0,   // He
+  3: 0.98,  // Li
+  4: 1.57,  // Be
+  5: 2.04,  // B
+  6: 2.55,  // C
+  7: 3.04,  // N
+  8: 3.44,  // O
+  9: 3.98,  // F
+  11: 0.93, // Na
+  12: 1.31, // Mg
+  13: 1.61, // Al
+  14: 1.90, // Si
+  15: 2.19, // P
+  16: 2.58, // S
+  17: 3.16, // Cl
+  19: 0.82, // K
+  20: 1.00, // Ca
+  26: 1.83, // Fe
+  29: 1.90, // Cu
+  30: 1.65, // Zn
+  32: 2.01, // Ge
+  33: 2.18, // As
+  34: 2.55, // Se
+  35: 2.96, // Br
+  47: 1.93, // Ag
+  50: 1.96, // Sn
+  53: 2.66, // I
+  56: 0.89, // Ba
+};
+
+const CPK_ATOM_COLORS: Record<number, string> = {
+  1: '#38bdf8',  // H - Light Blue
+  5: '#f472b6',  // B - Salmon/Pink
+  6: '#334155',  // C - Charcoal
+  7: '#2563eb',  // N - Royal Blue
+  8: '#ef4444',  // O - Red
+  9: '#22c55e',  // F - Green
+  11: '#8b5cf6', // Na - Violet
+  12: '#10b981', // Mg - Emerald
+  13: '#94a3b8', // Al - Silver
+  14: '#d97706', // Si - Ochre
+  15: '#f97316', // P - Orange
+  16: '#eab308', // S - Yellow
+  17: '#10b981', // Cl - Green
+  19: '#a855f7', // K - Purple
+  20: '#14b8a6', // Ca - Teal
+  35: '#991b1b', // Br - Dark Red
+  53: '#6b21a8', // I - Deep Violet
+};
+
+const GREEK_COMPOUND_NAMES: Record<string, string> = {
+  H2O: 'Νερό',
+  CH4: 'Μεθάνιο',
+  CO2: 'Διοξείδιο του Άνθρακα',
+  NH3: 'Αμμωνία',
+  NACL: 'Χλωριούχο Νάτριο',
+  HCL: 'Υδροχλώριο',
+  HF: 'Υδροφθόριο',
+  HBR: 'Υδροβρώμιο',
+  HI: 'Υδροϊώδιο',
+  H2S: 'Υδρόθειο',
+  SO2: 'Διοξείδιο του Θείου',
+  SO3: 'Τριοξείδιο του Θείου',
+  NO2: 'Διοξείδιο του Αζώτου',
+  NO: 'Μονοξείδιο του Αζώτου',
+  N2O: 'Υποξείδιο του Αζώτου',
+  CO: 'Μονοξείδιο του Άνθρακα',
+  O2: 'Οξυγόνο',
+  N2: 'Άζωτο',
+  H2: 'Υδρογόνο',
+  CL2: 'Χλώριο',
+  F2: 'Φθόριο',
+  BR2: 'Βρώμιο',
+  I2: 'Ιώδιο',
+  O3: 'Όζον',
+  BF3: 'Τριφθοριούχο Βόριο',
+  BCL3: 'Τριχλωριούχο Βόριο',
+  CCL4: 'Τετραχλωράνθρακας',
+  CHCL3: 'Χλωροφόρμιο',
+  PCL3: 'Τριχλωριούχος Φωσφόρος',
+  PCL5: 'Πενταχλωριούχος Φωσφόρος',
+  SF6: 'Εξαφθοριούχο Θείο',
+  PH3: 'Φωσφίνη',
+  SIH4: 'Σιλάνιο',
+  SICL4: 'Τετραχλωριούχο Πυρίτιο',
+  NF3: 'Τριφθοριούχο Άζωτο',
+  OF2: 'Διφθοριούχο Οξυγόνο',
+  CS2: 'Διθειούχος Άνθρακας',
+  BECL2: 'Χλωριούχο Βηρύλλιο',
+  MGO: 'Οξείδιο του Μαγνησίου',
+  CAO: 'Οξείδιο του Ασβεστίου',
+  CACL2: 'Χλωριούχο Ασβέστιο',
+  MGCL2: 'Χλωριούχο Μαγνήσιο',
+  LIF: 'Φθοριούχο Λίθιο',
+  KCL: 'Χλωριούχο Κάλιο',
+  KBR: 'Βρωμιούχο Κάλιο',
+  KI: 'Ιωδιούχο Κάλιο',
+  CH2O: 'Φορμαλδεΰδη',
+  HCN: 'Υδροκυάνιο',
+  H2O2: 'Υπεροξείδιο του Υδρογόνου',
+  C2H4: 'Αιθένιο',
+  C2H2: 'Αιθίνιο',
+  C2H6: 'Αιθάνιο',
+  H2SO4: 'Θειικό Οξύ',
+  HNO3: 'Νιτρικό Οξύ',
+  NAOH: 'Υδροξείδιο του Νατρίου',
+  KOH: 'Υδροξείδιο του Καλίου',
+};
+
+/**
+ * Καθαρίζει τυπικά OCR σφάλματα σε χειρόγραφους χημικούς τύπους (π.χ. "H20" -> "H2O", "C02" -> "CO2", "S02" -> "SO2").
+ */
+export function normalizeHandwrittenCompoundFormula(rawInput: string): string {
+  let s = normalizeAsciiChem(rawInput || '').trim();
+  // Αν είναι αντίδραση (π.χ. 2H2 + O2 -> 2H2O), πάρε το κύριο προϊόν
+  if (s.includes('->')) {
+    const rhs = (s.split('->')[1] || s).trim();
+    s = (rhs.split('+')[0] || rhs).trim();
   }
-  const norm = normalizeAsciiChem(reactionText || '').toUpperCase();
-  if (norm.includes('H2O') || (norm.includes('H') && norm.includes('O') && !norm.includes('C'))) {
+  // Αφαίρεση αρχικού στοιχειομετρικού συντελεστή (π.χ. "2H2O" -> "H2O", "2 H2O" -> "H2O")
+  s = s.replace(/^\d+\s*/, '').replace(/\s+/g, '');
+  // Διόρθωση "0" (μηδέν) που γράφτηκε αντί για "O" (Οξυγόνο): π.χ. H20 -> H2O, C02 -> CO2, S02 -> SO2, S03 -> SO3, N02 -> NO2
+  s = s
+    .replace(/^([A-Za-z]+\d*)0(\d*)$/i, '$1O$2')
+    .replace(/^([CHNSPKMgCaAlFe]+)0(\d*)$/i, '$1O$2');
+  return s;
+}
+
+/**
+ * Καθολικός VSEPR + Pauling 3D Γεννήτορας Μορίων (100% χωρίς AI API!).
+ * Δέχεται οποιονδήποτε χημικό τύπο (π.χ. HCl, SO2, SO3, BF3, CCl4, PH3, SF6, PCl5, O2, N2, H2S, CaCl2, κ.λπ.)
+ * και κατασκευάζει αυτόματα τις 3D συντεταγμένες VSEPR, τα μονήρη ζεύγη, το χρωματικό νέφος φορτίου δ⁺/δ⁻ και την πολικότητα!
+ */
+export function buildProcedural3DMoleculeFromFormula(formulaRaw: string): Molecule3DModel {
+  const cleanFormula = normalizeHandwrittenCompoundFormula(formulaRaw);
+  const parsed = parseFormulaToken(cleanFormula);
+  if (!parsed.atoms || parsed.atoms.length === 0) {
     return PRESET_3D_MOLECULES.H2O;
   }
-  if (norm.includes('CH4') || (norm.includes('C') && norm.includes('H') && !norm.includes('O'))) {
-    return PRESET_3D_MOLECULES.CH4;
+
+  // Κανονικοποίηση συμβόλων (π.χ. "cl" -> "Cl", "na" -> "Na", "o" -> "O")
+  const groups: { el: PeriodicElement; count: number }[] = [];
+  for (const item of parsed.atoms) {
+    const normSym =
+      item.sym.length >= 2
+        ? item.sym[0].toUpperCase() + item.sym.slice(1).toLowerCase()
+        : item.sym.toUpperCase();
+    const foundEl =
+      PERIODIC_ELEMENTS_H_TO_RN.find((e) => e.symbol.toLowerCase() === normSym.toLowerCase()) ||
+      PERIODIC_ELEMENTS_H_TO_RN[0];
+    const subNum = parseInt(item.sub || '1', 10);
+    groups.push({ el: foundEl, count: Math.max(1, Number.isFinite(subNum) ? subNum : 1) });
   }
-  if (norm.includes('CO2') || (norm.includes('C') && norm.includes('O'))) {
-    return PRESET_3D_MOLECULES.CO2;
+
+  const canonicalAscii = groups
+    .map((g) => `${g.el.symbol}${g.count > 1 ? g.count : ''}`)
+    .join('');
+  const upperKey = canonicalAscii.toUpperCase();
+
+  if (PRESET_3D_MOLECULES[canonicalAscii]) return PRESET_3D_MOLECULES[canonicalAscii];
+  if (PRESET_3D_MOLECULES[upperKey]) return PRESET_3D_MOLECULES[upperKey];
+
+  const prettyFormula = formatChemEquationText(canonicalAscii);
+  const greekName = GREEK_COMPOUND_NAMES[upperKey] || `Ένωση ${prettyFormula}`;
+  const fullNameEl = `${greekName} (${prettyFormula})`;
+  const isMetalEl = (el: PeriodicElement) =>
+    el.category !== 'nonmetal' && el.category !== 'noble' && el.category !== 'metalloid';
+
+  // 1. Διατομικό ομοπυρηνικό μόριο (π.χ. H2, O2, N2, Cl2, F2)
+  if (groups.length === 1 && groups[0].count === 2) {
+    const el = groups[0].el;
+    const chi = PAULING_ELECTRONEGATIVITY[el.z] ?? 2.2;
+    const col = CPK_ATOM_COLORS[el.z] || '#38bdf8';
+    const rFac = el.z === 1 ? 0.78 : el.z <= 10 ? 1.12 : 1.24;
+    const bondOrder: 1 | 2 | 3 = el.z === 7 ? 3 : el.z === 8 ? 2 : 1;
+    return {
+      id: canonicalAscii,
+      formula: prettyFormula,
+      nameEl: fullNameEl,
+      geometryLabel: 'Γραμμική 3D Γεωμετρία',
+      bondAngleText: '180.0°',
+      polarityLabel: 'Μη Πολικό Μόριο',
+      atoms: [
+        {
+          id: `${el.symbol}1`,
+          z: el.z,
+          symbol: el.symbol,
+          x: -0.78,
+          y: 0,
+          z3d: 0,
+          radiusFactor: rFac,
+          color: col,
+          electronegativity: chi,
+          partialCharge: 0,
+          chargeLabel: '',
+        },
+        {
+          id: `${el.symbol}2`,
+          z: el.z,
+          symbol: el.symbol,
+          x: 0.78,
+          y: 0,
+          z3d: 0,
+          radiusFactor: rFac,
+          color: col,
+          electronegativity: chi,
+          partialCharge: 0,
+          chargeLabel: '',
+        },
+      ],
+      bonds: [{ fromIdx: 0, toIdx: 1, order: bondOrder }],
+      lonePairs: [],
+    };
   }
-  if (norm.includes('NH3') || (norm.includes('N') && norm.includes('H') && !norm.includes('NA'))) {
-    return PRESET_3D_MOLECULES.NH3;
+
+  // 2. Διατομικό ετεροπυρηνικό μόριο (π.χ. HCl, HF, HBr, HI, CO, NO, LiF, KCl, MgO, CaO)
+  if (
+    groups.length === 2 &&
+    groups[0].count === 1 &&
+    groups[1].count === 1
+  ) {
+    const el1 = groups[0].el;
+    const el2 = groups[1].el;
+    const chi1 = PAULING_ELECTRONEGATIVITY[el1.z] ?? 2.0;
+    const chi2 = PAULING_ELECTRONEGATIVITY[el2.z] ?? 2.5;
+    const dChi = Math.abs(chi2 - chi1);
+    const isIonic = dChi >= 1.7 || isMetalEl(el1) !== isMetalEl(el2);
+    const sign1 = chi1 < chi2 ? 1 : -1;
+    const pMag = Math.min(0.95, Math.max(0.18, dChi / 2.2));
+    const bondOrder: 1 | 2 | 3 =
+      (el1.z === 6 && el2.z === 8) || (el1.z === 7 && el2.z === 8) ? 2 : 1;
+
+    return {
+      id: canonicalAscii,
+      formula: prettyFormula,
+      nameEl: fullNameEl,
+      geometryLabel: isIonic ? 'Ετεροπολικός (Ιοντικός) Δεσμός 3D' : 'Γραμμική 3D Γεωμετρία',
+      bondAngleText: '180.0°',
+      polarityLabel: isIonic
+        ? 'Ιοντική Ένωση (Ισχυρά Πολική)'
+        : dChi >= 0.8
+        ? 'Ισχυρά Πολικό Μόριο'
+        : dChi >= 0.35
+        ? 'Πολικό Μόριο'
+        : 'Μη Πολικό Μόριο',
+      dipoleVector: dChi >= 0.35 ? { dx: -sign1, dy: 0, dz: 0, label: 'p⃗' } : undefined,
+      atoms: [
+        {
+          id: `${el1.symbol}1`,
+          z: el1.z,
+          symbol: el1.symbol,
+          x: -0.78,
+          y: 0,
+          z3d: 0,
+          radiusFactor: el1.z === 1 ? 0.78 : 1.12,
+          color: CPK_ATOM_COLORS[el1.z] || '#38bdf8',
+          electronegativity: chi1,
+          partialCharge: sign1 * pMag,
+          chargeLabel: isIonic ? (sign1 > 0 ? `${el1.symbol}⁺` : `${el1.symbol}⁻`) : sign1 > 0 ? 'δ⁺' : 'δ⁻',
+        },
+        {
+          id: `${el2.symbol}1`,
+          z: el2.z,
+          symbol: el2.symbol,
+          x: 0.78,
+          y: 0,
+          z3d: 0,
+          radiusFactor: el2.z === 1 ? 0.78 : 1.24,
+          color: CPK_ATOM_COLORS[el2.z] || '#10b981',
+          electronegativity: chi2,
+          partialCharge: -sign1 * pMag,
+          chargeLabel: isIonic ? (-sign1 > 0 ? `${el2.symbol}⁺` : `${el2.symbol}⁻`) : -sign1 > 0 ? 'δ⁺' : 'δ⁻',
+        },
+      ],
+      bonds: [{ fromIdx: 0, toIdx: 1, order: bondOrder, isIonic }],
+      lonePairs: [],
+    };
   }
-  if (norm.includes('NACL') || (norm.includes('NA') && norm.includes('CL'))) {
-    return PRESET_3D_MOLECULES.NaCl;
+
+  // 3. Γενικό πολυατομικό μόριο AX_n E_m (π.χ. H2S, SO2, SO3, BF3, CCl4, PH3, PCl3, PCl5, SF6, NF3, OF2, CS2, CaCl2...)
+  // Επιλογή κεντρικού ατόμου: προτιμάμε άτομο με count === 1 που ΔΕΝ είναι H (π.χ. στο H2S είναι το S, στο SO2 είναι το S, στο CH2O είναι το C)
+  let centralGroupIdx = groups.findIndex((g) => g.count === 1 && g.el.z !== 1);
+  if (centralGroupIdx === -1) {
+    centralGroupIdx = groups.findIndex((g) => g.el.z !== 1);
+  }
+  if (centralGroupIdx === -1) centralGroupIdx = 0;
+
+  const centralEl = groups[centralGroupIdx].el;
+  const ligandList: PeriodicElement[] = [];
+  groups.forEach((g, idx) => {
+    const cnt = idx === centralGroupIdx ? g.count - 1 : g.count;
+    for (let k = 0; k < cnt; k++) {
+      ligandList.push(g.el);
+    }
+  });
+
+  const nLigands = Math.min(6, Math.max(1, ligandList.length));
+  const valenceE = centralEl.shells[centralEl.shells.length - 1] || 4;
+  // Αριθμός ηλεκτρονίων που χρειάζεται κάθε περιφερειακό άτομο (1 για H/αλογόνα, 2 για O/S)
+  const usedElectrons = ligandList.reduce((acc, lig) => {
+    if (lig.z === 8 || lig.z === 16) return acc + 2;
+    return acc + 1;
+  }, 0);
+  const lonePairCount = Math.max(0, Math.floor((valenceE - usedElectrons) / 2));
+
+  // Υπολογισμός 3D θέσεων περιφερειακών ατόμων & μονήρων ζευγών κατά VSEPR
+  let centralPos = { x: 0, y: 0, z3d: 0 };
+  let ligandCoords: { x: number; y: number; z3d: number }[] = [];
+  let lonePairs: LonePair3DLobe[] = [];
+  let geometryLabel = '3D Μοριακή Γεωμετρία';
+  let bondAngleText = '109.5°';
+  let isSymmetricGeometry = false;
+
+  if (nLigands === 2) {
+    if (lonePairCount === 0) {
+      // Γραμμικό AX2 (π.χ. CO2, CS2, BeCl2)
+      geometryLabel = 'Γραμμική 3D Γεωμετρία (VSEPR AX₂)';
+      bondAngleText = '180.0°';
+      isSymmetricGeometry = true;
+      ligandCoords = [
+        { x: -1.02, y: 0, z3d: 0 },
+        { x: 1.02, y: 0, z3d: 0 },
+      ];
+    } else {
+      // Γωνιακό AX2E ή AX2E2 (π.χ. H2O, H2S, SO2, OF2, NO2, O3)
+      geometryLabel = 'Γωνιακή 3D Γεωμετρία (VSEPR)';
+      bondAngleText = lonePairCount === 1 ? '119.0°' : '104.5°';
+      isSymmetricGeometry = false;
+      centralPos = { x: 0, y: -0.22, z3d: 0 };
+      ligandCoords = [
+        { x: -0.84, y: 0.42, z3d: 0.18 },
+        { x: 0.84, y: 0.42, z3d: -0.18 },
+      ];
+      lonePairs =
+        lonePairCount === 1
+          ? [{ x: 0, y: -0.82, z3d: 0 }]
+          : [
+              { x: 0, y: -0.78, z3d: 0.50 },
+              { x: 0, y: -0.78, z3d: -0.50 },
+            ];
+    }
+  } else if (nLigands === 3) {
+    if (lonePairCount === 0) {
+      // Επίπεδο Τριγωνικό AX3 (π.χ. SO3, BF3, BCl3, CH2O)
+      geometryLabel = 'Επίπεδη Τριγωνική 3D Γεωμετρία (VSEPR AX₃)';
+      bondAngleText = '120.0°';
+      isSymmetricGeometry = true;
+      ligandCoords = [
+        { x: 0, y: -0.96, z3d: 0 },
+        { x: 0.86, y: 0.48, z3d: 0.15 },
+        { x: -0.86, y: 0.48, z3d: -0.15 },
+      ];
+    } else {
+      // Τριγωνική Πυραμίδα AX3E (π.χ. NH3, PH3, PCl3, NF3, AsH3)
+      geometryLabel = 'Τριγωνική Πυραμίδα 3D (VSEPR AX₃E)';
+      bondAngleText = '107.0°';
+      isSymmetricGeometry = false;
+      centralPos = { x: 0, y: -0.24, z3d: 0 };
+      ligandCoords = [
+        { x: 0.84, y: 0.38, z3d: 0 },
+        { x: -0.42, y: 0.38, z3d: 0.73 },
+        { x: -0.42, y: 0.38, z3d: -0.73 },
+      ];
+      lonePairs = [{ x: 0, y: -0.84, z3d: 0 }];
+    }
+  } else if (nLigands === 4) {
+    // Τετραεδρικό AX4 (π.χ. CH4, CCl4, SiH4, SiCl4)
+    geometryLabel = 'Τετραεδρική 3D Γεωμετρία (VSEPR AX₄)';
+    bondAngleText = '109.5°';
+    isSymmetricGeometry = lonePairCount === 0;
+    ligandCoords = [
+      { x: 0, y: -0.96, z3d: 0 },
+      { x: 0.90, y: 0.32, z3d: 0 },
+      { x: -0.45, y: 0.32, z3d: 0.78 },
+      { x: -0.45, y: 0.32, z3d: -0.78 },
+    ];
+  } else if (nLigands === 5) {
+    // Τριγωνική Διπυραμίδα AX5 (π.χ. PCl5)
+    geometryLabel = 'Τριγωνική Διπυραμίδα 3D (VSEPR AX₅)';
+    bondAngleText = '90° / 120°';
+    isSymmetricGeometry = true;
+    ligandCoords = [
+      { x: 0, y: -1.0, z3d: 0 },
+      { x: 0, y: 1.0, z3d: 0 },
+      { x: 0.92, y: 0, z3d: 0 },
+      { x: -0.46, y: 0, z3d: 0.80 },
+      { x: -0.46, y: 0, z3d: -0.80 },
+    ];
+  } else {
+    // Οκταεδρικό AX6 (π.χ. SF6)
+    geometryLabel = 'Οκταεδρική 3D Γεωμετρία (VSEPR AX₆)';
+    bondAngleText = '90.0°';
+    isSymmetricGeometry = true;
+    ligandCoords = [
+      { x: 0, y: -1.0, z3d: 0 },
+      { x: 0, y: 1.0, z3d: 0 },
+      { x: 0.95, y: 0, z3d: 0 },
+      { x: -0.95, y: 0, z3d: 0 },
+      { x: 0, y: 0, z3d: 0.95 },
+      { x: 0, y: 0, z3d: -0.95 },
+    ];
+  }
+
+  const chiCentral = PAULING_ELECTRONEGATIVITY[centralEl.z] ?? 2.2;
+  const allSameLigand = ligandList.every((l) => l.z === ligandList[0]?.z);
+  const avgLigChi =
+    ligandList.reduce((acc, l) => acc + (PAULING_ELECTRONEGATIVITY[l.z] ?? 2.5), 0) /
+    Math.max(1, ligandList.length);
+  const maxDChi = Math.max(
+    ...ligandList.map((l) => Math.abs((PAULING_ELECTRONEGATIVITY[l.z] ?? 2.5) - chiCentral))
+  );
+  const isIonicMol = isMetalEl(centralEl);
+
+  const centralChargeSign = chiCentral < avgLigChi ? 1 : -1;
+  const centralChargeMag = Math.min(0.88, Math.max(0.25, maxDChi * 0.45));
+
+  const atoms3D: Atom3DNode[] = [
+    {
+      id: `${centralEl.symbol}0`,
+      z: centralEl.z,
+      symbol: centralEl.symbol,
+      x: centralPos.x,
+      y: centralPos.y,
+      z3d: centralPos.z3d,
+      radiusFactor: centralEl.z <= 10 ? 1.18 : 1.28,
+      color: CPK_ATOM_COLORS[centralEl.z] || '#6366f1',
+      electronegativity: chiCentral,
+      partialCharge: centralChargeSign * centralChargeMag,
+      chargeLabel: centralChargeSign > 0 ? 'δ⁺' : 'δ⁻',
+    },
+  ];
+
+  const bonds3D: Bond3DEdge[] = [];
+  for (let i = 0; i < Math.min(ligandList.length, ligandCoords.length); i++) {
+    const ligEl = ligandList[i];
+    const coord = ligandCoords[i];
+    const chiLig = PAULING_ELECTRONEGATIVITY[ligEl.z] ?? 2.5;
+    const ligSign = chiLig < chiCentral ? 1 : -1;
+    const ligMag = Math.min(0.85, Math.max(0.22, Math.abs(chiLig - chiCentral) * 0.42));
+    atoms3D.push({
+      id: `${ligEl.symbol}${i + 1}`,
+      z: ligEl.z,
+      symbol: ligEl.symbol,
+      x: coord.x,
+      y: coord.y,
+      z3d: coord.z3d,
+      radiusFactor: ligEl.z === 1 ? 0.76 : ligEl.z <= 10 ? 1.08 : 1.18,
+      color: CPK_ATOM_COLORS[ligEl.z] || '#38bdf8',
+      electronegativity: chiLig,
+      partialCharge: ligSign * ligMag,
+      chargeLabel: ligSign > 0 ? 'δ⁺' : 'δ⁻',
+    });
+    const order: 1 | 2 | 3 =
+      (ligEl.z === 8 || ligEl.z === 16) && centralEl.z !== 1 && !isIonicMol ? 2 : 1;
+    bonds3D.push({
+      fromIdx: 0,
+      toIdx: i + 1,
+      order,
+      isIonic: isIonicMol,
+    });
+  }
+
+  // Καθορισμός πολικότητας μορίου
+  const isNonPolar = isSymmetricGeometry && allSameLigand && !isIonicMol;
+  let polarityLabel = 'Πολικό Μόριο';
+  if (isIonicMol) {
+    polarityLabel = 'Ιοντική Ένωση (Ισχυρά Πολική)';
+  } else if (isNonPolar) {
+    polarityLabel = 'Μη Πολικό Μόριο';
+  } else if (maxDChi >= 0.75 || lonePairCount >= 1) {
+    polarityLabel = 'Ισχυρά Πολικό Μόριο';
+  }
+
+  return {
+    id: canonicalAscii,
+    formula: prettyFormula,
+    nameEl: fullNameEl,
+    geometryLabel,
+    bondAngleText,
+    polarityLabel,
+    dipoleVector: isNonPolar ? undefined : { dx: 0, dy: -1, dz: 0, label: 'p⃗' },
+    atoms: atoms3D,
+    bonds: bonds3D,
+    lonePairs,
+  };
+}
+
+export function get3DMoleculeModel(reactionText?: string, atomZList?: number[], forcedMolId?: string): Molecule3DModel {
+  if (forcedMolId) {
+    const cleanForced = normalizeHandwrittenCompoundFormula(forcedMolId);
+    if (PRESET_3D_MOLECULES[cleanForced]) return PRESET_3D_MOLECULES[cleanForced];
+    if (PRESET_3D_MOLECULES[cleanForced.toUpperCase()]) {
+      return PRESET_3D_MOLECULES[cleanForced.toUpperCase()];
+    }
+    return buildProcedural3DMoleculeFromFormula(cleanForced);
+  }
+  if (reactionText && reactionText.trim()) {
+    const cleanTarget = normalizeHandwrittenCompoundFormula(reactionText);
+    if (PRESET_3D_MOLECULES[cleanTarget]) return PRESET_3D_MOLECULES[cleanTarget];
+    if (PRESET_3D_MOLECULES[cleanTarget.toUpperCase()]) {
+      return PRESET_3D_MOLECULES[cleanTarget.toUpperCase()];
+    }
+    if (cleanTarget.length > 0) {
+      return buildProcedural3DMoleculeFromFormula(cleanTarget);
+    }
   }
 
   // Έλεγχος από τα άτομα στον καμβά

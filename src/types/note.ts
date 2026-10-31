@@ -309,7 +309,9 @@ export interface AtomSimConfig {
   showAtomsBelowReaction?: boolean; // Whether the Bohr atom/molecule structure is visible below the reaction bar
   show3DMolecule?: boolean; // Show 3D molecular geometry (H2O, CH4, CO2, NH3, NaCl) below/beside the reaction
   showChargeCloud?: boolean; // Show electrostatic charge distribution cloud (δ⁻ red/orange, δ⁺ blue/cyan) on the 3D spheres
-  selected3DMolId?: string; // Optional override for 3D molecule ('H2O' | 'CH4' | 'CO2' | 'NH3' | 'NaCl')
+  selected3DMolId?: string; // Optional override or chemical formula for 3D molecule (e.g. 'H2O', 'CH4', 'CO2', 'NH3', 'NaCl', 'SO2', 'BF3', etc.)
+  mol3DBoxX?: number; // Custom draggable X position for the 3D Molecule card on canvas
+  mol3DBoxY?: number; // Custom draggable Y position for the 3D Molecule card on canvas
   rot3DYaw?: number; // Custom 3D yaw rotation angle (radians)
   rot3DPitch?: number; // Custom 3D pitch rotation angle (radians)
 }
