@@ -12995,26 +12995,14 @@ export default function App() {
         }));
         return;
       }
-      if (action === 'close-3d-molecule' || action === 'toggle-3d-molecule') {
-        const shouldClose = action === 'close-3d-molecule' ? true : Boolean(sim.show3DMolecule);
-        if (
-          shouldClose &&
-          sim.showReactionEquation === false &&
-          sim.showAtomsBelowReaction === false
-        ) {
-          updateActivePage((page) => ({
-            ...page,
-            atomSims: (page.atomSims || []).filter((s) => s.id !== sim.id),
-          }));
-          return;
-        }
+      if (action === 'close-3d-molecule') {
         updateActivePage((page) => ({
           ...page,
           atomSims: (page.atomSims || []).map((s) =>
             s.id === sim.id
               ? {
                   ...s,
-                  show3DMolecule: action === 'close-3d-molecule' ? false : !s.show3DMolecule,
+                  show3DMolecule: false,
                   showChargeCloud: s.showChargeCloud ?? true,
                 }
               : s
@@ -13022,19 +13010,65 @@ export default function App() {
         }));
         return;
       }
+      if (action === 'toggle-3d-molecule') {
+        updateActivePage((page) => {
+          const allSims = page.atomSims || [];
+          const anyCurrentlyVisible = allSims.some((s) => Boolean(s.show3DMolecule));
+          if (anyCurrentlyVisible) {
+            return {
+              ...page,
+              atomSims: allSims.map((s) =>
+                s.show3DMolecule ? { ...s, show3DMolecule: false } : s
+              ),
+            };
+          }
+          // Αν δεν είναι κανένα 3D μόριο ορατό αυτή τη στιγμή:
+          // Επαναφέρουμε όλα τα 3D μοντέλα που είχαν κλείσει με ✕ (standalone 3D.OCR ή όσα είχαν selected3DMolId),
+          // ή αν δεν υπάρχουν τέτοια, ενεργοποιούμε το 3D στο ενεργό sim!
+          const standaloneOr3DSims = allSims.filter(
+            (s) =>
+              (s.showReactionEquation === false && s.showAtomsBelowReaction === false) ||
+              Boolean(s.selected3DMolId)
+          );
+          if (standaloneOr3DSims.length > 0) {
+            const targetIds = new Set(standaloneOr3DSims.map((s) => s.id));
+            return {
+              ...page,
+              atomSims: allSims.map((s) =>
+                targetIds.has(s.id)
+                  ? { ...s, show3DMolecule: true, showChargeCloud: s.showChargeCloud ?? true }
+                  : s
+              ),
+            };
+          }
+          return {
+            ...page,
+            atomSims: allSims.map((s) =>
+              s.id === sim.id
+                ? { ...s, show3DMolecule: true, showChargeCloud: s.showChargeCloud ?? true }
+                : s
+            ),
+          };
+        });
+        return;
+      }
       if (action === 'toggle-charge-cloud') {
-        updateActivePage((page) => ({
-          ...page,
-          atomSims: (page.atomSims || []).map((s) =>
-            s.id === sim.id
-              ? {
-                  ...s,
-                  show3DMolecule: true,
-                  showChargeCloud: s.showChargeCloud === false ? true : false,
-                }
-              : s
-          ),
-        }));
+        updateActivePage((page) => {
+          const allSims = page.atomSims || [];
+          const nextCloud = sim.showChargeCloud === false ? true : false;
+          return {
+            ...page,
+            atomSims: allSims.map((s) =>
+              s.id === sim.id || s.show3DMolecule
+                ? {
+                    ...s,
+                    show3DMolecule: s.id === sim.id ? true : s.show3DMolecule,
+                    showChargeCloud: nextCloud,
+                  }
+                : s
+            ),
+          };
+        });
         return;
       }
       if (action.startsWith('select-3d-mol:')) {
@@ -43806,12 +43840,30 @@ export default function App() {
                                         updateActivePage((p) => ({
                                           ...p,
                                           activeAtomSimId: sim.id,
+                                          atomSims: (p.atomSims || []).map((s) =>
+                                            s.id === sim.id &&
+                                            s.showReactionEquation === false &&
+                                            s.showAtomsBelowReaction === false
+                                              ? { ...s, show3DMolecule: true }
+                                              : s
+                                          ),
                                         }))
                                       }
                                       className="px-2 py-1 flex items-center gap-1 cursor-pointer"
                                     >
-                                      <span>⚛️</span>
-                                      <span>{sim.name}</span>
+                                      <span>
+                                        {sim.showReactionEquation === false &&
+                                        sim.showAtomsBelowReaction === false
+                                          ? '🧊'
+                                          : '⚛️'}
+                                      </span>
+                                      <span>
+                                        {sim.showReactionEquation === false &&
+                                        sim.showAtomsBelowReaction === false &&
+                                        sim.reactionEquationText
+                                          ? sim.reactionEquationText
+                                          : sim.name}
+                                      </span>
                                     </button>
                                     <button
                                       type="button"
@@ -44044,40 +44096,50 @@ export default function App() {
                             </div>
 
                             {/* 5. 3D Μοριακή Δομή & Χρωματικό Νέφος Κατανομής Φορτίου (δ⁺ / δ⁻) */}
-                            <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
-                              <span className="text-[10px] font-extrabold text-sky-800 uppercase tracking-wider block">
-                                🧊 3D Μοριο & Χρωματικο Νεφος Φορτιου (δ⁺/δ⁻):
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleAtomSimAction(activeAtomSim, 'toggle-3d-molecule')
-                                }
-                                className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
-                                  activeAtomSim.show3DMolecule
-                                    ? 'bg-sky-600 text-white shadow-2xs'
-                                    : 'bg-white text-sky-800 border border-sky-300 hover:bg-sky-50'
-                                }`}
-                              >
-                                {activeAtomSim.show3DMolecule
-                                  ? '🧊 Απόκρυψη 3D Μορίου & Νέφους Φορτίου'
-                                  : '🧊 Εμφάνιση 3D Μορίου & Νέφους Φορτίου (δ⁺/δ⁻)'}
-                              </button>
-
-                              {activeAtomSim.show3DMolecule && (
-                                <label className="flex items-center justify-between text-[10.5px] font-bold text-slate-700 pt-0.5 cursor-pointer">
-                                  <span>☁️ Χρωματικό νέφος φορτίου (🔴 δ⁻ / 🔵 δ⁺)</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={activeAtomSim.showChargeCloud !== false}
-                                    onChange={() =>
-                                      handleAtomSimAction(activeAtomSim, 'toggle-charge-cloud')
+                            {(() => {
+                              const any3DVisible = validAtomSims.some((s) => Boolean(s.show3DMolecule));
+                              const cloudChecked =
+                                validAtomSims.find((s) => s.show3DMolecule)?.showChargeCloud !== false;
+                              return (
+                                <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                                  <span className="text-[10px] font-extrabold text-sky-800 uppercase tracking-wider block">
+                                    🧊 3D Μοριο & Χρωματικο Νεφος Φορτιου (δ⁺/δ⁻):
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAtomSimAction(activeAtomSim, 'toggle-3d-molecule')
                                     }
-                                    className="accent-pink-600 w-4 h-4 cursor-pointer"
-                                  />
-                                </label>
-                              )}
-                            </div>
+                                    className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                                      any3DVisible
+                                        ? 'bg-sky-600 text-white shadow-2xs'
+                                        : 'bg-white text-sky-800 border border-sky-300 hover:bg-sky-50'
+                                    }`}
+                                  >
+                                    {any3DVisible
+                                      ? '🧊 Απόκρυψη 3D Μορίου & Νέφους Φορτίου'
+                                      : '🧊 Εμφάνιση 3D Μορίου & Νέφους Φορτίου (δ⁺/δ⁻)'}
+                                  </button>
+
+                                  {any3DVisible && (
+                                    <label className="flex items-center justify-between text-[10.5px] font-bold text-slate-700 pt-0.5 cursor-pointer">
+                                      <span>☁️ Χρωματικό νέφος φορτίου (🔴 δ⁻ / 🔵 δ⁺)</span>
+                                      <input
+                                        type="checkbox"
+                                        checked={cloudChecked}
+                                        onChange={() =>
+                                          handleAtomSimAction(
+                                            validAtomSims.find((s) => s.show3DMolecule) || activeAtomSim,
+                                            'toggle-charge-cloud'
+                                          )
+                                        }
+                                        className="accent-pink-600 w-4 h-4 cursor-pointer"
+                                      />
+                                    </label>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
