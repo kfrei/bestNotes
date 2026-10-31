@@ -166,6 +166,9 @@ import {
   formatChemEquationText,
   parseChemicalReactionToAtomSetup,
   inferReactionFromCanvasAtoms,
+  validateAndCorrectChemicalEquation,
+  get3DMoleculeModel,
+  PRESET_3D_MOLECULES,
 } from './utils/periodicTableData';
 import {
   CURATED_STICKERS_CATALOG,
@@ -12507,6 +12510,53 @@ export default function App() {
         }));
         return;
       }
+      if (action === 'toggle-3d-molecule') {
+        updateActivePage((page) => ({
+          ...page,
+          atomSims: (page.atomSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  show3DMolecule: !s.show3DMolecule,
+                  showChargeCloud: s.showChargeCloud ?? true,
+                }
+              : s
+          ),
+        }));
+        return;
+      }
+      if (action === 'toggle-charge-cloud') {
+        updateActivePage((page) => ({
+          ...page,
+          atomSims: (page.atomSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  show3DMolecule: true,
+                  showChargeCloud: s.showChargeCloud === false ? true : false,
+                }
+              : s
+          ),
+        }));
+        return;
+      }
+      if (action.startsWith('select-3d-mol:')) {
+        const molId = action.split(':')[1] || 'H2O';
+        updateActivePage((page) => ({
+          ...page,
+          atomSims: (page.atomSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  show3DMolecule: true,
+                  showChargeCloud: s.showChargeCloud ?? true,
+                  selected3DMolId: molId,
+                }
+              : s
+          ),
+        }));
+        return;
+      }
     },
     [computeReactionBondsForAtomSim, triggerAtomReactionAnimation]
   );
@@ -19189,29 +19239,66 @@ export default function App() {
           const simCenterX = Number.isFinite(minSimX) ? (minSimX + maxSimX) / 2 : 360;
           const topBarY = Number.isFinite(minSimY) ? Math.max(22, minSimY - 54) : 120;
 
-          // 1. Reaction Header Bar (με διαδραστικό βέλος ➔ διάρκειας 2s)
+          // 1. Reaction Header Bar (με διαδραστικό βέλος ➔ διάρκειας 2s + ΚΟΚΚΙΝΗ διόρθωση δεικτών/συντελεστών + κουμπί 3D Μορίου)
           if (aSim.showReactionEquation) {
             const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
-            const fullEq = aSim.reactionEquationText || inferred.equationDisplay;
-            const parts = fullEq.split(/→|->|-->/);
-            const lhsText = (parts[0] || fullEq).trim();
-            const rhsText = (parts[1] || '').trim();
+            const rawForCheck =
+              aSim.userRawReactionText || aSim.reactionEquationText || inferred.equationDisplay;
+            const chemVal = validateAndCorrectChemicalEquation(rawForCheck);
+
+            const arrowSegIdx = chemVal.segments.findIndex((s) => s.text.includes('→'));
+            const lhsSegs =
+              arrowSegIdx >= 0 ? chemVal.segments.slice(0, arrowSegIdx) : chemVal.segments;
+            const rhsSegs =
+              arrowSegIdx >= 0 ? chemVal.segments.slice(arrowSegIdx + 1) : [];
 
             ctx.save();
             ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            const lhsW = ctx.measureText(lhsText).width;
-            const rhsW = rhsText ? ctx.measureText(rhsText).width : 0;
+            const measureSegsWidth = (segs: typeof chemVal.segments) => {
+              let w = 0;
+              for (const sg of segs) {
+                if (sg.wrongText) w += ctx.measureText(sg.wrongText).width + 3;
+                w += ctx.measureText(sg.text).width + (sg.isCorrection ? 4 : 0);
+              }
+              return w;
+            };
+            const lhsW = measureSegsWidth(lhsSegs);
+            const rhsW = measureSegsWidth(rhsSegs);
             const arrowBtnW = 48;
-            const eqTotalW = lhsW + arrowBtnW + rhsW + 46;
-            const cardW = Math.max(290, eqTotalW + 170);
+            const eqTotalW = lhsW + arrowBtnW + rhsW + 42;
+            const cardW = Math.max(360, eqTotalW + 258);
             const cardH = 38;
             const cardX = Math.max(16, simCenterX - cardW / 2);
+
+            // Αν ο μαθητής ξέχασε ή έγραψε λάθος δείκτες/συντελεστές, εμφάνισε επεξηγηματικό κόκκινο ταμπελάκι πάνω από την αντίδραση!
+            if (chemVal.hasCorrections) {
+              const corrBannerText = `⚠️ Διόρθωση με Κόκκινο: ${
+                chemVal.explanationNotes[0] || 'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
+              }`;
+              ctx.save();
+              ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              const bw = Math.min(cardW, ctx.measureText(corrBannerText).width + 24);
+              const bx = Math.max(16, simCenterX - bw / 2);
+              const by = Math.max(4, topBarY - 24);
+              ctx.fillStyle = 'rgba(254, 242, 242, 0.97)';
+              ctx.strokeStyle = '#f87171';
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.roundRect(bx, by, bw, 20, 6);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#dc2626';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(corrBannerText, bx + bw / 2, by + 10.5);
+              ctx.restore();
+            }
 
             ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
             ctx.shadowBlur = 10;
             ctx.shadowOffsetY = 3;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
-            ctx.strokeStyle = '#cbd5e1';
+            ctx.strokeStyle = chemVal.hasCorrections ? '#fca5a5' : '#cbd5e1';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.roundRect(cardX, topBarY, cardW, cardH, 12);
@@ -19219,14 +19306,49 @@ export default function App() {
             ctx.stroke();
             ctx.restore();
 
-            let curX = cardX + 16;
-            ctx.save();
-            ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = '#0f172a';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(lhsText, curX, topBarY + cardH / 2);
-            curX += lhsW + 10;
+            const drawDiffSegments = (segs: typeof chemVal.segments, startX: number, centerY: number) => {
+              let xCursor = startX;
+              ctx.save();
+              ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              for (const sg of segs) {
+                if (sg.wrongText) {
+                  const ww = ctx.measureText(sg.wrongText).width;
+                  ctx.fillStyle = '#94a3b8';
+                  ctx.fillText(sg.wrongText, xCursor, centerY);
+                  ctx.strokeStyle = '#dc2626';
+                  ctx.lineWidth = 1.6;
+                  ctx.beginPath();
+                  ctx.moveTo(xCursor - 1, centerY);
+                  ctx.lineTo(xCursor + ww + 1, centerY);
+                  ctx.stroke();
+                  xCursor += ww + 3;
+                }
+                if (!sg.text) continue;
+                const tw = ctx.measureText(sg.text).width;
+                if (sg.isCorrection) {
+                  ctx.fillStyle = 'rgba(254, 226, 226, 0.95)';
+                  ctx.strokeStyle = '#f87171';
+                  ctx.lineWidth = 1;
+                  ctx.beginPath();
+                  ctx.roundRect(xCursor - 1.5, centerY - 10, tw + 5, 20, 4);
+                  ctx.fill();
+                  ctx.stroke();
+                  ctx.fillStyle = '#dc2626';
+                  ctx.fillText(sg.text, xCursor + 1, centerY);
+                  xCursor += tw + 4;
+                } else {
+                  ctx.fillStyle = '#0f172a';
+                  ctx.fillText(sg.text, xCursor, centerY);
+                  xCursor += tw;
+                }
+              }
+              ctx.restore();
+              return xCursor;
+            };
+
+            let curX = drawDiffSegments(lhsSegs, cardX + 14, topBarY + cardH / 2) + 8;
 
             // Κουμπί Βέλους Αντίδρασης [ ➔ ] (2s animation κίνησης ηλεκτρονίων!)
             const arrowBg = isAnimThisSim ? '#16a34a' : '#2563eb';
@@ -19241,19 +19363,16 @@ export default function App() {
               arrowBg,
               '#ffffff'
             );
-            curX += usedArrowW + 10;
+            curX += usedArrowW + 8;
 
-            if (rhsText) {
-              ctx.fillStyle = '#0f172a';
-              ctx.fillText(rhsText, curX, topBarY + cardH / 2);
-              curX += rhsW + 14;
+            if (rhsSegs.length > 0) {
+              curX = drawDiffSegments(rhsSegs, curX, topBarY + cardH / 2) + 10;
             }
-            ctx.restore();
 
-            // Κουμπιά εναλλαγής εμφάνισης Δομής Ατόμων & Επαναφοράς
+            // Κουμπιά εναλλαγής 3D Μορίου, Δομής Ατόμων & Επαναφοράς
             let rightBtnX = cardX + cardW - 10;
             if ((aSim.bonds || []).length > 0) {
-              const resetW = 28;
+              const resetW = 26;
               rightBtnX -= resetW;
               drawAtomPillButton(
                 aSim.id,
@@ -19267,11 +19386,27 @@ export default function App() {
                 '#334155',
                 '#cbd5e1'
               );
-              rightBtnX -= 6;
+              rightBtnX -= 5;
             }
+            const mol3DW = 84;
+            rightBtnX -= mol3DW;
+            drawAtomPillButton(
+              aSim.id,
+              aSim.show3DMolecule ? '🧊 3D ON' : '🧊 3D Μόριο',
+              'toggle-3d-molecule',
+              rightBtnX,
+              topBarY + 8,
+              mol3DW,
+              22,
+              aSim.show3DMolecule ? '#0284c7' : '#f0f9ff',
+              aSim.show3DMolecule ? '#ffffff' : '#0369a1',
+              '#7dd3fc'
+            );
+            rightBtnX -= 5;
+
             const toggleAtomsLabel =
-              aSim.showAtomsBelowReaction === false ? '⚛️ Εμφάνιση Ατόμων' : '⚛️ Δομή Ατόμων';
-            const toggleW = aSim.showAtomsBelowReaction === false ? 118 : 96;
+              aSim.showAtomsBelowReaction === false ? '⚛️ Άτομα OFF' : '⚛️ Άτομα ON';
+            const toggleW = 86;
             rightBtnX -= toggleW;
             drawAtomPillButton(
               aSim.id,
@@ -19286,24 +19421,34 @@ export default function App() {
               aSim.showAtomsBelowReaction === false ? '#93c5fd' : '#86efac'
             );
           } else if (aSim.atoms.length >= 2) {
-            // Όταν υπάρχουν >=2 άτομα δίπλα-δίπλα, εμφάνισε διακριτικό κουμπί για εμφάνιση της Αντίδρασης!
+            // Όταν υπάρχουν >=2 άτομα δίπλα-δίπλα, εμφάνισε διακριτικό κουμπί για εμφάνιση της Αντίδρασης + 3D Μορίου!
             drawAtomPillButton(
               aSim.id,
-              '🧪 Εμφάνιση Αντίδρασης & Κίνηση e⁻ (➔)',
+              '🧪 Αντίδραση & Κίνηση e⁻ (➔)',
               'toggle-reaction-eq',
-              Math.max(16, simCenterX - 115),
+              Math.max(16, simCenterX - 165),
               topBarY + 6,
-              230,
+              200,
               25,
               '#eff6ff',
               '#1d4ed8',
               '#93c5fd'
             );
+            drawAtomPillButton(
+              aSim.id,
+              aSim.show3DMolecule ? '🧊 3D Μόριο (Ενεργό)' : '🧊 3D Μόριο & Νέφος δ⁺/δ⁻',
+              'toggle-3d-molecule',
+              Math.max(222, simCenterX + 42),
+              topBarY + 6,
+              152,
+              25,
+              aSim.show3DMolecule ? '#0284c7' : '#fdf2f8',
+              aSim.show3DMolecule ? '#ffffff' : '#be185d',
+              aSim.show3DMolecule ? '#0284c7' : '#f9a8d4'
+            );
           }
 
-          if (aSim.showAtomsBelowReaction === false) {
-            continue;
-          }
+          if (aSim.showAtomsBelowReaction !== false) {
 
           // Υπολογισμός πόσων εξωτερικών ηλεκτρονίων κάθε ατόμου συμμετέχουν σε ομοιοπολικούς δεσμούς
           const covalentSharedByAtom = new Map<string, number>();
@@ -19748,6 +19893,421 @@ export default function App() {
                 ctx.restore();
               }
             }
+          }
+          } // end if (aSim.showAtomsBelowReaction !== false)
+
+          // 6. 3D ΜΟΡΙΑΚΗ ΔΟΜΗ (VSEPR) & ΧΡΩΜΑΤΙΚΟ ΝΕΦΟΣ ΚΑΤΑΝΟΜΗΣ ΦΟΡΤΙΟΥ (δ⁺ / δ⁻)
+          if (aSim.show3DMolecule) {
+            const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
+            const mol3D = get3DMoleculeModel(
+              aSim.reactionEquationText || inferred.equationDisplay,
+              aSim.atoms.map((a) => a.z),
+              aSim.selected3DMolId
+            );
+            const showCloud = aSim.showChargeCloud !== false;
+
+            const boxW = 468;
+            const boxH = 228;
+            const boxX = Math.max(18, simCenterX - boxW / 2);
+            const boxY =
+              aSim.showAtomsBelowReaction === false
+                ? topBarY + 50
+                : Math.max(topBarY + 60, (Number.isFinite(maxSimY) ? maxSimY : 320) + 38);
+
+            // Πλαίσιο 3D Μορίου
+            ctx.save();
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.16)';
+            ctx.shadowBlur = 14;
+            ctx.shadowOffsetY = 4;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.94)'; // Σκούρο φόντο εργαστηρίου ώστε το χρωματικό νέφος φορτίου δ⁺/δ⁻ να λάμπει!
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // Header μπάρα 3D Μορίου + Επιλογέας (H2O, CH4, CO2, NH3, NaCl) + Toggle Νέφους Φορτίου
+            ctx.save();
+            ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = '#f8fafc';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              `🧊 3D: ${mol3D.nameEl} (${mol3D.bondAngleText})`,
+              boxX + 14,
+              boxY + 18
+            );
+            ctx.restore();
+
+            // Κουμπιά επιλογής μορίου (H2O, CH4, CO2, NH3, NaCl)
+            let pillX = boxX + 205;
+            const molOptions: { id: string; label: string }[] = [
+              { id: 'H2O', label: 'H₂O' },
+              { id: 'CH4', label: 'CH₄' },
+              { id: 'CO2', label: 'CO₂' },
+              { id: 'NH3', label: 'NH₃' },
+              { id: 'NaCl', label: 'NaCl' },
+            ];
+            for (const mOpt of molOptions) {
+              const isAct = mol3D.id === mOpt.id;
+              const pw = 34;
+              drawAtomPillButton(
+                aSim.id,
+                mOpt.label,
+                `select-3d-mol:${mOpt.id}`,
+                pillX,
+                boxY + 8,
+                pw,
+                20,
+                isAct ? '#0284c7' : 'rgba(51, 65, 85, 0.9)',
+                isAct ? '#ffffff' : '#cbd5e1',
+                isAct ? '#38bdf8' : '#475569'
+              );
+              pillX += pw + 4;
+            }
+
+            // Toggle Χρωματικού Νέφους Φορτίου δ⁺/δ⁻
+            drawAtomPillButton(
+              aSim.id,
+              showCloud ? '☁️ Νέφος ON' : '☁️ Νέφος OFF',
+              'toggle-charge-cloud',
+              boxX + boxW - 76,
+              boxY + 8,
+              66,
+              20,
+              showCloud ? '#be185d' : 'rgba(51, 65, 85, 0.9)',
+              '#ffffff',
+              showCloud ? '#f472b6' : '#475569'
+            );
+
+            // Κέντρο 3D προβολής
+            const cx3d = boxX + boxW * 0.42;
+            const cy3d = boxY + 118;
+            const scale3D = 64;
+            const yaw =
+              (aSim.rot3DYaw ?? 0.42) +
+              (aSim.isRotating !== false ? Math.sin(now * 0.00075) * 0.48 : 0);
+            const pitch =
+              (aSim.rot3DPitch ?? 0.24) +
+              (aSim.isRotating !== false ? Math.cos(now * 0.00055) * 0.16 : 0);
+            const cosY = Math.cos(yaw),
+              sinY = Math.sin(yaw);
+            const cosP = Math.cos(pitch),
+              sinP = Math.sin(pitch);
+
+            const project3D = (x: number, y: number, z3d: number) => {
+              // Περιστροφή γύρω από Y (yaw) και μετά X (pitch)
+              const x1 = x * cosY + z3d * sinY;
+              const z1 = -x * sinY + z3d * cosY;
+              const y2 = y * cosP - z1 * sinP;
+              const z2 = y * sinP + z1 * cosP;
+              const persp = 1 / (1 - z2 * 0.14);
+              return {
+                px: cx3d + x1 * scale3D * persp,
+                py: cy3d + y2 * scale3D * persp,
+                depth: z2,
+                persp,
+              };
+            };
+
+            const projAtoms = mol3D.atoms.map((at, idx) => {
+              const p = project3D(at.x, at.y, at.z3d);
+              return {
+                ...at,
+                idx,
+                px: p.px,
+                py: p.py,
+                depth: p.depth,
+                rPx: 22 * at.radiusFactor * p.persp,
+              };
+            });
+
+            // 6α. ΧΡΩΜΑΤΙΚΟ ΝΕΦΟΣ ΗΛΕΚΤΡΟΣΤΑΤΙΚΟΥ ΔΥΝΑΜΙΚΟΥ / ΚΑΤΑΝΟΜΗΣ ΦΟΡΤΙΟΥ (δ⁻ Κόκκινο/Πορτοκαλί, δ⁺ Μπλε/Κυανό)
+            if (showCloud) {
+              // Γέφυρα νέφους κατά μήκος κάθε δεσμού (συνεχές μοριακό νέφος ηλεκτρονίων)
+              for (const b of mol3D.bonds) {
+                const a1 = projAtoms[b.fromIdx];
+                const a2 = projAtoms[b.toIdx];
+                if (!a1 || !a2) continue;
+                ctx.save();
+                const grad = ctx.createLinearGradient(a1.px, a1.py, a2.px, a2.py);
+                const c1 =
+                  a1.partialCharge < 0
+                    ? 'rgba(239, 68, 68, 0.34)'
+                    : 'rgba(14, 165, 233, 0.34)';
+                const c2 =
+                  a2.partialCharge < 0
+                    ? 'rgba(239, 68, 68, 0.34)'
+                    : 'rgba(14, 165, 233, 0.34)';
+                grad.addColorStop(0, c1);
+                grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.22)');
+                grad.addColorStop(1, c2);
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = Math.max(a1.rPx, a2.rPx) * 2.15;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(a1.px, a1.py);
+                ctx.lineTo(a2.px, a2.py);
+                ctx.stroke();
+                ctx.restore();
+              }
+
+              // Ακτινικό νέφος φορτίου γύρω από κάθε σφαιρίδιο (δ⁻ υψηλή ηλεκτρονιακή πυκνότητα, δ⁺ χαμηλή)
+              const pulse = 1 + Math.sin(now * 0.003) * 0.05;
+              for (const pa of projAtoms) {
+                const cloudR = pa.rPx * 2.35 * pulse;
+                const rg = ctx.createRadialGradient(
+                  pa.px,
+                  pa.py,
+                  pa.rPx * 0.25,
+                  pa.px,
+                  pa.py,
+                  cloudR
+                );
+                if (pa.partialCharge < 0) {
+                  // Αρνητικό φορτίο δ⁻ (Πυκνό νέφος ηλεκτρονίων: Κόκκινο -> Πορτοκαλί/Ματζέντα)
+                  const intensity = Math.min(0.62, 0.3 + Math.abs(pa.partialCharge) * 0.34);
+                  rg.addColorStop(0, `rgba(239, 68, 68, ${intensity})`);
+                  rg.addColorStop(0.55, `rgba(249, 115, 22, ${intensity * 0.55})`);
+                  rg.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                } else {
+                  // Θετικό φορτίο δ⁺ (Έλλειμμα ηλεκτρονίων: Κυανό -> Μπλε)
+                  const intensity = Math.min(0.58, 0.28 + Math.abs(pa.partialCharge) * 0.34);
+                  rg.addColorStop(0, `rgba(56, 189, 248, ${intensity})`);
+                  rg.addColorStop(0.55, `rgba(59, 130, 246, ${intensity * 0.52})`);
+                  rg.addColorStop(1, 'rgba(59, 130, 246, 0)');
+                }
+                ctx.save();
+                ctx.fillStyle = rg;
+                ctx.beginPath();
+                ctx.arc(pa.px, pa.py, cloudR, 0, Math.PI * 2);
+                ctx.fill();
+                // Διακεκομμένη ισοδυναμική γραμμή νέφους
+                ctx.strokeStyle =
+                  pa.partialCharge < 0
+                    ? 'rgba(251, 113, 133, 0.45)'
+                    : 'rgba(125, 211, 252, 0.42)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.arc(pa.px, pa.py, pa.rPx * 1.65, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+
+            // 6β. Μονήρη ζεύγη ηλεκτρονίων (Lone Pair Lobes, π.χ. στο H₂O και στο NH₃)
+            for (const lp of mol3D.lonePairs) {
+              const pLp = project3D(lp.x, lp.y, lp.z3d);
+              ctx.save();
+              ctx.fillStyle = 'rgba(244, 114, 182, 0.26)';
+              ctx.strokeStyle = 'rgba(244, 114, 182, 0.65)';
+              ctx.lineWidth = 1.2;
+              ctx.setLineDash([2, 2]);
+              ctx.beginPath();
+              ctx.arc(pLp.px, pLp.py, 11 * pLp.persp, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              // 2 κουκκίδες ηλεκτρονίων μονήρους ζεύγους
+              ctx.fillStyle = '#f472b6';
+              ctx.beginPath();
+              ctx.arc(pLp.px - 3.5, pLp.py, 2.3, 0, Math.PI * 2);
+              ctx.arc(pLp.px + 3.5, pLp.py, 2.3, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+
+            // 6γ. Depth-sorted σχεδίαση 3D Δεσμών και 3D Σφαιριδίων Ατόμων
+            type RenderItem3D =
+              | { kind: 'bond'; depth: number; bond: (typeof mol3D.bonds)[0] }
+              | { kind: 'atom'; depth: number; atom: (typeof projAtoms)[0] };
+
+            const items3D: RenderItem3D[] = [];
+            for (const b of mol3D.bonds) {
+              const a1 = projAtoms[b.fromIdx];
+              const a2 = projAtoms[b.toIdx];
+              if (a1 && a2) {
+                items3D.push({
+                  kind: 'bond',
+                  depth: (a1.depth + a2.depth) / 2 - 0.05,
+                  bond: b,
+                });
+              }
+            }
+            for (const pa of projAtoms) {
+              items3D.push({ kind: 'atom', depth: pa.depth, atom: pa });
+            }
+            items3D.sort((i1, i2) => i1.depth - i2.depth);
+
+            for (const item of items3D) {
+              if (item.kind === 'bond') {
+                const b = item.bond;
+                const a1 = projAtoms[b.fromIdx];
+                const a2 = projAtoms[b.toIdx];
+                const dx = a2.px - a1.px;
+                const dy = a2.py - a1.py;
+                const len = Math.max(1, Math.hypot(dx, dy));
+                const nx = -dy / len;
+                const ny = dx / len;
+
+                ctx.save();
+                if (b.isIonic) {
+                  ctx.strokeStyle = '#facc15';
+                  ctx.lineWidth = 3;
+                  ctx.setLineDash([5, 4]);
+                  ctx.beginPath();
+                  ctx.moveTo(a1.px, a1.py);
+                  ctx.lineTo(a2.px, a2.py);
+                  ctx.stroke();
+                } else if (b.order === 2) {
+                  // Διπλός δεσμός (π.χ. O = C = O στο CO2)
+                  for (const off of [-4.2, 4.2]) {
+                    ctx.strokeStyle = '#cbd5e1';
+                    ctx.lineWidth = 4.2;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(a1.px + nx * off, a1.py + ny * off);
+                    ctx.lineTo(a2.px + nx * off, a2.py + ny * off);
+                    ctx.stroke();
+                  }
+                } else {
+                  // Απλός 3D κυλινδρικός δεσμός
+                  ctx.strokeStyle = '#94a3b8';
+                  ctx.lineWidth = 6.5;
+                  ctx.lineCap = 'round';
+                  ctx.beginPath();
+                  ctx.moveTo(a1.px, a1.py);
+                  ctx.lineTo(a2.px, a2.py);
+                  ctx.stroke();
+
+                  ctx.strokeStyle = '#e2e8f0';
+                  ctx.lineWidth = 2.4;
+                  ctx.beginPath();
+                  ctx.moveTo(a1.px, a1.py);
+                  ctx.lineTo(a2.px, a2.py);
+                  ctx.stroke();
+                }
+                ctx.restore();
+              } else {
+                const pa = item.atom;
+                // 3D Σφαίρα με Specular φωτισμό
+                ctx.save();
+                const sphereGrad = ctx.createRadialGradient(
+                  pa.px - pa.rPx * 0.34,
+                  pa.py - pa.rPx * 0.34,
+                  pa.rPx * 0.1,
+                  pa.px,
+                  pa.py,
+                  pa.rPx
+                );
+                sphereGrad.addColorStop(0, '#ffffff');
+                sphereGrad.addColorStop(0.28, pa.color);
+                sphereGrad.addColorStop(1, '#0f172a');
+
+                ctx.fillStyle = sphereGrad;
+                ctx.strokeStyle =
+                  pa.partialCharge < 0
+                    ? 'rgba(252, 165, 165, 0.9)'
+                    : 'rgba(186, 230, 253, 0.9)';
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.arc(pa.px, pa.py, pa.rPx, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Σύμβολο Στοιχείου πάνω στο 3D σφαιρίδιο
+                ctx.font = `bold ${Math.round(Math.max(11, pa.rPx * 0.62))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(pa.symbol, pa.px, pa.py - 1);
+
+                // Ένδειξη μερικού φορτίου (δ⁻ / δ⁺) πάνω στο σφαιρίδιο
+                if (showCloud && pa.chargeLabel) {
+                  ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                  ctx.fillStyle = pa.partialCharge < 0 ? '#fecaca' : '#bae6fd';
+                  ctx.fillText(pa.chargeLabel, pa.px, pa.py + pa.rPx + 10);
+                }
+                ctx.restore();
+              }
+            }
+
+            // 6δ. Υπόμνημα (Legend) Κατανομής Φορτίου & Διπολικής Ροπής στη δεξιά πλευρά της 3D κάρτας
+            const legX = boxX + boxW - 148;
+            const legY = boxY + 46;
+            ctx.save();
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.88)';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(legX, legY, 136, 134, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.textAlign = 'left';
+            ctx.fillText('Κατανομή Φορτίου:', legX + 8, legY + 16);
+
+            // Κόκκινο δ⁻
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(legX + 14, legY + 34, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fca5a5';
+            ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillText('δ⁻ Πυκνό νέφος e⁻', legX + 24, legY + 34);
+
+            // Μπλε δ⁺
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(legX + 14, legY + 52, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#bae6fd';
+            ctx.fillText('δ⁺ Έλλειμμα e⁻', legX + 24, legY + 52);
+
+            // Γωνία δεσμού & Γεωμετρία
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillText(`Γωνία: ${mol3D.bondAngleText}`, legX + 8, legY + 74);
+
+            // Ηλεκτραρνητικότητες Pauling
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '600 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            const uniqueSyms = Array.from(new Set(mol3D.atoms.map((a) => a.symbol)));
+            uniqueSyms.slice(0, 2).forEach((sym, sIdx) => {
+              const foundAt = mol3D.atoms.find((a) => a.symbol === sym);
+              if (foundAt) {
+                ctx.fillText(
+                  `χ(${sym}) = ${foundAt.electronegativity.toFixed(2)}`,
+                  legX + 8,
+                  legY + 92 + sIdx * 14
+                );
+              }
+            });
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 8.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillText(
+              mol3D.dipoleVector ? 'Πολικό (μ ≠ 0)' : 'Μη Πολικό (μ = 0)',
+              legX + 8,
+              legY + 122
+            );
+            ctx.restore();
+
+            // Κάτω μπάρα επεξήγησης πολικότητας
+            ctx.save();
+            ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = '#bae6fd';
+            ctx.textAlign = 'center';
+            ctx.fillText(
+              `${mol3D.geometryLabel} • ${mol3D.polarityLabel}`,
+              boxX + boxW / 2,
+              boxY + boxH - 13
+            );
+            ctx.restore();
           }
         }
 
@@ -32614,6 +33174,7 @@ export default function App() {
       const rawReaction =
         chemRes?.rawEquation?.trim() || chemRes?.formattedText?.trim() || 'C + O2 -> CO2';
       const parsed = parseChemicalReactionToAtomSetup(rawReaction);
+      const validation = validateAndCorrectChemicalEquation(rawReaction);
       const ts = Date.now();
       const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
       const centerX = Math.max(240, Math.min(540, Math.round((minX + maxX) / 2)));
@@ -32643,8 +33204,11 @@ export default function App() {
         shellDisplayMode: 'auto',
         isRotating: true,
         showReactionEquation: true,
-        reactionEquationText: parsed.equationDisplay,
+        reactionEquationText: validation.correctedEquation || parsed.equationDisplay,
+        userRawReactionText: rawReaction,
         showAtomsBelowReaction: true,
+        show3DMolecule: true,
+        showChargeCloud: true,
       };
 
       const removeIdSet = new Set(selStrokes.map((s) => s.id));
@@ -32663,9 +33227,15 @@ export default function App() {
       setShowSimulationPanel(true);
       setSimActiveCategory('atoms');
       triggerAtomReactionAnimation(newSimId, 2000);
-      showToast(
-        `🧪 ChemOCR: Αναγνωρίστηκε «${parsed.equationDisplay}»! Πάτησε το βέλος ➔ για την κίνηση των ηλεκτρονίων.`
-      );
+      if (validation.hasCorrections) {
+        showToast(
+          `🧪 ChemOCR: Συμπληρώθηκαν με ΚΟΚΚΙΝΟ οι σωστοί δείκτες/συντελεστές → «${validation.correctedEquation}» + 3D Μόριο & Νέφος Φορτίου!`
+        );
+      } else {
+        showToast(
+          `🧪 ChemOCR: Αναγνωρίστηκε «${parsed.equationDisplay}» + 3D Μόριο & Νέφος Φορτίου δ⁺/δ⁻!`
+        );
+      }
     } finally {
       setIsConvertingHandwriting(false);
     }
@@ -32682,6 +33252,96 @@ export default function App() {
     updateActivePage,
     showToast,
   ]);
+
+  const handleCheckChemistryInTextBox = useCallback(
+    (targetTxtId?: string) => {
+      const txtId = targetTxtId || selectedTextId || editingTextId;
+      if (!txtId) return;
+      const targetTxt = (activePage.texts || []).find((t) => t.id === txtId);
+      if (!targetTxt || !targetTxt.text.trim()) return;
+
+      const rawUserStr = targetTxt.chemRawInput || targetTxt.text.trim();
+      const validation = validateAndCorrectChemicalEquation(rawUserStr);
+      const parsed = parseChemicalReactionToAtomSetup(rawUserStr);
+      const ts = Date.now();
+      const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
+      const centerX = Math.max(250, Math.min(540, Math.round(targetTxt.x + 170)));
+      const atomsY = Math.max(200, Math.round(targetTxt.y + 150));
+      const spacingX = parsed.atomZList.length >= 3 ? 185 : 200;
+      const startAtomX = centerX - ((parsed.atomZList.length - 1) * spacingX) / 2;
+
+      const createdAtoms: AtomNode[] = parsed.atomZList.map((zVal, idx) => ({
+        id: `atom-${ts}-${idx}`,
+        z: zVal,
+        x: Math.round(startAtomX + idx * spacingX),
+        y: atomsY,
+        outerRadiusPx: 74,
+        extraElectrons: 0,
+        color: idx % 2 === 0 ? '#8b5cf6' : '#0284c7',
+      }));
+
+      const { nextAtoms, nextBonds } = computeReactionBondsForAtomSim(createdAtoms);
+
+      const newAtomSim: AtomSimConfig = {
+        id: newSimId,
+        name: getNextDefaultAtomSimName(activePage),
+        atoms: nextAtoms,
+        selectedAtomId: nextAtoms[0]?.id,
+        bonds: nextBonds,
+        shellDisplayMode: 'auto',
+        isRotating: true,
+        showReactionEquation: true,
+        reactionEquationText: validation.correctedEquation || parsed.equationDisplay,
+        userRawReactionText: rawUserStr,
+        showAtomsBelowReaction: true,
+        show3DMolecule: true,
+        showChargeCloud: true,
+      };
+
+      updateActivePage((page) => {
+        const curValid = getValidAtomSims(page);
+        return {
+          ...page,
+          texts: (page.texts || []).map((t) =>
+            t.id === txtId
+              ? {
+                  ...t,
+                  chemRawInput: rawUserStr,
+                  text: validation.correctedEquation || parsed.equationDisplay,
+                }
+              : t
+          ),
+          atomSims: [...curValid, newAtomSim],
+          activeAtomSimId: newSimId,
+        };
+      });
+
+      setEditingTextId(null);
+      setShowSimulationPanel(true);
+      setSimActiveCategory('atoms');
+      triggerAtomReactionAnimation(newSimId, 2000);
+      if (validation.hasCorrections) {
+        showToast(
+          `🧪 Έλεγχος Δεικτών (0ms χωρίς AI): Συμπληρώθηκαν με ΚΟΚΚΙΝΟ οι σωστοί δείκτες/συντελεστές → «${validation.correctedEquation}» + 3D Μόριο!`
+        );
+      } else {
+        showToast(
+          `🧪 Σωστοί Δείκτες («${validation.correctedEquation}»)! Εμφανίστηκε η Δομή Ατόμων & το 3D Μόριο με Νέφος Φορτίου.`
+        );
+      }
+    },
+    [
+      selectedTextId,
+      editingTextId,
+      activePage,
+      computeReactionBondsForAtomSim,
+      getNextDefaultAtomSimName,
+      getValidAtomSims,
+      triggerAtomReactionAnimation,
+      updateActivePage,
+      showToast,
+    ]
+  );
 
   // Progressive 1.75s Diagram Animation helper:
   // 1) Fast fade-in of coordinate axes (0..260ms)
@@ -41790,6 +42450,73 @@ export default function App() {
                                 </button>
                               )}
                             </div>
+
+                            {/* 5. 3D Μοριακή Δομή & Χρωματικό Νέφος Κατανομής Φορτίου (δ⁺ / δ⁻) */}
+                            <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                              <span className="text-[10px] font-extrabold text-sky-800 uppercase tracking-wider block">
+                                🧊 3D Μοριο & Χρωματικο Νεφος Φορτιου (δ⁺/δ⁻):
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAtomSimAction(activeAtomSim, 'toggle-3d-molecule')
+                                }
+                                className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                                  activeAtomSim.show3DMolecule
+                                    ? 'bg-sky-600 text-white shadow-2xs'
+                                    : 'bg-white text-sky-800 border border-sky-300 hover:bg-sky-50'
+                                }`}
+                              >
+                                {activeAtomSim.show3DMolecule
+                                  ? '🧊 Απόκρυψη 3D Μορίου & Νέφους Φορτίου'
+                                  : '🧊 Εμφάνιση 3D Μορίου & Νέφους Φορτίου (δ⁺/δ⁻)'}
+                              </button>
+
+                              {activeAtomSim.show3DMolecule && (
+                                <>
+                                  <label className="flex items-center justify-between text-[10.5px] font-bold text-slate-700 pt-0.5 cursor-pointer">
+                                    <span>☁️ Χρωματικό νέφος φορτίου (🔴 δ⁻ / 🔵 δ⁺)</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={activeAtomSim.showChargeCloud !== false}
+                                      onChange={() =>
+                                        handleAtomSimAction(activeAtomSim, 'toggle-charge-cloud')
+                                      }
+                                      className="accent-pink-600 w-4 h-4 cursor-pointer"
+                                    />
+                                  </label>
+                                  <div className="grid grid-cols-5 gap-1 pt-0.5">
+                                    {(
+                                      [
+                                        { id: 'H2O', label: 'H₂O' },
+                                        { id: 'CH4', label: 'CH₄' },
+                                        { id: 'CO2', label: 'CO₂' },
+                                        { id: 'NH3', label: 'NH₃' },
+                                        { id: 'NaCl', label: 'NaCl' },
+                                      ] as const
+                                    ).map((m) => (
+                                      <button
+                                        key={m.id}
+                                        type="button"
+                                        onClick={() =>
+                                          handleAtomSimAction(
+                                            activeAtomSim,
+                                            `select-3d-mol:${m.id}`
+                                          )
+                                        }
+                                        className={`py-1 rounded text-[10px] font-extrabold transition cursor-pointer ${
+                                          activeAtomSim.selected3DMolId === m.id
+                                            ? 'bg-sky-700 text-white'
+                                            : 'bg-white border border-slate-200 text-slate-700 hover:bg-sky-50'
+                                        }`}
+                                      >
+                                        {m.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -42939,6 +43666,15 @@ export default function App() {
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
+                                onClick={() => handleCheckChemistryInTextBox(txt.id)}
+                                className="px-2 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold cursor-pointer"
+                                title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
+                              >
+                                🧪 Chem / Δείκτες
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => {
                                   if (isEditingTxt && txt.isMath) {
                                     const updatedLatex = convertPlainTextToMathLatex(txt.text || '');
@@ -43146,7 +43882,50 @@ export default function App() {
                                 ...fontCss,
                               }}
                             >
-                              {txt.text &&
+                              {txt.chemRawInput ? (
+                                (() => {
+                                  const chemVal = validateAndCorrectChemicalEquation(
+                                    txt.chemRawInput
+                                  );
+                                  return (
+                                    <div className="inline-flex flex-col gap-1">
+                                      <span className="inline-flex items-baseline flex-wrap gap-0.5">
+                                        {chemVal.segments.map((sg, sIdx) => (
+                                          <React.Fragment key={sIdx}>
+                                            {sg.wrongText && (
+                                              <span
+                                                className="line-through text-slate-400 text-[0.82em] mr-0.5"
+                                                title="Λάθος δείκτης/συντελεστής"
+                                              >
+                                                {sg.wrongText}
+                                              </span>
+                                            )}
+                                            {sg.text && (
+                                              <span
+                                                className={
+                                                  sg.isCorrection
+                                                    ? 'text-red-600 font-extrabold bg-red-50 px-1 rounded border border-red-300'
+                                                    : ''
+                                                }
+                                                title={sg.reason}
+                                              >
+                                                {sg.text}
+                                              </span>
+                                            )}
+                                          </React.Fragment>
+                                        ))}
+                                      </span>
+                                      {chemVal.hasCorrections && (
+                                        <span className="text-[11px] font-bold text-red-600 bg-red-50/90 border border-red-200 px-2 py-0.5 rounded-md leading-tight">
+                                          ⚠️ Διόρθωση με κόκκινο:{' '}
+                                          {chemVal.explanationNotes.join(' • ') ||
+                                            'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()
+                              ) : txt.text &&
                               (txt.text.includes('_') ||
                                 txt.text.includes('^') ||
                                 txt.id.endsWith('-multi')) ? (

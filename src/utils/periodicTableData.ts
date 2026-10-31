@@ -123,6 +123,17 @@ export function toSubscriptNumber(n: number): string {
     .join('');
 }
 
+export function toSubscriptDigits(s: string): string {
+  if (!s) return '';
+  return s
+    .split('')
+    .map((ch) => {
+      const code = ch.charCodeAt(0) - 48;
+      return code >= 0 && code <= 9 ? SUBSCRIPT_DIGITS[code] : ch;
+    })
+    .join('');
+}
+
 export function formatChemEquationText(raw: string): string {
   let s = raw
     .trim()
@@ -161,7 +172,33 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
     .toUpperCase();
 
   // Συχνές πρότυπες αντιδράσεις με ιδανική παιδαγωγική διάταξη ατόμων (π.χ. O - C - O για CO2, H - O - H για H2O)
-  if (norm.includes('CO2') || (norm.includes('C+') && norm.includes('O'))) {
+  if (norm.includes('CH4') && norm.includes('O2')) {
+    return {
+      equationDisplay: 'CH₄ + 2O₂ → CO₂ + 2H₂O',
+      bondType: 'covalent',
+      atomZList: [1, 8, 1], // Δείχνουμε το H2O / CO2
+      transfers: [],
+      sharedPairs: [
+        { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
+        { atomAIdx: 1, atomBIdx: 2, pairsCount: 1 },
+      ],
+    };
+  }
+  if (norm.includes('CH4') || (norm.includes('C') && norm.includes('H') && !norm.includes('O') && !norm.includes('CL') && !norm.includes('CA'))) {
+    return {
+      equationDisplay: 'C + 2H₂ → CH₄',
+      bondType: 'covalent',
+      atomZList: [1, 6, 1, 1, 1], // C στο κέντρο (idx 1) με 4 H
+      transfers: [],
+      sharedPairs: [
+        { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
+        { atomAIdx: 1, atomBIdx: 2, pairsCount: 1 },
+        { atomAIdx: 1, atomBIdx: 3, pairsCount: 1 },
+        { atomAIdx: 1, atomBIdx: 4, pairsCount: 1 },
+      ],
+    };
+  }
+  if (norm.includes('CO2') || (norm.includes('C') && norm.includes('O') && !norm.includes('CA') && !norm.includes('CL') && !norm.includes('CO3'))) {
     return {
       equationDisplay: 'C + O₂ → CO₂',
       bondType: 'covalent',
@@ -173,7 +210,11 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       ],
     };
   }
-  if (norm.includes('H2O') || (norm.includes('H2') && norm.includes('O2'))) {
+  if (
+    norm.includes('H2O') ||
+    norm.includes('HO') ||
+    (norm.includes('H') && norm.includes('O') && !norm.includes('C') && !norm.includes('NA') && !norm.includes('K') && !norm.includes('MG'))
+  ) {
     return {
       equationDisplay: '2H₂ + O₂ → 2H₂O',
       bondType: 'covalent',
@@ -185,7 +226,7 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       ],
     };
   }
-  if (norm.includes('NH3') || (norm.includes('N2') && norm.includes('H2'))) {
+  if (norm.includes('NH3') || norm.includes('NH') || (norm.includes('N') && norm.includes('H') && !norm.includes('NA'))) {
     return {
       equationDisplay: 'N₂ + 3H₂ → 2NH₃',
       bondType: 'covalent',
@@ -195,18 +236,6 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
         { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
         { atomAIdx: 1, atomBIdx: 2, pairsCount: 1 },
         { atomAIdx: 1, atomBIdx: 3, pairsCount: 1 },
-      ],
-    };
-  }
-  if (norm.includes('CH4')) {
-    return {
-      equationDisplay: 'C + 2H₂ → CH₄',
-      bondType: 'covalent',
-      atomZList: [1, 6, 1],
-      transfers: [],
-      sharedPairs: [
-        { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
-        { atomAIdx: 1, atomBIdx: 2, pairsCount: 1 },
       ],
     };
   }
@@ -364,6 +393,12 @@ export function inferReactionFromCanvasAtoms(atomZList: number[]): ParsedReactio
   if (counts.get(1) === 1 && counts.get(17) === 1) {
     return parseChemicalReactionToAtomSetup('H2 + Cl2 -> 2HCl');
   }
+  if ((counts.get(6) || 0) === 1 && (counts.get(1) || 0) >= 2) {
+    return parseChemicalReactionToAtomSetup('C + 2H2 -> CH4');
+  }
+  if ((counts.get(7) || 0) === 1 && (counts.get(1) || 0) >= 2) {
+    return parseChemicalReactionToAtomSetup('N2 + 3H2 -> 2NH3');
+  }
   if (atomZList.length === 2 && atomZList[0] === atomZList[1]) {
     const el = getPeriodicElementByZ(atomZList[0]);
     const val = el.shells[el.shells.length - 1] || 1;
@@ -389,4 +424,794 @@ export function inferReactionFromCanvasAtoms(atomZList: number[]): ParsedReactio
     transfers: [],
     sharedPairs: [],
   };
+}
+
+// ============================================================================
+// ΔΕΤΕΡΜΙΝΙΣΤΙΚΟΣ ΕΛΕΓΧΟΣ & ΔΙΟΡΘΩΣΗ ΔΕΙΚΤΩΝ / ΣΥΝΤΕΛΕΣΤΩΝ ΜΕ ΚΟΚΚΙΝΟ (Χωρίς AI)
+// ============================================================================
+export interface ChemDiffSegment {
+  text: string;
+  isCorrection?: boolean; // Αν true, σχεδιάζεται με έντονο ΚΟΚΚΙΝΟ χρώμα (#dc2626)
+  wrongText?: string;     // Αν ο μαθητής έγραψε λάθος αριθμό (π.χ. H3O αντί H₂O), εμφανίζεται διαγραμμένο δίπλα στο κόκκινο
+  reason?: string;        // Επεξήγηση (π.χ. "Έλειπε ο δείκτης ₂ στο H₂O" ή "Συντελεστής ισοστάθμισης 2")
+}
+
+export interface ChemValidationResult {
+  hasCorrections: boolean;
+  userRawFormatted: string;
+  correctedEquation: string;
+  segments: ChemDiffSegment[];
+  explanationNotes: string[];
+}
+
+interface ParsedTermToken {
+  coeff: string; // '' αν δεν γράφτηκε συντελεστής (δηλ. 1)
+  atoms: { sym: string; sub: string }[]; // sub = '' αν δεν γράφτηκε δείκτης (δηλ. 1)
+}
+
+function normalizeAsciiChem(raw: string): string {
+  return (raw || '')
+    .trim()
+    .replace(/₀/g, '0')
+    .replace(/₁/g, '1')
+    .replace(/₂/g, '2')
+    .replace(/₃/g, '3')
+    .replace(/₄/g, '4')
+    .replace(/₅/g, '5')
+    .replace(/₆/g, '6')
+    .replace(/₇/g, '7')
+    .replace(/₈/g, '8')
+    .replace(/₉/g, '9')
+    // Ομόγλυφα Ελληνικά -> Λατινικά χημικά σύμβολα
+    .replace(/Η/g, 'H')
+    .replace(/Ο/g, 'O')
+    .replace(/Ν/g, 'N')
+    .replace(/Κ/g, 'K')
+    .replace(/Μg/g, 'Mg')
+    .replace(/ΜG/g, 'Mg')
+    .replace(/Ϲ/g, 'C')
+    .replace(/-->|->|=>|➔|⟶|⇒|=/g, '->');
+}
+
+function parseFormulaToken(tokenStr: string): ParsedTermToken {
+  const clean = tokenStr.replace(/\s+/g, '');
+  const mCoeff = clean.match(/^(\d+)(.*)$/);
+  const coeff = mCoeff ? mCoeff[1] : '';
+  const rest = mCoeff ? mCoeff[2] : clean;
+
+  const atoms: { sym: string; sub: string }[] = [];
+  const regex = /([A-Z][a-z]?)(\d*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(rest)) !== null) {
+    atoms.push({ sym: m[1], sub: m[2] || '' });
+  }
+  return { coeff, atoms };
+}
+
+interface CanonicalReactionSpec {
+  id: string;
+  matchElements: (lhsSyms: string[], rhsSyms: string[], rawAscii: string) => boolean;
+  lhs: { coeff: string; atoms: { sym: string; sub: string; reason?: string }[]; coeffReason?: string }[];
+  rhs: { coeff: string; atoms: { sym: string; sub: string; reason?: string }[]; coeffReason?: string }[];
+}
+
+const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
+  {
+    id: 'water',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('H') && all.has('O') && !all.has('C') && !all.has('Na') && !all.has('Mg') && !all.has('Ca') && !raw.includes('H2O2');
+    },
+    lhs: [
+      { coeff: '2', coeffReason: 'Συντελεστής 2 για ισοστάθμιση 4 ατόμων H', atoms: [{ sym: 'H', sub: '2', reason: 'Το Υδρογόνο είναι διατομικό μόριο (H₂)' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Το Οξυγόνο είναι διατομικό μόριο (O₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 για ισοστάθμιση 2 ατόμων O',
+        atoms: [
+          { sym: 'H', sub: '2', reason: 'Δείκτης ₂ στο H₂O (το Οξυγόνο έχει σθένος 2)' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'methane_combustion',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('C') && all.has('H') && all.has('O') && (raw.includes('CH') || (lhs.includes('C') && lhs.includes('H') && lhs.includes('O')));
+    },
+    lhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'C', sub: '' },
+          { sym: 'H', sub: '4', reason: 'Δείκτης ₄ στο Μεθάνιο CH₄ (ο Άνθρακας έχει 4 ηλεκτρόνια σθένους)' },
+        ],
+      },
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2O₂ για ισοστάθμιση 4 ατόμων O',
+        atoms: [{ sym: 'O', sub: '2', reason: 'Το Οξυγόνο είναι διατομικό (O₂)' }],
+      },
+    ],
+    rhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'C', sub: '' },
+          { sym: 'O', sub: '2', reason: 'Δείκτης ₂ στο CO₂' },
+        ],
+      },
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2H₂O για ισοστάθμιση 4 ατόμων H',
+        atoms: [
+          { sym: 'H', sub: '2', reason: 'Δείκτης ₂ στο H₂O' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'co2',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('C') && all.has('O') && !all.has('H') && !all.has('Ca') && !all.has('Na');
+    },
+    lhs: [
+      { coeff: '', atoms: [{ sym: 'C', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'O', sub: '2', reason: 'Το Οξυγόνο είναι διατομικό μόριο (O₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'C', sub: '' },
+          { sym: 'O', sub: '2', reason: 'Δείκτης ₂ στο CO₂ (διπλοί δεσμοί O=C=O)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'methane_synthesis',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('C') && all.has('H') && !all.has('O') && !all.has('N') && !all.has('Cl');
+    },
+    lhs: [
+      { coeff: '', atoms: [{ sym: 'C', sub: '' }] },
+      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2H₂ (4 άτομα H)', atoms: [{ sym: 'H', sub: '2', reason: 'Διατομικό H₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'C', sub: '' },
+          { sym: 'H', sub: '4', reason: 'Δείκτης ₄ στο Μεθάνιο CH₄ (σθένος C = 4)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'ammonia',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('N') && all.has('H') && !all.has('O') && !all.has('C') && !all.has('Cl');
+    },
+    lhs: [
+      { coeff: '', atoms: [{ sym: 'N', sub: '2', reason: 'Το Άζωτο είναι διατομικό μόριο (N₂)' }] },
+      { coeff: '3', coeffReason: 'Συντελεστής 3 στο 3H₂ (6 άτομα H)', atoms: [{ sym: 'H', sub: '2', reason: 'Διατομικό H₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2NH₃',
+        atoms: [
+          { sym: 'N', sub: '' },
+          { sym: 'H', sub: '3', reason: 'Δείκτης ₃ στην Αμμωνία NH₃ (σθένος N = 3)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'mgcl2',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Mg') && all.has('Cl');
+    },
+    lhs: [
+      { coeff: '', atoms: [{ sym: 'Mg', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'Cl', sub: '2', reason: 'Το Χλώριο είναι διατομικό (Cl₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'Mg', sub: '' },
+          { sym: 'Cl', sub: '2', reason: 'Δείκτης ₂ στο MgCl₂ (το Mg²⁺ δίνει 2e⁻ σε δύο Cl⁻)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'cacl2',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Ca') && all.has('Cl');
+    },
+    lhs: [
+      { coeff: '', atoms: [{ sym: 'Ca', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'Cl', sub: '2', reason: 'Το Χλώριο είναι διατομικό (Cl₂)' }] },
+    ],
+    rhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'Ca', sub: '' },
+          { sym: 'Cl', sub: '2', reason: 'Δείκτης ₂ στο CaCl₂ (το Ca²⁺ έχει σθένος 2)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'hcl',
+    matchElements: (lhs, rhs) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('H') && all.has('Cl') && !all.has('Na') && !all.has('Mg') && !all.has('Ca') && !all.has('O');
+    },
+    lhs: [
+      { coeff: '', atoms: [{ sym: 'H', sub: '2', reason: 'Διατομικό H₂' }] },
+      { coeff: '', atoms: [{ sym: 'Cl', sub: '2', reason: 'Διατομικό Cl₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2HCl',
+        atoms: [
+          { sym: 'H', sub: '' },
+          { sym: 'Cl', sub: '' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'nacl',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.has('Na') && all.has('Cl') && (raw.includes('CL2') || raw.includes('2NA'));
+    },
+    lhs: [
+      { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Na', atoms: [{ sym: 'Na', sub: '' }] },
+      { coeff: '', atoms: [{ sym: 'Cl', sub: '2', reason: 'Διατομικό Cl₂' }] },
+    ],
+    rhs: [
+      {
+        coeff: '2',
+        coeffReason: 'Συντελεστής 2 στο 2NaCl',
+        atoms: [
+          { sym: 'Na', sub: '' },
+          { sym: 'Cl', sub: '' },
+        ],
+      },
+    ],
+  },
+];
+
+export function validateAndCorrectChemicalEquation(userRawInput: string): ChemValidationResult {
+  const ascii = normalizeAsciiChem(userRawInput);
+  const parts = ascii.split('->');
+  const lhsRaw = (parts[0] || '').trim();
+  const rhsRaw = (parts[1] || '').trim();
+
+  const lhsTokensRaw = lhsRaw ? lhsRaw.split('+').map((s) => s.trim()).filter(Boolean) : [];
+  const rhsTokensRaw = rhsRaw ? rhsRaw.split('+').map((s) => s.trim()).filter(Boolean) : [];
+
+  const userLhs = lhsTokensRaw.map(parseFormulaToken);
+  const userRhs = rhsTokensRaw.map(parseFormulaToken);
+
+  const lhsSyms = userLhs.flatMap((t) => t.atoms.map((a) => a.sym));
+  const rhsSyms = userRhs.flatMap((t) => t.atoms.map((a) => a.sym));
+
+  const matchedSpec = CANONICAL_REACTIONS.find((spec) => spec.matchElements(lhsSyms, rhsSyms, ascii.toUpperCase()));
+
+  if (!matchedSpec) {
+    const formatted = formatChemEquationText(userRawInput);
+    return {
+      hasCorrections: false,
+      userRawFormatted: formatted,
+      correctedEquation: formatted,
+      segments: [{ text: formatted, isCorrection: false }],
+      explanationNotes: [],
+    };
+  }
+
+  const segments: ChemDiffSegment[] = [];
+  const explanationNotes: string[] = [];
+  let hasCorrections = false;
+
+  const compareSide = (
+    canonicalTerms: CanonicalReactionSpec['lhs'],
+    userTerms: ParsedTermToken[]
+  ) => {
+    canonicalTerms.forEach((cTerm, idx) => {
+      if (idx > 0) {
+        segments.push({ text: ' + ', isCorrection: false });
+      }
+      // Βρες τον αντίστοιχο όρο που έγραψε ο μαθητής (με βάση το πρώτο χημικό σύμβολο)
+      const primarySym = cTerm.atoms[0]?.sym;
+      const uTerm =
+        userTerms.find((ut) => ut.atoms.some((ua) => ua.sym === primarySym)) ||
+        userTerms[idx] ||
+        ({ coeff: '', atoms: [] } as ParsedTermToken);
+
+      const uCoeffNorm = uTerm.coeff === '1' ? '' : uTerm.coeff;
+      const cCoeffNorm = cTerm.coeff === '1' ? '' : cTerm.coeff;
+
+      if (uCoeffNorm !== cCoeffNorm) {
+        hasCorrections = true;
+        if (cTerm.coeffReason && !explanationNotes.includes(cTerm.coeffReason)) {
+          explanationNotes.push(cTerm.coeffReason);
+        }
+        if (cCoeffNorm !== '') {
+          segments.push({
+            text: cCoeffNorm,
+            isCorrection: true,
+            wrongText: uCoeffNorm || undefined,
+            reason: cTerm.coeffReason || `Συντελεστής ${cCoeffNorm}`,
+          });
+        } else if (uCoeffNorm !== '') {
+          // Ο μαθητής έβαλε περιττό συντελεστή
+          segments.push({
+            text: '',
+            isCorrection: true,
+            wrongText: uCoeffNorm,
+            reason: 'Περιττός συντελεστής',
+          });
+        }
+      } else if (cCoeffNorm !== '') {
+        segments.push({ text: cCoeffNorm, isCorrection: false });
+      }
+
+      // Σύγκριση κάθε ατόμου και του δείκτη του (subscript)
+      cTerm.atoms.forEach((cAtom) => {
+        const uAtom = uTerm.atoms.find((ua) => ua.sym === cAtom.sym);
+        if (!uAtom) {
+          // Ο μαθητής ξέχασε ολόκληρο το άτομο/δείκτη (π.χ. έγραψε μόνο αντιδρώντα "2H2 + O2 ->")
+          hasCorrections = true;
+          const subUnicode = toSubscriptDigits(cAtom.sub);
+          segments.push({
+            text: `${cAtom.sym}${subUnicode}`,
+            isCorrection: true,
+            reason: cAtom.reason || `Συμπλήρωση ${cAtom.sym}${subUnicode}`,
+          });
+          if (cAtom.reason && !explanationNotes.includes(cAtom.reason)) {
+            explanationNotes.push(cAtom.reason);
+          }
+          return;
+        }
+
+        // Το σύμβολο του στοιχείου είναι σωστό
+        segments.push({ text: cAtom.sym, isCorrection: false });
+
+        const uSubNorm = uAtom.sub === '1' ? '' : uAtom.sub;
+        const cSubNorm = cAtom.sub === '1' ? '' : cAtom.sub;
+
+        if (uSubNorm !== cSubNorm) {
+          hasCorrections = true;
+          if (cAtom.reason && !explanationNotes.includes(cAtom.reason)) {
+            explanationNotes.push(cAtom.reason);
+          }
+          const cSubUni = toSubscriptDigits(cSubNorm);
+          const uSubUni = uSubNorm ? toSubscriptDigits(uSubNorm) : undefined;
+          segments.push({
+            text: cSubUni,
+            isCorrection: true,
+            wrongText: uSubUni,
+            reason: cAtom.reason || `Σωστός δείκτης ατόμου: ${cSubUni || '1 (κανένας δείκτης)'}`,
+          });
+        } else if (cSubNorm !== '') {
+          segments.push({ text: toSubscriptDigits(cSubNorm), isCorrection: false });
+        }
+      });
+    });
+  };
+
+  compareSide(matchedSpec.lhs, userLhs);
+  segments.push({ text: ' → ', isCorrection: false });
+  compareSide(matchedSpec.rhs, userRhs);
+
+  const correctedEquation = segments.map((s) => s.text).join('');
+  return {
+    hasCorrections,
+    userRawFormatted: formatChemEquationText(userRawInput),
+    correctedEquation,
+    segments,
+    explanationNotes,
+  };
+}
+
+// ============================================================================
+// 3D ΜΟΡΙΑΚΗ ΓΕΩΜΕΤΡΙΑ (VSEPR) & ΗΛΕΚΤΡΟΣΤΑΤΙΚΟ ΝΕΦΟΣ ΦΟΡΤΙΟΥ (δ⁺ / δ⁻)
+// ============================================================================
+export interface Atom3DNode {
+  id: string;
+  z: number;
+  symbol: string;
+  x: number; // 3D συντεταγμένες σε κανονικοποιημένες μονάδες (-1.2 έως +1.2)
+  y: number;
+  z3d: number;
+  radiusFactor: number;
+  color: string;
+  electronegativity: number; // Κλίμακα Pauling
+  partialCharge: number;     // -1.0 (έντονο δ⁻ κόκκινο/πορτοκαλί) έως +1.0 (έντονο δ⁺ μπλε/κυανό)
+  chargeLabel: string;       // π.χ. 'δ⁻', '2δ⁻', 'δ⁺', 'Na⁺', 'Cl⁻'
+}
+
+export interface Bond3DEdge {
+  fromIdx: number;
+  toIdx: number;
+  order: 1 | 2 | 3;
+  isIonic?: boolean;
+}
+
+export interface LonePair3DLobe {
+  x: number;
+  y: number;
+  z3d: number;
+}
+
+export interface Molecule3DModel {
+  id: string;
+  formula: string;
+  nameEl: string;
+  geometryLabel: string;
+  bondAngleText: string;
+  polarityLabel: string;
+  dipoleVector?: { dx: number; dy: number; dz: number; label: string };
+  atoms: Atom3DNode[];
+  bonds: Bond3DEdge[];
+  lonePairs: LonePair3DLobe[];
+}
+
+export const PRESET_3D_MOLECULES: Record<string, Molecule3DModel> = {
+  H2O: {
+    id: 'H2O',
+    formula: 'H₂O',
+    nameEl: 'Νερό (H₂O)',
+    geometryLabel: 'Γωνιακή 3D Γεωμετρία (VSEPR AX₂E₂)',
+    bondAngleText: '104.5°',
+    polarityLabel: 'Ισχυρά Πολικό Μόριο (μ = 1.85 D) • Αρνητικό νέφος δ⁻ στο O, θετικό δ⁺ στα 2 H',
+    dipoleVector: { dx: 0, dy: -1, dz: 0, label: 'p⃗ (Διπολική Ροπή μ = 1.85 D)' },
+    atoms: [
+      {
+        id: 'O1',
+        z: 8,
+        symbol: 'O',
+        x: 0,
+        y: -0.22,
+        z3d: 0,
+        radiusFactor: 1.25,
+        color: '#ef4444',
+        electronegativity: 3.44,
+        partialCharge: -0.84,
+        chargeLabel: '2δ⁻',
+      },
+      {
+        id: 'H1',
+        z: 1,
+        symbol: 'H',
+        x: -0.82,
+        y: 0.42,
+        z3d: 0.22,
+        radiusFactor: 0.78,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.42,
+        chargeLabel: 'δ⁺',
+      },
+      {
+        id: 'H2',
+        z: 1,
+        symbol: 'H',
+        x: 0.82,
+        y: 0.42,
+        z3d: -0.22,
+        radiusFactor: 0.78,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.42,
+        chargeLabel: 'δ⁺',
+      },
+    ],
+    bonds: [
+      { fromIdx: 0, toIdx: 1, order: 1 },
+      { fromIdx: 0, toIdx: 2, order: 1 },
+    ],
+    lonePairs: [
+      { x: 0, y: -0.78, z3d: 0.52 },
+      { x: 0, y: -0.78, z3d: -0.52 },
+    ],
+  },
+  CH4: {
+    id: 'CH4',
+    formula: 'CH₄',
+    nameEl: 'Μεθάνιο (CH₄)',
+    geometryLabel: 'Τετραεδρική 3D Γεωμετρία (VSEPR AX₄)',
+    bondAngleText: '109.5°',
+    polarityLabel: 'Μη Πολικό Συμμετρικό Μόριο (μ = 0 D) • Ελαφρύ δ⁻ στο C, δ⁺ στις 4 κορυφές H',
+    atoms: [
+      {
+        id: 'C1',
+        z: 6,
+        symbol: 'C',
+        x: 0,
+        y: 0,
+        z3d: 0,
+        radiusFactor: 1.18,
+        color: '#334155',
+        electronegativity: 2.55,
+        partialCharge: -0.44,
+        chargeLabel: '4δ⁻',
+      },
+      {
+        id: 'H1',
+        z: 1,
+        symbol: 'H',
+        x: 0,
+        y: -0.96,
+        z3d: 0,
+        radiusFactor: 0.76,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.11,
+        chargeLabel: 'δ⁺',
+      },
+      {
+        id: 'H2',
+        z: 1,
+        symbol: 'H',
+        x: 0.90,
+        y: 0.32,
+        z3d: 0,
+        radiusFactor: 0.76,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.11,
+        chargeLabel: 'δ⁺',
+      },
+      {
+        id: 'H3',
+        z: 1,
+        symbol: 'H',
+        x: -0.45,
+        y: 0.32,
+        z3d: 0.78,
+        radiusFactor: 0.76,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.11,
+        chargeLabel: 'δ⁺',
+      },
+      {
+        id: 'H4',
+        z: 1,
+        symbol: 'H',
+        x: -0.45,
+        y: 0.32,
+        z3d: -0.78,
+        radiusFactor: 0.76,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.11,
+        chargeLabel: 'δ⁺',
+      },
+    ],
+    bonds: [
+      { fromIdx: 0, toIdx: 1, order: 1 },
+      { fromIdx: 0, toIdx: 2, order: 1 },
+      { fromIdx: 0, toIdx: 3, order: 1 },
+      { fromIdx: 0, toIdx: 4, order: 1 },
+    ],
+    lonePairs: [],
+  },
+  CO2: {
+    id: 'CO2',
+    formula: 'CO₂',
+    nameEl: 'Διοξείδιο του Άνθρακα (CO₂)',
+    geometryLabel: 'Γραμμική 3D Γεωμετρία (O = C = O)',
+    bondAngleText: '180.0°',
+    polarityLabel: 'Πολικοί δεσμοί C=O αλλά Μη Πολικό Μόριο (μ_ολ = 0 D λόγω συμμετρίας 180°)',
+    atoms: [
+      {
+        id: 'O1',
+        z: 8,
+        symbol: 'O',
+        x: -1.06,
+        y: 0,
+        z3d: 0,
+        radiusFactor: 1.15,
+        color: '#ef4444',
+        electronegativity: 3.44,
+        partialCharge: -0.65,
+        chargeLabel: 'δ⁻',
+      },
+      {
+        id: 'C1',
+        z: 6,
+        symbol: 'C',
+        x: 0,
+        y: 0,
+        z3d: 0,
+        radiusFactor: 1.12,
+        color: '#475569',
+        electronegativity: 2.55,
+        partialCharge: +0.85,
+        chargeLabel: '2δ⁺',
+      },
+      {
+        id: 'O2',
+        z: 8,
+        symbol: 'O',
+        x: 1.06,
+        y: 0,
+        z3d: 0,
+        radiusFactor: 1.15,
+        color: '#ef4444',
+        electronegativity: 3.44,
+        partialCharge: -0.65,
+        chargeLabel: 'δ⁻',
+      },
+    ],
+    bonds: [
+      { fromIdx: 0, toIdx: 1, order: 2 },
+      { fromIdx: 1, toIdx: 2, order: 2 },
+    ],
+    lonePairs: [],
+  },
+  NH3: {
+    id: 'NH3',
+    formula: 'NH₃',
+    nameEl: 'Αμμωνία (NH₃)',
+    geometryLabel: 'Τριγωνική Πυραμίδα 3D (VSEPR AX₃E)',
+    bondAngleText: '107.0°',
+    polarityLabel: 'Πολικό Μόριο (μ = 1.47 D) • Αρνητικό νέφος δ⁻ στην κορυφή N, θετικό δ⁺ στη βάση 3H',
+    dipoleVector: { dx: 0, dy: -1, dz: 0, label: 'p⃗ (μ = 1.47 D)' },
+    atoms: [
+      {
+        id: 'N1',
+        z: 7,
+        symbol: 'N',
+        x: 0,
+        y: -0.25,
+        z3d: 0,
+        radiusFactor: 1.22,
+        color: '#2563eb',
+        electronegativity: 3.04,
+        partialCharge: -0.78,
+        chargeLabel: '3δ⁻',
+      },
+      {
+        id: 'H1',
+        z: 1,
+        symbol: 'H',
+        x: 0.84,
+        y: 0.38,
+        z3d: 0,
+        radiusFactor: 0.76,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.26,
+        chargeLabel: 'δ⁺',
+      },
+      {
+        id: 'H2',
+        z: 1,
+        symbol: 'H',
+        x: -0.42,
+        y: 0.38,
+        z3d: 0.73,
+        radiusFactor: 0.76,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.26,
+        chargeLabel: 'δ⁺',
+      },
+      {
+        id: 'H3',
+        z: 1,
+        symbol: 'H',
+        x: -0.42,
+        y: 0.38,
+        z3d: -0.73,
+        radiusFactor: 0.76,
+        color: '#38bdf8',
+        electronegativity: 2.20,
+        partialCharge: +0.26,
+        chargeLabel: 'δ⁺',
+      },
+    ],
+    bonds: [
+      { fromIdx: 0, toIdx: 1, order: 1 },
+      { fromIdx: 0, toIdx: 2, order: 1 },
+      { fromIdx: 0, toIdx: 3, order: 1 },
+    ],
+    lonePairs: [{ x: 0, y: -0.84, z3d: 0 }],
+  },
+  NaCl: {
+    id: 'NaCl',
+    formula: 'Na⁺Cl⁻',
+    nameEl: 'Χλωριούχο Νάτριο (Na⁺Cl⁻)',
+    geometryLabel: 'Ετεροπολικός (Ιοντικός) Δεσμός 3D',
+    bondAngleText: '180.0°',
+    polarityLabel: 'Πλήρης μεταφορά ηλεκτρονίου (Δχ = 2.23) • Κατιόν Na⁺ (μπλε δ⁺) & Ανιόν Cl⁻ (κόκκινο δ⁻)',
+    dipoleVector: { dx: -1, dy: 0, dz: 0, label: 'Ιοντικό Δίπολο Na⁺ → Cl⁻' },
+    atoms: [
+      {
+        id: 'Na1',
+        z: 11,
+        symbol: 'Na',
+        x: -0.78,
+        y: 0,
+        z3d: 0,
+        radiusFactor: 1.02,
+        color: '#3b82f6',
+        electronegativity: 0.93,
+        partialCharge: +0.95,
+        chargeLabel: 'Na⁺',
+      },
+      {
+        id: 'Cl1',
+        z: 17,
+        symbol: 'Cl',
+        x: 0.78,
+        y: 0,
+        z3d: 0,
+        radiusFactor: 1.34,
+        color: '#10b981',
+        electronegativity: 3.16,
+        partialCharge: -0.95,
+        chargeLabel: 'Cl⁻',
+      },
+    ],
+    bonds: [{ fromIdx: 0, toIdx: 1, order: 1, isIonic: true }],
+    lonePairs: [],
+  },
+};
+
+export function get3DMoleculeModel(reactionText?: string, atomZList?: number[], forcedMolId?: string): Molecule3DModel {
+  if (forcedMolId && PRESET_3D_MOLECULES[forcedMolId]) {
+    return PRESET_3D_MOLECULES[forcedMolId];
+  }
+  const norm = normalizeAsciiChem(reactionText || '').toUpperCase();
+  if (norm.includes('H2O') || (norm.includes('H') && norm.includes('O') && !norm.includes('C'))) {
+    return PRESET_3D_MOLECULES.H2O;
+  }
+  if (norm.includes('CH4') || (norm.includes('C') && norm.includes('H') && !norm.includes('O'))) {
+    return PRESET_3D_MOLECULES.CH4;
+  }
+  if (norm.includes('CO2') || (norm.includes('C') && norm.includes('O'))) {
+    return PRESET_3D_MOLECULES.CO2;
+  }
+  if (norm.includes('NH3') || (norm.includes('N') && norm.includes('H') && !norm.includes('NA'))) {
+    return PRESET_3D_MOLECULES.NH3;
+  }
+  if (norm.includes('NACL') || (norm.includes('NA') && norm.includes('CL'))) {
+    return PRESET_3D_MOLECULES.NaCl;
+  }
+
+  // Έλεγχος από τα άτομα στον καμβά
+  if (atomZList && atomZList.length > 0) {
+    const counts = new Map<number, number>();
+    for (const z of atomZList) counts.set(z, (counts.get(z) || 0) + 1);
+    if ((counts.get(1) || 0) >= 2 && (counts.get(8) || 0) === 1 && !counts.has(6)) return PRESET_3D_MOLECULES.H2O;
+    if ((counts.get(6) || 0) === 1 && (counts.get(8) || 0) >= 2) return PRESET_3D_MOLECULES.CO2;
+    if ((counts.get(6) || 0) === 1 && (counts.get(1) || 0) >= 2) return PRESET_3D_MOLECULES.CH4;
+    if ((counts.get(7) || 0) === 1 && (counts.get(1) || 0) >= 2) return PRESET_3D_MOLECULES.NH3;
+    if ((counts.get(11) || 0) >= 1 && (counts.get(17) || 0) >= 1) return PRESET_3D_MOLECULES.NaCl;
+  }
+
+  return PRESET_3D_MOLECULES.H2O;
 }

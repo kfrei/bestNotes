@@ -49,6 +49,10 @@ interface LandingPageProps {
 }
 
 type ShowcaseTabId =
+  | 'sim-forces'
+  | 'sim-springs'
+  | 'sim-circuits'
+  | 'sim-atoms'
   | 'water-cycle'
   | 'photosynthesis'
   | 'acids'
@@ -72,7 +76,71 @@ export interface ScienceNoteAsset {
   formulaBadge: string;
 }
 
+const LIVE_SIMULATION_GIFS: ScienceNoteAsset[] = [
+  {
+    id: 'sim-forces',
+    tabLabel: '🎯 Δυνάμεις & Ανάλυση',
+    shortTitle: 'Δυνάμεις & Ανάλυση F',
+    title: 'Ανάλυση & Σύνθεση Δυνάμεων, Κεκλιμένο Επίπεδο & Εκκρεμές',
+    subjectBadge: 'Φυσική • Μηχανική',
+    subjectColor: '#7c3aed',
+    src: '/showcase/sim-forces.gif',
+    highlightColor: '#c4b5fd',
+    highlightText: 'Fx = F·συν(θ),  Fy = F·ημ(θ)  &  Μαγνητικό Κλείδωμα Πυθαγορείων Τριάδων',
+    secondaryHighlightText: 'Σύρε την άκρη της δύναμης F στον καμβά • Αυτόματοι Υπολογισμοί Συνιστωσών',
+    description:
+      'Σχεδίασε με το μολύβι ένα ή δύο διανύσματα, ένα κεκλιμένο επίπεδο ή ένα εκκρεμές και δες τα να ζωντανεύουν! Κούνησε ελεύθερα την άκρη της δύναμης με μαγνητικό κλείδωμα σε ακέραιες τιμές (π.χ. 6 N, 8 N, 10 N) και εμφάνισε βήμα-βήμα τους υπολογισμούς.',
+    formulaBadge: '🧲 F = √(Fx² + Fy²) = 10 N',
+  },
+  {
+    id: 'sim-springs',
+    tabLabel: '🌀 Ελατήρια & Ταλάντωση',
+    shortTitle: 'Ελατήρια & Ταλαντώσεις',
+    title: 'Απλή Αρμονική Ταλάντωση, Νόμος του Hooke & Γραφήματα x(t), υ(t), α(t)',
+    subjectBadge: 'Φυσική • Ταλαντώσεις',
+    subjectColor: '#0284c7',
+    src: '/showcase/sim-springs.gif',
+    highlightColor: '#7dd3fc',
+    highlightText: 'Fελ = -k·x  •  Ζωντανή Ταλάντωση & Συγχρονισμένα Διαγράμματα x(t), υ(t), α(t)',
+    secondaryHighlightText: 'Τράβηξε το σώμα m από τη Θέση Ισορροπίας (+A / -A) και άφησέ το να ταλαντωθεί!',
+    description:
+      'Ζωγράφισε στήριγμα, ελατήριο και μάζα με το μολύβι σου! Το σχέδιό σου μετατρέπεται αμέσως σε ζωντανό ταλαντωτή με διανύσματα δυνάμεων (Fελ, B), πίνακα μετρήσεων Νόμου του Hooke και γραφήματα θέσης, ταχύτητας και επιτάχυνσης σε πραγματικό χρόνο.',
+    formulaBadge: '🌀 x(t) = A·ημ(ωt)',
+  },
+  {
+    id: 'sim-circuits',
+    tabLabel: '⚡ Ηλεκτρικά Κυκλώματα',
+    shortTitle: 'Ηλεκτρικά Κυκλώματα',
+    title: 'Ηλεκτρικά Κυκλώματα από το Μολύβι σε Ζωντανή Ροή Ηλεκτρονίων',
+    subjectBadge: 'Φυσική • Ηλεκτρισμός',
+    subjectColor: '#0f172a',
+    src: '/showcase/sim-circuits.gif',
+    highlightColor: '#fde047',
+    highlightText: 'Κλείσε τον διακόπτη στον καμβά ➔ Ροή Ηλεκτρονίων (e⁻) & Φωτεινός Λαμπτήρας',
+    secondaryHighlightText: 'Πηγή V, Διακόπτης, Λαμπτήρας, Αντιστάτης R & Μοτέρ με αυτόματη στοίχιση',
+    description:
+      'Σχεδίασε με το χέρι ένα ηλεκτρικό κύκλωμα στον πίνακα. Με ένα κλικ στο Sim, το κύκλωμα ευθυγραμμίζεται, ο διακόπτης γίνεται διαδραστικός και τα ηλεκτρόνια αρχίζουν να ρέουν ανάβοντας τον λαμπτήρα!',
+    formulaBadge: '⚡ I = V / R • Ροή e⁻',
+  },
+  {
+    id: 'sim-atoms',
+    tabLabel: '⚛️ Δομή Ατόμου & ChemOCR',
+    shortTitle: 'Δομή Ατόμου & Χημεία',
+    title: 'Δομή Ατόμου (Bohr), Περιοδικός Πίνακας, Δεσμοί & ChemOCR Αντιδράσεων',
+    subjectBadge: 'Χημεία • Άτομα & Δεσμοί',
+    subjectColor: '#4f46e5',
+    src: '/showcase/sim-atoms.gif',
+    highlightColor: '#a7f3d0',
+    highlightText: 'Ζευγαράκια Ηλεκτρονίων 2-2 σε Αργή Περιστροφή • Ετεροπολικός & Ομοιοπολικός Δεσμός',
+    secondaryHighlightText: 'Γράπωσε εξωτερικό e⁻ σε διπλανό άτομο ή πάτα το βέλος ➔ για 2s Animation Αντίδρασης!',
+    description:
+      'Ζωγράφισε πυρήνα και τροχιές, επίλεξε στοιχείο από τον Draggable Περιοδικό Πίνακα (H έως Rn) με πλήρη συμβολισμό ᴬᶻX, σύρε ηλεκτρόνια σθένους για δημιουργία δεσμών ή αναγνώρισε χειρόγραφες χημικές αντιδράσεις με ChemOCR!',
+    formulaBadge: '⚛️ Na + Cl ➔ Na⁺Cl⁻',
+  },
+];
+
 const SCIENCE_NOTES: ScienceNoteAsset[] = [
+  ...LIVE_SIMULATION_GIFS,
   {
     id: 'water-cycle',
     tabLabel: '1. Whiteboard • Κύκλος Νερού',
@@ -151,11 +219,13 @@ const SCIENCE_NOTES: ScienceNoteAsset[] = [
 ];
 
 const SHOWCASE_TABS: { id: ShowcaseTabId; label: string; badge?: string }[] = [
-  { id: 'water-cycle', label: '1. Κύκλος Νερού' },
-  { id: 'photosynthesis', label: '2. Φωτοσύνθεση' },
-  { id: 'acids', label: '3. Τα Οξέα' },
-  { id: 'blood-vessels', label: '4. Αιμοφόρα Αγγεία' },
-  { id: 'mass-physics', label: '5. Η Μάζα' },
+  { id: 'sim-forces', label: '🎯 Δυνάμεις', badge: 'LIVE' },
+  { id: 'sim-springs', label: '🌀 Ελατήρια', badge: 'LIVE' },
+  { id: 'sim-circuits', label: '⚡ Κυκλώματα', badge: 'LIVE' },
+  { id: 'sim-atoms', label: '⚛️ Άτομο & Χημεία', badge: 'LIVE' },
+  { id: 'water-cycle', label: 'Κύκλος Νερού' },
+  { id: 'photosynthesis', label: 'Φωτοσύνθεση' },
+  { id: 'acids', label: 'Τα Οξέα' },
   { id: 'sine-3d', label: 'Ημίτονα & 3D', badge: 'PRO' },
   { id: 'layers-groups', label: 'Layers & Groups', badge: 'PRO' },
 ];
@@ -599,7 +669,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   authMode,
   setAuthMode,
 }) => {
-  const [activeTab, setActiveTab] = useState<ShowcaseTabId>('water-cycle');
+  const [activeTab, setActiveTab] = useState<ShowcaseTabId>('sim-forces');
   const [tabProgress, setTabProgress] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [dragResetCounter, setDragResetCounter] = useState<number>(0);
@@ -851,37 +921,78 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </header>
 
       {/* =====================================================================
-          2. HERO SECTION + 5 ANIMATED SCIENCE SHOWCASE TABS (+ 2 PRO TABS)
+          2. HERO SECTION + ANIMATED SIMULATIONS & SCIENCE SHOWCASE TABS
          ===================================================================== */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 pt-10 pb-28">
         <div className="text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100/90 border border-amber-300 text-amber-950 text-xs font-extrabold mb-4 shadow-2xs">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Ζωντανό Apple Pencil • Φωσφορούχος Μαρκαδόρος • Draggable Καρτέλες • MathOCR</span>
+            <span>Ζωντανές Προσομοιώσεις («Explain») • Δυνάμεις, Ελατήρια, Κυκλώματα &amp; 3D Μόρια • MathOCR &amp; ChemOCR</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-[54px] font-extrabold tracking-tight text-slate-950 leading-[1.12]">
+          <h1 className="text-3xl sm:text-5xl md:text-[50px] font-extrabold tracking-tight text-slate-950 leading-[1.14]">
+            Δώστε ζωή &amp; κίνηση στο μολύβι σας με το{' '}
             {isExplainBoardsBrand ? (
               <>
-                Take <span className="text-[#111722]">Explain</span>
-                <span className="text-[#df1b3f]">Boards</span> wherever you work
+                <span className="text-[#111722]">Explain</span>
+                <span className="text-[#df1b3f]">Boards</span>
               </>
             ) : (
-              'Take BestNotes wherever you work'
+              <>
+                <span className="text-[#111722]">Best</span>
+                <span className="text-[#0066ff]">Notes</span>
+              </>
             )}
           </h1>
-          <p className="mt-4 text-base sm:text-lg text-slate-600 font-normal leading-relaxed">
-            Ο Κύκλος του Νερού, Η Φωτοσύνθεση, Τα Οξέα, Αιμοφόρα Αγγεία &amp; Η Μάζα στη Φυσική —
-            <br className="hidden sm:inline" /> σύρε τις καρτέλες με το ποντίκι, κάνε zoom και δες το Apple Pencil να υπογραμμίζει ζωντανά!
+          <p className="mt-4 text-base sm:text-lg text-slate-700 font-medium leading-relaxed">
+            Εξηγήστε (<span className="font-extrabold text-[#df1b3f]">«Explain»</span>) πάνω στα boards σας{' '}
+            <b>φαινόμενα, έννοιες, χημικές αντιδράσεις &amp; διαγράμματα</b> με διαδραστικές προσομοιώσεις που{' '}
+            <span className="underline decoration-amber-400 decoration-2 font-bold">«ζωντανεύουν» κατευθείαν από το μολύβι σας</span>!
+            <br className="hidden sm:inline" /> Ένα ολοκληρωμένο πακέτο εργαλείων{' '}
+            <b className="text-slate-900">Φυσικής, Χημείας, Βιολογίας &amp; Μαθηματικών</b> — από το{' '}
+            <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-900 font-extrabold text-sm">Δημοτικό</span> μέχρι το{' '}
+            <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900 font-extrabold text-sm">Πανεπιστήμιο</span>.
           </p>
 
-          <div className="mt-7 flex items-center justify-center gap-3 flex-wrap">
+          {/* Subject & Simulation Quick Pills */}
+          <div className="mt-5 flex items-center justify-center gap-2 flex-wrap text-xs font-extrabold">
+            <button
+              type="button"
+              onClick={() => handleSelectTab('sim-forces')}
+              className="px-3 py-1.5 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 transition cursor-pointer"
+            >
+              🎯 Ανάλυση &amp; Σύνθεση Δυνάμεων
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectTab('sim-springs')}
+              className="px-3 py-1.5 rounded-full bg-sky-100 hover:bg-sky-200 text-sky-900 border border-sky-300 transition cursor-pointer"
+            >
+              🌀 Ελατήρια &amp; Ταλαντώσεις Hooke
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectTab('sim-circuits')}
+              className="px-3 py-1.5 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 transition cursor-pointer"
+            >
+              ⚡ Ηλεκτρικά Κυκλώματα (V=I·R)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectTab('sim-atoms')}
+              className="px-3 py-1.5 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 transition cursor-pointer"
+            >
+              ⚛️ Άτομα, 3D Μόρια &amp; ChemOCR
+            </button>
+          </div>
+
+          <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
             <button
               type="button"
               onClick={onEnterApp}
               className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#46c8f5] hover:bg-[#2bb8eb] text-slate-950 text-sm font-extrabold shadow-sm hover:shadow-md transition cursor-pointer"
             >
-              <span>Start Free / Έναρξη</span>
+              <span>Δωρεάν Έναρξη στον Καμβά</span>
               <ChevronRight className="w-4 h-4" />
             </button>
 
@@ -908,15 +1019,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
 
         {/* ===================================================================
-            3. FOLDER-STYLE SHOWCASE TABS (5 First Tabs with the 5 Images + 2 PRO Tabs)
+            3. FOLDER-STYLE SHOWCASE TABS (Live Simulation GIFs + Science Notes + PRO Tabs)
            =================================================================== */}
         <div
           className="mt-10 max-w-6xl mx-auto"
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
         >
-          {/* Folder Tab Headers (5 Science Tabs + 2 PRO Tabs) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 px-2">
+          {/* Folder Tab Headers */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1.5 px-2">
             {SHOWCASE_TABS.map((tab) => {
               const isSelected = activeTab === tab.id;
               return (
@@ -1120,7 +1231,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       src={activeScienceNote.src}
                       alt={activeScienceNote.title}
                       {...({ fetchpriority: 'high' } as any)}
-                      className="w-full max-h-[370px] object-contain mx-auto bn-ken-burns"
+                      className={`w-full max-h-[370px] object-contain mx-auto ${
+                        activeScienceNote.src.endsWith('.gif') ? '' : 'bn-ken-burns'
+                      }`}
                     />
                   </div>
 
@@ -1449,23 +1562,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
 
         {/* ===================================================================
-            4. INTERACTIVE DRAGGABLE 5-CARD SCIENCE STUDIO WALL (All 5 Images
-               Visible Together — Drag with Mouse, Fade/Zoom & Fluorescent Pen!)
+            4. INTERACTIVE DRAGGABLE SCIENCE & SIMULATION STUDIO WALL
            =================================================================== */}
         <section className="mt-24 max-w-6xl mx-auto bn-scroll-reveal">
           <div className="text-center max-w-3xl mx-auto mb-10">
             <span className="px-3.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-extrabold uppercase tracking-wider">
-              Διαδραστικός Πίνακας 5 Σημειώσεων • Σύρε τις Καρτέλες με το Ποντίκι
+              Ζωντανές Προσομοιώσεις «Explain» &amp; Σημειώσεις • Σύρε τις Καρτέλες με το Ποντίκι
             </span>
             <h2 className="mt-3 text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-950">
-              Και οι 5 Σημειώσεις Ζωντανά μπροστά σου — Κάνε Drag, Zoom &amp; Υπογράμμιση
+              Δυνάμεις, Ελατήρια, Κυκλώματα, Άτομα &amp; Σημειώσεις που «Ζωντανεύουν» από το Μολύβι σας
             </h2>
             <p className="mt-2.5 text-sm sm:text-base text-slate-600">
-              Πιάσε οποιαδήποτε από τις 5 καρτέλες με το ποντίκι (ή το δάχτυλο) και μετακίνησέ την ελεύθερα στον χώρο, ή πάτησε πάνω της για μεγέθυνση (Zoom) και άνοιγμα στην εφαρμογή!
+              Ένα ολοκληρωμένο εκπαιδευτικό οικοσύστημα <b>Φυσικής, Χημείας, Βιολογίας &amp; Μαθηματικών</b> από το Δημοτικό μέχρι το Πανεπιστήμιο — πιάσε οποιαδήποτε καρτέλα με το ποντίκι, κάνε Zoom ή άνοιξέ την στον Καμβά!
             </p>
           </div>
 
-          {/* 5-Card Interactive Draggable Grid */}
+          {/* Interactive Draggable Grid */}
           <div
             className="relative rounded-3xl border border-slate-200 bg-[#f8fafc] p-6 sm:p-8 shadow-xl overflow-hidden"
             style={{
@@ -1525,7 +1637,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           className={`w-full ${
                             idx === 0 ? 'h-64 sm:h-72' : 'h-56'
                           } object-contain mx-auto transition-transform duration-700 ${
-                            isSpotlight ? 'bn-ken-burns' : 'group-hover/drag:scale-[1.38]'
+                            note.src.endsWith('.gif')
+                              ? ''
+                              : isSpotlight
+                                ? 'bn-ken-burns'
+                                : 'group-hover/drag:scale-[1.38]'
                           }`}
                         />
                       </div>
@@ -1561,16 +1677,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </section>
 
         {/* ===================================================================
-            5. FULL-PAGE ALTERNATING GOODNOTES SHOWCASE SECTIONS (All 5 Images
-               Large & Detailed Down the Page with Zoom, Circles & Expanding Frames)
+            5. FULL-PAGE ALTERNATING GOODNOTES SHOWCASE SECTIONS
            =================================================================== */}
         <section className="mt-24 max-w-6xl mx-auto space-y-20">
           <div className="text-center max-w-3xl mx-auto">
             <span className="px-3.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-[#0066ff] text-xs font-extrabold uppercase tracking-wider">
-              Αναλυτική Παρουσίαση Σημειώσεων • Goodnotes Εμπειρία
+              Αναλυτική Παρουσίαση Προσομοιώσεων &amp; Σημειώσεων • ExplainBoards
             </span>
             <h2 className="mt-3 text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-950">
-              Δες κάθε μία από τις 5 Σημειώσεις σε Πλήρες Μέγεθος &amp; Κίνηση
+              Δες κάθε Προσομοίωση &amp; Σημείωση σε Πλήρες Μέγεθος &amp; Ζωντανή Κίνηση
             </h2>
           </div>
 
@@ -1595,7 +1710,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       src={note.src}
                       alt={note.title}
                       loading="lazy"
-                      className="w-full max-h-[420px] object-contain mx-auto bn-ken-burns"
+                      className={`w-full max-h-[420px] object-contain mx-auto ${
+                        note.src.endsWith('.gif') ? '' : 'bn-ken-burns'
+                      }`}
                     />
                   </DraggableCard>
                 </div>

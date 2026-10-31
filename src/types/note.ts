@@ -132,6 +132,7 @@ export interface TextObject {
   fontSize: number;
   bold?: boolean;
   fontFamily?: TextFontStyle;
+  chemRawInput?: string; // Original user input for ChemOCR / Chemistry check so missing/wrong subscripts & coefficients are highlighted in red
   layerId: string;
   groupId?: string;
 }
@@ -302,7 +303,13 @@ export interface AtomSimConfig {
   isRotating?: boolean; // default true (slow orbital rotation of electron pairs)
   showReactionEquation?: boolean; // Show chemical reaction equation header above atoms
   reactionEquationText?: string; // e.g. 'C + O₂ → CO₂' or 'Na + Cl → Na⁺Cl⁻'
+  userRawReactionText?: string; // Raw user input (e.g. 'H2 + O2 -> H2O' or 'H + O -> HO') so missing/wrong subscripts & coefficients are highlighted in red
   showAtomsBelowReaction?: boolean; // default true; when created via ChemOCR, user can toggle showing/hiding the atom structures below
+  show3DMolecule?: boolean; // Show 3D molecular geometry (H2O, CH4, CO2, NH3, NaCl) below/beside the reaction
+  showChargeCloud?: boolean; // Show electrostatic charge distribution cloud (δ⁻ red/orange, δ⁺ blue/cyan) on the 3D spheres
+  selected3DMolId?: string; // Optional override for 3D molecule ('H2O' | 'CH4' | 'CO2' | 'NH3' | 'NaCl')
+  rot3DYaw?: number; // Custom 3D yaw rotation angle (radians)
+  rot3DPitch?: number; // Custom 3D pitch rotation angle (radians)
 }
 
 export interface NotePage {
