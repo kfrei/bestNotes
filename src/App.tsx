@@ -1361,12 +1361,26 @@ export default function App() {
     x: 48,
     y: 92,
   });
+  const [periodicTableWidth, setPeriodicTableWidth] = useState<number>(940);
   const periodicTableDragRef = useRef<{
     startX: number;
     startY: number;
     origX: number;
     origY: number;
   } | null>(null);
+  const periodicTableResizeRef = useRef<{
+    corner: 'nw' | 'ne' | 'sw' | 'se';
+    startX: number;
+    startY: number;
+    origW: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  useEffect(() => {
+    if (showPeriodicTableModal) {
+      setPeriodicTableWidth(940);
+    }
+  }, [showPeriodicTableModal]);
   const [atomReactionAnim, setAtomReactionAnim] = useState<{
     simId: string;
     startTime: number;
@@ -44165,21 +44179,77 @@ export default function App() {
               </div>
             )}
 
-            {/* Draggable Periodic Table Floating Window (Periods 1–6, Groups 1–18, H to Rn) */}
-            {showPeriodicTableModal && (
-              <div
-                data-ui-panel="true"
-                data-popover-panel="periodic-table"
-                style={{ left: periodicTablePos.x, top: periodicTablePos.y }}
-                onPointerDown={(e) => e.stopPropagation()}
-                onWheel={(e) => e.stopPropagation()}
-                className="fixed z-50 w-[940px] max-w-[96vw] max-h-[84vh] overflow-auto rounded-2xl bg-white/98 backdrop-blur-md border-2 border-indigo-200 shadow-2xl p-3 text-slate-800 select-none"
-              >
-                {/* Draggable Header */}
+            {/* Draggable & Corner-Resizable Periodic Table Floating Window (Periods 1–6, Groups 1–18, H to Rn) */}
+            {showPeriodicTableModal && (() => {
+              const ptScale = periodicTableWidth / 940;
+              const cellH = Math.round(52 * ptScale);
+              const gridGap = Math.max(2, Math.round(4 * ptScale));
+              const cellPad = Math.max(2, Math.round(4 * ptScale));
+              const startCornerResize = (
+                e: React.PointerEvent<HTMLDivElement>,
+                corner: 'nw' | 'ne' | 'sw' | 'se'
+              ) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                periodicTableResizeRef.current = {
+                  corner,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  origW: periodicTableWidth,
+                  origX: periodicTablePos.x,
+                  origY: periodicTablePos.y,
+                };
+              };
+              const moveCornerResize = (e: React.PointerEvent<HTMLDivElement>) => {
+                const rz = periodicTableResizeRef.current;
+                if (!rz) return;
+                e.stopPropagation();
+                const dx = e.clientX - rz.startX;
+                const dy = e.clientY - rz.startY;
+                const signX = rz.corner === 'ne' || rz.corner === 'se' ? 1 : -1;
+                const signY = rz.corner === 'sw' || rz.corner === 'se' ? 1 : -1;
+                // Συνδυασμός οριζόντιας και κατακόρυφης κίνησης γωνίας για άνετη αυξομείωση
+                const deltaW = Math.round(dx * signX * 0.75 + dy * signY * 0.65);
+                const minW = 640;
+                const maxW = Math.max(940, Math.min(1850, window.innerWidth - 16));
+                const nextW = Math.max(minW, Math.min(maxW, rz.origW + deltaW));
+                const actualDW = nextW - rz.origW;
+                let nextX = rz.origX;
+                let nextY = rz.origY;
+                if (rz.corner === 'nw' || rz.corner === 'sw') {
+                  nextX = Math.max(8, rz.origX - actualDW);
+                }
+                if (rz.corner === 'nw' || rz.corner === 'ne') {
+                  const approxDH = Math.round(actualDW * 0.38);
+                  nextY = Math.max(8, rz.origY - approxDH);
+                }
+                setPeriodicTableWidth(nextW);
+                setPeriodicTablePos({ x: nextX, y: nextY });
+              };
+              const endCornerResize = (e: React.PointerEvent<HTMLDivElement>) => {
+                e.stopPropagation();
+                periodicTableResizeRef.current = null;
+              };
+
+              return (
                 <div
+                  data-ui-panel="true"
+                  data-popover-panel="periodic-table"
+                  style={{
+                    left: periodicTablePos.x,
+                    top: periodicTablePos.y,
+                    width: `${periodicTableWidth}px`,
+                    maxWidth: '98vw',
+                    maxHeight: '92vh',
+                    padding: `${Math.round(12 * ptScale)}px`,
+                    touchAction: 'none',
+                  }}
                   onPointerDown={(e) => {
-                    if ((e.target as HTMLElement).closest('button')) return;
                     e.stopPropagation();
+                    const targetEl = e.target as HTMLElement;
+                    if (targetEl.closest('button') || targetEl.closest('[data-pt-resize="true"]')) {
+                      return;
+                    }
                     e.currentTarget.setPointerCapture(e.pointerId);
                     periodicTableDragRef.current = {
                       startX: e.clientX,
@@ -44194,14 +44264,14 @@ export default function App() {
                     const nextX = Math.max(
                       8,
                       Math.min(
-                        window.innerWidth - 320,
+                        window.innerWidth - 260,
                         drag.origX + (e.clientX - drag.startX)
                       )
                     );
                     const nextY = Math.max(
                       8,
                       Math.min(
-                        window.innerHeight - 120,
+                        window.innerHeight - 100,
                         drag.origY + (e.clientY - drag.startY)
                       )
                     );
@@ -44213,107 +44283,176 @@ export default function App() {
                   onPointerCancel={() => {
                     periodicTableDragRef.current = null;
                   }}
-                  style={{ touchAction: 'none' }}
-                  className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2.5 border-b border-slate-200 cursor-grab active:cursor-grabbing"
-                  title="Σύρε από εδώ για μετακίνηση του Περιοδικού Πίνακα"
+                  onWheel={(e) => e.stopPropagation()}
+                  className="fixed z-50 overflow-auto rounded-2xl bg-white/98 backdrop-blur-md border-2 border-indigo-200 shadow-2xl text-slate-800 select-none cursor-grab active:cursor-grabbing"
+                  title="Σύρε από οποιοδήποτε λευκό σημείο για μετακίνηση ή από τις γωνίες για αυξομείωση μεγέθους"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
-                      ⚛️
-                    </span>
-                    <span className="text-xs font-extrabold text-[#1b2a4a]">
-                      Περιοδικός Πίνακας Στοιχείων (Περίοδοι 1–6 • Z, A, Σύμβολο, Όνομα)
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-semibold">
-                      (Κλικ = ενημέρωση επιλεγμένου ατόμου • Shift+Κλικ = προσθήκη δίπλα)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPeriodicTableModal(false)}
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
-                    title="Κλείσιμο Περιοδικού Πίνακα"
+                  {/* 4 Γωνίες Αυξομείωσης Μεγέθους (Corner Resize Handles) */}
+                  <div
+                    data-pt-resize="true"
+                    onPointerDown={(e) => startCornerResize(e, 'nw')}
+                    onPointerMove={moveCornerResize}
+                    onPointerUp={endCornerResize}
+                    onPointerCancel={endCornerResize}
+                    className="absolute top-0 left-0 w-4 h-4 cursor-nwse-resize z-20"
+                    title="Σύρε τη γωνία για αυξομείωση μεγέθους"
+                  />
+                  <div
+                    data-pt-resize="true"
+                    onPointerDown={(e) => startCornerResize(e, 'ne')}
+                    onPointerMove={moveCornerResize}
+                    onPointerUp={endCornerResize}
+                    onPointerCancel={endCornerResize}
+                    className="absolute top-0 right-0 w-4 h-4 cursor-nesw-resize z-20"
+                    title="Σύρε τη γωνία για αυξομείωση μεγέθους"
+                  />
+                  <div
+                    data-pt-resize="true"
+                    onPointerDown={(e) => startCornerResize(e, 'sw')}
+                    onPointerMove={moveCornerResize}
+                    onPointerUp={endCornerResize}
+                    onPointerCancel={endCornerResize}
+                    className="absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize z-20"
+                    title="Σύρε τη γωνία για αυξομείωση μεγέθους"
+                  />
+                  <div
+                    data-pt-resize="true"
+                    onPointerDown={(e) => startCornerResize(e, 'se')}
+                    onPointerMove={moveCornerResize}
+                    onPointerUp={endCornerResize}
+                    onPointerCancel={endCornerResize}
+                    className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-20 flex items-end justify-end pr-1 pb-1 text-slate-400 hover:text-indigo-600"
+                    title="Σύρε τη γωνία για αυξομείωση μεγέθους"
                   >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+                    <svg width="10" height="10" viewBox="0 0 10 10" className="pointer-events-none">
+                      <line x1="9" y1="2" x2="2" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <line x1="9" y1="6" x2="6" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </div>
 
-                {/* 18-Column Grid for Periods 1 to 6 */}
-                <div
-                  className="grid gap-1"
-                  style={{
-                    gridTemplateColumns: 'repeat(18, minmax(46px, 1fr))',
-                  }}
-                >
-                  {(() => {
-                    const activeAtomSim = getActiveAtomSim(activePage);
-                    const selectedAtomNode =
-                      activeAtomSim?.atoms.find(
-                        (a) => a.id === activeAtomSim.selectedAtomId
-                      ) || activeAtomSim?.atoms[activeAtomSim.atoms.length - 1];
-                    const cells: React.ReactNode[] = [];
+                  {/* Header */}
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2.5 border-b border-slate-200"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
+                        ⚛️
+                      </span>
+                      <span
+                        className="font-extrabold text-[#1b2a4a]"
+                        style={{ fontSize: `${(12 * Math.max(1, ptScale * 0.92)).toFixed(1)}px` }}
+                      >
+                        Περιοδικός Πίνακας Στοιχείων
+                      </span>
+                      <span
+                        className="text-slate-400 font-semibold"
+                        style={{ fontSize: `${(10 * Math.max(1, ptScale * 0.9)).toFixed(1)}px` }}
+                      >
+                        (Κλικ = ενημέρωση επιλεγμένου ατόμου • Shift+Κλικ = προσθήκη δίπλα)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPeriodicTableModal(false)}
+                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      title="Κλείσιμο Περιοδικού Πίνακα"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
-                    for (let period = 1; period <= 6; period++) {
-                      for (let group = 1; group <= 18; group++) {
-                        const el = PERIODIC_ELEMENTS_H_TO_RN.find(
-                          (item) => item.period === period && item.group === group
-                        );
-                        if (!el) {
-                          cells.push(
-                            <div
-                              key={`empty-${period}-${group}`}
-                              className="h-13 rounded-lg bg-transparent"
-                            />
+                  {/* 18-Column Responsive Grid for Periods 1 to 6 */}
+                  <div
+                    className="grid"
+                    style={{
+                      gap: `${gridGap}px`,
+                      gridTemplateColumns: 'repeat(18, minmax(0, 1fr))',
+                    }}
+                  >
+                    {(() => {
+                      const activeAtomSim = getActiveAtomSim(activePage);
+                      const selectedAtomNode =
+                        activeAtomSim?.atoms.find(
+                          (a) => a.id === activeAtomSim.selectedAtomId
+                        ) || activeAtomSim?.atoms[activeAtomSim.atoms.length - 1];
+                      const cells: React.ReactNode[] = [];
+
+                      for (let period = 1; period <= 6; period++) {
+                        for (let group = 1; group <= 18; group++) {
+                          const el = PERIODIC_ELEMENTS_H_TO_RN.find(
+                            (item) => item.period === period && item.group === group
                           );
-                          continue;
-                        }
-                        const isSelectedZ = selectedAtomNode?.z === el.z;
-                        const catStyle =
-                          el.category === 'noble'
-                            ? 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-950'
-                            : el.category === 'nonmetal'
-                            ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-950'
-                            : el.category === 'metalloid'
-                            ? 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-950'
-                            : 'bg-sky-50/80 hover:bg-sky-100 border-sky-200 text-slate-900';
+                          if (!el) {
+                            cells.push(
+                              <div
+                                key={`empty-${period}-${group}`}
+                                style={{ height: `${cellH}px` }}
+                                className="rounded-lg bg-transparent"
+                              />
+                            );
+                            continue;
+                          }
+                          const isSelectedZ = selectedAtomNode?.z === el.z;
+                          const catStyle =
+                            el.category === 'noble'
+                              ? 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-950'
+                              : el.category === 'nonmetal'
+                              ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-950'
+                              : el.category === 'metalloid'
+                              ? 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-950'
+                              : 'bg-sky-50/80 hover:bg-sky-100 border-sky-200 text-slate-900';
 
-                        cells.push(
-                          <button
-                            key={`el-${el.z}`}
-                            type="button"
-                            onClick={(ev) => {
-                              assignPeriodicElementToAtomSim(el.z, ev.shiftKey);
-                            }}
-                            title={`${el.nameEl} (${el.symbol}) — Ατομικός Z=${el.z}, Μαζικός A=${el.a}, Στιβάδες: ${el.shells.join('-')}`}
-                            className={`h-13 p-1 rounded-lg border flex flex-col justify-between transition cursor-pointer ${catStyle} ${
-                              isSelectedZ
-                                ? 'ring-2 ring-indigo-600 bg-indigo-100/90 font-extrabold shadow-xs'
-                                : ''
-                            }`}
-                          >
-                            <div className="w-full flex items-center justify-between text-[8.5px] font-bold leading-none">
-                              <span className="text-indigo-700" title="Ατομικός Αριθμός Z">
-                                {el.z}
-                              </span>
-                              <span className="text-slate-500" title="Μαζικός Αριθμός A">
-                                {el.a}
-                              </span>
-                            </div>
-                            <div className="text-[12.5px] font-extrabold leading-none text-center">
-                              {el.symbol}
-                            </div>
-                            <div className="text-[7.5px] font-semibold leading-tight truncate w-full text-center opacity-90">
-                              {el.nameEl}
-                            </div>
-                          </button>
-                        );
+                          cells.push(
+                            <button
+                              key={`el-${el.z}`}
+                              type="button"
+                              onClick={(ev) => {
+                                assignPeriodicElementToAtomSim(el.z, ev.shiftKey);
+                              }}
+                              title={`${el.nameEl} (${el.symbol}) — Ατομικός Z=${el.z}, Μαζικός A=${el.a}, Στιβάδες: ${el.shells.join('-')}`}
+                              style={{
+                                height: `${cellH}px`,
+                                padding: `${cellPad}px`,
+                              }}
+                              className={`rounded-lg border flex flex-col justify-between transition cursor-pointer ${catStyle} ${
+                                isSelectedZ
+                                  ? 'ring-2 ring-indigo-600 bg-indigo-100/90 font-extrabold shadow-xs'
+                                  : ''
+                              }`}
+                            >
+                              <div
+                                className="w-full flex items-center justify-between font-bold leading-none"
+                                style={{ fontSize: `${(8.5 * ptScale).toFixed(1)}px` }}
+                              >
+                                <span className="text-indigo-700" title="Ατομικός Αριθμός Z">
+                                  {el.z}
+                                </span>
+                                <span className="text-slate-500" title="Μαζικός Αριθμός A">
+                                  {el.a}
+                                </span>
+                              </div>
+                              <div
+                                className="font-extrabold leading-none text-center"
+                                style={{ fontSize: `${(12.5 * ptScale).toFixed(1)}px` }}
+                              >
+                                {el.symbol}
+                              </div>
+                              <div
+                                className="font-semibold leading-tight truncate w-full text-center opacity-90"
+                                style={{ fontSize: `${(7.5 * ptScale).toFixed(1)}px` }}
+                              >
+                                {el.nameEl}
+                              </div>
+                            </button>
+                          );
+                        }
                       }
-                    }
-                    return cells;
-                  })()}
+                      return cells;
+                    })()}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Floating Layers Popover (Draggable Reordering, Up/Down Move, Lock, Visibility & Red Trash Can Delete!) */}
             {showLayersPanel && (
