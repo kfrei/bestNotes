@@ -939,13 +939,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           2. HERO SECTION + ANIMATED SIMULATIONS & SCIENCE SHOWCASE TABS
          ===================================================================== */}
       <main id="hero-top-section" className="max-w-7xl mx-auto px-4 sm:px-8 pt-10 pb-28 scroll-mt-20">
-        {/* --- Α. ΚΕΝΤΡΙΚΕΣ ΠΛΗΡΟΦΟΡΙΕΣ (Τίτλος, Υπότιτλος & Ταυτότητα Μαθημάτων) --- */}
+        {/* --- Α. ΚΕΝΤΡΙΚΕΣ ΠΛΗΡΟΦΟΡΙΕΣ (Τίτλος & Υπότιτλος) --- */}
         <div className="text-center max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 border border-amber-200/90 text-amber-900 text-xs font-bold mb-5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Διαδραστικός Καμβάς Εκπαίδευσης • MathOCR, ChemOCR &amp; 3D.OCR</span>
-          </div>
-
           <h1 className="text-3xl sm:text-5xl md:text-[50px] font-extrabold tracking-tight text-slate-950 leading-[1.14]">
             Δώστε ζωή &amp; κίνηση στο μολύβι σας με το{' '}
             {isExplainBoardsBrand ? (
@@ -963,24 +958,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <p className="mt-4 text-base sm:text-lg text-slate-600 font-medium leading-relaxed max-w-2xl mx-auto">
             Εξηγήστε πάνω στα boards σας φαινόμενα, έννοιες, χημικές αντιδράσεις &amp; διαγράμματα με διαδραστικές προσομοιώσεις που{' '}
-            <span className="text-slate-900 font-bold">«ζωντανεύουν» κατευθείαν από το μολύβι σας</span>.
+            <span className="text-slate-900 font-bold">«ζωντανεύουν» κατευθείαν από το μολύβι σας</span>!
+            <br className="hidden sm:inline" /> Ένα ολοκληρωμένο πακέτο εργαλείων{' '}
+            <strong className="text-slate-900 font-bold">Φυσικής, Χημείας, Βιολογίας &amp; Μαθηματικών</strong>.
           </p>
-
-          {/* Καθαρή Μπάρα Πληροφοριών (Μη-κλικάρισμα / Διαχωρισμένη από τα κουμπιά) */}
-          <div className="mt-5 inline-flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs sm:text-sm text-slate-700">
-            <div className="flex items-center gap-2 font-bold text-slate-800">
-              <span className="text-base leading-none">📚</span>
-              <span>Φυσική • Χημεία • Βιολογία • Μαθηματικά</span>
-            </div>
-            <span className="hidden sm:inline text-slate-300 font-light">|</span>
-            <div className="flex items-center gap-1.5 text-slate-600 font-medium">
-              <span className="text-base leading-none">🎓</span>
-              <span>
-                Από το <strong className="text-slate-900 font-bold">Δημοτικό</strong> μέχρι το{' '}
-                <strong className="text-slate-900 font-bold">Πανεπιστήμιο</strong>
-              </span>
-            </div>
-          </div>
 
           {/* --- Β. ΚΥΡΙΑ ΚΟΥΜΠΙΑ ΕΝΕΡΓΕΙΑΣ (Ξεκάθαρα διαχωρισμένα) --- */}
           <div className="mt-8 flex items-center justify-center gap-3.5 flex-wrap">
@@ -1091,19 +1072,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
                   ⬚ Ορθογώνιο Λάσο &amp; ∑ MathOCR
                 </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[10.5px] font-bold text-slate-500 hidden md:inline">
-                  💡 Tip: Πιάσε οποιαδήποτε πλαϊνή καρτέλα με το ποντίκι και σύρε την!
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setDragResetCounter((c) => c + 1)}
-                  className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 cursor-pointer transition"
-                >
-                  ↺ Reset Θέσεων
-                </button>
               </div>
             </div>
 
