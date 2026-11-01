@@ -7642,13 +7642,13 @@ export async function transcribeEquationForGraphWithGemini(
 
   const parts: any[] = [
     {
-      text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Απλής Αρμονικής & Φθίνουσας Ταλάντωσης (Φυσικής) για σχεδίαση διαγράμματος${contextHint}.
-Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), x = A_0 e^(-Λt) συν(ωt), x = A_0 e^(-Λt) ημ(ωt), A = A_0 e^(-Λt), ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
+      text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Φυσικής Γυμνασίου & Λυκείου (Ταλαντώσεις, Μηχανική, Αέρια PV=nRT, Ηλεκτρισμός, Κύματα) για σχεδίαση διαγράμματος${contextHint}.
+Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u_max^2 συν^2(ωt), U = 1/2 D A^2 ημ^2(ωt), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), x = A_0 e^(-Λt) συν(ωt), x = A_0 e^(-Λt) ημ(ωt), A = A_0 e^(-Λt), PV = nRT, P = nRT/V, V_π = E - I r, x = u_0 t + 1/2 a t^2, u = u_0 + a t, ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
 Κανόνες:
-1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "x = A_0*e^(-Λ*t)*συν(ω*t)", "x = A_0*e^(-Λ*t)*ημ(ω*t)", "A = A_0*e^(-Λ*t)", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
+1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "K = 1/2*m*u_max^2*συν^2(ω*t)", "U = 1/2*D*A^2*ημ^2(ω*t)", "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "x = A_0*e^(-Λ*t)*συν(ω*t)", "x = A_0*e^(-Λ*t)*ημ(ω*t)", "A = A_0*e^(-Λ*t)", "P*V = n*R*T", "V_π = E - I*r", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
 2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. u_1 = 10 και u_2 = 2 + 5t, ή y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "u_1 = 10\\nu_2 = 2 + 5*t") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
-3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159), ΤΑΧΥΤΗΤΑ u = u_max, ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ e^(-Λt) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή και ΔΕΝ είναι άγνωστη παράμετρος!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)") — ΜΗΝ το αντικαθιστάς με 3.14 και ΜΗΝ το μπερδεύεις με τα γράμματα n ή r! Στις εξισώσεις ταχύτητας ταλάντωσης (π.χ. u = u_max συν(ωt)), το u είναι ΠΑΝΤΑ πεζό "u" και το πλάτος είναι πεζό "u_max" (ΠΟΤΕ κεφαλαίο Umax). Στις εξισώσεις Φθίνουσας Ταλάντωσης (π.χ. x = A_0 e^(-Λt) συν(ωt) ή ημ(ωt)), το αρχικό πλάτος είναι "A_0" (ακόμη κι αν ο δείκτης 0 μοιάζει με μικρό o, δηλ. Ao -> γράψε A_0) και ο εκθέτης του e είναι "-Λ*t" (όπου Λ η σταθερά απόσβεσης — ΜΗΝ μπερδεύεις το χειρόγραφο κεφαλαίο Λ με Α ή 1!). Επίσης πρόσεξε ΠΑΡΑ ΠΟΛΥ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos, τρία γράμματα σ-υ-ν όπου το σ μοιάζει με μικρό 6/c και το υν με uv): ΜΗΝ το μπερδεύεις ΠΟΤΕ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
-4. Στο πεδίο "normalizedEquation", αν δεν είναι εξίσωση ταλάντωσης (απλής αρμονικής ή φθίνουσας) και έχει συμβολικές παραμέτρους χωρίς αριθμούς (π.χ. y = ax + b, y = αχ + β, x^2/a^2 + y^2/b^2 = 1 — εξαιρουμένου του π που είναι σταθερά!), θεώρησε τις παραμέτρους ΘΕΤΙΚΟΥΣ αριθμούς και γράψε την αντίστοιχη εξίσωση σε x και y. Αν είναι εξίσωση ταλάντωσης (π.χ. x = A_0*e^(-Λ*t)*συν(ω*t)), κράτησε στο "normalizedEquation" την ίδια ακριβώς μορφή με το "equation"!
+3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159), ΕΝΕΡΓΕΙΕΣ K(t)/U(t) ΜΕ συν^2(ωt)/ημ^2(ωt), ΤΑΧΥΤΗΤΑ u_max, ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ e^(-Λt) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)"). Όταν υπάρχει τετράγωνο σε μέγεθος με δείκτη max (π.χ. u²_max ή u_max² στο K = 1/2 m u_max^2 συν^2(ωt)), γράψε ΠΑΝΤΑ πρώτα τον δείκτη και μετά τον εκθέτη: "u_max^2" (ώστε να είναι ξεκάθαρο ότι το u_max είναι σταθερό πλάτος ταχύτητας και η μεταβλητή είναι το t!). Όταν υπάρχει τετράγωνο σε τριγωνομετρική συνάρτηση (συν²(ωt) ή ημ²(ωt)), γράψε "συν^2(ω*t)" ή "ημ^2(ω*t)". Στις εξισώσεις Φθίνουσας Ταλάντωσης (π.χ. x = A_0 e^(-Λt) συν(ωt) ή ημ(ωt)), το αρχικό πλάτος είναι "A_0" και ο εκθέτης του e είναι "-Λ*t". Επίσης πρόσεξε ΠΑΡΑ ΠΟΛΥ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos, τρία γράμματα σ-υ-ν όπου το σ μοιάζει με μικρό 6/c και το υν με uv): ΜΗΝ το μπερδεύεις ΠΟΤΕ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
+4. ΙΕΡΑΡΧΙΑ ΑΝΕΞΑΡΤΗΤΗΣ ΜΕΤΑΒΛΗΤΗΣ ΣΤΗ ΦΥΣΙΚΗ: Στις εξισώσεις Φυσικής, αν στο δεξί μέλος υπάρχει ο χρόνος "t" (πολυώνυμο, εκθετική, τριγωνομετρική κ.λπ.), η συνάρτηση είναι συνάρτηση του χρόνου t και όλα τα άλλα σύμβολα (m, D, k, A, A_0, u_0, x_0, u_max, ω, Λ, a, g) είναι σταθερές παράμετροι. Αν δεν υπάρχει t αλλά υπάρχει η θέση "x", είναι συνάρτηση της θέσης x (π.χ. ΣF = -D*x, U = 1/2*D*x^2). Αν δεν υπάρχει ούτε t ούτε x αλλά υπάρχει η ταχύτητα "u", είναι συνάρτηση της ταχύτητας u (π.χ. K = 1/2*m*u^2, p = m*u). Στην καταστατική εξίσωση αερίων PV = nRT (ή P = nRT/V, P - V, P - T, V - T), κράτησε στο "equation" και στο "normalizedEquation" την ίδια ακριβώς μορφή με το "equation"!
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
@@ -7925,24 +7925,37 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/(?<![A-Z])\b[fghyFGH](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*[xχ]\s*\)/g, 'y')
     .replace(/(?<![A-Z])\b[xuvXUV](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*t\s*\)/g, 'y');
 
-  // Remove subscripts like x_0, y_0, u_0, v_0 -> treat as symbolic positive constant b,
-  // and amplitude/extrema subscripts like u_{max}, u_{mαx}, x_{max}, a_{max}, F_{max}, K_{max}, U_{max} -> treat as symbolic amplitude A
-  // (CRITICAL: prevents the trailing 'x' in 'max'/'mαx' from being mistaken for the horizontal coordinate variable x!)
+  // Remove subscripts like x_0, y_0, u_0, v_0, A_0 -> treat as symbolic positive constant b,
+  // and amplitude/extrema subscripts like u_{max}, u^2_{max}, u_{mαx}, x_{max}, a_{max}, F_{max}, K_{max}, U_{max} -> treat as symbolic amplitude A
+  // (CRITICAL: also handles when the exponent precedes `_max` like `u^(2)_max` or `u^2_max`, preventing the trailing 'x' in 'max'/'mαx' from being mistaken for the horizontal coordinate variable x!)
   s = s
-    .replace(/\b([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[aα]x\s*\}?/gi, 'A')
-    .replace(/\b([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[iι]n\s*\}?/gi, 'b')
-    .replace(/\b([xyuvα-ωa-z])\s*_\s*\{?\s*0\s*\}?/gi, 'b')
+    .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*m[aα][xχ]\s*\}?/gi, 'A$2')
+    .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*m[iι]n\s*\}?/gi, 'b$2')
+    .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*(?:0|o|αρχ|ολ|π|κ)\s*\}?/gi, 'b$2')
+    .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[aα][xχ]\s*\}?/gi, 'A')
+    .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[iι]n\s*\}?/gi, 'b')
+    .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*(?:0|o|αρχ|ολ)\s*\}?/gi, 'b')
+    .replace(/_\s*\{?\s*m[aα][xχ]\s*\}?/gi, '')
+    .replace(/_\s*\{?\s*m[iι]n\s*\}?/gi, '')
     .replace(/\\[a-zA-Z]+/g, '');
+
+  // Rewrite trig powers like `COS^(2)(ωt)` or `SIN^2(ωt)` into `((COS(ωt))^(2))`
+  s = s.replace(
+    /\b(SIN|COS|TAN)\s*\^\s*(\([0-9.+-]+\)|[0-9.]+)\s*\(([^()]+)\)/g,
+    '(($1($3))^$2)'
+  );
 
   // Replace Greek χ/Χ with x, and ψ/Ψ with y
   s = s.replace(/[χΧ]/g, 'x').replace(/[ψΨ]/g, 'y');
 
-  // If equation has 't' on RHS and no 'x' (e.g. x = 2t + 1, u = a*t, or u = A*COS(ωt + π/2)), map LHS variable to y and t to x
+  // If equation has 't' on RHS (e.g. x = 2t + 1, u = a*t, u = A*COS(ωt + π/2), K = 1/2 m u_max^2 συν^2(ωt)),
+  // map LHS variable to y, treat any incidental x on RHS as constant A, and map t to x!
   // Note: use (?<![a-zA-Z])t(?![a-zA-Z]) instead of \bt\b so `2t`, `ωt`, `πt` also match cleanly!
   if (!s.includes('y') && /(?<![a-zA-Z])t(?![a-zA-Z])/.test(s) && s.includes('=')) {
     const [lhs, rhs] = s.split('=');
     if (lhs && rhs && /(?<![a-zA-Z])t(?![a-zA-Z])/.test(rhs)) {
-      s = `y = ${rhs.replace(/(?<![a-zA-Z])t(?![a-zA-Z])/g, 'x')}`;
+      const rhsWithoutX = rhs.replace(/[xX]/g, 'A');
+      s = `y = ${rhsWithoutX.replace(/(?<![a-zA-Z])t(?![a-zA-Z])/g, 'x')}`;
     }
   }
 
@@ -7983,35 +7996,42 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     // 1. If there is no `y` in the equation and the LHS is a single variable/symbol (e.g. K, U, E, F, ΣF, P, V, a, u, v, s), map LHS -> `y`
     if (
       !hasY &&
-      /^(?:Σ?[a-zA-Zα-ωΑ-Ω](?:_[a-zA-Z0-9]+)?)$/.test(lhsPart) &&
+      /^(?:Σ?[a-zA-Zα-ωΑ-Ω](?:_[a-zA-Z0-9α-ωΑ-Ω]+)?)$/.test(lhsPart) &&
       lhsPart !== 'x' &&
       lhsPart !== 'π'
     ) {
       lhsPart = 'y';
     }
 
-    // 2. If there is still no `x` on the RHS (e.g. `K = 1/2 m u^2` where RHS has `m` and `u`), map the primary RHS variable -> `x`
-    // Note: `π` is the constant 3.14159..., NEVER a variable!
+    // 2. Universal Physics Independent Variable Hierarchy when `t` and `x` are not already present:
+    // Priority: (a) velocity `u` / `υ` / `v` (e.g. K = 1/2 m u^2, p = m u, P = F u)
+    //           (b) state/circuit/wave variables `V`, `T`, `P`, `I`, `R`, `r`, `f`, `h`, `s`, `q`
+    //           (c) variable raised to a power
     if (!hasX) {
       const strippedRhs = rhsPart
         .replace(/\b(SIN|COS|TAN|SQRT|ABS|EXP|LN|LOG)\b/g, '')
         .replace(/[πΠ]/g, '');
-      // Prefer a variable raised to a power (like `u^(2)` or `v^2` or `r^2` or `t^2`)
-      const powVarMatch = strippedRhs.match(/([a-zA-Zα-ωΑ-Ω])\s*\^/);
-      if (
-        powVarMatch &&
-        powVarMatch[1] &&
-        powVarMatch[1] !== 'y' &&
-        powVarMatch[1] !== 'e' &&
-        powVarMatch[1] !== 'π'
-      ) {
-        const targetVar = powVarMatch[1];
-        rhsPart = rhsPart.replace(new RegExp(targetVar, 'g'), 'x');
+      const velMatch = strippedRhs.match(/[uvυ]/);
+      if (velMatch && velMatch[0]) {
+        rhsPart = rhsPart.replace(new RegExp(velMatch[0], 'g'), 'x');
       } else {
-        // Otherwise prefer common physics independent variables (u, v, υ, t, r, s, I, T, q, z)
-        const prefMatch = strippedRhs.match(/[uvυtrsITqz]/);
-        if (prefMatch && prefMatch[0]) {
-          rhsPart = rhsPart.replace(new RegExp(prefMatch[0], 'g'), 'x');
+        const powVarMatch = strippedRhs.match(/([a-zA-Zα-ωΑ-Ω])\s*\^/);
+        if (
+          powVarMatch &&
+          powVarMatch[1] &&
+          powVarMatch[1] !== 'y' &&
+          powVarMatch[1] !== 'e' &&
+          powVarMatch[1] !== 'A' &&
+          powVarMatch[1] !== 'b' &&
+          powVarMatch[1] !== 'π'
+        ) {
+          const targetVar = powVarMatch[1];
+          rhsPart = rhsPart.replace(new RegExp(targetVar, 'g'), 'x');
+        } else {
+          const prefMatch = strippedRhs.match(/[VTPIrRfhsNqz]/);
+          if (prefMatch && prefMatch[0]) {
+            rhsPart = rhsPart.replace(new RegExp(prefMatch[0], 'g'), 'x');
+          }
         }
       }
     }
@@ -8194,19 +8214,23 @@ export function extractEquationItemsForPlot(
       if (!itemXVar) {
         const strippedRhs = rawRhs
           .replace(/\\?(?:sin|cos|tan|tg|ln|log|exp|sqrt|abs|ημιτ|ημ|συνημ|συν|εφ|max|min|pi)\b/gi, '')
-          .replace(/\\?(?:ημιτ|ημ|συνημ|συν|εφ)/gi, '')
+          .replace(/\\?(?:ημιτ|ημ|συνημ|συν|εφ|m[aα][xχ]|m[iι]n)/gi, '')
           .replace(/[πΠ]/g, '')
+          .replace(/[a-zA-Zα-ωΑ-Ω]\s*(?:\^\s*\{?[0-9.+-]+\}?)?\s*_\s*\{?[0-9a-zA-Zα-ωΑ-Ω]+\}?/g, '')
           .replace(/_\{?[0-9a-zA-Zα-ωΑ-Ω]+\}?/g, '');
-        if (/\bt\b/.test(strippedRhs)) {
+        // Universal Physics Independent Variable Hierarchy: t -> x -> u -> state variables
+        if (/(?<![a-zA-Z])t(?![a-zA-Z])/.test(strippedRhs)) {
           itemXVar = 't';
         } else if (/[xχXΧ]/.test(strippedRhs)) {
           itemXVar = 'x';
+        } else if (/[uυv]/.test(strippedRhs)) {
+          itemXVar = 'u';
         } else {
           const powMatch = strippedRhs.match(/([a-zA-Zα-ωΑ-Ω])\s*\^/);
-          if (powMatch && powMatch[1] && !/^[yYeEπΠ]$/.test(powMatch[1])) {
+          if (powMatch && powMatch[1] && !/^[yYeEAπΠ]$/.test(powMatch[1])) {
             itemXVar = normalizeAxisVarSymbol(powMatch[1]);
           } else {
-            const prefMatch = strippedRhs.match(/[uυvrsITqz]/);
+            const prefMatch = strippedRhs.match(/[VTPIrRfhsNqz]/);
             if (prefMatch && prefMatch[0]) {
               itemXVar = normalizeAxisVarSymbol(prefMatch[0]);
             }
@@ -8501,6 +8525,18 @@ function compileMathExprEvaluator(
     if (tok.type === 'func') {
       pos++;
       const fnName = tok.name;
+      // Support trig/function powers like `COS^(2)(x)` or `SIN^2(x)` where `^ exp` precedes `(arg)`
+      let fnExpNode: EvalNode | null = null;
+      const powTok = tokens[pos];
+      if (powTok && powTok.type === 'op' && powTok.value === '^') {
+        pos++;
+        fnExpNode = parseUnary();
+        // If implicit '*' was inserted between `^(2)` and `(arg)`, consume it
+        const mulTok = tokens[pos];
+        if (mulTok && mulTok.type === 'op' && mulTok.value === '*') {
+          pos++;
+        }
+      }
       let argNode: EvalNode;
       const openTok = tokens[pos];
       if (openTok && openTok.type === 'paren' && openTok.value === '(') {
@@ -8513,7 +8549,7 @@ function compileMathExprEvaluator(
       } else {
         argNode = parseTerm();
       }
-      return (x, y) => {
+      const baseFnNode: EvalNode = (x, y) => {
         const val = argNode(x, y);
         if (!Number.isFinite(val)) return NaN;
         switch (fnName) {
@@ -8537,6 +8573,20 @@ function compileMathExprEvaluator(
             return val <= 0 ? NaN : Math.log10(val);
         }
       };
+      if (fnExpNode) {
+        const expEval = fnExpNode;
+        return (x, y) => {
+          const bVal = baseFnNode(x, y);
+          const eVal = expEval(x, y);
+          if (!Number.isFinite(bVal) || !Number.isFinite(eVal)) return NaN;
+          const roundedExp = Math.round(eVal);
+          if (Math.abs(eVal - roundedExp) < 1e-7) {
+            return Math.pow(bVal, roundedExp);
+          }
+          return bVal < 0 ? NaN : Math.pow(bVal, eVal);
+        };
+      }
+      return baseFnNode;
     }
     if (tok.type === 'paren' && tok.value === '(') {
       pos++;
@@ -8662,6 +8712,8 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/\\left\b|\\right\b/g, '')
     .replace(/_\{([^}]*)\}/g, '_$1')
     .replace(/₀/g, '_0')
+    .replace(/₁/g, '_1')
+    .replace(/₂/g, '_2')
     .replace(/\b([AE])\s*_\s*[oO0]\b/g, '$1_0')
     .replace(/\b([AE])[oO0]\b/g, '$1_0')
     .replace(/m[αa][xχ]/gi, 'max')
@@ -8670,6 +8722,8 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/[−–—]/g, '-')
     .replace(/²/g, '^2')
     .replace(/\^\(\s*2\s*\)/g, '^2')
+    .replace(/([a-zA-Zα-ωΑ-Ω])\s*\^2\s*_\s*max/gi, '$1_max^2')
+    .replace(/([a-zA-Zα-ωΑ-Ω])\s*\^2\s*_\s*0/gi, '$1_0^2')
     .replace(/Κ/g, 'K')
     .replace(/Ε/g, 'E')
     .replace(/Α/g, 'A')
@@ -9395,12 +9449,23 @@ function tryBuildOscillationDiagramStrokes(
     };
   }
 
-  // CASE 5C: Damped Oscillation Amplitude or Energy Decay `A = A_0 e^(-Λt)` or `E = E_0 e^(-2Λt)`
+  // CASE 5C: Damped Oscillation Amplitude/Energy Decay `A = A_0 e^(-Λt)`, `E = E_0 e^(-2Λt)` & Physics Exponential Decay `N = N_0 e^(-λt)`, `I = I_0 e^(-t/τ)`, `Q = Q_0 e^(-t/RC)`
   const ampDecayMatch = compact.match(
-    /^(A|E)(?:\([tτ]\))?=([0-9.]+|A_?[0oO]|E_?[0oO])?\*?(?:e\^\(?-[a-zA-Zα-ωΑ-Ω0-9.*/_+]*[tτ][a-zA-Zα-ωΑ-Ω0-9.*/_+]*\)?|exp\(-[a-zA-Zα-ωΑ-Ω0-9.*/_+]*[tτ][a-zA-Zα-ωΑ-Ω0-9.*/_+]*\))$/i
+    /^(A|E|N|m|I|Q|q)(?:\([tτ]\))?=([0-9.]+|[AENmIQq]_?[0oO])?\*?(?:e\^\(?-[a-zA-Zα-ωΑ-Ω0-9.*/_+]*[tτ][a-zA-Zα-ωΑ-Ω0-9.*/_+]*\)?|exp\(-[a-zA-Zα-ωΑ-Ω0-9.*/_+]*[tτ][a-zA-Zα-ωΑ-Ω0-9.*/_+]*\))$/i
   );
   if (ampDecayMatch) {
-    const yVar = ampDecayMatch[1].toUpperCase() === 'E' ? 'E' : 'A';
+    const rawLhs = ampDecayMatch[1];
+    const yVar = /^[eE]$/.test(rawLhs)
+      ? 'E'
+      : /^[nN]$/.test(rawLhs)
+      ? 'N'
+      : /^[mM]$/.test(rawLhs)
+      ? 'm'
+      : /^[iI]$/.test(rawLhs)
+      ? 'I'
+      : /^[qQ]$/.test(rawLhs)
+      ? rawLhs
+      : 'A';
     const rawInit = (ampDecayMatch[2] || '').replace(/\*/g, '');
     const initLabel = /^[0-9.]+$/.test(rawInit) ? rawInit : `${yVar}_0`;
 
@@ -9870,6 +9935,868 @@ function tryBuildOscillationDiagramStrokes(
     );
 
     return { strokes, texts, groupId, kindLabel: `Διάγραμμα Ταλάντωσης ${yVar}(t)` };
+  }
+
+  // CASE 6A: Squared-Trig Oscillation Energy vs Time `K = 1/2 m u_max^2 συν^2(ωt)`, `U = 1/2 D A^2 ημ^2(ωt)`, `K - t`, `U - t`
+  const sqTrigTimeMatch = compact.match(
+    /^(K|U|E_?[kKκpU]|E|x|y)(?:\([tτ]\))?=([^=]*?)(ημιτ|ημ|sin|συνημ|συν|cos)\^2\(?(.*?)[tτ]([^)]*)\)?$/i
+  );
+  const sqTrigShorthandMatch = compact.match(/^(K|U)-t$/i);
+
+  if (sqTrigTimeMatch || sqTrigShorthandMatch) {
+    const rawLhs = (sqTrigTimeMatch ? sqTrigTimeMatch[1] : sqTrigShorthandMatch![1]).trim();
+    const yVar = /^U|E_?[pU]$/i.test(rawLhs)
+      ? 'U'
+      : /^K|E_?[kKκ]$/i.test(rawLhs)
+      ? 'K'
+      : rawLhs;
+
+    const trigStr = sqTrigTimeMatch ? sqTrigTimeMatch[3].toLowerCase() : yVar === 'U' ? 'ημ' : 'συν';
+    const baseIsCos = trigStr === 'συν' || trigStr === 'συνημ' || trigStr === 'cos';
+
+    let phaseRad = 0;
+    const rawPhase = sqTrigTimeMatch ? (sqTrigTimeMatch[5] || '').replace(/[()\s{}]/g, '') : '';
+    if (rawPhase) {
+      const phasePiMatch = rawPhase.match(/^([+-])(?:([0-9.]+)\*?)?π(?:\/([0-9.]+))?$/);
+      if (phasePiMatch) {
+        const sgn = phasePiMatch[1] === '-' ? -1 : 1;
+        const pNum = phasePiMatch[2] ? parseFloat(phasePiMatch[2]) : 1;
+        const pDen = phasePiMatch[3] ? parseFloat(phasePiMatch[3]) : 1;
+        phaseRad = sgn * (pNum / Math.max(1e-6, pDen)) * Math.PI;
+      } else {
+        const parsedPhase = parseFloat(rawPhase);
+        if (Number.isFinite(parsedPhase)) {
+          phaseRad = parsedPhase;
+        }
+      }
+    }
+
+    // Parse optional numerical amplitude or default to textbook `E, K_max` / `E, U_max`
+    const prefactor = sqTrigTimeMatch ? (sqTrigTimeMatch[2] || '').replace(/^\*+|\*+$/g, '') : '';
+    const isPureNumPrefactor =
+      prefactor.length > 0 && /^[0-9.]+(?:\/[0-9.]+)?$/.test(prefactor) && prefactor !== '1/2' && prefactor !== '0.5';
+    const topLabel = isPureNumPrefactor
+      ? prefactor
+      : yVar === 'K'
+      ? 'E, K_max'
+      : yVar === 'U'
+      ? 'E, U_max'
+      : `${yVar}_max`;
+
+    // Parse angular frequency ω for period labels T/2, 1T, 1.5T
+    let halfPeriodLabel = 'T/2';
+    let periodLabel = '1T';
+    let threeHalfPeriodLabel = '1.5T';
+    if (sqTrigTimeMatch) {
+      const rawOmega = (sqTrigTimeMatch[4] || '').replace(/^[(*\s]+|[)*\s]+$/g, '').trim();
+      const piMatch = rawOmega.match(/^([0-9.]+)?\s*\*?\s*π(?:\s*\/\s*([0-9.]+))?$/);
+      if (piMatch) {
+        const num = piMatch[1] ? parseFloat(piMatch[1]) : 1;
+        const den = piMatch[2] ? parseFloat(piMatch[2]) : 1;
+        const k = num / Math.max(1e-6, den);
+        if (k > 0) {
+          const fullT = 2 / k;
+          halfPeriodLabel = String(+(0.5 * fullT).toFixed(2));
+          periodLabel = String(+fullT.toFixed(2));
+          threeHalfPeriodLabel = String(+(1.5 * fullT).toFixed(2));
+        }
+      }
+    }
+
+    const axisLeftX = centerX - halfW * 0.70;
+    const axisRightX = centerX + halfW * 0.92;
+    const axisBottomY = centerY + halfH * 0.56;
+    const axisTopY = centerY - halfH * 0.88;
+    const yPeakPx = centerY - halfH * 0.54;
+    const ampPx = axisBottomY - yPeakPx;
+    const waveW = axisRightX - axisLeftX - 18;
+
+    // 1. Vertical K or U axis on left (non-negative diagram, horizontal t-axis at bottom)
+    strokes.push(
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: axisBottomY + 16, pressure: 0.7 },
+          { x: axisLeftX, y: axisTopY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      },
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX - 14, y: axisBottomY, pressure: 0.7 },
+          { x: axisRightX, y: axisBottomY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      }
+    );
+
+    // 2. Top horizontal blue dashed envelope at E, K_max / E, U_max
+    addDashedGuide(axisLeftX, yPeakPx, axisRightX - 14, yPeakPx, 1);
+    addRulerTick(axisLeftX - 4.5, yPeakPx, axisLeftX + 4.5, yPeakPx, 'ytick-p');
+
+    // 3. Squared-trig wave curve over 1.5 oscillation periods (3 energy lobes since T_energy = T/2)
+    const steps = 144;
+    const wavePts: { x: number; y: number; pressure: number }[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      const theta = u * Math.PI * 3; // 1.5 periods of x(t) = 3 full lobes of K(t) or U(t)
+      const trigVal = baseIsCos ? Math.cos(theta + phaseRad) : Math.sin(theta + phaseRad);
+      const val = trigVal * trigVal; // Non-negative in [0, 1]
+      wavePts.push({
+        x: axisLeftX + u * waveW,
+        y: axisBottomY - val * ampPx,
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-sqwave`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: wavePts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+
+    // 4. Ticks & labels at T/2, 1T, 1.5T along bottom t-axis
+    const xHalfPeriod = axisLeftX + (1 / 3) * waveW;
+    const xPeriod = axisLeftX + (2 / 3) * waveW;
+    const xThreeHalfPeriod = axisLeftX + waveW;
+    addRulerTick(xHalfPeriod, axisBottomY - 4.5, xHalfPeriod, axisBottomY + 4.5, 'xtick-thalf');
+    addRulerTick(xPeriod, axisBottomY - 4.5, xPeriod, axisBottomY + 4.5, 'xtick-t1');
+    addRulerTick(xThreeHalfPeriod, axisBottomY - 4.5, xThreeHalfPeriod, axisBottomY + 4.5, 'xtick-t15');
+
+    // Vertical dashed guide at 1T when cos^2 has a peak there
+    const valAtPeriod = Math.pow(baseIsCos ? Math.cos(2 * Math.PI + phaseRad) : Math.sin(2 * Math.PI + phaseRad), 2);
+    if (valAtPeriod > 0.85) {
+      addDashedGuide(xPeriod, yPeakPx, xPeriod, axisBottomY, 2);
+    }
+
+    texts.push(
+      createMathGraphLabelText(
+        yVar,
+        axisLeftX + 8,
+        axisTopY + 6,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-ly`
+      ),
+      createMathGraphLabelText(
+        't',
+        axisRightX + 7,
+        axisBottomY + 2,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-lx`
+      ),
+      createMathGraphLabelText(
+        topLabel,
+        axisLeftX - 7,
+        yPeakPx,
+        'right',
+        15,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-lp`
+      ),
+      createMathGraphLabelText(
+        '0',
+        axisLeftX - 8,
+        axisBottomY + 13,
+        'right',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-l0`
+      ),
+      createMathGraphLabelText(
+        halfPeriodLabel,
+        xHalfPeriod,
+        axisBottomY + 16,
+        'center',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-xlbl-thalf`
+      ),
+      createMathGraphLabelText(
+        periodLabel,
+        xPeriod,
+        axisBottomY + 16,
+        'center',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-xlbl-t1`
+      ),
+      createMathGraphLabelText(
+        threeHalfPeriodLabel,
+        xThreeHalfPeriod,
+        axisBottomY + 16,
+        'center',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-xlbl-t15`
+      )
+    );
+
+    return { strokes, texts, groupId, kindLabel: `Διάγραμμα Ενέργειας ${yVar}(t)` };
+  }
+
+  // Helper for 1st-Quadrant Gymnasium & Lyceum Physics Library Diagrams (Kinematics, Dynamics, Gas Laws PV=nRT, Electricity, Waves)
+  const buildFirstQuadrantPhysicsDiagram = (opts: {
+    yAxisLabel: string;
+    xAxisLabel: string;
+    curveKind:
+      | 'hyperbola'
+      | 'inverse-square'
+      | 'line-origin'
+      | 'line-offset-up'
+      | 'line-offset-down'
+      | 'horizontal'
+      | 'parabola-up'
+      | 'parabola-u0-up'
+      | 'parabola-u0-down'
+      | 'sqrt';
+    yInitLabel?: string;
+    xEndLabel?: string;
+    isGasPV?: boolean;
+    gasLineSubLabels?: { x1: string; y1: string };
+    topRightNote?: string;
+    kindLabel: string;
+  }) => {
+    const axisLeftX = centerX - halfW * 0.70;
+    const axisRightX = centerX + halfW * 0.90;
+    const axisBottomY = centerY + halfH * 0.58;
+    const axisTopY = centerY - halfH * 0.86;
+    const plotW = axisRightX - axisLeftX - 20;
+    const plotH = axisBottomY - axisTopY - 20;
+
+    // 1. 1st-Quadrant Axes
+    strokes.push(
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: axisBottomY + 16, pressure: 0.7 },
+          { x: axisLeftX, y: axisTopY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      },
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX - 16, y: axisBottomY, pressure: 0.7 },
+          { x: axisRightX, y: axisBottomY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      }
+    );
+
+    texts.push(
+      createMathGraphLabelText(
+        opts.yAxisLabel,
+        axisLeftX + 8,
+        axisTopY + 6,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-ly`
+      ),
+      createMathGraphLabelText(
+        opts.xAxisLabel,
+        axisRightX + 7,
+        axisBottomY + 2,
+        'left',
+        18,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-lx`
+      ),
+      createMathGraphLabelText(
+        '0',
+        axisLeftX - 8,
+        axisBottomY + 13,
+        'right',
+        14,
+        axisColor,
+        layerId,
+        groupId,
+        `${nowId}-l0`
+      )
+    );
+
+    if (opts.topRightNote) {
+      texts.push(
+        createMathGraphLabelText(
+          opts.topRightNote,
+          axisLeftX + plotW * 0.62,
+          axisTopY + plotH * 0.22,
+          'left',
+          14,
+          axisColor,
+          layerId,
+          groupId,
+          `${nowId}-lnote`
+        )
+      );
+    }
+
+    const curvePts: { x: number; y: number; pressure: number }[] = [];
+    const steps = 72;
+
+    if (opts.curveKind === 'hyperbola' || opts.curveKind === 'inverse-square') {
+      const kConst = opts.curveKind === 'hyperbola' ? 0.21 : 0.14;
+      const uMin = opts.curveKind === 'hyperbola' ? 0.22 : 0.36;
+      for (let i = 0; i <= steps; i++) {
+        const u = uMin + (1 - uMin) * (i / steps);
+        const v = opts.curveKind === 'hyperbola' ? kConst / u : kConst / (u * u);
+        if (v > 0.98) continue;
+        curvePts.push({
+          x: axisLeftX + u * plotW,
+          y: axisBottomY - v * plotH,
+          pressure: 0.7,
+        });
+      }
+      if (opts.isGasPV) {
+        // Two isothermal state points (V_1, P_1) and (V_2, P_2) with blue dashed guides
+        const u1 = 0.28;
+        const v1 = kConst / u1;
+        const u2 = 0.70;
+        const v2 = kConst / u2;
+        const x1 = axisLeftX + u1 * plotW;
+        const y1 = axisBottomY - v1 * plotH;
+        const x2 = axisLeftX + u2 * plotW;
+        const y2 = axisBottomY - v2 * plotH;
+        addDashedGuide(axisLeftX, y1, x1, y1, 1);
+        addDashedGuide(x1, y1, x1, axisBottomY, 2);
+        addDashedGuide(axisLeftX, y2, x2, y2, 3);
+        addDashedGuide(x2, y2, x2, axisBottomY, 4);
+        addRulerTick(axisLeftX - 4, y1, axisLeftX + 4, y1, 'ytick-p1');
+        addRulerTick(axisLeftX - 4, y2, axisLeftX + 4, y2, 'ytick-p2');
+        addRulerTick(x1, axisBottomY - 4, x1, axisBottomY + 4, 'xtick-v1');
+        addRulerTick(x2, axisBottomY - 4, x2, axisBottomY + 4, 'xtick-v2');
+        texts.push(
+          createMathGraphLabelText('P_1', axisLeftX - 7, y1, 'right', 14, axisColor, layerId, groupId, `${nowId}-lp1`),
+          createMathGraphLabelText('P_2', axisLeftX - 7, y2, 'right', 14, axisColor, layerId, groupId, `${nowId}-lp2`),
+          createMathGraphLabelText('V_1', x1, axisBottomY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-lv1`),
+          createMathGraphLabelText('V_2', x2, axisBottomY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-lv2`)
+        );
+      }
+    } else if (opts.curveKind === 'line-origin') {
+      const endX = axisLeftX + plotW * 0.86;
+      const endY = axisBottomY - plotH * 0.82;
+      curvePts.push(
+        { x: axisLeftX, y: axisBottomY, pressure: 0.7 },
+        { x: endX, y: endY, pressure: 0.7 }
+      );
+      if (opts.gasLineSubLabels) {
+        const gx = axisLeftX + plotW * 0.68;
+        const gy = axisBottomY - plotH * 0.65;
+        addDashedGuide(axisLeftX, gy, gx, gy, 1);
+        addDashedGuide(gx, gy, gx, axisBottomY, 2);
+        addRulerTick(axisLeftX - 4, gy, axisLeftX + 4, gy, 'ytick-g1');
+        addRulerTick(gx, axisBottomY - 4, gx, axisBottomY + 4, 'xtick-g1');
+        texts.push(
+          createMathGraphLabelText(opts.gasLineSubLabels.y1, axisLeftX - 7, gy, 'right', 14, axisColor, layerId, groupId, `${nowId}-lgy1`),
+          createMathGraphLabelText(opts.gasLineSubLabels.x1, gx, axisBottomY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-lgx1`)
+        );
+      }
+    } else if (opts.curveKind === 'line-offset-up') {
+      const startY = axisBottomY - plotH * 0.34;
+      const endX = axisLeftX + plotW * 0.88;
+      const endY = axisBottomY - plotH * 0.86;
+      curvePts.push(
+        { x: axisLeftX, y: startY, pressure: 0.7 },
+        { x: endX, y: endY, pressure: 0.7 }
+      );
+      addRulerTick(axisLeftX - 4.5, startY, axisLeftX + 4.5, startY, 'ytick-init');
+      if (opts.yInitLabel) {
+        texts.push(
+          createMathGraphLabelText(opts.yInitLabel, axisLeftX - 7, startY, 'right', 15, axisColor, layerId, groupId, `${nowId}-lyinit`)
+        );
+      }
+    } else if (opts.curveKind === 'line-offset-down') {
+      const startY = axisBottomY - plotH * 0.78;
+      const endX = axisLeftX + plotW * 0.82;
+      curvePts.push(
+        { x: axisLeftX, y: startY, pressure: 0.7 },
+        { x: endX, y: axisBottomY, pressure: 0.7 }
+      );
+      addRulerTick(axisLeftX - 4.5, startY, axisLeftX + 4.5, startY, 'ytick-init');
+      addRulerTick(endX, axisBottomY - 4.5, endX, axisBottomY + 4.5, 'xtick-end');
+      if (opts.yInitLabel) {
+        texts.push(
+          createMathGraphLabelText(opts.yInitLabel, axisLeftX - 7, startY, 'right', 15, axisColor, layerId, groupId, `${nowId}-lyinit`)
+        );
+      }
+      if (opts.xEndLabel) {
+        texts.push(
+          createMathGraphLabelText(opts.xEndLabel, endX, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lxend`)
+        );
+      }
+    } else if (opts.curveKind === 'horizontal') {
+      const constY = axisBottomY - plotH * 0.62;
+      curvePts.push(
+        { x: axisLeftX, y: constY, pressure: 0.7 },
+        { x: axisLeftX + plotW * 0.90, y: constY, pressure: 0.7 }
+      );
+      addRulerTick(axisLeftX - 4.5, constY, axisLeftX + 4.5, constY, 'ytick-const');
+      if (opts.yInitLabel) {
+        texts.push(
+          createMathGraphLabelText(opts.yInitLabel, axisLeftX - 7, constY, 'right', 15, axisColor, layerId, groupId, `${nowId}-lyconst`)
+        );
+      }
+    } else if (opts.curveKind === 'parabola-up') {
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        curvePts.push({
+          x: axisLeftX + u * plotW * 0.86,
+          y: axisBottomY - u * u * plotH * 0.86,
+          pressure: 0.7,
+        });
+      }
+    } else if (opts.curveKind === 'parabola-u0-up') {
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const v = 0.32 * u + 0.68 * u * u;
+        curvePts.push({
+          x: axisLeftX + u * plotW * 0.86,
+          y: axisBottomY - v * plotH * 0.86,
+          pressure: 0.7,
+        });
+      }
+    } else if (opts.curveKind === 'parabola-u0-down') {
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const v = 2 * u - u * u; // Concave down from (0,0) reaching maximum at u = 1
+        curvePts.push({
+          x: axisLeftX + u * plotW * 0.82,
+          y: axisBottomY - v * plotH * 0.80,
+          pressure: 0.7,
+        });
+      }
+      const peakX = axisLeftX + plotW * 0.82;
+      const peakY = axisBottomY - plotH * 0.80;
+      addDashedGuide(axisLeftX, peakY, peakX, peakY, 1);
+      addDashedGuide(peakX, peakY, peakX, axisBottomY, 2);
+    } else if (opts.curveKind === 'sqrt') {
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        curvePts.push({
+          x: axisLeftX + u * plotW * 0.90,
+          y: axisBottomY - Math.sqrt(u) * plotH * 0.84,
+          pressure: 0.7,
+        });
+      }
+    }
+
+    strokes.push({
+      id: `st-${nowId}-crv-phys`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: curvePts,
+      layerId,
+      groupId,
+      isShape: curvePts.length === 2,
+      shapeType: curvePts.length === 2 ? 'line' : undefined,
+    });
+
+    return { strokes, texts, groupId, kindLabel: opts.kindLabel };
+  };
+
+  // CASE 7: Ideal Gas Law (`PV = nRT`) with Two State Variables at a Time (`P - V`, `P - T`, `V - T`)
+  // 7A. Isothermal (Boyle-Mariotte, T = σταθ.): `PV = nRT`, `P = nRT/V`, `V = nRT/P`, `PV = σταθ`, `PV = c`, `P - V`
+  const isGasIsothermalPV =
+    /^(?:P\*?V=n\*?R\*?T|p\*?V=n\*?R\*?T|P\*?V=N\*?k\*?T|P=n\*?R\*?T\/V|V=n\*?R\*?T\/P|P\*?V=(?:σταθ\.?|const|c|[0-9.]+)|P=(?:σταθ\.?|c)\/V|P-V)$/i.test(
+      compact
+    );
+  if (isGasIsothermalPV) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P',
+      xAxisLabel: 'V',
+      curveKind: 'hyperbola',
+      isGasPV: true,
+      topRightNote: 'T = σταθ.',
+      kindLabel: 'Ισόθερμη Μεταβολή P(V) (PV = nRT)',
+    });
+  }
+
+  // 7B. Isochoric (Charles, V = σταθ.): `P = (nR/V)*T`, `P/T = nR/V`, `P/T = σταθ`, `P = c*T`, `P(T) = ...`, `P - T`
+  const isGasIsochoricPT =
+    /^(?:P(?:\(T\))?=(?:\(?n\*?R\/V\)?\*?T|n\*?R\*?T\/V)|P\/T=(?:n\*?R\/V|σταθ\.?|const|c)|P-T)$/i.test(
+      compact
+    );
+  if (isGasIsochoricPT) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P',
+      xAxisLabel: 'T',
+      curveKind: 'line-origin',
+      gasLineSubLabels: { x1: 'T_1', y1: 'P_1' },
+      topRightNote: 'V = σταθ.',
+      kindLabel: 'Ισόχωρη Μεταβολή P(T) (PV = nRT)',
+    });
+  }
+
+  // 7C. Isobaric (Gay-Lussac, P = σταθ.): `V = (nR/P)*T`, `V/T = nR/P`, `V/T = σταθ`, `V(T) = ...`, `V - T`
+  const isGasIsobaricVT =
+    /^(?:V(?:\(T\))?=(?:\(?n\*?R\/P\)?\*?T|n\*?R\*?T\/P)|V\/T=(?:n\*?R\/P|σταθ\.?|const|c)|V-T)$/i.test(
+      compact
+    );
+  if (isGasIsobaricVT) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'V',
+      xAxisLabel: 'T',
+      curveKind: 'line-origin',
+      gasLineSubLabels: { x1: 'T_1', y1: 'V_1' },
+      topRightNote: 'P = σταθ.',
+      kindLabel: 'Ισοβαρής Μεταβολή V(T) (PV = nRT)',
+    });
+  }
+
+  // CASE 8: Built-in Gymnasium & Lyceum Physics Equations Library (Checked First Before Generic Math Plotter)
+  // 8A. Kinematics (ΕΟΚ & ΕΟΜΚ):
+  // - `x = u*t`, `s = u*t`, `x = v*t` (ΕΟΚ)
+  if (/^([xsχ])(?:\(t\))?=[uvυ]\*?t$/i.test(compact)) {
+    const ySym = /^s/i.test(compact) ? 's' : 'x';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 't',
+      curveKind: 'line-origin',
+      kindLabel: `Ευθύγραμμη Ομαλή Κίνηση ${ySym}(t)`,
+    });
+  }
+  // - `x = x_0 + u*t`, `x = x_0 + v*t`
+  if (/^[xχ](?:\(t\))?=[xχ]_?0\+[uvυ]\*?t$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'x',
+      xAxisLabel: 't',
+      curveKind: 'line-offset-up',
+      yInitLabel: 'x_0',
+      kindLabel: 'Ευθύγραμμη Ομαλή Κίνηση x(t)',
+    });
+  }
+  // - `u = σταθ`, `a = σταθ`
+  if (/^([uvυaα])(?:\(t\))?=(?:σταθ\.?|const|[uvυaα]_?0)$/i.test(compact)) {
+    const isVel = /^[uvυ]/i.test(compact);
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: isVel ? 'u' : 'a',
+      xAxisLabel: 't',
+      curveKind: 'horizontal',
+      yInitLabel: isVel ? 'u' : 'a',
+      kindLabel: isVel ? 'Ταχύτητα ΕΟΚ u(t)' : 'Επιτάχυνση ΕΟΜΚ a(t)',
+    });
+  }
+  // - `u = a*t`, `u = g*t`
+  if (/^[uvυ](?:\(t\))?=[aαg]\*?t$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u',
+      xAxisLabel: 't',
+      curveKind: 'line-origin',
+      kindLabel: 'ΕΟΜΚ Ταχύτητα u(t) = a·t',
+    });
+  }
+  // - `u = u_0 + a*t`, `u = u_0 + g*t`
+  if (/^[uvυ](?:\(t\))?=[uvυ]_?0\+[aαg0-9.]*\*?t$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u',
+      xAxisLabel: 't',
+      curveKind: 'line-offset-up',
+      yInitLabel: 'u_0',
+      kindLabel: 'ΕΟΜΚ Επιταχυνόμενη u(t) = u_0 + a·t',
+    });
+  }
+  // - `u = u_0 - a*t`, `u = u_0 - g*t`
+  if (/^[uvυ](?:\(t\))?=[uvυ]_?0-[aαg0-9.]*\*?t$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u',
+      xAxisLabel: 't',
+      curveKind: 'line-offset-down',
+      yInitLabel: 'u_0',
+      xEndLabel: 't_ολ',
+      kindLabel: 'ΕΟΜΚ Επιβραδυνόμενη u(t) = u_0 - a·t',
+    });
+  }
+  // - `x = 1/2 a t^2`, `s = 1/2 a t^2`, `s = 1/2 g t^2`, `h = 1/2 g t^2`, `y = 1/2 g t^2`
+  if (
+    /^([xχshy])(?:\(t\))?=(?:(?:\(?1\/2\)?|0\.5)\*?[aαg]\*?t\^2|[aαg]\*?t\^2\/2)$/i.test(compact)
+  ) {
+    const rawL = compact[0];
+    const ySym = /^[sS]$/.test(rawL) ? 's' : /^[hH]$/.test(rawL) ? 'h' : /^[yY]$/.test(rawL) ? 'y' : 'x';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 't',
+      curveKind: 'parabola-up',
+      kindLabel: `ΕΟΜΚ Μετατόπιση ${ySym}(t)`,
+    });
+  }
+  // - `x = u_0 t + 1/2 a t^2`, `s = u_0 t + 1/2 a t^2`
+  if (
+    /^([xχs])(?:\(t\))?=[uvυ]_?0\*?t\+(?:(?:\(?1\/2\)?|0\.5)\*?[aαg0-9.]*\*?t\^2|[aαg0-9.]*\*?t\^2\/2)$/i.test(
+      compact
+    )
+  ) {
+    const ySym = /^s/i.test(compact) ? 's' : 'x';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 't',
+      curveKind: 'parabola-u0-up',
+      kindLabel: `ΕΟΜΚ Επιταχυνόμενη ${ySym}(t) = u_0·t + ½a·t²`,
+    });
+  }
+  // - `x = u_0 t - 1/2 a t^2`, `s = u_0 t - 1/2 a t^2`
+  if (
+    /^([xχs])(?:\(t\))?=[uvυ]_?0\*?t-(?:(?:\(?1\/2\)?|0\.5)\*?[aαg0-9.]*\*?t\^2|[aαg0-9.]*\*?t\^2\/2)$/i.test(
+      compact
+    )
+  ) {
+    const ySym = /^s/i.test(compact) ? 's' : 'x';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 't',
+      curveKind: 'parabola-u0-down',
+      kindLabel: `ΕΟΜΚ Επιβραδυνόμενη ${ySym}(t) = u_0·t - ½a·t²`,
+    });
+  }
+  // - `u = sqrt(2 a x)`, `u = sqrt(2 g h)`, `u^2 = 2 a x`, `u^2 = 2 g h`
+  if (
+    /^[uvυ](?:\([xχsh]\))?=(?:SQRT|sqrt|√)\(2\*?[aαg]\*?([xχsh])\)$/i.test(compact) ||
+    /^[uvυ]\^2=2\*?[aαg]\*?([xχsh])$/i.test(compact)
+  ) {
+    const xSym = /h\)?$/i.test(compact) ? 'h' : /s\)?$/i.test(compact) ? 's' : 'x';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u',
+      xAxisLabel: xSym,
+      curveKind: 'sqrt',
+      kindLabel: `Διάγραμμα Ταχύτητας - Θέσης u(${xSym})`,
+    });
+  }
+
+  // 8B. Dynamics, Hooke's Law, Momentum, Work, Power, Friction:
+  // - Hooke's Law (magnitude): `F = k*x`, `F = D*x`, `F_ελ = k*x`, `F_ελ = D*x`
+  if (/^(?:F|F_?ελ)(?:\([xχl]\))?=[kκD]\*?([xχl])$/i.test(compact)) {
+    const xSym = /l$/i.test(compact) ? 'Δl' : 'x';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'F',
+      xAxisLabel: xSym,
+      curveKind: 'line-origin',
+      kindLabel: `Νόμος του Hooke F(${xSym})`,
+    });
+  }
+  // - Newton's 2nd Law: `F = m*a`, `ΣF = m*a`, `a = F/m`, `a = ΣF/m`
+  if (/^(?:ΣF|F)=[mμ]\*?[aα]$/i.test(compact)) {
+    const ySym = /^ΣF/i.test(compact) ? 'ΣF' : 'F';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 'a',
+      curveKind: 'line-origin',
+      kindLabel: `2ος Νόμος Νεύτωνα ${ySym}(a)`,
+    });
+  }
+  if (/^[aα]=(?:ΣF|F)\/[mμ]$/i.test(compact)) {
+    const xSym = /ΣF/i.test(compact) ? 'ΣF' : 'F';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'a',
+      xAxisLabel: xSym,
+      curveKind: 'line-origin',
+      kindLabel: `2ος Νόμος Νεύτωνα a(${xSym})`,
+    });
+  }
+  // - Momentum `p = m*u`, Work `W = F*x` / `W = F*s`, Power `P = F*u`, Friction `T = μ*N`
+  if (/^p(?:\([uvυ]\))?=[mμ]\*?[uvυ]$|^p-[uvυ]$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'p',
+      xAxisLabel: 'u',
+      curveKind: 'line-origin',
+      kindLabel: 'Ορμή p(u) = m·u',
+    });
+  }
+  if (/^W=F\*?([xχs])$/i.test(compact)) {
+    const xSym = /s$/i.test(compact) ? 's' : 'x';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'W',
+      xAxisLabel: xSym,
+      curveKind: 'line-origin',
+      kindLabel: `Έργο Δύναμης W(${xSym})`,
+    });
+  }
+  if (/^P=F\*?[uvυ]$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P',
+      xAxisLabel: 'u',
+      curveKind: 'line-origin',
+      kindLabel: 'Ισχύς P(u) = F·u',
+    });
+  }
+  if (/^(?:T|T_?ολ)=[mμ]\*?N$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'T',
+      xAxisLabel: 'N',
+      curveKind: 'line-origin',
+      kindLabel: 'Τριβή Ολίσθησης T(N) = μ·N',
+    });
+  }
+
+  // 8C. Electricity, Electromagnetism, Gravity, Waves, Nuclear Decay:
+  // - Ohm's Law: `I = V/R`, `V = I*R`, `I - V`, `V - I`
+  if (/^I=V\/R$|^I-V$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'I',
+      xAxisLabel: 'V',
+      curveKind: 'line-origin',
+      kindLabel: 'Νόμος του Ohm I(V)',
+    });
+  }
+  if (/^V=I\*?R$|^R\*?I=V$|^V-I$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'V',
+      xAxisLabel: 'I',
+      curveKind: 'line-origin',
+      kindLabel: 'Νόμος του Ohm V(I)',
+    });
+  }
+  if (/^I-R$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'I',
+      xAxisLabel: 'R',
+      curveKind: 'hyperbola',
+      kindLabel: 'Ένταση Ρεύματος - Αντίσταση I(R)',
+    });
+  }
+  // - Closed Circuit (Νόμος Ohm κλειστού κυκλώματος): `V_π = E - I*r`, `U = E - I*r`, `V = E - I*r`
+  if (/^(?:V_?[πp]|U|V)=(?:E|ε)-I\*?r$/i.test(compact)) {
+    const ySym = /^V_?[πp]/i.test(compact) ? 'V_π' : /^U/i.test(compact) ? 'U' : 'V';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 'I',
+      curveKind: 'line-offset-down',
+      yInitLabel: 'E',
+      xEndLabel: 'I_βρ',
+      kindLabel: `Πολική Τάση ${ySym}(I) = E - I·r`,
+    });
+  }
+  // - Joule Power / Capacitor Energy / Inductor Energy: `P = I^2*R`, `U = 1/2 C V^2`, `U = 1/2 L I^2`
+  if (/^P=I\^2\*?R$|^P=R\*?I\^2$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P',
+      xAxisLabel: 'I',
+      curveKind: 'parabola-up',
+      kindLabel: 'Ηλεκτρική Ισχύς Joule P(I) = I²·R',
+    });
+  }
+  if (/^(?:U|E)=(?:(?:\(?1\/2\)?|0\.5)\*?C\*?V\^2|C\*?V\^2\/2)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'U',
+      xAxisLabel: 'V',
+      curveKind: 'parabola-up',
+      kindLabel: 'Ενέργεια Πυκνωτή U(V) = ½C·V²',
+    });
+  }
+  if (/^(?:U|E|E_?B)=(?:(?:\(?1\/2\)?|0\.5)\*?L\*?I\^2|L\*?I\^2\/2)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'U',
+      xAxisLabel: 'I',
+      curveKind: 'parabola-up',
+      kindLabel: 'Ενέργεια Πηνίου U(I) = ½L·I²',
+    });
+  }
+  // - Coulomb / Universal Gravitation / Electric & Gravitational Field (`1/r^2`):
+  //   `F = k q_1 q_2 / r^2`, `F = k Q q / r^2`, `F = G m_1 m_2 / r^2`, `F = G M m / r^2`, `E = k Q / r^2`, `g = G M / r^2`
+  if (
+    /^(?:F|E|g)=(?:[kκG]\*?[a-zA-Z0-9_*]+\/r\^2)$/i.test(compact)
+  ) {
+    const ySym = /^E/i.test(compact) ? 'E' : /^g/i.test(compact) ? 'g' : 'F';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 'r',
+      curveKind: 'inverse-square',
+      kindLabel: `Διάγραμμα ${ySym}(r) ∝ 1/r²`,
+    });
+  }
+  // - Electric Potential `V = k Q / r`, Magnetic Field `B = k 2 I / r`, Wavelength `λ = u / f`, Period `T = 1 / f` (`1/x`)
+  if (/^V=[kκ]\*?Q\/r$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'V',
+      xAxisLabel: 'r',
+      curveKind: 'hyperbola',
+      kindLabel: 'Ηλεκτρικό Δυναμικό V(r) = k·Q/r',
+    });
+  }
+  if (/^B=[kκ]\*?2\*?I\/r$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'B',
+      xAxisLabel: 'r',
+      curveKind: 'hyperbola',
+      kindLabel: 'Μαγνητικό Πεδίο Ευθύγραμμου Αγωγού B(r)',
+    });
+  }
+  if (/^λ=[uvυc]\/f$|^λ-f$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'λ',
+      xAxisLabel: 'f',
+      curveKind: 'hyperbola',
+      kindLabel: 'Θεμελιώδης Εξίσωση Κυματικής λ(f) = u/f',
+    });
+  }
+  if (/^T=1\/f$|^f=1\/T$|^T-f$/i.test(compact)) {
+    const isTF = /^T/i.test(compact);
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: isTF ? 'T' : 'f',
+      xAxisLabel: isTF ? 'f' : 'T',
+      curveKind: 'hyperbola',
+      kindLabel: isTF ? 'Περίοδος - Συχνότητα T(f) = 1/f' : 'Συχνότητα - Περίοδος f(T) = 1/T',
+    });
   }
 
   return null;
