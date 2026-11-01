@@ -634,8 +634,17 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
       if (at.y - rOut < minY) minY = at.y - rOut;
       if (at.y + rOut > maxY) maxY = at.y + rOut;
     }
-    const simCenterX = Number.isFinite(minX) ? (minX + maxX) / 2 : 360;
-    const topBarY = Math.max(28, (Number.isFinite(minY) ? minY : 180) - 54);
+    const rScale = Math.max(0.55, Math.min(3.0, aSim.reactionScale || 1));
+    const simCenterX =
+      aSim.reactionBarX !== undefined
+        ? aSim.reactionBarX
+        : Number.isFinite(minX)
+        ? (minX + maxX) / 2
+        : 360;
+    const topBarY =
+      aSim.reactionBarY !== undefined
+        ? aSim.reactionBarY
+        : Math.max(28, (Number.isFinite(minY) ? minY : 180) - 54);
 
     if (aSim.showReactionEquation) {
       const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
@@ -646,17 +655,20 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
       ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       const eqText = chemVal.correctedEquation || rawForCheck;
       const cardW = Math.max(210, ctx.measureText(eqText).width + 86);
-      const cardX = Math.max(16, simCenterX - cardW / 2);
+      const scaledCardW = cardW * rScale;
+      const scaledCardX = Math.max(8, simCenterX - scaledCardW / 2);
+      ctx.translate(scaledCardX, topBarY);
+      ctx.scale(rScale, rScale);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
       ctx.strokeStyle = chemVal.hasCorrections ? '#fca5a5' : '#cbd5e1';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(cardX, topBarY, cardW, 38, 12);
+      ctx.roundRect(0, 0, cardW, 38, 12);
       ctx.fill();
       ctx.stroke();
 
-      let curX = cardX + 18;
-      const midY = topBarY + 19;
+      let curX = 18;
+      const midY = 19;
       for (const seg of chemVal.segments) {
         const w = ctx.measureText(seg.text).width;
         if (seg.isCorrection && seg.text.trim()) {

@@ -1412,6 +1412,8 @@ export default function App() {
     window.addEventListener('pointerdown', handleGlobalDismissChemCorrection);
     return () => window.removeEventListener('pointerdown', handleGlobalDismissChemCorrection);
   }, []);
+  const [selectedReactionSimId, setSelectedReactionSimId] = useState<string | null>(null);
+  const selectedReactionSimIdRef = useRef<string | null>(null);
   const recent3DMoleculesRef = useRef<{
     notebookId: string;
     items: { id: string; formula: string }[];
@@ -1419,7 +1421,14 @@ export default function App() {
   const mol3DAutoYawRef = useRef<Record<string, { offset: number; lastNow: number }>>({});
   const draggingAtomHandleRef = useRef<{
     simId: string;
-    kind: 'atom-nucleus' | 'valence-electron' | 'atom-resize' | 'mol-3d-box' | 'mol-3d-rotate';
+    kind:
+      | 'atom-nucleus'
+      | 'valence-electron'
+      | 'atom-resize'
+      | 'mol-3d-box'
+      | 'mol-3d-rotate'
+      | 'reaction-card-move'
+      | 'reaction-card-resize';
     atomId: string;
     electronIdx?: number;
     startX: number;
@@ -1429,6 +1438,9 @@ export default function App() {
     curX: number;
     curY: number;
     origCentralR?: number;
+    origScale?: number;
+    origMol3DBoxX?: number;
+    origMol3DBoxY?: number;
     origAtomsSnapshot?: { id: string; x: number; y: number; r: number }[];
   } | null>(null);
   const atomOverlayHitRef = useRef<{
@@ -1471,6 +1483,16 @@ export default function App() {
       molR: number;
       origYaw: number;
       origPitch: number;
+    }[];
+    reactionCards?: {
+      simId: string;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      cx: number;
+      topY: number;
+      scale: number;
     }[];
     buttons: {
       simId: string;
@@ -12672,8 +12694,19 @@ export default function App() {
           if (a.x > maxX) maxX = a.x;
           if (a.y - rOut < minOrbitTopY) minOrbitTopY = a.y - rOut;
         }
-        const cx = Number.isFinite(minX) ? Math.round((minX + maxX) / 2) : 360;
-        const targetTopY = Number.isFinite(minOrbitTopY) ? minOrbitTopY : 180;
+        const rScale = Math.max(0.55, Math.min(3.0, s.reactionScale || 1));
+        const cx =
+          s.reactionBarX !== undefined
+            ? Math.round(s.reactionBarX)
+            : Number.isFinite(minX)
+            ? Math.round((minX + maxX) / 2)
+            : 360;
+        const targetTopY =
+          s.reactionBarY !== undefined
+            ? Math.round(s.reactionBarY + 38 * rScale + 18)
+            : Number.isFinite(minOrbitTopY)
+            ? minOrbitTopY
+            : 180;
         const rawBuilt = buildAtomNodesAndBondsForTerm(termText, cx, targetTopY + 90);
         let builtMinTopY = Infinity;
         for (const a of rawBuilt.atoms) {
@@ -19778,6 +19811,16 @@ export default function App() {
           x2: number;
           y2: number;
         }[] = [];
+        const reactionCardsHit: {
+          simId: string;
+          x1: number;
+          y1: number;
+          x2: number;
+          y2: number;
+          cx: number;
+          topY: number;
+          scale: number;
+        }[] = [];
 
         const curReactAnim = atomReactionAnimRef.current;
         if (curReactAnim && now - curReactAnim.startTime >= curReactAnim.durationMs) {
@@ -19853,10 +19896,21 @@ export default function App() {
             if (at.y - rOut < minSimY) minSimY = at.y - rOut;
             if (at.y + rOut > maxSimY) maxSimY = at.y + rOut;
           }
-          const simCenterX = Number.isFinite(minSimX) ? (minSimX + maxSimX) / 2 : 360;
-          const topBarY = Number.isFinite(minSimY) ? Math.max(22, minSimY - 54) : 120;
+          const rScale = Math.max(0.55, Math.min(3.0, aSim.reactionScale || 1));
+          const simCenterX =
+            aSim.reactionBarX !== undefined
+              ? aSim.reactionBarX
+              : Number.isFinite(minSimX)
+              ? (minSimX + maxSimX) / 2
+              : 360;
+          const topBarY =
+            aSim.reactionBarY !== undefined
+              ? aSim.reactionBarY
+              : Number.isFinite(minSimY)
+              ? Math.max(22, minSimY - 54)
+              : 120;
 
-          // 1. Reaction Header Bar (Κλικ σε κάθε Αντιδρών/Προϊόν + Κυκλικό Βέλος ➔ + Εικονίδιο Δομής ⚛️ χωρίς λόγια)
+          // 1. Reaction Header Bar (Κλικ σε κάθε Αντιδρών/Προϊόν + Επιλογή με Λάσο για Resize & Drag)
           if (aSim.showReactionEquation) {
             const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
             const rawForCheck =
@@ -19910,7 +19964,23 @@ export default function App() {
             const eqTotalW = lhsW + arrowPlainW + rhsW + 24;
             const cardW = Math.max(195, eqTotalW + 52);
             const cardH = 38;
-            const cardX = Math.max(16, simCenterX - cardW / 2);
+            ctx.restore();
+
+            const scaledCardW = cardW * rScale;
+            const scaledCardH = cardH * rScale;
+            const scaledCardX = Math.max(8, simCenterX - scaledCardW / 2);
+            const scaledCardY = topBarY;
+
+            reactionCardsHit.push({
+              simId: aSim.id,
+              x1: scaledCardX,
+              y1: scaledCardY,
+              x2: scaledCardX + scaledCardW,
+              y2: scaledCardY + scaledCardH,
+              cx: scaledCardX + scaledCardW / 2,
+              topY: scaledCardY,
+              scale: rScale,
+            });
 
             // Το μήνυμα διόρθωσης εμφανίζεται ΜΟΝΟ αν ο χρήστης κάνει κλικ πάνω σε κάποιον κόκκινο συντελεστή/δείκτη!
             const activeCorrForSim =
@@ -19925,9 +19995,9 @@ export default function App() {
               }`;
               ctx.save();
               ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-              const bw = Math.max(cardW, ctx.measureText(corrBannerText).width + 24);
-              const bx = Math.max(16, simCenterX - bw / 2);
-              const by = Math.max(4, topBarY - 24);
+              const bw = Math.max(scaledCardW, ctx.measureText(corrBannerText).width + 24);
+              const bx = Math.max(12, scaledCardX + scaledCardW / 2 - bw / 2);
+              const by = Math.max(4, scaledCardY - 24);
               ctx.fillStyle = 'rgba(254, 242, 242, 0.97)';
               ctx.strokeStyle = '#f87171';
               ctx.lineWidth = 1.2;
@@ -19942,6 +20012,12 @@ export default function App() {
               ctx.restore();
             }
 
+            // Σχεδίαση κάρτας αντίδρασης υπό κλίμακα rScale
+            ctx.save();
+            ctx.translate(scaledCardX, scaledCardY);
+            ctx.scale(rScale, rScale);
+
+            ctx.save();
             ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
             ctx.shadowBlur = 10;
             ctx.shadowOffsetY = 3;
@@ -19949,7 +20025,7 @@ export default function App() {
             ctx.strokeStyle = chemVal.hasCorrections ? '#fca5a5' : '#cbd5e1';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.roundRect(cardX, topBarY, cardW, cardH, 12);
+            ctx.roundRect(0, 0, cardW, cardH, 12);
             ctx.fill();
             ctx.stroke();
             ctx.restore();
@@ -19986,7 +20062,7 @@ export default function App() {
 
                 const hitX = xCursor;
                 const hitW = Math.max(18, termInnerW + 6);
-                const hitY = topBarY + 6;
+                const hitY = 6;
                 const hitH = cardH - 12;
                 const isTermActive =
                   aSim.activeReactionTerm === termPlainText &&
@@ -19996,10 +20072,10 @@ export default function App() {
                   atomButtonsHit.push({
                     simId: aSim.id,
                     action: `click-reaction-term:${termPlainText}`,
-                    x1: hitX,
-                    y1: hitY,
-                    x2: hitX + hitW,
-                    y2: hitY + hitH,
+                    x1: scaledCardX + hitX * rScale,
+                    y1: scaledCardY + hitY * rScale,
+                    x2: scaledCardX + (hitX + hitW) * rScale,
+                    y2: scaledCardY + (hitY + hitH) * rScale,
                   });
                 }
 
@@ -20024,10 +20100,10 @@ export default function App() {
                           chemVal.explanationNotes[0] ||
                           'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
                         }`,
-                        x1: innerX - 3,
-                        y1: topBarY + 4,
-                        x2: innerX + ww + 2,
-                        y2: topBarY + cardH - 4,
+                        x1: scaledCardX + (innerX - 3) * rScale,
+                        y1: scaledCardY + 4 * rScale,
+                        x2: scaledCardX + (innerX + ww + 2) * rScale,
+                        y2: scaledCardY + (cardH - 4) * rScale,
                       });
                     }
                     innerX += ww + 3;
@@ -20044,10 +20120,10 @@ export default function App() {
                         chemVal.explanationNotes[0] ||
                         'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
                       }`,
-                      x1: innerX - 4,
-                      y1: topBarY + 4,
-                      x2: innerX + tw + 1,
-                      y2: topBarY + cardH - 4,
+                      x1: scaledCardX + (innerX - 4) * rScale,
+                      y1: scaledCardY + 4 * rScale,
+                      x2: scaledCardX + (innerX + tw + 1) * rScale,
+                      y2: scaledCardY + (cardH - 4) * rScale,
                     });
                     innerX += tw + 1;
                   } else {
@@ -20064,7 +20140,7 @@ export default function App() {
               return xCursor;
             };
 
-            let curX = drawInteractiveTermGroups(lhsTermGroups, cardX + 14, topBarY + cardH / 2) + 4;
+            let curX = drawInteractiveTermGroups(lhsTermGroups, 14, cardH / 2) + 4;
 
             // Καθαρό βέλος εξίσωσης (→) χωρίς κουμπί και χωρίς να είναι clickable
             ctx.save();
@@ -20073,30 +20149,77 @@ export default function App() {
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             const arrowStr = ' → ';
-            ctx.fillText(arrowStr, curX, topBarY + cardH / 2);
+            ctx.fillText(arrowStr, curX, cardH / 2);
             curX += ctx.measureText(arrowStr).width + 4;
             ctx.restore();
 
             if (rhsTermGroups.length > 0) {
-              curX = drawInteractiveTermGroups(rhsTermGroups, curX, topBarY + cardH / 2) + 8;
+              curX = drawInteractiveTermGroups(rhsTermGroups, curX, cardH / 2) + 8;
             }
 
             // Δίπλα στην αντίδραση: Κουμπί εναλλαγής [ 2D ] <-> [ 3D ]
             const modeBtnW = 34;
-            const modeBtnX = cardX + cardW - modeBtnW - 10;
+            const modeBtnX = cardW - modeBtnW - 10;
+            const modeBtnY = 7;
+            const modeBtnH = 24;
             const is3DMode = aSim.reactionViewMode === '3d';
-            drawAtomPillButton(
-              aSim.id,
-              is3DMode ? '3D' : '2D',
-              'toggle-reaction-view-mode',
-              modeBtnX,
-              topBarY + 7,
-              modeBtnW,
-              24,
-              is3DMode ? '#0284c7' : '#eff6ff',
-              is3DMode ? '#ffffff' : '#1d4ed8',
-              is3DMode ? '#0369a1' : '#93c5fd'
-            );
+            ctx.save();
+            ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = is3DMode ? '#0284c7' : '#eff6ff';
+            ctx.strokeStyle = is3DMode ? '#0369a1' : '#93c5fd';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.roundRect(modeBtnX, modeBtnY, modeBtnW, modeBtnH, modeBtnH / 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = is3DMode ? '#ffffff' : '#1d4ed8';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(is3DMode ? '3D' : '2D', modeBtnX + modeBtnW / 2, modeBtnY + modeBtnH / 2 + 0.5);
+            ctx.restore();
+            atomButtonsHit.push({
+              simId: aSim.id,
+              action: 'toggle-reaction-view-mode',
+              x1: scaledCardX + modeBtnX * rScale,
+              y1: scaledCardY + modeBtnY * rScale,
+              x2: scaledCardX + (modeBtnX + modeBtnW) * rScale,
+              y2: scaledCardY + (modeBtnY + modeBtnH) * rScale,
+            });
+
+            ctx.restore();
+
+            // Όταν η κάρτα της αντίδρασης είναι επιλεγμένη (με Λάσο): μπλε περίγραμμα (#0066ff) + 4 γωνιακά κυκλάκια αυξομείωσης όπως στη μαθηματική εξίσωση!
+            if (selectedReactionSimIdRef.current === aSim.id) {
+              ctx.save();
+              ctx.strokeStyle = '#0066ff';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.roundRect(
+                scaledCardX,
+                scaledCardY,
+                scaledCardW,
+                scaledCardH,
+                Math.min(18, 12 * rScale)
+              );
+              ctx.stroke();
+
+              const corners = [
+                { x: scaledCardX, y: scaledCardY },
+                { x: scaledCardX + scaledCardW, y: scaledCardY },
+                { x: scaledCardX, y: scaledCardY + scaledCardH },
+                { x: scaledCardX + scaledCardW, y: scaledCardY + scaledCardH },
+              ];
+              for (const cPt of corners) {
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#0066ff';
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.arc(cPt.x, cPt.y, 5.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+              }
+              ctx.restore();
+            }
           } else if (
             aSim.atoms.length >= 2 &&
             aSim.showAtomsBelowReaction !== false &&
@@ -20813,12 +20936,13 @@ export default function App() {
             const boxW = 440;
             const boxH = 224;
             const defaultBoxX = Math.max(18, simCenterX - boxW / 2);
+            const scaledReactionBottom = topBarY + 38 * rScale;
             const defaultBoxY =
               aSim.showReactionEquation === false && aSim.showAtomsBelowReaction === false
                 ? Math.max(36, (aSim.atoms[0]?.y ?? 220) - boxH / 2)
                 : aSim.showAtomsBelowReaction === false
-                ? topBarY + 50
-                : Math.max(topBarY + 60, (Number.isFinite(maxSimY) ? maxSimY : 320) + 38);
+                ? scaledReactionBottom + 12
+                : Math.max(scaledReactionBottom + 22, (Number.isFinite(maxSimY) ? maxSimY : 320) + 38);
             const boxX = aSim.mol3DBoxX ?? defaultBoxX;
             const boxY = aSim.mol3DBoxY ?? defaultBoxY;
             const cx3d = boxX + boxW * 0.45;
@@ -21223,6 +21347,7 @@ export default function App() {
           electrons: electronsHit,
           resizeHandles: resizeHandlesHit,
           mol3DBoxes: mol3DBoxesHit,
+          reactionCards: reactionCardsHit,
           buttons: atomButtonsHit,
         };
       } else {
@@ -24314,9 +24439,106 @@ export default function App() {
       }
     }
 
-    // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Resize Handles, Valence Electrons & Nuclei:
+    // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Reaction Card Selection/Resize/Drag, Valence Electrons & Nuclei:
     if (atomOverlayHitRef.current) {
       const aHit = atomOverlayHitRef.current;
+
+      // 0) Corner Resize Handles of Selected Reaction Equation Card (works in any tool, just like a selected math equation!)
+      if (selectedReactionSimIdRef.current) {
+        const selRc = (aHit.reactionCards || []).find(
+          (rc) => rc.simId === selectedReactionSimIdRef.current
+        );
+        if (selRc) {
+          const corners = [
+            { x: selRc.x1, y: selRc.y1 },
+            { x: selRc.x2, y: selRc.y1 },
+            { x: selRc.x1, y: selRc.y2 },
+            { x: selRc.x2, y: selRc.y2 },
+          ];
+          const hitCorner = corners.find((c) => Math.hypot(pt.x - c.x, pt.y - c.y) <= 18);
+          if (hitCorner) {
+            e.preventDefault();
+            const cardCenterY = (selRc.y1 + selRc.y2) / 2;
+            draggingAtomHandleRef.current = {
+              simId: selRc.simId,
+              kind: 'reaction-card-resize',
+              atomId: selRc.simId,
+              startX: pt.x,
+              startY: pt.y,
+              origAtomX: selRc.cx,
+              origAtomY: cardCenterY,
+              curX: pt.x,
+              curY: pt.y,
+              origCentralR: Math.max(24, Math.hypot(pt.x - selRc.cx, pt.y - cardCenterY)),
+              origScale: selRc.scale,
+            };
+            activePointerIdRef.current = e.pointerId;
+            activePointerTypeRef.current = e.pointerType;
+            try {
+              e.currentTarget.setPointerCapture(e.pointerId);
+            } catch {
+              // ignore
+            }
+            isDrawingRef.current = true;
+            return;
+          }
+        }
+      }
+
+      const startReactionCardMove = (rc: NonNullable<typeof aHit.reactionCards>[number]) => {
+        e.preventDefault();
+        if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+        if (selectedImageIds.length > 0) setSelectedImageIds([]);
+        if (selectedImageId) setSelectedImageId(null);
+        if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+        if (selectedTextId) setSelectedTextId(null);
+        selectedReactionSimIdRef.current = rc.simId;
+        setSelectedReactionSimId(rc.simId);
+        const targetSimForCard = (targetPage.atomSims || []).find((s) => s.id === rc.simId);
+        draggingAtomHandleRef.current = {
+          simId: rc.simId,
+          kind: 'reaction-card-move',
+          atomId: rc.simId,
+          startX: pt.x,
+          startY: pt.y,
+          origAtomX: rc.cx,
+          origAtomY: rc.topY,
+          curX: pt.x,
+          curY: pt.y,
+          origMol3DBoxX: targetSimForCard?.mol3DBoxX,
+          origMol3DBoxY: targetSimForCard?.mol3DBoxY,
+          origAtomsSnapshot: (targetSimForCard?.atoms || []).map((a) => ({
+            id: a.id,
+            x: a.x,
+            y: a.y,
+            r: a.outerRadiusPx || getNaturalOuterOrbitRadiusPx(a.z),
+          })),
+        };
+        activePointerIdRef.current = e.pointerId;
+        activePointerTypeRef.current = e.pointerType;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+        isDrawingRef.current = true;
+      };
+
+      // 0b) When Lasso tool is active: clicking anywhere on the Reaction Equation Card selects it & lets you drag it!
+      if (activeTool === 'lasso' || activeTool === 'direct-node') {
+        for (const rc of [...(aHit.reactionCards || [])].reverse()) {
+          if (
+            pt.x >= rc.x1 - 6 &&
+            pt.x <= rc.x2 + 6 &&
+            pt.y >= rc.y1 - 6 &&
+            pt.y <= rc.y2 + 6
+          ) {
+            startReactionCardMove(rc);
+            return;
+          }
+        }
+      }
+
       // 1) On-Canvas Reaction Buttons ([ ➔ ], [ 2D/3D ], clickable reactants/products, red corrections, 3D window controls)
       for (const btn of [...aHit.buttons].reverse()) {
         const tolX = btn.action.startsWith('click-chem-correction:') ? 1.5 : 4;
@@ -24339,6 +24561,24 @@ export default function App() {
           return;
         }
       }
+
+      // 1a) Grabbing the Reaction Card background/border (even outside Lasso mode) selects & drags the Reaction Card
+      for (const rc of [...(aHit.reactionCards || [])].reverse()) {
+        if (
+          pt.x >= rc.x1 - 4 &&
+          pt.x <= rc.x2 + 4 &&
+          pt.y >= rc.y1 - 4 &&
+          pt.y <= rc.y2 + 4
+        ) {
+          startReactionCardMove(rc);
+          return;
+        }
+      }
+    }
+
+    if (selectedReactionSimIdRef.current) {
+      selectedReactionSimIdRef.current = null;
+      setSelectedReactionSimId(null);
     }
 
     if (activeChemCorrectionRef.current) {
@@ -26659,6 +26899,32 @@ export default function App() {
       return;
     }
 
+    // 4. Chemical Reaction Equation Card enclosed or crossed by the Lasso loop
+    const matchedReactionCard = (atomOverlayHitRef.current?.reactionCards || []).find((rc) => {
+      const checkPts = [
+        { x: rc.cx, y: (rc.y1 + rc.y2) / 2 },
+        { x: rc.x1 + 8, y: rc.y1 + 8 },
+        { x: rc.x2 - 8, y: rc.y1 + 8 },
+        { x: rc.x2 - 8, y: rc.y2 - 8 },
+        { x: rc.x1 + 8, y: rc.y2 - 8 },
+      ];
+      if (checkPts.some((p) => isPointInPolygon(p, poly))) return true;
+      return densePoly.some(
+        (lp) => lp.x >= rc.x1 && lp.x <= rc.x2 && lp.y >= rc.y1 && lp.y <= rc.y2
+      );
+    });
+    if (matchedReactionCard) {
+      setSelectedLassoTextIds([]);
+      setSelectedImageIds([]);
+      setSelectedImageId(null);
+      setSelectedStrokeIds([]);
+      setActiveNodeStrokeId(null);
+      setSelectedTextId(null);
+      selectedReactionSimIdRef.current = matchedReactionCard.simId;
+      setSelectedReactionSimId(matchedReactionCard.simId);
+      return;
+    }
+
     if (!isAdditive) {
       setSelectedLassoTextIds([]);
       setSelectedImageIds([]);
@@ -27058,6 +27324,67 @@ export default function App() {
                     mol3DBoxY: nextBoxY,
                   }
                 : s
+            ),
+          }),
+          false
+        );
+      } else if (dragAt.kind === 'reaction-card-move') {
+        const pW = getPageLogicalWidth(activePage);
+        const pH = getPageLogicalHeight(activePage);
+        const dx = latestPt.x - dragAt.startX;
+        const dy = latestPt.y - dragAt.startY;
+        const nextBarX = Math.round(Math.max(70, Math.min(pW - 70, dragAt.origAtomX + dx)));
+        const nextBarY = Math.round(Math.max(10, Math.min(pH - 48, dragAt.origAtomY + dy)));
+        const actualDx = nextBarX - dragAt.origAtomX;
+        const actualDy = nextBarY - dragAt.origAtomY;
+        updateActivePage(
+          (page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) => {
+              if (s.id !== dragAt.simId) return s;
+              return {
+                ...s,
+                reactionBarX: nextBarX,
+                reactionBarY: nextBarY,
+                mol3DBoxX:
+                  dragAt.origMol3DBoxX !== undefined
+                    ? Math.round(dragAt.origMol3DBoxX + actualDx)
+                    : s.mol3DBoxX,
+                mol3DBoxY:
+                  dragAt.origMol3DBoxY !== undefined
+                    ? Math.round(dragAt.origMol3DBoxY + actualDy)
+                    : s.mol3DBoxY,
+                atoms: dragAt.origAtomsSnapshot?.length
+                  ? s.atoms.map((a) => {
+                      const snap = dragAt.origAtomsSnapshot!.find((it) => it.id === a.id);
+                      if (!snap) return a;
+                      return {
+                        ...a,
+                        x: Math.round(snap.x + actualDx),
+                        y: Math.round(snap.y + actualDy),
+                      };
+                    })
+                  : s.atoms,
+              };
+            }),
+          }),
+          false
+        );
+      } else if (dragAt.kind === 'reaction-card-resize') {
+        const curDist = Math.max(
+          12,
+          Math.hypot(latestPt.x - dragAt.origAtomX, latestPt.y - dragAt.origAtomY)
+        );
+        const baseDist = Math.max(24, dragAt.origCentralR || 100);
+        const baseScale = dragAt.origScale || 1;
+        const nextScale =
+          Math.round(Math.max(0.55, Math.min(3.0, baseScale * (curDist / baseDist))) * 100) /
+          100;
+        updateActivePage(
+          (page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id === dragAt.simId ? { ...s, reactionScale: nextScale } : s
             ),
           }),
           false

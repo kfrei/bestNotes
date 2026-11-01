@@ -317,6 +317,9 @@ export interface AtomSimConfig {
   mol3DBoxY?: number; // Custom draggable Y position for the 3D Molecule card on canvas
   rot3DYaw?: number; // Custom 3D yaw rotation angle (radians)
   rot3DPitch?: number; // Custom 3D pitch rotation angle (radians)
+  reactionBarX?: number; // Custom draggable center X for the Reaction Equation card on canvas
+  reactionBarY?: number; // Custom draggable top Y for the Reaction Equation card on canvas
+  reactionScale?: number; // Custom scale factor for the Reaction Equation card (default 1.0)
 }
 
 export interface NotePage {
