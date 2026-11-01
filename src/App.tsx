@@ -35267,8 +35267,17 @@ export default function App() {
       const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
       const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
 
+      let inheritedGraphSuffix = '';
+      for (const st of selStrokes) {
+        const m = st.id.match(/-(math-graph-grp-[a-z0-9-]+)-fn\d+$/);
+        if (m && m[1]) {
+          inheritedGraphSuffix = `-${m[1]}-fn0`;
+          break;
+        }
+      }
+
       const newTxt: TextObject = {
-        id: `math-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `math-${Date.now()}-${Math.random().toString(36).slice(2, 6)}${inheritedGraphSuffix}`,
         x: Math.max(12, Math.round(minX)),
         y: Math.max(12, Math.round(minY)),
         text: plainText,
@@ -35292,6 +35301,40 @@ export default function App() {
       setSelectedTextId(newTxt.id);
       setTextFontSize(finalFontSize);
       setShowToolSubBar(true);
+
+      // If the handwritten equation already had a diagram next to it, automatically refresh/replace that diagram
+      // using the newly recognized MathOCR LaTeX (or prompt for Wave mode if it's a 2-variable wave equation)!
+      if (inheritedGraphSuffix) {
+        const pW = getPageLogicalWidth(activePage);
+        const pH = getPageLogicalHeight(activePage);
+        const diagW = 240;
+        const diagH = 240;
+        const eqMidY = (minY + maxY) / 2;
+        let centerX = maxX + 56 + diagW / 2;
+        let centerY = Math.max(diagH / 2 + 24, Math.min(pH - diagH / 2 - 24, eqMidY));
+        if (centerX + diagW / 2 + 24 > pW) {
+          centerX = Math.max(diagW / 2 + 24, Math.min(pW - diagW / 2 - 24, (minX + maxX) / 2));
+          centerY = Math.min(pH - diagH / 2 - 24, maxY + 48 + diagH / 2);
+        }
+        const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+        const wDet = detectWaveTwoVarEquation(cleanLatex) || detectWaveTwoVarEquation(plainText);
+        if (wDet && wDet.isWaveXT && !wDet.forcedMode) {
+          setWaveDiagramPrompt({
+            candEq: cleanLatex,
+            displayEq: plainText || cleanLatex,
+            info: wDet,
+            centerX,
+            centerY,
+            diagW,
+            diagH,
+            axisInk,
+            targetLayerId,
+            sourceTextId: newTxt.id,
+          });
+          return;
+        }
+      }
+
       showToast('🧮 MathOCR: Οι εξισώσεις & τα κλάσματα μετατράπηκαν σε μαθηματική μορφή! (Ctrl+Z για αναίρεση)');
     } finally {
       setIsConvertingHandwriting(false);
@@ -35938,9 +35981,35 @@ export default function App() {
       }
 
       animateAndCommitMathGraph(graphBuilt, (page) => {
+        const findNearbyOrphanGraphGroupIds = () => {
+          const nearby = new Set<string>();
+          const grpBounds = new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>();
+          for (const s of page.strokes) {
+            if (!s.groupId?.startsWith('math-graph-grp-')) continue;
+            const b = getStrokeBounds(s);
+            const cur = grpBounds.get(s.groupId);
+            if (!cur) {
+              grpBounds.set(s.groupId, { ...b });
+            } else {
+              cur.minX = Math.min(cur.minX, b.minX);
+              cur.minY = Math.min(cur.minY, b.minY);
+              cur.maxX = Math.max(cur.maxX, b.maxX);
+              cur.maxY = Math.max(cur.maxY, b.maxY);
+            }
+          }
+          for (const [gid, b] of grpBounds.entries()) {
+            const gx = (b.minX + b.maxX) / 2;
+            const gy = (b.minY + b.maxY) / 2;
+            if (Math.hypot(gx - prompt.centerX, gy - prompt.centerY) <= 180) {
+              nearby.add(gid);
+            }
+          }
+          return nearby;
+        };
+
         if (prompt.sourceStrokeIds && prompt.sourceStrokeIds.length > 0) {
           const srcSet = new Set(prompt.sourceStrokeIds);
-          const oldGraphGroupIds = new Set<string>();
+          const oldGraphGroupIds = findNearbyOrphanGraphGroupIds();
           for (const s of page.strokes) {
             if (!srcSet.has(s.id)) continue;
             const m = s.id.match(/-eqsrc-(math-graph-grp-[a-z0-9-]+)-fn\d+$/);
@@ -35962,23 +36031,24 @@ export default function App() {
           };
         }
         if (prompt.sourceTextId) {
-          const oldGraphGroupIds = new Set<string>();
+          const oldGraphGroupIds = findNearbyOrphanGraphGroupIds();
           for (const t of page.texts || []) {
             if (t.id !== prompt.sourceTextId) continue;
             const m = t.id.match(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/);
             if (m && m[1]) oldGraphGroupIds.add(m[1]);
           }
+          const cleanTargetId = prompt.sourceTextId.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
           return {
             ...page,
             strokes: page.strokes.filter((s) => !(s.groupId && oldGraphGroupIds.has(s.groupId))),
             texts: (page.texts || [])
               .filter((t) => !(t.groupId && oldGraphGroupIds.has(t.groupId)))
               .map((t) => {
-                if (t.id !== prompt.sourceTextId) return t;
-                const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+                const tClean = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+                if (t.id !== prompt.sourceTextId && tClean !== cleanTargetId) return t;
                 return {
                   ...t,
-                  id: `${cleanBaseId}-${graphBuilt!.groupId}-fn0`,
+                  id: `${tClean}-${graphBuilt!.groupId}-fn0`,
                 };
               }),
           };
@@ -36328,7 +36398,7 @@ export default function App() {
         return;
       }
       let rawEq = (
-        (!txtObj.isMath && txtObj.text ? txtObj.text : txtObj.text || txtObj.latex) || ''
+        (txtObj.isMath ? txtObj.latex || txtObj.text : txtObj.text || txtObj.latex) || ''
       ).trim();
       if (!rawEq) {
         showToast('ℹ️ Το πλαίσιο κειμένου είναι κενό — γράψε πρώτα την εξίσωση (π.χ. x^2 + y^2 = 1)!');
@@ -36343,7 +36413,7 @@ export default function App() {
         const siblingTxts = (activePage.texts || [])
           .filter((t) => {
             if (t.groupId?.startsWith('math-graph-grp-')) return false;
-            const tContent = ((!t.isMath && t.text ? t.text : t.text || t.latex) || '').trim();
+            const tContent = ((t.isMath ? t.latex || t.text : t.text || t.latex) || '').trim();
             if (!tContent || !isIndexedFnText(tContent)) return false;
             return Math.abs(t.x - txtObj.x) <= 240 && Math.abs(t.y - txtObj.y) <= 280;
           })
@@ -36351,7 +36421,7 @@ export default function App() {
         if (siblingTxts.length >= 2) {
           matchedSiblingTxts = siblingTxts;
           rawEq = siblingTxts
-            .map((t) => ((!t.isMath && t.text ? t.text : t.text || t.latex) || '').trim())
+            .map((t) => ((t.isMath ? t.latex || t.text : t.text || t.latex) || '').trim())
             .join('\n');
         }
       }
@@ -36455,39 +36525,72 @@ export default function App() {
       }
       curveColorEntries.sort((a, b) => a.fnIdx - b.fnIdx);
 
-      animateAndCommitMathGraph(graphBuilt, (page) => ({
-        ...page,
-        texts: (page.texts || []).map((t) => {
-          if (matchedSiblingTxts.length >= 2 && curveColorEntries.length >= 2) {
-            const sibIdx = matchedSiblingTxts.findIndex((st) => st.id === t.id);
-            if (sibIdx !== -1) {
-              const entry = curveColorEntries[Math.min(sibIdx, curveColorEntries.length - 1)];
-              const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
-              return {
-                ...t,
-                id: `${cleanBaseId}-${graphBuilt.groupId}-fn${entry.fnIdx}`,
-                color: entry.color,
-              };
-            }
+      animateAndCommitMathGraph(graphBuilt, (page) => {
+        const oldGraphGroupIds = new Set<string>();
+        const targetTxts = matchedSiblingTxts.length >= 2 ? matchedSiblingTxts : [txtObj];
+        for (const tt of targetTxts) {
+          const m = tt.id.match(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/);
+          if (m && m[1]) oldGraphGroupIds.add(m[1]);
+        }
+        const grpBounds = new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>();
+        for (const s of page.strokes) {
+          if (!s.groupId?.startsWith('math-graph-grp-')) continue;
+          const b = getStrokeBounds(s);
+          const cur = grpBounds.get(s.groupId);
+          if (!cur) {
+            grpBounds.set(s.groupId, { ...b });
+          } else {
+            cur.minX = Math.min(cur.minX, b.minX);
+            cur.minY = Math.min(cur.minY, b.minY);
+            cur.maxX = Math.max(cur.maxX, b.maxX);
+            cur.maxY = Math.max(cur.maxY, b.maxY);
           }
-          if (t.id === txtObj.id) {
-            const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
-            if (curveColorEntries.length >= 2) {
-              return {
-                ...t,
-                id: `${cleanBaseId}-${graphBuilt.groupId}-multi`,
-              };
-            }
-            if (curveColorEntries.length === 1) {
-              return {
-                ...t,
-                id: `${cleanBaseId}-${graphBuilt.groupId}-fn${curveColorEntries[0].fnIdx}`,
-              };
-            }
+        }
+        for (const [gid, b] of grpBounds.entries()) {
+          const gx = (b.minX + b.maxX) / 2;
+          const gy = (b.minY + b.maxY) / 2;
+          if (Math.hypot(gx - centerX, gy - centerY) <= 180) {
+            oldGraphGroupIds.add(gid);
           }
-          return t;
-        }),
-      }));
+        }
+
+        return {
+          ...page,
+          strokes: page.strokes.filter((s) => !(s.groupId && oldGraphGroupIds.has(s.groupId))),
+          texts: (page.texts || [])
+            .filter((t) => !(t.groupId && oldGraphGroupIds.has(t.groupId)))
+            .map((t) => {
+              if (matchedSiblingTxts.length >= 2 && curveColorEntries.length >= 2) {
+                const sibIdx = matchedSiblingTxts.findIndex((st) => st.id === t.id);
+                if (sibIdx !== -1) {
+                  const entry = curveColorEntries[Math.min(sibIdx, curveColorEntries.length - 1)];
+                  const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+                  return {
+                    ...t,
+                    id: `${cleanBaseId}-${graphBuilt.groupId}-fn${entry.fnIdx}`,
+                    color: entry.color,
+                  };
+                }
+              }
+              if (t.id === txtObj.id) {
+                const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+                if (curveColorEntries.length >= 2) {
+                  return {
+                    ...t,
+                    id: `${cleanBaseId}-${graphBuilt.groupId}-multi`,
+                  };
+                }
+                if (curveColorEntries.length === 1) {
+                  return {
+                    ...t,
+                    id: `${cleanBaseId}-${graphBuilt.groupId}-fn${curveColorEntries[0].fnIdx}`,
+                  };
+                }
+              }
+              return t;
+            }),
+        };
+      });
       showToast(
         `📈 Διάγραμμα (${graphBuilt.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
       );
