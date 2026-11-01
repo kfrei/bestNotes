@@ -40652,7 +40652,7 @@ export default function App() {
                       {/* Bold (B) Toggle */}
                       <button
                         onClick={() => applyBold(!currentBold)}
-                        className={`px-3 py-1 rounded-full font-extrabold transition cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-full font-normal transition cursor-pointer ${
                           currentBold
                             ? 'bg-[#0066ff] text-white shadow-xs'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -40678,7 +40678,7 @@ export default function App() {
                             key={fOpt.id}
                             onClick={() => applyFontFamily(fOpt.id)}
                             style={getTextFontCss(fOpt.id)}
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
                               currentFontFamily === fOpt.id
                                 ? 'bg-purple-600 text-white shadow-xs'
                                 : 'text-slate-700 hover:bg-white'
@@ -40693,10 +40693,10 @@ export default function App() {
                       <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
 
                       {/* Font Size Controls */}
-                      <span className="text-[11px] font-semibold text-slate-500">Μέγεθος:</span>
+                      <span className="text-[11px] font-normal text-slate-500">Μέγεθος:</span>
                       <button
                         onClick={() => applyFontSize(currentSize - 2)}
-                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
                         title="Μικρότερη γραμματοσειρά (-2px)"
                       >
                         A-
@@ -40705,7 +40705,7 @@ export default function App() {
                         <button
                           key={sz}
                           onClick={() => applyFontSize(sz)}
-                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition cursor-pointer ${
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
                             currentSize === sz
                               ? 'bg-[#0066ff] text-white shadow-xs'
                               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -40717,7 +40717,7 @@ export default function App() {
                       ))}
                       <button
                         onClick={() => applyFontSize(currentSize + 2)}
-                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
                         title="Μεγαλύτερη γραμματοσειρά (+2px)"
                       >
                         A+
@@ -40730,7 +40730,7 @@ export default function App() {
                           <button
                             onMouseDown={(ev) => ev.preventDefault()}
                             onClick={() => handleInsertPowerCaretInText(selTxt?.id)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold border border-amber-300 transition cursor-pointer"
+                            className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 font-normal border border-amber-300 transition cursor-pointer"
                             title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
                           >
                             <span>xⁿ (^)</span>
@@ -40738,7 +40738,7 @@ export default function App() {
                           <button
                             onMouseDown={(ev) => ev.preventDefault()}
                             onClick={() => handleInsertSubscriptInText(selTxt?.id)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-100 hover:bg-teal-200 text-teal-900 font-extrabold border border-teal-300 transition cursor-pointer"
+                            className="flex items-center gap-1 px-2 py-1 rounded-full bg-teal-100 hover:bg-teal-200 text-teal-900 font-normal border border-teal-300 transition cursor-pointer"
                             title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max, K_max"
                           >
                             <span>xᵢ (_)</span>
@@ -41152,7 +41152,7 @@ export default function App() {
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                       <button
                         onClick={() => handleAlignSelected('left')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Αριστερά (Align Left Edges)"
                       >
                         <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -41164,7 +41164,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('center-x')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
                         title="Κεντράρισμα Οριζόντια (Align Horizontal Centers — X)"
                       >
                         <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -41176,7 +41176,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('right')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Δεξιά (Align Right Edges)"
                       >
                         <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -41192,7 +41192,7 @@ export default function App() {
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                       <button
                         onClick={() => handleAlignSelected('top')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Πάνω (Align Top Edges)"
                       >
                         <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -41204,7 +41204,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('center-y')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
                         title="Κεντράρισμα Κατακόρυφα (Align Vertical Centers — Y)"
                       >
                         <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -41216,7 +41216,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => handleAlignSelected('bottom')}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-slate-800 font-semibold transition cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-slate-800 font-normal transition cursor-pointer"
                         title="Στοίχιση Όλων Κάτω (Align Bottom Edges)"
                       >
                         <svg className="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -41231,7 +41231,7 @@ export default function App() {
                     {/* Dead Center (Both X and Y at once!) */}
                     <button
                       onClick={() => handleAlignSelected('center-both')}
-                      className="flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal shadow-2xs transition cursor-pointer"
                       title="Απόλυτο Κεντράρισμα Οριζόντια & Κατακόρυφα (Dead Center X + Y — J / Ξ)"
                     >
                       <span>🎯 Κέντρο X+Y</span>
@@ -41265,7 +41265,7 @@ export default function App() {
                         return (
                           <button
                             onClick={handleUngroupSelected}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer"
+                            className="flex items-center gap-1 px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer"
                             title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                           >
                             <Ungroup className="w-3.5 h-3.5" />
@@ -41279,7 +41279,7 @@ export default function App() {
                           <>
                             <button
                               onClick={handleGroupSelected}
-                              className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer"
                               title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
                             >
                               <Group className="w-3.5 h-3.5" />
@@ -41288,7 +41288,7 @@ export default function App() {
                             {selectedStrokeIds.length >= 2 && (
                               <button
                                 onClick={handleConvertSelectedStrokesToPolygon}
-                                className="flex items-center gap-1 px-3 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-normal shadow-2xs transition cursor-pointer"
                                 title="Ένωση των επιλεγμένων διακριτών ευθειών στο πιο κοντινό κλειστό Πολύγωνο"
                               >
                                 <span>⬠ Πολύγωνο</span>
@@ -41311,7 +41311,7 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={handlePaste}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-normal cursor-pointer"
                       title="Επικόλληση (Paste) στο σημείο που κάνατε κλικ με το Λάσο"
                     >
                       <ClipboardPaste className="w-3.5 h-3.5" />
@@ -41326,7 +41326,7 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={handleCutSelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-normal cursor-pointer"
                       title="Αποκοπή (Cut)"
                     >
                       <Scissors className="w-3.5 h-3.5" />
@@ -41334,7 +41334,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={handleCopySelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-normal cursor-pointer"
                       title="Αντιγραφή (Copy)"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -41342,7 +41342,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={handleDuplicateSelected}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-normal cursor-pointer"
                       title="Άμεση δημιουργία αντιγράφου λίγο πιο κάτω και λίγο πιο δεξιά"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -41354,7 +41354,7 @@ export default function App() {
                       <div className="flex items-center gap-1 bg-indigo-50/90 p-0.5 rounded-full border border-indigo-200/90">
                         <button
                           onClick={() => handleMirrorSelected('horizontal')}
-                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-indigo-700 font-normal transition cursor-pointer"
                           title="Mirror Αριστερά ↔ Δεξιά (Κατοπτρισμός ως προς κατακόρυφο άξονα)"
                         >
                           <MirrorHorizontalIcon className="w-4 h-4" />
@@ -41362,7 +41362,7 @@ export default function App() {
                         </button>
                         <button
                           onClick={() => handleMirrorSelected('vertical')}
-                          className="flex items-center gap-1 px-2.5 py-0.5 rounded-full hover:bg-white text-indigo-700 font-semibold transition cursor-pointer"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full hover:bg-white text-indigo-700 font-normal transition cursor-pointer"
                           title="Mirror Πάνω ↕ Κάτω (Κατοπτρισμός ως προς οριζόντιο άξονα)"
                         >
                           <MirrorVerticalIcon className="w-4 h-4" />
@@ -41373,7 +41373,7 @@ export default function App() {
 
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs whitespace-nowrap"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer shadow-2xs whitespace-nowrap"
                       title="Προσθήκη του επιλεγμένου αντικειμένου στις αποθηκευμένες εικόνες"
                     >
                       <span>Προσθήκη</span>
@@ -41383,7 +41383,7 @@ export default function App() {
                       <>
                         <button
                           onClick={handleConvertSelectedStrokesToPolygon}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap"
+                          className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-normal shadow-2xs transition cursor-pointer whitespace-nowrap"
                           title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
                         >
                           <span>Πολύγωνο</span>
@@ -41391,7 +41391,7 @@ export default function App() {
                         <button
                           onClick={() => void handleConvertLassoToCalligraphic()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-violet-300 text-white cursor-wait'
                               : 'bg-violet-600 hover:bg-violet-700 text-white'
@@ -41403,7 +41403,7 @@ export default function App() {
                         <button
                           onClick={() => void handleConvertLassoToMathOCR()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-purple-300 text-white cursor-wait'
                               : 'bg-purple-600 hover:bg-purple-700 text-white'
@@ -41415,7 +41415,7 @@ export default function App() {
                         <button
                           onClick={() => void handleConvertLassoToChemOCR()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-teal-300 text-white cursor-wait'
                               : 'bg-teal-600 hover:bg-teal-700 text-white'
@@ -41427,7 +41427,7 @@ export default function App() {
                         <button
                           onClick={() => void handleConvertLassoTo3DMoleculeOCR()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-sky-300 text-white cursor-wait'
                               : 'bg-sky-700 hover:bg-sky-800 text-white'
@@ -41439,7 +41439,7 @@ export default function App() {
                         <button
                           onClick={() => void handleConvertLassoToMathGraph()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
+                          className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-emerald-300 text-white cursor-wait'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -41450,7 +41450,7 @@ export default function App() {
                         </button>
                         <button
                           onClick={() => registerOrActivateAtomSimFromLasso()}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap"
+                          className="flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal shadow-2xs transition cursor-pointer whitespace-nowrap"
                           title="Μετατροπή του επιλεγμένου σχεδίου (πυρήνας & τροχιές) σε διαδραστική Προσομοίωση Δομής Ατόμου με Περιοδικό Πίνακα"
                         >
                           <span>Άτομο</span>
@@ -41543,7 +41543,7 @@ export default function App() {
                                         : info.ids
                                     );
                                   }}
-                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold transition cursor-pointer ${
+                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
                                     isThisCurveOnly
                                       ? 'bg-white text-slate-900 ring-2 ring-rose-500 shadow-2xs'
                                       : 'hover:bg-white/80 text-slate-700'
@@ -41562,7 +41562,7 @@ export default function App() {
                               onClick={() =>
                                 applyLineStyleToSelection(isCurrentlyDashed ? 'solid' : 'dashed')
                               }
-                              className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition cursor-pointer ${
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
                                 isCurrentlyDashed
                                   ? 'bg-amber-600 text-white shadow-2xs'
                                   : 'bg-white/90 hover:bg-white text-slate-700 border border-slate-200'
@@ -41579,28 +41579,28 @@ export default function App() {
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                       <button
                         onClick={() => handleZOrderSelected('to-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
                         title="Send to Back (Εντελώς πίσω)"
                       >
                         Πίσω
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
                         title="Send Backward (1 βήμα πίσω)"
                       >
                         -1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
                         title="Bring Forward (1 βήμα μπροστά)"
                       >
                         +1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('to-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-normal cursor-pointer whitespace-nowrap"
                         title="Bring to Front (Εντελώς μπροστά)"
                       >
                         Μπροστά
@@ -41634,7 +41634,7 @@ export default function App() {
                         return (
                           <button
                             onClick={handleUngroupSelected}
-                            className="flex items-center px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
+                            className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
                             title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                           >
                             <span>Ungroup</span>
@@ -41646,7 +41646,7 @@ export default function App() {
                         return (
                           <button
                             onClick={handleGroupSelected}
-                            className="flex items-center px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer whitespace-nowrap"
+                            className="flex items-center px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer whitespace-nowrap"
                             title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
                           >
                             <span>Group ({totalSelCount})</span>
@@ -41658,7 +41658,7 @@ export default function App() {
                         return (
                           <button
                             onClick={handleUngroupSelected}
-                            className="flex items-center px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
+                            className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
                             title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                           >
                             <span>Ungroup</span>
@@ -41692,7 +41692,7 @@ export default function App() {
                                 onClick={() => {
                                   registerOrActivateSimFromLasso();
                                 }}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] cursor-pointer shadow-2xs transition"
+                                className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal text-[11px] cursor-pointer shadow-2xs transition"
                                 title="Δημιουργία/Ενεργοποίηση Προσομοίωσης από το επιλεγμένο κύκλωμα (αυτόματο κλείσιμο Λάσο)"
                               >
                                 <span>⚡ Προσομοίωση ({getNextDefaultSimName(activePage)})</span>
@@ -41721,7 +41721,7 @@ export default function App() {
                                     return { ...page, strokes: res.strokes, circuitSims: nextSims };
                                   });
                                 }}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] cursor-pointer transition"
+                                className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-normal text-[11px] cursor-pointer transition"
                                 title="Μετατροπή Μπαταρίας ↔ Πηγής Τάσης και Λαμπτήρα ↔ Αντιστάτη με 1 κλικ!"
                               >
                                 <span>
@@ -41749,7 +41749,7 @@ export default function App() {
                                     return { ...page, strokes: toggled.strokes };
                                   });
                                 }}
-                                className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-bold text-[11px] cursor-pointer transition ${
+                                className={`flex items-center gap-1 px-2 py-1 rounded-full font-normal text-[11px] cursor-pointer transition ${
                                   swStroke.switchClosed !== false
                                     ? 'bg-emerald-600 text-white'
                                     : 'bg-rose-600 text-white'
@@ -41819,7 +41819,7 @@ export default function App() {
                           setSelectedImageIds([]);
                           setSelectedImageId(null);
                         }}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-medium cursor-pointer"
+                        className="flex items-center gap-1 px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-normal cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Διαγραφή</span>
@@ -41849,7 +41849,7 @@ export default function App() {
                         }));
                         showToast(`📐 Επαναφέρθηκαν οι πραγματικές αναλογίες (${natW}×${natH}px)!`);
                       }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-semibold cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-normal cursor-pointer"
                       title="Επαναφορά στις πραγματικές αρχικές αναλογίες (Aspect Ratio) της εικόνας"
                     >
                       <span>1:1</span>
@@ -41880,7 +41880,7 @@ export default function App() {
                         }));
                         showToast('🪄 Transparent BG ολοκληρώθηκε!');
                       }}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold cursor-pointer transition ${
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-normal cursor-pointer transition ${
                         selectedImgObj.transparentBg
                           ? 'bg-emerald-600 text-white shadow-2xs'
                           : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
@@ -41903,7 +41903,7 @@ export default function App() {
                         }));
                         showToast('🪄 Magic Wand ολοκληρώθηκε!');
                       }}
-                      className="px-3 py-1 rounded-full bg-teal-600 text-white font-semibold cursor-pointer"
+                      className="px-2.5 py-1 rounded-full bg-teal-600 text-white font-normal cursor-pointer"
                     >
                       🪄 Magic Wand
                     </button>
@@ -41913,7 +41913,7 @@ export default function App() {
                         lassoPolygonRef.current = [];
                         showToast('✂️ Σχεδίασε οποιοδήποτε σχήμα πάνω στην εικόνα για Lasso Crop!');
                       }}
-                      className={`px-3 py-1 rounded-full font-semibold cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-full font-normal cursor-pointer ${
                         imageCropMode === 'freehand' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-800'
                       }`}
                     >
@@ -41925,7 +41925,7 @@ export default function App() {
                         lassoPolygonRef.current = [];
                         showToast('🧲 Magnetic Lasso: Πέρασε το Pencil γύρω από τις ακμές του σχήματος!');
                       }}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold cursor-pointer ${
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-normal cursor-pointer ${
                         imageCropMode === 'magnetic' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-800'
                       }`}
                     >
@@ -46324,10 +46324,10 @@ export default function App() {
                                 letterSpacing: 'normal',
                                 WebkitTextStroke: '0px',
                               }}
-                              className="absolute -top-14 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2.5 py-1 rounded-full shadow-lg text-[11px] font-semibold whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
+                              className="absolute -top-14 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
                             >
                               <span
-                                className="px-1 py-0.5 text-sky-300 font-bold select-none"
+                                className="px-1 py-0.5 text-sky-300 font-normal select-none"
                                 title="Σύρετε με το δάχτυλο ή το πενάκι για μετακίνηση του παραθύρου κειμένου"
                               >
                                 ✥ Σύρετε
@@ -46368,7 +46368,7 @@ export default function App() {
                                       }),
                                     }));
                                   }}
-                                  className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-bold cursor-pointer"
+                                  className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
                                   title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                 >
                                   {txt.fontFamily === 'calligraphic'
@@ -46410,7 +46410,7 @@ export default function App() {
                                       }),
                                     }));
                                   }}
-                                  className={`px-1.5 py-0.5 rounded font-extrabold cursor-pointer ${
+                                  className={`px-1.5 py-0.5 rounded font-normal cursor-pointer ${
                                     txt.bold ? 'bg-[#0066ff] text-white' : 'hover:bg-white/15 text-slate-200'
                                   }`}
                                   title="Bold (Έντονα)"
@@ -46433,12 +46433,12 @@ export default function App() {
                                     ),
                                   }));
                                 }}
-                                className="px-1.5 py-0.5 rounded hover:bg-white/15 cursor-pointer"
+                                className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
                                 title="Μικρότερη γραμματοσειρά"
                               >
                                 A-
                               </button>
-                              <span className="text-[10px] text-sky-200 px-0.5">{txt.fontSize}px</span>
+                              <span className="text-[10px] font-normal text-sky-200 px-0.5">{txt.fontSize}px</span>
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
@@ -46454,7 +46454,7 @@ export default function App() {
                                     ),
                                   }));
                                 }}
-                                className="px-1.5 py-0.5 rounded hover:bg-white/15 cursor-pointer"
+                                className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
                                 title="Μεγαλύτερη γραμματοσειρά"
                               >
                                 A+
@@ -46465,7 +46465,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleInsertPowerCaretInText(txt.id)}
-                                    className="px-1.5 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-extrabold cursor-pointer"
+                                    className="px-1.5 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-normal cursor-pointer"
                                     title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
                                   >
                                     xⁿ (^)
@@ -46474,7 +46474,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleInsertSubscriptInText(txt.id)}
-                                    className="px-1.5 py-0.5 rounded bg-teal-600/85 hover:bg-teal-500 text-white font-extrabold cursor-pointer"
+                                    className="px-1.5 py-0.5 rounded bg-teal-600/85 hover:bg-teal-500 text-white font-normal cursor-pointer"
                                     title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max"
                                   >
                                     xᵢ (_)
@@ -46483,7 +46483,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleConvertTextToMath(txt.id)}
-                                    className="px-2 py-0.5 rounded font-extrabold cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
+                                    className="px-1.5 py-0.5 rounded font-normal cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
                                     title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
                                   >
                                     Text2Math
@@ -46494,7 +46494,7 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => handleCreateMathGraphFromTextBox(txt.id)}
-                                className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
+                                className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-normal cursor-pointer"
                                 title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
                               >
                                 Διάγραμμα
@@ -46503,7 +46503,7 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => handleCheckChemistryInTextBox(txt.id)}
-                                className="px-2 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold cursor-pointer whitespace-nowrap"
+                                className="px-1.5 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-normal cursor-pointer whitespace-nowrap"
                                 title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
                               >
                                 Chem / Δείκτες
@@ -46512,7 +46512,7 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => handleCreate3DMoleculeFromTextBox(txt.id)}
-                                className="px-2 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-bold cursor-pointer whitespace-nowrap"
+                                className="px-1.5 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-normal cursor-pointer whitespace-nowrap"
                                 title="3D.OCR: Άμεση δημιουργία του Draggable 3D Μορίου με χρωματικό νέφος φορτίου από την ένωση του πλαισίου κειμένου!"
                               >
                                 3D.OCR
@@ -46532,7 +46532,7 @@ export default function App() {
                                   }
                                   setEditingTextId(isEditingTxt ? null : txt.id);
                                 }}
-                                className="px-1.5 py-1 rounded bg-sky-600/85 hover:bg-sky-500 text-white flex items-center justify-center cursor-pointer"
+                                className="px-1.5 py-1 rounded bg-sky-600/85 hover:bg-sky-500 text-white font-normal flex items-center justify-center cursor-pointer"
                                 title={
                                   isEditingTxt
                                     ? 'Ολοκλήρωση επεξεργασίας (επιστροφή στη μαθηματική μορφή)'
@@ -46540,7 +46540,7 @@ export default function App() {
                                 }
                               >
                                 {isEditingTxt ? (
-                                  <span className="font-extrabold text-xs leading-none">✓</span>
+                                  <span className="font-normal text-xs leading-none">✓</span>
                                 ) : (
                                   <svg
                                     viewBox="0 0 24 24"
