@@ -20237,14 +20237,14 @@ export default function App() {
             const is3DMode = aSim.reactionViewMode === '3d';
             ctx.save();
             ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = is3DMode ? '#0284c7' : '#eff6ff';
-            ctx.strokeStyle = is3DMode ? '#0369a1' : '#93c5fd';
+            ctx.fillStyle = 'rgba(239, 246, 255, 0.55)';
+            ctx.strokeStyle = '#93c5fd';
             ctx.lineWidth = 1.4;
             ctx.beginPath();
             ctx.roundRect(modeBtnX, modeBtnY, modeBtnW, modeBtnH, modeBtnH / 2);
             ctx.fill();
             ctx.stroke();
-            ctx.fillStyle = is3DMode ? '#ffffff' : '#1d4ed8';
+            ctx.fillStyle = '#1d4ed8';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(is3DMode ? '3D' : '2D', modeBtnX + modeBtnW / 2, modeBtnY + modeBtnH / 2 + 0.5);
