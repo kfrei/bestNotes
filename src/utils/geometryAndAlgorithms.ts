@@ -4222,13 +4222,14 @@ function safeParseVisionJson(rawText: string): any {
   if (!cleanJsonText) return null;
 
   // Pre-escape any unescaped single-backslash LaTeX commands inside JSON string literals
-  // (critical for `\frac`, `\nu`, `\theta`, `\text`, `\tau`, `\rho`, `\rightarrow`, `\beta`
-  // which otherwise get eaten by JSON.parse as \f, \n, \t, \r, \b control characters!)
+  // in a SINGLE pass so already-escaped `\\cdot`, `\\eta`, `\\mu`, `\\omega` are NEVER double-escaped into `\\\cdot`!
   const preEscapedJson = cleanJsonText.replace(/"((?:[^"\\]|\\.)*)"/gs, (match) =>
     match
       .replace(/\r?\n/g, '\\n')
-      .replace(/(?<!\\)\\(frac|dfrac|tfrac|nu|neq|nabla|theta|text|tau|times|tan|rho|rightarrow|right|beta|binom|begin|bcancel|eta|mu|pi|omega|sigma|upsilon|alpha|gamma|delta|Delta|lambda|kappa|phi|psi|cdot|sqrt|vec|Rightarrow|Leftrightarrow|implies|le|ge)\b/g, '\\\\$1')
-      .replace(/\\(?![/\"\\bfnrt]|u[0-9a-fA-F]{4})/g, '\\\\')
+      .replace(
+        /(?<!\\)\\(?:(?=(?:frac|dfrac|tfrac|nu|neq|nabla|theta|text|tau|times|tan|rho|rightarrow|right|beta|binom|begin|bcancel)\b)|(?![/\"\\bfnrt]|u[0-9a-fA-F]{4}))/g,
+        '\\\\'
+      )
   );
 
   try {
@@ -4245,7 +4246,7 @@ function safeParseVisionJson(rawText: string): any {
         return m[1]
           .replace(/\\n(?![a-zA-Z])/g, '\n')
           .replace(/\\"/g, '"')
-          .replace(/\\\\/g, '\\');
+          .replace(/\\\\+/g, '\\');
       };
       const eq = extractField('equation');
       const norm = extractField('normalizedEquation');
@@ -4488,6 +4489,12 @@ export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
     .replace(/\\end\{(aligned|align\*?|gathered|gather\*?|split)\}/gi, '\n')
     // Replace `\\[6pt]`, `\[6pt]`, or `[6pt]` with a clean newline break
     .replace(/\\*\[\s*\d+(?:\.\d+)?\s*(?:pt|px|em|ex|mm|cm)\s*\]/gi, '\n')
+    // Collapse accidental double-escaped LaTeX commands (e.g. `\\cdot`, `\\eta`, `\\mu`, `\\omega`, `\\sigma`) into single backslash `\`
+    // BEFORE treating `\\` as a LaTeX line break!
+    .replace(
+      /\\\\+(?=(?:cdot|times|frac|dfrac|tfrac|sqrt|vec|eta|mu|sigma|upsilon|nu|pi|omega|alpha|beta|gamma|delta|Delta|Lambda|lambda|theta|phi|varphi|Phi|rho|tau|kappa|epsilon|varepsilon|left|right|text|mathrm|operatorname|mathit|mathbf|max|min|sin|cos|tan|ln|log|exp|Rightarrow|Leftrightarrow|implies|le|ge|pm|ne|neq|div)\b)/g,
+      '\\'
+    )
     // Replace `\\` (LaTeX newline) or `\newline` / `\cr` with a clean newline break
     .replace(/\\\\+/g, '\n')
     .replace(/\\(?:newline|cr)\b/g, '\n');
@@ -8832,16 +8839,18 @@ function normalizePhysicsEquationToCompact(rawInput: string): string {
     .replace(/\\(?:text|mathrm|operatorname|mathit|mathbf)\{([^}]*)\}/g, '$1')
     .replace(/\\(?:max|min)\b/gi, (m) => m.slice(1).toLowerCase())
     .replace(/(?:[6σςcCgGsS]\s*\*?\s*[uυv]\s*\*?\s*[vνn])(?=\s*\*?\s*[\^(ωπtτxχ0-9])/gi, 'συν')
-    .replace(/(?:[ηnnhuυv]\s*\*?\s*\|?\s*\*?\s*[μmkprlI1|h])(?=\s*\*?\s*[\^(ωπtτxχ0-9])/gi, 'ημ')
+    .replace(/(?:[4ηnnhuυv]\s*\*?\s*\|?\s*\*?\s*[μmkprlI1|h])(?=\s*\*?\s*[\^(ωπtτxχ0-9])/gi, 'ημ')
     .replace(/σ\s*[uυv]\s*[vν]/gi, 'συν')
     .replace(/η\s*[μm]/gi, 'ημ')
     .replace(/\\left\b|\\right\b|\\displaystyle\b/g, '')
+    .replace(/\\[,;!]\s*/g, '')
     .replace(/_\{([^}]*)\}/g, (_, sub) => `_${sub.replace(/\s+/g, '')}`)
     .replace(/₀/g, '_0')
     .replace(/₁/g, '_1')
     .replace(/₂/g, '_2')
-    .replace(/\b([AE])\s*_\s*[oO0]\b/g, '$1_0')
-    .replace(/\b([AE])[oO0]\b/g, '$1_0')
+    .replace(/_[oO0οΟ](?![a-zA-Zα-ωΑ-Ω])/g, '_0')
+    .replace(/\b([AEΑΕxχuυv])\s*_\s*[oO0οΟ](?![a-zA-Zα-ωΑ-Ω])/g, '$1_0')
+    .replace(/\b([AEΑΕ])[oO0οΟ](?![a-zA-Zα-ωΑ-Ω])/g, '$1_0')
     .replace(/[μm]\s*[αa]\s*[xχ]/gi, 'max')
     .replace(/[μm]\s*[iι]\s*[nν]/gi, 'min')
     .replace(/\\(?:cdot|times)\b/g, '*')
@@ -8857,6 +8866,8 @@ function normalizePhysicsEquationToCompact(rawInput: string): string {
     .replace(/Ε/g, 'E')
     .replace(/Α/g, 'A')
     .replace(/Υ/g, 'U')
+    .replace(/[χΧ]/g, 'x')
+    .replace(/[ψΨ]/g, 'y')
     .replace(/τ(?=\s*[)+-])/g, 't')
     .replace(/(\d),(\d)/g, '$1.$2')
     .replace(/\s+/g, '')
@@ -8879,6 +8890,15 @@ function normalizePhysicsEquationToCompact(rawInput: string): string {
     .replace(
       /(\/T\s*[-+]\s*\(?(?:2\*?π\*?)?[xχ]\)?\/)(?:7|A|X|r|1|l)(?=[)+-]|$)/g,
       '$1λ'
+    )
+    // Rescue any mangled handwritten ημ / συν after e^(...) in Damped Oscillation before `(ωt` or `(2π`
+    .replace(
+      /(e\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?\*?)(?!συν|συνημ|cos|ημ|ημιτ|sin)([6σςcCgGsS][a-zA-Zα-ωΑ-Ω|*]{1,4})(?=\(?\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
+      '$1συν'
+    )
+    .replace(
+      /(e\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?\*?)(?!συν|συνημ|cos|ημ|ημιτ|sin)[a-zA-Zα-ωΑ-Ω0-9|*]{1,5}(?=\(\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
+      '$1ημ'
     )
     // Rescue any mangled handwritten ημ after amplitude A before wave phase `(2πt/T` or `(t/T` or `(ωt`
     .replace(
@@ -9509,13 +9529,13 @@ export function tryBuildOscillationDiagramStrokes(
 
   // CASE 5B: Damped Oscillation (Φθίνουσα Ταλάντωση) `x = A_0 e^(-Λt) συν(ωt)` / `ημ(ωt)`
   // and Exponential Amplitude / Energy Decay `A = A_0 e^(-Λt)`, `E = E_0 e^(-2Λt)`
-  // Note: Also accepts optional `*` after `συν`/`ημ` and tolerates OCR reading `-Λ` as `A` or `-1` or `-A` inside `e^(...)`.
+  // Note: Also accepts optional `*` after `συν`/`ημ`, Greek omicron `ο` in `A_ο`, Greek `χ` on LHS, and any exponent format on `e^(...)`.
   const dampedOscMatch = compact.match(
-    /^(x|y|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A_?[0oO]|A|[xuvυ]_?[0oO]|[uvυ]_?max|[aα]_?max|ΣF_?max|F_?max)?\*?(?:e\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\))\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?$/i
+    /^(x|χ|y|ψ|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)([a-zA-Zα-ωΑ-Ω0-9._*]*?)\*?(?:[eε]\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\))\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?$/i
   );
   const dampedOscRevMatch = !dampedOscMatch
     ? compact.match(
-        /^(x|y|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A_?[0oO]|A|[xuvυ]_?[0oO]|[uvυ]_?max|[aα]_?max|ΣF_?max|F_?max)?\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?\*?(?:e\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+]+?\))$/i
+        /^(x|χ|y|ψ|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)([a-zA-Zα-ωΑ-Ω0-9._*]*?)\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?\*?(?:[eε]\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\))$/i
       )
     : null;
 
