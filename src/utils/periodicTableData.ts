@@ -2262,11 +2262,15 @@ export function buildAtomNodesAndBondsForTerm(
     .map((a) => `${a.sym.toUpperCase()}${a.sub}`)
     .join('');
 
+  // Απόσταση μεταξύ των εξωτερικών στιβάδων ομοιοπολικά συνδεδεμένων ατόμων (24px -> 12px εκατέρωθεν του κέντρου του δεσμού)
+  // ώστε τα κοινά ζεύγη ηλεκτρονίων να βρίσκονται έξω από τις εξωτερικές στιβάδες και η σιέλ έλλειψη να πατάει ελάχιστα (~1.5px) πάνω στην εξωτερική στιβάδα!
+  const covShellGap = 24;
+
   // 1. CH4 (Μεθάνιο): 1 Άνθρακας στο κέντρο + 4 μικρά Υδρογόνα γύρω του (πάνω, κάτω, αριστερά, δεξιά) με 4 απλούς ομοιοπολικούς δεσμούς!
   if (formulaUpper === 'CH4') {
     const rC = getNaturalOuterOrbitRadiusPx(6); // 66
     const rH = getNaturalOuterOrbitRadiusPx(1); // 38
-    const dist = rC + rH - 4; // 100px ώστε οι τροχιές να εφάπτονται/επικαλύπτονται ελαφρά
+    const dist = rC + rH + covShellGap;
     const cId = `atom-${ts}-c`;
     const hIds = [0, 1, 2, 3].map((i) => `atom-${ts}-h${i}`);
     const offsets = [
@@ -2310,7 +2314,7 @@ export function buildAtomNodesAndBondsForTerm(
   if (formulaUpper === 'H2O' || formulaUpper === 'OH2') {
     const rO = getNaturalOuterOrbitRadiusPx(8); // 66
     const rH = getNaturalOuterOrbitRadiusPx(1); // 38
-    const dist = rO + rH - 4; // 100
+    const dist = rO + rH + covShellGap;
     const oId = `atom-${ts}-o`;
     const h1Id = `atom-${ts}-h1`;
     const h2Id = `atom-${ts}-h2`;
@@ -2355,7 +2359,7 @@ export function buildAtomNodesAndBondsForTerm(
   if (formulaUpper === 'CO2') {
     const rC = getNaturalOuterOrbitRadiusPx(6); // 66
     const rO = getNaturalOuterOrbitRadiusPx(8); // 66
-    const dist = rC + rO - 4; // 128
+    const dist = rC + rO + covShellGap;
     const o1Id = `atom-${ts}-o1`;
     const cId = `atom-${ts}-c`;
     const o2Id = `atom-${ts}-o2`;
@@ -2376,7 +2380,7 @@ export function buildAtomNodesAndBondsForTerm(
   if (formulaUpper === 'NH3' || formulaUpper === 'H3N') {
     const rN = getNaturalOuterOrbitRadiusPx(7); // 66
     const rH = getNaturalOuterOrbitRadiusPx(1); // 38
-    const dist = rN + rH - 4; // 100
+    const dist = rN + rH + covShellGap;
     const nId = `atom-${ts}-n`;
     const hIds = [`atom-${ts}-h1`, `atom-${ts}-h2`, `atom-${ts}-h3`];
     const offsets = [
@@ -2411,7 +2415,7 @@ export function buildAtomNodesAndBondsForTerm(
   if (parsed.atoms.length === 1 && parsed.atoms[0].sub === '2') {
     const el = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(1);
     const rOut = getNaturalOuterOrbitRadiusPx(el.z);
-    const dist = rOut * 2 - 4;
+    const dist = rOut * 2 + covShellGap;
     const val = el.shells[el.shells.length - 1] || 1;
     const pairsCount = el.z === 1 ? 1 : Math.max(1, Math.min(3, 8 - val));
     const a1Id = `atom-${ts}-1`;
@@ -2454,7 +2458,7 @@ export function buildAtomNodesAndBondsForTerm(
     const rA = getNaturalOuterOrbitRadiusPx(elA.z);
     const rB = getNaturalOuterOrbitRadiusPx(elB.z);
     const isIonic = elA.category === 'metal' && elB.category !== 'metal';
-    const dist = rA + rB + (isIonic ? 24 : -4);
+    const dist = rA + rB + (isIonic ? 24 : covShellGap);
     const b1Id = `atom-${ts}-b1`;
     const aId = `atom-${ts}-a`;
     const b2Id = `atom-${ts}-b2`;
@@ -2485,7 +2489,7 @@ export function buildAtomNodesAndBondsForTerm(
     const isIonic =
       (el1.category === 'metal' && el2.category !== 'metal') ||
       (el2.category === 'metal' && el1.category !== 'metal');
-    const dist = r1 + r2 + (isIonic ? 26 : -4);
+    const dist = r1 + r2 + (isIonic ? 26 : covShellGap);
     const vMetal = Math.min(2, el1.shells[el1.shells.length - 1] || 1);
     const a1Id = `atom-${ts}-1`;
     const a2Id = `atom-${ts}-2`;
@@ -2515,3 +2519,107 @@ export function buildAtomNodesAndBondsForTerm(
     bonds: [],
   };
 }
+
+/**
+ * Εξασφαλίζει ότι σε κάθε ομοιοπολικό μόριο (π.χ. CO₂, H₂O, CH₄, NH₃, O₂, N₂, HCl)
+ * υπάρχει καθαρό διάκενο ~24px (αναλογικά με την κλίμακα) ανάμεσα στις εξωτερικές στιβάδες των συνδεδεμένων ατόμων,
+ * ώστε τα κοινά ζεύγη ηλεκτρονίων να στέκονται λίγο πιο έξω (ανάμεσα στις εξωτερικές στιβάδες)
+ * και η σιέλ έλλειψη να πατάει ελάχιστα (~1.5px) στην εξωτερική στιβάδα χωρίς να περνούν άλλα ηλεκτρόνια από μέσα της.
+ */
+export function normalizeCovalentAtomPositions<
+  T extends { id: string; z: number; x: number; y: number; outerRadiusPx?: number }
+>(
+  atoms: T[],
+  bonds?: { kind: 'ionic' | 'covalent'; fromAtomId: string; toAtomId: string; count: number }[]
+): T[] {
+  if (!bonds || bonds.length === 0 || atoms.length < 2) return atoms;
+  const covBonds = bonds.filter((b) => b.kind === 'covalent');
+  if (covBonds.length === 0) return atoms;
+
+  if (atoms.length === 2 && covBonds.length >= 1) {
+    const a1 = atoms[0];
+    const a2 = atoms[1];
+    const nat1 = getNaturalOuterOrbitRadiusPx(a1.z);
+    const nat2 = getNaturalOuterOrbitRadiusPx(a2.z);
+    const r1 = a1.outerRadiusPx || nat1;
+    const r2 = a2.outerRadiusPx || nat2;
+    const avgScale = (r1 / nat1 + r2 / nat2) / 2;
+    const targetDist = r1 + r2 + Math.round(24 * avgScale);
+    const dx = a2.x - a1.x;
+    const dy = a2.y - a1.y;
+    const curDist = Math.hypot(dx, dy);
+    if (curDist >= targetDist - 2) return atoms;
+    const ux = curDist > 0.5 ? dx / curDist : 1;
+    const uy = curDist > 0.5 ? dy / curDist : 0;
+    const midX = (a1.x + a2.x) / 2;
+    const midY = (a1.y + a2.y) / 2;
+    return [
+      {
+        ...a1,
+        x: Math.round(midX - ux * (targetDist / 2)),
+        y: Math.round(midY - uy * (targetDist / 2)),
+      },
+      {
+        ...a2,
+        x: Math.round(midX + ux * (targetDist / 2)),
+        y: Math.round(midY + uy * (targetDist / 2)),
+      },
+    ];
+  }
+
+  // Πολυατομικά μόρια (>=3 άτομα, π.χ. CO2, H2O, CH4, NH3): βρίσκουμε το κεντρικό άτομο με τους περισσότερους δεσμούς
+  const degMap = new Map<string, number>();
+  for (const b of covBonds) {
+    degMap.set(b.fromAtomId, (degMap.get(b.fromAtomId) || 0) + 1);
+    degMap.set(b.toAtomId, (degMap.get(b.toAtomId) || 0) + 1);
+  }
+  let centralAtom = atoms[0];
+  let maxDeg = -1;
+  for (const a of atoms) {
+    const d = degMap.get(a.id) || 0;
+    if (d > maxDeg) {
+      maxDeg = d;
+      centralAtom = a;
+    }
+  }
+
+  const natC = getNaturalOuterOrbitRadiusPx(centralAtom.z);
+  const rC = centralAtom.outerRadiusPx || natC;
+  let modified = false;
+  const nextPosMap = new Map<string, { x: number; y: number }>();
+
+  for (const b of covBonds) {
+    const ligId =
+      b.fromAtomId === centralAtom.id
+        ? b.toAtomId
+        : b.toAtomId === centralAtom.id
+        ? b.fromAtomId
+        : null;
+    if (!ligId) continue;
+    const ligAt = atoms.find((a) => a.id === ligId);
+    if (!ligAt) continue;
+    const natL = getNaturalOuterOrbitRadiusPx(ligAt.z);
+    const rL = ligAt.outerRadiusPx || natL;
+    const avgScale = (rC / natC + rL / natL) / 2;
+    const targetDist = rC + rL + Math.round(24 * avgScale);
+    const dx = ligAt.x - centralAtom.x;
+    const dy = ligAt.y - centralAtom.y;
+    const curDist = Math.hypot(dx, dy);
+    if (curDist < targetDist - 2) {
+      const ux = curDist > 0.5 ? dx / curDist : 1;
+      const uy = curDist > 0.5 ? dy / curDist : 0;
+      nextPosMap.set(ligAt.id, {
+        x: Math.round(centralAtom.x + ux * targetDist),
+        y: Math.round(centralAtom.y + uy * targetDist),
+      });
+      modified = true;
+    }
+  }
+
+  if (!modified) return atoms;
+  return atoms.map((a) => {
+    const p = nextPosMap.get(a.id);
+    return p ? { ...a, x: p.x, y: p.y } : a;
+  });
+}
+

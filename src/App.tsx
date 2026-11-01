@@ -177,6 +177,7 @@ import {
   getNaturalNucleusRadiusPx,
   getNaturalOuterOrbitRadiusPx,
   buildAtomNodesAndBondsForTerm,
+  normalizeCovalentAtomPositions,
 } from './utils/periodicTableData';
 import {
   CURATED_STICKERS_CATALOG,
@@ -12159,9 +12160,12 @@ export default function App() {
   // ΠΡΟΣΟΜΟΙΩΣΗ ΔΟΜΗΣ ΑΤΟΜΟΥ & ΧΗΜΙΚΩΝ ΔΕΣΜΩΝ (Bohr Orbits, 2-2 Electrons, Bonds)
   // ============================================================================
   const getValidAtomSims = useCallback((page: NotePage): AtomSimConfig[] => {
-    return (page.atomSims || []).filter(
-      (s) => s && Array.isArray(s.atoms) && s.atoms.length > 0
-    );
+    return (page.atomSims || [])
+      .filter((s) => s && Array.isArray(s.atoms) && s.atoms.length > 0)
+      .map((s) => ({
+        ...s,
+        atoms: normalizeCovalentAtomPositions(s.atoms, s.bonds),
+      }));
   }, []);
 
   const getNextDefaultAtomSimName = useCallback(
@@ -12281,7 +12285,7 @@ export default function App() {
       }
 
       return {
-        nextAtoms: arrangedAtoms,
+        nextAtoms: normalizeCovalentAtomPositions(arrangedAtoms, nextBonds),
         nextBonds,
         equationText: inferred.equationDisplay,
       };
@@ -12723,14 +12727,15 @@ export default function App() {
           }
         }
 
-        const inferred = inferReactionFromCanvasAtoms(nextAtoms.map((a) => a.z));
+        const normalizedNextAtoms = normalizeCovalentAtomPositions(nextAtoms, curBonds);
+        const inferred = inferReactionFromCanvasAtoms(normalizedNextAtoms.map((a) => a.z));
         return {
           ...page,
           atomSims: (page.atomSims || []).map((s) =>
             s.id === simId
               ? {
                   ...s,
-                  atoms: nextAtoms,
+                  atoms: normalizedNextAtoms,
                   bonds: curBonds,
                   showReactionEquation: true,
                   reactionEquationText: s.reactionEquationText || inferred.equationDisplay,
@@ -20508,6 +20513,26 @@ export default function App() {
                 }
               }
 
+              // Γωνίες ομοιοπολικών δεσμών αυτού του ατόμου ώστε τα άλλα ηλεκτρόνια της εξωτερικής στιβάδας
+              // να μην περνούν ποτέ μέσα από τη σιέλ έλλειψη των κοινών ζευγών!
+              const atomCovBondAngles: number[] = [];
+              if (isOuter) {
+                for (const cb of aSim.bonds || []) {
+                  if (cb.kind !== 'covalent') continue;
+                  const otherId =
+                    cb.fromAtomId === atom.id
+                      ? cb.toAtomId
+                      : cb.toAtomId === atom.id
+                      ? cb.fromAtomId
+                      : null;
+                  if (!otherId) continue;
+                  const otherAt = aSim.atoms.find((a) => a.id === otherId);
+                  if (otherAt) {
+                    atomCovBondAngles.push(Math.atan2(otherAt.y - atom.y, otherAt.x - atom.x));
+                  }
+                }
+              }
+
               eAngles.forEach((ang, eIdx) => {
                 const isBeingDragged =
                   draggingAtomHandleRef.current?.kind === 'valence-electron' &&
@@ -20516,12 +20541,26 @@ export default function App() {
                   draggingAtomHandleRef.current.electronIdx === eIdx &&
                   isOuter;
 
+                let rEff = r_s;
+                if (isOuter && atomCovBondAngles.length > 0 && !isBeingDragged) {
+                  let maxBondOverlap = 0;
+                  for (const bAng of atomCovBondAngles) {
+                    const cosDiff = Math.cos(ang - bAng);
+                    if (cosDiff > 0) {
+                      maxBondOverlap = Math.max(maxBondOverlap, Math.pow(cosDiff, 8));
+                    }
+                  }
+                  if (maxBondOverlap > 0.001) {
+                    rEff = Math.max(minOrbitR + 6, r_s - 5.2 * maxBondOverlap);
+                  }
+                }
+
                 const ex = isBeingDragged
                   ? draggingAtomHandleRef.current!.curX
-                  : atom.x + r_s * Math.cos(ang);
+                  : atom.x + rEff * Math.cos(ang);
                 const ey = isBeingDragged
                   ? draggingAtomHandleRef.current!.curY
-                  : atom.y + r_s * Math.sin(ang);
+                  : atom.y + rEff * Math.sin(ang);
                 const er = isOuter ? 4.4 : 3.6;
 
                 if (isBeingDragged) {
@@ -20848,24 +20887,40 @@ export default function App() {
                 ctx.restore();
               }
             } else {
-              // Ομοιοπολικός Δεσμός: Κοινά ζεύγη ηλεκτρονίων (2-2) στην περιοχή επικάλυψης μεταξύ των δύο ατόμων
+              // Ομοιοπολικός Δεσμός: Κοινά ζεύγη ηλεκτρονίων (2-2) λίγο πιο έξω (ανάμεσα στις εξωτερικές στιβάδες)
+              // και σιέλ γεμιστή έλλειψη που πατάει ελάχιστα (~1.5px) στην εξωτερική στιβάδα ώστε να μην περνούν άλλα ηλεκτρόνια από μέσα τους!
               const midOverlapX =
                 (fromAt.x + ux * rFrom + (toAt.x - ux * rTo)) / 2;
               const midOverlapY =
                 (fromAt.y + uy * rFrom + (toAt.y - uy * rTo)) / 2;
+              const natFrom = getNaturalOuterOrbitRadiusPx(fromAt.z);
+              const natTo = getNaturalOuterOrbitRadiusPx(toAt.z);
+              const avgBondScale = Math.max(
+                0.55,
+                Math.min(2.2, (rFrom / natFrom + rTo / natTo) / 2)
+              );
+              const halfShellGap = Math.max(
+                8 * avgBondScale,
+                (dist - (rFrom + rTo)) / 2
+              );
 
-              // Φωτεινή κάψουλα κοινών ζευγών ηλεκτρονίων
+              // Φωτεινή σιέλ έλλειψη κοινών ζευγών ηλεκτρονίων:
+              // - Κατά μήκος του άξονα του δεσμού (capRadialRx): πατάει ελάχιστα (~1.5px) πάνω στην εξωτερική στιβάδα κάθε ατόμου!
+              // - Κάθετα στον άξονα του δεσμού (capPerpRy): αγκαλιάζει σφιχτά τα 1, 2 ή 3 κοινά ζεύγη!
               ctx.save();
               ctx.translate(midOverlapX, midOverlapY);
-              ctx.rotate(Math.atan2(dy, dx) + Math.PI / 2);
+              ctx.rotate(Math.atan2(dy, dx));
               ctx.fillStyle = `rgba(56, 189, 248, ${0.18 * easeP})`;
               ctx.strokeStyle = `rgba(2, 132, 199, ${0.65 * easeP})`;
               ctx.lineWidth = 1.4;
               ctx.setLineDash([3, 3]);
-              const capRx = 13;
-              const capRy = 11 + bond.count * 8;
+              const capRadialRx = Math.min(
+                15 * avgBondScale,
+                halfShellGap + 1.5 * avgBondScale
+              );
+              const capPerpRy = (9.5 + (bond.count - 1) * 6.2) * avgBondScale;
               ctx.beginPath();
-              ctx.ellipse(0, 0, capRx, capRy, 0, 0, Math.PI * 2);
+              ctx.ellipse(0, 0, capRadialRx, capPerpRy, 0, 0, Math.PI * 2);
               ctx.fill();
               ctx.stroke();
               ctx.restore();
@@ -20886,17 +20941,22 @@ export default function App() {
 
               // Σχεδίαση των bond.count κοινών ζευγών ηλεκτρονίων (2 ηλεκτρόνια ανά ζεύγος, ένα στο χρώμα κάθε ατόμου!)
               const gentleWobble =
-                aSim.isRotating !== false ? Math.sin(now * 0.0022) * 1.8 : 0;
+                aSim.isRotating !== false
+                  ? Math.sin(now * 0.0022) * 1.0 * avgBondScale
+                  : 0;
+              const pairSpacingPerp = 12.4 * avgBondScale;
+              const radialPairSep = 3.8 * avgBondScale;
               for (let pIdx = 0; pIdx < bond.count; pIdx++) {
-                const pairOffsetPerp = (pIdx - (bond.count - 1) / 2) * 14;
+                const pairOffsetPerp =
+                  (pIdx - (bond.count - 1) / 2) * pairSpacingPerp;
                 const pairCenterX = midOverlapX + nx * pairOffsetPerp;
                 const pairCenterY = midOverlapY + ny * pairOffsetPerp;
 
-                // Τελικές θέσεις των 2 ηλεκτρονίων του κοινού ζεύγους
-                const target1X = pairCenterX - ux * 4.6 + nx * gentleWobble;
-                const target1Y = pairCenterY - uy * 4.6 + ny * gentleWobble;
-                const target2X = pairCenterX + ux * 4.6 - nx * gentleWobble;
-                const target2Y = pairCenterY + uy * 4.6 - ny * gentleWobble;
+                // Τελικές θέσεις των 2 ηλεκτρονίων του κοινού ζεύγους (έξω από τις εξωτερικές στιβάδες, στο κέντρο της σιέλ έλλειψης)
+                const target1X = pairCenterX - ux * radialPairSep + nx * gentleWobble;
+                const target1Y = pairCenterY - uy * radialPairSep + ny * gentleWobble;
+                const target2X = pairCenterX + ux * radialPairSep - nx * gentleWobble;
+                const target2Y = pairCenterY + uy * radialPairSep - ny * gentleWobble;
 
                 // Αρχικές θέσεις πάνω στις εξωτερικές τροχιές των 2 ατόμων (για το 2s animation)
                 const init1X = fromAt.x + ux * rFrom + nx * pairOffsetPerp;
@@ -24627,7 +24687,10 @@ export default function App() {
           curY: pt.y,
           origMol3DBoxX: targetSimForCard?.mol3DBoxX,
           origMol3DBoxY: targetSimForCard?.mol3DBoxY,
-          origAtomsSnapshot: (targetSimForCard?.atoms || []).map((a) => ({
+          origAtomsSnapshot: normalizeCovalentAtomPositions(
+            targetSimForCard?.atoms || [],
+            targetSimForCard?.bonds
+          ).map((a) => ({
             id: a.id,
             x: a.x,
             y: a.y,
@@ -24743,7 +24806,10 @@ export default function App() {
             curX: pt.x,
             curY: pt.y,
             origCentralR: centralOrigR,
-            origAtomsSnapshot: (targetSimForResize?.atoms || []).map((a) => ({
+            origAtomsSnapshot: normalizeCovalentAtomPositions(
+              targetSimForResize?.atoms || [],
+              targetSimForResize?.bonds
+            ).map((a) => ({
               id: a.id,
               x: a.x,
               y: a.y,
@@ -24825,7 +24891,10 @@ export default function App() {
             origAtomY: nucHit.y,
             curX: pt.x,
             curY: pt.y,
-            origAtomsSnapshot: (targetSimForNuc?.atoms || []).map((a) => ({
+            origAtomsSnapshot: normalizeCovalentAtomPositions(
+              targetSimForNuc?.atoms || [],
+              targetSimForNuc?.bonds
+            ).map((a) => ({
               id: a.id,
               x: a.x,
               y: a.y,

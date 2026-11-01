@@ -36,6 +36,7 @@ import {
   inferReactionFromCanvasAtoms,
   getNaturalNucleusRadiusPx,
   getNaturalOuterOrbitRadiusPx,
+  normalizeCovalentAtomPositions,
 } from './periodicTableData';
 
 export interface PdfExportOptions {
@@ -627,7 +628,8 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
       maxX = -Infinity,
       minY = Infinity,
       maxY = -Infinity;
-    for (const at of aSim.atoms) {
+    const normAtoms = normalizeCovalentAtomPositions(aSim.atoms, aSim.bonds);
+    for (const at of normAtoms) {
       const rOut = at.outerRadiusPx || getNaturalOuterOrbitRadiusPx(at.z);
       if (at.x - rOut < minX) minX = at.x - rOut;
       if (at.x + rOut > maxX) maxX = at.x + rOut;
@@ -699,7 +701,8 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
         }
       }
       const colorByZ = new Map<number, string>();
-      aSim.atoms.forEach((atom, atomIdx) => {
+      const colByAtomId = new Map<string, string>();
+      normAtoms.forEach((atom, atomIdx) => {
         if (!colorByZ.has(atom.z)) {
           colorByZ.set(atom.z, atom.color || atomPalette[colorByZ.size % atomPalette.length]);
         }
@@ -707,9 +710,26 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
         const col = atom.customColor
           ? atom.color || colorByZ.get(atom.z)!
           : colorByZ.get(atom.z)!;
+        colByAtomId.set(atom.id, col);
         const rOuter = atom.outerRadiusPx || getNaturalOuterOrbitRadiusPx(atom.z);
         const rNuc = Math.max(13, Math.min(26, getNaturalNucleusRadiusPx(atom.z)));
         const nShells = Math.max(1, el.shells.length);
+
+        const atomCovBondAngles: number[] = [];
+        for (const cb of aSim.bonds || []) {
+          if (cb.kind !== 'covalent') continue;
+          const otherId =
+            cb.fromAtomId === atom.id
+              ? cb.toAtomId
+              : cb.toAtomId === atom.id
+              ? cb.fromAtomId
+              : null;
+          if (!otherId) continue;
+          const otherAt = normAtoms.find((a) => a.id === otherId);
+          if (otherAt) {
+            atomCovBondAngles.push(Math.atan2(otherAt.y - atom.y, otherAt.x - atom.x));
+          }
+        }
 
         for (let s = 0; s < nShells; s++) {
           const isOuter = s === nShells - 1;
@@ -730,6 +750,7 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
           const covUsed = isOuter ? covalentSharedByAtom.get(atom.id) || 0 : 0;
           const initShellE = Math.max(0, el.shells[s] + (isOuter ? atom.extraElectrons || 0 : 0));
           const eCount = Math.max(0, initShellE - covUsed);
+          if (eCount <= 0) continue;
           const naturalPairs =
             s === 0 || !isOuter
               ? Math.floor(initShellE / 2)
@@ -751,8 +772,21 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
             }
           }
           for (const ang of eAngles) {
-            const ex = atom.x + r_s * Math.cos(ang);
-            const ey = atom.y + r_s * Math.sin(ang);
+            let rEff = r_s;
+            if (isOuter && atomCovBondAngles.length > 0) {
+              let maxBondOverlap = 0;
+              for (const bAng of atomCovBondAngles) {
+                const cosDiff = Math.cos(ang - bAng);
+                if (cosDiff > 0) {
+                  maxBondOverlap = Math.max(maxBondOverlap, Math.pow(cosDiff, 8));
+                }
+              }
+              if (maxBondOverlap > 0.001) {
+                rEff = Math.max(rNuc + 10, r_s - 5.2 * maxBondOverlap);
+              }
+            }
+            const ex = atom.x + rEff * Math.cos(ang);
+            const ey = atom.y + rEff * Math.sin(ang);
             ctx.save();
             ctx.fillStyle = col;
             ctx.globalAlpha = isOuter ? 0.96 : 0.5;
@@ -776,7 +810,7 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
         ctx.stroke();
 
         // Symbol badge below nucleus
-        const isSingleAtom = aSim.atoms.length === 1;
+        const isSingleAtom = normAtoms.length === 1;
         const labelTxt = isSingleAtom ? `${el.symbol} , ${el.nameEl}` : el.symbol;
         ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         const bw = Math.max(32, ctx.measureText(labelTxt).width + 20);
@@ -795,6 +829,77 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
         ctx.fillText(labelTxt, atom.x + 3, by + 11);
         ctx.restore();
       });
+
+      // Σχεδίαση ομοιοπολικών δεσμών (σιέλ έλλειψη & κοινά ζεύγη ηλεκτρονίων) στο PDF
+      for (const bond of aSim.bonds || []) {
+        if (bond.kind !== 'covalent') continue;
+        const fromAt = normAtoms.find((a) => a.id === bond.fromAtomId);
+        const toAt = normAtoms.find((a) => a.id === bond.toAtomId);
+        if (!fromAt || !toAt) continue;
+        const natFrom = getNaturalOuterOrbitRadiusPx(fromAt.z);
+        const natTo = getNaturalOuterOrbitRadiusPx(toAt.z);
+        const rFrom = fromAt.outerRadiusPx || natFrom;
+        const rTo = toAt.outerRadiusPx || natTo;
+        const dx = toAt.x - fromAt.x;
+        const dy = toAt.y - fromAt.y;
+        const dist = Math.max(1, Math.hypot(dx, dy));
+        const ux = dx / dist;
+        const uy = dy / dist;
+        const nx = -uy;
+        const ny = ux;
+        const midOverlapX = (fromAt.x + ux * rFrom + (toAt.x - ux * rTo)) / 2;
+        const midOverlapY = (fromAt.y + uy * rFrom + (toAt.y - uy * rTo)) / 2;
+        const avgBondScale = Math.max(
+          0.55,
+          Math.min(2.2, (rFrom / natFrom + rTo / natTo) / 2)
+        );
+        const halfShellGap = Math.max(8 * avgBondScale, (dist - (rFrom + rTo)) / 2);
+
+        ctx.save();
+        ctx.translate(midOverlapX, midOverlapY);
+        ctx.rotate(Math.atan2(dy, dx));
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+        ctx.strokeStyle = 'rgba(2, 132, 199, 0.65)';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([3, 3]);
+        const capRadialRx = Math.min(15 * avgBondScale, halfShellGap + 1.5 * avgBondScale);
+        const capPerpRy = (9.5 + (bond.count - 1) * 6.2) * avgBondScale;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, capRadialRx, capPerpRy, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        const colFrom = colByAtomId.get(fromAt.id) || '#2563eb';
+        const colTo = colByAtomId.get(toAt.id) || '#ef4444';
+        const pairSpacingPerp = 12.4 * avgBondScale;
+        const radialPairSep = 3.8 * avgBondScale;
+        for (let pIdx = 0; pIdx < bond.count; pIdx++) {
+          const pairOffsetPerp = (pIdx - (bond.count - 1) / 2) * pairSpacingPerp;
+          const pairCenterX = midOverlapX + nx * pairOffsetPerp;
+          const pairCenterY = midOverlapY + ny * pairOffsetPerp;
+          const e1x = pairCenterX - ux * radialPairSep;
+          const e1y = pairCenterY - uy * radialPairSep;
+          const e2x = pairCenterX + ux * radialPairSep;
+          const e2y = pairCenterY + uy * radialPairSep;
+
+          ctx.save();
+          ctx.fillStyle = colFrom;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.arc(e1x, e1y, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = colTo;
+          ctx.beginPath();
+          ctx.arc(e2x, e2y, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
     }
 
     if (aSim.show3DMolecule) {
