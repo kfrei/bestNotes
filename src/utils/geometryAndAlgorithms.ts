@@ -4578,6 +4578,10 @@ export async function transcribeHandwrittenMathWithGemini(
 4. ΚΡΙΣΙΜΟ — Ελληνικές τριγωνομετρικές συναρτήσεις ("συν" & "ημ") vs αγγλικό "sin" ή μονάδες: Στις ελληνικές σημειώσεις Φυσικής/Μαθηματικών το συνημίτονο γράφεται ελληνικά ως "συν" (τρία γράμματα σ-υ-ν, όπου στο χειρόγραφο το σ μοιάζει με 6 ή c και το υν με uv, π.χ. συν(ωt)) και το ημίτονο ως "ημ" (δύο ελληνικά γράμματα η-μ, π.χ. 10 ημ(2πt), A ημ(ωt)). ΜΗΝ μπερδεύεις ΠΟΤΕ το χειρόγραφο ελληνικό "ημ" πριν από παρένθεση (π.χ. u = 10 ημ(2πt)) με μονάδα μέτρησης m/s ή με σκέτο \\mu! Και ΜΗΝ μπερδεύεις ΠΟΤΕ το χειρόγραφο ελληνικό "συν" (που μοιάζει με 6uv) με το αγγλικό "sin"! Όταν βλέπεις ελληνικό "συν", γράψε ΠΑΝΤΑ \\sigma\\upsilon\\nu (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t)), και όταν βλέπεις ελληνικό "ημ", γράψε ΠΑΝΤΑ \\eta\\mu (π.χ. u = 10\\eta\\mu(2\\pi t), x = A\\eta\\mu(\\omega t)).
 5. ΚΡΙΣΙΜΟ — Ταχύτητα u και πλάτος u_{max} (πεζό u, ΟΧΙ κεφαλαίο U) & δείκτες max/min: Στις εξισώσεις ταχύτητας ταλάντωσης (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t) ή u = -u_{max}\\eta\\mu(\\omega t)), το u είναι ΠΑΝΤΑ πεζό "u" (ταχύτητα) τόσο στο αριστερό μέλος όσο και στο πλάτος u_{max} (ΠΟΤΕ κεφαλαίο U, γιατί το U είναι δυναμική ενέργεια!). Επίσης τα max και min γράφονται ΠΑΝΤΑ ως δείκτης σε αγκύλες _{max} και _{min} (π.χ. u_{max}, a_{max}, F_{max}, x_{max}, K_{max}, U_{max}), ΠΟΤΕ κολλητά (όχι Umax ή umax).
 5β. ΚΡΙΣΙΜΟ — Χειρόγραφο ελληνικό "π" (\\pi) vs "η" (\\eta) μέσα σε φάση τριγωνομετρικής συνάρτησης: Στο ελληνικό χειρόγραφο το γράμμα π (\\pi) γράφεται συχνά με τη δεξιά κάθετη γραμμή λίγο πιο μακριά προς τα κάτω (σαν Π/π), οπότε μοιάζει οπτικά με "η". Μέσα στις παρενθέσεις ημιτόνου/συνημιτόνου (π.χ. (\\omega t + \\phi_0), (5\\pi t + \\pi), (2\\pi t - \\frac{\\pi}{2})) η γωνία/αρχική φάση και ο συντελεστής του t είναι ΠΑΝΤΑ \\pi (π.χ. 5\\pi t + \\pi), ΠΟΤΕ \\eta!
+5γ. ΚΡΙΣΙΜΟ — Εξισώσεις Βιβλιοθήκης Φυσικής Λυκείου (Κύματα, Φωτοηλεκτρικό, Ταλαντώσεις, Ηλεκτρομαγνητισμός, Αέρια):
+   - Στις εξισώσεις κυμάτων όπως y = A\\eta\\mu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή u_y = u_{max}\\sigma\\upsilon\\nu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή y = 2A\\sigma\\upsilon\\nu\\left(\\frac{2\\pi x}{\\lambda}\\right)\\eta\\mu\\left(\\frac{2\\pi t}{T}\\right), ο παρονομαστής κάτω από το 2\\pi x είναι ΠΑΝΤΑ \\lambda (μήκος κύματος λ, ΠΟΤΕ ο αριθμός 7!) και κάτω από το 2\\pi t είναι ΠΑΝΤΑ T (περίοδος).
+   - Στο φωτοηλεκτρικό φαινόμενο K_{max} = h\\cdot f - \\phi ή K_{max} = h\\cdot f - W_{\\text{εξ}} ή eV_0 = h\\cdot f - \\phi: το h είναι η σταθερά Planck, το f η συχνότητα και το \\phi (ή W_{\\text{εξ}}) το έργο εξαγωγής.
+   - Στις ενέργειες ταλάντωσης K = \\frac{1}{2}m u_{max}^2 \\sigma\\upsilon\\nu^2(\\omega t) και U = \\frac{1}{2}D A^2 \\eta\\mu^2(\\omega t): πρόσεξε το τετράγωνο στο u_{max}^2 και στο \\sigma\\upsilon\\nu^2(\\omega t) / \\eta\\mu^2(\\omega t).
 6. Κυκλωμένοι αριθμοί ασκήσεων (αν υπάρχουν στην αρχή, π.χ. ①, ②, ③): γράψε τους ως \\text{①}\\; ή \\text{②}\\; ή \\text{③}\\;.
 7. Μονάδες μέτρησης & ελληνικές λέξεις: αν στο τέλος μιας αριθμητικής τιμής (όχι πριν από παρένθεση τριγωνομετρικής συνάρτησης!) υπάρχει μονάδα μέτρησης, βάλε την σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 5\\,\\text{kg}, 25\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
 8. Αριθμός γραμμών (σειρών): Αν στην εικόνα υπάρχει ΜΟΝΟ ΜΙΑ γραμμή εξίσωσης, ο πίνακας "lines" ΠΡΕΠΕΙ να έχει ΑΥΣΤΗΡΑ 1 στοιχείο (και το "latex" 1 γραμμή χωρίς "\\n")! Αγνόησε τυχόν μεμονωμένες τελείες ή μικρά σημαδάκια πάνω/κάτω από την εξίσωση και ΜΗΝ επινοείς ΠΟΤΕ δεύτερη γραμμή (όπως "u = 1"). Μόνο αν υπάρχουν πραγματικά 2 ή περισσότερες ολόκληρες σειρές εξισώσεων (η μία κάτω από την άλλη), βάλε κάθε σειρά ως ξεχωριστό στοιχείο στον πίνακα "lines". ΜΗΝ χρησιμοποιείς ΠΟΤΕ \\[6pt], \\\\[6pt] ή \\begin{aligned}.
@@ -7345,7 +7349,20 @@ export function convertPlainTextToMathLatex(rawText: string): string {
       .replace(/[−–—]/g, '-')
       .replace(/²/g, '^2')
       .replace(/³/g, '^3')
-      .replace(/⁴/g, '^4');
+      .replace(/⁴/g, '^4')
+      // Auto-normalize Greek Physics subscripts from our Physics Equations Library even if typed without `_`:
+      // e.g. Kmax -> K_max, umax^2 -> u_max^2, Wεξ -> W_εξ, tαφ -> t_αφ, f0 -> f_0, u0 -> u_0, uy -> u_y, ay -> a_y
+      .replace(/\b([KUEuυvVaαFxXyYIBPΦτA])\s*_?\s*(max|min|μαχ|μιν)\b/gi, (_, sym, sub) => {
+        const cleanSub = /^μ[αa][xχ]$/i.test(sub) ? 'max' : /^μ[iι][nν]$/i.test(sub) ? 'min' : sub.toLowerCase();
+        return `${sym}_${cleanSub}`;
+      })
+      .replace(/\bW\s*_?\s*(εξ|ολ|επ)\b/g, 'W_$1')
+      .replace(/\bt\s*_?\s*(αφ|ολ)\b/g, 't_$1')
+      .replace(/\b([FU])\s*_?\s*(ελ|ηλ|κ|δ|μηχ)\b/g, '$1_$2')
+      .replace(/\bE\s*_?\s*(μηχ|ολ|κ|δ)\b/g, 'E_$1')
+      .replace(/\b([uυvVfxXyYtTλφωEABImrqP])\s*([0123])\b/g, '$1_$2')
+      .replace(/\b([uυvaαF])\s*([xy])\b/g, '$1_$2')
+      .replace(/\b([fu])\s*([AS])\b/g, '$1_$2');
 
     // 1. Convert sqrt(...) or √(...)
     let sqrtSafety = 0;
@@ -7596,9 +7613,9 @@ export function convertPlainTextToMathLatex(rawText: string): string {
     // 5. Convert trig functions & common operators / arrows
     s = s
       .replace(/(?<!\\)\b(sin|cos|tan|ln|log)\b/gi, (_, fn) => `\\${fn.toLowerCase()}`)
-      .replace(/(?<!\\)(?:συνημ|συν)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\sigma\\upsilon\\nu')
-      .replace(/(?<!\\)(?:ημιτ|ημ)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\eta\\mu')
-      .replace(/(?<!\\text\{)(εφ|σφ)(?=\s*\(|\s*[a-zA-Zα-ωΑ-Ω0-9])/gi, '\\text{$1}')
+      .replace(/(?<!\\)(?:συνημ|συν)(?=\s*[\^(_]|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\sigma\\upsilon\\nu')
+      .replace(/(?<!\\)(?:ημιτ|ημ)(?=\s*[\^(_]|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\eta\\mu')
+      .replace(/(?<!\\text\{)(εφ|σφ)(?=\s*[\^(_]|\s*[a-zA-Zα-ωΑ-Ω0-9])/gi, '\\text{$1}')
       .replace(/<=>/g, ' \\Leftrightarrow ')
       .replace(/=>|->/g, ' \\Rightarrow ')
       .replace(/<=/g, ' \\le ')
@@ -7606,6 +7623,11 @@ export function convertPlainTextToMathLatex(rawText: string): string {
       .replace(/!=/g, ' \\ne ')
       .replace(/\+-|±/g, ' \\pm ')
       .replace(/\*/g, ' \\cdot ');
+
+    // 6. Auto-scale parentheses `(...)` that contain tall `\frac` or `\sqrt` into `\left(...\right)`
+    if (depth === 0 && (/\\frac|\\sqrt/.test(s))) {
+      s = s.replace(/\(([^()]*\\(?:frac|sqrt)[^()]*)\)/g, '\\left($1\\right)');
+    }
 
     return s.trim();
   };
