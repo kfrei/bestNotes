@@ -21204,19 +21204,48 @@ export default function App() {
             const cosP = Math.cos(pitch),
               sinP = Math.sin(pitch);
 
-            const project3D = (x: number, y: number, z3d: number) => {
-              // Περιστροφή γύρω από Y (yaw) και μετά X (pitch)
+            const rotate3DPoint = (x: number, y: number, z3d: number) => {
               const x1 = x * cosY + z3d * sinY;
               const z1 = -x * sinY + z3d * cosY;
               const y2 = y * cosP - z1 * sinP;
               const z2 = y * sinP + z1 * cosP;
-              const persp = 1 / (1 - z2 * 0.14);
+              return { x: x1, y: y2, z: z2 };
+            };
+
+            const project3D = (x: number, y: number, z3d: number) => {
+              // Περιστροφή γύρω από Y (yaw) και μετά X (pitch) με έντονη 3D προοπτική (persp)
+              const r = rotate3DPoint(x, y, z3d);
+              const persp = 1 / Math.max(0.45, 1 - r.z * 0.22);
               return {
-                px: cx3d + x1 * scale3D * persp,
-                py: cy3d + y2 * scale3D * persp,
-                depth: z2,
+                px: cx3d + r.x * scale3D * persp,
+                py: cy3d + r.y * scale3D * persp,
+                depth: r.z,
                 persp,
+                rx: r.x,
+                ry: r.y,
+                rz: r.z,
               };
+            };
+
+            // Βοηθητική συνάρτηση φωτισμού/σκίασης χρώματος HEX για 3D PBR σφαίρες
+            const shadeHexColor = (hex: string, factor: number): string => {
+              const clean = hex.replace('#', '');
+              const num = parseInt(clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean, 16);
+              if (Number.isNaN(num)) return hex;
+              let r = (num >> 16) & 255;
+              let g = (num >> 8) & 255;
+              let b = num & 255;
+              if (factor >= 0) {
+                r = Math.round(r + (255 - r) * factor);
+                g = Math.round(g + (255 - g) * factor);
+                b = Math.round(b + (255 - b) * factor);
+              } else {
+                const f = 1 + factor;
+                r = Math.round(r * f);
+                g = Math.round(g * f);
+                b = Math.round(b * f);
+              }
+              return `rgb(${Math.max(0, Math.min(255, r))}, ${Math.max(0, Math.min(255, g))}, ${Math.max(0, Math.min(255, b))})`;
             };
 
             const projAtoms = mol3D.atoms.map((at, idx) => {
@@ -21227,13 +21256,15 @@ export default function App() {
                 px: p.px,
                 py: p.py,
                 depth: p.depth,
-                rPx: 22 * at.radiusFactor * p.persp,
+                persp: p.persp,
+                rPx: 23 * at.radiusFactor * p.persp,
+                r3D: (23 / scale3D) * at.radiusFactor,
               };
             });
 
             // 6α. ΧΡΩΜΑΤΙΚΟ ΝΕΦΟΣ ΗΛΕΚΤΡΟΣΤΑΤΙΚΟΥ ΔΥΝΑΜΙΚΟΥ / ΚΑΤΑΝΟΜΗΣ ΦΟΡΤΙΟΥ (δ⁻ Κόκκινο/Πορτοκαλί, δ⁺ Μπλε/Κυανό)
             if (showCloud) {
-              // Γέφυρα νέφους κατά μήκος κάθε δεσμού (συνεχές μοριακό νέφος ηλεκτρονίων)
+              // Γέφυρα νέφους κατά μήκος κάθε δεσμού (συνεχές 3D μοριακό νέφος ηλεκτρονίων)
               for (const b of mol3D.bonds) {
                 const a1 = projAtoms[b.fromIdx];
                 const a2 = projAtoms[b.toIdx];
@@ -21242,17 +21273,17 @@ export default function App() {
                 const grad = ctx.createLinearGradient(a1.px, a1.py, a2.px, a2.py);
                 const c1 =
                   a1.partialCharge < 0
-                    ? 'rgba(239, 68, 68, 0.34)'
-                    : 'rgba(14, 165, 233, 0.34)';
+                    ? 'rgba(239, 68, 68, 0.30)'
+                    : 'rgba(14, 165, 233, 0.30)';
                 const c2 =
                   a2.partialCharge < 0
-                    ? 'rgba(239, 68, 68, 0.34)'
-                    : 'rgba(14, 165, 233, 0.34)';
+                    ? 'rgba(239, 68, 68, 0.30)'
+                    : 'rgba(14, 165, 233, 0.30)';
                 grad.addColorStop(0, c1);
-                grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.22)');
+                grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.20)');
                 grad.addColorStop(1, c2);
                 ctx.strokeStyle = grad;
-                ctx.lineWidth = Math.max(a1.rPx, a2.rPx) * 2.15;
+                ctx.lineWidth = Math.max(a1.rPx, a2.rPx) * 2.1;
                 ctx.lineCap = 'round';
                 ctx.beginPath();
                 ctx.moveTo(a1.px, a1.py);
@@ -21261,29 +21292,29 @@ export default function App() {
                 ctx.restore();
               }
 
-              // Ακτινικό νέφος φορτίου γύρω από κάθε σφαιρίδιο (δ⁻ υψηλή ηλεκτρονιακή πυκνότητα, δ⁺ χαμηλή)
-              const pulse = 1 + Math.sin(now * 0.003) * 0.05;
+              // Ογκομετρικό 3D νέφος φορτίου γύρω από κάθε σφαιρίδιο (χωρίς επίπεδους 2D διακεκομμένους κύκλους)
+              const pulse = 1 + Math.sin(now * 0.003) * 0.045;
               for (const pa of projAtoms) {
-                const cloudR = pa.rPx * 2.35 * pulse;
+                const cloudR = pa.rPx * 2.4 * pulse;
                 const rg = ctx.createRadialGradient(
-                  pa.px,
-                  pa.py,
-                  pa.rPx * 0.25,
+                  pa.px - pa.rPx * 0.18,
+                  pa.py - pa.rPx * 0.18,
+                  pa.rPx * 0.2,
                   pa.px,
                   pa.py,
                   cloudR
                 );
                 if (pa.partialCharge < 0) {
-                  // Αρνητικό φορτίο δ⁻ (Πυκνό νέφος ηλεκτρονίων: Κόκκινο -> Πορτοκαλί/Ματζέντα)
-                  const intensity = Math.min(0.62, 0.3 + Math.abs(pa.partialCharge) * 0.34);
+                  const intensity = Math.min(0.58, 0.28 + Math.abs(pa.partialCharge) * 0.32);
                   rg.addColorStop(0, `rgba(239, 68, 68, ${intensity})`);
-                  rg.addColorStop(0.55, `rgba(249, 115, 22, ${intensity * 0.55})`);
+                  rg.addColorStop(0.5, `rgba(249, 115, 22, ${intensity * 0.52})`);
+                  rg.addColorStop(0.82, `rgba(244, 63, 94, ${intensity * 0.18})`);
                   rg.addColorStop(1, 'rgba(239, 68, 68, 0)');
                 } else {
-                  // Θετικό φορτίο δ⁺ (Έλλειμμα ηλεκτρονίων: Κυανό -> Μπλε)
-                  const intensity = Math.min(0.58, 0.28 + Math.abs(pa.partialCharge) * 0.34);
+                  const intensity = Math.min(0.54, 0.26 + Math.abs(pa.partialCharge) * 0.32);
                   rg.addColorStop(0, `rgba(56, 189, 248, ${intensity})`);
-                  rg.addColorStop(0.55, `rgba(59, 130, 246, ${intensity * 0.52})`);
+                  rg.addColorStop(0.5, `rgba(59, 130, 246, ${intensity * 0.48})`);
+                  rg.addColorStop(0.82, `rgba(99, 102, 241, ${intensity * 0.16})`);
                   rg.addColorStop(1, 'rgba(59, 130, 246, 0)');
                 }
                 ctx.save();
@@ -21291,151 +21322,344 @@ export default function App() {
                 ctx.beginPath();
                 ctx.arc(pa.px, pa.py, cloudR, 0, Math.PI * 2);
                 ctx.fill();
-                // Διακεκομμένη ισοδυναμική γραμμή νέφους
-                ctx.strokeStyle =
-                  pa.partialCharge < 0
-                    ? 'rgba(251, 113, 133, 0.45)'
-                    : 'rgba(125, 211, 252, 0.42)';
-                ctx.lineWidth = 1;
-                ctx.setLineDash([3, 3]);
-                ctx.beginPath();
-                ctx.arc(pa.px, pa.py, pa.rPx * 1.65, 0, Math.PI * 2);
-                ctx.stroke();
                 ctx.restore();
               }
             }
 
-            // 6β. Μονήρη ζεύγη ηλεκτρονίων (Lone Pair Lobes, π.χ. στο H₂O και στο NH₃)
+            // 6β. Μονήρη ζεύγη ηλεκτρονίων (3D Lone Pair Lobes, π.χ. στο H₂O και στο NH₃)
             for (const lp of mol3D.lonePairs) {
               const pLp = project3D(lp.x, lp.y, lp.z3d);
+              const lpR = 11.5 * pLp.persp;
               ctx.save();
-              ctx.fillStyle = 'rgba(244, 114, 182, 0.26)';
-              ctx.strokeStyle = 'rgba(244, 114, 182, 0.65)';
-              ctx.lineWidth = 1.2;
-              ctx.setLineDash([2, 2]);
+              const lpGrad = ctx.createRadialGradient(
+                pLp.px - lpR * 0.25,
+                pLp.py - lpR * 0.25,
+                lpR * 0.1,
+                pLp.px,
+                pLp.py,
+                lpR
+              );
+              lpGrad.addColorStop(0, 'rgba(251, 207, 232, 0.55)');
+              lpGrad.addColorStop(0.6, 'rgba(244, 114, 182, 0.28)');
+              lpGrad.addColorStop(1, 'rgba(244, 114, 182, 0.04)');
+              ctx.fillStyle = lpGrad;
+              ctx.strokeStyle = 'rgba(244, 114, 182, 0.45)';
+              ctx.lineWidth = 1;
               ctx.beginPath();
-              ctx.arc(pLp.px, pLp.py, 11 * pLp.persp, 0, Math.PI * 2);
+              ctx.arc(pLp.px, pLp.py, lpR, 0, Math.PI * 2);
               ctx.fill();
               ctx.stroke();
-              // 2 κουκκίδες ηλεκτρονίων μονήρους ζεύγους
-              ctx.fillStyle = '#f472b6';
-              ctx.beginPath();
-              ctx.arc(pLp.px - 3.5, pLp.py, 2.3, 0, Math.PI * 2);
-              ctx.arc(pLp.px + 3.5, pLp.py, 2.3, 0, Math.PI * 2);
-              ctx.fill();
+              // 2 3D σφαιρίδια ηλεκτρονίων μονήρους ζεύγους
+              for (const exOff of [-3.6, 3.6]) {
+                const ex = pLp.px + exOff * pLp.persp;
+                const ey = pLp.py;
+                const er = 2.6 * pLp.persp;
+                const eGrad = ctx.createRadialGradient(ex - er * 0.3, ey - er * 0.3, 0.2, ex, ey, er);
+                eGrad.addColorStop(0, '#ffffff');
+                eGrad.addColorStop(0.45, '#f472b6');
+                eGrad.addColorStop(1, '#9d174d');
+                ctx.fillStyle = eGrad;
+                ctx.beginPath();
+                ctx.arc(ex, ey, er, 0, Math.PI * 2);
+                ctx.fill();
+              }
               ctx.restore();
             }
 
-            // 6γ. Depth-sorted σχεδίαση 3D Δεσμών και 3D Σφαιριδίων Ατόμων
+            // 6γ. Πραγματική 3D Depth-Sorted Σχεδίαση Κυλινδρικών Δεσμών (σε 3D τμήματα από επιφάνεια σε επιφάνεια) & 3D Σφαιριδίων Ατόμων
+            type BondCylinderSeg3D = {
+              x1: number;
+              y1: number;
+              x2: number;
+              y2: number;
+              radiusPx: number;
+              isIonic?: boolean;
+              colA: string;
+              colB: string;
+              tMid: number;
+            };
             type RenderItem3D =
-              | { kind: 'bond'; depth: number; bond: (typeof mol3D.bonds)[0] }
+              | { kind: 'bond-seg'; depth: number; seg: BondCylinderSeg3D }
               | { kind: 'atom'; depth: number; atom: (typeof projAtoms)[0] };
 
             const items3D: RenderItem3D[] = [];
+
             for (const b of mol3D.bonds) {
               const a1 = projAtoms[b.fromIdx];
               const a2 = projAtoms[b.toIdx];
-              if (a1 && a2) {
-                items3D.push({
-                  kind: 'bond',
-                  depth: (a1.depth + a2.depth) / 2 - 0.05,
-                  bond: b,
-                });
+              if (!a1 || !a2) continue;
+
+              const dx3 = a2.x - a1.x;
+              const dy3 = a2.y - a1.y;
+              const dz3 = a2.z3d - a1.z3d;
+              const dist3 = Math.max(0.001, Math.hypot(dx3, dy3, dz3));
+              const ux = dx3 / dist3;
+              const uy = dy3 / dist3;
+              const uz = dz3 / dist3;
+
+              // Το βάθος του δεσμού ορίζεται ακριβώς πίσω από το πιο απομακρυσμένο εκ των 2 συνδεδεμένων ατόμων:
+              // min(a1.depth, a2.depth) - 0.001. Έτσι:
+              // 1) Κανένας δεσμός δεν ζωγραφίζεται ΠΟΤΕ πάνω από τις σφαίρες των 2 άκρων του (ούτε καλύπτει τα σύμβολα C, O, N, H).
+              // 2) Οι μπροστινοί δεσμοί & σφαίρες καλύπτουν ρεαλιστικά τους πίσω δεσμούς & τις πίσω σφαίρες!
+              const baseBondDepth = Math.min(a1.depth, a2.depth) - 0.001;
+              const startInset = Math.min(dist3 * 0.25, a1.r3D * 0.45);
+              const endInset = Math.min(dist3 * 0.25, a2.r3D * 0.45);
+              const sx1 = a1.x + ux * startInset;
+              const sy1 = a1.y + uy * startInset;
+              const sz1 = a1.z3d + uz * startInset;
+              const sx2 = a2.x - ux * endInset;
+              const sy2 = a2.y - uy * endInset;
+              const sz2 = a2.z3d - uz * endInset;
+
+              // Υπολογισμός 3D κάθετου διανύσματος για διπλούς/τριπλούς δεσμούς ώστε να περιστρέφονται ρεαλιστικά στον 3D χώρο
+              let px3 = -uy;
+              let py3 = ux;
+              let pz3 = 0;
+              let pLen = Math.hypot(px3, py3, pz3);
+              if (pLen < 0.01) {
+                px3 = 0;
+                py3 = -uz;
+                pz3 = uy;
+                pLen = Math.max(0.001, Math.hypot(px3, py3, pz3));
+              }
+              px3 /= pLen;
+              py3 /= pLen;
+              pz3 /= pLen;
+              // Δεύτερο 3D κάθετο διάνυσμα (cross product u x p) για 3D όγκο στους πολλαπλούς δεσμούς
+              const qx3 = uy * pz3 - uz * py3;
+              const qy3 = uz * px3 - ux * pz3;
+              const qz3 = ux * py3 - uy * px3;
+
+              const offsets3D: { ox: number; oy: number; oz: number; radBase: number }[] =
+                b.order === 2
+                  ? [
+                      { ox: (px3 * 0.85 + qx3 * 0.52) * 0.088, oy: (py3 * 0.85 + qy3 * 0.52) * 0.088, oz: (pz3 * 0.85 + qz3 * 0.52) * 0.088, radBase: 3.1 },
+                      { ox: -(px3 * 0.85 + qx3 * 0.52) * 0.088, oy: -(py3 * 0.85 + qy3 * 0.52) * 0.088, oz: -(pz3 * 0.85 + qz3 * 0.52) * 0.088, radBase: 3.1 },
+                    ]
+                  : b.order === 3
+                  ? [
+                      { ox: 0, oy: 0, oz: 0, radBase: 2.5 },
+                      { ox: (px3 * 0.82 + qx3 * 0.55) * 0.105, oy: (py3 * 0.82 + qy3 * 0.55) * 0.105, oz: (pz3 * 0.82 + qz3 * 0.55) * 0.105, radBase: 2.3 },
+                      { ox: -(px3 * 0.82 + qx3 * 0.55) * 0.105, oy: -(py3 * 0.82 + qy3 * 0.55) * 0.105, oz: -(pz3 * 0.82 + qz3 * 0.55) * 0.105, radBase: 2.3 },
+                    ]
+                  : [{ ox: 0, oy: 0, oz: 0, radBase: 4.4 }];
+
+              const numSegs = b.isIonic ? 1 : 2;
+              for (const off of offsets3D) {
+                const pMidOff = project3D(
+                  (sx1 + sx2) * 0.5 + off.ox,
+                  (sy1 + sy2) * 0.5 + off.oy,
+                  (sz1 + sz2) * 0.5 + off.oz
+                );
+                const pMidCenter = project3D((sx1 + sx2) * 0.5, (sy1 + sy2) * 0.5, (sz1 + sz2) * 0.5);
+                const cylDepthBias = (pMidOff.depth - pMidCenter.depth) * 0.01;
+
+                for (let sIdx = 0; sIdx < numSegs; sIdx++) {
+                  const t0 = sIdx / numSegs;
+                  const t1 = (sIdx + 1) / numSegs;
+                  const t0Pad = sIdx === 0 ? t0 : t0 - 0.03;
+                  const t1Pad = sIdx === numSegs - 1 ? t1 : t1 + 0.03;
+
+                  const pStart = project3D(
+                    sx1 + (sx2 - sx1) * t0Pad + off.ox,
+                    sy1 + (sy2 - sy1) * t0Pad + off.oy,
+                    sz1 + (sz2 - sz1) * t0Pad + off.oz
+                  );
+                  const pEnd = project3D(
+                    sx1 + (sx2 - sx1) * t1Pad + off.ox,
+                    sy1 + (sy2 - sy1) * t1Pad + off.oy,
+                    sz1 + (sz2 - sz1) * t1Pad + off.oz
+                  );
+                  const midPersp = (pStart.persp + pEnd.persp) * 0.5;
+
+                  items3D.push({
+                    kind: 'bond-seg',
+                    depth: baseBondDepth + cylDepthBias,
+                    seg: {
+                      x1: pStart.px,
+                      y1: pStart.py,
+                      x2: pEnd.px,
+                      y2: pEnd.py,
+                      radiusPx: off.radBase * midPersp,
+                      isIonic: b.isIonic,
+                      colA: a1.color,
+                      colB: a2.color,
+                      tMid: (t0 + t1) * 0.5,
+                    },
+                  });
+                }
               }
             }
+
             for (const pa of projAtoms) {
               items3D.push({ kind: 'atom', depth: pa.depth, atom: pa });
             }
             items3D.sort((i1, i2) => i1.depth - i2.depth);
 
             for (const item of items3D) {
-              if (item.kind === 'bond') {
-                const b = item.bond;
-                const a1 = projAtoms[b.fromIdx];
-                const a2 = projAtoms[b.toIdx];
-                const dx = a2.px - a1.px;
-                const dy = a2.py - a1.py;
-                const len = Math.max(1, Math.hypot(dx, dy));
-                const nx = -dy / len;
-                const ny = dx / len;
+              if (item.kind === 'bond-seg') {
+                const seg = item.seg;
+                const dx = seg.x2 - seg.x1;
+                const dy = seg.y2 - seg.y1;
+                const len = Math.hypot(dx, dy);
+                if (len < 0.4) continue;
 
                 ctx.save();
-                if (b.isIonic) {
+                if (seg.isIonic) {
                   ctx.strokeStyle = '#facc15';
                   ctx.lineWidth = 3;
                   ctx.setLineDash([5, 4]);
                   ctx.beginPath();
-                  ctx.moveTo(a1.px, a1.py);
-                  ctx.lineTo(a2.px, a2.py);
+                  ctx.moveTo(seg.x1, seg.y1);
+                  ctx.lineTo(seg.x2, seg.y2);
                   ctx.stroke();
-                } else if (b.order === 2) {
-                  // Διπλός δεσμός (π.χ. O = C = O στο CO2)
-                  for (const off of [-4.2, 4.2]) {
-                    ctx.strokeStyle = '#cbd5e1';
-                    ctx.lineWidth = 4.2;
-                    ctx.lineCap = 'round';
-                    ctx.beginPath();
-                    ctx.moveTo(a1.px + nx * off, a1.py + ny * off);
-                    ctx.lineTo(a2.px + nx * off, a2.py + ny * off);
-                    ctx.stroke();
-                  }
                 } else {
-                  // Απλός 3D κυλινδρικός δεσμός
-                  ctx.strokeStyle = '#94a3b8';
-                  ctx.lineWidth = 6.5;
+                  // Πραγματικός 3D φωτισμένος κύλινδρος (με κάθετο μεταλλικό/γυαλιστερό gradient + διχρωμία ατόμων όπως στα 3D μοριακά μοντέλα)
+                  const nx = -dy / len;
+                  const ny = dx / len;
+                  const r = seg.radiusPx;
+                  const midX = (seg.x1 + seg.x2) * 0.5;
+                  const midY = (seg.y1 + seg.y2) * 0.5;
+                  const baseTint = seg.tMid < 0.5 ? seg.colA : seg.colB;
+
+                  const cylGrad = ctx.createLinearGradient(
+                    midX - nx * r,
+                    midY - ny * r,
+                    midX + nx * r,
+                    midY + ny * r
+                  );
+                  cylGrad.addColorStop(0, '#0f172a');
+                  cylGrad.addColorStop(0.2, shadeHexColor(baseTint, -0.25));
+                  cylGrad.addColorStop(0.42, '#f8fafc'); // 3D Specular ridge κατά μήκος του κυλίνδρου
+                  cylGrad.addColorStop(0.72, shadeHexColor(baseTint, 0.15));
+                  cylGrad.addColorStop(1, '#020617');
+
+                  ctx.strokeStyle = cylGrad;
+                  ctx.lineWidth = r * 2;
                   ctx.lineCap = 'round';
                   ctx.beginPath();
-                  ctx.moveTo(a1.px, a1.py);
-                  ctx.lineTo(a2.px, a2.py);
-                  ctx.stroke();
-
-                  ctx.strokeStyle = '#e2e8f0';
-                  ctx.lineWidth = 2.4;
-                  ctx.beginPath();
-                  ctx.moveTo(a1.px, a1.py);
-                  ctx.lineTo(a2.px, a2.py);
+                  ctx.moveTo(seg.x1, seg.y1);
+                  ctx.lineTo(seg.x2, seg.y2);
                   ctx.stroke();
                 }
                 ctx.restore();
               } else {
                 const pa = item.atom;
-                // 3D Σφαίρα με Specular φωτισμό
                 ctx.save();
+
+                // 1. 3D Drop Shadow / Ambient Occlusion πίσω και κάτω από τη σφαίρα
+                ctx.save();
+                ctx.shadowColor = 'rgba(2, 6, 23, 0.68)';
+                ctx.shadowBlur = pa.rPx * 0.55;
+                ctx.shadowOffsetX = pa.rPx * 0.14;
+                ctx.shadowOffsetY = pa.rPx * 0.22;
+                ctx.fillStyle = '#020617';
+                ctx.beginPath();
+                ctx.arc(pa.px, pa.py, pa.rPx * 0.97, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+
+                // 2. Κύριο 3D Phong/PBR Radial Gradient Σφαίρας (χωρίς επίπεδο 2D περίγραμμα!)
+                const lightX = pa.px - pa.rPx * 0.36;
+                const lightY = pa.py - pa.rPx * 0.38;
                 const sphereGrad = ctx.createRadialGradient(
-                  pa.px - pa.rPx * 0.34,
-                  pa.py - pa.rPx * 0.34,
-                  pa.rPx * 0.1,
-                  pa.px,
-                  pa.py,
-                  pa.rPx
+                  lightX,
+                  lightY,
+                  pa.rPx * 0.05,
+                  pa.px + pa.rPx * 0.08,
+                  pa.py + pa.rPx * 0.08,
+                  pa.rPx * 1.02
                 );
                 sphereGrad.addColorStop(0, '#ffffff');
-                sphereGrad.addColorStop(0.28, pa.color);
-                sphereGrad.addColorStop(1, '#0f172a');
-
-                ctx.fillStyle = sphereGrad;
-                ctx.strokeStyle =
+                sphereGrad.addColorStop(0.16, shadeHexColor(pa.color, 0.48));
+                sphereGrad.addColorStop(0.46, pa.color);
+                sphereGrad.addColorStop(0.78, shadeHexColor(pa.color, -0.45));
+                sphereGrad.addColorStop(0.93, '#020617');
+                // Απαλό 3D Fresnel Rim Light στο πίσω χείλος της σφαίρας για 3D διαχωρισμό από το φόντο
+                sphereGrad.addColorStop(
+                  1,
                   pa.partialCharge < 0
-                    ? 'rgba(252, 165, 165, 0.9)'
-                    : 'rgba(186, 230, 253, 0.9)';
-                ctx.lineWidth = 1.6;
+                    ? 'rgba(251, 113, 133, 0.55)'
+                    : 'rgba(125, 211, 252, 0.55)'
+                );
+
                 ctx.beginPath();
                 ctx.arc(pa.px, pa.py, pa.rPx, 0, Math.PI * 2);
+                ctx.fillStyle = sphereGrad;
                 ctx.fill();
+
+                // 3. Περιστρεφόμενοι 3D Μεσημβρινοί / Ισημερινός πάνω στην επιφάνεια της σφαίρας
+                // ώστε η 3D σφαιρικότητα και η ιδιοπεριστροφή να φαίνονται ξεκάθαρα σε κάθε γωνία!
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(pa.px, pa.py, pa.rPx * 0.985, 0, Math.PI * 2);
+                ctx.clip();
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.13)';
+                ctx.lineWidth = 1.25;
+                // 3D Ισημερινός (κέκλιμένος σύμφωνα με το pitch)
+                const eqRy = Math.max(1.5, Math.abs(Math.sin(pitch)) * pa.rPx * 0.92);
+                ctx.beginPath();
+                ctx.ellipse(
+                  pa.px,
+                  pa.py,
+                  pa.rPx * 0.96,
+                  eqRy,
+                  0,
+                  sinP >= 0 ? 0 : Math.PI,
+                  sinP >= 0 ? Math.PI : Math.PI * 2
+                );
                 ctx.stroke();
 
-                // Σύμβολο Στοιχείου πάνω στο 3D σφαιρίδιο
-                ctx.font = `bold ${Math.round(Math.max(11, pa.rPx * 0.62))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                // 3D Μεσημβρινός (περιστρεφόμενος σύμφωνα με το yaw)
+                const merRx = Math.max(1.5, Math.abs(Math.sin(yaw)) * pa.rPx * 0.92);
+                ctx.beginPath();
+                ctx.ellipse(
+                  pa.px,
+                  pa.py,
+                  merRx,
+                  pa.rPx * 0.96,
+                  0,
+                  cosY >= 0 ? -Math.PI / 2 : Math.PI / 2,
+                  cosY >= 0 ? Math.PI / 2 : (Math.PI * 3) / 2
+                );
+                ctx.stroke();
+
+                // 4. Γυαλιστερή 3D Specular Αντανάκλαση (Billiard-ball gloss highlight)
+                ctx.save();
+                ctx.translate(pa.px - pa.rPx * 0.34, pa.py - pa.rPx * 0.34);
+                ctx.rotate(-Math.PI / 4);
+                const specGrad = ctx.createRadialGradient(0, 0, 0.2, 0, 0, pa.rPx * 0.32);
+                specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.78)');
+                specGrad.addColorStop(0.55, 'rgba(255, 255, 255, 0.22)');
+                specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = specGrad;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, pa.rPx * 0.30, pa.rPx * 0.17, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+
+                ctx.restore();
+
+                // 5. Σύμβολο Στοιχείου πάνω στην 3D σφαίρα με 3D σκιά βάθους
+                ctx.save();
+                ctx.font = `bold ${Math.round(Math.max(11, pa.rPx * 0.60))}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                ctx.shadowColor = 'rgba(2, 6, 23, 0.82)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 1.5;
                 ctx.fillStyle = '#ffffff';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(pa.symbol, pa.px, pa.py - 1);
+                ctx.fillText(pa.symbol, pa.px, pa.py - 0.5);
+                ctx.restore();
 
-                // Ένδειξη μερικού φορτίου (δ⁻ / δ⁺) πάνω στο σφαιρίδιο
+                // 6. Ένδειξη μερικού φορτίου (δ⁻ / δ⁺) κάτω από τη σφαίρα
                 if (showCloud && pa.chargeLabel) {
                   ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
                   ctx.fillStyle = pa.partialCharge < 0 ? '#fecaca' : '#bae6fd';
-                  ctx.fillText(pa.chargeLabel, pa.px, pa.py + pa.rPx + 10);
+                  ctx.textAlign = 'center';
+                  ctx.fillText(pa.chargeLabel, pa.px, pa.py + pa.rPx + 11);
                 }
                 ctx.restore();
               }
