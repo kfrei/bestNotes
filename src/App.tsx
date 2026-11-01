@@ -35940,29 +35940,47 @@ export default function App() {
       animateAndCommitMathGraph(graphBuilt, (page) => {
         if (prompt.sourceStrokeIds && prompt.sourceStrokeIds.length > 0) {
           const srcSet = new Set(prompt.sourceStrokeIds);
+          const oldGraphGroupIds = new Set<string>();
+          for (const s of page.strokes) {
+            if (!srcSet.has(s.id)) continue;
+            const m = s.id.match(/-eqsrc-(math-graph-grp-[a-z0-9-]+)-fn\d+$/);
+            if (m && m[1]) oldGraphGroupIds.add(m[1]);
+          }
           return {
             ...page,
-            strokes: page.strokes.map((s) => {
-              if (!srcSet.has(s.id)) return s;
-              const cleanBaseId = s.id.replace(/-eqsrc-math-graph-grp-[a-z0-9-]+-fn\d+$/, '');
-              return {
-                ...s,
-                id: `${cleanBaseId}-eqsrc-${graphBuilt!.groupId}-fn0`,
-              };
-            }),
+            strokes: page.strokes
+              .filter((s) => !(s.groupId && oldGraphGroupIds.has(s.groupId)))
+              .map((s) => {
+                if (!srcSet.has(s.id)) return s;
+                const cleanBaseId = s.id.replace(/-eqsrc-math-graph-grp-[a-z0-9-]+-fn\d+$/, '');
+                return {
+                  ...s,
+                  id: `${cleanBaseId}-eqsrc-${graphBuilt!.groupId}-fn0`,
+                };
+              }),
+            texts: (page.texts || []).filter((t) => !(t.groupId && oldGraphGroupIds.has(t.groupId))),
           };
         }
         if (prompt.sourceTextId) {
+          const oldGraphGroupIds = new Set<string>();
+          for (const t of page.texts || []) {
+            if (t.id !== prompt.sourceTextId) continue;
+            const m = t.id.match(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/);
+            if (m && m[1]) oldGraphGroupIds.add(m[1]);
+          }
           return {
             ...page,
-            texts: (page.texts || []).map((t) => {
-              if (t.id !== prompt.sourceTextId) return t;
-              const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
-              return {
-                ...t,
-                id: `${cleanBaseId}-${graphBuilt!.groupId}-fn0`,
-              };
-            }),
+            strokes: page.strokes.filter((s) => !(s.groupId && oldGraphGroupIds.has(s.groupId))),
+            texts: (page.texts || [])
+              .filter((t) => !(t.groupId && oldGraphGroupIds.has(t.groupId)))
+              .map((t) => {
+                if (t.id !== prompt.sourceTextId) return t;
+                const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+                return {
+                  ...t,
+                  id: `${cleanBaseId}-${graphBuilt!.groupId}-fn0`,
+                };
+              }),
           };
         }
         return page;
@@ -35990,9 +36008,13 @@ export default function App() {
         .filter((s) => baseSet.has(s.id) && s.groupId)
         .map((s) => s.groupId as string)
     );
-    const selStrokes = activePage.strokes.filter(
+    const rawSelStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
+    const nonGraphStrokes = rawSelStrokes.filter(
+      (s) => !s.groupId?.startsWith('math-graph-grp-')
+    );
+    const selStrokes = nonGraphStrokes.length > 0 ? nonGraphStrokes : rawSelStrokes;
     if (selStrokes.length === 0) {
       showToast('ℹ️ Επίλεξε πρώτα με το Λάσο την εξίσωση για την οποία θέλεις Διάγραμμα!');
       return;
@@ -36255,17 +36277,29 @@ export default function App() {
         }
       }
 
+      const oldGraphGroupIds = new Set<string>();
+      for (const st of rawSelStrokes) {
+        if (st.groupId?.startsWith('math-graph-grp-')) {
+          oldGraphGroupIds.add(st.groupId);
+        }
+        const m = st.id.match(/-eqsrc-(math-graph-grp-[a-z0-9-]+)-fn\d+$/);
+        if (m && m[1]) oldGraphGroupIds.add(m[1]);
+      }
+
       animateAndCommitMathGraph(graphBuilt, (page) => ({
         ...page,
-        strokes: page.strokes.map((s) => {
-          const mapped = strokeColorAndTagMap.get(s.id);
-          if (!mapped) return s;
-          return {
-            ...s,
-            id: mapped.newId,
-            color: mapped.color || s.color,
-          };
-        }),
+        strokes: page.strokes
+          .filter((s) => !(s.groupId && oldGraphGroupIds.has(s.groupId)))
+          .map((s) => {
+            const mapped = strokeColorAndTagMap.get(s.id);
+            if (!mapped) return s;
+            return {
+              ...s,
+              id: mapped.newId,
+              color: mapped.color || s.color,
+            };
+          }),
+        texts: (page.texts || []).filter((t) => !(t.groupId && oldGraphGroupIds.has(t.groupId))),
       }));
       showToast(
         `📈 Διάγραμμα (${graphBuilt.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση! Είναι πλήρως επεξεργάσιμο σε μέγεθος, χρώμα & θέση.`
@@ -47943,16 +47977,52 @@ export default function App() {
                     centerY = Math.min(pH - diagH / 2 - 24, targetY + targetH + 48 + diagH / 2);
                   }
                   const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
-                  const graphRes = buildMathGraphStrokesFromEquation(
-                    normalizedLatex,
-                    centerX,
-                    centerY,
-                    diagW,
-                    diagH,
-                    '#dc2626',
-                    axisInk,
-                    activeLayerId
-                  );
+                  const wDet = detectWaveTwoVarEquation(normalizedLatex);
+                  if (wDet && wDet.isWaveXT && !wDet.forcedMode) {
+                    updateActivePage((page) => ({
+                      ...page,
+                      texts: selMathTxt
+                        ? (page.texts || []).map((t) =>
+                            t.id === selMathTxt.id && updatedOrNewTxt ? updatedOrNewTxt : t
+                          )
+                        : [...(page.texts || []), ...(updatedOrNewTxt ? [updatedOrNewTxt] : [])],
+                    }));
+                    setShowMathModal(false);
+                    setWaveDiagramPrompt({
+                      candEq: normalizedLatex,
+                      displayEq: normalizedLatex,
+                      info: wDet,
+                      centerX,
+                      centerY,
+                      diagW,
+                      diagH,
+                      axisInk,
+                      targetLayerId: activeLayerId,
+                      sourceTextId: updatedOrNewTxt?.id,
+                    });
+                    return;
+                  }
+                  const graphRes =
+                    tryBuildOscillationDiagramStrokes(
+                      normalizedLatex,
+                      centerX,
+                      centerY,
+                      diagW,
+                      diagH,
+                      '#dc2626',
+                      axisInk,
+                      activeLayerId
+                    ) ||
+                    buildMathGraphStrokesFromEquation(
+                      normalizedLatex,
+                      centerX,
+                      centerY,
+                      diagW,
+                      diagH,
+                      '#dc2626',
+                      axisInk,
+                      activeLayerId
+                    );
                   if (!graphRes) {
                     showToast('⚠️ Δεν αναγνωρίστηκε έγκυρη εξίσωση για σχεδίαση διαγράμματος!');
                     return;

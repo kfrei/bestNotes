@@ -4579,7 +4579,7 @@ export async function transcribeHandwrittenMathWithGemini(
 5. ΚΡΙΣΙΜΟ — Ταχύτητα u και πλάτος u_{max} (πεζό u, ΟΧΙ κεφαλαίο U) & δείκτες max/min: Στις εξισώσεις ταχύτητας ταλάντωσης (π.χ. u = u_{max}\\sigma\\upsilon\\nu(\\omega t) ή u = -u_{max}\\eta\\mu(\\omega t)), το u είναι ΠΑΝΤΑ πεζό "u" (ταχύτητα) τόσο στο αριστερό μέλος όσο και στο πλάτος u_{max} (ΠΟΤΕ κεφαλαίο U, γιατί το U είναι δυναμική ενέργεια!). Επίσης τα max και min γράφονται ΠΑΝΤΑ ως δείκτης σε αγκύλες _{max} και _{min} (π.χ. u_{max}, a_{max}, F_{max}, x_{max}, K_{max}, U_{max}), ΠΟΤΕ κολλητά (όχι Umax ή umax).
 5β. ΚΡΙΣΙΜΟ — Χειρόγραφο ελληνικό "π" (\\pi) vs "η" (\\eta) μέσα σε φάση τριγωνομετρικής συνάρτησης: Στο ελληνικό χειρόγραφο το γράμμα π (\\pi) γράφεται συχνά με τη δεξιά κάθετη γραμμή λίγο πιο μακριά προς τα κάτω (σαν Π/π), οπότε μοιάζει οπτικά με "η". Μέσα στις παρενθέσεις ημιτόνου/συνημιτόνου (π.χ. (\\omega t + \\phi_0), (5\\pi t + \\pi), (2\\pi t - \\frac{\\pi}{2})) η γωνία/αρχική φάση και ο συντελεστής του t είναι ΠΑΝΤΑ \\pi (π.χ. 5\\pi t + \\pi), ΠΟΤΕ \\eta!
 5γ. ΚΡΙΣΙΜΟ — Εξισώσεις Βιβλιοθήκης Φυσικής Λυκείου (Κύματα, Φωτοηλεκτρικό, Ταλαντώσεις, Ηλεκτρομαγνητισμός, Αέρια):
-   - Στις εξισώσεις κυμάτων όπως y = A\\eta\\mu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή u_y = u_{max}\\sigma\\upsilon\\nu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή y = 2A\\sigma\\upsilon\\nu\\left(\\frac{2\\pi x}{\\lambda}\\right)\\eta\\mu\\left(\\frac{2\\pi t}{T}\\right), ο παρονομαστής κάτω από το 2\\pi x είναι ΠΑΝΤΑ \\lambda (μήκος κύματος λ, ΠΟΤΕ ο αριθμός 7!) και κάτω από το 2\\pi t είναι ΠΑΝΤΑ T (περίοδος).
+   - Στις εξισώσεις κυμάτων όπως y = A\\eta\\mu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή u_y = u_{max}\\sigma\\upsilon\\nu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή y = 2A\\sigma\\upsilon\\nu\\left(\\frac{2\\pi x}{\\lambda}\\right)\\eta\\mu\\left(\\frac{2\\pi t}{T}\\right), πρόσεξε το χειρόγραφο "ημ" μετά το A (όπου το η μοιάζει με n ή u και η κατακόρυφη γραμμή του μ είναι πολύ μακριά σαν | ή k ή p, π.χ. μοιάζει με "An|r(" ή "Ank(") — γράψε ΠΑΝΤΑ A\\eta\\mu! Επίσης ο παρονομαστής κάτω από το 2\\pi x είναι ΠΑΝΤΑ \\lambda (μήκος κύματος λ, ΠΟΤΕ ο αριθμός 7 ή A!) και κάτω από το 2\\pi t είναι ΠΑΝΤΑ T (περίοδος).
    - Στο φωτοηλεκτρικό φαινόμενο K_{max} = h\\cdot f - \\phi ή K_{max} = h\\cdot f - W_{\\text{εξ}} ή eV_0 = h\\cdot f - \\phi: το h είναι η σταθερά Planck, το f η συχνότητα και το \\phi (ή W_{\\text{εξ}}) το έργο εξαγωγής.
    - Στις ενέργειες ταλάντωσης K = \\frac{1}{2}m u_{max}^2 \\sigma\\upsilon\\nu^2(\\omega t) και U = \\frac{1}{2}D A^2 \\eta\\mu^2(\\omega t): πρόσεξε το τετράγωνο στο u_{max}^2 και στο \\sigma\\upsilon\\nu^2(\\omega t) / \\eta\\mu^2(\\omega t).
 6. Κυκλωμένοι αριθμοί ασκήσεων (αν υπάρχουν στην αρχή, π.χ. ①, ②, ③): γράψε τους ως \\text{①}\\; ή \\text{②}\\; ή \\text{③}\\;.
@@ -7674,7 +7674,7 @@ export async function transcribeEquationForGraphWithGemini(
 3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159), ΕΞΙΣΩΣΕΙΣ ΚΥΜΑΤΟΣ (x, t), ΕΝΕΡΓΕΙΕΣ K(t)/U(t) ΜΕ συν^2(ωt)/ημ^2(ωt), ΤΑΧΥΤΗΤΑ u_max, ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ e^(-Λt) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "6uv" & "ημ"):
    - ΚΡΙΣΙΜΟ ΓΙΑ ΧΕΙΡΟΓΡΑΦΟ "συν": Στο ελληνικό χειρόγραφο το συνημίτονο "συν" γράφεται με τρία γράμματα (σ-υ-ν) όπου το "σ" μοιάζει οπτικά με "6", "c" ή "G" και το "υν" μοιάζει με "uv" ή "un" (π.χ. φαίνεται σαν "6uv(ωt)" ή "cuv(ωt)"). ΠΟΤΕ μην διαβάζεις το χειρόγραφο "συν(ωt)" ως "6*u*v*(ω*t)"! Όταν βλέπεις "6uv", "cuv", "σuv" πριν από παρένθεση (π.χ. x = A_0 e^(-Λt) συν(ωt), u = u_max συν(ωt), K = 1/2 m u_max^2 συν^2(ωt)), γράψε ΠΑΝΤΑ "συν"!
    - ΚΡΙΣΙΜΟ ΓΙΑ ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ x = A_0 e^(-Λt) συν(ωt): Στον εκθέτη του e^(-Λt), το μείον "-" συχνά ακουμπάει το αριστερό σκέλος του κεφαλαίου "Λ" και μοιάζει με "-1*t", "-A*t" ή "A*t". Όταν βλέπεις εξίσωση με A_0 (ή A) πολλαπλασιασμένο με εκθετικό e^(...) και συν(ωt) ή ημ(ωt), είναι ΠΑΝΤΑ η εξίσωση φθίνουσας ταλάντωσης "x = A_0*e^(-Λ*t)*συν(ω*t)" (ή "ημ(ω*t)")!
-   - Όπου εμφανίζεται το σύμβολο "π" (π.χ. 2πt/T - 2πx/λ, u = 10 συν(2πt), x = A ημ(2πt)), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο. Στις εξισώσεις κύματος (π.χ. y = A ημ(2πt/T - 2πx/λ), u = u_max συν(2πt/T - 2πx/λ), a = -a_max ημ(2πt/T - 2πx/λ)) πρόσεξε το χειρόγραφο "ημ" (όπου η κατακόρυφη γραμμή του μ μπορεί να είναι μακριά) και κράτησε ΚΑΙ το t ΚΑΙ το x αυτούσια (π.χ. "y = A*ημ(2*π*t/T - 2*π*x/λ)")! Όταν υπάρχει τετράγωνο σε μέγεθος με δείκτη max (π.χ. u²_max ή u_max² στο K = 1/2 m u_max^2 συν^2(ωt)), γράψε ΠΑΝΤΑ πρώτα τον δείκτη και μετά τον εκθέτη: "u_max^2". Όταν υπάρχει τετράγωνο σε τριγωνομετρική συνάρτηση (συν²(ωt) ή ημ²(ωt)), γράψε "συν^2(ω*t)" ή "ημ^2(ω*t)".
+   - Όπου εμφανίζεται το σύμβολο "π" (π.χ. 2πt/T - 2πx/λ, u = 10 συν(2πt), x = A ημ(2πt)), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο. Στις εξισώσεις κύματος (π.χ. y = A ημ(2πt/T - 2πx/λ), u = u_max συν(2πt/T - 2πx/λ), a = -a_max ημ(2πt/T - 2πx/λ)) πρόσεξε ιδιαίτερα το χειρόγραφο "ημ" μετά το A (όπου το η μοιάζει με n ή u και η κατακόρυφη γραμμή του μ γράφεται πολύ μακριά σαν "|", "k", "p" ή "|r", π.χ. φαίνεται σαν "y = A n |r (2πt/T - 2πx/λ)") και τον παρονομαστή "λ" κάτω από το 2πx (που μοιάζει συχνά με "7" ή "A"): γράψε ΠΑΝΤΑ "y = A*ημ(2*π*t/T - 2*π*x/λ)" κρατώντας ΚΑΙ το t ΚΑΙ το x αυτούσια! Όταν υπάρχει τετράγωνο σε μέγεθος με δείκτη max (π.χ. u²_max ή u_max² στο K = 1/2 m u_max^2 συν^2(ωt)), γράψε ΠΑΝΤΑ πρώτα τον δείκτη και μετά τον εκθέτη: "u_max^2". Όταν υπάρχει τετράγωνο σε τριγωνομετρική συνάρτηση (συν²(ωt) ή ημ²(ωt)), γράψε "συν^2(ω*t)" ή "ημ^2(ω*t)".
 4. ΙΕΡΑΡΧΙΑ ΑΝΕΞΑΡΤΗΤΗΣ ΜΕΤΑΒΛΗΤΗΣ ΣΤΗ ΦΥΣΙΚΗ: Στις εξισώσεις Κύματος με δύο μεταβλητές (t και x, π.χ. 2πt/T - 2πx/λ ή ωt - kx), κράτησε ΚΑΙ τις δύο μεταβλητές t και x αυτούσιες τόσο στο "equation" όσο και στο "normalizedEquation"! Στις υπόλοιπες εξισώσεις Φυσικής, αν στο δεξί μέλος υπάρχει ο χρόνος "t" (χωρίς x), η συνάρτηση είναι συνάρτηση του χρόνου t και όλα τα άλλα σύμβολα (m, D, k, A, A_0, u_0, x_0, u_max, ω, Λ, a, g) είναι σταθερές παράμετροι. Αν δεν υπάρχει t αλλά υπάρχει η θέση "x", είναι συνάρτηση της θέσης x (π.χ. ΣF = -D*x, U = 1/2*D*x^2). Αν δεν υπάρχει ούτε t ούτε x αλλά υπάρχει η ταχύτητα "u", είναι συνάρτηση της ταχύτητας u (π.χ. K = 1/2*m*u^2, p = m*u). Στην καταστατική εξίσωση αερίων PV = nRT (ή P = nRT/V, P - V, P - T, V - T), κράτησε στο "equation" και στο "normalizedEquation" την ίδια ακριβώς μορφή με το "equation"!
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
@@ -7947,10 +7947,10 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
 
   // Normalize trig & standard functions into uppercase tokens before single-letter variable splitting
   // Note: Do NOT use `\b` after Greek words (`ημ`, `συν`, `εφ`) or unparenthesized `sinx`/`cosx` because JS `\b` only matches ASCII!
-  // Also rescue handwritten `συν` misread by OCR as `6uv`, `6*u*v`, `cuv` before `(` or `^`!
+  // Also rescue handwritten `συν` misread by OCR as `6uv`, `6*u*v`, `cuv` and handwritten `ημ` misread as `nk`, `np`, `uμ`, `n|r` before `(` or `^`!
   s = s
     .replace(/(?:[6σςcCgGsS]\s*\*?\s*[uυv]\s*\*?\s*[vνn])\s*\*?(?=\s*[\^(])/gi, 'COS')
-    .replace(/(?:[ηnnh]\s*\*?\s*[μm])\s*\*?(?=\s*[\^(])/gi, 'SIN')
+    .replace(/(?:[ηnnhuυv]\s*\*?\s*\|?\s*\*?\s*[μmkprlI1|])\s*\*?(?=\s*[\^(])/gi, 'SIN')
     .replace(/\\?(?:sin(?!h)|ημιτ|ημ)/gi, 'SIN')
     .replace(/\\?(?:cos(?!h)|συνημ|συν|σ[uυv][vν])/gi, 'COS')
     .replace(/\\?(?:tan(?!h)|tg|εφ)/gi, 'TAN')
@@ -7962,10 +7962,10 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/√\s*([a-zA-Zα-ωΑ-Ω0-9]+)/g, 'SQRT($1)')
     .replace(/\\?(?:abs)\b/gi, 'ABS');
 
-  // Convert f(x), g(x), y(x), f_1(x), y_1(x), x(t), u(t), v(t) (also accepting Greek χ)
+  // Convert f(x), g(x), y(x), f_1(x), y_1(x), x(t), u(t), v(t), y(t) (also accepting Greek χ)
   s = s
     .replace(/(?<![A-Z])\b[fghyFGH](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*[xχ]\s*\)/g, 'y')
-    .replace(/(?<![A-Z])\b[xuvXUV](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*t\s*\)/g, 'y');
+    .replace(/(?<![A-Z])\b[xuvyXUVY](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*t\s*\)/g, 'y');
 
   // Remove subscripts like x_0, y_0, u_0, v_0, A_0 -> treat as symbolic positive constant b,
   // and amplitude/extrema subscripts like u_{max}, u^2_{max}, u_{mαx}, K_{m\alpha x}, x_{max}, a_{max}, F_{max}, K_{max}, U_{max} -> treat as symbolic amplitude A
@@ -7993,12 +7993,12 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
   // Replace Greek χ/Χ with x, and ψ/Ψ with y
   s = s.replace(/[χΧ]/g, 'x').replace(/[ψΨ]/g, 'y');
 
-  // If equation has 't' on RHS (e.g. x = 2t + 1, u = a*t, u = A*COS(ωt + π/2), K = 1/2 m u_max^2 συν^2(ωt)),
+  // If equation has 't' on RHS (e.g. x = 2t + 1, y = 5t - 2, u = a*t, u = A*COS(ωt + π/2), K = 1/2 m u_max^2 συν^2(ωt)),
   // map LHS variable to y, treat any incidental x on RHS as constant A, and map t to x!
   // Note: use (?<![a-zA-Z])t(?![a-zA-Z]) instead of \bt\b so `2t`, `ωt`, `πt` also match cleanly!
-  if (!s.includes('y') && /(?<![a-zA-Z])t(?![a-zA-Z])/.test(s) && s.includes('=')) {
+  if (/(?<![a-zA-Z])t(?![a-zA-Z])/.test(s) && s.includes('=')) {
     const [lhs, rhs] = s.split('=');
-    if (lhs && rhs && /(?<![a-zA-Z])t(?![a-zA-Z])/.test(rhs)) {
+    if (lhs && rhs && !/\b[yY]\b/.test(rhs) && /(?<![a-zA-Z])t(?![a-zA-Z])/.test(rhs)) {
       const rhsWithoutX = rhs.replace(/[xX]/g, 'A');
       s = `y = ${rhsWithoutX.replace(/(?<![a-zA-Z])t(?![a-zA-Z])/g, 'x')}`;
     }
@@ -8824,15 +8824,15 @@ function normalizePhysicsEquationToCompact(rawInput: string): string {
     .replace(/\\tau\b/g, 'τ')
     .replace(/\\Phi\b/g, 'Φ')
     .replace(/\\(?:phi|varphi)\b/g, 'φ')
-    .replace(/\\mu\b/g, 'm')
     .replace(/\\sigma\s*\\upsilon\s*\\nu/gi, 'συν')
     .replace(/\\eta\s*\\mu/gi, 'ημ')
+    .replace(/\\mu\b/g, 'm')
     .replace(/\\(?:upsilon|nu)\b/g, 'u')
     .replace(/\\kappa\b/g, 'k')
     .replace(/\\(?:text|mathrm|operatorname|mathit|mathbf)\{([^}]*)\}/g, '$1')
     .replace(/\\(?:max|min)\b/gi, (m) => m.slice(1).toLowerCase())
     .replace(/(?:[6σςcCgGsS]\s*\*?\s*[uυv]\s*\*?\s*[vνn])(?=\s*\*?\s*[\^(ωπtτxχ0-9])/gi, 'συν')
-    .replace(/(?:[ηnnh]\s*\*?\s*[μm])(?=\s*\*?\s*[\^(ωπtτxχ0-9])/gi, 'ημ')
+    .replace(/(?:[ηnnhuυv]\s*\*?\s*\|?\s*\*?\s*[μmkprlI1|h])(?=\s*\*?\s*[\^(ωπtτxχ0-9])/gi, 'ημ')
     .replace(/σ\s*[uυv]\s*[vν]/gi, 'συν')
     .replace(/η\s*[μm]/gi, 'ημ')
     .replace(/\\left\b|\\right\b|\\displaystyle\b/g, '')
@@ -8859,7 +8859,7 @@ function normalizePhysicsEquationToCompact(rawInput: string): string {
     .replace(/Υ/g, 'U')
     .replace(/τ(?=\s*[)+-])/g, 't')
     .replace(/(\d),(\d)/g, '$1.$2')
-    .replace(/\s+/g, ' ')
+    .replace(/\s+/g, '')
     .trim();
 
   for (let pass = 0; pass < 5; pass++) {
@@ -8873,9 +8873,18 @@ function normalizePhysicsEquationToCompact(rawInput: string): string {
   }
 
   return expanded
-    .replace(/\s+/g, '')
     .replace(/[μm][αa][xχ]/gi, 'max')
     .replace(/[μm][iι][nν]/gi, 'min')
+    // Rescue handwritten λ in wave fraction denominators (e.g. 2πx/7 or 2πx/A -> 2πx/λ when paired with /T)
+    .replace(
+      /(\/T\s*[-+]\s*\(?(?:2\*?π\*?)?[xχ]\)?\/)(?:7|A|X|r|1|l)(?=[)+-]|$)/g,
+      '$1λ'
+    )
+    // Rescue any mangled handwritten ημ after amplitude A before wave phase `(2πt/T` or `(t/T` or `(ωt`
+    .replace(
+      /(=-?(?:[0-9.]+|[AΑaαuυv](?:_max|_0)?)\*?)(?!συν|συνημ|cos|ημ|ημιτ|sin)[a-zA-Zα-ωΑ-Ω|*]{1,5}(?=\(\(?(?:2\*?π|[tτ]\/T|ω\*?[tτ]))/i,
+      '$1ημ'
+    )
     .replace(/\\+([a-zA-Z]+)/g, '$1');
 }
 
@@ -8911,18 +8920,23 @@ function parseWaveTwoVarFromCompact(compact: string): WaveTwoVarDetection | null
 
   const rhsClean = rhs.replace(/max|min|exp|text|σταθ|const|sqrt|abs/gi, '');
   const trigMatches = rhsClean.match(/συνημ|συν|cos|ημιτ|ημ|sin/gi) || [];
-  if (yVar !== 'φ' && trigMatches.length === 0) return null;
 
   const rhsVars = rhsClean.replace(/συνημ|συν|cos|ημιτ|ημ|sin/gi, '');
   const hasT =
     /(?:^|[^a-zA-Zα-ωΑ-Ω_])[tτ](?:$|[^a-zA-Zα-ωΑ-Ω_])|[0-9πωf]\*?[tτ]|[tτ]\/T/.test(rhsVars);
   const hasX =
-    /(?:^|[^a-zA-Zα-ωΑ-Ω_])[xχ](?:$|[^a-zA-Zα-ωΑ-Ω_])|[0-9πk]\*?[xχ]|[xχ]\/[λuυv]/.test(rhsVars);
+    /(?:^|[^a-zA-Zα-ωΑ-Ω_])[xχ](?:$|[^a-zA-Zα-ωΑ-Ω_])|[0-9πk]\*?[xχ]|[xχ]\/[λuυv7A]/.test(rhsVars);
   const hasTandLambda =
-    /\/T(?:[^a-zA-Zα-ωΑ-Ω_]|$)/.test(rhsVars) && /\/λ(?:[^a-zA-Zα-ωΑ-Ω_]|$)/.test(rhsVars);
+    /\/T(?:[^a-zA-Zα-ωΑ-Ω_]|$)/.test(rhsVars) && /\/[λ7A](?:[^a-zA-Zα-ωΑ-Ω_]|$)/.test(rhsVars);
+  const hasCanonicalWavePhase =
+    hasTandLambda ||
+    (/2\*?π\*?[tτ]/.test(rhsVars) && /2\*?π\*?[xχ]/.test(rhsVars)) ||
+    (/[tτ]\/T/.test(rhsVars) && /[xχ]\/[λuυv7A]/.test(rhsVars)) ||
+    (/ω\*?[tτ]/.test(rhsVars) && /k\*?[xχ]/.test(rhsVars));
   const hasInterferenceR = /r_?1/.test(rhsVars) && /r_?2/.test(rhsVars) && hasT;
 
-  if (!((hasT && hasX) || hasTandLambda || hasInterferenceR)) return null;
+  if (yVar !== 'φ' && trigMatches.length === 0 && !hasCanonicalWavePhase) return null;
+  if (!((hasT && hasX) || hasTandLambda || hasCanonicalWavePhase || hasInterferenceR)) return null;
 
   const isStanding = trigMatches.length >= 2;
   const isNeg = rhs.startsWith('-');
