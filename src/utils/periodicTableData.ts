@@ -135,7 +135,7 @@ export function toSubscriptDigits(s: string): string {
 }
 
 export function formatChemEquationText(raw: string): string {
-  let s = raw
+  let s = normalizeAsciiChem(raw)
     .trim()
     .replace(/-->|->|→|⇒|=/g, ' → ')
     .replace(/\s*\+\s*/g, ' + ')
@@ -450,7 +450,7 @@ interface ParsedTermToken {
 }
 
 function normalizeAsciiChem(raw: string): string {
-  return (raw || '')
+  let s = (raw || '')
     .trim()
     .replace(/₀/g, '0')
     .replace(/₁/g, '1')
@@ -462,15 +462,141 @@ function normalizeAsciiChem(raw: string): string {
     .replace(/₇/g, '7')
     .replace(/₈/g, '8')
     .replace(/₉/g, '9')
-    // Ομόγλυφα Ελληνικά -> Λατινικά χημικά σύμβολα
+    // Ομόγλυφα Ελληνικά -> Λατινικά χημικά σύμβολα (Κεφαλαία & Πεζά)
     .replace(/Η/g, 'H')
     .replace(/Ο/g, 'O')
     .replace(/Ν/g, 'N')
     .replace(/Κ/g, 'K')
     .replace(/Μg/g, 'Mg')
     .replace(/ΜG/g, 'Mg')
+    .replace(/Μ/g, 'M')
+    .replace(/Α/g, 'A')
+    .replace(/Β/g, 'B')
+    .replace(/Ε/g, 'E')
+    .replace(/Ζ/g, 'Z')
+    .replace(/Ι/g, 'I')
+    .replace(/Ρ/g, 'P')
+    .replace(/Τ/g, 'T')
+    .replace(/Υ/g, 'Y')
+    .replace(/Χ(?=[lLaAuUoOhH0-9\s+>-]|$)/g, 'C')
     .replace(/Ϲ/g, 'C')
+    .replace(/([A-Z])α/g, '$1a')
+    .replace(/([A-Z])ο/g, '$1o')
+    .replace(/([A-Z])ε/g, '$1e')
+    .replace(/([A-Z])ι/g, '$1i')
+    .replace(/([A-Z])υ/g, '$1u')
+    .replace(/([A-Z])ρ/g, '$1r')
+    .replace(/([A-Z])ν/g, '$1n')
     .replace(/-->|->|=>|➔|⟶|⇒|=/g, '->');
+
+  // Διόρθωση συχνών οπτικών συγχύσεων OCR/πληκτρολόγησης μέσα σε χημικούς τύπους:
+  // 1) "0" (μηδέν) αντί για "O" (Οξυγόνο): π.χ. 02 -> O2, C02 -> CO2, H20 -> H2O, Mg0 -> MgO, S02 -> SO2, Na0H -> NaOH
+  s = s
+    .replace(/(^|[\s+>])(\d*)0(\d*)(?=$|[\s+-])/g, '$1$2O$3')
+    .replace(/([A-Za-z])0(?=\d|[A-Z\s+>-]|$)/g, '$1O')
+    .replace(/\b(H2|Na2|K2|Li2|Al2|Fe2|Fe3|N2|P2|Cl2)0(\d*)\b/g, '$1O$2')
+    .replace(/\(0H\)/g, '(OH)');
+
+  // 2) "C1" / "CI" αντί για "Cl" (Χλώριο) και "A1" / "AI" αντί για "Al" (Αργίλιο)
+  s = s
+    .replace(/\b(\d*)(Na|K|Li|H|Ag|Mg|Ca|Zn|Fe|Al|Cu)?C[1I](\d*)\b/g, '$1$2Cl$3')
+    .replace(/\b(\d*)A[1I](\d*O\d*|\d*Cl\d*|\b)/g, '$1Al$2');
+
+  // 3) Case-insensitive κανονικοποίηση αν ο μαθητής έγραψε με πεζά (π.χ. "c + o2 -> co2", "2h2 + o2 -> 2h2o", "na + cl2 -> nacl")
+  const COMMON_LOWER_FORMULAS: Record<string, string> = {
+    h: 'H', h2: 'H2', o: 'O', o2: 'O2', o3: 'O3', n: 'N', n2: 'N2', c: 'C', s: 'S', p: 'P',
+    f: 'F', f2: 'F2', cl: 'Cl', cl2: 'Cl2', br: 'Br', br2: 'Br2', i: 'I', i2: 'I2',
+    na: 'Na', k: 'K', li: 'Li', mg: 'Mg', ca: 'Ca', ba: 'Ba', al: 'Al', zn: 'Zn', fe: 'Fe', cu: 'Cu', ag: 'Ag',
+    h2o: 'H2O', h2o2: 'H2O2', ho: 'HO', co2: 'CO2', co: 'CO', so2: 'SO2', so3: 'SO3',
+    nh3: 'NH3', nh: 'NH', ch4: 'CH4', ch: 'CH', c2h6: 'C2H6', c2h4: 'C2H4', c2h2: 'C2H2', c3h8: 'C3H8',
+    hcl: 'HCl', hbr: 'HBr', hi: 'HI', hf: 'HF', h2s: 'H2S', h2so4: 'H2SO4', hno3: 'HNO3', h2co3: 'H2CO3', h3po4: 'H3PO4',
+    nacl: 'NaCl', kcl: 'KCl', licl: 'LiCl', lif: 'LiF', naf: 'NaF', kf: 'KF',
+    mgcl2: 'MgCl2', mgcl: 'MgCl', cacl2: 'CaCl2', cacl: 'CaCl', zncl2: 'ZnCl2', zncl: 'ZnCl',
+    fecl2: 'FeCl2', fecl3: 'FeCl3', alcl3: 'AlCl3', cucl2: 'CuCl2', agcl: 'AgCl',
+    mgo: 'MgO', cao: 'CaO', bao: 'BaO', zno: 'ZnO', cuo: 'CuO', feo: 'FeO',
+    na2o: 'Na2O', nao: 'NaO', k2o: 'K2O', ko: 'KO', al2o3: 'Al2O3', alo: 'AlO', fe2o3: 'Fe2O3', fe3o4: 'Fe3O4',
+    no: 'NO', no2: 'NO2', n2o: 'N2O', n2o5: 'N2O5', p2o5: 'P2O5',
+    naoh: 'NaOH', koh: 'KOH', caoh2: 'Ca(OH)2', mgoh2: 'Mg(OH)2', caco3: 'CaCO3',
+  };
+  s = s.replace(/\b(\d*)([a-zA-Z]{1,6}\d*[a-zA-Z]*\d*)\b/g, (full, coeff: string, word: string) => {
+    const mapped = COMMON_LOWER_FORMULAS[word.toLowerCase()];
+    return mapped ? `${coeff}${mapped}` : full;
+  });
+
+  return s;
+}
+
+/**
+ * Ολιστική διόρθωση συμβόλων στοιχείων μιας αντίδρασης (Αρχή Διατήρησης Στοιχείων LHS <-> RHS):
+ * Αν κάποιο γράμμα στη μία πλευρά του βέλους (π.χ. "GO2" αντί "CO2", "CQ2" αντί "CO2", "MH3" αντί "NH3",
+ * "NaGl" αντί "NaCl", "Fc2O3" αντί "Fe2O3", "GuO" αντί "CuO") δεν είναι έγκυρο στοιχείο ή δε βρίσκεται
+ * στην άλλη πλευρά της αντίδρασης, το μαντεύει από τα στοιχεία που υπάρχουν καθαρά στην απέναντι πλευρά,
+ * κρατώντας ΑΘΙΚΤΟΥΣ τους συντελεστές και τους δείκτες του μαθητή!
+ */
+function inferReactionSideTokensFromConservation(
+  userLhs: ParsedTermToken[],
+  userRhs: ParsedTermToken[]
+): void {
+  if (userLhs.length === 0 || userRhs.length === 0) return;
+
+  const VISUAL_ELEMENT_CANDIDATES: Record<string, string[]> = {
+    G: ['C', 'Cl', 'Ca', 'Cu'],
+    Q: ['O'],
+    D: ['O'],
+    M: ['N', 'Mg', 'Mn'],
+    L: ['Cl', 'Li', 'Al'],
+    R: ['K', 'Br', 'Cr'],
+    E: ['F', 'Fe'],
+    T: ['F', 'I'],
+    Fc: ['Fe'],
+    Fe: ['Fe'],
+    Gu: ['Cu'],
+    Cn: ['Cu', 'Zn', 'Ca'],
+    Gl: ['Cl', 'Al'],
+    Cl: ['Cl'],
+    Ma: ['Na', 'Mg', 'Ca'],
+    Nq: ['Na'],
+    No: ['Na'],
+    Mq: ['Mg'],
+    Cq: ['Ca', 'Cu', 'Co'],
+    Zq: ['Zn'],
+    Zh: ['Zn'],
+  };
+
+  const resolveSide = (thisSide: ParsedTermToken[], otherSide: ParsedTermToken[]) => {
+    const otherSyms = new Set(otherSide.flatMap((t) => t.atoms.map((a) => a.sym)));
+    for (const term of thisSide) {
+      for (const atom of term.atoms) {
+        const isKnownElement = Boolean(getPeriodicElementBySymbol(atom.sym));
+        // Αν το σύμβολο υπάρχει ήδη στην άλλη πλευρά και είναι έγκυρο στοιχείο, είναι 100% σωστό
+        if (isKnownElement && otherSyms.has(atom.sym)) continue;
+
+        const candidates = VISUAL_ELEMENT_CANDIDATES[atom.sym] || [];
+        const matchedFromOtherSide = candidates.find((cand) => otherSyms.has(cand));
+        if (matchedFromOtherSide) {
+          atom.sym = matchedFromOtherSide;
+          continue;
+        }
+
+        // Αν δεν είναι καν έγκυρο χημικό στοιχείο του Περιοδικού Πίνακα (π.χ. G, Q, D, M, Fc, Gu, Gl)
+        if (!isKnownElement) {
+          if (candidates.length > 0) {
+            atom.sym = candidates[0];
+          } else if (atom.sym.length === 1) {
+            // Αν λείπει ΑΚΡΙΒΩΣ 1 στοιχείο από αυτή την πλευρά σε σχέση με την απέναντι πλευρά, συμπλήρωσέ το!
+            const currentThisSyms = new Set(thisSide.flatMap((t) => t.atoms.map((a) => a.sym)));
+            const missingFromThisSide = Array.from(otherSyms).filter((s) => !currentThisSyms.has(s));
+            if (missingFromThisSide.length === 1) {
+              atom.sym = missingFromThisSide[0];
+            }
+          }
+        }
+      }
+    }
+  };
+
+  resolveSide(userLhs, userRhs);
+  resolveSide(userRhs, userLhs);
 }
 
 function parseFormulaToken(tokenStr: string): ParsedTermToken {
@@ -1000,13 +1126,24 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
   const userLhs = lhsTokensRaw.map(parseFormulaToken);
   const userRhs = rhsTokensRaw.map(parseFormulaToken);
 
+  // Ολιστική ανάλυση ολόκληρης της αντίδρασης (Αρχή Διατήρησης Στοιχείων LHS <-> RHS):
+  // αν κάποιο γράμμα στοιχείου γράφτηκε δυσανάγνωστα (π.χ. GO2 αντί CO2, MH3 αντί NH3, NaGl αντί NaCl),
+  // διορθώνει το σύμβολο του στοιχείου από την απέναντι πλευρά του βέλους!
+  inferReactionSideTokensFromConservation(userLhs, userRhs);
+
   const lhsSyms = userLhs.flatMap((t) => t.atoms.map((a) => a.sym));
   const rhsSyms = userRhs.flatMap((t) => t.atoms.map((a) => a.sym));
+  const reconstructedAscii = `${userLhs
+    .map((t) => `${t.coeff}${t.atoms.map((a) => `${a.sym}${a.sub}`).join('')}`)
+    .join(' + ')}${ascii.includes('->') ? ' -> ' : ''}${userRhs
+    .map((t) => `${t.coeff}${t.atoms.map((a) => `${a.sym}${a.sub}`).join('')}`)
+    .join(' + ')}`.trim();
 
   const hasReactionStructure = ascii.includes('->') || ascii.includes('+');
   const matchedSpec = hasReactionStructure
-    ? CANONICAL_REACTIONS.find((spec) => spec.matchElements(lhsSyms, rhsSyms, ascii.toUpperCase())) ||
-      tryAutoBalanceReactionSpec(userLhs, userRhs)
+    ? CANONICAL_REACTIONS.find((spec) =>
+        spec.matchElements(lhsSyms, rhsSyms, reconstructedAscii.toUpperCase())
+      ) || tryAutoBalanceReactionSpec(userLhs, userRhs)
     : undefined;
 
   if (!matchedSpec) {

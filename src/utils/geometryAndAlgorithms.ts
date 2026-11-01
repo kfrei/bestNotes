@@ -4480,6 +4480,160 @@ export async function transcribeHandwrittenStrokesWithGemini(
  * so each row can be rendered cleanly on its own line in KaTeX without broken `\[6pt]`
  * or `\begin{aligned}` escaping artifacts.
  */
+/**
+ * Ολιστική Ανάλυση Ολόκληρης της Εξίσωσης & Αλυσίδας Συνεπαγωγών (Whole-Equation & Step-by-Step Context Inference):
+ * Εξετάζει τα προηγούμενα και τα επόμενα βήματα/σύμβολα μιας εξίσωσης (τόσο στο MathOCR όσο και στο Text2Math)
+ * για να συμπεράνει και να διορθώσει δυσανάγνωστα ή γρήγορα γραμμένα σύμβολα, μεταβλητές, αριθμούς και μονάδες μέτρησης SI:
+ * 1) Διατήρηση/συνέπεια της επιλυόμενης μεταβλητής στο αριστερό μέλος (LHS) κατά μήκος διαδοχικών βημάτων `→` / `⇒`
+ *    (π.χ. `\sum F = m \cdot a \rightarrow a = \frac{\sum F}{m} \rightarrow a = \frac{10}{2} \rightarrow d = 5 m/2` => `a = 5\,\text{m/s}^2`).
+ * 2) Αριθμητική επαλήθευση μεταξύ διαδοχικών βημάτων (π.χ. αν προηγείται `\frac{10}{2}` και στο επόμενο βήμα το `5` γράφτηκε σαν `S`, διορθώνεται σε `5`).
+ * 3) Αυτόματη αναγνώριση & διόρθωση μονάδας μέτρησης SI στο τέλος αριθμητικού αποτελέσματος με βάση το φυσικό μέγεθος του αριστερού μέλους
+ *    (`a` -> `\text{m/s}^2`, `u`/`v` -> `\text{m/s}`, `\omega` -> `\text{rad/s}`, `D`/`k` -> `\text{N/m}`, `F` -> `\text{N}`, κ.λπ.).
+ * 4) Συμφραστική διόρθωση γνωστών εξισώσεων Φυσικής (Κύματα `2πt/T - 2πx/λ`, Φθίνουσα Ταλάντωση `A_0 e^{-\Lambda t} συν(\omega t)`, Φωτοηλεκτρικό `K_{max} = h\cdot f - \phi`).
+ */
+export function applyWholeEquationContextInferenceToLatexLine(rawLine: string): string {
+  if (!rawLine || !rawLine.trim()) return rawLine;
+  let line = rawLine;
+
+  // A. Συμφραστική διόρθωση Εξίσωσης Αρμονικού Κύματος: αν υπάρχει `\frac{2\pi t}{T}` (ή `\frac{t}{T}`) και δίπλα `\frac{2\pi x}{7|A|l|1|r}`, ο 2ος παρονομαστής είναι `\lambda`!
+  line = line.replace(
+    /(\\frac\{\s*(?:2\s*\\pi\s*)?t\s*\}\{\s*T\s*\}\s*[-+]\s*\\frac\{\s*(?:2\s*\\pi\s*)?x\s*\}\{\s*)(?:7|A|X|l|1|r|\\eta)(\s*\})/g,
+    '$1\\lambda$2'
+  );
+  // Και αντίστροφα: αν ο 2ος όρος είναι `\frac{2\pi x}{\lambda}` και ο 1ος παρονομαστής κάτω από το `2\pi t` διαβάστηκε ως `1`, `I`, `7`, `\tau`, `r`, είναι `T`!
+  line = line.replace(
+    /(\\frac\{\s*(?:2\s*\\pi\s*)?t\s*\}\{\s*)(?:1|I|7|\\tau|r)(\s*\}\s*[-+]\s*\\frac\{\s*(?:2\s*\\pi\s*)?x\s*\}\{\s*\\lambda\s*\})/g,
+    '$1T$2'
+  );
+
+  // B. Συμφραστική διόρθωση Φθίνουσας Ταλάντωσης `x = A_0 e^{-\Lambda t} \sigma\upsilon\nu(\omega t)`:
+  // Αν ακολουθεί `\sigma\upsilon\nu` ή `\eta\mu` μετά από `e^{...}` και ο εκθέτης έχει `-1 t`, `-A t`, `-l t`, `-I t`, είναι `-\Lambda t`!
+  line = line.replace(
+    /(e\^\{\s*-\s*)(?:1|A|l|I|\\lambda|\\Delta)(\s*(?:\\cdot\s*)?t\s*\}\s*(?:\\cdot\s*)?(?:\\sigma\\upsilon\\nu|\\eta\\mu|\\cos|\\sin))/g,
+    '$1\\Lambda$2'
+  );
+
+  // C. Συμφραστική διόρθωση Φωτοηλεκτρικού Φαινομένου `K_{max} = h \cdot f - \phi`:
+  if (/K_\{max\}\s*=/.test(line)) {
+    line = line
+      .replace(/(K_\{max\}\s*=\s*h\s*(?:\\cdot\s*)?)(?:t|l)(\s*-\s*(?:\\phi|\\varphi|W))/g, '$1f$2')
+      .replace(/(K_\{max\}\s*=\s*h\s*(?:\\cdot\s*)?f\s*-\s*)(?:q|p|0)(?=\s*$|\s*\\Rightarrow|\s*\\rightarrow)/g, '$1\\phi');
+  }
+
+  // D. Ανάλυση Αλυσίδας Συνεπαγωγών (`\Rightarrow`, `\Leftrightarrow`, `\rightarrow`, `\longrightarrow`, `\implies`)
+  const arrowSplitRegex = /(\s*(?:\\Rightarrow|\\Leftrightarrow|\\rightarrow|\\longrightarrow|\\implies)\s*)/;
+  const parts = line.split(arrowSplitRegex);
+
+  const normalizeAccelerationUnitOnStep = (stepStr: string): string =>
+    stepStr
+      .replace(
+        /(=\s*[+-]?\d+(?:[.,]\d+)?)\s*(?:\\,?\s*)?(?:\\frac\{\s*(?:\\text\{)?m(?:\})?\s*\}\{\s*(?:\\text\{)?(?:s\^\{?2\}?|s_\{?2\}?|\|?2)(?:\})?\s*\}|\\text\{\s*m\s*\/\s*(?:s\^?2|s²|\|?2)\s*\}\s*(?:\^\{?2\}?)?|\bm\s*\/\s*(?:s\s*(?:\^\{?2\}?|_\s*\{?2\}?|²)|\|?2)\b)/gi,
+        '$1\\,\\text{m/s}^{2}'
+      );
+
+  const normalizeVelocityUnitOnStep = (stepStr: string): string =>
+    stepStr
+      .replace(
+        /(=\s*[+-]?\d+(?:[.,]\d+)?)\s*(?:\\,?\s*)?(?:\\frac\{\s*(?:\\text\{)?m(?:\})?\s*\}\{\s*(?:\\text\{)?(?:s|5)(?:\})?\s*\}|\\text\{\s*m\s*\/\s*(?:s|5)\s*\}|\bm\s*\/\s*(?:s|5)\b)(?!\s*\^)/gi,
+        '$1\\,\\text{m/s}'
+      );
+
+  const normalizeOmegaUnitOnStep = (stepStr: string): string =>
+    stepStr
+      .replace(
+        /(=\s*[+-]?\d+(?:[.,]\d+)?)\s*(?:\\,?\s*)?(?:\\frac\{\s*(?:\\text\{)?rad(?:\})?\s*\}\{\s*(?:\\text\{)?s(?:\})?\s*\}|\\text\{\s*rad\s*\/\s*s\s*\}|\brad\s*\/\s*s\b)(?!\s*\^)/gi,
+        '$1\\,\\text{rad/s}'
+      );
+
+  const normalizeSpringConstantUnitOnStep = (stepStr: string): string =>
+    stepStr
+      .replace(
+        /(=\s*[+-]?\d+(?:[.,]\d+)?)\s*(?:\\,?\s*)?(?:\\frac\{\s*(?:\\text\{)?N(?:\})?\s*\}\{\s*(?:\\text\{)?m(?:\})?\s*\}|\\text\{\s*N\s*\/\s*m\s*\}|\bN\s*\/\s*m\b)(?!\s*\^)/g,
+        '$1\\,\\text{N/m}'
+      );
+
+  let activeSolvedVar = '';
+  let prevNumericValue: number | null = null;
+
+  for (let i = 0; i < parts.length; i += 2) {
+    let step = parts[i].trim();
+    if (!step) continue;
+
+    // Αν το προηγούμενο βήμα ήταν ο 2ος Νόμος του Νεύτωνα `\sum F = m \cdot a` (ή `F = m \cdot a`)
+    // και το τρέχον βήμα έχει `= \frac{\sum F}{m}` ή `= \frac{F}{m}`, η επιλυόμενη μεταβλητή είναι `a`!
+    if (
+      i >= 2 &&
+      /(?:\\sum|\\Sigma)?\s*F\s*=\s*m\s*(?:\\cdot|\*)?\s*(?:a|\\alpha)\b/.test(parts[i - 2]) &&
+      /=\s*\\frac\{\s*(?:\\sum|\\Sigma)?\s*F\s*\}\{\s*m\s*\}/.test(step)
+    ) {
+      step = step.replace(/^([a-zA-Zα-ωΑ-Ω\\]+)\s*=/, 'a =');
+      activeSolvedVar = 'a';
+    }
+
+    const eqMatch = step.match(/^((?:\\sum\s*|\\Sigma\s*|\\Delta\s*|\\vec\{[^}]+\}|\\[a-zA-Z]+|[a-zA-Zα-ωΑ-Ω])(?:_\{?[^}=]+\}?)?)\s*=\s*(.+)$/);
+    if (eqMatch) {
+      let lhsVar = eqMatch[1].trim();
+      let rhsExpr = eqMatch[2].trim();
+
+      // Αν έχουμε ήδη ενεργή επιλυόμενη μεταβλητή `activeSolvedVar` από το προηγούμενο βήμα
+      // και το δεξί μέλος του τρέχοντος βήματος είναι καθαρά αριθμητική αντικατάσταση / αποτέλεσμα με μονάδα
+      // (δηλ. ξεκινάει με αριθμό ή αριθμητικό κλάσμα `\frac{10}{2}`), τότε το αριστερό μέλος ΠΡΕΠΕΙ να είναι το `activeSolvedVar`!
+      const isNumericStepRhs =
+        /^(?:[+-]?\s*\d+(?:[.,]\d+)?|\\frac\{\s*[+-]?\d+(?:[.,]\d+)?\s*\}\{\s*[+-]?\d+(?:[.,]\d+)?\s*\}|\\sqrt\{\s*\d+(?:[.,]\d+)?\s*\})/.test(
+          rhsExpr
+        );
+
+      if (activeSolvedVar && isNumericStepRhs && lhsVar !== activeSolvedVar) {
+        lhsVar = activeSolvedVar;
+      } else {
+        // Κανονικοποίηση `\alpha` -> `a` αν στο προηγούμενο βήμα υπήρχε `a`
+        if (lhsVar === '\\alpha' && i >= 2 && /\ba\b/.test(parts[i - 2])) {
+          lhsVar = 'a';
+        }
+        activeSolvedVar = lhsVar;
+      }
+
+      // Αριθμητική επαλήθευση από το προηγούμενο βήμα: αν το προηγούμενο βήμα είχε κλάσμα `\frac{N1}{N2}` (π.χ. `\frac{10}{2} = 5`)
+      // και στο τρέχον βήμα το ψηφίο διαβάστηκε ως γράμμα (`S` αντί `5`, `Z` αντί `2`, `O` αντί `0`)
+      if (prevNumericValue !== null && Number.isInteger(prevNumericValue)) {
+        if (prevNumericValue === 5 && /^[Ss](?=\s|$|\\|\text|m)/.test(rhsExpr)) {
+          rhsExpr = rhsExpr.replace(/^[Ss]/, '5');
+        } else if (prevNumericValue === 2 && /^[Zz](?=\s|$|\\|\text|m)/.test(rhsExpr)) {
+          rhsExpr = rhsExpr.replace(/^[Zz]/, '2');
+        }
+      }
+
+      // Υπολογισμός αριθμητικής τιμής αν το τρέχον βήμα είναι απλό αριθμητικό κλάσμα `\frac{N1}{N2}`
+      const fracNumMatch = rhsExpr.match(/^\\frac\{\s*([+-]?\d+(?:\.\d+)?)\s*\}\{\s*([+-]?\d+(?:\.\d+)?)\s*\}$/);
+      if (fracNumMatch) {
+        const n1 = parseFloat(fracNumMatch[1]);
+        const n2 = parseFloat(fracNumMatch[2]);
+        prevNumericValue = n2 !== 0 ? n1 / n2 : null;
+      } else {
+        prevNumericValue = null;
+      }
+
+      step = `${lhsVar} = ${rhsExpr}`;
+
+      // Συμπέρασμα & διόρθωση μονάδας μέτρησης SI στο τέλος του βήματος ανάλογα με το `lhsVar`
+      const cleanVarBase = lhsVar.replace(/^\\vec\{([^}]+)\}$/, '$1').replace(/_.*$/, '').trim();
+      if (cleanVarBase === 'a' || cleanVarBase === '\\alpha') {
+        step = normalizeAccelerationUnitOnStep(step);
+      } else if (cleanVarBase === 'u' || cleanVarBase === 'v' || cleanVarBase === '\\upsilon') {
+        step = normalizeVelocityUnitOnStep(step);
+      } else if (cleanVarBase === '\\omega' || cleanVarBase === 'ω') {
+        step = normalizeOmegaUnitOnStep(step);
+      } else if (cleanVarBase === 'D' || cleanVarBase === 'k') {
+        step = normalizeSpringConstantUnitOnStep(step);
+      }
+    }
+
+    parts[i] = step;
+  }
+
+  return parts.join('');
+}
+
 export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
   if (!rawLatex || !rawLatex.trim()) return [];
   const stripped = rawLatex
@@ -4528,6 +4682,8 @@ export function splitAndCleanMathLatexLines(rawLatex: string): string[] {
       if (/(?:^|\\Rightarrow|\\Leftrightarrow)\s*(?:\\vec\{u\}|u(?:\s*\(\s*t\s*\))?)\s*=/.test(cleaned)) {
         cleaned = cleaned.replace(/\bU_\{max\}/g, 'u_{max}').replace(/\bU_\{min\}/g, 'u_{min}');
       }
+      // Ολιστική Ανάλυση Ολόκληρης της Εξίσωσης & Αλυσίδας Συνεπαγωγών (προηγούμενα ↔ επόμενα βήματα)
+      cleaned = applyWholeEquationContextInferenceToLatexLine(cleaned);
       return cleaned;
     })
     .filter((line) => line.length > 0);
@@ -4589,6 +4745,11 @@ export async function transcribeHandwrittenMathWithGemini(
    - Στις εξισώσεις κυμάτων όπως y = A\\eta\\mu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή u_y = u_{max}\\sigma\\upsilon\\nu\\left(\\frac{2\\pi t}{T} - \\frac{2\\pi x}{\\lambda}\\right) ή y = 2A\\sigma\\upsilon\\nu\\left(\\frac{2\\pi x}{\\lambda}\\right)\\eta\\mu\\left(\\frac{2\\pi t}{T}\\right), πρόσεξε το χειρόγραφο "ημ" μετά το A (όπου το η μοιάζει με n ή u και η κατακόρυφη γραμμή του μ είναι πολύ μακριά σαν | ή k ή p, π.χ. μοιάζει με "An|r(" ή "Ank(") — γράψε ΠΑΝΤΑ A\\eta\\mu! Επίσης ο παρονομαστής κάτω από το 2\\pi x είναι ΠΑΝΤΑ \\lambda (μήκος κύματος λ, ΠΟΤΕ ο αριθμός 7 ή A!) και κάτω από το 2\\pi t είναι ΠΑΝΤΑ T (περίοδος).
    - Στο φωτοηλεκτρικό φαινόμενο K_{max} = h\\cdot f - \\phi ή K_{max} = h\\cdot f - W_{\\text{εξ}} ή eV_0 = h\\cdot f - \\phi: το h είναι η σταθερά Planck, το f η συχνότητα και το \\phi (ή W_{\\text{εξ}}) το έργο εξαγωγής.
    - Στις ενέργειες ταλάντωσης K = \\frac{1}{2}m u_{max}^2 \\sigma\\upsilon\\nu^2(\\omega t) και U = \\frac{1}{2}D A^2 \\eta\\mu^2(\\omega t): πρόσεξε το τετράγωνο στο u_{max}^2 και στο \\sigma\\upsilon\\nu^2(\\omega t) / \\eta\\mu^2(\\omega t).
+5δ. ΚΡΙΣΙΜΟ — ΟΛΙΣΤΙΚΗ ΑΝΑΛΥΣΗ ΟΛΟΚΛΗΡΗΣ ΤΗΣ ΕΞΙΣΩΣΗΣ & ΑΛΥΣΙΔΑΣ ΣΥΝΕΠΑΓΩΓΩΝ (ΠΡΟΗΓΟΥΜΕΝΑ ↔ ΕΠΟΜΕΝΑ ΒΗΜΑΤΑ):
+   - Πριν αποφασίσεις για οποιοδήποτε δυσανάγνωστο ή γρήγορα γραμμένο σύμβολο, διάβασε ΟΛΟΚΛΗΡΗ την εξίσωση ή την αλυσίδα συνεπαγωγών (\\rightarrow / \\Rightarrow) από την αρχή μέχρι το τέλος και αντίστροφα:
+   - (α) Συνέπεια Επιλυόμενης Μεταβλητής (Αριστερό Μέλος "="): Σε διαδοχικά βήματα επίλυσης (π.χ. \\sum F = m\\cdot a \\rightarrow a = \\frac{\\sum F}{m} \\rightarrow a = \\frac{10}{2} \\rightarrow a = 5\\,\\text{m/s}^2), το φυσικό μέγεθος στο αριστερό μέλος (a = ...) παραμένει ΤΟ ΙΔΙΟ σε όλα τα βήματα αντικατάστασης! Αν στο τελευταίο βήμα το "a" γράφτηκε βιαστικά και μοιάζει με "d", "o", "q" ή "\\alpha", κράτησε το ίδιο ακριβώς σύμβολο ("a") με τα προηγούμενα βήματα!
+   - (β) Αριθμητική Επαλήθευση από το Προηγούμενο Βήμα: Αν ένα βήμα περιέχει αριθμητική πράξη/κλάσμα (π.χ. a = \\frac{10}{2} ή \\Delta t = \\frac{20}{5}) και στο επόμενο βήμα γράφεται το αποτέλεσμα (a = 5 ή \\Delta t = 4), χρησιμοποίησε το μαθηματικό αποτέλεσμα της πράξης (10/2 = 5, 20/5 = 4) για να αναγνωρίσεις με 100% σιγουριά τυχόν βιαστικά γραμμένο αριθμό!
+   - (γ) Συμπέρασμα Μονάδας Μέτρησης SI από το Φυσικό Μέγεθος: Αν στο τέλος ενός αριθμητικού υπολογισμού υπάρχει βιαστικά γραμμένη μονάδα μέτρησης (π.χ. μετά το a = 5 φαίνεται κάτι σαν "m/|2" ή "m/s2"), συμπεραίνεις τη σωστή μονάδα SI από το φυσικό μέγεθος του αριστερού μέλους: επιτάχυνση a -> \\text{m/s}^2, ταχύτητα u/v -> \\text{m/s}, γωνιακή συχνότητα \\omega -> \\text{rad/s}, δύναμη F/\\sum F -> \\text{N}, ενέργεια/έργο K/U/E/W -> \\text{J}, ισχύς P -> \\text{W}, συχνότητα f -> \\text{Hz}, χρόνος/περίοδος t/T -> \\text{s}, μήκος/πλάτος/μήκος κύματος x/A/\\lambda -> \\text{m}, μάζα m -> \\text{kg}, σταθερά D/k -> \\text{N/m}.
 6. Κυκλωμένοι αριθμοί ασκήσεων (αν υπάρχουν στην αρχή, π.χ. ①, ②, ③): γράψε τους ως \\text{①}\\; ή \\text{②}\\; ή \\text{③}\\;.
 7. Μονάδες μέτρησης & ελληνικές λέξεις: αν στο τέλος μιας αριθμητικής τιμής (όχι πριν από παρένθεση τριγωνομετρικής συνάρτησης!) υπάρχει μονάδα μέτρησης, βάλε την σε \\text{ ... } με ένα μικρό κενό πριν (π.χ. 4\\,\\text{s}, 5\\,\\text{kg}, 25\\,\\text{N}). Αν υπάρχουν ελληνικές λέξεις, βάλε τες μέσα σε \\text{...}.
 8. Αριθμός γραμμών (σειρών): Αν στην εικόνα υπάρχει ΜΟΝΟ ΜΙΑ γραμμή εξίσωσης, ο πίνακας "lines" ΠΡΕΠΕΙ να έχει ΑΥΣΤΗΡΑ 1 στοιχείο (και το "latex" 1 γραμμή χωρίς "\\n")! Αγνόησε τυχόν μεμονωμένες τελείες ή μικρά σημαδάκια πάνω/κάτω από την εξίσωση και ΜΗΝ επινοείς ΠΟΤΕ δεύτερη γραμμή (όπως "u = 1"). Μόνο αν υπάρχουν πραγματικά 2 ή περισσότερες ολόκληρες σειρές εξισώσεων (η μία κάτω από την άλλη), βάλε κάθε σειρά ως ξεχωριστό στοιχείο στον πίνακα "lines". ΜΗΝ χρησιμοποιείς ΠΟΤΕ \\[6pt], \\\\[6pt] ή \\begin{aligned}.
@@ -4690,9 +4851,11 @@ export async function transcribeHandwrittenChemistryWithGemini(
     {
       text: `Είσαι εξειδικευμένο σύστημα ChemOCR (Αναγνώριση Χειρόγραφων Χημικών Αντιδράσεων & Χημικών Τύπων)${contextHint}.
 Διάβασε με απόλυτη ακρίβεια τη χειρόγραφη χημική αντίδραση ή χημικό τύπο στην εικόνα:
-1. Διόρθωσε αυτόματα συχνές οπτικές ομοιότητες γραμμάτων χειρογράφου στη Χημεία:
-   - Το "0" δίπλα σε χημικό τύπο ("02", "C02", "H20", "Mg0") είναι το στοιχείο Οξυγόνο "O" (κεφαλαίο αγγλικό O), δηλαδή "O2", "CO2", "H2O", "MgO".
-   - Το "C1" ή "NaC1" ή "HC1" είναι Χλώριο "Cl" (κεφαλαίο C + πεζό l).
+1. ΟΛΙΣΤΙΚΗ ΑΝΑΛΥΣΗ ΟΛΟΚΛΗΡΗΣ ΤΗΣ ΑΝΤΙΔΡΑΣΗΣ (Αρχή Διατήρησης Χημικών Στοιχείων: Αντιδρώντα ↔ Προϊόντα):
+   - Πριν αποφασίσεις για ένα δυσανάγνωστο ή γρήγορα γραμμένο γράμμα στοιχείου, διάβασε ΟΛΟΚΛΗΡΗ την εξίσωση (αριστερά και δεξιά του βέλους "->")!
+   - Επειδή τα ίδια ακριβώς χημικά στοιχεία που υπάρχουν στα αντιδρώντα (αριστερά) ΠΡΕΠΕΙ να υπάρχουν και στα προϊόντα (δεξιά), χρησιμοποίησε τα καθαρά γραμμένα στοιχεία της μίας πλευράς για να συμπεράνεις τυχόν κακογραμμένο γράμμα στην άλλη πλευρά (π.χ. αν αριστερά έχει "C + O2 ->" και δεξιά φαίνεται "GO2" ή "CQ2" ή "C02", είναι 100% "CO2"· αν αριστερά έχει "N2 + H2 ->" και δεξιά φαίνεται "MH3", είναι "NH3"· αν αριστερά έχει "Na + Cl2 ->" και δεξιά φαίνεται "NaGl" ή "NaC1", είναι "NaCl"· αν αριστερά έχει "Fe + O2 ->" και δεξιά φαίνεται "Fc2O3", είναι "Fe2O3").
+   - Το "0" δίπλα σε χημικό τύπο ("02", "C02", "H20", "Mg0") είναι ΠΑΝΤΑ το στοιχείο Οξυγόνο "O" ("O2", "CO2", "H2O", "MgO").
+   - Το "C1" ή "CI" ("NaC1", "HC1", "MgC12") είναι ΠΑΝΤΑ Χλώριο "Cl" ("NaCl", "HCl", "MgCl2").
 2. ΠΟΛΥ ΣΗΜΑΝΤΙΚΟ: ΜΗΝ προσθέτεις και ΜΗΝ διορθώνεις συντελεστές ή αριθμητικούς δείκτες ατόμων που ΔΕΝ έγραψε ο μαθητής!
    - Αν ο μαθητής έγραψε π.χ. "H2 + O2 -> H2O" (χωρίς το 2 μπροστά) ή "H + O -> HO" ή "C + O -> CO2" ή "Mg + Cl -> MgCl", κατέγραψε στο "rawEquation" ΑΚΡΙΒΩΣ τους αριθμούς που έγραψε ο μαθητής, ώστε ο αλγόριθμος ελέγχου να του συμπληρώσει με ΚΟΚΚΙΝΟ χρώμα ό,τι ξέχασε ή έκανε λάθος!
 3. Για το βέλος της αντίδρασης χρησιμοποίησε " -> " στο "rawEquation" και " → " στο "formattedText".
@@ -7356,7 +7519,53 @@ export function convertPlainTextToMathLatex(rawText: string): string {
       .replace(/[−–—]/g, '-')
       .replace(/²/g, '^2')
       .replace(/³/g, '^3')
-      .replace(/⁴/g, '^4')
+      .replace(/⁴/g, '^4');
+
+    // 0A. Protect trailing SI units with `/` after numbers at the end of an equation step (`= 5 m/s^2`, `= 5 m/s2`, `= 5 m/2`, `= 10 m/s`, `= 2 rad/s`, `= 100 N/m`)
+    // BEFORE subscript auto-numbering (`s2` -> `s_2`) and BEFORE `/` fraction conversion!
+    if (depth === 0) {
+      s = s
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*m\s*\/\s*(?:s\s*\^?\s*2|s²|\|?2)(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
+          '$1 __UNIT_MS2__'
+        )
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*m\s*\/\s*s(?![\^²20-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
+          '$1 __UNIT_MS__'
+        )
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*km\s*\/\s*h(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
+          '$1 __UNIT_KMH__'
+        )
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*rad\s*\/\s*(?:s\s*\^?\s*2|s²)(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
+          '$1 __UNIT_RADS2__'
+        )
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*rad\s*\/\s*s(?![\^²20-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
+          '$1 __UNIT_RADS__'
+        )
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*N\s*\/\s*m(?![\^²³0-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/g,
+          '$1 __UNIT_NM__'
+        )
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*N\s*\/\s*C(?![\^²³0-9a-zA-Zα-ωΑ-Ω])(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/g,
+          '$1 __UNIT_NC__'
+        )
+        .replace(
+          /(\d+(?:[.,]\d+)?)\s*kg\s*\/\s*m\s*\^?\s*3(?=\s*(?:$|->|=>|⇒|<=>|⇔|[,;)]))/gi,
+          '$1 __UNIT_KGM3__'
+        )
+        // Contextual Latin -> Greek disambiguation in Physics equations:
+        // e.g. `SF = m*a` -> `ΣF = m*a`, `Dx/Dt` -> `Δx/Δt`, `ημ(wt)` / `συν(wt)` / `sin(wt)` / `cos(wt)` -> `ω*t`
+        .replace(/\bSF(?=\s*[_=]|\s*->|\s*=>)/g, 'ΣF')
+        .replace(/\bD([xtuvpEKUΦVTθφmlS])\s*\/\s*D([xtuvpEKUΦVTθφmlS])\b/g, 'Δ$1/Δ$2')
+        .replace(/((?:συν|συνημ|ημ|ημιτ|sin|cos)\s*(?:\^2\s*)?\(\s*)w(?=\s*\*?\s*t\b)/gi, '$1ω')
+        .replace(/(=\s*-\s*)w(?=\s*\^2\s*\*?\s*x\b)/gi, '$1ω');
+    }
+
+    s = s
       // Auto-normalize Greek Physics subscripts from our Physics Equations Library even if typed without `_`:
       // e.g. Kmax -> K_max, umax^2 -> u_max^2, Wεξ -> W_εξ, tαφ -> t_αφ, f0 -> f_0, u0 -> u_0, uy -> u_y, ay -> a_y
       .replace(/\b([KUEuυvVaαFxXyYIBPΦτA])\s*_?\s*(max|min|μαχ|μιν)\b/gi, (_, sym, sub) => {
@@ -7617,23 +7826,52 @@ export function convertPlainTextToMathLatex(rawText: string): string {
     // Guard against any stacked double superscripts `a^{b}^{c}` which cause a KaTeX parse error
     s = s.replace(/([a-zA-Zα-ωΑ-Ω0-9)}])\^\{([^}]+)\}\s*\^\{([^}]+)\}/g, '{$1^{$2}}^{$3}');
 
-    // 5. Convert trig functions & common operators / arrows
+    // 5. Convert trig functions & common operators / arrows / Greek symbols / SI units
     s = s
       .replace(/(?<!\\)\b(sin|cos|tan|ln|log)\b/gi, (_, fn) => `\\${fn.toLowerCase()}`)
       .replace(/(?<!\\)(?:συνημ|συν)(?=\s*[\^(_]|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\sigma\\upsilon\\nu')
       .replace(/(?<!\\)(?:ημιτ|ημ)(?=\s*[\^(_]|\s*[a-zA-Zα-ωΑ-Ω0-9\\])/gi, '\\eta\\mu')
       .replace(/(?<!\\text\{)(εφ|σφ)(?=\s*[\^(_]|\s*[a-zA-Zα-ωΑ-Ω0-9])/gi, '\\text{$1}')
-      .replace(/<=>/g, ' \\Leftrightarrow ')
-      .replace(/=>|->/g, ' \\Rightarrow ')
+      .replace(/Σ(?=\s*[FτpMIVREQ])/g, '\\sum ')
+      .replace(/Δ(?=\s*[a-zA-Zα-ωΑ-Ω\\])/g, '\\Delta ')
+      .replace(/π/g, '\\pi ')
+      .replace(/ω/g, '\\omega ')
+      .replace(/λ/g, '\\lambda ')
+      .replace(/Λ/g, '\\Lambda ')
+      .replace(/φ/g, '\\phi ')
+      .replace(/Φ/g, '\\Phi ')
+      .replace(/<=>|⇔/g, ' \\Leftrightarrow ')
+      .replace(/=>|->|⇒|→/g, ' \\Rightarrow ')
       .replace(/<=/g, ' \\le ')
       .replace(/>=/g, ' \\ge ')
       .replace(/!=/g, ' \\ne ')
       .replace(/\+-|±/g, ' \\pm ')
-      .replace(/\*/g, ' \\cdot ');
+      .replace(/\*/g, ' \\cdot ')
+      .replace(/\s*__UNIT_MS2__/g, '\\,\\text{m/s}^{2}')
+      .replace(/\s*__UNIT_MS__/g, '\\,\\text{m/s}')
+      .replace(/\s*__UNIT_KMH__/g, '\\,\\text{km/h}')
+      .replace(/\s*__UNIT_RADS2__/g, '\\,\\text{rad/s}^{2}')
+      .replace(/\s*__UNIT_RADS__/g, '\\,\\text{rad/s}')
+      .replace(/\s*__UNIT_NM__/g, '\\,\\text{N/m}')
+      .replace(/\s*__UNIT_NC__/g, '\\,\\text{N/C}')
+      .replace(/\s*__UNIT_KGM3__/g, '\\,\\text{kg/m}^{3}');
+
+    if (depth === 0) {
+      // Single-token SI units after `= <number>` at the end of a step (e.g. `= 20 N`, `= 5 kg`, `= 4 s`, `= 50 Hz`, `= 100 J`)
+      s = s.replace(
+        /(=\s*[+-]?\d+(?:[.,]\d+)?)\s+(kg|Hz|Pa|Wb|mol|rad|cm|mm|km|ms|kJ|kW|mV|mA|eV|N|J|W|s|m|g|V|A|Ω|C|T|L)(?=\s*(?:$|\\Rightarrow|\\Leftrightarrow|\\rightarrow|[,;)]))/g,
+        '$1\\,\\text{$2}'
+      );
+    }
 
     // 6. Auto-scale parentheses `(...)` that contain tall `\frac` or `\sqrt` into `\left(...\right)`
     if (depth === 0 && (/\\frac|\\sqrt/.test(s))) {
       s = s.replace(/\(([^()]*\\(?:frac|sqrt)[^()]*)\)/g, '\\left($1\\right)');
+    }
+
+    // 7. Run Whole-Equation & Step-by-Step Context Inference on the full line
+    if (depth === 0) {
+      s = applyWholeEquationContextInferenceToLatexLine(s);
     }
 
     return s.trim();
@@ -7683,6 +7921,7 @@ export async function transcribeEquationForGraphWithGemini(
    - ΚΡΙΣΙΜΟ ΓΙΑ ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ x = A_0 e^(-Λt) συν(ωt): Στον εκθέτη του e^(-Λt), το μείον "-" συχνά ακουμπάει το αριστερό σκέλος του κεφαλαίου "Λ" και μοιάζει με "-1*t", "-A*t" ή "A*t". Όταν βλέπεις εξίσωση με A_0 (ή A) πολλαπλασιασμένο με εκθετικό e^(...) και συν(ωt) ή ημ(ωt), είναι ΠΑΝΤΑ η εξίσωση φθίνουσας ταλάντωσης "x = A_0*e^(-Λ*t)*συν(ω*t)" (ή "ημ(ω*t)")!
    - Όπου εμφανίζεται το σύμβολο "π" (π.χ. 2πt/T - 2πx/λ, u = 10 συν(2πt), x = A ημ(2πt)), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο. Στις εξισώσεις κύματος (π.χ. y = A ημ(2πt/T - 2πx/λ), u = u_max συν(2πt/T - 2πx/λ), a = -a_max ημ(2πt/T - 2πx/λ)) πρόσεξε ιδιαίτερα το χειρόγραφο "ημ" μετά το A (όπου το η μοιάζει με n ή u και η κατακόρυφη γραμμή του μ γράφεται πολύ μακριά σαν "|", "k", "p" ή "|r", π.χ. φαίνεται σαν "y = A n |r (2πt/T - 2πx/λ)") και τον παρονομαστή "λ" κάτω από το 2πx (που μοιάζει συχνά με "7" ή "A"): γράψε ΠΑΝΤΑ "y = A*ημ(2*π*t/T - 2*π*x/λ)" κρατώντας ΚΑΙ το t ΚΑΙ το x αυτούσια! Όταν υπάρχει τετράγωνο σε μέγεθος με δείκτη max (π.χ. u²_max ή u_max² στο K = 1/2 m u_max^2 συν^2(ωt)), γράψε ΠΑΝΤΑ πρώτα τον δείκτη και μετά τον εκθέτη: "u_max^2". Όταν υπάρχει τετράγωνο σε τριγωνομετρική συνάρτηση (συν²(ωt) ή ημ²(ωt)), γράψε "συν^2(ω*t)" ή "ημ^2(ω*t)".
 4. ΙΕΡΑΡΧΙΑ ΑΝΕΞΑΡΤΗΤΗΣ ΜΕΤΑΒΛΗΤΗΣ ΣΤΗ ΦΥΣΙΚΗ: Στις εξισώσεις Κύματος με δύο μεταβλητές (t και x, π.χ. 2πt/T - 2πx/λ ή ωt - kx), κράτησε ΚΑΙ τις δύο μεταβλητές t και x αυτούσιες τόσο στο "equation" όσο και στο "normalizedEquation"! Στις υπόλοιπες εξισώσεις Φυσικής, αν στο δεξί μέλος υπάρχει ο χρόνος "t" (χωρίς x), η συνάρτηση είναι συνάρτηση του χρόνου t και όλα τα άλλα σύμβολα (m, D, k, A, A_0, u_0, x_0, u_max, ω, Λ, a, g) είναι σταθερές παράμετροι. Αν δεν υπάρχει t αλλά υπάρχει η θέση "x", είναι συνάρτηση της θέσης x (π.χ. ΣF = -D*x, U = 1/2*D*x^2). Αν δεν υπάρχει ούτε t ούτε x αλλά υπάρχει η ταχύτητα "u", είναι συνάρτηση της ταχύτητας u (π.χ. K = 1/2*m*u^2, p = m*u). Στην καταστατική εξίσωση αερίων PV = nRT (ή P = nRT/V, P - V, P - T, V - T), κράτησε στο "equation" και στο "normalizedEquation" την ίδια ακριβώς μορφή με το "equation"!
+5. ΟΛΙΣΤΙΚΗ ΣΥΜΦΡΑΣΤΙΚΗ ΑΝΑΓΝΩΡΙΣΗ (ΠΡΟΗΓΟΥΜΕΝΑ ↔ ΕΠΟΜΕΝΑ ΣΥΜΒΟΛΑ): Αν κάποιο σύμβολο της εξίσωσης δεν έχει γραφτεί καθαρά, χρησιμοποίησε τα προηγούμενα και τα επόμενα σύμβολα της εξίσωσης για να το συμπεράνεις με βάση τους τύπους Φυσικής/Μαθηματικών (π.χ. μετά από "2*π*t/T -" το επόμενο κλάσμα με "2*π*x/..." έχει ΠΑΝΤΑ παρονομαστή "λ"· ανάμεσα σε "A_0*e^(...)" και "συν(ω*t)" ο εκθέτης είναι ΠΑΝΤΑ "-Λ*t"· μετά από "K_max = h*f -" ακολουθεί ΠΑΝΤΑ "φ").
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
