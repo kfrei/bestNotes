@@ -13381,7 +13381,7 @@ export function tryBuildOscillationDiagramStrokes(
     const xF0 = axisLeftX + (axisRightX - axisLeftX) * 0.36; // threshold frequency f_0
     const xEnd = axisLeftX + (axisRightX - axisLeftX) * 0.86;
     const slope = (axisZeroY - yWorkFn) / (xF0 - axisLeftX);
-    const yEnd = axisZeroY - slope * (xEnd - xF0);
+    const yEnd = axisZeroY + slope * (xEnd - xF0);
 
     strokes.push(
       {
