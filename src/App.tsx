@@ -820,7 +820,7 @@ export default function App() {
 
   const initialZoom =
     typeof initialSession?.zoom === 'number' && Number.isFinite(initialSession.zoom)
-      ? Math.min(3.5, Math.max(0.45, initialSession.zoom))
+      ? Math.min(3.5, Math.max(0.2, initialSession.zoom))
       : 1;
   const initialPanY = (() => {
     if (typeof initialSession?.panY === 'number' && Number.isFinite(initialSession.panY)) {
@@ -896,7 +896,7 @@ export default function App() {
                 restoredPageIdx = Math.max(0, sess.activePageIndex);
               }
               if (sess && typeof sess.zoom === 'number' && Number.isFinite(sess.zoom)) {
-                const z = Math.min(3.5, Math.max(0.45, sess.zoom));
+                const z = Math.min(3.5, Math.max(0.2, sess.zoom));
                 zoomRef.current = z;
                 setZoom(z);
               }
@@ -3855,7 +3855,7 @@ export default function App() {
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const nextZoom = Math.min(3.5, Math.max(0.45, zoomRef.current - e.deltaY * 0.008));
+        const nextZoom = Math.min(3.5, Math.max(0.2, zoomRef.current - e.deltaY * 0.008));
         zoomRef.current = nextZoom;
         if (paperTransformElRef.current) {
           paperTransformElRef.current.style.transform = `translate3d(0px, ${panRef.current.y}px, 0) scale(${nextZoom})`;
@@ -7452,7 +7452,7 @@ export default function App() {
   const debouncedTransformCommitRef = useRef<number | null>(null);
   const applyPaperTransformDirect = useCallback(
     (nextZoom: number, _nextPanX: number, nextPanY: number, commitReactState = false) => {
-      const clampedZoom = Math.min(3.5, Math.max(0.45, nextZoom));
+      const clampedZoom = Math.min(3.5, Math.max(0.2, nextZoom));
       const didScrollVertically = Math.abs(nextPanY - panRef.current.y) > 0.5;
       zoomRef.current = clampedZoom;
       // Strictly lock X to 0 so the page is ALWAYS horizontally centered and only scrolls vertically (up/down)!
@@ -7480,6 +7480,69 @@ export default function App() {
     },
     [triggerPageControlsVisibility]
   );
+
+  // Compute exact Fit-to-Width zoom so 100% of the page width (all 41 grid squares) is always visible
+  const computeFitWidthZoom = useCallback(
+    (customPageWidth?: number) => {
+      const ws = workspaceRef.current;
+      const wsWidth = ws?.clientWidth || window.innerWidth || 980;
+      const pW = Math.max(200, customPageWidth ?? pageWidth);
+      const horizMargin = Math.min(28, Math.max(8, Math.round(wsWidth * 0.02)));
+      return Math.min(3.5, Math.max(0.2, (wsWidth - horizMargin) / pW));
+    },
+    [pageWidth]
+  );
+
+  // Responsive Fit-to-Width on browser window resize (narrowing/widening) so the full width of the page
+  // is always visible and its height adapts proportionally
+  const lastObservedWsWidthRef = useRef<number | null>(null);
+  const lastObservedPageWidthRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (viewMode !== 'editor') return;
+    const ws = workspaceRef.current;
+    if (!ws) return;
+
+    const syncResponsivePageWidth = (forceFit = false) => {
+      const wsWidth = ws.clientWidth || window.innerWidth;
+      if (wsWidth <= 0) return;
+      const pW = Math.max(200, pageWidth);
+      const horizMargin = Math.min(28, Math.max(8, Math.round(wsWidth * 0.02)));
+      const fitWidthZoom = Math.min(3.5, Math.max(0.2, (wsWidth - horizMargin) / pW));
+
+      const prevWsW = lastObservedWsWidthRef.current;
+      const prevPW = lastObservedPageWidthRef.current;
+      const didWsWidthChange = prevWsW !== null && Math.abs(wsWidth - prevWsW) >= 1;
+      const didPageWidthChange = prevPW !== null && Math.abs(pW - prevPW) >= 1;
+      lastObservedWsWidthRef.current = wsWidth;
+      lastObservedPageWidthRef.current = pW;
+
+      const curZoom = zoomRef.current;
+      if (forceFit || didWsWidthChange || didPageWidthChange || curZoom > fitWidthZoom + 0.002) {
+        if (Math.abs(fitWidthZoom - curZoom) > 0.002) {
+          const nextPanY = curZoom > 0.05 ? panRef.current.y * (fitWidthZoom / curZoom) : panRef.current.y;
+          applyPaperTransformDirect(fitWidthZoom, 0, nextPanY, true);
+        }
+      }
+    };
+
+    syncResponsivePageWidth(false);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        syncResponsivePageWidth(false);
+      });
+      ro.observe(ws);
+    }
+
+    const onWinResize = () => syncResponsivePageWidth(false);
+    window.addEventListener('resize', onWinResize);
+
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', onWinResize);
+    };
+  }, [viewMode, pageWidth, applyPaperTransformDirect]);
 
   // Smoothly jump to a specific page in the Word-style vertical document stack
   const scrollToPageIndex = useCallback(
@@ -9883,7 +9946,7 @@ export default function App() {
         st.lastMoveTime = now;
 
         const oldZoom = zoomRef.current;
-        const newZoom = Math.min(3.5, Math.max(0.45, st.initialZoom * (currDist / st.initialDist)));
+        const newZoom = Math.min(3.5, Math.max(0.2, st.initialZoom * (currDist / st.initialDist)));
         const nextPanY = panRef.current.y + stepMidY * gain - st.paperOffsetY * (newZoom - oldZoom);
 
         applyPaperTransformDirect(newZoom, 0, nextPanY, false);
@@ -10015,7 +10078,7 @@ export default function App() {
         const paperRect = paperTransformElRef.current?.getBoundingClientRect();
         const oldZoom = zoomRef.current;
         const factor = Math.exp(-e.deltaY * 0.0045);
-        const newZoom = Math.min(3.5, Math.max(0.45, oldZoom * factor));
+        const newZoom = Math.min(3.5, Math.max(0.2, oldZoom * factor));
         const offsetX = paperRect ? (e.clientX - paperRect.left) / oldZoom : 460;
         const offsetY = paperRect ? (e.clientY - paperRect.top) / oldZoom : 630;
         const newPanX = panRef.current.x - offsetX * (newZoom - oldZoom);
@@ -37055,9 +37118,13 @@ export default function App() {
                   <ZoomOut className="w-3.5 h-3.5" />
                 </button>
                 <button
-                  onClick={() => applyPaperTransformDirect(1, 0, 0, true)}
+                  onClick={() => {
+                    const fitZ = computeFitWidthZoom();
+                    const nextPanY = zoomRef.current > 0.05 ? panRef.current.y * (fitZ / zoomRef.current) : 0;
+                    applyPaperTransformDirect(fitZ, 0, nextPanY, true);
+                  }}
                   className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
-                  title="Επαναφορά Zoom στο 100% (ή Pinch με 2 δάχτυλα στο χαρτί)"
+                  title="Προσαρμογή σε όλο το πλάτος παραθύρου (Fit to Width)"
                 >
                   {Math.round(zoom * 100)}%
                 </button>
@@ -41320,7 +41387,7 @@ export default function App() {
              ========================================================================= */}
           <div
             ref={workspaceRef}
-            className="relative flex-1 overflow-hidden bg-[#f1f3f6] flex justify-center items-start py-6 px-8 touch-none"
+            className="relative flex-1 overflow-hidden bg-[#f1f3f6] flex justify-center items-start py-6 px-2 sm:px-4 touch-none"
           >
             {statusBanner && (
               <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1b2a4a] text-white text-xs font-medium shadow-xl">
