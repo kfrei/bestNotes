@@ -7645,12 +7645,12 @@ export async function transcribeEquationForGraphWithGemini(
   const parts: any[] = [
     {
       text: `Είσαι εξειδικευμένο σύστημα αναγνώρισης μαθηματικών εξισώσεων, συναρτήσεων και εξισώσεων Φυσικής Γυμνασίου & Λυκείου (Ταλαντώσεις, Μηχανική, Αέρια PV=nRT, Ηλεκτρισμός, Κύματα) για σχεδίαση διαγράμματος${contextHint}.
-Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u_max^2 συν^2(ωt), U = 1/2 D A^2 ημ^2(ωt), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), x = A_0 e^(-Λt) συν(ωt), x = A_0 e^(-Λt) ημ(ωt), A = A_0 e^(-Λt), PV = nRT, P = nRT/V, V_π = E - I r, x = u_0 t + 1/2 a t^2, u = u_0 + a t, ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
+Διάβασε τη χειρόγραφη εξίσωση ή τις συναρτήσεις στην εικόνα (π.χ. y = A ημ(2πt/T - 2πx/λ), y = A ημ(2π(t/T - x/λ)), u = u_max συν(2πt/T - 2πx/λ), a = -a_max ημ(2πt/T - 2πx/λ), y = 2A συν(2πx/λ) ημ(2πt/T), y_1 = x^2 - 9 και y_2 = x^2 - 16, y = sin(x), y = ημ(x), y = cos(x), y = συν(x), K = 1/2 m u_max^2 συν^2(ωt), U = 1/2 D A^2 ημ^2(ωt), K = 1/2 m u^2, U = 1/2 D x^2, ΣF = -D x, F = -k x, a = -ω^2 x, K = E - 1/2 D x^2, x = A ημ(ωt), u = u_max συν(ωt), a = -a_max ημ(ωt), x = A_0 e^(-Λt) συν(ωt), x = A_0 e^(-Λt) ημ(ωt), A = A_0 e^(-Λt), PV = nRT, P = nRT/V, V_π = E - I r, K_max = h f - φ, x = u_0 t + 1/2 a t^2, u = u_0 + a t, ευθεία, παραβολή, κύκλος, έλλειψη, υπερβολή, πολυώνυμο κ.λπ.).
 Κανόνες:
-1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "K = 1/2*m*u_max^2*συν^2(ω*t)", "U = 1/2*D*A^2*ημ^2(ω*t)", "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "x = A_0*e^(-Λ*t)*συν(ω*t)", "x = A_0*e^(-Λ*t)*ημ(ω*t)", "A = A_0*e^(-Λ*t)", "P*V = n*R*T", "V_π = E - I*r", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
+1. Στο πεδίο "equation" γράψε ΑΚΡΙΒΩΣ την εξίσωση (ή τις εξισώσεις) που έγραψε ο χρήστης σε καθαρή μορφή κρατώντας ΑΝΑΛΛΟΙΩΤΟΥΣ τους δείκτες και τα ονόματα των μεταβλητών (π.χ. y_1, y_2, u_1, u_2, x_1, x_2, t, x, y — για ταχύτητα υ/v γράψε u, π.χ. "y = A*ημ(2*π*t/T - 2*π*x/λ)", "u = u_max*συν(2*π*t/T - 2*π*x/λ)", "a = -a_max*ημ(2*π*t/T - 2*π*x/λ)", "K = 1/2*m*u_max^2*συν^2(ω*t)", "U = 1/2*D*A^2*ημ^2(ω*t)", "u_1 = 10\\nu_2 = 2 + 5*t", "y_1 = x^2 - 9\\ny_2 = x^2 - 16", "y = sin(x)", "y = ημ(x)", "K = 1/2*m*u^2", "U = 1/2*D*x^2", "ΣF = -D*x", "a = -ω^2*x", "K = E - 1/2*D*x^2", "x = A*ημ(ω*t)", "x = A_0*e^(-Λ*t)*συν(ω*t)", "x = A_0*e^(-Λ*t)*ημ(ω*t)", "A = A_0*e^(-Λ*t)", "P*V = n*R*T", "V_π = E - I*r", "K_max = h*f - φ", ή για μαθηματικά "x^2 + y^2 = 1", "(x^2)/9 + (y^2)/16 = 25", "y = 2*x + 3", "y = a*x + b", "y = x^2 - 4", "y = 1/x", "y = x^3 - 3*x"). ΜΗΝ αντικαθιστάς τα u, t με y, x στο πεδίο "equation"!
 2. ΠΟΛΛΑΠΛΕΣ ΣΥΝΑΡΤΗΣΕΙΣ: Αν στην εικόνα υπάρχουν 2 ή περισσότερες ξεχωριστές συναρτήσεις/εξισώσεις (π.χ. u_1 = 10 και u_2 = 2 + 5t, ή y_1 = ... και y_2 = ..., ή f(x) = ... και g(x) = ..., ή δύο εξισώσεις σε διαφορετικές σειρές χωρίς βέλος συνεπαγωγής ⇒), γράψε ΟΛΕΣ τις εξισώσεις χωρισμένες με αλλαγή γραμμής "\\n" τόσο στο "equation" όσο και στο "normalizedEquation" (π.χ. "u_1 = 10\\nu_2 = 2 + 5*t") ώστε να σχεδιαστούν σε κοινό σύστημα αξόνων! Μόνο αν πρόκειται για βήματα επίλυσης της ίδιας εξίσωσης με συνεπαγωγή (⇒ / ⇔), κράτησε την τελική εξίσωση.
-3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159), ΕΝΕΡΓΕΙΕΣ K(t)/U(t) ΜΕ συν^2(ωt)/ημ^2(ωt), ΤΑΧΥΤΗΤΑ u_max, ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ e^(-Λt) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. u = 10 συν(2πt), x = A ημ(2πt), y = sin(2πx), y = 2πx), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο (π.χ. "u = 10*συν(2*π*t)"). Όταν υπάρχει τετράγωνο σε μέγεθος με δείκτη max (π.χ. u²_max ή u_max² στο K = 1/2 m u_max^2 συν^2(ωt)), γράψε ΠΑΝΤΑ πρώτα τον δείκτη και μετά τον εκθέτη: "u_max^2" (ώστε να είναι ξεκάθαρο ότι το u_max είναι σταθερό πλάτος ταχύτητας και η μεταβλητή είναι το t!). Όταν υπάρχει τετράγωνο σε τριγωνομετρική συνάρτηση (συν²(ωt) ή ημ²(ωt)), γράψε "συν^2(ω*t)" ή "ημ^2(ω*t)". Στις εξισώσεις Φθίνουσας Ταλάντωσης (π.χ. x = A_0 e^(-Λt) συν(ωt) ή ημ(ωt)), το αρχικό πλάτος είναι "A_0" και ο εκθέτης του e είναι "-Λ*t". Επίσης πρόσεξε ΠΑΡΑ ΠΟΛΥ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos, τρία γράμματα σ-υ-ν όπου το σ μοιάζει με μικρό 6/c και το υν με uv): ΜΗΝ το μπερδεύεις ΠΟΤΕ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
-4. ΙΕΡΑΡΧΙΑ ΑΝΕΞΑΡΤΗΤΗΣ ΜΕΤΑΒΛΗΤΗΣ ΣΤΗ ΦΥΣΙΚΗ: Στις εξισώσεις Φυσικής, αν στο δεξί μέλος υπάρχει ο χρόνος "t" (πολυώνυμο, εκθετική, τριγωνομετρική κ.λπ.), η συνάρτηση είναι συνάρτηση του χρόνου t και όλα τα άλλα σύμβολα (m, D, k, A, A_0, u_0, x_0, u_max, ω, Λ, a, g) είναι σταθερές παράμετροι. Αν δεν υπάρχει t αλλά υπάρχει η θέση "x", είναι συνάρτηση της θέσης x (π.χ. ΣF = -D*x, U = 1/2*D*x^2). Αν δεν υπάρχει ούτε t ούτε x αλλά υπάρχει η ταχύτητα "u", είναι συνάρτηση της ταχύτητας u (π.χ. K = 1/2*m*u^2, p = m*u). Στην καταστατική εξίσωση αερίων PV = nRT (ή P = nRT/V, P - V, P - T, V - T), κράτησε στο "equation" και στο "normalizedEquation" την ίδια ακριβώς μορφή με το "equation"!
+3. ΣΤΑΘΕΡΑ π (pi ≈ 3.14159), ΕΞΙΣΩΣΕΙΣ ΚΥΜΑΤΟΣ (x, t), ΕΝΕΡΓΕΙΕΣ K(t)/U(t) ΜΕ συν^2(ωt)/ημ^2(ωt), ΤΑΧΥΤΗΤΑ u_max, ΦΘΙΝΟΥΣΑ ΤΑΛΑΝΤΩΣΗ e^(-Λt) & ΤΡΙΓΩΝΟΜΕΤΡΙΚΑ ("συν" vs "ημ"): Όπου εμφανίζεται το σύμβολο "π" (π.χ. 2πt/T - 2πx/λ, u = 10 συν(2πt), x = A ημ(2πt)), είναι η γνωστή μαθηματική σταθερά π (ΔΕΝ είναι μεταβλητή!). Γράψε ΠΑΝΤΑ το σύμβολο "π" αυτούσιο. Στις εξισώσεις κύματος (π.χ. y = A ημ(2πt/T - 2πx/λ), u = u_max συν(2πt/T - 2πx/λ), a = -a_max ημ(2πt/T - 2πx/λ)) πρόσεξε το χειρόγραφο "ημ" (όπου η κατακόρυφη γραμμή του μ μπορεί να είναι μακριά) και κράτησε ΚΑΙ το t ΚΑΙ το x αυτούσια (π.χ. "y = A*ημ(2*π*t/T - 2*π*x/λ)")! Όταν υπάρχει τετράγωνο σε μέγεθος με δείκτη max (π.χ. u²_max ή u_max² στο K = 1/2 m u_max^2 συν^2(ωt)), γράψε ΠΑΝΤΑ πρώτα τον δείκτη και μετά τον εκθέτη: "u_max^2". Όταν υπάρχει τετράγωνο σε τριγωνομετρική συνάρτηση (συν²(ωt) ή ημ²(ωt)), γράψε "συν^2(ω*t)" ή "ημ^2(ω*t)". Επίσης πρόσεξε ΠΑΡΑ ΠΟΛΥ το χειρόγραφο ελληνικό "συν" (συνημίτονο = cos): ΜΗΝ το μπερδεύεις ΠΟΤΕ με το αγγλικό "sin" (το ελληνικό ημίτονο γράφεται "ημ")!
+4. ΙΕΡΑΡΧΙΑ ΑΝΕΞΑΡΤΗΤΗΣ ΜΕΤΑΒΛΗΤΗΣ ΣΤΗ ΦΥΣΙΚΗ: Στις εξισώσεις Κύματος με δύο μεταβλητές (t και x, π.χ. 2πt/T - 2πx/λ ή ωt - kx), κράτησε ΚΑΙ τις δύο μεταβλητές t και x αυτούσιες τόσο στο "equation" όσο και στο "normalizedEquation"! Στις υπόλοιπες εξισώσεις Φυσικής, αν στο δεξί μέλος υπάρχει ο χρόνος "t" (χωρίς x), η συνάρτηση είναι συνάρτηση του χρόνου t και όλα τα άλλα σύμβολα (m, D, k, A, A_0, u_0, x_0, u_max, ω, Λ, a, g) είναι σταθερές παράμετροι. Αν δεν υπάρχει t αλλά υπάρχει η θέση "x", είναι συνάρτηση της θέσης x (π.χ. ΣF = -D*x, U = 1/2*D*x^2). Αν δεν υπάρχει ούτε t ούτε x αλλά υπάρχει η ταχύτητα "u", είναι συνάρτηση της ταχύτητας u (π.χ. K = 1/2*m*u^2, p = m*u). Στην καταστατική εξίσωση αερίων PV = nRT (ή P = nRT/V, P - V, P - T, V - T), κράτησε στο "equation" και στο "normalizedEquation" την ίδια ακριβώς μορφή με το "equation"!
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
 {"equation": "...", "normalizedEquation": "...", "kind": "oscillation|circle|ellipse|parabola|hyperbola|line|polynomial|function"}
 χωρίς κανένα άλλο σχόλιο.`,
@@ -8745,26 +8745,23 @@ function createMathGraphLabelText(
 /**
  * Specialized Greek Physics Oscillation Diagram Builder:
  * Recognizes and plots textbook oscillation diagrams (qualitative or quantitative) with blue dashed
- * amplitude/extrema projection lines and textbook axis/extrema labels:
- * 1. Kinetic Energy vs Velocity: `K = 1/2 m u^2`, `K - u` -> Parabola with `-u_max`, `+u_max`, `K_max`
- * 2. Potential Energy vs Displacement: `U = 1/2 D x^2`, `U = 1/2 k x^2`, `U - x` -> Parabola with `-A`, `+A`, `U_max`
- * 3. Kinetic Energy vs Displacement: `K = E - 1/2 D x^2`, `K = 1/2 D (A^2 - x^2)`, `K - x` -> Inverted Parabola with `-A`, `+A`, `K_max`
- * 4. Restoring Force vs Displacement: `ΣF = -D x`, `F = -D x`, `F = -k x`, `ΣF - x`, `F - x` -> Negative slope line with `-A`, `+A`, `+F_max`, `-F_max`
- * 5. Acceleration vs Displacement: `a = -ω^2 x`, `a - x` -> Negative slope line with `-A`, `+A`, `+a_max`, `-a_max`
- * 6. Time diagrams: `x = A ημ(ωt)`, `u = u_max συν(ωt)`, `a = -a_max ημ(ωt)`, `x - t`, `u - t`, `a - t`
+ * amplitude/extrema projection lines and textbook axis/extrema labels.
  */
-export function tryBuildOscillationDiagramStrokes(
-  rawInput: string,
-  centerX: number,
-  centerY: number,
-  width: number,
-  height: number,
-  curveColor: string,
-  axisColor: string,
-  layerId: string
-): { strokes: StrokeObject[]; texts: TextObject[]; groupId: string; kindLabel: string } | null {
-  if (!rawInput || !rawInput.trim()) return null;
+export interface WaveTwoVarDetection {
+  isWaveXT: boolean;
+  yVar: 'y' | 'u_y' | 'u' | 'a_y' | 'a' | 'φ';
+  depSymbol: string;
+  depName: string;
+  isStanding: boolean;
+  isCos: boolean;
+  isNeg: boolean;
+  numAmp: string;
+  forcedMode?: 'snapshot-x' | 'oscillation-t';
+  compact: string;
+}
 
+function normalizePhysicsEquationToCompact(rawInput: string): string {
+  if (!rawInput || !rawInput.trim()) return '';
   const lines = splitAndCleanMathLatexLines(rawInput);
   let raw = lines.length > 0 ? lines[lines.length - 1] : rawInput.trim();
   const arrowParts = raw.split(/\\Rightarrow|\\Leftrightarrow|\\implies|⇒|⇔|->/);
@@ -8807,6 +8804,7 @@ export function tryBuildOscillationDiagramStrokes(
     .replace(/\\(?:text|mathrm|operatorname|mathit|mathbf)\{([^}]*)\}/g, '$1')
     .replace(/\\(?:max|min)\b/gi, (m) => m.slice(1).toLowerCase())
     .replace(/σ\s*[uυv]\s*[vν]/gi, 'συν')
+    .replace(/η\s*[μm]/gi, 'ημ')
     .replace(/\\left\b|\\right\b|\\displaystyle\b/g, '')
     .replace(/_\{([^}]*)\}/g, (_, sub) => `_${sub.replace(/\s+/g, '')}`)
     .replace(/₀/g, '_0')
@@ -8834,8 +8832,6 @@ export function tryBuildOscillationDiagramStrokes(
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Unwrap redundant parentheses around simple tokens/fractions like `((1)/(2))` -> `1/2`,
-  // `((2*I)/(r))` -> `2*I/r`, `((q_1*q_2)/(r^2))` -> `q_1*q_2/r^2`, `((E)/(R+r))` -> `E/(R+r)`
   for (let pass = 0; pass < 5; pass++) {
     expanded = expanded
       .replace(/(?<![a-zA-Zα-ωΑ-Ω0-9_^])\(\s*([a-zA-Zα-ωΑ-Ω0-9_.*^/]+)\s*\)/g, '$1')
@@ -8846,11 +8842,130 @@ export function tryBuildOscillationDiagramStrokes(
       .replace(/\(\s*(1\/2|0\.5)\s*\)/g, '$1');
   }
 
-  const compact = expanded
+  return expanded
     .replace(/\s+/g, '')
     .replace(/[μm][αa][xχ]/gi, 'max')
     .replace(/[μm][iι][nν]/gi, 'min')
     .replace(/\\+([a-zA-Z]+)/g, '$1');
+}
+
+function parseWaveTwoVarFromCompact(compact: string): WaveTwoVarDetection | null {
+  if (!compact) return null;
+  const eqIdx = compact.indexOf('=');
+  if (eqIdx <= 0) return null;
+  const lhs = compact.slice(0, eqIdx).trim();
+  const rhs = compact.slice(eqIdx + 1).trim();
+
+  const lhsM = lhs.match(/^(y|u_?y|υ_?y|v_?y|u|υ|v|a_?y|α_?y|a|α|φ)(?:\(([xχtτ,\s]+)\))?$/i);
+  if (!lhsM) return null;
+
+  const rawSym = lhsM[1];
+  const yVar: WaveTwoVarDetection['yVar'] = /^u_?y|υ_?y|v_?y$/i.test(rawSym)
+    ? 'u_y'
+    : /^u|υ|v$/i.test(rawSym)
+    ? 'u'
+    : /^a_?y|α_?y$/i.test(rawSym)
+    ? 'a_y'
+    : /^a|α$/i.test(rawSym)
+    ? 'a'
+    : /^φ$/i.test(rawSym)
+    ? 'φ'
+    : 'y';
+
+  const arg = (lhsM[2] || '').replace(/\s+/g, '');
+  const forcedMode: WaveTwoVarDetection['forcedMode'] = /^[xχ]$/i.test(arg)
+    ? 'snapshot-x'
+    : /^[tτ]$/i.test(arg)
+    ? 'oscillation-t'
+    : undefined;
+
+  const rhsClean = rhs.replace(/max|min|exp|text|σταθ|const|sqrt|abs/gi, '');
+  const trigMatches = rhsClean.match(/συνημ|συν|cos|ημιτ|ημ|sin/gi) || [];
+  if (yVar !== 'φ' && trigMatches.length === 0) return null;
+
+  const rhsVars = rhsClean.replace(/συνημ|συν|cos|ημιτ|ημ|sin/gi, '');
+  const hasT =
+    /(?:^|[^a-zA-Zα-ωΑ-Ω_])[tτ](?:$|[^a-zA-Zα-ωΑ-Ω_])|[0-9πωf]\*?[tτ]|[tτ]\/T/.test(rhsVars);
+  const hasX =
+    /(?:^|[^a-zA-Zα-ωΑ-Ω_])[xχ](?:$|[^a-zA-Zα-ωΑ-Ω_])|[0-9πk]\*?[xχ]|[xχ]\/[λuυv]/.test(rhsVars);
+  const hasTandLambda =
+    /\/T(?:[^a-zA-Zα-ωΑ-Ω_]|$)/.test(rhsVars) && /\/λ(?:[^a-zA-Zα-ωΑ-Ω_]|$)/.test(rhsVars);
+  const hasInterferenceR = /r_?1/.test(rhsVars) && /r_?2/.test(rhsVars) && hasT;
+
+  if (!((hasT && hasX) || hasTandLambda || hasInterferenceR)) return null;
+
+  const isStanding = trigMatches.length >= 2;
+  const isNeg = rhs.startsWith('-');
+  const relevantTrig = (
+    isStanding ? trigMatches[trigMatches.length - 1] : trigMatches[0] || ''
+  ).toLowerCase();
+  const isCos =
+    relevantTrig === 'συν' ||
+    relevantTrig === 'συνημ' ||
+    relevantTrig === 'cos' ||
+    ((yVar === 'u' || yVar === 'u_y') && !relevantTrig);
+
+  const ampM = rhs.match(/^-?([0-9.]+)\*?(?:συνημ|συν|cos|ημιτ|ημ|sin)/i);
+  const numAmp = ampM && !isStanding ? ampM[1] : '';
+
+  const depName =
+    yVar === 'u' || yVar === 'u_y'
+      ? 'Ταχύτητα ταλάντωσης'
+      : yVar === 'a' || yVar === 'a_y'
+      ? 'Επιτάχυνση ταλάντωσης'
+      : yVar === 'φ'
+      ? 'Φάση κύματος'
+      : isStanding
+      ? 'Απομάκρυνση στάσιμου κύματος'
+      : 'Απομάκρυνση κύματος';
+
+  return {
+    isWaveXT: true,
+    yVar,
+    depSymbol: yVar,
+    depName,
+    isStanding,
+    isCos,
+    isNeg,
+    numAmp,
+    forcedMode,
+    compact,
+  };
+}
+
+/**
+ * Detects whether a handwritten or typed equation is a 2-variable Wave Equation in (x, t)
+ * (`y(x,t)`, `u(x,t)`, `u_y(x,t)`, `a(x,t)`, `a_y(x,t)`, `φ(x,t)` — travelling or standing wave)
+ * so the UI can ask the user whether they want:
+ * - `snapshot-x`: Στιγμιότυπο Κύματος f(x) με t = σταθ.
+ * - `oscillation-t`: Διάγραμμα Ταλάντωσης Σημείου f(t) με x = σταθ. (από t = t_αφ = x/u και μετά)
+ */
+export function detectWaveTwoVarEquation(rawInput: string): WaveTwoVarDetection | null {
+  const compact = normalizePhysicsEquationToCompact(rawInput);
+  return parseWaveTwoVarFromCompact(compact);
+}
+
+/**
+ * Specialized Greek Physics Oscillation & Curriculum Diagram Builder:
+ * Recognizes and plots textbook oscillation, wave, kinematics, dynamics, gas, electricity,
+ * magnetism, optics, and quantum diagrams (qualitative or quantitative) with blue dashed
+ * amplitude/extrema projection lines and textbook axis/extrema labels.
+ */
+export function tryBuildOscillationDiagramStrokes(
+  rawInput: string,
+  centerX: number,
+  centerY: number,
+  width: number,
+  height: number,
+  curveColor: string,
+  axisColor: string,
+  layerId: string,
+  waveMode?: 'snapshot-x' | 'oscillation-t'
+): { strokes: StrokeObject[]; texts: TextObject[]; groupId: string; kindLabel: string } | null {
+  if (!rawInput || !rawInput.trim()) return null;
+
+  const compact = normalizePhysicsEquationToCompact(rawInput);
+  if (!compact) return null;
   const groupId = `math-graph-grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const nowId = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
   const halfW = Math.max(85, width / 2);
@@ -9174,17 +9289,20 @@ export function tryBuildOscillationDiagramStrokes(
     });
   }
 
-  // CASE 5: Restoring Force `ΣF = -D x` / `F = -k x` / `ΣF - x` OR Acceleration `a = -ω^2 x` / `a - x`
+  // CASE 5: Restoring Force `ΣF = -D x` / `F = -k x` / `ΣF - x` OR Acceleration `a = -ω^2 x` / `a_y = -ω^2 y` / `a - x` / `a_y - y`
   const isForceDisplacement =
-    /^(?:ΣF|F)\s*=\s*-\s*(?:[Dkκ]|[0-9.]+)\s*\*?\s*[xχ]$/i.test(compact) ||
-    /^(?:ΣF|F)\s*-\s*[xχ]$/i.test(compact);
+    /^(?:ΣF|F)\s*=\s*-\s*(?:[Dkκ]|[0-9.]+)\s*\*?\s*([xχy])$/i.test(compact) ||
+    /^(?:ΣF|F)\s*-\s*([xχy])$/i.test(compact);
   const isAccelDisplacement =
-    /^[aα]\s*=\s*-\s*(?:ω\^2|[0-9.]+)\s*\*?\s*[xχ]$/i.test(compact) ||
-    /^[aα]\s*-\s*[xχ]$/i.test(compact);
+    /^(?:[aα]_?y|[aα])\s*=\s*-\s*(?:ω\^2|\(?2\*?π\/T\)?\^2|[0-9.]+)\s*\*?\s*([xχy])$/i.test(compact) ||
+    /^(?:[aα]_?y|[aα])\s*-\s*([xχy])$/i.test(compact);
 
   if (isForceDisplacement || isAccelDisplacement) {
     const isSigmaF = /ΣF/i.test(compact);
-    const yAxisTitle = isForceDisplacement ? (isSigmaF ? 'ΣF' : 'F') : 'a';
+    const isAy = /^[aα]_?y/i.test(compact);
+    const isYDisp = /y$/i.test(compact);
+    const yAxisTitle = isForceDisplacement ? (isSigmaF ? 'ΣF' : 'F') : isAy ? 'a_y' : 'a';
+    const xAxisTitle = isYDisp ? 'y' : 'x';
     const topValLabel = isForceDisplacement
       ? isSigmaF
         ? '+ΣF_max'
@@ -9198,7 +9316,7 @@ export function tryBuildOscillationDiagramStrokes(
     const xMaxPx = halfW * 0.64;
     const yMaxPx = halfH * 0.64;
 
-    // 1. Horizontal x-axis
+    // 1. Horizontal x/y-axis
     strokes.push({
       id: `st-${nowId}-axx`,
       tool: 'pen',
@@ -9248,7 +9366,7 @@ export function tryBuildOscillationDiagramStrokes(
         `${nowId}-ly`
       ),
       createMathGraphLabelText(
-        'x',
+        xAxisTitle,
         centerX + halfW + 8,
         centerY + 2,
         'left',
@@ -9341,7 +9459,7 @@ export function tryBuildOscillationDiagramStrokes(
       strokes,
       texts,
       groupId,
-      kindLabel: isForceDisplacement ? `Διάγραμμα ${yAxisTitle}(x)` : 'Διάγραμμα a(x)',
+      kindLabel: isForceDisplacement ? `Διάγραμμα ${yAxisTitle}(${xAxisTitle})` : `Διάγραμμα ${yAxisTitle}(${xAxisTitle})`,
     };
   }
 
@@ -9719,19 +9837,417 @@ export function tryBuildOscillationDiagramStrokes(
     };
   }
 
-  // CASE 6: Time Oscillation & AC / Induction Diagrams `x(t)`, `u(t)`, `a(t)`, `ΣF(t)`, `Φ(t)`, `E_επ(t)`, `i(t)`, `V(t)` (including initial phase φ_0)
+  // CASE 6W: Two-Variable Wave Equations in (x, t):
+  // `y = A ημ(2πt/T - 2πx/λ)`, `y = A ημ(2π(t/T - x/λ))`, `y = A ημ(ωt - kx)`,
+  // `u = u_max συν(2πt/T - 2πx/λ)`, `u_y = ωA συν(2π(t/T - x/λ))`,
+  // `a = -a_max ημ(2πt/T - 2πx/λ)`, `a_y = -ω²A ημ(2π(t/T - x/λ))`,
+  // Standing Wave `y = 2A συν(2πx/λ) ημ(2πt/T)` & Wave Phase `φ = 2π(t/T - x/λ)`
+  const waveXT = parseWaveTwoVarFromCompact(compact);
+  if (waveXT) {
+    const mode: 'snapshot-x' | 'oscillation-t' = waveMode || waveXT.forcedMode || 'snapshot-x';
+    const axisLeftX = centerX - halfW * 0.72;
+    const axisRightX = centerX + halfW * 0.92;
+    const ampPx = halfH * 0.62;
+    const waveW = axisRightX - axisLeftX - 18;
+
+    // Special case: Wave Phase φ(x, t) = 2π(t/T - x/λ)
+    if (waveXT.yVar === 'φ') {
+      const axisBottomY = centerY + halfH * 0.58;
+      const axisTopY = centerY - halfH * 0.86;
+      const plotW = axisRightX - axisLeftX - 20;
+      const plotH = axisBottomY - axisTopY - 20;
+      strokes.push(
+        {
+          id: `st-${nowId}-axy`,
+          tool: 'pen',
+          color: axisColor,
+          width: 2.5,
+          opacity: 1,
+          arrowEnd: true,
+          points: [
+            { x: axisLeftX, y: axisBottomY + 16, pressure: 0.7 },
+            { x: axisLeftX, y: axisTopY, pressure: 0.7 },
+          ],
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'wave-axis-y',
+        },
+        {
+          id: `st-${nowId}-axx`,
+          tool: 'pen',
+          color: axisColor,
+          width: 2.5,
+          opacity: 1,
+          arrowEnd: true,
+          points: [
+            { x: axisLeftX - 16, y: axisBottomY, pressure: 0.7 },
+            { x: axisRightX, y: axisBottomY, pressure: 0.7 },
+          ],
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'wave-axis-x',
+        }
+      );
+      if (mode === 'snapshot-x') {
+        const startY = axisBottomY - plotH * 0.78;
+        const endX = axisLeftX + plotW * 0.82;
+        strokes.push({
+          id: `st-${nowId}-crv-phix`,
+          tool: 'pen',
+          color: curveColor,
+          width: 2.8,
+          opacity: 1,
+          points: [
+            { x: axisLeftX, y: startY, pressure: 0.7 },
+            { x: endX, y: axisBottomY, pressure: 0.7 },
+          ],
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'line',
+        });
+        addRulerTick(axisLeftX - 4.5, startY, axisLeftX + 4.5, startY, 'ytick-ph0');
+        addRulerTick(endX, axisBottomY - 4.5, endX, axisBottomY + 4.5, 'xtick-x1');
+        texts.push(
+          createMathGraphLabelText('φ', axisLeftX + 8, axisTopY + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+          createMathGraphLabelText('x', axisRightX + 7, axisBottomY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+          createMathGraphLabelText('2πt_1/T', axisLeftX - 7, startY, 'right', 14, axisColor, layerId, groupId, `${nowId}-lph0`),
+          createMathGraphLabelText('x_1 = u·t_1', endX, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lx1`),
+          createMathGraphLabelText('t = t_1 = σταθ.', axisLeftX + plotW * 0.54, axisTopY + 18, 'left', 14, axisColor, layerId, groupId, `${nowId}-lnote`)
+        );
+        return { strokes, texts, groupId, kindLabel: 'Φάση Κύματος φ(x) (t = σταθ.)' };
+      } else {
+        const xTaf = axisLeftX + plotW * 0.30;
+        const endX = axisLeftX + plotW * 0.88;
+        const endY = axisBottomY - plotH * 0.82;
+        strokes.push({
+          id: `st-${nowId}-crv-phit`,
+          tool: 'pen',
+          color: curveColor,
+          width: 2.8,
+          opacity: 1,
+          points: [
+            { x: xTaf, y: axisBottomY, pressure: 0.7 },
+            { x: endX, y: endY, pressure: 0.7 },
+          ],
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'line',
+        });
+        addRulerTick(xTaf, axisBottomY - 4.5, xTaf, axisBottomY + 4.5, 'xtick-taf');
+        texts.push(
+          createMathGraphLabelText('φ', axisLeftX + 8, axisTopY + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+          createMathGraphLabelText('t', axisRightX + 7, axisBottomY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+          createMathGraphLabelText('t_αφ = x/u', xTaf, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-ltaf`),
+          createMathGraphLabelText('x = σταθ.', axisLeftX + plotW * 0.58, axisTopY + 18, 'left', 14, axisColor, layerId, groupId, `${nowId}-lnote`)
+        );
+        return { strokes, texts, groupId, kindLabel: 'Φάση Κύματος φ(t) (x = σταθ., t ≥ t_αφ = x/u)' };
+      }
+    }
+
+    // Standard Wave Quantities: y(x,t), u(x,t) / u_y(x,t), a(x,t) / a_y(x,t)
+    strokes.push(
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: centerY + halfH * 0.9, pressure: 0.7 },
+          { x: axisLeftX, y: centerY - halfH * 0.9, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      },
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: centerY, pressure: 0.7 },
+          { x: axisRightX, y: centerY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      }
+    );
+
+    addDashedGuide(axisLeftX, centerY - ampPx, axisRightX - 14, centerY - ampPx, 1);
+    addDashedGuide(axisLeftX, centerY + ampPx, axisRightX - 14, centerY + ampPx, 2);
+    addRulerTick(axisLeftX - 4.5, centerY - ampPx, axisLeftX + 4.5, centerY - ampPx, 'ytick-p');
+    addRulerTick(axisLeftX - 4.5, centerY + ampPx, axisLeftX + 4.5, centerY + ampPx, 'ytick-n');
+
+    const baseAmpSym =
+      waveXT.yVar === 'u' || waveXT.yVar === 'u_y'
+        ? 'u_max'
+        : waveXT.yVar === 'a' || waveXT.yVar === 'a_y'
+        ? 'a_max'
+        : 'A';
+
+    if (mode === 'snapshot-x') {
+      const posLabel = waveXT.numAmp
+        ? `+${waveXT.numAmp}`
+        : waveXT.isStanding
+        ? `+2${baseAmpSym}`
+        : `+${baseAmpSym}`;
+      const negLabel = waveXT.numAmp
+        ? `-${waveXT.numAmp}`
+        : waveXT.isStanding
+        ? `-2${baseAmpSym}`
+        : `-${baseAmpSym}`;
+
+      const frontW = waveXT.isStanding ? waveW : waveW * 0.86;
+      const wavePts: { x: number; y: number; pressure: number }[] = [];
+      const steps = 96;
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const theta = u * Math.PI * 3; // 1.5 wavelengths (up to x_1 = 1.5λ)
+        const val =
+          (waveXT.isNeg ? -1 : 1) * (waveXT.isCos ? Math.cos(theta) : Math.sin(theta));
+        wavePts.push({
+          x: axisLeftX + u * frontW,
+          y: centerY - val * ampPx,
+          pressure: 0.7,
+        });
+      }
+      // For travelling wave: beyond wavefront x_1 = u·t_1 = 1.5λ, medium is undisturbed (μ = 0)
+      if (!waveXT.isStanding) {
+        if (waveXT.isCos) {
+          addDashedGuide(
+            axisLeftX + frontW,
+            wavePts[wavePts.length - 1].y,
+            axisLeftX + frontW,
+            centerY,
+            3
+          );
+        }
+        strokes.push({
+          id: `st-${nowId}-crv-xrest`,
+          tool: 'pen',
+          color: curveColor,
+          width: 2.8,
+          opacity: 1,
+          points: [
+            { x: axisLeftX + frontW, y: centerY, pressure: 0.7 },
+            { x: axisLeftX + waveW, y: centerY, pressure: 0.7 },
+          ],
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'line',
+        });
+      } else {
+        // Standing wave opposite-phase dashed profile
+        const oppPts: { x: number; y: number; pressure: number }[] = [];
+        for (let i = 0; i <= steps; i++) {
+          const u = i / steps;
+          const theta = u * Math.PI * 3;
+          const val =
+            -(waveXT.isNeg ? -1 : 1) * (waveXT.isCos ? Math.cos(theta) : Math.sin(theta));
+          oppPts.push({
+            x: axisLeftX + u * frontW,
+            y: centerY - val * ampPx,
+            pressure: 0.65,
+          });
+        }
+        strokes.push({
+          id: `st-${nowId}-gd-st-opp`,
+          tool: 'pen',
+          color: blueGuide,
+          width: 1.8,
+          opacity: 0.85,
+          lineStyle: 'dashed',
+          points: oppPts,
+          layerId,
+          groupId,
+          isShape: false,
+        });
+      }
+
+      strokes.push({
+        id: `st-${nowId}-crv-xwave`,
+        tool: 'pen',
+        color: curveColor,
+        width: 2.8,
+        opacity: 1,
+        points: wavePts,
+        layerId,
+        groupId,
+        isShape: false,
+      });
+
+      const xHalfL = axisLeftX + (1 / 3) * frontW;
+      const xOneL = axisLeftX + (2 / 3) * frontW;
+      const xThreeHalfL = axisLeftX + frontW;
+      addRulerTick(xHalfL, centerY - 4.5, xHalfL, centerY + 4.5, 'xtick-lh');
+      addRulerTick(xOneL, centerY - 4.5, xOneL, centerY + 4.5, 'xtick-l1');
+      addRulerTick(xThreeHalfL, centerY - 4.5, xThreeHalfL, centerY + 4.5, 'xtick-l15');
+
+      texts.push(
+        createMathGraphLabelText(waveXT.yVar, axisLeftX + 8, centerY - halfH * 0.9 + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+        createMathGraphLabelText('x', axisRightX + 7, centerY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+        createMathGraphLabelText(posLabel, axisLeftX - 7, centerY - ampPx, 'right', 15, axisColor, layerId, groupId, `${nowId}-lp`),
+        createMathGraphLabelText(negLabel, axisLeftX - 7, centerY + ampPx, 'right', 15, axisColor, layerId, groupId, `${nowId}-ln`),
+        createMathGraphLabelText('λ/2', xHalfL - 6, centerY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-llh`),
+        createMathGraphLabelText('λ', xOneL + 5, centerY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-ll1`),
+        createMathGraphLabelText('1.5λ', xThreeHalfL - 4, centerY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-ll15`),
+        createMathGraphLabelText('t = σταθ.', axisRightX - 6, centerY - halfH * 0.84, 'right', 13, axisColor, layerId, groupId, `${nowId}-ltnote`)
+      );
+
+      return {
+        strokes,
+        texts,
+        groupId,
+        kindLabel: `Στιγμιότυπο Κύματος ${waveXT.yVar}(x) (t = σταθ.)`,
+      };
+    } else {
+      // mode === 'oscillation-t': Διάγραμμα Ταλάντωσης Σημείου μ = f(t) με x = σταθ.
+      // Ξεκινάει από t = t_αφ = x/u και μετά (ακίνητο μ = 0 για 0 ≤ t < t_αφ)!
+      const posLabel = waveXT.numAmp
+        ? `+${waveXT.numAmp}`
+        : waveXT.isStanding
+        ? `+${baseAmpSym}'`
+        : `+${baseAmpSym}`;
+      const negLabel = waveXT.numAmp
+        ? `-${waveXT.numAmp}`
+        : waveXT.isStanding
+        ? `-${baseAmpSym}'`
+        : `-${baseAmpSym}`;
+
+      const tafRatio = waveXT.isStanding ? 0 : 0.24;
+      const xTaf = axisLeftX + tafRatio * waveW;
+      const oscW = waveW - tafRatio * waveW;
+
+      // 1. Undisturbed flat segment on t-axis from t = 0 to t = t_αφ = x/u
+      if (!waveXT.isStanding) {
+        strokes.push({
+          id: `st-${nowId}-crv-trest`,
+          tool: 'pen',
+          color: curveColor,
+          width: 3.0,
+          opacity: 1,
+          points: [
+            { x: axisLeftX, y: centerY, pressure: 0.7 },
+            { x: xTaf, y: centerY, pressure: 0.7 },
+          ],
+          layerId,
+          groupId,
+          isShape: true,
+          shapeType: 'line',
+        });
+      }
+
+      // 2. Harmonic oscillation starting at t = t_αφ = x/u over 1.5 periods
+      const wavePts: { x: number; y: number; pressure: number }[] = [];
+      const steps = 96;
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const theta = u * Math.PI * 3; // 1.5 periods after t_αφ
+        const val =
+          (waveXT.isNeg ? -1 : 1) * (waveXT.isCos ? Math.cos(theta) : Math.sin(theta));
+        wavePts.push({
+          x: xTaf + u * oscW,
+          y: centerY - val * ampPx,
+          pressure: 0.7,
+        });
+      }
+      if (!waveXT.isStanding && waveXT.isCos) {
+        addDashedGuide(xTaf, centerY, xTaf, wavePts[0].y, 3);
+      }
+
+      strokes.push({
+        id: `st-${nowId}-crv-twave`,
+        tool: 'pen',
+        color: curveColor,
+        width: 2.8,
+        opacity: 1,
+        points: wavePts,
+        layerId,
+        groupId,
+        isShape: false,
+      });
+
+      const xHalfT = xTaf + (1 / 3) * oscW;
+      const xOneT = xTaf + (2 / 3) * oscW;
+      const xThreeHalfT = xTaf + oscW;
+      if (!waveXT.isStanding) {
+        addRulerTick(xTaf, centerY - 4.5, xTaf, centerY + 4.5, 'xtick-taf');
+      }
+      addRulerTick(xHalfT, centerY - 4.5, xHalfT, centerY + 4.5, 'xtick-th');
+      addRulerTick(xOneT, centerY - 4.5, xOneT, centerY + 4.5, 'xtick-t1');
+      addRulerTick(xThreeHalfT, centerY - 4.5, xThreeHalfT, centerY + 4.5, 'xtick-t15');
+
+      texts.push(
+        createMathGraphLabelText(waveXT.yVar, axisLeftX + 8, centerY - halfH * 0.9 + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+        createMathGraphLabelText('t', axisRightX + 7, centerY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+        createMathGraphLabelText(posLabel, axisLeftX - 7, centerY - ampPx, 'right', 15, axisColor, layerId, groupId, `${nowId}-lp`),
+        createMathGraphLabelText(negLabel, axisLeftX - 7, centerY + ampPx, 'right', 15, axisColor, layerId, groupId, `${nowId}-ln`),
+        createMathGraphLabelText(
+          waveXT.isStanding ? 'x = σταθ.' : 'x = σταθ. (t_αφ = x/u)',
+          axisRightX - 6,
+          centerY - halfH * 0.84,
+          'right',
+          13,
+          axisColor,
+          layerId,
+          groupId,
+          `${nowId}-lxnote`
+        )
+      );
+
+      if (!waveXT.isStanding) {
+        texts.push(
+          createMathGraphLabelText('t_αφ = x/u', xTaf - 2, centerY + 16, 'center', 13, axisColor, layerId, groupId, `${nowId}-ltaf`),
+          createMathGraphLabelText('t_αφ+T', xOneT + 4, centerY + 16, 'center', 13, axisColor, layerId, groupId, `${nowId}-lt1`)
+        );
+      } else {
+        texts.push(
+          createMathGraphLabelText('T/2', xHalfT - 6, centerY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-lth`),
+          createMathGraphLabelText('T', xOneT + 5, centerY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-lt1`),
+          createMathGraphLabelText('1.5T', xThreeHalfT - 6, centerY + 15, 'center', 14, axisColor, layerId, groupId, `${nowId}-lt15`)
+        );
+      }
+
+      return {
+        strokes,
+        texts,
+        groupId,
+        kindLabel: `Διάγραμμα Ταλάντωσης Σημείου ${waveXT.yVar}(t) (x = σταθ., από t_αφ = x/u)`,
+      };
+    }
+  }
+
+  // CASE 6: Time Oscillation & AC / Induction Diagrams `x(t)`, `y(t)`, `u(t)`, `a(t)`, `ΣF(t)`, `Φ(t)`, `E_επ(t)`, `i(t)`, `V(t)` (including initial phase φ_0)
   const timeOscMatch = compact.match(
-    /^(x|u|υ|v|a|α|ΣF|F|Φ|E_?επ|I|i|V)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A|[uvυ]_?max|[aα]_?max|ΣF_?max|F_?max|Φ_?max|B\*?A|N\*?B\*?A|E_?max|V_?max|I_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?(.*?)[tτ]([^)]*)\)?$/i
+    /^(x|y|u_?y|υ_?y|v_?y|u|υ|v|a_?y|α_?y|a|α|ΣF|F|Φ|E_?επ|I|i|V)\s*(?:\(\s*t\s*\))?\s*=\s*(-?)\s*((?:[0-9.]+\*?)?π(?:\^[0-9]+)?|[0-9.]+|A|[uvυ]_?max|[aα]_?max|ΣF_?max|F_?max|Φ_?max|B\*?A|N\*?B\*?A|E_?max|V_?max|I_?max|ω\*?A|ω\^2\*?A)?\s*\*?\s*(ημιτ|ημ|sin|συνημ|συν|cos)\s*\(?(.*?)[tτ]([^)]*)\)?$/i
   );
-  const shorthandTimeMatch = compact.match(/^(x|u|υ|v|a|α|ΣF|F|Φ|E_?επ)\s*-\s*t$/i);
+  const shorthandTimeMatch = compact.match(/^(x|y|u_?y|u|υ|v|a_?y|a|α|ΣF|F|Φ|E_?επ)\s*-\s*t$/i);
 
   if (timeOscMatch || shorthandTimeMatch) {
     const rawVar = (timeOscMatch ? timeOscMatch[1] : shorthandTimeMatch![1]).trim();
     const yVar =
-      /^(?:u|υ|v)$/i.test(rawVar)
+      /^(?:u_?y|υ_?y|v_?y)$/i.test(rawVar)
+        ? 'u_y'
+        : /^(?:u|υ|v)$/i.test(rawVar)
         ? 'u'
+        : /^(?:a_?y|α_?y)$/i.test(rawVar)
+        ? 'a_y'
         : /^(?:a|α)$/i.test(rawVar)
         ? 'a'
+        : /^y$/i.test(rawVar)
+        ? 'y'
         : /^ΣF$/i.test(rawVar)
         ? 'ΣF'
         : /^F$/i.test(rawVar)
@@ -10357,13 +10873,13 @@ export function tryBuildOscillationDiagramStrokes(
     };
   }
 
-  // CASE 6B: Phase-Space Ellipse for SHM (`u = ±ω√(A^2 - x^2)`, `u^2 = ω^2(A^2 - x^2)`, `u - x`),
+  // CASE 6B: Phase-Space Ellipse for SHM & Waves (`u = ±ω√(A^2 - x^2)`, `u_y = ±ω√(A^2 - y^2)`, `u^2 = ω^2(A^2 - x^2)`, `u - x`, `u_y - y`),
   // SHM Acceleration-Velocity (`a = ±ω√(u_max^2 - u^2)`, `a^2 = ω^2(u_max^2 - u^2)`),
   // and LC Electrical Oscillation (`i = ±ω√(Q^2 - q^2)`, `i^2 = ω^2(Q^2 - q^2)`, `i - q`)
   const isSHMPhaseEllipse =
-    /^[uvυ]=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\(A\^2-[xχ]\^2\)$/i.test(compact) ||
-    /^[uvυ]\^2=ω\^2\*?\(A\^2-[xχ]\^2\)$/i.test(compact) ||
-    /^[uvυ]-[xχ]$/i.test(compact);
+    /^(?:[uvυ]_?y|[uvυ])=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\(A\^2-[xχy]\^2\)$/i.test(compact) ||
+    /^(?:[uvυ]_?y|[uvυ])\^2=ω\^2\*?\(A\^2-[xχy]\^2\)$/i.test(compact) ||
+    /^(?:[uvυ]_?y|[uvυ])-[xχy]$/i.test(compact);
   const isSHMAccelVelEllipse =
     /^[aα]=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\([uvυ]_?max\^2-[uvυ]\^2\)$/i.test(compact) ||
     /^[aα]\^2=ω\^2\*?\([uvυ]_?max\^2-[uvυ]\^2\)$/i.test(compact);
@@ -10375,8 +10891,10 @@ export function tryBuildOscillationDiagramStrokes(
   if (isSHMPhaseEllipse || isSHMAccelVelEllipse || isLCPhaseEllipse) {
     const rx = halfW * 0.66;
     const ry = halfH * 0.56;
-    const yTitle = isLCPhaseEllipse ? 'i' : isSHMAccelVelEllipse ? 'a' : 'u';
-    const xTitle = isLCPhaseEllipse ? 'q' : isSHMAccelVelEllipse ? 'u' : 'x';
+    const isWaveUy = /^[uvυ]_?y/i.test(compact);
+    const isWaveY = /y\^2\)$|-y$/i.test(compact);
+    const yTitle = isLCPhaseEllipse ? 'i' : isSHMAccelVelEllipse ? 'a' : isWaveUy ? 'u_y' : 'u';
+    const xTitle = isLCPhaseEllipse ? 'q' : isSHMAccelVelEllipse ? 'u' : isWaveY ? 'y' : 'x';
     const leftX = isLCPhaseEllipse ? '-Q' : isSHMAccelVelEllipse ? '-u_max' : '-A';
     const rightX = isLCPhaseEllipse ? '+Q' : isSHMAccelVelEllipse ? '+u_max' : '+A';
     const topY = isLCPhaseEllipse ? '+I_max' : isSHMAccelVelEllipse ? '+a_max' : '+u_max';
@@ -11930,7 +12448,7 @@ export function tryBuildOscillationDiagramStrokes(
     );
     return { strokes, texts, groupId, kindLabel: 'Στιγμιότυπο Αρμονικού Κύματος y(x)' };
   }
-  // - Doppler Effect (`f_A = (u / (u - u_S)) f_S` or `f_A - u_S`):
+  // - Doppler Effect (`f_A = (u / (u - u_S)) f_S`, `f_A = (u / (u + u_S)) f_S`, `f_A = ((u ± u_A)/u) f_S` or `f_A - u_S`):
   if (/^f_?A=\(?[uvυ]\/\([uvυ]-[uvυ]_?S\)\)?\*?f_?S$|^f_?A-[uvυ]_?S$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'f_A',
@@ -11938,7 +12456,68 @@ export function tryBuildOscillationDiagramStrokes(
       curveKind: 'doppler-approach',
       yInitLabel: 'f_S',
       xEndLabel: 'u',
-      kindLabel: 'Φαινόμενο Doppler f_A(u_S)',
+      kindLabel: 'Φαινόμενο Doppler f_A(u_S) (Πλησιάζει η Πηγή)',
+    });
+  }
+  if (/^f_?A=\(?[uvυ]\/\([uvυ]\+[uvυ]_?S\)\)?\*?f_?S$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'f_A',
+      xAxisLabel: 'u_S',
+      curveKind: 'closed-circuit-i-r',
+      yInitLabel: 'f_S',
+      kindLabel: 'Φαινόμενο Doppler f_A(u_S) (Απομακρύνεται η Πηγή)',
+    });
+  }
+  if (/^f_?A=\(?\([uvυ]\+[uvυ]_?A\)\/[uvυ]\)?\*?f_?S$|^f_?A-[uvυ]_?A$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'f_A',
+      xAxisLabel: 'u_A',
+      curveKind: 'line-offset-up',
+      yInitLabel: 'f_S',
+      kindLabel: 'Φαινόμενο Doppler f_A(u_A) (Πλησιάζει ο Παρατηρητής)',
+    });
+  }
+  if (/^f_?A=\(?\([uvυ]-[uvυ]_?A\)\/[uvυ]\)?\*?f_?S$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'f_A',
+      xAxisLabel: 'u_A',
+      curveKind: 'line-offset-down',
+      yInitLabel: 'f_S',
+      xEndLabel: 'u',
+      kindLabel: 'Φαινόμενο Doppler f_A(u_A) (Απομακρύνεται ο Παρατηρητής)',
+    });
+  }
+  // - Wave Phase Difference (`Δφ = 2π Δx / λ`, `Δφ = 2π Δt / T`), String Wave Speed (`u = √(F/μ)`), Spherical Wave Intensity (`I = P / (4π r^2)`):
+  if (/^(?:Dφ|Δφ)=2\*?π\*?(?:Dx|Δx|[xχ])\/λ$|^(?:Dφ|Δφ)-(?:Dx|Δx|[xχ])$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'Δφ',
+      xAxisLabel: 'Δx',
+      curveKind: 'line-origin',
+      kindLabel: 'Διαφορά Φάσης Κύματος Δφ(Δx) = 2π·Δx/λ',
+    });
+  }
+  if (/^(?:Dφ|Δφ)=2\*?π\*?(?:Dt|Δt|t)\/T$|^(?:Dφ|Δφ)-(?:Dt|Δt|t)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'Δφ',
+      xAxisLabel: 'Δt',
+      curveKind: 'line-origin',
+      kindLabel: 'Διαφορά Φάσης Σημείου Δφ(Δt) = 2π·Δt/T',
+    });
+  }
+  if (/^[uvυ]=(?:SQRT|sqrt|√)\(F\/[mμ]\)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u',
+      xAxisLabel: 'F',
+      curveKind: 'sqrt',
+      kindLabel: 'Ταχύτητα Εγκάρσιου Κύματος σε Χορδή u(F) = √(F/μ)',
+    });
+  }
+  if (/^I=P\/\(?\s*4\*?π\*?r\^2\s*\)?$|^I-r$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'I',
+      xAxisLabel: 'r',
+      curveKind: 'inverse-square',
+      kindLabel: 'Ένταση Κύματος σε σχέση με την Απόσταση I(r) = P/(4πr²)',
     });
   }
 

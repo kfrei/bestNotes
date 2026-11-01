@@ -148,6 +148,8 @@ import {
   transcribeEquationForGraphWithGemini,
   getUnifiedOcrErrorMessage,
   convertPlainTextToMathLatex,
+  detectWaveTwoVarEquation,
+  type WaveTwoVarDetection,
   tryBuildOscillationDiagramStrokes,
   buildMathGraphStrokesFromEquation,
   prepareMathGraphStrokesForAnimation,
@@ -35853,6 +35855,126 @@ export default function App() {
     [updateActivePage]
   );
 
+  // Ερώτηση επιλογής διαγράμματος όταν η εξίσωση κύματος εξαρτάται από δύο μεταβλητές (x, t):
+  // - Στιγμιότυπο Κύματος f(x) με t = σταθ.
+  // - Διάγραμμα Ταλάντωσης Σημείου f(t) με x = σταθ. (από t = t_αφ = x/u και μετά)
+  const [waveDiagramPrompt, setWaveDiagramPrompt] = useState<{
+    candEq: string;
+    displayEq: string;
+    info: WaveTwoVarDetection;
+    centerX: number;
+    centerY: number;
+    diagW: number;
+    diagH: number;
+    axisInk: string;
+    targetLayerId: string;
+    sourceStrokeIds?: string[];
+    sourceTextId?: string;
+  } | null>(null);
+
+  const handleConfirmWaveDiagramMode = useCallback(
+    (mode: 'snapshot-x' | 'oscillation-t' | 'both') => {
+      if (!waveDiagramPrompt) return;
+      const prompt = waveDiagramPrompt;
+      setWaveDiagramPrompt(null);
+
+      const pH = getPageLogicalHeight(activePage);
+      let graphBuilt: ReturnType<typeof buildMathGraphStrokesFromEquation> = null;
+
+      if (mode === 'both') {
+        const snap = tryBuildOscillationDiagramStrokes(
+          prompt.candEq,
+          prompt.centerX,
+          prompt.centerY,
+          prompt.diagW,
+          prompt.diagH,
+          '#dc2626',
+          prompt.axisInk,
+          prompt.targetLayerId,
+          'snapshot-x'
+        );
+        const secondCenterY = Math.min(
+          pH - prompt.diagH / 2 - 24,
+          prompt.centerY + prompt.diagH + 36
+        );
+        const osc = tryBuildOscillationDiagramStrokes(
+          prompt.candEq,
+          prompt.centerX,
+          secondCenterY,
+          prompt.diagW,
+          prompt.diagH,
+          '#dc2626',
+          prompt.axisInk,
+          prompt.targetLayerId,
+          'oscillation-t'
+        );
+        if (snap && osc) {
+          graphBuilt = {
+            strokes: [...snap.strokes, ...osc.strokes],
+            texts: [...snap.texts, ...osc.texts],
+            groupId: snap.groupId,
+            kindLabel: `${snap.kindLabel} & ${osc.kindLabel}`,
+          };
+        } else {
+          graphBuilt = snap || osc;
+        }
+      } else {
+        graphBuilt = tryBuildOscillationDiagramStrokes(
+          prompt.candEq,
+          prompt.centerX,
+          prompt.centerY,
+          prompt.diagW,
+          prompt.diagH,
+          '#dc2626',
+          prompt.axisInk,
+          prompt.targetLayerId,
+          mode
+        );
+      }
+
+      if (!graphBuilt) {
+        showToast(`⚠️ Δεν ήταν δυνατή η σχεδίαση διαγράμματος για: ${prompt.displayEq}`);
+        return;
+      }
+
+      animateAndCommitMathGraph(graphBuilt, (page) => {
+        if (prompt.sourceStrokeIds && prompt.sourceStrokeIds.length > 0) {
+          const srcSet = new Set(prompt.sourceStrokeIds);
+          return {
+            ...page,
+            strokes: page.strokes.map((s) => {
+              if (!srcSet.has(s.id)) return s;
+              const cleanBaseId = s.id.replace(/-eqsrc-math-graph-grp-[a-z0-9-]+-fn\d+$/, '');
+              return {
+                ...s,
+                id: `${cleanBaseId}-eqsrc-${graphBuilt!.groupId}-fn0`,
+              };
+            }),
+          };
+        }
+        if (prompt.sourceTextId) {
+          return {
+            ...page,
+            texts: (page.texts || []).map((t) => {
+              if (t.id !== prompt.sourceTextId) return t;
+              const cleanBaseId = t.id.replace(/-(math-graph-grp-[a-z0-9-]+)-(?:fn\d+|multi)$/, '');
+              return {
+                ...t,
+                id: `${cleanBaseId}-${graphBuilt!.groupId}-fn0`,
+              };
+            }),
+          };
+        }
+        return page;
+      });
+
+      showToast(
+        `📈 Διάγραμμα (${graphBuilt.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση!`
+      );
+    },
+    [waveDiagramPrompt, activePage, animateAndCommitMathGraph, showToast]
+  );
+
   // 3. Manual (on-demand) Lasso Handwriting -> 2D Mathematical Coordinate Diagram (`📈 Διάγραμμα`) right next to the equation!
   const handleConvertLassoToMathGraph = useCallback(async () => {
     if (isConvertingHandwriting) return;
@@ -35972,6 +36094,27 @@ export default function App() {
             .filter(Boolean)
         )
       );
+
+      // 0. Αν η εξίσωση είναι κύματος δύο μεταβλητών (x, t) — π.χ. y = A·ημ(2πt/T - 2πx/λ), u_y(x,t), a_y(x,t), φ(x,t) —
+      // ρώτα τον χρήστη αν θέλει Στιγμιότυπο Κύματος f(x) με t=σταθ. ή Διάγραμμα Ταλάντωσης f(t) με x=σταθ. (από t_αφ = x/u)!
+      for (const candEq of candidateEquations) {
+        const wDet = detectWaveTwoVarEquation(candEq);
+        if (wDet && wDet.isWaveXT && !wDet.forcedMode) {
+          setWaveDiagramPrompt({
+            candEq,
+            displayEq: aiRes?.normalizedEquation || eqStr,
+            info: wDet,
+            centerX,
+            centerY,
+            diagW,
+            diagH,
+            axisInk,
+            targetLayerId,
+            sourceStrokeIds: selStrokes.map((s) => s.id),
+          });
+          return;
+        }
+      }
 
       let graphBuilt: ReturnType<typeof buildMathGraphStrokesFromEquation> = null;
       // 1. Check Physics Equations Library across ALL candidate transcriptions first!
@@ -36204,6 +36347,27 @@ export default function App() {
             .filter(Boolean)
         )
       );
+
+      // 0. Αν η εξίσωση είναι κύματος δύο μεταβλητών (x, t) — π.χ. y = A·ημ(2πt/T - 2πx/λ), u_y(x,t), a_y(x,t), φ(x,t) —
+      // ρώτα τον χρήστη αν θέλει Στιγμιότυπο Κύματος f(x) με t=σταθ. ή Διάγραμμα Ταλάντωσης f(t) με x=σταθ. (από t_αφ = x/u)!
+      for (const candEq of candidateEquations) {
+        const wDet = detectWaveTwoVarEquation(candEq);
+        if (wDet && wDet.isWaveXT && !wDet.forcedMode) {
+          setWaveDiagramPrompt({
+            candEq,
+            displayEq: rawEq,
+            info: wDet,
+            centerX,
+            centerY,
+            diagW,
+            diagH,
+            axisInk,
+            targetLayerId,
+            sourceTextId: txtObj.id,
+          });
+          return;
+        }
+      }
 
       let graphBuilt: ReturnType<typeof buildMathGraphStrokesFromEquation> = null;
       // 1. Check Physics Equations Library across ALL candidate transcriptions first!
@@ -48065,6 +48229,100 @@ export default function App() {
                 Ακύρωση
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal επιλογής διαγράμματος για Εξίσωση Κύματος δύο μεταβλητών (x, t): Στιγμιότυπο f(x) ή Ταλάντωση Σημείου f(t) */}
+      {waveDiagramPrompt && (
+        <div
+          className="fixed inset-0 z-[1050] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setWaveDiagramPrompt(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5 flex flex-col gap-3.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 flex items-center justify-center text-lg">
+                  🌊
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Εξίσωση Κύματος Δύο Μεταβλητών (x, t)
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Μέγεθος: <span className="font-semibold text-red-600 dark:text-red-400">{waveDiagramPrompt.info.depName} ({waveDiagramPrompt.info.depSymbol})</span> • Ποιο διάγραμμα θέλετε να σχεδιαστεί;
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setWaveDiagramPrompt(null)}
+                className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold cursor-pointer"
+                title="Κλείσιμο"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-200 truncate">
+              {waveDiagramPrompt.displayEq}
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={() => handleConfirmWaveDiagramMode('snapshot-x')}
+                className="w-full text-left p-3.5 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100/80 dark:hover:bg-blue-900/50 transition-all cursor-pointer flex items-start gap-3"
+              >
+                <span className="text-xl leading-none mt-0.5">📸</span>
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                    Στιγμιότυπο Κύματος {waveDiagramPrompt.info.depSymbol} = f(x) με t = σταθ.
+                  </div>
+                  <div className="text-[11px] text-blue-700/90 dark:text-blue-300/80 mt-0.5 leading-snug">
+                    Γραφική παράσταση {waveDiagramPrompt.info.depSymbol}(x) τη χρονική στιγμή t₁ σε συνάρτηση με τη θέση x (μέτωπο κύματος x₁ = u·t₁, ακίνητα σημεία για x &gt; x₁).
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleConfirmWaveDiagramMode('oscillation-t')}
+                className="w-full text-left p-3.5 rounded-xl border-2 border-red-200 dark:border-red-800 bg-red-50/70 dark:bg-red-950/40 hover:bg-red-100/80 dark:hover:bg-red-900/50 transition-all cursor-pointer flex items-start gap-3"
+              >
+                <span className="text-xl leading-none mt-0.5">⏱️</span>
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-red-900 dark:text-red-200">
+                    Διάγραμμα Ταλάντωσης Σημείου {waveDiagramPrompt.info.depSymbol} = f(t) με x = σταθ.
+                  </div>
+                  <div className="text-[11px] text-red-700/90 dark:text-red-300/80 mt-0.5 leading-snug">
+                    Γραφική παράσταση {waveDiagramPrompt.info.depSymbol}(t) για συγκεκριμένο σημείο x₁: παραμένει ακίνητο (0) από t = 0 έως t_αφ = x/u και εκτελεί Α.Α.Τ. για t ≥ t_αφ!
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleConfirmWaveDiagramMode('both')}
+                className="w-full text-left p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition-all cursor-pointer flex items-center gap-3"
+              >
+                <span className="text-lg leading-none">📊</span>
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                    Και τα δύο Διαγράμματα ({waveDiagramPrompt.info.depSymbol} = f(x) &amp; {waveDiagramPrompt.info.depSymbol} = f(t))
+                  </div>
+                  <div className="text-[11px] text-emerald-700/90 dark:text-emerald-300/80">
+                    Σχεδιάζει το στιγμιότυπο κύματος και από κάτω το διάγραμμα ταλάντωσης (από t_αφ = x/u).
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setWaveDiagramPrompt(null)}
+              className="w-full py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+            >
+              Ακύρωση
+            </button>
           </div>
         </div>
       )}
