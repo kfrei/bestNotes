@@ -9131,29 +9131,48 @@ function normalizePhysicsEquationToCompact(rawInput: string): string {
       .replace(/\(\s*(1\/2|0\.5)\s*\)/g, '$1');
   }
 
-  return expanded
+  expanded = expanded
     .replace(/[μm][αa][xχ]/gi, 'max')
     .replace(/[μm][iι][nν]/gi, 'min')
     // Rescue handwritten λ in wave fraction denominators (e.g. 2πx/7 or 2πx/A -> 2πx/λ when paired with /T)
     .replace(
       /(\/T\s*[-+]\s*\(?(?:2\*?π\*?)?[xχ]\)?\/)(?:7|A|X|r|1|l)(?=[)+-]|$)/g,
       '$1λ'
-    )
-    // Rescue any mangled handwritten ημ / συν after e^(...) in Damped Oscillation before `(ωt` or `(2π`
-    .replace(
-      /(e\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?\*?)(?!συν|συνημ|cos|ημ|ημιτ|sin)([6σςcCgGsS][a-zA-Zα-ωΑ-Ω|*]{1,4})(?=\(?\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
-      '$1συν'
-    )
-    .replace(
-      /(e\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?\*?)(?!συν|συνημ|cos|ημ|ημιτ|sin)[a-zA-Zα-ωΑ-Ω0-9|*]{1,5}(?=\(\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
-      '$1ημ'
-    )
-    // Rescue any mangled handwritten ημ after amplitude A before wave phase `(2πt/T` or `(t/T` or `(ωt`
-    .replace(
-      /(=-?(?:[0-9.]+|[AΑaαuυv](?:_max|_0)?)\*?)(?!συν|συνημ|cos|ημ|ημιτ|sin)[a-zA-Zα-ωΑ-Ω|*]{1,5}(?=\(\(?(?:2\*?π|[tτ]\/T|ω\*?[tτ]))/i,
-      '$1ημ'
-    )
-    .replace(/\\+([a-zA-Z]+)/g, '$1');
+    );
+
+  // Only attempt to rescue mangled handwritten trig tokens if NO valid trig function (`συν`, `ημ`, `cos`, `sin`) is already present before `(`!
+  // (Previously, a lazy `\*?` before `(?!συν)` caused `*συν(ωt)` to match `[...*]{1,5}` and get overwritten with `ημ`!)
+  if (!/(?:συν|συνημ|cos|ημ|ημιτ|sin)\^?2?\*?\(/i.test(expanded)) {
+    expanded = expanded
+      // Rescue any mangled handwritten συν / ημ after e^(...) in Damped Oscillation before `(ωt` or `(2π`
+      .replace(
+        /(e\^(?:\([^)]+\)|-?[a-zA-Zα-ωΑ-Ω0-9._]+\*?[tτ])\*+)(?!συν|συνημ|cos|ημ|ημιτ|sin)([6σςcCgGsS][a-zA-Zα-ωΑ-Ω|]{1,4})(?=\(?\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
+        '$1συν'
+      )
+      .replace(
+        /(e\^(?:\([^)]+\)|-?[a-zA-Zα-ωΑ-Ω0-9._]+\*?[tτ]))(?!\*)(?!συν|συνημ|cos|ημ|ημιτ|sin)([6σςcCgGsS][a-zA-Zα-ωΑ-Ω|]{1,4})(?=\(?\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
+        '$1συν'
+      )
+      .replace(
+        /(e\^(?:\([^)]+\)|-?[a-zA-Zα-ωΑ-Ω0-9._]+\*?[tτ])\*+)(?!συν|συνημ|cos|ημ|ημιτ|sin)([a-zA-Zα-ωΑ-Ω0-9|]{1,5})(?=\(\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
+        '$1ημ'
+      )
+      .replace(
+        /(e\^(?:\([^)]+\)|-?[a-zA-Zα-ωΑ-Ω0-9._]+\*?[tτ]))(?!\*)(?!συν|συνημ|cos|ημ|ημιτ|sin)([a-zA-Zα-ωΑ-Ω0-9|]{1,5})(?=\(\(?(?:ω|2\*?π|[0-9.]+\*?[tτ]|[tτ]))/i,
+        '$1ημ'
+      )
+      // Rescue any mangled handwritten ημ after amplitude A before wave phase `(2πt/T` or `(t/T` or `(ωt`
+      .replace(
+        /(=-?(?:[0-9.]+|[AΑaαuυv](?:_max|_0)?)\*+)(?!συν|συνημ|cos|ημ|ημιτ|sin)([a-zA-Zα-ωΑ-Ω|]{1,5})(?=\(\(?(?:2\*?π|[tτ]\/T|ω\*?[tτ]))/i,
+        '$1ημ'
+      )
+      .replace(
+        /(=-?(?:[0-9.]+|[AΑaαuυv](?:_max|_0)?))(?!\*)(?!συν|συνημ|cos|ημ|ημιτ|sin)([a-zA-Zα-ωΑ-Ω|]{1,5})(?=\(\(?(?:2\*?π|[tτ]\/T|ω\*?[tτ]))/i,
+        '$1ημ'
+      );
+  }
+
+  return expanded.replace(/\\+([a-zA-Z]+)/g, '$1');
 }
 
 function parseWaveTwoVarFromCompact(compact: string): WaveTwoVarDetection | null {
@@ -9779,11 +9798,11 @@ export function tryBuildOscillationDiagramStrokes(
   // and Exponential Amplitude / Energy Decay `A = A_0 e^(-Λt)`, `E = E_0 e^(-2Λt)`
   // Note: Also accepts optional `*` after `συν`/`ημ`, Greek omicron `ο` in `A_ο`, Greek `χ` on LHS, and any exponent format on `e^(...)`.
   const dampedOscMatch = compact.match(
-    /^(x|χ|y|ψ|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)([a-zA-Zα-ωΑ-Ω0-9._*]*?)\*?(?:[eε]\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\))\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?$/i
+    /^(x|χ|y|ψ|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)([a-zA-Zα-ωΑ-Ω0-9._*]*?)\*?(?:[eε]\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+?\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+?\))\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?$/i
   );
   const dampedOscRevMatch = !dampedOscMatch
     ? compact.match(
-        /^(x|χ|y|ψ|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)([a-zA-Zα-ωΑ-Ω0-9._*]*?)\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?\*?(?:[eε]\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+\))$/i
+        /^(x|χ|y|ψ|u|υ|v|a|α|ΣF|F)(?:\([tτxχ]\))?=(-?)([a-zA-Zα-ωΑ-Ω0-9._*]*?)\*?(ημιτ|ημ|sin|συνημ|συν|cos)\*?\(?(.*?)[tτxχ]([^)]*)\)?\*?(?:[eε]\^\(?-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+?\)?|exp\(-?[a-zA-Zα-ωΑ-Ω0-9.*/_+-]+?\))$/i
       )
     : null;
 
