@@ -20467,13 +20467,33 @@ export default function App() {
 
               if (eCount <= 0) continue;
 
-              // Διάταξη ηλεκτρονίων σε ζευγαράκια 2-2 (π.χ. 8 ηλεκτρόνια = 4 ζευγαράκια) με αργή περιστροφή!
+              // Διάταξη ηλεκτρονίων κατά Lewis / Hund:
+              // - Στιβάδα K (s === 0, 1s τροχιακό): 1e⁻ = 1 μονήρες (H), 2e⁻ = 1 ζεύγος (He & εσωτερική K).
+              // - Εσωτερικές συμπληρωμένες στιβάδες (!isOuter): ζεύγη ανά 2.
+              // - Εξωτερική στιβάδα σθένους (isOuter, s > 0, 4 τροχιακά σθένους s, px, py, pz):
+              //   * 1..4 e⁻ (π.χ. Na=1, Mg/Ca=2, B/Al=3, C/Si=4) -> ΟΛΑ ΜΟΝΗΡΗ (0 ζεύγη, 1..4 μονήρη)!
+              //   * 5 e⁻ (π.χ. N, P) -> 1 ζεύγος + 3 μονήρη!
+              //   * 6 e⁻ (π.χ. O, S) -> 2 ζεύγη + 2 μονήρη!
+              //   * 7 e⁻ (π.χ. F, Cl, Br, I) -> 3 ζεύγη + 1 μονήρες!
+              //   * 8 e⁻ (Ευγενή αέρια Ne, Ar & ιόντα οκτάδας) -> 4 ζεύγη!
+              //   Όταν σχηματίζονται ομοιοπολικοί δεσμοί (covUsed), καταναλώνονται πρώτα τα μονήρη ηλεκτρόνια,
+              //   ώστε τα μη δεσμικά ζεύγη (lone pairs, π.χ. 2 στο O του H₂O/CO₂, 1 στο N της NH₃) να παραμένουν ζεύγη!
               const rotRate = aSim.isRotating !== false ? 0.00036 : 0;
               const baseRot =
                 now * rotRate * (s % 2 === 0 ? 1 : -0.75) + atomIdx * 0.55;
-              const numPairs = Math.floor(eCount / 2);
-              const hasUnpaired = eCount % 2 === 1;
-              const totalSlots = Math.max(1, numPairs + (hasUnpaired ? 1 : 0));
+              const initShellE = Math.max(
+                0,
+                (el.shells[s] || 0) + (isOuter ? atom.extraElectrons || 0 : 0)
+              );
+              const naturalPairs =
+                s === 0 || !isOuter
+                  ? Math.floor(initShellE / 2)
+                  : initShellE <= 4
+                  ? 0
+                  : Math.min(Math.floor(initShellE / 2), initShellE - 4);
+              const numPairs = Math.min(Math.floor(eCount / 2), naturalPairs);
+              const numUnpaired = Math.max(0, eCount - numPairs * 2);
+              const totalSlots = Math.max(1, numPairs + numUnpaired);
               const pairHalfAng = Math.min(0.16, 6.5 / r_s);
 
               const eAngles: number[] = [];

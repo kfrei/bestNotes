@@ -685,6 +685,19 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
     }
 
     if (aSim.showAtomsBelowReaction !== false) {
+      const covalentSharedByAtom = new Map<string, number>();
+      for (const b of aSim.bonds || []) {
+        if (b.kind === 'covalent') {
+          covalentSharedByAtom.set(
+            b.fromAtomId,
+            (covalentSharedByAtom.get(b.fromAtomId) || 0) + (b.count || 1)
+          );
+          covalentSharedByAtom.set(
+            b.toAtomId,
+            (covalentSharedByAtom.get(b.toAtomId) || 0) + (b.count || 1)
+          );
+        }
+      }
       const colorByZ = new Map<number, string>();
       aSim.atoms.forEach((atom, atomIdx) => {
         if (!colorByZ.has(atom.z)) {
@@ -714,10 +727,18 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
           ctx.stroke();
           ctx.restore();
 
-          const eCount = Math.max(0, el.shells[s] + (isOuter ? atom.extraElectrons || 0 : 0));
-          const numPairs = Math.floor(eCount / 2);
-          const hasUnpaired = eCount % 2 === 1;
-          const totalSlots = Math.max(1, numPairs + (hasUnpaired ? 1 : 0));
+          const covUsed = isOuter ? covalentSharedByAtom.get(atom.id) || 0 : 0;
+          const initShellE = Math.max(0, el.shells[s] + (isOuter ? atom.extraElectrons || 0 : 0));
+          const eCount = Math.max(0, initShellE - covUsed);
+          const naturalPairs =
+            s === 0 || !isOuter
+              ? Math.floor(initShellE / 2)
+              : initShellE <= 4
+              ? 0
+              : Math.min(Math.floor(initShellE / 2), initShellE - 4);
+          const numPairs = Math.min(Math.floor(eCount / 2), naturalPairs);
+          const numUnpaired = Math.max(0, eCount - numPairs * 2);
+          const totalSlots = Math.max(1, numPairs + numUnpaired);
           const pairHalfAng = Math.min(0.16, 6.5 / r_s);
           const eAngles: number[] = [];
           for (let g = 0; g < totalSlots; g++) {
