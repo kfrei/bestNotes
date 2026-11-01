@@ -660,13 +660,6 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
       for (const seg of chemVal.segments) {
         const w = ctx.measureText(seg.text).width;
         if (seg.isCorrection && seg.text.trim()) {
-          ctx.fillStyle = 'rgba(254, 226, 226, 0.92)';
-          ctx.strokeStyle = '#f87171';
-          ctx.lineWidth = 1.1;
-          ctx.beginPath();
-          ctx.roundRect(curX - 2, midY - 11, w + 4, 22, 5);
-          ctx.fill();
-          ctx.stroke();
           ctx.fillStyle = '#dc2626';
         } else {
           ctx.fillStyle = '#0f172a';
@@ -674,7 +667,7 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(seg.text, curX, midY);
-        curX += w + (seg.isCorrection ? 3 : 0);
+        curX += w + (seg.isCorrection ? 1 : 0);
       }
       ctx.restore();
     }

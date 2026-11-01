@@ -1391,6 +1391,27 @@ export default function App() {
     startTime: number;
     durationMs: number;
   } | null>(null);
+  const [activeChemCorrection, setActiveChemCorrection] = useState<{
+    targetId: string;
+    reason: string;
+  } | null>(null);
+  const activeChemCorrectionRef = useRef<{
+    targetId: string;
+    reason: string;
+  } | null>(null);
+  const lastChemCorrectionClickTimeRef = useRef<number>(0);
+  useEffect(() => {
+    const handleGlobalDismissChemCorrection = (ev: PointerEvent) => {
+      if (!activeChemCorrectionRef.current) return;
+      if (performance.now() - lastChemCorrectionClickTimeRef.current < 90) return;
+      const targetEl = ev.target as HTMLElement | null;
+      if (targetEl?.closest?.('[data-chem-correction-btn="true"]')) return;
+      activeChemCorrectionRef.current = null;
+      setActiveChemCorrection(null);
+    };
+    window.addEventListener('pointerdown', handleGlobalDismissChemCorrection);
+    return () => window.removeEventListener('pointerdown', handleGlobalDismissChemCorrection);
+  }, []);
   const recent3DMoleculesRef = useRef<{
     notebookId: string;
     items: { id: string; formula: string }[];
@@ -12666,6 +12687,27 @@ export default function App() {
         };
       };
 
+      // Κλικ πάνω σε κόκκινο συντελεστή/δείκτη (διόρθωση): εμφανίζει/κρύβει το μήνυμα «Διόρθωση: ...»
+      if (action.startsWith('click-chem-correction:')) {
+        const reason = action.slice('click-chem-correction:'.length).trim();
+        lastChemCorrectionClickTimeRef.current = performance.now();
+        const cur = activeChemCorrectionRef.current;
+        if (cur && cur.targetId === sim.id && cur.reason === reason) {
+          activeChemCorrectionRef.current = null;
+          setActiveChemCorrection(null);
+        } else {
+          const next = { targetId: sim.id, reason };
+          activeChemCorrectionRef.current = next;
+          setActiveChemCorrection(next);
+        }
+        return;
+      }
+
+      if (activeChemCorrectionRef.current) {
+        activeChemCorrectionRef.current = null;
+        setActiveChemCorrection(null);
+      }
+
       // Κλικ πάνω σε συγκεκριμένο Αντιδρών ή Προϊόν στην μπάρα της αντίδρασης:
       // Αν το κουμπί δίπλα είναι σε '2d' -> δείχνει 2D άτομα, τροχιές & δεσμούς από κάτω.
       // Αν το κουμπί δίπλα είναι σε '3d' -> δείχνει το 3D μοντέλο της ένωσης/στοιχείου!
@@ -19856,7 +19898,7 @@ export default function App() {
                 }
                 for (const sg of grp) {
                   if (sg.wrongText) w += ctx.measureText(sg.wrongText).width + 3;
-                  w += ctx.measureText(sg.text).width + (sg.isCorrection ? 4 : 0);
+                  w += ctx.measureText(sg.text).width + (sg.isCorrection ? 1 : 0);
                 }
                 w += 6; // καθαρό διάστημα γύρω από κάθε ένωση/στοιχείο (χωρίς πλαίσιο κουμπιού)
               });
@@ -19870,10 +19912,16 @@ export default function App() {
             const cardH = 38;
             const cardX = Math.max(16, simCenterX - cardW / 2);
 
-            // Αν ο μαθητής ξέχασε ή έγραψε λάθος δείκτες/συντελεστές, εμφάνισε επεξηγηματικό κόκκινο ταμπελάκι πάνω από την αντίδραση!
-            if (chemVal.hasCorrections) {
-              const corrBannerText = `⚠️ Διόρθωση με Κόκκινο: ${
-                chemVal.explanationNotes[0] || 'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
+            // Το μήνυμα διόρθωσης εμφανίζεται ΜΟΝΟ αν ο χρήστης κάνει κλικ πάνω σε κάποιον κόκκινο συντελεστή/δείκτη!
+            const activeCorrForSim =
+              activeChemCorrectionRef.current?.targetId === aSim.id
+                ? activeChemCorrectionRef.current
+                : null;
+            if (chemVal.hasCorrections && activeCorrForSim) {
+              const corrBannerText = `⚠️ Διόρθωση: ${
+                activeCorrForSim.reason ||
+                chemVal.explanationNotes[0] ||
+                'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
               }`;
               ctx.save();
               ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -19933,7 +19981,7 @@ export default function App() {
                   .trim();
                 for (const sg of grp) {
                   if (sg.wrongText) termInnerW += ctx.measureText(sg.wrongText).width + 3;
-                  termInnerW += ctx.measureText(sg.text).width + (sg.isCorrection ? 4 : 0);
+                  termInnerW += ctx.measureText(sg.text).width + (sg.isCorrection ? 1 : 0);
                 }
 
                 const hitX = xCursor;
@@ -19944,7 +19992,18 @@ export default function App() {
                   aSim.activeReactionTerm === termPlainText &&
                   (aSim.showAtomsBelowReaction !== false || !!aSim.show3DMolecule);
 
-                // Χωρίς μικρά πλαίσια/κουμπιά γύρω από τις ενώσεις — μόνο καθαρό κείμενο εξίσωσης!
+                if (termPlainText) {
+                  atomButtonsHit.push({
+                    simId: aSim.id,
+                    action: `click-reaction-term:${termPlainText}`,
+                    x1: hitX,
+                    y1: hitY,
+                    x2: hitX + hitW,
+                    y2: hitY + hitH,
+                  });
+                }
+
+                // Χωρίς μικρά πλαίσια γύρω από τους κόκκινους συντελεστές — κλικ πάνω τους εμφανίζει το «Διόρθωση: ...»
                 let innerX = hitX + 3;
                 for (const sg of grp) {
                   if (sg.wrongText) {
@@ -19957,37 +20016,45 @@ export default function App() {
                     ctx.moveTo(innerX - 1, centerY);
                     ctx.lineTo(innerX + ww + 1, centerY);
                     ctx.stroke();
+                    if (sg.isCorrection) {
+                      atomButtonsHit.push({
+                        simId: aSim.id,
+                        action: `click-chem-correction:${
+                          sg.reason ||
+                          chemVal.explanationNotes[0] ||
+                          'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
+                        }`,
+                        x1: innerX - 3,
+                        y1: topBarY + 4,
+                        x2: innerX + ww + 2,
+                        y2: topBarY + cardH - 4,
+                      });
+                    }
                     innerX += ww + 3;
                   }
                   if (!sg.text) continue;
                   const tw = ctx.measureText(sg.text).width;
                   if (sg.isCorrection) {
-                    ctx.fillStyle = 'rgba(254, 226, 226, 0.95)';
-                    ctx.strokeStyle = '#f87171';
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.roundRect(innerX - 1.5, centerY - 9, tw + 5, 18, 4);
-                    ctx.fill();
-                    ctx.stroke();
                     ctx.fillStyle = '#dc2626';
-                    ctx.fillText(sg.text, innerX + 1, centerY);
-                    innerX += tw + 4;
+                    ctx.fillText(sg.text, innerX, centerY);
+                    atomButtonsHit.push({
+                      simId: aSim.id,
+                      action: `click-chem-correction:${
+                        sg.reason ||
+                        chemVal.explanationNotes[0] ||
+                        'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
+                      }`,
+                      x1: innerX - 4,
+                      y1: topBarY + 4,
+                      x2: innerX + tw + 1,
+                      y2: topBarY + cardH - 4,
+                    });
+                    innerX += tw + 1;
                   } else {
                     ctx.fillStyle = isTermActive ? '#2563eb' : '#0f172a';
                     ctx.fillText(sg.text, innerX, centerY);
                     innerX += tw;
                   }
-                }
-
-                if (termPlainText) {
-                  atomButtonsHit.push({
-                    simId: aSim.id,
-                    action: `click-reaction-term:${termPlainText}`,
-                    x1: hitX,
-                    y1: hitY,
-                    x2: hitX + hitW,
-                    y2: hitY + hitH,
-                  });
                 }
 
                 xCursor = hitX + hitW + 2;
@@ -24250,11 +24317,12 @@ export default function App() {
     // 0a-atoms. Interactive Atom Simulation Canvas Buttons, Resize Handles, Valence Electrons & Nuclei:
     if (atomOverlayHitRef.current) {
       const aHit = atomOverlayHitRef.current;
-      // 1) On-Canvas Reaction Buttons ([ ➔ ], [ 2D/3D ], clickable reactants/products, 3D window controls)
+      // 1) On-Canvas Reaction Buttons ([ ➔ ], [ 2D/3D ], clickable reactants/products, red corrections, 3D window controls)
       for (const btn of [...aHit.buttons].reverse()) {
+        const tolX = btn.action.startsWith('click-chem-correction:') ? 1.5 : 4;
         if (
-          pt.x >= btn.x1 - 4 &&
-          pt.x <= btn.x2 + 4 &&
+          pt.x >= btn.x1 - tolX &&
+          pt.x <= btn.x2 + tolX &&
           pt.y >= btn.y1 - 4 &&
           pt.y <= btn.y2 + 4
         ) {
@@ -24271,6 +24339,15 @@ export default function App() {
           return;
         }
       }
+    }
+
+    if (activeChemCorrectionRef.current) {
+      activeChemCorrectionRef.current = null;
+      setActiveChemCorrection(null);
+    }
+
+    if (atomOverlayHitRef.current) {
+      const aHit = atomOverlayHitRef.current;
 
       // 1b) Uniform Radial Resize Handle (⤡) on the selected atom's outer orbit (or central atom for proportional molecule scaling)
       for (const rh of aHit.resizeHandles || []) {
@@ -40310,11 +40387,9 @@ export default function App() {
 
                     <button
                       onClick={handleAddSelectedToShapeLibrary}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shadow-2xs whitespace-nowrap"
                       title="Προσθήκη του επιλεγμένου αντικειμένου στις αποθηκευμένες εικόνες"
                     >
-                      <span>+</span>
-                      <ImageIcon className="w-3.5 h-3.5" />
                       <span>Προσθήκη</span>
                     </button>
 
@@ -40322,7 +40397,7 @@ export default function App() {
                       <>
                         <button
                           onClick={handleConvertSelectedStrokesToPolygon}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap"
                           title="Ένωση των επιλεγμένων διακριτών ευθειών/γραμμών στο πιο κοντινό κλειστό Πολύγωνο"
                         >
                           <span>Πολύγωνο</span>
@@ -40330,19 +40405,19 @@ export default function App() {
                         <button
                           onClick={() => void handleConvertLassoToCalligraphic()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-violet-300 text-white cursor-wait'
                               : 'bg-violet-600 hover:bg-violet-700 text-white'
                           }`}
-                          title="Κείμενο OCR: Μετατροπή χειρόγραφου ελληνικού κειμένου σε κείμενο με επιλογή γραμματοσειράς (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
+                          title="textOCR: Μετατροπή χειρόγραφου ελληνικού κειμένου σε κείμενο με επιλογή γραμματοσειράς (Καλλιγραφική, Πένα, Μαρκαδόρος, Χειρόγραφο, Ρέουσα, Τυπωμένο)"
                         >
-                          <span>{isConvertingHandwriting ? 'OCR...' : 'Κείμενο OCR'}</span>
+                          <span>{isConvertingHandwriting ? 'OCR...' : 'textOCR'}</span>
                         </button>
                         <button
                           onClick={() => void handleConvertLassoToMathOCR()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-purple-300 text-white cursor-wait'
                               : 'bg-purple-600 hover:bg-purple-700 text-white'
@@ -40354,31 +40429,31 @@ export default function App() {
                         <button
                           onClick={() => void handleConvertLassoToChemOCR()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-teal-300 text-white cursor-wait'
                               : 'bg-teal-600 hover:bg-teal-700 text-white'
                           }`}
                           title="ChemOCR: Αναγνώριση χειρόγραφης χημικής αντίδρασης (π.χ. C + O₂ → CO₂) και εμφάνιση δομής ατόμων & κίνησης ηλεκτρονίων"
                         >
-                          <span>{isConvertingHandwriting ? 'ChemOCR...' : '🧪 ChemOCR'}</span>
+                          <span>{isConvertingHandwriting ? 'ChemOCR...' : 'ChemOCR'}</span>
                         </button>
                         <button
                           onClick={() => void handleConvertLassoTo3DMoleculeOCR()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-sky-300 text-white cursor-wait'
                               : 'bg-sky-700 hover:bg-sky-800 text-white'
                           }`}
                           title="3D.OCR: Αναγνώριση χειρόγραφης χημικής ένωσης (π.χ. H₂O, CH₄, CO₂, NH₃, SO₂, BF₃...) και εμφάνιση του Draggable 3D Μορίου με χρωματικό νέφος φορτίου!"
                         >
-                          <span>{isConvertingHandwriting ? '3D.OCR...' : '🧊 3D.OCR'}</span>
+                          <span>{isConvertingHandwriting ? '3D.OCR...' : '3D.OCR'}</span>
                         </button>
                         <button
                           onClick={() => void handleConvertLassoToMathGraph()}
                           disabled={isConvertingHandwriting}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer ${
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-full font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap ${
                             isConvertingHandwriting
                               ? 'bg-emerald-300 text-white cursor-wait'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -40389,10 +40464,10 @@ export default function App() {
                         </button>
                         <button
                           onClick={() => registerOrActivateAtomSimFromLasso()}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-2xs transition cursor-pointer"
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-2xs transition cursor-pointer whitespace-nowrap"
                           title="Μετατροπή του επιλεγμένου σχεδίου (πυρήνας & τροχιές) σε διαδραστική Προσομοίωση Δομής Ατόμου με Περιοδικό Πίνακα"
                         >
-                          <span>⚛️ Άτομο</span>
+                          <span>Άτομο</span>
                         </button>
                       </>
                     )}
@@ -40518,31 +40593,31 @@ export default function App() {
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full border border-slate-200">
                       <button
                         onClick={() => handleZOrderSelected('to-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
                         title="Send to Back (Εντελώς πίσω)"
                       >
-                        ⏬ Πίσω
+                        Πίσω
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-back')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
                         title="Send Backward (1 βήμα πίσω)"
                       >
-                        🔽 -1
+                        -1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('step-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
                         title="Bring Forward (1 βήμα μπροστά)"
                       >
-                        🔼 +1
+                        +1
                       </button>
                       <button
                         onClick={() => handleZOrderSelected('to-front')}
-                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer"
+                        className="px-2 py-0.5 rounded-full hover:bg-white text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
                         title="Bring to Front (Εντελώς μπροστά)"
                       >
-                        ⏫ Μπροστά
+                        Μπροστά
                       </button>
                     </div>
 
@@ -40573,10 +40648,9 @@ export default function App() {
                         return (
                           <button
                             onClick={handleUngroupSelected}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer"
+                            className="flex items-center px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
                             title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                           >
-                            <Ungroup className="w-3.5 h-3.5" />
                             <span>Ungroup</span>
                           </button>
                         );
@@ -40586,10 +40660,9 @@ export default function App() {
                         return (
                           <button
                             onClick={handleGroupSelected}
-                            className="flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer"
+                            className="flex items-center px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer whitespace-nowrap"
                             title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
                           >
-                            <Group className="w-3.5 h-3.5" />
                             <span>Group ({totalSelCount})</span>
                           </button>
                         );
@@ -40599,10 +40672,9 @@ export default function App() {
                         return (
                           <button
                             onClick={handleUngroupSelected}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer"
+                            className="flex items-center px-2.5 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold cursor-pointer whitespace-nowrap"
                             title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
                           >
-                            <Ungroup className="w-3.5 h-3.5" />
                             <span>Ungroup</span>
                           </button>
                         );
@@ -45445,19 +45517,19 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => handleCheckChemistryInTextBox(txt.id)}
-                                className="px-2 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-bold cursor-pointer whitespace-nowrap"
                                 title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
                               >
-                                🧪 Chem / Δείκτες
+                                Chem / Δείκτες
                               </button>
                               <button
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => handleCreate3DMoleculeFromTextBox(txt.id)}
-                                className="px-2 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-bold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-bold cursor-pointer whitespace-nowrap"
                                 title="3D.OCR: Άμεση δημιουργία του Draggable 3D Μορίου με χρωματικό νέφος φορτίου από την ένωση του πλαισίου κειμένου!"
                               >
-                                🧊 3D.OCR
+                                3D.OCR
                               </button>
                               <button
                                 type="button"
@@ -45674,6 +45746,10 @@ export default function App() {
                                   const chemVal = validateAndCorrectChemicalEquation(
                                     txt.chemRawInput
                                   );
+                                  const activeTxtCorr =
+                                    activeChemCorrection?.targetId === txt.id
+                                      ? activeChemCorrection
+                                      : null;
                                   return (
                                     <div className="inline-flex flex-col gap-1">
                                       <span className="inline-flex items-baseline flex-wrap gap-0.5">
@@ -45689,12 +45765,43 @@ export default function App() {
                                             )}
                                             {sg.text && (
                                               <span
+                                                data-chem-correction-btn={
+                                                  sg.isCorrection ? 'true' : undefined
+                                                }
+                                                onPointerDown={
+                                                  sg.isCorrection
+                                                    ? (ev) => {
+                                                        ev.stopPropagation();
+                                                        lastChemCorrectionClickTimeRef.current =
+                                                          performance.now();
+                                                        const reason =
+                                                          sg.reason ||
+                                                          chemVal.explanationNotes[0] ||
+                                                          'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές';
+                                                        const cur = activeChemCorrectionRef.current;
+                                                        if (
+                                                          cur &&
+                                                          cur.targetId === txt.id &&
+                                                          cur.reason === reason
+                                                        ) {
+                                                          activeChemCorrectionRef.current = null;
+                                                          setActiveChemCorrection(null);
+                                                        } else {
+                                                          const next = {
+                                                            targetId: txt.id,
+                                                            reason,
+                                                          };
+                                                          activeChemCorrectionRef.current = next;
+                                                          setActiveChemCorrection(next);
+                                                        }
+                                                      }
+                                                    : undefined
+                                                }
                                                 className={
                                                   sg.isCorrection
-                                                    ? 'text-red-600 font-extrabold bg-red-50 px-1 rounded border border-red-300'
+                                                    ? 'text-red-600 font-extrabold cursor-pointer'
                                                     : ''
                                                 }
-                                                title={sg.reason}
                                               >
                                                 {sg.text}
                                               </span>
@@ -45702,10 +45809,11 @@ export default function App() {
                                           </React.Fragment>
                                         ))}
                                       </span>
-                                      {chemVal.hasCorrections && (
-                                        <span className="text-[11px] font-bold text-red-600 bg-red-50/90 border border-red-200 px-2 py-0.5 rounded-md leading-tight">
-                                          ⚠️ Διόρθωση με κόκκινο:{' '}
-                                          {chemVal.explanationNotes.join(' • ') ||
+                                      {chemVal.hasCorrections && activeTxtCorr && (
+                                        <span className="text-[11px] font-bold text-red-600 bg-red-50/95 border border-red-200 px-2 py-0.5 rounded-md leading-tight">
+                                          ⚠️ Διόρθωση:{' '}
+                                          {activeTxtCorr.reason ||
+                                            chemVal.explanationNotes[0] ||
                                             'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'}
                                         </span>
                                       )}
