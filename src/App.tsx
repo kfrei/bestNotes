@@ -35955,16 +35955,28 @@ export default function App() {
       const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
       const targetLayerId = txtObj.layerId || activeLayerId;
 
-      const graphBuilt = buildMathGraphStrokesFromEquation(
-        rawEq,
-        centerX,
-        centerY,
-        diagW,
-        diagH,
-        '#dc2626',
-        axisInk,
-        targetLayerId
+      const candidateEquations = Array.from(
+        new Set(
+          (matchedSiblingTxts.length > 0 ? [rawEq] : [rawEq, txtObj.latex, txtObj.text])
+            .map((c) => (c || '').trim())
+            .filter(Boolean)
+        )
       );
+
+      let graphBuilt: ReturnType<typeof buildMathGraphStrokesFromEquation> = null;
+      for (const candEq of candidateEquations) {
+        graphBuilt = buildMathGraphStrokesFromEquation(
+          candEq,
+          centerX,
+          centerY,
+          diagW,
+          diagH,
+          '#dc2626',
+          axisInk,
+          targetLayerId
+        );
+        if (graphBuilt) break;
+      }
 
       if (!graphBuilt) {
         showToast(

@@ -1,4 +1,6 @@
 import { BezierPoint, StrokeObject, TextObject, ShapePresetType, Notebook } from '../types/note';
+export { PHYSICS_EQUATIONS_CATALOG } from './physicsEquationsLibrary';
+export type { PhysicsEquationCatalogEntry } from './physicsEquationsLibrary';
 
 export function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
@@ -7847,12 +7849,18 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
 
   let s = expandLatexConstructs(line);
 
-  // Strip LaTeX formatting wrappers
+  // Strip LaTeX formatting wrappers and normalize Unicode Greek math symbol variants
   s = s
+    .replace(/ϕ/g, 'φ')
+    .replace(/ϑ/g, 'θ')
+    .replace(/ϰ/g, 'κ')
+    .replace(/ϱ/g, 'ρ')
+    .replace(/ϵ/g, 'ε')
+    .replace(/ϖ/g, 'π')
     .replace(/\\left\s*\|([^|]+)\\right\s*\|/g, 'ABS($1)')
     .replace(/\|([^|=]+)\|/g, 'ABS($1)')
     .replace(/\\left\b|\\right\b|\\displaystyle\b/g, '')
-    .replace(/\\(?:text|operatorname|mathrm)\{([^}]*)\}/g, '$1')
+    .replace(/\\(?:text|operatorname|mathrm|mathit|mathbf)\{([^}]*)\}/g, '$1')
     .replace(/\\(?:cdot|times)\b/g, '*')
     .replace(/[·×∙]/g, '*')
     .replace(/÷/g, '/')
@@ -7861,10 +7869,16 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/\\beta\b/g, 'β')
     .replace(/\\gamma\b/g, 'γ')
     .replace(/\\delta\b/g, 'δ')
+    .replace(/\\(?:varepsilon|epsilon)\b/g, 'ε')
+    .replace(/\\theta\b/g, 'θ')
     .replace(/\\kappa\b/g, 'κ')
     .replace(/\\lambda\b/g, 'λ')
     .replace(/\\mu\b/g, 'μ')
     .replace(/\\rho\b/g, 'ρ')
+    .replace(/\\sigma\b/g, 'σ')
+    .replace(/\\tau\b/g, 'τ')
+    .replace(/\\(?:phi|varphi)\b/g, 'φ')
+    .replace(/\\Phi\b/g, 'Φ')
     .replace(/\\omega\b/g, 'ω')
     .replace(/\\pi\b|\bpi\b|Π/gi, 'π');
 
@@ -8028,9 +8042,33 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
           const targetVar = powVarMatch[1];
           rhsPart = rhsPart.replace(new RegExp(targetVar, 'g'), 'x');
         } else {
-          const prefMatch = strippedRhs.match(/[VTPIrRfhsNqz]/);
-          if (prefMatch && prefMatch[0]) {
-            rhsPart = rhsPart.replace(new RegExp(prefMatch[0], 'g'), 'x');
+          const orderedPhysicsVars = [
+            'r',
+            'd',
+            'l',
+            's',
+            'ω',
+            'f',
+            'λ',
+            'θ',
+            'T',
+            'V',
+            'I',
+            'R',
+            'q',
+            'Q',
+            'B',
+            'P',
+            'p',
+            'n',
+            'N',
+            'A',
+            'S',
+            'h',
+          ];
+          const chosenVar = orderedPhysicsVars.find((v) => strippedRhs.includes(v));
+          if (chosenVar) {
+            rhsPart = rhsPart.replace(new RegExp(chosenVar, 'g'), 'x');
           }
         }
       }
@@ -8230,9 +8268,33 @@ export function extractEquationItemsForPlot(
           if (powMatch && powMatch[1] && !/^[yYeEAπΠ]$/.test(powMatch[1])) {
             itemXVar = normalizeAxisVarSymbol(powMatch[1]);
           } else {
-            const prefMatch = strippedRhs.match(/[VTPIrRfhsNqz]/);
-            if (prefMatch && prefMatch[0]) {
-              itemXVar = normalizeAxisVarSymbol(prefMatch[0]);
+            const orderedPhysicsVars = [
+              'r',
+              'd',
+              'l',
+              's',
+              'ω',
+              'f',
+              'λ',
+              'θ',
+              'T',
+              'V',
+              'I',
+              'R',
+              'q',
+              'Q',
+              'B',
+              'P',
+              'p',
+              'n',
+              'N',
+              'A',
+              'S',
+              'h',
+            ];
+            const chosenVar = orderedPhysicsVars.find((v) => strippedRhs.includes(v));
+            if (chosenVar) {
+              itemXVar = normalizeAxisVarSymbol(chosenVar);
             }
           }
         }
@@ -8693,6 +8755,12 @@ function tryBuildOscillationDiagramStrokes(
   }
 
   let expanded = expandLatexConstructs(raw)
+    .replace(/ϕ/g, 'φ')
+    .replace(/ϑ/g, 'θ')
+    .replace(/ϰ/g, 'κ')
+    .replace(/ϱ/g, 'ρ')
+    .replace(/ϵ/g, 'ε')
+    .replace(/ϖ/g, 'π')
     .replace(/\\Sigma\b/g, 'Σ')
     .replace(/\\Delta\b/g, 'D')
     .replace(/\\Lambda\b/g, 'Λ')
@@ -8702,9 +8770,13 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/3\.14159\d*|3\.14\b/g, 'π')
     .replace(/6\.283\d*|6\.28\b/g, '2*π')
     .replace(/\\alpha\b/g, 'α')
+    .replace(/\\beta\b/g, 'β')
     .replace(/\\gamma\b/g, 'γ')
+    .replace(/\\(?:varepsilon|epsilon)\b/g, 'ε')
+    .replace(/\\mathcal\{E\}/g, 'E')
     .replace(/\\theta\b/g, 'θ')
     .replace(/\\rho\b/g, 'ρ')
+    .replace(/\\sigma\b/g, 'σ')
     .replace(/\\tau\b/g, 'τ')
     .replace(/\\Phi\b/g, 'Φ')
     .replace(/\\(?:phi|varphi)\b/g, 'φ')
@@ -8713,7 +8785,7 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/\\eta\s*\\mu/gi, 'ημ')
     .replace(/\\(?:upsilon|nu)\b/g, 'u')
     .replace(/\\kappa\b/g, 'k')
-    .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+    .replace(/\\(?:text|mathrm|operatorname|mathit|mathbf)\{([^}]*)\}/g, '$1')
     .replace(/σ\s*[uυv]\s*[vν]/gi, 'συν')
     .replace(/\\left\b|\\right\b/g, '')
     .replace(/_\{([^}]*)\}/g, '_$1')
@@ -8727,7 +8799,9 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/[·×∙]/g, '*')
     .replace(/[−–—]/g, '-')
     .replace(/²/g, '^2')
-    .replace(/\^\(\s*2\s*\)/g, '^2')
+    .replace(/³/g, '^3')
+    .replace(/⁴/g, '^4')
+    .replace(/\^\(\s*([0-9]+)\s*\)/g, '^$1')
     .replace(/([a-zA-Zα-ωΑ-Ω])\s*\^2\s*_\s*max/gi, '$1_max^2')
     .replace(/([a-zA-Zα-ωΑ-Ω])\s*\^2\s*_\s*0/gi, '$1_0^2')
     .replace(/Κ/g, 'K')
@@ -8739,10 +8813,15 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Unwrap redundant parentheses around simple tokens/fractions like `((1)/(2))` -> `1/2`
-  for (let pass = 0; pass < 4; pass++) {
+  // Unwrap redundant parentheses around simple tokens/fractions like `((1)/(2))` -> `1/2`,
+  // `((2*I)/(r))` -> `2*I/r`, `((q_1*q_2)/(r^2))` -> `q_1*q_2/r^2`, `((E)/(R+r))` -> `E/(R+r)`
+  for (let pass = 0; pass < 5; pass++) {
     expanded = expanded
-      .replace(/\(\s*([0-9.]+|[a-zA-Zα-ωΑ-Ω]+(?:\^2)?)\s*\)/g, '$1')
+      .replace(/(?<![a-zA-Zα-ωΑ-Ω0-9_^])\(\s*([a-zA-Zα-ωΑ-Ω0-9_.*^/]+)\s*\)/g, '$1')
+      .replace(
+        /(?<![a-zA-Zα-ωΑ-Ω0-9_^])\(\s*([a-zA-Zα-ωΑ-Ω0-9_.*^]+\s*\/\s*\([a-zA-Zα-ωΑ-Ω0-9_.*^+-]+\))\s*\)/g,
+        '$1'
+      )
       .replace(/\(\s*(1\/2|0\.5)\s*\)/g, '$1');
   }
 
@@ -9971,21 +10050,33 @@ function tryBuildOscillationDiagramStrokes(
     return { strokes, texts, groupId, kindLabel: `Διάγραμμα Ταλάντωσης ${yVar}(t)` };
   }
 
-  // CASE 6A: Squared-Trig Oscillation Energy vs Time `K = 1/2 m u_max^2 συν^2(ωt)`, `U = 1/2 D A^2 ημ^2(ωt)`, `K - t`, `U - t`
+  // CASE 6A: Squared-Trig Oscillation Energy & AC Instantaneous Power vs Time
+  // `K = 1/2 m u_max^2 συν^2(ωt)`, `U = 1/2 D A^2 ημ^2(ωt)`, `U_E = E συν^2(ωt)`, `U_B = E ημ^2(ωt)`, `p = P_max ημ^2(ωt)`, `p = V I ημ^2(ωt)`, `K - t`, `U - t`, `p - t`
   const sqTrigTimeMatch = compact.match(
-    /^(K|U|E_?[kKκpU]|E|x|y)(?:\([tτ]\))?=([^=]*?)(ημιτ|ημ|sin|συνημ|συν|cos)\^2\(?(.*?)[tτ]([^)]*)\)?$/i
+    /^(K|U|U_?[EB]|E_?[kKκpU]|E|p|P|x|y)(?:\([tτ]\))?=([^=]*?)(ημιτ|ημ|sin|συνημ|συν|cos)\^2\(?(.*?)[tτ]([^)]*)\)?$/i
   );
-  const sqTrigShorthandMatch = compact.match(/^(K|U)-t$/i);
+  const sqTrigShorthandMatch = compact.match(/^(K|U|U_?[EB]|p)-t$|^P-t\(Ε\.?Ρ\.?\)$/i);
 
   if (sqTrigTimeMatch || sqTrigShorthandMatch) {
-    const rawLhs = (sqTrigTimeMatch ? sqTrigTimeMatch[1] : sqTrigShorthandMatch![1]).trim();
-    const yVar = /^U|E_?[pU]$/i.test(rawLhs)
+    const rawLhs = (sqTrigTimeMatch ? sqTrigTimeMatch[1] : sqTrigShorthandMatch![1] || 'p').trim();
+    const isACPower = /^[pP]$/.test(rawLhs);
+    const yVar = isACPower
+      ? 'p'
+      : /^U_?E$/i.test(rawLhs)
+      ? 'U_E'
+      : /^U_?B$/i.test(rawLhs)
+      ? 'U_B'
+      : /^U|E_?[pU]$/i.test(rawLhs)
       ? 'U'
       : /^K|E_?[kKκ]$/i.test(rawLhs)
       ? 'K'
       : rawLhs;
 
-    const trigStr = sqTrigTimeMatch ? sqTrigTimeMatch[3].toLowerCase() : yVar === 'U' ? 'ημ' : 'συν';
+    const trigStr = sqTrigTimeMatch
+      ? sqTrigTimeMatch[3].toLowerCase()
+      : yVar === 'U' || yVar === 'U_B' || isACPower
+      ? 'ημ'
+      : 'συν';
     const baseIsCos = trigStr === 'συν' || trigStr === 'συνημ' || trigStr === 'cos';
 
     let phaseRad = 0;
@@ -10005,12 +10096,14 @@ function tryBuildOscillationDiagramStrokes(
       }
     }
 
-    // Parse optional numerical amplitude or default to textbook `E, K_max` / `E, U_max`
+    // Parse optional numerical amplitude or default to textbook `E, K_max` / `E, U_max` / `P_max`
     const prefactor = sqTrigTimeMatch ? (sqTrigTimeMatch[2] || '').replace(/^\*+|\*+$/g, '') : '';
     const isPureNumPrefactor =
       prefactor.length > 0 && /^[0-9.]+(?:\/[0-9.]+)?$/.test(prefactor) && prefactor !== '1/2' && prefactor !== '0.5';
     const topLabel = isPureNumPrefactor
       ? prefactor
+      : isACPower
+      ? 'P_max'
       : yVar === 'K'
       ? 'E, K_max'
       : yVar === 'U'
@@ -10045,7 +10138,7 @@ function tryBuildOscillationDiagramStrokes(
     const ampPx = axisBottomY - yPeakPx;
     const waveW = axisRightX - axisLeftX - 18;
 
-    // 1. Vertical K or U axis on left (non-negative diagram, horizontal t-axis at bottom)
+    // 1. Vertical K / U / p axis on left (non-negative diagram, horizontal t-axis at bottom)
     strokes.push(
       {
         id: `st-${nowId}-axy`,
@@ -10081,16 +10174,24 @@ function tryBuildOscillationDiagramStrokes(
       }
     );
 
-    // 2. Top horizontal blue dashed envelope at E, K_max / E, U_max
+    // 2. Top horizontal blue dashed envelope at E, K_max / E, U_max / P_max (plus average power P_μ = P_max/2 for AC power)
     addDashedGuide(axisLeftX, yPeakPx, axisRightX - 14, yPeakPx, 1);
     addRulerTick(axisLeftX - 4.5, yPeakPx, axisLeftX + 4.5, yPeakPx, 'ytick-p');
+    if (isACPower) {
+      const yMidPx = axisBottomY - 0.5 * ampPx;
+      addDashedGuide(axisLeftX, yMidPx, axisRightX - 14, yMidPx, 3);
+      addRulerTick(axisLeftX - 4.5, yMidPx, axisLeftX + 4.5, yMidPx, 'ytick-pmid');
+      texts.push(
+        createMathGraphLabelText('P_μ', axisLeftX - 7, yMidPx, 'right', 14, axisColor, layerId, groupId, `${nowId}-lpmid`)
+      );
+    }
 
-    // 3. Squared-trig wave curve over 1.5 oscillation periods (3 energy lobes since T_energy = T/2)
+    // 3. Squared-trig wave curve over 1.5 oscillation periods (3 lobes since T_energy = T/2)
     const steps = 144;
     const wavePts: { x: number; y: number; pressure: number }[] = [];
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
-      const theta = u * Math.PI * 3; // 1.5 periods of x(t) = 3 full lobes of K(t) or U(t)
+      const theta = u * Math.PI * 3; // 1.5 periods of x(t) = 3 full lobes of K(t) / U(t) / p(t)
       const trigVal = baseIsCos ? Math.cos(theta + phaseRad) : Math.sin(theta + phaseRad);
       const val = trigVal * trigVal; // Non-negative in [0, 1]
       wavePts.push({
@@ -10205,7 +10306,235 @@ function tryBuildOscillationDiagramStrokes(
       )
     );
 
-    return { strokes, texts, groupId, kindLabel: `Διάγραμμα Ενέργειας ${yVar}(t)` };
+    return {
+      strokes,
+      texts,
+      groupId,
+      kindLabel: isACPower ? 'Στιγμιαία Ισχύς Ε.Ρ. p(t) = P_max·ημ²(ωt)' : `Διάγραμμα Ενέργειας ${yVar}(t)`,
+    };
+  }
+
+  // CASE 6B: Phase-Space Ellipse for SHM (`u = ±ω√(A^2 - x^2)`, `u^2 = ω^2(A^2 - x^2)`, `u - x`)
+  // and LC Electrical Oscillation (`i = ±ω√(Q^2 - q^2)`, `i^2 = ω^2(Q^2 - q^2)`, `i - q`)
+  const isSHMPhaseEllipse =
+    /^[uvυ]=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\(A\^2-[xχ]\^2\)$/i.test(compact) ||
+    /^[uvυ]\^2=ω\^2\*?\(A\^2-[xχ]\^2\)$/i.test(compact) ||
+    /^[uvυ]-[xχ]$/i.test(compact);
+  const isLCPhaseEllipse =
+    /^[iI]=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\(Q\^2-q\^2\)$/i.test(compact) ||
+    /^[iI]\^2=ω\^2\*?\(Q\^2-q\^2\)$/i.test(compact) ||
+    /^[iI]-q$/i.test(compact);
+
+  if (isSHMPhaseEllipse || isLCPhaseEllipse) {
+    const rx = halfW * 0.66;
+    const ry = halfH * 0.56;
+    const yTitle = isLCPhaseEllipse ? 'i' : 'u';
+    const xTitle = isLCPhaseEllipse ? 'q' : 'x';
+    const leftX = isLCPhaseEllipse ? '-Q' : '-A';
+    const rightX = isLCPhaseEllipse ? '+Q' : '+A';
+    const topY = isLCPhaseEllipse ? '+I_max' : '+u_max';
+    const botY = isLCPhaseEllipse ? '-I_max' : '-u_max';
+
+    strokes.push(
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: centerX - halfW, y: centerY, pressure: 0.7 },
+          { x: centerX + halfW, y: centerY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      },
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: centerX, y: centerY + halfH, pressure: 0.7 },
+          { x: centerX, y: centerY - halfH, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      }
+    );
+
+    const ellPts: { x: number; y: number; pressure: number }[] = [];
+    for (let i = 0; i <= 96; i++) {
+      const ang = (i / 96) * Math.PI * 2;
+      ellPts.push({
+        x: centerX + rx * Math.cos(ang),
+        y: centerY - ry * Math.sin(ang),
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-phase-ell`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: ellPts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+
+    addRulerTick(centerX - rx, centerY - 4.5, centerX - rx, centerY + 4.5, 'xtick-l');
+    addRulerTick(centerX + rx, centerY - 4.5, centerX + rx, centerY + 4.5, 'xtick-r');
+    addRulerTick(centerX - 4.5, centerY - ry, centerX + 4.5, centerY - ry, 'ytick-t');
+    addRulerTick(centerX - 4.5, centerY + ry, centerX + 4.5, centerY + ry, 'ytick-b');
+
+    texts.push(
+      createMathGraphLabelText(yTitle, centerX + 8, centerY - halfH + 8, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+      createMathGraphLabelText(xTitle, centerX + halfW + 8, centerY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+      createMathGraphLabelText(leftX, centerX - rx - 6, centerY + 16, 'right', 15, axisColor, layerId, groupId, `${nowId}-lxl`),
+      createMathGraphLabelText(rightX, centerX + rx + 6, centerY + 16, 'left', 15, axisColor, layerId, groupId, `${nowId}-lxr`),
+      createMathGraphLabelText(topY, centerX + 8, centerY - ry - 12, 'left', 15, axisColor, layerId, groupId, `${nowId}-lyt`),
+      createMathGraphLabelText(botY, centerX + 8, centerY + ry + 14, 'left', 15, axisColor, layerId, groupId, `${nowId}-lyb`)
+    );
+
+    return {
+      strokes,
+      texts,
+      groupId,
+      kindLabel: isLCPhaseEllipse
+        ? 'Διάγραμμα Έντασης - Φορτίου i(q) = ±ω√(Q² - q²)'
+        : 'Διάγραμμα Ταχύτητας - Απομάκρυνσης u(x) = ±ω√(A² - x²)',
+    };
+  }
+
+  // CASE 6C: Beats / Διακρότημα (`x = 2A συν((ω_1 - ω_2)/2 t) ημ((ω_1 + ω_2)/2 t)`, `διακρότημα`)
+  if (
+    /^x=2\*?A\*?(?:συνημ|συν|cos)\([^)]*\)\*?(?:ημιτ|ημ|sin)\([^)]*\)$/i.test(compact) ||
+    /^διακρ[οό]τημα$/i.test(compact)
+  ) {
+    const axisLeftX = centerX - halfW * 0.74;
+    const axisRightX = centerX + halfW * 0.92;
+    const ampPx = halfH * 0.66;
+    const waveW = axisRightX - axisLeftX - 16;
+
+    strokes.push(
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: centerY + halfH * 0.9, pressure: 0.7 },
+          { x: axisLeftX, y: centerY - halfH * 0.9, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      },
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: centerY, pressure: 0.7 },
+          { x: axisRightX, y: centerY, pressure: 0.7 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      }
+    );
+
+    const envSteps = 96;
+    const topEnvPts: { x: number; y: number; pressure: number }[] = [];
+    const botEnvPts: { x: number; y: number; pressure: number }[] = [];
+    for (let i = 0; i <= envSteps; i++) {
+      const u = i / envSteps;
+      const env = Math.cos(u * Math.PI * 2); // 2 beat lobes
+      const px = axisLeftX + u * waveW;
+      topEnvPts.push({ x: px, y: centerY - env * ampPx, pressure: 0.65 });
+      botEnvPts.push({ x: px, y: centerY + env * ampPx, pressure: 0.65 });
+    }
+    strokes.push(
+      {
+        id: `st-${nowId}-gd-top`,
+        tool: 'pen',
+        color: blueGuide,
+        width: 1.8,
+        opacity: 0.95,
+        lineStyle: 'dashed',
+        points: topEnvPts,
+        layerId,
+        groupId,
+        isShape: false,
+      },
+      {
+        id: `st-${nowId}-gd-bot`,
+        tool: 'pen',
+        color: blueGuide,
+        width: 1.8,
+        opacity: 0.95,
+        lineStyle: 'dashed',
+        points: botEnvPts,
+        layerId,
+        groupId,
+        isShape: false,
+      }
+    );
+
+    const wavePts: { x: number; y: number; pressure: number }[] = [];
+    const steps = 220;
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      const env = Math.cos(u * Math.PI * 2);
+      const carrier = Math.sin(u * Math.PI * 16);
+      wavePts.push({
+        x: axisLeftX + u * waveW,
+        y: centerY - env * carrier * ampPx,
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-beats`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.5,
+      opacity: 1,
+      points: wavePts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+
+    addRulerTick(axisLeftX - 4.5, centerY - ampPx, axisLeftX + 4.5, centerY - ampPx, 'ytick-p');
+    addRulerTick(axisLeftX - 4.5, centerY + ampPx, axisLeftX + 4.5, centerY + ampPx, 'ytick-n');
+    const xTdelta = axisLeftX + 0.5 * waveW;
+    addRulerTick(xTdelta, centerY - 4.5, xTdelta, centerY + 4.5, 'xtick-td');
+
+    texts.push(
+      createMathGraphLabelText('x', axisLeftX + 8, centerY - halfH * 0.9 + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+      createMathGraphLabelText('t', axisRightX + 7, centerY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+      createMathGraphLabelText('+2A', axisLeftX - 7, centerY - ampPx, 'right', 15, axisColor, layerId, groupId, `${nowId}-lp`),
+      createMathGraphLabelText('-2A', axisLeftX - 7, centerY + ampPx, 'right', 15, axisColor, layerId, groupId, `${nowId}-ln`),
+      createMathGraphLabelText('T_δ', xTdelta, centerY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-ltd`)
+    );
+
+    return { strokes, texts, groupId, kindLabel: 'Διάγραμμα Διακροτήματος x(t)' };
   }
 
   // Helper for 1st-Quadrant Gymnasium & Lyceum Physics Library Diagrams (Kinematics, Dynamics, Gas Laws PV=nRT, Electricity, Waves, Rigid Body, Fluids, Quantum)
@@ -10215,6 +10544,7 @@ function tryBuildOscillationDiagramStrokes(
     curveKind:
       | 'hyperbola'
       | 'inverse-square'
+      | 'inv-sqrt'
       | 'line-origin'
       | 'line-offset-up'
       | 'line-offset-down'
@@ -10229,6 +10559,11 @@ function tryBuildOscillationDiagramStrokes(
       | 'standing-wave-amp'
       | 'collision-impulse'
       | 'exp-growth-asymptote'
+      | 'closed-circuit-i-r'
+      | 'closed-circuit-v-r'
+      | 'optical-dispersion'
+      | 'nuclear-binding'
+      | 'blackbody-planck'
       | 'adiabatic-pv'
       | 'isobaric-pv'
       | 'isochoric-pv'
@@ -10685,6 +11020,148 @@ function tryBuildOscillationDiagramStrokes(
           createMathGraphLabelText(opts.yInitLabel, axisLeftX - 7, asymY, 'right', 15, axisColor, layerId, groupId, `${nowId}-lyasym`)
         );
       }
+    } else if (opts.curveKind === 'inv-sqrt') {
+      const kConst = 0.36;
+      const uMin = 0.20;
+      for (let i = 0; i <= steps; i++) {
+        const u = uMin + (1 - uMin) * (i / steps);
+        const v = kConst / Math.sqrt(u);
+        if (v > 0.96) continue;
+        curvePts.push({
+          x: axisLeftX + u * plotW * 0.92,
+          y: axisBottomY - v * plotH,
+          pressure: 0.7,
+        });
+      }
+    } else if (opts.curveKind === 'closed-circuit-i-r') {
+      // Closed circuit current vs external resistance: `I = E / (R + r)` starting at `I_βρ = E/r` at R = 0
+      const v0 = 0.80;
+      const startY = axisBottomY - v0 * plotH;
+      addRulerTick(axisLeftX - 4.5, startY, axisLeftX + 4.5, startY, 'ytick-ibr');
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const v = v0 / (1 + 3.2 * u);
+        curvePts.push({
+          x: axisLeftX + u * plotW * 0.92,
+          y: axisBottomY - v * plotH,
+          pressure: 0.7,
+        });
+      }
+      const xR = axisLeftX + (1 / 3.2) * plotW * 0.92;
+      const yHalf = axisBottomY - 0.5 * v0 * plotH;
+      addDashedGuide(axisLeftX, yHalf, xR, yHalf, 1);
+      addDashedGuide(xR, yHalf, xR, axisBottomY, 2);
+      addRulerTick(axisLeftX - 4.5, yHalf, axisLeftX + 4.5, yHalf, 'ytick-ihalf');
+      addRulerTick(xR, axisBottomY - 4.5, xR, axisBottomY + 4.5, 'xtick-r');
+      texts.push(
+        createMathGraphLabelText(opts.yInitLabel || 'I_βρ', axisLeftX - 7, startY, 'right', 14, axisColor, layerId, groupId, `${nowId}-libr`),
+        createMathGraphLabelText('I_βρ/2', axisLeftX - 7, yHalf, 'right', 13, axisColor, layerId, groupId, `${nowId}-lihalf`),
+        createMathGraphLabelText('r', xR, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lr`)
+      );
+    } else if (opts.curveKind === 'closed-circuit-v-r') {
+      // Terminal voltage vs external resistance: `V_π = E * R / (R + r)` approaching E as R -> ∞
+      const asymY = axisBottomY - plotH * 0.80;
+      addDashedGuide(axisLeftX, asymY, axisLeftX + plotW * 0.92, asymY, 1);
+      addRulerTick(axisLeftX - 4.5, asymY, axisLeftX + 4.5, asymY, 'ytick-e');
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const v = (3.5 * u) / (1 + 3.5 * u);
+        curvePts.push({
+          x: axisLeftX + u * plotW * 0.92,
+          y: axisBottomY - v * (axisBottomY - asymY),
+          pressure: 0.7,
+        });
+      }
+      const xR = axisLeftX + (1 / 3.5) * plotW * 0.92;
+      const yHalf = axisBottomY - 0.5 * (axisBottomY - asymY);
+      addDashedGuide(axisLeftX, yHalf, xR, yHalf, 2);
+      addDashedGuide(xR, yHalf, xR, axisBottomY, 3);
+      addRulerTick(axisLeftX - 4.5, yHalf, axisLeftX + 4.5, yHalf, 'ytick-ehalf');
+      addRulerTick(xR, axisBottomY - 4.5, xR, axisBottomY + 4.5, 'xtick-r');
+      texts.push(
+        createMathGraphLabelText(opts.yInitLabel || 'E', axisLeftX - 7, asymY, 'right', 15, axisColor, layerId, groupId, `${nowId}-le`),
+        createMathGraphLabelText('E/2', axisLeftX - 7, yHalf, 'right', 13, axisColor, layerId, groupId, `${nowId}-lehalf`),
+        createMathGraphLabelText('r', xR, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lr`)
+      );
+    } else if (opts.curveKind === 'optical-dispersion') {
+      // Optical Dispersion `n(λ) = A + B/λ^2` (Cauchy curve from violet λ_1 = 400nm to red λ_2 = 700nm)
+      const u1 = 0.24;
+      const u2 = 0.84;
+      for (let i = 0; i <= steps; i++) {
+        const u = u1 + (u2 - u1) * (i / steps);
+        const norm = (u - u1) / (u2 - u1);
+        const v = 0.36 + 0.44 * Math.pow(1 - norm, 1.85);
+        curvePts.push({
+          x: axisLeftX + u * plotW,
+          y: axisBottomY - v * plotH,
+          pressure: 0.7,
+        });
+      }
+      const pStart = curvePts[0];
+      const pEnd = curvePts[curvePts.length - 1];
+      addDashedGuide(axisLeftX, pStart.y, pStart.x, pStart.y, 1);
+      addDashedGuide(pStart.x, pStart.y, pStart.x, axisBottomY, 2);
+      addDashedGuide(axisLeftX, pEnd.y, pEnd.x, pEnd.y, 3);
+      addDashedGuide(pEnd.x, pEnd.y, pEnd.x, axisBottomY, 4);
+      addRulerTick(axisLeftX - 4.5, pStart.y, axisLeftX + 4.5, pStart.y, 'ytick-n1');
+      addRulerTick(axisLeftX - 4.5, pEnd.y, axisLeftX + 4.5, pEnd.y, 'ytick-n2');
+      addRulerTick(pStart.x, axisBottomY - 4.5, pStart.x, axisBottomY + 4.5, 'xtick-l1');
+      addRulerTick(pEnd.x, axisBottomY - 4.5, pEnd.x, axisBottomY + 4.5, 'xtick-l2');
+      texts.push(
+        createMathGraphLabelText('n_ι', axisLeftX - 7, pStart.y, 'right', 14, axisColor, layerId, groupId, `${nowId}-ln1`),
+        createMathGraphLabelText('n_ε', axisLeftX - 7, pEnd.y, 'right', 14, axisColor, layerId, groupId, `${nowId}-ln2`),
+        createMathGraphLabelText('λ_ι', pStart.x, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-ll1`),
+        createMathGraphLabelText('λ_ε', pEnd.x, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-ll2`)
+      );
+    } else if (opts.curveKind === 'nuclear-binding') {
+      // Nuclear Binding Energy per nucleon `E_B/A` vs mass number `A` (steep rise, peak at A=56 Fe ~8.8 MeV, gentle decline)
+      const uPeak = 0.30;
+      for (let i = 0; i <= 96; i++) {
+        const u = 0.04 + 0.88 * (i / 96);
+        const v =
+          u <= uPeak
+            ? 0.82 * (1 - Math.pow(1 - (u - 0.04) / (uPeak - 0.04), 2.4))
+            : 0.82 - 0.16 * ((u - uPeak) / (0.92 - uPeak));
+        curvePts.push({
+          x: axisLeftX + u * plotW,
+          y: axisBottomY - v * plotH,
+          pressure: 0.7,
+        });
+      }
+      const xFe = axisLeftX + uPeak * plotW;
+      const yFe = axisBottomY - 0.82 * plotH;
+      addDashedGuide(axisLeftX, yFe, xFe, yFe, 1);
+      addDashedGuide(xFe, yFe, xFe, axisBottomY, 2);
+      addRulerTick(axisLeftX - 4.5, yFe, axisLeftX + 4.5, yFe, 'ytick-fe');
+      addRulerTick(xFe, axisBottomY - 4.5, xFe, axisBottomY + 4.5, 'xtick-fe');
+      texts.push(
+        createMathGraphLabelText('8.8', axisLeftX - 7, yFe, 'right', 14, axisColor, layerId, groupId, `${nowId}-lyfe`),
+        createMathGraphLabelText('56', xFe, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lxfe`)
+      );
+    } else if (opts.curveKind === 'blackbody-planck') {
+      // Planck Blackbody spectral distribution `I(λ)` peaking at `λ_max`
+      const uPeak = 0.34;
+      const rawPeak = Math.pow(uPeak, -4) / (Math.exp(4 / (5 * uPeak)) - 1);
+      for (let i = 1; i <= 96; i++) {
+        const u = 0.08 + 0.84 * (i / 96);
+        const rawVal = Math.pow(u, -4) / (Math.exp(4 / (5 * u)) - 1);
+        const v = Math.min(1, rawVal / rawPeak) * 0.80;
+        curvePts.push({
+          x: axisLeftX + u * plotW,
+          y: axisBottomY - v * plotH,
+          pressure: 0.7,
+        });
+      }
+      const xLmax = axisLeftX + uPeak * plotW;
+      const yImax = axisBottomY - 0.80 * plotH;
+      addDashedGuide(axisLeftX, yImax, xLmax, yImax, 1);
+      addDashedGuide(xLmax, yImax, xLmax, axisBottomY, 2);
+      addRulerTick(axisLeftX - 4.5, yImax, axisLeftX + 4.5, yImax, 'ytick-imax');
+      addRulerTick(xLmax, axisBottomY - 4.5, xLmax, axisBottomY + 4.5, 'xtick-lmax');
+      texts.push(
+        createMathGraphLabelText('I_max', axisLeftX - 7, yImax, 'right', 14, axisColor, layerId, groupId, `${nowId}-limax`),
+        createMathGraphLabelText('λ_max', xLmax, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-llmax`)
+      );
     } else if (opts.curveKind === 'doppler-approach') {
       // Doppler effect when source approaches observer: `f_A = (u / (u - u_S)) f_S`
       const asymX = axisLeftX + plotW * 0.80;
@@ -11350,6 +11827,16 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ροπή Αδράνειας I(R) ∝ m·R²',
     });
   }
+  // - Steiner's Parallel-Axis Theorem: `I_p = I_cm + M*d^2`, `I = I_cm + m*d^2`, `I - d`
+  if (/^I(?:_?[pπz])?=I_?(?:cm|0)\+[mμM]\*?d\^2$|^I_?p-d$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'I_p',
+      xAxisLabel: 'd',
+      curveKind: 'parabola-offset-up',
+      yInitLabel: 'I_cm',
+      kindLabel: 'Θεώρημα Steiner I_p(d) = I_cm + M·d²',
+    });
+  }
   // - Rotational Dynamics `Στ = I*α_γ`, `τ = I*α_γ`, Angular Momentum `L = I*ω`, Rotational KE `K_στρ = 1/2 I ω^2`, Work `W = τ*θ`, Power `P = τ*ω`:
   if (/^(?:Στ|τ)=I\*?(?:[aα]_?[γg]|[aα])$/i.test(compact)) {
     const ySym = /^Στ/i.test(compact) ? 'Στ' : 'τ';
@@ -11368,7 +11855,7 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Στροφορμή Στερεού L(ω) = I·ω',
     });
   }
-  if (/^K(?:_?στρ)?=(?:(?:\(?1\/2\)?|0\.5)\*?I\*?ω\^2|I\*?ω\^2\/2)$/i.test(compact)) {
+  if (/^K(?:_?(?:στρ|περ))?=(?:(?:\(?1\/2\)?|0\.5)\*?I\*?ω\^2|I\*?ω\^2\/2)$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'K_στρ',
       xAxisLabel: 'ω',
@@ -11384,7 +11871,7 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Έργο Σταθερής Ροπής W(θ) = τ·θ',
     });
   }
-  if (/^P=τ\*?ω$/i.test(compact)) {
+  if (/^(?:P|P_?F)=τ\*?ω$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'P',
       xAxisLabel: 'ω',
@@ -11392,9 +11879,9 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ισχύς Ροπής P(ω) = τ·ω',
     });
   }
-  // - Fluid Mechanics: Hydrostatic Pressure `P = ρ*g*h`, `P_υδ = ρ*g*h`, Total Pressure `P = P_atm + ρ*g*h`, Continuity `u = Π/A` / `A*u = σταθ`:
-  if (/^(?:P|P_?υδ)=[ρd]\*?g\*?h$/i.test(compact)) {
-    const ySym = /^P_?υδ/i.test(compact) ? 'P_υδ' : 'P';
+  // - Fluid Mechanics: Hydrostatic Pressure `P = ρ*g*h`, `Δp = ρ*g*h`, Total Pressure `P = P_atm + ρ*g*h`, Continuity `u = Π/A` / `A*u = σταθ`, Pascal `F_2 = (A_2/A_1)*F_1`:
+  if (/^(?:P|p|P_?υδ|Dp|Δp)=[ρd]\*?g\*?h$|^P-h$/i.test(compact)) {
+    const ySym = /^P_?υδ/i.test(compact) ? 'P_υδ' : /^D|^Δ/i.test(compact) ? 'Δp' : 'P';
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: ySym,
       xAxisLabel: 'h',
@@ -11402,8 +11889,8 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: `Υδροστατική Πίεση ${ySym}(h) = ρ·g·h`,
     });
   }
-  if (/^(?:P|P_?ολ)=(?:P_?atm|P_?0)\+[ρd]\*?g\*?h$/i.test(compact)) {
-    const initSym = /P_?atm/i.test(compact) ? 'P_atm' : 'P_0';
+  if (/^(?:P|p|P_?ολ)=(?:P_?(?:atm|εξ|0)|p_?(?:atm|εξ|0))\+[ρd]\*?g\*?h$/i.test(compact)) {
+    const initSym = /atm/i.test(compact) ? 'P_atm' : /εξ/i.test(compact) ? 'p_εξ' : 'P_0';
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'P',
       xAxisLabel: 'h',
@@ -11412,7 +11899,15 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: `Ολική Πίεση Ρευστού P(h) = ${initSym} + ρ·g·h`,
     });
   }
-  if (/^[uvυ]=Π\/A$|^A\*?[uvυ]=(?:Π|σταθ\.?|const)$/i.test(compact)) {
+  if (/^[uvυ]=Π\/A$|^A\*?[uvυ]=(?:Π|σταθ\.?|const)$|^Π=A\*?[uvυ]$/i.test(compact)) {
+    if (/^Π=A\*?[uvυ]$/i.test(compact)) {
+      return buildFirstQuadrantPhysicsDiagram({
+        yAxisLabel: 'Π',
+        xAxisLabel: 'u',
+        curveKind: 'line-origin',
+        kindLabel: 'Παροχή Ρευστού Π(u) = A·u',
+      });
+    }
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'u',
       xAxisLabel: 'A',
@@ -11422,8 +11917,17 @@ function tryBuildOscillationDiagramStrokes(
     });
   }
 
-  // 8E. Electricity, Electromagnetism, RC/RL Circuits, Gravity, Waves, Quantum & Photoelectric Effect:
-  // - Ohm's Law: `I = V/R`, `V = I*R`, `I - V`, `V - I`
+  // 8E. Electricity, Magnetism, Induction, AC/RLC/LC, Optics, Gravitation, Quantum & Nuclear Physics:
+  // - Electric Current & Charge (`q = I*t`, `I = q/t`):
+  if (/^q=I\*?t$|^q-t$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'q',
+      xAxisLabel: 't',
+      curveKind: 'line-origin',
+      kindLabel: 'Ηλεκτρικό Φορτίο q(t) = I·t',
+    });
+  }
+  // - Ohm's Law: `I = V/R`, `V = I*R`, `I - V`, `V - I`, `I - R`
   if (/^I=V\/R$|^I-V$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'I',
@@ -11448,8 +11952,60 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ένταση Ρεύματος - Αντίσταση I(R)',
     });
   }
-  // - Closed Circuit (Νόμος Ohm κλειστού κυκλώματος): `V_π = E - I*r`, `U = E - I*r`, `V = E - I*r`
-  if (/^(?:V_?[πp]|U|V)=(?:E|ε)-I\*?r$/i.test(compact)) {
+  // - Conductor Resistance vs Length, Cross-Sectional Area, Radius & Temperature (`R = ρ*l/S`, `R = R_0(1 + α*θ)`):
+  if (/^R=[ρp]\*?[lL]\/[SA]$|^R-[lL]$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'R',
+      xAxisLabel: 'l',
+      curveKind: 'line-origin',
+      kindLabel: 'Αντίσταση Αγωγού - Μήκος R(l) = ρ·l/S',
+    });
+  }
+  if (/^R-[SA]$/i.test(compact)) {
+    const xSym = /A$/i.test(compact) ? 'A' : 'S';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'R',
+      xAxisLabel: xSym,
+      curveKind: 'hyperbola',
+      kindLabel: `Αντίσταση Αγωγού - Διατομή R(${xSym}) = ρ·l/${xSym}`,
+    });
+  }
+  if (/^R=[ρp]\*?[lL]\/\(?\s*π\*?[rd]\^2\s*\)?$/i.test(compact)) {
+    const xSym = /d\^2/i.test(compact) ? 'd' : 'r';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'R',
+      xAxisLabel: xSym,
+      curveKind: 'inverse-square',
+      kindLabel: `Αντίσταση Αγωγού - Ακτίνα Διατομής R(${xSym}) ∝ 1/${xSym}²`,
+    });
+  }
+  if (
+    /^(R|ρ)=(?:R_?0|ρ_?0)\*?\(1\+[aα]\*?(?:D?θ|Δ?θ|T)\)$/i.test(compact) ||
+    /^(R|ρ)-(?:θ|T)$/i.test(compact)
+  ) {
+    const isRho = /^ρ/i.test(compact);
+    const ySym = isRho ? 'ρ' : 'R';
+    const xSym = /T\)?$/i.test(compact) ? 'T' : 'θ';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: xSym,
+      curveKind: 'line-offset-up',
+      yInitLabel: isRho ? 'ρ_0' : 'R_0',
+      kindLabel: `Εξάρτηση ${isRho ? 'Ειδικής Αντίστασης ρ' : 'Αντίστασης R'}(${xSym}) = ${isRho ? 'ρ_0' : 'R_0'}(1 + α·${xSym})`,
+    });
+  }
+  // - Closed Circuit (Νόμος Ohm κλειστού κυκλώματος):
+  //   `I = E/(R+r)`, `V_π = E - I*r`, `V_π = E*R/(R+r)`, `P_εξ = E*I - I^2*r`
+  if (/^I=(?:E|ε)\/\(R\+r\)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'I',
+      xAxisLabel: 'R',
+      curveKind: 'closed-circuit-i-r',
+      yInitLabel: 'I_βρ',
+      kindLabel: 'Νόμος Ohm Κλειστού Κυκλώματος I(R) = E/(R + r)',
+    });
+  }
+  if (/^(?:V_?[πp]|U|V)=(?:E|ε)-I\*?r$|^V_?[πp]-I$/i.test(compact)) {
     const ySym = /^V_?[πp]/i.test(compact) ? 'V_π' : /^U/i.test(compact) ? 'U' : 'V';
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: ySym,
@@ -11460,8 +12016,30 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: `Πολική Τάση ${ySym}(I) = E - I·r`,
     });
   }
-  // - Joule Power / Capacitor Energy / Inductor Energy: `P = I^2*R`, `U = 1/2 C V^2`, `U = 1/2 L I^2`
-  if (/^P=I\^2\*?R$|^P=R\*?I\^2$/i.test(compact)) {
+  if (/^V_?[πp]=(?:E|ε)\*?R\/\(R\+r\)$|^V_?[πp]-R$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'V_π',
+      xAxisLabel: 'R',
+      curveKind: 'closed-circuit-v-r',
+      yInitLabel: 'E',
+      kindLabel: 'Πολική Τάση - Εξωτερική Αντίσταση V_π(R) = E·R/(R + r)',
+    });
+  }
+  if (
+    /^P(?:_?(?:εξ|R))?=(?:E|ε)\*?I-I\^2\*?r$/i.test(compact) ||
+    /^P_?(?:εξ|R)-I$/i.test(compact)
+  ) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P_εξ',
+      xAxisLabel: 'I',
+      curveKind: 'projectile-arch',
+      yInitLabel: 'P_max',
+      xEndLabel: 'I_βρ',
+      kindLabel: 'Ισχύς Εξωτερικού Κυκλώματος P_εξ(I) = E·I - I²·r',
+    });
+  }
+  // - Joule Power / Energy & Capacitors (`Q = C*V`, `C = ε_0*S/d`, `U = 1/2 C V^2`, `U = Q^2/(2C)`, `U = 1/2 L I^2`):
+  if (/^P=I\^2\*?R$|^P=R\*?I\^2$|^P-I$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'P',
       xAxisLabel: 'I',
@@ -11469,7 +12047,60 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ηλεκτρική Ισχύς Joule P(I) = I²·R',
     });
   }
-  if (/^(?:U|E)=(?:(?:\(?1\/2\)?|0\.5)\*?C\*?V\^2|C\*?V\^2\/2)$/i.test(compact)) {
+  if (/^P=V\^2\/R$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P',
+      xAxisLabel: 'V',
+      curveKind: 'parabola-up',
+      kindLabel: 'Ηλεκτρική Ισχύς P(V) = V²/R',
+    });
+  }
+  if (/^P=V\*?I$|^P=I\*?V$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P',
+      xAxisLabel: 'I',
+      curveKind: 'line-origin',
+      kindLabel: 'Ηλεκτρική Ισχύς P(I) = V·I',
+    });
+  }
+  if (/^(?:Q|W|E)=I\^2\*?R\*?t$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'Q',
+      xAxisLabel: 't',
+      curveKind: 'line-origin',
+      kindLabel: 'Νόμος του Joule Q(t) = I²·R·t',
+    });
+  }
+  if (/^[Qq]=C\*?V$|^C=[Qq]\/V$|^[Qq]-V$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'Q',
+      xAxisLabel: 'V',
+      curveKind: 'line-origin',
+      kindLabel: 'Φορτίο Πυκνωτή Q(V) = C·V',
+    });
+  }
+  if (/^C=ε_?0\*?(?:ε\*?)?([SA])\/([dl])$|^C-([SA])$/i.test(compact)) {
+    const xSym = /A/i.test(compact) ? 'A' : 'S';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'C',
+      xAxisLabel: xSym,
+      curveKind: 'line-origin',
+      kindLabel: `Χωρητικότητα Επίπεδου Πυκνωτή C(${xSym}) = ε_0·${xSym}/d`,
+    });
+  }
+  if (/^C-([dl])$/i.test(compact)) {
+    const xSym = /l$/i.test(compact) ? 'l' : 'd';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'C',
+      xAxisLabel: xSym,
+      curveKind: 'hyperbola',
+      kindLabel: `Χωρητικότητα Επίπεδου Πυκνωτή C(${xSym}) = ε_0·S/${xSym}`,
+    });
+  }
+  if (
+    /^(?:U|U_?E|E)=(?:(?:\(?1\/2\)?|0\.5)\*?C\*?V\^2|C\*?V\^2\/2)$/i.test(compact) ||
+    /^U_?E?-V$/i.test(compact)
+  ) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'U',
       xAxisLabel: 'V',
@@ -11477,32 +12108,66 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ενέργεια Πυκνωτή U(V) = ½C·V²',
     });
   }
-  if (/^(?:U|E|E_?B)=(?:(?:\(?1\/2\)?|0\.5)\*?L\*?I\^2|L\*?I\^2\/2)$/i.test(compact)) {
+  if (
+    /^(?:U|U_?E|E)=[Qq]\^2\/\(?\s*2\*?C\s*\)?$/i.test(compact) ||
+    /^U_?E?-[Qq]$/i.test(compact)
+  ) {
+    const xSym = /q/i.test(compact) && !/Q/.test(compact) ? 'q' : 'Q';
     return buildFirstQuadrantPhysicsDiagram({
-      yAxisLabel: 'U',
-      xAxisLabel: 'I',
+      yAxisLabel: 'U_E',
+      xAxisLabel: xSym,
       curveKind: 'parabola-up',
-      kindLabel: 'Ενέργεια Πηνίου U(I) = ½L·I²',
+      kindLabel: `Ηλεκτρική Ενέργεια Πυκνωτή U_E(${xSym}) = ${xSym}²/(2C)`,
     });
   }
-  // - Capacitor Charging / RL Current Growth: `Q = Q_0*(1 - e^(-t/RC))`, `V_C = E*(1 - e^(-t/RC))`, `I = I_max*(1 - e^(-t/τ))`
   if (
-    /^(Q|q|V_?C|I)(?:\(t\))?=([Qq]_?0|E|I_?max|I_?0)\*?\(1-e\^\(?-[a-zA-Zα-ωΑ-Ω0-9.*/_+]+\)?\)$/i.test(
-      compact
-    )
+    /^(?:U|U_?B|U_?L|E|E_?B)=(?:(?:\(?1\/2\)?|0\.5)\*?L\*?[Ii]\^2|L\*?[Ii]\^2\/2)$/i.test(compact) ||
+    /^U_?[BL]-[Ii]$/i.test(compact)
   ) {
-    const rawL = compact.split('=')[0].replace(/\(t\)/i, '');
-    const initSym = /^I/i.test(rawL) ? 'I_max' : /^V/i.test(rawL) ? 'E' : 'Q_0';
+    const xSym = /i$/i.test(compact) && !/I/.test(compact) ? 'i' : 'I';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'U_B',
+      xAxisLabel: xSym,
+      curveKind: 'parabola-up',
+      kindLabel: `Μαγνητική Ενέργεια Πηνίου U_B(${xSym}) = ½L·${xSym}²`,
+    });
+  }
+  // - Capacitor Charging / RL Current Growth / Discharging Nuclei `N_δ = N_0(1 - e^(-λt))`:
+  if (
+    /^(Q|q|V_?C|I|N_?[δd])(?:\(t\))?=([Qq]_?0|E|I_?max|I_?0|N_?0)\*?\(1-e\^\(?-[a-zA-Zα-ωΑ-Ω0-9.*/_+]+\)?\)$/i.test(
+      compact
+    ) ||
+    /^N_?[δd]-t$/i.test(compact)
+  ) {
+    const rawL = compact.includes('=') ? compact.split('=')[0].replace(/\(t\)/i, '') : 'N_δ';
+    const initSym = /^N/i.test(rawL) ? 'N_0' : /^I/i.test(rawL) ? 'I_max' : /^V/i.test(rawL) ? 'E' : 'Q_0';
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: rawL,
       xAxisLabel: 't',
       curveKind: 'exp-growth-asymptote',
       yInitLabel: initSym,
-      kindLabel: `Εκθετική Αύξηση ${rawL}(t)`,
+      kindLabel: /^N/i.test(rawL) ? 'Διασπασθέντες Πυρήνες N_δ(t) = N_0(1 - e^(-λt))' : `Εκθετική Αύξηση ${rawL}(t)`,
     });
   }
-  // - Laplace & Lorentz Force (`F_L = B*I*l`, `F_L = q*u*B`, cyclotron radius `R = m*u/(q*B)`):
-  if (/^(?:F|F_?L)=B\*?I\*?l$/i.test(compact)) {
+  // - Electric Field, Potential & Uniform Field (`F = q*E`, `V = E*d`):
+  if (/^F=[qQ]\*?E$|^F-E$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'F',
+      xAxisLabel: 'E',
+      curveKind: 'line-origin',
+      kindLabel: 'Ηλεκτρική Δύναμη F(E) = q·E',
+    });
+  }
+  if (/^V=E\*?d$|^E=V\/d$|^V-d$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'V',
+      xAxisLabel: 'd',
+      curveKind: 'line-origin',
+      kindLabel: 'Δυναμικό Ομογενούς Ηλεκτρικού Πεδίου V(d) = E·d',
+    });
+  }
+  // - Laplace, Lorentz, Cyclotron & Electromagnetic Induction (`F_L = B*I*l`, `F_L = q*u*B`, `R = m*u/(q*B)`, `E_επ = B*u*l`, `E_επ = 1/2 B ω l^2`):
+  if (/^(?:F|F_?L)=B\*?I\*?l(?:\*?(?:ημ|sin)\(?[φθ]\)?)?$|^F_?L-I$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'F_L',
       xAxisLabel: 'I',
@@ -11510,7 +12175,7 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Δύναμη Laplace F_L(I) = B·I·l',
     });
   }
-  if (/^(?:F|F_?L)=q\*?[uvυ]\*?B$/i.test(compact)) {
+  if (/^(?:F|F_?L)=[qQ]\*?[uvυ]\*?B(?:\*?(?:ημ|sin)\(?[φθ]\)?)?$|^F_?L-[uvυ]$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'F_L',
       xAxisLabel: 'u',
@@ -11518,7 +12183,10 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Δύναμη Lorentz F_L(u) = |q|·u·B',
     });
   }
-  if (/^[Rr]=[mμ]\*?[uvυ]\/\(q\*?B\)$|^[Rr]=[mμ]\*?[uvυ]\/q\*?B$/i.test(compact)) {
+  if (
+    /^[Rr]=[mμ]\*?[uvυ]\/\(?(?:q\*?B|B\*?q)\)?$/i.test(compact) ||
+    /^[Rr]-[uvυ]$/i.test(compact)
+  ) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'R',
       xAxisLabel: 'u',
@@ -11526,45 +12194,262 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ακτίνα Κυκλικής Τροχιάς Φορτίου R(u) = m·u/(q·B)',
     });
   }
-  // - Coulomb / Universal Gravitation / Electric & Gravitational Field (`1/r^2`):
-  //   `F = k q_1 q_2 / r^2`, `F = k Q q / r^2`, `F = G m_1 m_2 / r^2`, `F = G M m / r^2`, `E = k Q / r^2`, `g = G M / r^2`
+  if (/^[Rr]-B$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'R',
+      xAxisLabel: 'B',
+      curveKind: 'hyperbola',
+      kindLabel: 'Ακτίνα Κυκλικής Τροχιάς Φορτίου R(B) = m·u/(q·B)',
+    });
+  }
+  if (/^T=2\*?π\*?[mμ]\/\(?(?:q\*?B|B\*?q)\)?$|^T-B$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'T',
+      xAxisLabel: 'B',
+      curveKind: 'hyperbola',
+      kindLabel: 'Περίοδος Κυκλικής Κίνησης Φορτίου T(B) = 2πm/(q·B)',
+    });
+  }
   if (
-    /^(?:F|E|g)=(?:[kκG]\*?[a-zA-Z0-9_*]+\/r\^2)$/i.test(compact)
+    /^(?:E_?επ|ε_?επ)=B\*?[uvυ]\*?l$|^E_?επ-[uvυ]$/i.test(compact) ||
+    /^I_?επ=B\*?[uvυ]\*?l\/R$|^I_?επ-[uvυ]$/i.test(compact)
+  ) {
+    const isCurrent = /^I/i.test(compact);
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: isCurrent ? 'I_επ' : 'E_επ',
+      xAxisLabel: 'u',
+      curveKind: 'line-origin',
+      kindLabel: isCurrent ? 'Επαγωγικό Ρεύμα I_επ(u) = B·u·l/R' : 'Επαγωγική ΗΕΔ Κινούμενου Αγωγού E_επ(u) = B·u·l',
+    });
+  }
+  if (/^(?:E_?επ|ε_?επ)=(?:(?:\(?1\/2\)?|0\.5)\*?B\*?ω\*?l\^2|B\*?ω\*?l\^2\/2)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'E_επ',
+      xAxisLabel: 'ω',
+      curveKind: 'line-origin',
+      kindLabel: 'Επαγωγική ΗΕΔ Περιστρεφόμενης Ράβδου E_επ(ω) = ½B·ω·l²',
+    });
+  }
+  // - AC Impedances (`Z_C = 1/(C*ω)`, `Z_L = L*ω`), RLC Resonance (`I - ω`, `I - f`), LC Period (`T = 2π√(LC)`):
+  if (
+    /^(?:Z_?C|X_?C)=1\/\(?(?:C\*?ω|ω\*?C|2\*?π\*?f\*?C)\)?$/i.test(compact) ||
+    /^(?:Z_?C|X_?C)-[ωf]$/i.test(compact)
+  ) {
+    const ySym = /^X/i.test(compact) ? 'X_C' : 'Z_C';
+    const xSym = /f$/i.test(compact) ? 'f' : 'ω';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: xSym,
+      curveKind: 'hyperbola',
+      kindLabel: `Χωρητική Εμπέδηση Πυκνωτή ${ySym}(${xSym}) = 1/(C·ω)`,
+    });
+  }
+  if (
+    /^(?:Z_?L|X_?L)=L\*?ω$|^(?:Z_?L|X_?L)=2\*?π\*?f\*?L$/i.test(compact) ||
+    /^(?:Z_?L|X_?L)-[ωf]$/i.test(compact)
+  ) {
+    const ySym = /^X/i.test(compact) ? 'X_L' : 'Z_L';
+    const xSym = /f$/i.test(compact) ? 'f' : 'ω';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: xSym,
+      curveKind: 'line-origin',
+      kindLabel: `Επαγωγική Εμπέδηση Πηνίου ${ySym}(${xSym}) = L·ω`,
+    });
+  }
+  if (/^(?:I|I_?εν)-[ωf]$|^συντονισμ[οό]ςRLC$/i.test(compact)) {
+    const xSym = /ω/i.test(compact) ? 'ω' : 'f';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'I_εν',
+      xAxisLabel: xSym,
+      curveKind: 'resonance-peak',
+      xEndLabel: xSym === 'ω' ? 'ω_0' : 'f_0',
+      kindLabel: `Καμπύλη Συντονισμού Κυκλώματος RLC I_εν(${xSym})`,
+    });
+  }
+  if (/^T=2\*?π\*?(?:SQRT|sqrt|√)\(L\*?C\)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'T',
+      xAxisLabel: 'C',
+      curveKind: 'sqrt',
+      kindLabel: 'Περίοδος Ηλεκτρικής Ταλάντωσης LC T(C) = 2π√(L·C)',
+    });
+  }
+  // - Coulomb / Universal Gravitation / Electric & Gravitational Field (`1/r^2`):
+  //   `F = k q_1 q_2 / r^2`, `F = k Q q / r^2`, `F = G m_1 m_2 / r^2`, `F = G M m / r^2`, `E = k Q / r^2`, `g = G M / r^2`, `E - r`, `g - r`, `F_C - r`
+  if (
+    /^(?:F|F_?C|E|g)=(?:[kκG](?:_?(?:ηλ|e))?\*?[a-zA-Z0-9_*]+\/r\^2)$/i.test(compact) ||
+    /^(?:E|g|F_?C)-r$/i.test(compact)
   ) {
     const ySym = /^E/i.test(compact) ? 'E' : /^g/i.test(compact) ? 'g' : 'F';
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: ySym,
       xAxisLabel: 'r',
       curveKind: 'inverse-square',
-      kindLabel: `Διάγραμμα ${ySym}(r) ∝ 1/r²`,
+      kindLabel:
+        ySym === 'E'
+          ? 'Ένταση Ηλεκτρικού Πεδίου Σημειακού Φορτίου E(r) = k·Q/r²'
+          : ySym === 'g'
+          ? 'Ένταση Βαρυτικού Πεδίου g(r) = G·M/r²'
+          : 'Νόμος Coulomb / Παγκόσμιας Έλξης F(r) ∝ 1/r²',
     });
   }
-  // - Electric Potential `V = k Q / r`, Magnetic Field `B = k 2 I / r`, Wavelength `λ = u / f`, Period `T = 1 / f` (`1/x`)
-  if (/^V=[kκ]\*?Q\/r$/i.test(compact)) {
+  // - Satellite & Escape Velocity (`u_δορ = sqrt(G*M/r)`, `u_δ = sqrt(2*G*M/r)`):
+  if (
+    /^[uvυ](?:_?(?:δορ|δ))?=(?:SQRT|sqrt|√)\((?:2\*?)?G\*?M\/[rR]\)$/i.test(compact) ||
+    /^[uvυ]_?(?:δορ|δ)-[rR]$/i.test(compact)
+  ) {
+    const isEsc = /_?δ(?!ορ)/i.test(compact) || /2\*?G/i.test(compact);
     return buildFirstQuadrantPhysicsDiagram({
-      yAxisLabel: 'V',
+      yAxisLabel: isEsc ? 'u_δ' : 'u_δορ',
+      xAxisLabel: 'r',
+      curveKind: 'inv-sqrt',
+      kindLabel: isEsc ? 'Ταχύτητα Διαφυγής u_δ(r) = √(2GM/r)' : 'Ταχύτητα Δορυφόρου u_δορ(r) = √(GM/r)',
+    });
+  }
+  // - Gravitational Potential / Bohr Energy in 4th Quadrant (`V = -G*M/r`, `U = -G*M*m/r`, `E_n = -E_1/n^2`):
+  if (
+    /^(?:V|U)=-G\*?M(?:\*?[mμ])?\/[rR]$/i.test(compact) ||
+    /^E_?n=-(?:E_?[10]|13\.6)\/n\^2$/i.test(compact) ||
+    /^E_?n-n$/i.test(compact)
+  ) {
+    const isBohr = /^E_?n/i.test(compact);
+    const ySym = isBohr ? 'E_n' : /^U/i.test(compact) ? 'U' : 'V';
+    const xSym = isBohr ? 'n' : 'r';
+    const axisLeftX = centerX - halfW * 0.70;
+    const axisRightX = centerX + halfW * 0.90;
+    const axisZeroY = centerY - halfH * 0.56;
+    const axisBotY = centerY + halfH * 0.86;
+    const plotW = axisRightX - axisLeftX - 20;
+    const plotH = axisBotY - axisZeroY - 20;
+
+    strokes.push(
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: axisBotY },
+          { x: axisLeftX, y: axisZeroY - 18 },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      },
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX - 16, y: axisZeroY },
+          { x: axisRightX, y: axisZeroY },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      }
+    );
+
+    const pts4Q: { x: number; y: number; pressure: number }[] = [];
+    const uMin = isBohr ? 0.34 : 0.24;
+    const kC = isBohr ? 0.14 : 0.21;
+    const expP = isBohr ? 2 : 1;
+    for (let i = 0; i <= 72; i++) {
+      const u = uMin + (1 - uMin) * (i / 72);
+      const v = kC / Math.pow(u, expP);
+      if (v > 0.96) continue;
+      pts4Q.push({
+        x: axisLeftX + u * plotW,
+        y: axisZeroY + v * plotH,
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-4q`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: pts4Q,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+    texts.push(
+      createMathGraphLabelText(ySym, axisLeftX + 8, axisBotY - 10, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+      createMathGraphLabelText(xSym, axisRightX + 7, axisZeroY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+      createMathGraphLabelText('0', axisLeftX - 8, axisZeroY - 6, 'right', 14, axisColor, layerId, groupId, `${nowId}-l0`)
+    );
+    return {
+      strokes,
+      texts,
+      groupId,
+      kindLabel: isBohr ? 'Ενέργεια Τροχιάς Bohr E_n(n) = -E_1/n²' : `Βαρυτικό Δυναμικό / Ενέργεια ${ySym}(r) = -G·M/r`,
+    };
+  }
+  // - Electric Potential `V = k Q / r`, Electric PE `U = k q_1 q_2 / r`, Magnetic Field `B = k_μ 2I / r` (straight/circular wire), Solenoid `B = μ_0 n I`, Wavelength `λ = u / f`, Period `T = 1 / f`:
+  if (
+    /^(?:V|U)=[kκ](?:_?(?:ηλ|e))?\*?[a-zA-Z0-9_*]+\/r$/i.test(compact) ||
+    /^(?:V|U)-r$/i.test(compact)
+  ) {
+    const isU = /^U/i.test(compact);
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: isU ? 'U' : 'V',
       xAxisLabel: 'r',
       curveKind: 'hyperbola',
-      kindLabel: 'Ηλεκτρικό Δυναμικό V(r) = k·Q/r',
+      kindLabel: isU ? 'Ηλεκτρική Δυναμική Ενέργεια U(r) = k·q_1·q_2/r' : 'Ηλεκτρικό Δυναμικό V(r) = k·Q/r',
     });
   }
-  if (/^B=[kκ]\*?2\*?I\/r$/i.test(compact)) {
+  if (
+    /^B=(?:[kκ](?:_?[μm]|_?μαγ)?\*?2(?:\*?π)?(?:\*?N)?\*?I\/r|[μm]_?0\*?I\/\(?\s*2(?:\*?π)?\*?r\s*\)?|[μm]_?0\/\(?\s*4\*?π\s*\)?\*?2(?:\*?π)?\*?I\/r)$/i.test(
+      compact
+    ) ||
+    /^B-r$/i.test(compact) ||
+    /^F=[kκ](?:_?[μm])?\*?2\*?I_?1\*?I_?2(?:\*?l)?\/r$/i.test(compact) ||
+    /^F-r$/i.test(compact)
+  ) {
+    const isForce = /^F/i.test(compact);
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: isForce ? 'F' : 'B',
+      xAxisLabel: 'r',
+      curveKind: 'hyperbola',
+      kindLabel: isForce
+        ? 'Δύναμη Μεταξύ Παράλληλων Αγωγών F(r) = k_μ·2I_1·I_2·l/r'
+        : 'Μαγνητικό Πεδίο Ρευματοφόρου Αγωγού B(r) = k_μ·2I/r',
+    });
+  }
+  if (
+    /^B=(?:[μm]\*?)?[μm]_?0\*?(?:n|N\/l)\*?I$/i.test(compact) ||
+    /^B=[kκ](?:_?[μm])?\*?4\*?π\*?(?:n|N\/l)\*?I$/i.test(compact) ||
+    /^B-I$/i.test(compact) ||
+    /^B-n$/i.test(compact)
+  ) {
+    const xSym = /-n$/i.test(compact) ? 'n' : 'I';
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'B',
-      xAxisLabel: 'r',
-      curveKind: 'hyperbola',
-      kindLabel: 'Μαγνητικό Πεδίο Ευθύγραμμου Αγωγού B(r)',
+      xAxisLabel: xSym,
+      curveKind: 'line-origin',
+      kindLabel: `Μαγνητικό Πεδίο B(${xSym}) ∝ ${xSym}`,
     });
   }
-  if (/^λ=[uvυc]\/f$|^λ-f$/i.test(compact)) {
+  if (/^λ=[uvυc]\/f$|^[uvυc]=λ\*?f$|^λ-f$|^f-λ$/i.test(compact)) {
+    const isFL = /^f-λ$/i.test(compact);
     return buildFirstQuadrantPhysicsDiagram({
-      yAxisLabel: 'λ',
-      xAxisLabel: 'f',
+      yAxisLabel: isFL ? 'f' : 'λ',
+      xAxisLabel: isFL ? 'λ' : 'f',
       curveKind: 'hyperbola',
       kindLabel: 'Θεμελιώδης Εξίσωση Κυματικής λ(f) = u/f',
     });
   }
-  if (/^T=1\/f$|^f=1\/T$|^T-f$/i.test(compact)) {
+  if (/^T=1\/f$|^f=1\/T$|^T-f$|^f-T$/i.test(compact)) {
     const isTF = /^T/i.test(compact);
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: isTF ? 'T' : 'f',
@@ -11573,17 +12458,53 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: isTF ? 'Περίοδος - Συχνότητα T(f) = 1/f' : 'Συχνότητα - Περίοδος f(T) = 1/T',
     });
   }
-  // - Photoelectric Effect (Εξίσωση Einstein `K_max = h*f - φ`, `K_max = h*f - W_εξ`, `e*V_0 = h*f - φ`, `K_max - f`):
+  // - Optics & Dispersion (`n = c/u`, `n - λ`, `n = A + B/λ^2`):
+  if (/^n=c(?:_?0)?\/[uvυc]$|^n-[uvυ]$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'n',
+      xAxisLabel: 'u',
+      curveKind: 'hyperbola',
+      kindLabel: 'Δείκτης Διάθλασης n(u) = c_0/u',
+    });
+  }
+  if (/^n(?:\(λ\))?=A\+B\/λ\^2$|^n-λ$|^διασκεδασμ[οό]ς$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'n',
+      xAxisLabel: 'λ',
+      curveKind: 'optical-dispersion',
+      kindLabel: 'Καμπύλη Διασκεδασμού Φωτός n(λ)',
+    });
+  }
+  // - Photoelectric Effect & Stopping Potential (Εξίσωση Einstein `K_max = h*f - φ`, `K_max = h*f - W_εξ`,
+  //   Δυναμικό Αποκοπής `e*V_0 = h*f - φ`, `V_0 = (h/e)*f - W_εξ/e`, `V_απ = (h/e)*f - φ/e`, `V_0 - f`, `V_απ - f`, `K_max - f`):
   if (
-    /^(?:K_?max|E_?k|e\*?V_?0)=h\*?f-(?:φ|W_?εξ|W)$/i.test(compact) ||
-    /^K_?max-f$/i.test(compact)
+    /^(?:K_?max|E_?k|e\*?V_?(?:0|απ|ap))=h\*?(?:[fν]-(?:φ|φ_?0|W_?εξ|W_?0|W|b)|\(f-f_?0\))$/i.test(compact) ||
+    /^V_?(?:0|απ|ap)=(?:h\/e\*?[fν]-(?:φ|W_?εξ|W_?0|W)\/e|h\/e\*?\(f-f_?0\)|h\*?[fν]\/e-(?:φ|W_?εξ|W)\/e)$/i.test(
+      compact
+    ) ||
+    /^(?:K_?max|V_?(?:0|απ|ap))-f$/i.test(compact) ||
+    /^δυναμικ[οό]αποκοπ[ηή]ς$/i.test(compact)
   ) {
+    const isStoppingPotential =
+      /^V_?(?:0|απ|ap)/i.test(compact) ||
+      /^e\*?V_?(?:0|απ|ap)/i.test(compact) ||
+      /^δυναμικ[οό]αποκοπ[ηή]ς$/i.test(compact);
+    const yAxisTitle = isStoppingPotential ? (/απ|ap/i.test(compact) ? 'V_απ' : 'V_0') : 'K_max';
+    const hasW = /W/i.test(compact);
+    const negInterceptLabel = isStoppingPotential
+      ? hasW
+        ? '-W_εξ/e'
+        : '-φ/e'
+      : hasW
+      ? '-W_εξ'
+      : '-φ';
+
     const axisLeftX = centerX - halfW * 0.68;
     const axisRightX = centerX + halfW * 0.90;
     const axisZeroY = centerY + halfH * 0.16;
     const axisTopY = centerY - halfH * 0.86;
     const axisBotY = centerY + halfH * 0.86;
-    const yWorkFn = centerY + halfH * 0.68; // -W_εξ (-φ) on negative vertical axis
+    const yWorkFn = centerY + halfH * 0.68; // -W_εξ (-φ) or -W_εξ/e on negative vertical axis
     const xF0 = axisLeftX + (axisRightX - axisLeftX) * 0.36; // threshold frequency f_0
     const xEnd = axisLeftX + (axisRightX - axisLeftX) * 0.86;
     const slope = (axisZeroY - yWorkFn) / (xF0 - axisLeftX);
@@ -11656,18 +12577,105 @@ function tryBuildOscillationDiagramStrokes(
     );
     addRulerTick(axisLeftX - 4.5, yWorkFn, axisLeftX + 4.5, yWorkFn, 'ytick-w');
     addRulerTick(xF0, axisZeroY - 4.5, xF0, axisZeroY + 4.5, 'xtick-f0');
-    const negPhiLabel = /W/i.test(compact) ? '-W_εξ' : '-φ';
     texts.push(
-      createMathGraphLabelText('K_max', axisLeftX + 8, axisTopY + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+      createMathGraphLabelText(yAxisTitle, axisLeftX + 8, axisTopY + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
       createMathGraphLabelText('f', axisRightX + 7, axisZeroY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
       createMathGraphLabelText('0', axisLeftX - 8, axisZeroY + 13, 'right', 14, axisColor, layerId, groupId, `${nowId}-l0`),
-      createMathGraphLabelText(negPhiLabel, axisLeftX - 7, yWorkFn, 'right', 15, axisColor, layerId, groupId, `${nowId}-lw`),
+      createMathGraphLabelText(negInterceptLabel, axisLeftX - 7, yWorkFn, 'right', 15, axisColor, layerId, groupId, `${nowId}-lw`),
       createMathGraphLabelText('f_0', xF0, axisZeroY + 16, 'center', 15, axisColor, layerId, groupId, `${nowId}-lf0`)
     );
-    return { strokes, texts, groupId, kindLabel: 'Φωτοηλεκτρικό Φαινόμενο K_max(f) = h·f - φ' };
+    return {
+      strokes,
+      texts,
+      groupId,
+      kindLabel: isStoppingPotential
+        ? `Δυναμικό Αποκοπής ${yAxisTitle}(f) = (h/e)·f - W_εξ/e`
+        : 'Φωτοηλεκτρικό Φαινόμενο K_max(f) = h·f - φ',
+    };
   }
-  // - Photon Energy `E = h*f`, `E = h*c/λ`, de Broglie Wavelength `λ = h/p`, `λ = h/(m*u)`, Bohr Radius `r_n = n^2 * r_1`:
-  if (/^E=h\*?[fν]$/i.test(compact)) {
+  // - Photoelectric Current vs Voltage Characteristic (`I_φ - V`, `I - V (φωτοηλεκτρικό)`, `φωτοηλεκτρικό ρεύμα`):
+  if (
+    /^I_?φ-V$|^I-V\(φωτοηλεκτρικ[οό]\)$|^φωτοηλεκτρικ[οό]ρε[υύ]μα$/i.test(compact)
+  ) {
+    const axisMidX = centerX - halfW * 0.18;
+    const axisLeftX = centerX - halfW * 0.88;
+    const axisRightX = centerX + halfW * 0.90;
+    const axisBotY = centerY + halfH * 0.56;
+    const axisTopY = centerY - halfH * 0.86;
+    const ySat = axisBotY - (axisBotY - axisTopY) * 0.68;
+    const xStop = axisMidX - (axisMidX - axisLeftX) * 0.66; // -V_0
+
+    strokes.push(
+      {
+        id: `st-${nowId}-axy`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisMidX, y: axisBotY + 16 },
+          { x: axisMidX, y: axisTopY },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-y',
+      },
+      {
+        id: `st-${nowId}-axx`,
+        tool: 'pen',
+        color: axisColor,
+        width: 2.5,
+        opacity: 1,
+        arrowEnd: true,
+        points: [
+          { x: axisLeftX, y: axisBotY },
+          { x: axisRightX, y: axisBotY },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'wave-axis-x',
+      }
+    );
+    addDashedGuide(axisMidX, ySat, axisRightX - 16, ySat, 1);
+    addRulerTick(axisMidX - 4.5, ySat, axisMidX + 4.5, ySat, 'ytick-ikor');
+    addRulerTick(xStop, axisBotY - 4.5, xStop, axisBotY + 4.5, 'xtick-v0');
+
+    const ivPts: { x: number; y: number; pressure: number }[] = [];
+    const spanX = axisRightX - 18 - xStop;
+    for (let i = 0; i <= 80; i++) {
+      const u = i / 80;
+      const v = 1 - Math.exp(-4.2 * u);
+      ivPts.push({
+        x: xStop + u * spanX,
+        y: axisBotY - v * (axisBotY - ySat),
+        pressure: 0.7,
+      });
+    }
+    strokes.push({
+      id: `st-${nowId}-crv-photo-iv`,
+      tool: 'pen',
+      color: curveColor,
+      width: 2.8,
+      opacity: 1,
+      points: ivPts,
+      layerId,
+      groupId,
+      isShape: false,
+    });
+    texts.push(
+      createMathGraphLabelText('I', axisMidX + 8, axisTopY + 6, 'left', 18, axisColor, layerId, groupId, `${nowId}-ly`),
+      createMathGraphLabelText('V', axisRightX + 7, axisBotY + 2, 'left', 18, axisColor, layerId, groupId, `${nowId}-lx`),
+      createMathGraphLabelText('I_κορ', axisMidX - 7, ySat - 4, 'right', 14, axisColor, layerId, groupId, `${nowId}-likor`),
+      createMathGraphLabelText('-V_0', xStop, axisBotY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lv0`),
+      createMathGraphLabelText('0', axisMidX + 8, axisBotY + 14, 'left', 14, axisColor, layerId, groupId, `${nowId}-l0`)
+    );
+    return { strokes, texts, groupId, kindLabel: 'Φωτοηλεκτρικό Ρεύμα - Τάση I(V) με Δυναμικό Αποκοπής -V_0' };
+  }
+  // - Photon Energy `E = h*f`, `E = h*c/λ`, de Broglie Wavelength `λ = h/p`, `λ = h/(m*u)`, Wien `λ_max = b/T`, Stefan-Boltzmann `P = σ*A*T^4`, Bohr `r_n = n^2*r_1`, `L_n = n*h/(2π)`, `u_n = u_1/n`:
+  if (/^E=h\*?[fν]$|^E-f$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'E',
       xAxisLabel: 'f',
@@ -11675,7 +12683,7 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ενέργεια Φωτονίου E(f) = h·f',
     });
   }
-  if (/^E=h\*?c\/λ$/i.test(compact)) {
+  if (/^E=h\*?c\/λ$|^E-λ$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'E',
       xAxisLabel: 'λ',
@@ -11683,8 +12691,8 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ενέργεια Φωτονίου E(λ) = h·c/λ',
     });
   }
-  if (/^λ=h\/p$|^p=h\/λ$|^λ=h\/(?:\(?[mμ]\*?[uvυ]\)?)$/i.test(compact)) {
-    const isP = /^p=/i.test(compact);
+  if (/^λ=h\/p$|^p=h\/λ$|^λ=h\/(?:\(?[mμ]\*?[uvυ]\)?)$|^λ-[puυv]$|^p-λ$/i.test(compact)) {
+    const isP = /^p/i.test(compact);
     const xSym = isP ? 'λ' : /u|υ|v/i.test(compact) ? 'u' : 'p';
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: isP ? 'p' : 'λ',
@@ -11693,12 +12701,53 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: `Μήκος Κύματος de Broglie ${isP ? 'p(λ)' : `λ(${xSym})`}`,
     });
   }
-  if (/^r_?n=n\^2\*?r_?1$/i.test(compact)) {
+  if (/^λ_?max=b\/T$|^λ_?max\*?T=b$|^λ_?max-T$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'λ_max',
+      xAxisLabel: 'T',
+      curveKind: 'hyperbola',
+      kindLabel: 'Νόμος Μετατόπισης του Wien λ_max(T) = b/T',
+    });
+  }
+  if (/^I-λ\(μ[εέ]λανσ[ωώ]μα\)$|^μ[εέ]λανσ[ωώ]μα$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'I',
+      xAxisLabel: 'λ',
+      curveKind: 'blackbody-planck',
+      kindLabel: 'Ακτινοβολία Μέλανος Σώματος (Καμπύλη Planck) I(λ)',
+    });
+  }
+  if (/^r_?n=(?:n\^2\*?r_?[10]|r_?[10]\*?n\^2)$|^r_?n-n$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'r_n',
       xAxisLabel: 'n',
       curveKind: 'parabola-up',
       kindLabel: 'Ακτίνα Τροχιάς Bohr r_n(n) = n²·r_1',
+    });
+  }
+  if (/^L_?n=n\*?h\/\(?\s*2\*?π\s*\)?$|^L_?n-n$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'L_n',
+      xAxisLabel: 'n',
+      curveKind: 'line-origin',
+      kindLabel: 'Στροφορμή Ηλεκτρονίου Bohr L_n(n) = n·h/(2π)',
+    });
+  }
+  if (/^[uvυ]_?n=[uvυ]_?[10]\/n$|^[uvυ]_?n-n$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u_n',
+      xAxisLabel: 'n',
+      curveKind: 'hyperbola',
+      kindLabel: 'Ταχύτητα Ηλεκτρονίου Bohr u_n(n) = u_1/n',
+    });
+  }
+  // - Nuclear Binding Energy per nucleon (`E_B/A - A`, `ενέργεια σύνδεσης`):
+  if (/^E_?B\/A-A$|^εν[εέ]ργειασ[υύ]νδεσης$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'E_B/A',
+      xAxisLabel: 'A',
+      curveKind: 'nuclear-binding',
+      kindLabel: 'Ενέργεια Σύνδεσης ανά Νουκλεόνιο E_B/A(A)',
     });
   }
 
