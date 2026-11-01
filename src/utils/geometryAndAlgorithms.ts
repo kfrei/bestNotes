@@ -9112,6 +9112,24 @@ function tryBuildOscillationDiagramStrokes(
     });
   }
 
+  // CASE 3B: Potential Energy vs Velocity `U = E - 1/2 m u^2` or `U = 1/2 m (u_max^2 - u^2)` or `U - u`
+  const isPotentialVelocity =
+    /^U\s*=\s*(?:(?:E|U_?max)\s*-\s*(?:\(?1\/2\)?|0\.5)?\s*\*?\s*[mμM]?\s*\*?\s*[uvυ]\^2|(?:\(?1\/2\)?|0\.5)?\s*\*?\s*[mμM]?\s*\*?\s*\(\s*[uvυ]_?max\^2\s*-\s*[uvυ]\^2\s*\))$/i.test(
+      compact
+    ) || /^U\s*-\s*[uvυ]$/i.test(compact);
+
+  if (isPotentialVelocity) {
+    return buildEnergyParabolaDiagram({
+      yAxisLabel: 'U',
+      xAxisLabel: 'u',
+      leftXLabel: '-u_max',
+      rightXLabel: '+u_max',
+      topYLabel: 'E, U_max',
+      inverted: true,
+      kindLabel: 'Δυναμική Ενέργεια U(u) = E - ½m·u²',
+    });
+  }
+
   // CASE 4: Combined Energy `E = K + U` or `E = 1/2 D A^2` or `E - x`
   const isTotalEnergy =
     /^E\s*=\s*(?:K\s*\+\s*U|U\s*\+\s*K|(?:\(?1\/2\)?|0\.5)\s*\*?\s*[Dkκ]\s*\*?\s*A\^2)$/i.test(
@@ -10314,26 +10332,30 @@ function tryBuildOscillationDiagramStrokes(
     };
   }
 
-  // CASE 6B: Phase-Space Ellipse for SHM (`u = ±ω√(A^2 - x^2)`, `u^2 = ω^2(A^2 - x^2)`, `u - x`)
+  // CASE 6B: Phase-Space Ellipse for SHM (`u = ±ω√(A^2 - x^2)`, `u^2 = ω^2(A^2 - x^2)`, `u - x`),
+  // SHM Acceleration-Velocity (`a = ±ω√(u_max^2 - u^2)`, `a^2 = ω^2(u_max^2 - u^2)`),
   // and LC Electrical Oscillation (`i = ±ω√(Q^2 - q^2)`, `i^2 = ω^2(Q^2 - q^2)`, `i - q`)
   const isSHMPhaseEllipse =
     /^[uvυ]=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\(A\^2-[xχ]\^2\)$/i.test(compact) ||
     /^[uvυ]\^2=ω\^2\*?\(A\^2-[xχ]\^2\)$/i.test(compact) ||
     /^[uvυ]-[xχ]$/i.test(compact);
+  const isSHMAccelVelEllipse =
+    /^[aα]=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\([uvυ]_?max\^2-[uvυ]\^2\)$/i.test(compact) ||
+    /^[aα]\^2=ω\^2\*?\([uvυ]_?max\^2-[uvυ]\^2\)$/i.test(compact);
   const isLCPhaseEllipse =
     /^[iI]=(?:\+-|±|-)?ω\*?(?:SQRT|sqrt|√)\(Q\^2-q\^2\)$/i.test(compact) ||
     /^[iI]\^2=ω\^2\*?\(Q\^2-q\^2\)$/i.test(compact) ||
     /^[iI]-q$/i.test(compact);
 
-  if (isSHMPhaseEllipse || isLCPhaseEllipse) {
+  if (isSHMPhaseEllipse || isSHMAccelVelEllipse || isLCPhaseEllipse) {
     const rx = halfW * 0.66;
     const ry = halfH * 0.56;
-    const yTitle = isLCPhaseEllipse ? 'i' : 'u';
-    const xTitle = isLCPhaseEllipse ? 'q' : 'x';
-    const leftX = isLCPhaseEllipse ? '-Q' : '-A';
-    const rightX = isLCPhaseEllipse ? '+Q' : '+A';
-    const topY = isLCPhaseEllipse ? '+I_max' : '+u_max';
-    const botY = isLCPhaseEllipse ? '-I_max' : '-u_max';
+    const yTitle = isLCPhaseEllipse ? 'i' : isSHMAccelVelEllipse ? 'a' : 'u';
+    const xTitle = isLCPhaseEllipse ? 'q' : isSHMAccelVelEllipse ? 'u' : 'x';
+    const leftX = isLCPhaseEllipse ? '-Q' : isSHMAccelVelEllipse ? '-u_max' : '-A';
+    const rightX = isLCPhaseEllipse ? '+Q' : isSHMAccelVelEllipse ? '+u_max' : '+A';
+    const topY = isLCPhaseEllipse ? '+I_max' : isSHMAccelVelEllipse ? '+a_max' : '+u_max';
+    const botY = isLCPhaseEllipse ? '-I_max' : isSHMAccelVelEllipse ? '-a_max' : '-u_max';
 
     strokes.push(
       {
@@ -10411,6 +10433,8 @@ function tryBuildOscillationDiagramStrokes(
       groupId,
       kindLabel: isLCPhaseEllipse
         ? 'Διάγραμμα Έντασης - Φορτίου i(q) = ±ω√(Q² - q²)'
+        : isSHMAccelVelEllipse
+        ? 'Διάγραμμα Επιτάχυνσης - Ταχύτητας ΑΑΤ a(u) = ±ω√(u_max² - u²)'
         : 'Διάγραμμα Ταχύτητας - Απομάκρυνσης u(x) = ±ω√(A² - x²)',
     };
   }
@@ -10568,6 +10592,7 @@ function tryBuildOscillationDiagramStrokes(
       | 'isobaric-pv'
       | 'isochoric-pv'
       | 'doppler-approach'
+      | 'rlc-impedance'
       | 'sqrt';
     yInitLabel?: string;
     xEndLabel?: string;
@@ -11184,6 +11209,30 @@ function tryBuildOscillationDiagramStrokes(
         createMathGraphLabelText(opts.yInitLabel || 'f_S', axisLeftX - 7, startY, 'right', 14, axisColor, layerId, groupId, `${nowId}-lfs`),
         createMathGraphLabelText(opts.xEndLabel || 'u', asymX, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lu`)
       );
+    } else if (opts.curveKind === 'rlc-impedance') {
+      // RLC Total Impedance `Z(ω) = √(R² + (Lω - 1/(Cω))²)` with minimum `Z_min = R` at resonance `ω_0`
+      const uRes = 0.44;
+      const rMin = 0.30;
+      for (let i = 0; i <= 96; i++) {
+        const u = 0.14 + 0.80 * (i / 96);
+        const xReact = 0.42 * (u / uRes - uRes / u);
+        const v = Math.min(0.92, Math.sqrt(rMin * rMin + xReact * xReact));
+        curvePts.push({
+          x: axisLeftX + u * plotW,
+          y: axisBottomY - v * plotH,
+          pressure: 0.7,
+        });
+      }
+      const xW0 = axisLeftX + uRes * plotW;
+      const yR = axisBottomY - rMin * plotH;
+      addDashedGuide(axisLeftX, yR, xW0, yR, 1);
+      addDashedGuide(xW0, yR, xW0, axisBottomY, 2);
+      addRulerTick(axisLeftX - 4.5, yR, axisLeftX + 4.5, yR, 'ytick-r');
+      addRulerTick(xW0, axisBottomY - 4.5, xW0, axisBottomY + 4.5, 'xtick-w0');
+      texts.push(
+        createMathGraphLabelText('R', axisLeftX - 7, yR, 'right', 15, axisColor, layerId, groupId, `${nowId}-lr`),
+        createMathGraphLabelText(opts.xEndLabel || 'ω_0', xW0, axisBottomY + 16, 'center', 14, axisColor, layerId, groupId, `${nowId}-lw0`)
+      );
     } else if (opts.curveKind === 'sqrt') {
       for (let i = 0; i <= steps; i++) {
         const u = i / steps;
@@ -11260,7 +11309,8 @@ function tryBuildOscillationDiagramStrokes(
     });
   }
 
-  // 7D. Adiabatic (`PV^γ = σταθ`), Isobaric P-V (`P = P_0` on P-V), Isochoric P-V (`V = V_0` on P-V)
+  // 7D. Adiabatic (`PV^γ = σταθ`, `TV^(γ-1) = σταθ`), Isobaric P-V (`P = P_0` on P-V), Isochoric P-V (`V = V_0` on P-V),
+  // Kinetic Theory of Gases (`u_εν = √(3RT/M_r)`, `K = 3/2 k T`, `U = n C_V T`), Carnot Efficiency (`n_c = 1 - T_2/T_1`)
   if (/^P\*?V\^[γg]=(?:σταθ\.?|const|c|[0-9.]+)$/i.test(compact)) {
     return buildFirstQuadrantPhysicsDiagram({
       yAxisLabel: 'P',
@@ -11269,6 +11319,15 @@ function tryBuildOscillationDiagramStrokes(
       isGasPV: true,
       topRightNote: 'Q = 0 (Αδιαβατική)',
       kindLabel: 'Αδιαβατική Μεταβολή P(V) (PV^γ = σταθ.)',
+    });
+  }
+  if (/^T\*?V\^\(?[γg]-1\)?=(?:σταθ\.?|const|c|[0-9.]+)$|^T-V\(αδιαβατικ[ηή]\)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'T',
+      xAxisLabel: 'V',
+      curveKind: 'adiabatic-pv',
+      topRightNote: 'T·V^(γ-1) = σταθ.',
+      kindLabel: 'Αδιαβατική Μεταβολή T(V) (T·V^(γ-1) = σταθ.)',
     });
   }
   if (/^P(?:\(V\))?=(?:P_?[01]|σταθ\.?|const)$/i.test(compact)) {
@@ -11289,6 +11348,47 @@ function tryBuildOscillationDiagramStrokes(
       xEndLabel: 'V_0',
       topRightNote: 'V = σταθ.',
       kindLabel: 'Ισόχωρη Μεταβολή P(V)',
+    });
+  }
+  if (
+    /^[uvυ]_?(?:εν|rms)=(?:SQRT|sqrt|√)\(3\*?(?:R\*?T\/M_?r?|k\*?T\/[mμ])\)$/i.test(compact) ||
+    /^[uvυ]_?(?:εν|rms)-T$/i.test(compact)
+  ) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u_εν',
+      xAxisLabel: 'T',
+      curveKind: 'sqrt',
+      kindLabel: 'Ενεργός Ταχύτητα Μορίων Αερίου u_εν(T) = √(3RT/M_r)',
+    });
+  }
+  if (
+    /^K(?:_?[μm])?=\(?3\/2\)?\*?k\*?T$|^K=1\.5\*?k\*?T$|^K-T$/i.test(compact) ||
+    /^(?:U|ΔU)=(?:\(?[356f]\/2\)?\*?n\*?R\*?(?:Δ?T)|n\*?C_?V\*?(?:Δ?T))$|^U-T$/i.test(compact)
+  ) {
+    const isInternal = /^U|^ΔU/i.test(compact);
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: isInternal ? 'U' : 'K',
+      xAxisLabel: 'T',
+      curveKind: 'line-origin',
+      kindLabel: isInternal
+        ? 'Εσωτερική Ενέργεια Ιδανικού Αερίου U(T) = n·C_V·T'
+        : 'Μέση Κινητική Ενέργεια Μορίου K(T) = (3/2)·k·T',
+    });
+  }
+  if (
+    /^(?:n_?c|e_?c|η_?c)=1-T_?[c2ψ]\/T_?[h1θ]$/i.test(compact) ||
+    /^(?:n_?c|e_?c|η_?c)-T_?[c2ψ]$/i.test(compact)
+  ) {
+    const ySym = /^e/i.test(compact) ? 'e_c' : 'n_c';
+    const xSym = /T_?c/i.test(compact) ? 'T_c' : 'T_2';
+    const endSym = /T_?c/i.test(compact) ? 'T_h' : 'T_1';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: xSym,
+      curveKind: 'line-offset-down',
+      yInitLabel: '1',
+      xEndLabel: endSym,
+      kindLabel: `Συντελεστής Απόδοσης Μηχανής Carnot ${ySym}(${xSym}) = 1 - ${xSym}/${endSym}`,
     });
   }
 
@@ -11879,7 +11979,38 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Ισχύς Ροπής P(ω) = τ·ω',
     });
   }
-  // - Fluid Mechanics: Hydrostatic Pressure `P = ρ*g*h`, `Δp = ρ*g*h`, Total Pressure `P = P_atm + ρ*g*h`, Continuity `u = Π/A` / `A*u = σταθ`, Pascal `F_2 = (A_2/A_1)*F_1`:
+  // - Conservation of Angular Momentum (`ω = L/I`, `I*ω = σταθ`, `ω - I`), Torque (`τ = F*d`, `τ = F*r`), Point Angular Momentum (`L = m*u*r`):
+  if (/^ω=L\/I$|^I\*?ω=(?:L|σταθ\.?|const)$|^ω-I$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'ω',
+      xAxisLabel: 'I',
+      curveKind: 'hyperbola',
+      topRightNote: 'L = I·ω = σταθ.',
+      kindLabel: 'Διατήρηση Στροφορμής ω(I) = L/I',
+    });
+  }
+  if (/^τ=F\*?([drl])(?:\*?(?:ημ|sin)\(?[φθ]\)?)?$|^τ-([Fdr])$/i.test(compact)) {
+    const xSym = /-F$/i.test(compact) ? 'F' : /r/i.test(compact) ? 'r' : 'd';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'τ',
+      xAxisLabel: xSym,
+      curveKind: 'line-origin',
+      kindLabel: `Ροπή Δύναμης τ(${xSym}) = F·d`,
+    });
+  }
+  if (/^L=[mμ]\*?[uvυ]\*?[rR]$|^L-[rR]$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'L',
+      xAxisLabel: 'r',
+      curveKind: 'line-origin',
+      kindLabel: 'Στροφορμή Υλικού Σημείου L(r) = m·u·r',
+    });
+  }
+  // - Fluid Mechanics: Hydrostatic Pressure `P = ρ*g*h`, `Δp = ρ*g*h`, Total Pressure `P = P_atm + ρ*g*h`,
+  //   Archimedes Buoyancy `F_A = ρ*g*V` / `A = ρ*g*V`, Pascal `F_2 = (A_2/A_1)*F_1`,
+  //   Volume & Flow Rate `V = Π*t` / `Π = A*u`, Continuity `u = Π/A` / `A*u = σταθ`,
+  //   Jet Impact Force `F = ρ*A*u^2`, Viscosity `F_ΤΡ = η*A*u/l`,
+  //   Horizontal Bernoulli Pipe `P = P_0 - 1/2 ρ u^2` (`P - u`), Torricelli `u = √(2g(H-y))`:
   if (/^(?:P|p|P_?υδ|Dp|Δp)=[ρd]\*?g\*?h$|^P-h$/i.test(compact)) {
     const ySym = /^P_?υδ/i.test(compact) ? 'P_υδ' : /^D|^Δ/i.test(compact) ? 'Δp' : 'P';
     return buildFirstQuadrantPhysicsDiagram({
@@ -11899,6 +12030,31 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: `Ολική Πίεση Ρευστού P(h) = ${initSym} + ρ·g·h`,
     });
   }
+  if (/^(?:F_?[AΑ]|A)=[ρd](?:_?υγρ)?\*?g\*?V(?:_?βυθ)?$|^(?:F_?[AΑ]|A_?αν)-V$/i.test(compact)) {
+    const ySym = /^A$/i.test(compact.split('=')[0]) ? 'A' : 'F_A';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: ySym,
+      xAxisLabel: 'V_βυθ',
+      curveKind: 'line-origin',
+      kindLabel: `Άνωση Αρχιμήδη ${ySym}(V_βυθ) = ρ_υγρ·g·V_βυθ`,
+    });
+  }
+  if (/^F_?2=\(?[AS]_?2\/[AS]_?1\)?\*?F_?1$|^F_?2-F_?1$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'F_2',
+      xAxisLabel: 'F_1',
+      curveKind: 'line-origin',
+      kindLabel: 'Αρχή του Pascal (Υδραυλικό Πιεστήριο) F_2(F_1) = (A_2/A_1)·F_1',
+    });
+  }
+  if (/^(?:V|DV|ΔV)=Π\*?(?:t|Dt|Δt)$|^(?:V|ΔV)-t$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'ΔV',
+      xAxisLabel: 't',
+      curveKind: 'line-origin',
+      kindLabel: 'Όγκος Ρευστού - Χρόνος ΔV(t) = Π·t',
+    });
+  }
   if (/^[uvυ]=Π\/A$|^A\*?[uvυ]=(?:Π|σταθ\.?|const)$|^Π=A\*?[uvυ]$/i.test(compact)) {
     if (/^Π=A\*?[uvυ]$/i.test(compact)) {
       return buildFirstQuadrantPhysicsDiagram({
@@ -11914,6 +12070,52 @@ function tryBuildOscillationDiagramStrokes(
       curveKind: 'hyperbola',
       topRightNote: 'Π = A·u = σταθ.',
       kindLabel: 'Εξίσωση Συνέχειας Ρευστού u(A) = Π/A',
+    });
+  }
+  if (/^F=[ρd]\*?[AS]\*?[uvυ]\^2$|^F-[uvυ]\(ρευστ[οό]\)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'F',
+      xAxisLabel: 'u',
+      curveKind: 'parabola-up',
+      kindLabel: 'Δύναμη Πρόσκρουσης Φλέβας Ρευστού F(u) = ρ·A·u²',
+    });
+  }
+  if (/^F_?(?:ΤΡ|τρ|ΤΡΙΒΩΝ|ιξ)=[ηn]\*?[AS]\*?[uvυ]\/[lyd]$|^F_?(?:ΤΡ|τρ)-[uvυ]$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'F_ΤΡ',
+      xAxisLabel: 'u',
+      curveKind: 'line-origin',
+      kindLabel: 'Δύναμη Εσωτερικής Τριβής (Ιξώδες) F_ΤΡ(u) = η·A·u/l',
+    });
+  }
+  if (/^F_?(?:ΤΡ|τρ)-[ly]$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'F_ΤΡ',
+      xAxisLabel: 'l',
+      curveKind: 'hyperbola',
+      kindLabel: 'Δύναμη Εσωτερικής Τριβής (Ιξώδες) F_ΤΡ(l) = η·A·u/l',
+    });
+  }
+  if (
+    /^(?:P|p)=(?:P_?[01]|p_?[01])-(?:(?:\(?1\/2\)?|0\.5)\*?[ρd]\*?[uvυ]\^2|[ρd]\*?[uvυ]\^2\/2)$/i.test(compact) ||
+    /^(?:P|p)-[uvυ]\(Bernoulli\)$/i.test(compact) ||
+    /^P-[uvυ]$/i.test(compact)
+  ) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'P',
+      xAxisLabel: 'u',
+      curveKind: 'parabola-offset-down',
+      yInitLabel: 'P_0',
+      xEndLabel: 'u_max',
+      kindLabel: 'Εξίσωση Bernoulli Οριζόντιου Σωλήνα P(u) = P_0 - ½ρ·u²',
+    });
+  }
+  if (/^[uvυ](?:_?εκρ)?=(?:SQRT|sqrt|√)\(2\*?g\*?\(H-[yh]\)\)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'u',
+      xAxisLabel: 'h',
+      curveKind: 'sqrt',
+      kindLabel: 'Θεώρημα Torricelli (Ταχύτητα Εκροής) u(h) = √(2g·h)',
     });
   }
 
@@ -12230,7 +12432,72 @@ function tryBuildOscillationDiagramStrokes(
       kindLabel: 'Επαγωγική ΗΕΔ Περιστρεφόμενης Ράβδου E_επ(ω) = ½B·ω·l²',
     });
   }
-  // - AC Impedances (`Z_C = 1/(C*ω)`, `Z_L = L*ω`), RLC Resonance (`I - ω`, `I - f`), LC Period (`T = 2π√(LC)`):
+  if (/^(?:E_?επ|ε_?επ)-l$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'E_επ',
+      xAxisLabel: 'l',
+      curveKind: 'parabola-up',
+      kindLabel: 'Επαγωγική ΗΕΔ Περιστρεφόμενης Ράβδου E_επ(l) = ½B·ω·l²',
+    });
+  }
+  // - Neumann's Law (Επαγωγικό Φορτίο `q_επ = N * |ΔΦ| / R`):
+  if (/^[Qq]_?επ=(?:N\*?)?(?:DΦ|ΔΦ|\|ΔΦ\|)\/R$|^[Qq]_?επ-(?:DΦ|ΔΦ)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'q_επ',
+      xAxisLabel: 'ΔΦ',
+      curveKind: 'line-origin',
+      kindLabel: 'Νόμος του Neumann (Επαγωγικό Φορτίο) q_επ(ΔΦ) = N·|ΔΦ|/R',
+    });
+  }
+  if (/^[Qq]_?επ-R$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'q_επ',
+      xAxisLabel: 'R',
+      curveKind: 'hyperbola',
+      kindLabel: 'Επαγωγικό Φορτίο - Αντίσταση q_επ(R) = N·|ΔΦ|/R',
+    });
+  }
+  if (/^[Qq]_?επ-(?:Dt|Δt)$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'q_επ',
+      xAxisLabel: 'Δt',
+      curveKind: 'horizontal',
+      yInitLabel: 'N·ΔΦ/R',
+      topRightNote: 'Ανεξάρτητο του Δt',
+      kindLabel: 'Επαγωγικό Φορτίο - Χρόνος Μεταβολής q_επ(Δt) = σταθ.',
+    });
+  }
+  // - Solenoid Self-Inductance (`L = μ*μ_0*A*N^2/l`):
+  if (/^L=(?:[μm]\*?)?[μm]_?0\*?[AS]\*?N\^2\/l$|^L-N$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'L',
+      xAxisLabel: 'N',
+      curveKind: 'parabola-up',
+      kindLabel: 'Συντελεστής Αυτεπαγωγής Σωληνοειδούς L(N) = μ_0·A·N²/l',
+    });
+  }
+  if (/^L-l$/i.test(compact)) {
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'L',
+      xAxisLabel: 'l',
+      curveKind: 'hyperbola',
+      kindLabel: 'Συντελεστής Αυτεπαγωγής Σωληνοειδούς L(l) = μ_0·A·N²/l',
+    });
+  }
+  // - AC Impedances (`Z_C = 1/(C*ω)`, `Z_L = L*ω`, `Z = √(R^2 + (Lω - 1/(Cω))^2)`), RLC Resonance (`I - ω`, `I - f`), LC Period (`T = 2π√(LC)`):
+  if (
+    /^Z=(?:SQRT|sqrt|√)\(R\^2\+\(L\*?ω-1\/\(?\s*C\*?ω\s*\)?\)\^2\)$/i.test(compact) ||
+    /^Z-[ωf]$/i.test(compact)
+  ) {
+    const xSym = /f$/i.test(compact) ? 'f' : 'ω';
+    return buildFirstQuadrantPhysicsDiagram({
+      yAxisLabel: 'Z',
+      xAxisLabel: xSym,
+      curveKind: 'rlc-impedance',
+      xEndLabel: xSym === 'f' ? 'f_0' : 'ω_0',
+      kindLabel: `Ολική Εμπέδηση Κυκλώματος RLC Z(${xSym}) = √(R² + (Lω - 1/(Cω))²)`,
+    });
+  }
   if (
     /^(?:Z_?C|X_?C)=1\/\(?(?:C\*?ω|ω\*?C|2\*?π\*?f\*?C)\)?$/i.test(compact) ||
     /^(?:Z_?C|X_?C)-[ωf]$/i.test(compact)
