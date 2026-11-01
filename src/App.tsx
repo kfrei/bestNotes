@@ -1442,6 +1442,7 @@ export default function App() {
     origMol3DBoxX?: number;
     origMol3DBoxY?: number;
     origAtomsSnapshot?: { id: string; x: number; y: number; r: number }[];
+    pendingButtonAction?: string;
   } | null>(null);
   const atomOverlayHitRef = useRef<{
     simId: string;
@@ -20051,7 +20052,7 @@ export default function App() {
                 ? activeChemCorrectionRef.current
                 : null;
             if (chemVal.hasCorrections && activeCorrForSim) {
-              const corrBannerText = `⚠️ Διόρθωση: ${
+              const corrBannerText = `Διόρθωση: ${
                 activeCorrForSim.reason ||
                 chemVal.explanationNotes[0] ||
                 'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
@@ -20163,10 +20164,10 @@ export default function App() {
                           chemVal.explanationNotes[0] ||
                           'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
                         }`,
-                        x1: scaledCardX + (innerX - 3) * rScale,
-                        y1: scaledCardY + 4 * rScale,
-                        x2: scaledCardX + (innerX + ww + 2) * rScale,
-                        y2: scaledCardY + (cardH - 4) * rScale,
+                        x1: scaledCardX + (innerX - 5) * rScale,
+                        y1: scaledCardY + 2 * rScale,
+                        x2: scaledCardX + (innerX + ww + 3) * rScale,
+                        y2: scaledCardY + (cardH - 2) * rScale,
                       });
                     }
                     innerX += ww + 3;
@@ -20183,10 +20184,10 @@ export default function App() {
                         chemVal.explanationNotes[0] ||
                         'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
                       }`,
-                      x1: scaledCardX + (innerX - 4) * rScale,
-                      y1: scaledCardY + 4 * rScale,
-                      x2: scaledCardX + (innerX + tw + 1) * rScale,
-                      y2: scaledCardY + (cardH - 4) * rScale,
+                      x1: scaledCardX + (innerX - 5) * rScale,
+                      y1: scaledCardY + 2 * rScale,
+                      x2: scaledCardX + (innerX + tw + 3) * rScale,
+                      y2: scaledCardY + (cardH - 2) * rScale,
                     });
                     innerX += tw + 1;
                   } else {
@@ -21673,6 +21674,8 @@ export default function App() {
     simShowDarkWireTrack,
     simSpeedMultiplier,
     activeTool,
+    activeChemCorrection,
+    selectedReactionSimId,
   ]);
 
   // Automatic External HDMI / 2nd Screen Projector Sync (Presentation API + BroadcastChannel)
@@ -21740,6 +21743,8 @@ export default function App() {
     simShowDarkWireTrack,
     simSpeedMultiplier,
     activeTool,
+    activeChemCorrection,
+    selectedReactionSimId,
   ]);
 
   useEffect(() => {
@@ -24506,6 +24511,35 @@ export default function App() {
     if (atomOverlayHitRef.current) {
       const aHit = atomOverlayHitRef.current;
 
+      // 0-corr) Clicking directly on a red corrected coefficient/subscript ALWAYS shows/toggles "Διόρθωση: ..." (in any tool, including Lasso!)
+      for (const btn of [...aHit.buttons].reverse()) {
+        if (!btn.action.startsWith('click-chem-correction:')) continue;
+        if (
+          pt.x >= btn.x1 - 4 &&
+          pt.x <= btn.x2 + 4 &&
+          pt.y >= btn.y1 - 4 &&
+          pt.y <= btn.y2 + 4
+        ) {
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          const targetAtomSim =
+            (targetPage.atomSims || []).find((s) => s.id === btn.simId) ||
+            getActiveAtomSim(targetPage);
+          handleAtomSimAction(targetAtomSim, btn.action);
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+      }
+
+      // Clicking anywhere else on the canvas immediately dismisses any open chemical correction message
+      if (activeChemCorrectionRef.current) {
+        activeChemCorrectionRef.current = null;
+        setActiveChemCorrection(null);
+      }
+
       // 0) Corner Resize Handles of Selected Reaction Equation Card (works in any tool, just like a selected math equation!)
       if (selectedReactionSimIdRef.current) {
         const selRc = (aHit.reactionCards || []).find(
@@ -24548,7 +24582,10 @@ export default function App() {
         }
       }
 
-      const startReactionCardMove = (rc: NonNullable<typeof aHit.reactionCards>[number]) => {
+      const startReactionCardMove = (
+        rc: NonNullable<typeof aHit.reactionCards>[number],
+        pendingAction?: string
+      ) => {
         e.preventDefault();
         if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
         if (selectedImageIds.length > 0) setSelectedImageIds([]);
@@ -24576,6 +24613,7 @@ export default function App() {
             y: a.y,
             r: a.outerRadiusPx || getNaturalOuterOrbitRadiusPx(a.z),
           })),
+          pendingButtonAction: pendingAction,
         };
         activePointerIdRef.current = e.pointerId;
         activePointerTypeRef.current = e.pointerType;
@@ -24587,7 +24625,8 @@ export default function App() {
         isDrawingRef.current = true;
       };
 
-      // 0b) When Lasso tool is active: clicking anywhere on the Reaction Equation Card selects it & lets you drag it!
+      // 0b) When Lasso tool is active: clicking anywhere on the Reaction Equation Card selects it & lets you drag it
+      // (and if released without dragging on a reactant/product or 2D/3D badge, triggers that button too!)
       if (activeTool === 'lasso' || activeTool === 'direct-node') {
         for (const rc of [...(aHit.reactionCards || [])].reverse()) {
           if (
@@ -24596,7 +24635,17 @@ export default function App() {
             pt.y >= rc.y1 - 6 &&
             pt.y <= rc.y2 + 6
           ) {
-            startReactionCardMove(rc);
+            const matchedBtn = [...aHit.buttons]
+              .reverse()
+              .find(
+                (b) =>
+                  b.simId === rc.simId &&
+                  pt.x >= b.x1 - 4 &&
+                  pt.x <= b.x2 + 4 &&
+                  pt.y >= b.y1 - 4 &&
+                  pt.y <= b.y2 + 4
+              );
+            startReactionCardMove(rc, matchedBtn?.action);
             return;
           }
         }
@@ -24604,7 +24653,7 @@ export default function App() {
 
       // 1) On-Canvas Reaction Buttons ([ ➔ ], [ 2D/3D ], clickable reactants/products, red corrections, 3D window controls)
       for (const btn of [...aHit.buttons].reverse()) {
-        const tolX = btn.action.startsWith('click-chem-correction:') ? 1.5 : 4;
+        const tolX = btn.action.startsWith('click-chem-correction:') ? 4 : 4;
         if (
           pt.x >= btn.x1 - tolX &&
           pt.x <= btn.x2 + tolX &&
@@ -27392,47 +27441,52 @@ export default function App() {
           false
         );
       } else if (dragAt.kind === 'reaction-card-move') {
-        const pW = getPageLogicalWidth(activePage);
-        const pH = getPageLogicalHeight(activePage);
         const dx = latestPt.x - dragAt.startX;
         const dy = latestPt.y - dragAt.startY;
-        const nextBarX = Math.round(Math.max(70, Math.min(pW - 70, dragAt.origAtomX + dx)));
-        const nextBarY = Math.round(Math.max(10, Math.min(pH - 48, dragAt.origAtomY + dy)));
-        const actualDx = nextBarX - dragAt.origAtomX;
-        const actualDy = nextBarY - dragAt.origAtomY;
-        updateActivePage(
-          (page) => ({
-            ...page,
-            atomSims: (page.atomSims || []).map((s) => {
-              if (s.id !== dragAt.simId) return s;
-              return {
-                ...s,
-                reactionBarX: nextBarX,
-                reactionBarY: nextBarY,
-                mol3DBoxX:
-                  dragAt.origMol3DBoxX !== undefined
-                    ? Math.round(dragAt.origMol3DBoxX + actualDx)
-                    : s.mol3DBoxX,
-                mol3DBoxY:
-                  dragAt.origMol3DBoxY !== undefined
-                    ? Math.round(dragAt.origMol3DBoxY + actualDy)
-                    : s.mol3DBoxY,
-                atoms: dragAt.origAtomsSnapshot?.length
-                  ? s.atoms.map((a) => {
-                      const snap = dragAt.origAtomsSnapshot!.find((it) => it.id === a.id);
-                      if (!snap) return a;
-                      return {
-                        ...a,
-                        x: Math.round(snap.x + actualDx),
-                        y: Math.round(snap.y + actualDy),
-                      };
-                    })
-                  : s.atoms,
-              };
+        if (Math.hypot(dx, dy) > 5) {
+          dragAt.pendingButtonAction = undefined;
+        }
+        if (Math.hypot(dx, dy) > 3) {
+          const pW = getPageLogicalWidth(activePage);
+          const pH = getPageLogicalHeight(activePage);
+          const nextBarX = Math.round(Math.max(70, Math.min(pW - 70, dragAt.origAtomX + dx)));
+          const nextBarY = Math.round(Math.max(10, Math.min(pH - 48, dragAt.origAtomY + dy)));
+          const actualDx = nextBarX - dragAt.origAtomX;
+          const actualDy = nextBarY - dragAt.origAtomY;
+          updateActivePage(
+            (page) => ({
+              ...page,
+              atomSims: (page.atomSims || []).map((s) => {
+                if (s.id !== dragAt.simId) return s;
+                return {
+                  ...s,
+                  reactionBarX: nextBarX,
+                  reactionBarY: nextBarY,
+                  mol3DBoxX:
+                    dragAt.origMol3DBoxX !== undefined
+                      ? Math.round(dragAt.origMol3DBoxX + actualDx)
+                      : s.mol3DBoxX,
+                  mol3DBoxY:
+                    dragAt.origMol3DBoxY !== undefined
+                      ? Math.round(dragAt.origMol3DBoxY + actualDy)
+                      : s.mol3DBoxY,
+                  atoms: dragAt.origAtomsSnapshot?.length
+                    ? s.atoms.map((a) => {
+                        const snap = dragAt.origAtomsSnapshot!.find((it) => it.id === a.id);
+                        if (!snap) return a;
+                        return {
+                          ...a,
+                          x: Math.round(snap.x + actualDx),
+                          y: Math.round(snap.y + actualDy),
+                        };
+                      })
+                    : s.atoms,
+                };
+              }),
             }),
-          }),
-          false
-        );
+            false
+          );
+        }
       } else if (dragAt.kind === 'reaction-card-resize') {
         const curDist = Math.max(
           12,
@@ -32011,6 +32065,20 @@ export default function App() {
     if (draggingAtomHandleRef.current) {
       const finishedAtomDrag = draggingAtomHandleRef.current;
       draggingAtomHandleRef.current = null;
+      if (
+        finishedAtomDrag.kind === 'reaction-card-move' &&
+        finishedAtomDrag.pendingButtonAction &&
+        Math.hypot(
+          finishedAtomDrag.curX - finishedAtomDrag.startX,
+          finishedAtomDrag.curY - finishedAtomDrag.startY
+        ) <= 5
+      ) {
+        const targetSim =
+          (activePage.atomSims || []).find((s) => s.id === finishedAtomDrag.simId) ||
+          getActiveAtomSim(activePage);
+        handleAtomSimAction(targetSim, finishedAtomDrag.pendingButtonAction);
+        return;
+      }
       if (finishedAtomDrag.kind === 'valence-electron') {
         const targetSim = (activePage.atomSims || []).find(
           (s) => s.id === finishedAtomDrag.simId
@@ -46205,7 +46273,7 @@ export default function App() {
                                       </span>
                                       {chemVal.hasCorrections && activeTxtCorr && (
                                         <span className="text-[11px] font-bold text-red-600 bg-red-50/95 border border-red-200 px-2 py-0.5 rounded-md leading-tight">
-                                          ⚠️ Διόρθωση:{' '}
+                                          Διόρθωση:{' '}
                                           {activeTxtCorr.reason ||
                                             chemVal.explanationNotes[0] ||
                                             'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'}
