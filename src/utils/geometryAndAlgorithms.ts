@@ -7940,17 +7940,20 @@ export function normalizeMathEquationForPlot(rawInput: string): string {
     .replace(/(?<![A-Z])\b[xuvXUV](?:\s*_\s*\{?\s*[0-9a-zA-Z]+\s*\}?|[0-9]+)?\s*\(\s*t\s*\)/g, 'y');
 
   // Remove subscripts like x_0, y_0, u_0, v_0, A_0 -> treat as symbolic positive constant b,
-  // and amplitude/extrema subscripts like u_{max}, u^2_{max}, u_{mαx}, x_{max}, a_{max}, F_{max}, K_{max}, U_{max} -> treat as symbolic amplitude A
-  // (CRITICAL: also handles when the exponent precedes `_max` like `u^(2)_max` or `u^2_max`, preventing the trailing 'x' in 'max'/'mαx' from being mistaken for the horizontal coordinate variable x!)
+  // and amplitude/extrema subscripts like u_{max}, u^2_{max}, u_{mαx}, K_{m\alpha x}, x_{max}, a_{max}, F_{max}, K_{max}, U_{max} -> treat as symbolic amplitude A
+  // (CRITICAL: also handles when `\alpha` was converted to `α ` with a trailing space inside `{m\alpha x}` or when the exponent precedes `_max` like `u^(2)_max` or `u^2_max`, preventing the trailing 'x' in 'max'/'mαx' from being mistaken for the horizontal coordinate variable x!)
   s = s
-    .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*m[aα][xχ]\s*\}?/gi, 'A$2')
-    .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*m[iι]n\s*\}?/gi, 'b$2')
+    .replace(/\\(?:max|min)\b/gi, (m) => m.slice(1).toLowerCase())
+    .replace(/[μm]\s*[aα]\s*[xχ]/gi, 'max')
+    .replace(/[μm]\s*[iι]\s*[nν]/gi, 'min')
+    .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*max\s*\}?/gi, 'A$2')
+    .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*min\s*\}?/gi, 'b$2')
     .replace(/([xyuvα-ωa-zA-Z])\s*(\^\s*(?:\([^)]+\)|[0-9.]+))\s*_\s*\{?\s*(?:0|o|αρχ|ολ|π|κ)\s*\}?/gi, 'b$2')
-    .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[aα][xχ]\s*\}?/gi, 'A')
-    .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*m[iι]n\s*\}?/gi, 'b')
+    .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*max\s*\}?/gi, 'A')
+    .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*min\s*\}?/gi, 'b')
     .replace(/([xyuvα-ωa-zA-Z])\s*_\s*\{?\s*(?:0|o|αρχ|ολ)\s*\}?/gi, 'b')
-    .replace(/_\s*\{?\s*m[aα][xχ]\s*\}?/gi, '')
-    .replace(/_\s*\{?\s*m[iι]n\s*\}?/gi, '')
+    .replace(/_\s*\{?\s*max\s*\}?/gi, '')
+    .replace(/_\s*\{?\s*min\s*\}?/gi, '')
     .replace(/\\[a-zA-Z]+/g, '');
 
   // Rewrite trig powers like `COS^(2)(ωt)` or `SIN^2(ωt)` into `((COS(ωt))^(2))`
@@ -8180,13 +8183,17 @@ export function extractEquationItemsForPlot(
       const eqPos = cleanSubLine.indexOf('=');
       const rawLhs = cleanSubLine
         .slice(0, eqPos)
-        .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+        .replace(/\\(?:text|mathrm|operatorname|mathit|mathbf)\{([^}]*)\}/g, '$1')
         .replace(/\\Sigma\b/g, 'Σ')
+        .replace(/\\alpha\b/g, 'α')
+        .replace(/\\(?:max|min)\b/gi, (m) => m.slice(1).toLowerCase())
+        .replace(/[μm]\s*[aα]\s*[xχ]/gi, 'max')
+        .replace(/[μm]\s*[iι]\s*[nν]/gi, 'min')
         .replace(/\\left|\\right/g, '')
         .trim();
       const rawRhs = cleanSubLine
         .slice(eqPos + 1)
-        .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+        .replace(/\\(?:text|mathrm|operatorname|mathit|mathbf)\{([^}]*)\}/g, '$1')
         .replace(/\\left|\\right/g, '')
         .trim();
 
@@ -8204,10 +8211,15 @@ export function extractEquationItemsForPlot(
         if (/^[fFgGhH]$/.test(rawBase)) {
           explicitLabel = `${rawBase}_${sub}`;
           itemYVar = 'y';
-        } else {
+        } else if (/^[1-9]$/.test(sub)) {
+          // Indexed functions like y_1, y_2, u_1, u_2, x_1, x_2
           const normBase = normalizeAxisVarSymbol(rawBase);
           explicitLabel = `${normBase}_${sub}`;
           itemYVar = normBase;
+        } else {
+          // Physical subscript like K_max, U_max, V_0, V_απ, P_εξ, E_επ, I_εν, a_κ, F_κ
+          const normBase = normalizeAxisVarSymbol(rawBase);
+          itemYVar = `${normBase}_${sub}`;
         }
         if (argVar) itemXVar = normalizeAxisVarSymbol(argVar);
       } else if (digitMatch) {
@@ -8251,8 +8263,15 @@ export function extractEquationItemsForPlot(
 
       if (!itemXVar) {
         const strippedRhs = rawRhs
-          .replace(/\\?(?:sin|cos|tan|tg|ln|log|exp|sqrt|abs|ημιτ|ημ|συνημ|συν|εφ|max|min|pi)\b/gi, '')
-          .replace(/\\?(?:ημιτ|ημ|συνημ|συν|εφ|m[aα][xχ]|m[iι]n)/gi, '')
+          .replace(/\\omega\b/g, 'ω')
+          .replace(/\\lambda\b/g, 'λ')
+          .replace(/\\theta\b/g, 'θ')
+          .replace(/\\(?:phi|varphi)\b/g, 'φ')
+          .replace(/\\Phi\b/g, 'Φ')
+          .replace(/\\alpha\b/g, 'α')
+          .replace(/\\?(?:sin|cos|tan|tg|ln|log|exp|sqrt|abs|ημιτ|ημ|συνημ|συν|εφ|max|min|pi|cdot|times|frac|dfrac|tfrac)\b/gi, '')
+          .replace(/\\?(?:ημιτ|ημ|συνημ|συν|εφ|[μm]\s*[aα]\s*[xχ]|[μm]\s*[iι]\s*[nν])/gi, '')
+          .replace(/\\[a-zA-Z]+/g, '')
           .replace(/[πΠ]/g, '')
           .replace(/[a-zA-Zα-ωΑ-Ω]\s*(?:\^\s*\{?[0-9.+-]+\}?)?\s*_\s*\{?[0-9a-zA-Zα-ωΑ-Ω]+\}?/g, '')
           .replace(/_\{?[0-9a-zA-Zα-ωΑ-Ω]+\}?/g, '');
@@ -8734,7 +8753,7 @@ function createMathGraphLabelText(
  * 5. Acceleration vs Displacement: `a = -ω^2 x`, `a - x` -> Negative slope line with `-A`, `+A`, `+a_max`, `-a_max`
  * 6. Time diagrams: `x = A ημ(ωt)`, `u = u_max συν(ωt)`, `a = -a_max ημ(ωt)`, `x - t`, `u - t`, `a - t`
  */
-function tryBuildOscillationDiagramStrokes(
+export function tryBuildOscillationDiagramStrokes(
   rawInput: string,
   centerX: number,
   centerY: number,
@@ -8786,15 +8805,17 @@ function tryBuildOscillationDiagramStrokes(
     .replace(/\\(?:upsilon|nu)\b/g, 'u')
     .replace(/\\kappa\b/g, 'k')
     .replace(/\\(?:text|mathrm|operatorname|mathit|mathbf)\{([^}]*)\}/g, '$1')
+    .replace(/\\(?:max|min)\b/gi, (m) => m.slice(1).toLowerCase())
     .replace(/σ\s*[uυv]\s*[vν]/gi, 'συν')
-    .replace(/\\left\b|\\right\b/g, '')
-    .replace(/_\{([^}]*)\}/g, '_$1')
+    .replace(/\\left\b|\\right\b|\\displaystyle\b/g, '')
+    .replace(/_\{([^}]*)\}/g, (_, sub) => `_${sub.replace(/\s+/g, '')}`)
     .replace(/₀/g, '_0')
     .replace(/₁/g, '_1')
     .replace(/₂/g, '_2')
     .replace(/\b([AE])\s*_\s*[oO0]\b/g, '$1_0')
     .replace(/\b([AE])[oO0]\b/g, '$1_0')
-    .replace(/m[αa][xχ]/gi, 'max')
+    .replace(/[μm]\s*[αa]\s*[xχ]/gi, 'max')
+    .replace(/[μm]\s*[iι]\s*[nν]/gi, 'min')
     .replace(/\\(?:cdot|times)\b/g, '*')
     .replace(/[·×∙]/g, '*')
     .replace(/[−–—]/g, '-')
@@ -8825,7 +8846,11 @@ function tryBuildOscillationDiagramStrokes(
       .replace(/\(\s*(1\/2|0\.5)\s*\)/g, '$1');
   }
 
-  const compact = expanded.replace(/\s+/g, '');
+  const compact = expanded
+    .replace(/\s+/g, '')
+    .replace(/[μm][αa][xχ]/gi, 'max')
+    .replace(/[μm][iι][nν]/gi, 'min')
+    .replace(/\\+([a-zA-Z]+)/g, '$1');
   const groupId = `math-graph-grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const nowId = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
   const halfW = Math.max(85, width / 2);
@@ -12745,8 +12770,10 @@ function tryBuildOscillationDiagramStrokes(
   // - Photoelectric Effect & Stopping Potential (Εξίσωση Einstein `K_max = h*f - φ`, `K_max = h*f - W_εξ`,
   //   Δυναμικό Αποκοπής `e*V_0 = h*f - φ`, `V_0 = (h/e)*f - W_εξ/e`, `V_απ = (h/e)*f - φ/e`, `V_0 - f`, `V_απ - f`, `K_max - f`):
   if (
-    /^(?:K_?max|E_?k|e\*?V_?(?:0|απ|ap))=h\*?(?:[fν]-(?:φ|φ_?0|W_?εξ|W_?0|W|b)|\(f-f_?0\))$/i.test(compact) ||
-    /^V_?(?:0|απ|ap)=(?:h\/e\*?[fν]-(?:φ|W_?εξ|W_?0|W)\/e|h\/e\*?\(f-f_?0\)|h\*?[fν]\/e-(?:φ|W_?εξ|W)\/e)$/i.test(
+    /^(?:K(?:_?max)?|E_?k(?:,?max)?|e\*?V_?(?:0|απ|ap))=h\*?(?:[fνu]-(?:φ|Φ|φ_?0|W_?εξ|W_?0|W|b)|\(f-f_?0\))$/i.test(
+      compact
+    ) ||
+    /^V_?(?:0|απ|ap)=(?:h\/e\*?[fνu]-(?:φ|Φ|W_?εξ|W_?0|W)\/e|h\/e\*?\(f-f_?0\)|h\*?[fνu]\/e-(?:φ|Φ|W_?εξ|W_?0|W)\/e)$/i.test(
       compact
     ) ||
     /^(?:K_?max|V_?(?:0|απ|ap))-f$/i.test(compact) ||
@@ -12827,7 +12854,7 @@ function tryBuildOscillationDiagramStrokes(
         shapeType: 'line',
       },
       {
-        id: `st-${nowId}-photo-solid`,
+        id: `st-${nowId}-crv-fn0-photo-solid`,
         tool: 'pen',
         color: curveColor,
         width: 2.9,

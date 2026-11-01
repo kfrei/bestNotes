@@ -148,6 +148,7 @@ import {
   transcribeEquationForGraphWithGemini,
   getUnifiedOcrErrorMessage,
   convertPlainTextToMathLatex,
+  tryBuildOscillationDiagramStrokes,
   buildMathGraphStrokesFromEquation,
   prepareMathGraphStrokesForAnimation,
   computeMathGraphAnimationFrameWithPen,
@@ -35749,8 +35750,9 @@ export default function App() {
       );
 
       let graphBuilt: ReturnType<typeof buildMathGraphStrokesFromEquation> = null;
+      // 1. Check Physics Equations Library across ALL candidate transcriptions first!
       for (const candEq of candidateEquations) {
-        graphBuilt = buildMathGraphStrokesFromEquation(
+        graphBuilt = tryBuildOscillationDiagramStrokes(
           candEq,
           centerX,
           centerY,
@@ -35761,6 +35763,22 @@ export default function App() {
           targetLayerId
         );
         if (graphBuilt) break;
+      }
+      // 2. Fall back to generic 2D math plotter if not in Physics Library
+      if (!graphBuilt) {
+        for (const candEq of candidateEquations) {
+          graphBuilt = buildMathGraphStrokesFromEquation(
+            candEq,
+            centerX,
+            centerY,
+            diagW,
+            diagH,
+            '#dc2626',
+            axisInk,
+            targetLayerId
+          );
+          if (graphBuilt) break;
+        }
       }
 
       if (!graphBuilt) {
@@ -35964,8 +35982,9 @@ export default function App() {
       );
 
       let graphBuilt: ReturnType<typeof buildMathGraphStrokesFromEquation> = null;
+      // 1. Check Physics Equations Library across ALL candidate transcriptions first!
       for (const candEq of candidateEquations) {
-        graphBuilt = buildMathGraphStrokesFromEquation(
+        graphBuilt = tryBuildOscillationDiagramStrokes(
           candEq,
           centerX,
           centerY,
@@ -35976,6 +35995,22 @@ export default function App() {
           targetLayerId
         );
         if (graphBuilt) break;
+      }
+      // 2. Fall back to generic 2D math plotter if not in Physics Library
+      if (!graphBuilt) {
+        for (const candEq of candidateEquations) {
+          graphBuilt = buildMathGraphStrokesFromEquation(
+            candEq,
+            centerX,
+            centerY,
+            diagW,
+            diagH,
+            '#dc2626',
+            axisInk,
+            targetLayerId
+          );
+          if (graphBuilt) break;
+        }
       }
 
       if (!graphBuilt) {
