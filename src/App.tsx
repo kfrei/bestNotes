@@ -16152,8 +16152,10 @@ export default function App() {
         if (cs.comp.kind !== 'bulb' || !cs.active || cs.powerFactor <= 0.01) continue;
         const b = cs.comp;
         const domeCx = b.cx;
-        const domeCy = b.minY + b.h * 0.36;
-        const domeR = Math.max(16, Math.min(b.w, b.h) * 0.42);
+        const domeRx = Math.max(14, Math.min(b.w * 0.27, b.h * 0.34));
+        const domeRy = Math.max(14, b.h * 0.33);
+        const domeCy = b.minY + domeRy + b.h * 0.02;
+        const domeR = Math.max(16, (domeRx + domeRy) / 2);
         const pwr = Math.min(1.6, Math.max(0.45, cs.powerFactor));
         const blinkWave = 0.5 + 0.5 * Math.sin(elapsedSec * 9.5);
         const pulse = 0.92 + 0.16 * blinkWave;
@@ -16197,6 +16199,34 @@ export default function App() {
           ctx.lineTo(domeCx + Math.cos(ang) * rOuter, domeCy + Math.sin(ang) * rOuter);
           ctx.stroke();
         }
+
+        // Heated glowing orange/golden filament coil inside the bulb dome (matching reference image!)
+        const filY = domeCy - domeRy * 0.02;
+        const coilHalfW = Math.max(7, domeRx * 0.34);
+        const coilHalfH = Math.max(4, domeRy * 0.15);
+        const filLeftX = domeCx - coilHalfW;
+        const filRightX = domeCx + coilHalfW;
+        ctx.strokeStyle = '#f97316';
+        ctx.shadowColor = '#fb923c';
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 3.2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        const numCoilSteps = 6;
+        for (let i = 0; i <= numCoilSteps; i++) {
+          const t = i / numCoilSteps;
+          const px = filLeftX + (filRightX - filLeftX) * t;
+          const py =
+            i === 0 || i === numCoilSteps
+              ? filY
+              : i % 2 === 1
+                ? filY - coilHalfH
+                : filY + coilHalfH * 0.55;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
         ctx.restore();
       }
 
@@ -16317,7 +16347,8 @@ export default function App() {
           for (let i = 0; i < polyPts.length - 1; i++) {
             const sdx = polyPts[i + 1].x - polyPts[i].x;
             const sdy = polyPts[i + 1].y - polyPts[i].y;
-            const isDiagonalTooth = Math.abs(sdx) > 0.5 && Math.abs(sdy) > 2;
+            const isDiagonalTooth =
+              Math.abs(sdx) > 0.5 && Math.abs(sdy) > 2 && Math.hypot(sdx, sdy) < 22;
             const subStep = isDiagonalTooth
               ? Math.hypot(sdx, sdy * 0.35)
               : Math.hypot(sdx, sdy);
@@ -22244,7 +22275,7 @@ export default function App() {
       }
       const minW =
         shapePreset === 'bulb'
-          ? 56
+          ? 104
           : shapePreset === 'switch' || shapePreset === 'fan'
             ? 84
             : shapePreset === 'battery' || shapePreset === 'voltage-source'
@@ -22254,7 +22285,7 @@ export default function App() {
                 : 120;
       const minH =
         shapePreset === 'bulb'
-          ? 80
+          ? 88
           : shapePreset === 'switch'
             ? 48
             : shapePreset === 'fan'
@@ -32986,7 +33017,7 @@ export default function App() {
       }
       const minW =
         shapePreset === 'bulb'
-          ? 56
+          ? 104
           : shapePreset === 'switch' || shapePreset === 'fan'
             ? 84
             : shapePreset === 'battery' || shapePreset === 'voltage-source'
@@ -32996,7 +33027,7 @@ export default function App() {
                 : 120;
       const minH =
         shapePreset === 'bulb'
-          ? 80
+          ? 88
           : shapePreset === 'switch'
             ? 48
             : shapePreset === 'fan'
@@ -41252,11 +41283,18 @@ export default function App() {
                           title: 'Λαμπτήρας (Ηλεκτρικά Κυκλώματα)',
                           isSimItem: true,
                           icon: (
-                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M 13.5 13.5 C 12.2 11.5, 10.5 9.8, 10.5 7.4 A 6.5 6.0 0 1 1 23.5 7.4 C 23.5 9.8, 21.8 11.5, 20.5 13.5 Z" />
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" stroke="#111827" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M 13.5 13.5 C 12.2 11.5, 10.5 9.8, 10.5 7.4 A 6.5 6.0 0 1 1 23.5 7.4 C 23.5 9.8, 21.8 11.5, 20.5 13.5" />
                               <path d="M 13.5 13.5 L 14 19.2 C 15.2 20.8, 18.8 20.8, 20 19.2 L 20.5 13.5" />
-                              <line x1="13.7" y1="15.5" x2="20.3" y2="14.7" strokeWidth="1.5" />
-                              <line x1="13.9" y1="17.6" x2="20.1" y2="16.8" strokeWidth="1.5" />
+                              <polyline points="14.6,7.6 15.6,5.8 17.0,8.2 18.4,5.8 19.4,7.6" strokeWidth="1.35" />
+                              <line x1="14.6" y1="8.2" x2="13.8" y2="16.2" strokeWidth="1.2" strokeDasharray="1.6 1.5" />
+                              <line x1="19.4" y1="8.2" x2="18.6" y2="19.2" strokeWidth="1.2" strokeDasharray="1.6 1.5" />
+                              <line x1="13.7" y1="15.0" x2="20.3" y2="14.3" strokeWidth="1.35" />
+                              <line x1="13.9" y1="17.2" x2="20.1" y2="16.5" strokeWidth="1.35" />
+                              <circle cx="13.5" cy="16.2" r="1.4" fill="#111827" />
+                              <path d="M 14.0 18.6 L 20.0 18.2 L 19.8 19.5 C 18.6 20.8, 15.4 20.8, 14.2 19.5 Z" fill="#111827" />
+                              <line x1="4" y1="16.2" x2="12.5" y2="16.2" strokeWidth="1.75" />
+                              <line x1="19.5" y1="19.6" x2="30" y2="19.6" strokeWidth="1.75" />
                             </svg>
                           ),
                         },

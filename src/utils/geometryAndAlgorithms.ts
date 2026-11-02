@@ -1521,16 +1521,16 @@ export function createPhysicsStencilStrokes(
       shapeType: 'resistor',
     });
   } else if (preset === 'bulb') {
-    // Light Bulb (Λαμπτήρας) matching the user's sketch:
-    // Top pear/rounded glass dome tapering smoothly into a threaded screw base at the bottom.
+    // Light Bulb (Λαμπτήρας) with 2 distinct dark terminals (side screw thread & bottom foot),
+    // internal coiled filament + 2 vertical dashed internal leads, and stepped circuit wire leads:
     const cx = x + w / 2;
-    const domeRx = Math.max(14, w * 0.44);
-    const domeRy = Math.max(14, h * 0.34);
+    const domeRx = Math.max(14, Math.min(w * 0.27, h * 0.34));
+    const domeRy = Math.max(14, h * 0.33);
     const domeCy = y + domeRy + h * 0.02;
-    const neckY = y + h * 0.66;
+    const neckY = y + h * 0.64;
     const baseRx = Math.max(8, domeRx * 0.52);
-    const baseBotY = y + h * 0.93;
-    const tipBotY = y + h;
+    const baseBotY = y + h * 0.91;
+    const tipBotY = y + h * 0.985;
 
     // Build smooth bulb glass dome + tapering neck contour (from left neck -> up around crown -> right neck)
     const domePts: BezierPoint[] = [];
@@ -1644,6 +1644,7 @@ export function createPhysicsStencilStrokes(
     }
 
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const darkTermColor = color || '#111827';
     out.push({
       id: `st-${uid}-bulb-body`,
       tool: 'pen',
@@ -1657,8 +1658,8 @@ export function createPhysicsStencilStrokes(
       shapeType: 'bulb',
     });
 
-    // Spiral screw thread ribs across the base (matching the user's sketch)
-    const threadFracs = [0.06, 0.36, 0.66, 0.92];
+    // Spiral screw thread ribs across the base
+    const threadFracs = [0.06, 0.34, 0.62, 0.86];
     threadFracs.forEach((frac, idx) => {
       const yL = neckY + (baseBotY - neckY) * Math.min(1, frac + 0.08);
       const yR = neckY + (baseBotY - neckY) * Math.max(0, frac - 0.04);
@@ -1670,7 +1671,7 @@ export function createPhysicsStencilStrokes(
         id: `st-${uid}-bulb-th-${idx}`,
         tool: 'pen',
         color,
-        width: 2.4,
+        width: 2.3,
         opacity: 1,
         points: [
           { x: xL, y: yL, pressure: 0.7 },
@@ -1683,6 +1684,228 @@ export function createPhysicsStencilStrokes(
         shapeType: 'bulb',
       });
     });
+
+    // 1. Solid dark bottom terminal cap (Κάτω σκούρος πόλος στη βάση του λαμπτήρα)
+    const botCapTopFrac = 0.86;
+    const botCapTopYL = neckY + (baseBotY - neckY) * Math.min(1, botCapTopFrac + 0.08);
+    const botCapTopYR = neckY + (baseBotY - neckY) * Math.max(0, botCapTopFrac - 0.04);
+    const botCapMidY = (botCapTopYL + botCapTopYR) / 2 + (baseBotY - neckY) * 0.06;
+    const botCapWScale = 1 - botCapTopFrac * 0.12;
+    const botCapXL = cx - baseRx * botCapWScale;
+    const botCapXR = cx + baseRx * botCapWScale;
+    const botCapRawPts: { x: number; y: number }[] = [
+      { x: botCapXL, y: botCapTopYL },
+      { x: (botCapXL + botCapXR) / 2, y: botCapMidY },
+      { x: botCapXR, y: botCapTopYR },
+      { x: rBotX, y: baseBotY },
+    ];
+    for (let i = 1; i <= botSteps; i++) {
+      const t = i / botSteps;
+      const ang = t * Math.PI;
+      botCapRawPts.push({
+        x: cx + ((rBotX - lBotX) / 2) * Math.cos(ang),
+        y: baseBotY + (tipBotY - baseBotY) * Math.sin(ang),
+      });
+    }
+    botCapRawPts.push({ x: botCapXL, y: botCapTopYL });
+    out.push({
+      id: `st-${uid}-bulb-term-bot`,
+      tool: 'pen',
+      color: darkTermColor,
+      fillColor: darkTermColor,
+      fillStyle: 'solid',
+      width: 2.2,
+      opacity: 1,
+      points: makePolygonBezier(botCapRawPts),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'bulb',
+    });
+
+    // 2. Solid dark side screw-thread terminal pad (Πλαϊνός σκούρος πόλος στο σπείρωμα)
+    const sideTermFrac = 0.42;
+    const sideTermY = neckY + (baseBotY - neckY) * sideTermFrac;
+    const sideTermX = cx - baseRx * 0.96;
+    const sideTermRx = Math.max(3.5, baseRx * 0.24);
+    const sideTermRy = Math.max(3.8, (baseBotY - neckY) * 0.14);
+    out.push({
+      id: `st-${uid}-bulb-term-side`,
+      tool: 'pen',
+      color: darkTermColor,
+      fillColor: darkTermColor,
+      fillStyle: 'solid',
+      width: 2.0,
+      opacity: 1,
+      points: makeEllipseBezier(sideTermX, sideTermY, sideTermRx, sideTermRy),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'bulb',
+    });
+
+    // 3. Internal coiled filament (7-point 3-peak zigzag inside the glass dome)
+    const filY = domeCy - domeRy * 0.02;
+    const coilHalfW = Math.max(7, domeRx * 0.34);
+    const coilHalfH = Math.max(4, domeRy * 0.15);
+    const filLeftX = cx - coilHalfW;
+    const filRightX = cx + coilHalfW;
+    const coilRawPts: { x: number; y: number }[] = [];
+    const numCoilSteps = 6;
+    for (let i = 0; i <= numCoilSteps; i++) {
+      const t = i / numCoilSteps;
+      const px = filLeftX + (filRightX - filLeftX) * t;
+      const py =
+        i === 0 || i === numCoilSteps
+          ? filY
+          : i % 2 === 1
+            ? filY - coilHalfH
+            : filY + coilHalfH * 0.55;
+      coilRawPts.push({ x: px, y: py });
+    }
+    const coilBezierPts: BezierPoint[] = coilRawPts.map((pt, idx) => {
+      if (idx === 0) return { x: pt.x, y: pt.y, pressure: 0.7 };
+      const prev = coilRawPts[idx - 1];
+      return {
+        x: pt.x,
+        y: pt.y,
+        cx: (prev.x + pt.x) / 2,
+        cy: (prev.y + pt.y) / 2,
+        pressure: 0.7,
+      };
+    });
+    out.push({
+      id: `st-${uid}-bulb-coil`,
+      tool: 'pen',
+      color,
+      width: 2.2,
+      opacity: 1,
+      points: coilBezierPts,
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'bulb',
+    });
+
+    // 4. Two vertical dashed internal lead wires terminating at the 2 dark poles!
+    // Left dashed lead -> terminates at the left dark screw-thread terminal pad
+    const leftLeadMidY = neckY - (neckY - filY) * 0.15;
+    out.push({
+      id: `st-${uid}-bulb-lead-l`,
+      tool: 'pen',
+      color,
+      width: 2.1,
+      opacity: 1,
+      lineStyle: 'dashed',
+      points: [
+        { x: filLeftX, y: filY, pressure: 0.7 },
+        {
+          x: filLeftX,
+          y: leftLeadMidY,
+          cx: filLeftX,
+          cy: (filY + leftLeadMidY) / 2,
+          pressure: 0.7,
+        },
+        {
+          x: sideTermX + sideTermRx * 0.35,
+          y: sideTermY,
+          cx: (filLeftX + sideTermX + sideTermRx * 0.35) / 2,
+          cy: (leftLeadMidY + sideTermY) / 2,
+          pressure: 0.7,
+        },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'bulb',
+    });
+
+    // Right dashed lead -> goes straight down and terminates at the bottom dark foot contact cap
+    const botTargetX = cx + baseRx * 0.42;
+    const botTargetY = (botCapMidY + tipBotY) / 2;
+    out.push({
+      id: `st-${uid}-bulb-lead-r`,
+      tool: 'pen',
+      color,
+      width: 2.1,
+      opacity: 1,
+      lineStyle: 'dashed',
+      points: [
+        { x: filRightX, y: filY, pressure: 0.7 },
+        {
+          x: filRightX,
+          y: neckY,
+          cx: filRightX,
+          cy: (filY + neckY) / 2,
+          pressure: 0.7,
+        },
+        {
+          x: botTargetX,
+          y: botTargetY,
+          cx: (filRightX + botTargetX) / 2,
+          cy: (neckY + botTargetY) / 2,
+          pressure: 0.7,
+        },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: 'bulb',
+    });
+
+    // 5. Stepped horizontal external circuit leads with height difference (υψομετρική διαφορά):
+    // Left horizontal wire connects to the higher side screw-thread pole (sideTermY)
+    const leftLeadEndX = sideTermX - sideTermRx * 0.85;
+    if (leftLeadEndX - x >= 4) {
+      out.push({
+        id: `st-${uid}-bulb-wl`,
+        tool: 'pen',
+        color,
+        width: 2.8,
+        opacity: 1,
+        points: [
+          { x, y: sideTermY, pressure: 0.7 },
+          {
+            x: leftLeadEndX,
+            y: sideTermY,
+            cx: (x + leftLeadEndX) / 2,
+            cy: sideTermY,
+            pressure: 0.7,
+          },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'bulb',
+      });
+    }
+
+    // Right horizontal wire connects to the lower bottom foot pole (rightTermY)
+    const rightTermY = baseBotY + (tipBotY - baseBotY) * 0.45;
+    const rightLeadStartX = cx + baseRx * 0.68;
+    if (x + w - rightLeadStartX >= 4) {
+      out.push({
+        id: `st-${uid}-bulb-wr`,
+        tool: 'pen',
+        color,
+        width: 2.8,
+        opacity: 1,
+        points: [
+          { x: rightLeadStartX, y: rightTermY, pressure: 0.7 },
+          {
+            x: x + w,
+            y: rightTermY,
+            cx: (rightLeadStartX + x + w) / 2,
+            cy: rightTermY,
+            pressure: 0.7,
+          },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: 'bulb',
+      });
+    }
   } else if (preset === 'battery') {
     // Battery (Μπαταρία) matching the user's sketch:
     // [+]  [small protruding cap][main rectangular body]  [-]
@@ -5372,10 +5595,20 @@ export function getCircuitComponentsWithTerminals(
     let rightTerm = { x: maxX, y: cy };
 
     if (entry.kind === 'bulb') {
-      const baseY = minY + h * 0.8;
-      const baseHalfW = Math.max(8, w * 0.23);
-      leftTerm = { x: cx - baseHalfW, y: baseY };
-      rightTerm = { x: cx + baseHalfW, y: baseY };
+      const wlStroke = entry.strokes.find((s) => s.id.includes('-bulb-wl'));
+      const wrStroke = entry.strokes.find((s) => s.id.includes('-bulb-wr'));
+      const leftY =
+        wlStroke && wlStroke.points.length > 0
+          ? wlStroke.points[0].y
+          : minY + h * 0.753;
+      const rightY =
+        wrStroke && wrStroke.points.length > 0
+          ? wrStroke.points[wrStroke.points.length - 1].y
+          : minY + h * 0.944;
+      const leftX = wlStroke ? minX : cx - Math.max(8, w * 0.23);
+      const rightX = wrStroke ? maxX : cx + Math.max(8, w * 0.23);
+      leftTerm = { x: leftX, y: leftY };
+      rightTerm = { x: rightX, y: rightY };
     } else if (entry.kind === 'switch') {
       const wireY = minY + h * 0.68;
       leftTerm = { x: minX, y: wireY };
@@ -5484,6 +5717,8 @@ export function splitWiresUnderCircuitComponent(
             if (crossesHorizontally) {
               const leftEndPt = pStart.x <= pEnd.x ? pStart : pEnd;
               const rightEndPt = pStart.x <= pEnd.x ? pEnd : pStart;
+              const yLeft = comp.kind === 'bulb' ? comp.leftTerm.y : leftEndPt.y;
+              const yRight = comp.kind === 'bulb' ? comp.rightTerm.y : rightEndPt.y;
               const wire1: StrokeObject = {
                 ...s,
                 id: `st-${Date.now()}-w1-${Math.random().toString(36).slice(2, 5)}`,
@@ -5495,12 +5730,12 @@ export function splitWiresUnderCircuitComponent(
                 isShape: true,
                 shapeType: 'line',
                 points: [
-                  { x: leftEndPt.x, y: leftEndPt.y, pressure: 0.7 },
+                  { x: leftEndPt.x, y: yLeft, pressure: 0.7 },
                   {
                     x: comp.leftTerm.x,
-                    y: leftEndPt.y,
+                    y: yLeft,
                     cx: (leftEndPt.x + comp.leftTerm.x) / 2,
-                    cy: leftEndPt.y,
+                    cy: yLeft,
                     pressure: 0.7,
                   },
                 ],
@@ -5516,12 +5751,12 @@ export function splitWiresUnderCircuitComponent(
                 isShape: true,
                 shapeType: 'line',
                 points: [
-                  { x: comp.rightTerm.x, y: rightEndPt.y, pressure: 0.7 },
+                  { x: comp.rightTerm.x, y: yRight, pressure: 0.7 },
                   {
                     x: rightEndPt.x,
-                    y: rightEndPt.y,
+                    y: yRight,
                     cx: (comp.rightTerm.x + rightEndPt.x) / 2,
-                    cy: rightEndPt.y,
+                    cy: yRight,
                     pressure: 0.7,
                   },
                 ],
@@ -5740,6 +5975,39 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
         next.push(s);
       }
       currentStrokes = next;
+    } else if (comp.kind === 'bulb') {
+      const hasModernBulb = currentStrokes.some(
+        (s) => comp.strokeIds.includes(s.id) && s.id.includes('-bulb-coil')
+      );
+      if (!hasModernBulb) {
+        const bw = comp.w < 84 ? Math.max(96, Math.round(comp.w * 1.5)) : Math.max(92, Math.min(128, comp.w));
+        const bh = Math.max(82, Math.min(110, comp.h));
+        const bx = comp.cx - bw / 2;
+        const by = comp.minY;
+        const upgradedBulb = createPhysicsStencilStrokes(
+          'bulb',
+          bx,
+          by,
+          bw,
+          bh,
+          comp.color,
+          comp.layerId
+        );
+        const removeSet = new Set(comp.strokeIds);
+        const next: StrokeObject[] = [];
+        let inserted = false;
+        for (const s of currentStrokes) {
+          if (removeSet.has(s.id)) {
+            if (!inserted) {
+              next.push(...upgradedBulb);
+              inserted = true;
+            }
+            continue;
+          }
+          next.push(s);
+        }
+        currentStrokes = next;
+      }
     } else if (comp.kind === 'battery') {
       const targetSignY = comp.minY + comp.h * 0.22;
       const idSet = new Set(comp.strokeIds);
@@ -5955,8 +6223,19 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     const row = hRows[rIdx];
     const yRow = row.yRow;
     const rowComps = alignedComps
-      .filter((c) => Math.abs(c.leftTerm.y - yRow) <= 34)
+      .filter((c) => Math.abs(c.leftTerm.y - yRow) <= 36 || Math.abs(c.rightTerm.y - yRow) <= 36)
       .sort((a, b) => a.cx - b.cx);
+
+    // Helper: preserve stepped height difference (υψομετρική διαφορά) for horizontal wire segments
+    // connected to the left vs right of a 2-terminal bulb on this row!
+    const getRowSegY = (segXL: number, segXR: number): number => {
+      const rowBulb = rowComps.find((c) => c.kind === 'bulb');
+      if (!rowBulb) return yRow;
+      const segMidX = (segXL + segXR) / 2;
+      return segMidX < rowBulb.cx
+        ? Math.round(rowBulb.leftTerm.y)
+        : Math.round(rowBulb.rightTerm.y);
+    };
 
     // Identify vertical columns that connect to this row
     const activeRowCols = vCols
@@ -6133,8 +6412,9 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
       }
       if (m.xR - m.xL >= 6) {
         finalRowSegments.push(m);
+        const segY = getRowSegY(m.xL, m.xR);
         newWireStrokes.push(
-          makeCleanWireStroke(m.stroke, m.xL, yRow, m.xR, yRow, `h${rIdx}-${mIdx}`)
+          makeCleanWireStroke(m.stroke, m.xL, segY, m.xR, segY, `h${rIdx}-${mIdx}`)
         );
       }
     }
@@ -6158,13 +6438,14 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
             if (!alreadyBridged) {
               const br = { xL: c.rightTerm.x, xR: col.xCol, stroke: templateWireStroke };
               finalRowSegments.push(br);
+              const segYR = getRowSegY(c.rightTerm.x, col.xCol);
               newWireStrokes.push(
                 makeCleanWireStroke(
                   templateWireStroke,
                   c.rightTerm.x,
-                  yRow,
+                  segYR,
                   col.xCol,
-                  yRow,
+                  segYR,
                   `hbr-r-${rIdx}-${c.key}`
                 )
               );
@@ -6181,13 +6462,14 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
             if (!alreadyBridged) {
               const br = { xL: col.xCol, xR: c.leftTerm.x, stroke: templateWireStroke };
               finalRowSegments.push(br);
+              const segYL = getRowSegY(col.xCol, c.leftTerm.x);
               newWireStrokes.push(
                 makeCleanWireStroke(
                   templateWireStroke,
                   col.xCol,
-                  yRow,
+                  segYL,
                   c.leftTerm.x,
-                  yRow,
+                  segYL,
                   `hbr-l-${rIdx}-${c.key}`
                 )
               );
@@ -6208,13 +6490,14 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
             (m) => m.xL <= cLeft.rightTerm.x + 8 && m.xR >= cRight.leftTerm.x - 8
           );
           if (!alreadyConnected) {
+            const segYCC = getRowSegY(cLeft.rightTerm.x, cRight.leftTerm.x);
             newWireStrokes.push(
               makeCleanWireStroke(
                 templateWireStroke,
                 cLeft.rightTerm.x,
-                yRow,
+                segYCC,
                 cRight.leftTerm.x,
-                yRow,
+                segYCC,
                 `hbr-cc-${rIdx}-${ci}`
               )
             );
@@ -6429,16 +6712,16 @@ export function convertCircuitComponents(
       // Bulb <-> Resistor
       const picW =
         comp.kind === 'bulb'
-          ? Math.max(58, Math.min(84, Math.round(comp.w)))
-          : Math.max(62, Math.min(76, Math.round(comp.w * 0.88)));
+          ? Math.max(92, Math.min(125, Math.round(comp.w)))
+          : Math.max(96, Math.min(115, Math.round(comp.w * 1.32)));
       const picH =
         comp.kind === 'bulb'
-          ? Math.max(78, Math.min(108, Math.round(comp.h)))
-          : Math.max(82, Math.min(98, Math.round(picW * 1.32)));
+          ? Math.max(80, Math.min(108, Math.round(comp.h)))
+          : Math.max(84, Math.min(98, Math.round(picW * 0.86)));
       const schW =
         comp.kind === 'resistor' && comp.w <= 110
           ? Math.max(68, Math.min(88, Math.round(comp.w)))
-          : Math.max(68, Math.min(84, Math.round(picW * 1.08)));
+          : Math.max(68, Math.min(84, Math.round(picW * 0.76)));
       box = {
         cx: comp.cx,
         termY: comp.leftTerm.y,
@@ -6501,10 +6784,10 @@ export function convertCircuitComponents(
         circuitBox: box,
       }));
     } else if (targetKind === 'bulb') {
-      const bw = box.pictorialW;
-      const bh = box.pictorialH;
+      const bw = Math.max(92, box.pictorialW);
+      const bh = Math.max(80, box.pictorialH);
       const bx = box.cx - bw / 2;
-      const by = box.termY - bh * 0.8;
+      const by = box.termY - bh * 0.753;
       replacement = createPhysicsStencilStrokes(
         'bulb',
         bx,
@@ -6662,11 +6945,13 @@ function distanceToComponentSide(
     const yBot = c.maxY + 4;
     if (side === 'L') {
       return Math.min(
+        pointToSegmentDist(pt.x, pt.y, c.minX, c.leftTerm.y, c.cx - c.w * 0.1, c.leftTerm.y),
         pointToSegmentDist(pt.x, pt.y, c.cx - c.w * 0.25, yTop, c.cx - c.w * 0.15, yBot),
         Math.hypot(pt.x - c.leftTerm.x, pt.y - c.leftTerm.y)
       );
     }
     return Math.min(
+      pointToSegmentDist(pt.x, pt.y, c.cx + c.w * 0.08, c.rightTerm.y, c.maxX, c.rightTerm.y),
       pointToSegmentDist(pt.x, pt.y, c.cx + c.w * 0.25, yTop, c.cx + c.w * 0.15, yBot),
       Math.hypot(pt.x - c.rightTerm.x, pt.y - c.rightTerm.y)
     );
@@ -7205,6 +7490,15 @@ export function analyzeCircuitForSimulation(
           else if (wn.v === cn.u && wx2 < swLeftX && wx1 < wx2) wx2 = swLeftX;
           if (wn.u === cn.v && wx1 > swRightX && wx2 > wx1) wx1 = swRightX;
           else if (wn.v === cn.v && wx2 > swRightX && wx1 > wx2) wx2 = swRightX;
+        } else if (c.kind === 'bulb') {
+          const domeRx = Math.max(14, Math.min(c.w * 0.27, c.h * 0.34));
+          const baseRx = Math.max(8, domeRx * 0.52);
+          const sideTermX = c.cx - baseRx * 0.96;
+          const botRightX = c.cx + baseRx * 0.55;
+          if (wn.u === cn.u && wx1 < sideTermX && wx2 < wx1) wx1 = sideTermX;
+          else if (wn.v === cn.u && wx2 < sideTermX && wx1 < wx2) wx2 = sideTermX;
+          if (wn.u === cn.v && wx1 > botRightX && wx2 > wx1) wx1 = botRightX;
+          else if (wn.v === cn.v && wx2 > botRightX && wx1 > wx2) wx2 = botRightX;
         }
       }
     }
@@ -7312,6 +7606,52 @@ export function analyzeCircuitForSimulation(
         const flow = compSignedFlowMap.get(c.key) ?? 0.85;
         addComponentLeadSegment(c.minX, wireY, c.minX + c.w * 0.26, wireY, flow);
         addComponentLeadSegment(c.minX + c.w * 0.74, wireY, c.maxX, wireY, flow);
+      } else if (c.kind === 'bulb' && compInLoop.has(c.key)) {
+        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
+        const domeRx = Math.max(14, Math.min(c.w * 0.27, c.h * 0.34));
+        const domeRy = Math.max(14, c.h * 0.33);
+        const domeCy = c.minY + domeRy + c.h * 0.02;
+        const baseRx = Math.max(8, domeRx * 0.52);
+        const sideTermX = c.cx - baseRx * 0.96;
+        const botTargetX = c.cx + baseRx * 0.42;
+        const filY = domeCy - domeRy * 0.02;
+        const coilHalfW = Math.max(7, domeRx * 0.34);
+        const filLeftX = c.cx - coilHalfW;
+        const filRightX = c.cx + coilHalfW;
+
+        // External horizontal leads (merge seamlessly with left & right stepped horizontal circuit wires)
+        addComponentLeadSegment(c.minX, c.leftTerm.y, sideTermX, c.leftTerm.y, flow);
+        addComponentLeadSegment(botTargetX, c.rightTerm.y, c.maxX, c.rightTerm.y, flow);
+
+        // Internal path through the 2 terminals & filament (up left lead -> across filament -> down right lead)
+        const rawBulbPath = [
+          { x: sideTermX + 2, y: c.leftTerm.y },
+          { x: filLeftX, y: filY },
+          { x: filRightX, y: filY },
+          { x: botTargetX, y: c.rightTerm.y },
+        ];
+        const orderedPath = flow >= 0 ? rawBulbPath : [...rawBulbPath].reverse();
+        let totalInnerLen = 0;
+        for (let k = 0; k < orderedPath.length - 1; k++) {
+          totalInnerLen += Math.hypot(
+            orderedPath[k + 1].x - orderedPath[k].x,
+            orderedPath[k + 1].y - orderedPath[k].y
+          );
+        }
+        const active = circuitSwitchClosed;
+        const speed = Math.min(2.2, Math.max(0.4, Math.abs(flow)));
+        simulatedWires.push({
+          x1: orderedPath[0].x,
+          y1: orderedPath[0].y,
+          x2: orderedPath[orderedPath.length - 1].x,
+          y2: orderedPath[orderedPath.length - 1].y,
+          length: totalInnerLen,
+          inClosedLoop: true,
+          active,
+          currentSpeed: active ? speed : 0,
+          highEnergy: true,
+          pathPoints: orderedPath,
+        });
       }
     }
 
@@ -7322,7 +7662,7 @@ export function analyzeCircuitForSimulation(
       mergedAny = false;
       for (let i = 0; i < simulatedWires.length; i++) {
         const a = simulatedWires[i];
-        if (!a.inClosedLoop) continue;
+        if (!a.inClosedLoop || a.pathPoints) continue;
         const dax = a.x2 - a.x1;
         const day = a.y2 - a.y1;
         if (Math.abs(day) > Math.abs(dax) * 0.2 || Math.abs(dax) < 4) continue;
@@ -7333,7 +7673,7 @@ export function analyzeCircuitForSimulation(
 
         for (let j = i + 1; j < simulatedWires.length; j++) {
           const b = simulatedWires[j];
-          if (!b.inClosedLoop) continue;
+          if (!b.inClosedLoop || b.pathPoints) continue;
           const dbx = b.x2 - b.x1;
           const dby = b.y2 - b.y1;
           if (Math.abs(dby) > Math.abs(dbx) * 0.2 || Math.abs(dbx) < 4) continue;
