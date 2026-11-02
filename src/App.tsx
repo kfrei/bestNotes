@@ -1718,6 +1718,7 @@ export default function App() {
     return [];
   });
   const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const layerDragStartYRef = useRef<number>(0);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -46819,14 +46820,7 @@ export default function App() {
                     return (
                       <div
                         key={layer.id}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          if (!draggingLayerId || draggingLayerId === layer.id) return;
-                          const fromIdx = activePage.layers.findIndex((l) => l.id === draggingLayerId);
-                          if (fromIdx !== -1 && fromIdx !== layerIdx) {
-                            moveLayerToIndex(fromIdx, layerIdx);
-                          }
-                        }}
+                        data-layer-row-id={layer.id}
                         onClick={() => setActiveLayerId(layer.id)}
                         className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition ${
                           isBeingDragged
@@ -46836,13 +46830,12 @@ export default function App() {
                             : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80'
                         }`}
                       >
-                        {/* Left: Touch/Pencil/Mouse Drag Handle + Layer Name & Item Count */}
+                        {/* Left: Touch/Pencil/Mouse Drag Handle + Click-to-Edit Layer Name & Item Count */}
                         <div
-                          draggable
-                          onDragStart={() => setDraggingLayerId(layer.id)}
-                          onDragEnd={() => setDraggingLayerId(null)}
                           style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+                          onDragStart={(e) => e.preventDefault()}
                           onPointerDown={(e) => {
+                            if (editingLayerId === layer.id) return;
                             e.stopPropagation();
                             setActiveLayerId(layer.id);
                             try {
@@ -46859,16 +46852,18 @@ export default function App() {
                             const dy = e.clientY - layerDragStartYRef.current;
                             const currIdx = activePage.layers.findIndex((l) => l.id === layer.id);
                             if (currIdx === -1) return;
-                            if (dy <= -32 && currIdx > 0) {
+                            if (dy <= -26 && currIdx > 0) {
                               moveLayerToIndex(currIdx, currIdx - 1);
                               layerDragStartYRef.current = e.clientY;
-                            } else if (dy >= 32 && currIdx < activePage.layers.length - 1) {
+                            } else if (dy >= 26 && currIdx < activePage.layers.length - 1) {
                               moveLayerToIndex(currIdx, currIdx + 1);
                               layerDragStartYRef.current = e.clientY;
                             }
                           }}
                           onPointerUp={(e) => {
+                            if (editingLayerId === layer.id) return;
                             e.stopPropagation();
+                            const totalDy = Math.abs(e.clientY - layerDragStartYRef.current);
                             try {
                               if (e.currentTarget.hasPointerCapture(e.pointerId)) {
                                 e.currentTarget.releasePointerCapture(e.pointerId);
@@ -46877,22 +46872,93 @@ export default function App() {
                               // ignore
                             }
                             setDraggingLayerId(null);
+                            const targetEl = e.target as HTMLElement | null;
+                            if (totalDy <= 5 && targetEl?.closest('[data-layer-name="true"]')) {
+                              setEditingLayerId(layer.id);
+                            }
                           }}
                           onPointerCancel={() => setDraggingLayerId(null)}
                           className="flex items-center gap-1.5 min-w-0 flex-1 pr-2 cursor-grab active:cursor-grabbing"
-                          title="Σύρε πάνω/κάτω για αλλαγή σειράς του Layer"
+                          title="Σύρε πάνω/κάτω για αλλαγή σειράς του Layer (ή κάνε κλικ στο όνομα για μετονομασία)"
                         >
-                          <div className="p-1 rounded-lg text-slate-400 hover:text-[#0066ff] hover:bg-slate-200/70 shrink-0">
+                          <div className="p-1 -ml-0.5 rounded-lg text-slate-400 hover:text-[#0066ff] hover:bg-slate-200/70 shrink-0">
                             <GripVertical className="w-4 h-4" />
                           </div>
 
-                          <div className="flex flex-col truncate">
-                            <span className="font-semibold truncate">{layer.name}</span>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            {editingLayerId === layer.id ? (
+                              <input
+                                type="text"
+                                autoFocus
+                                value={layer.name}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const nextName = e.target.value;
+                                  updateActivePage(
+                                    (page) => ({
+                                      ...page,
+                                      layers: page.layers.map((l) =>
+                                        l.id === layer.id ? { ...l, name: nextName } : l
+                                      ),
+                                    }),
+                                    false
+                                  );
+                                }}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation();
+                                  if (e.key === 'Enter' || e.key === 'Escape') {
+                                    if (!layer.name.trim()) {
+                                      updateActivePage(
+                                        (page) => ({
+                                          ...page,
+                                          layers: page.layers.map((l, idx) =>
+                                            l.id === layer.id
+                                              ? { ...l, name: `Layer ${idx + 1}` }
+                                              : l
+                                          ),
+                                        }),
+                                        false
+                                      );
+                                    }
+                                    setEditingLayerId(null);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (!layer.name.trim()) {
+                                    updateActivePage(
+                                      (page) => ({
+                                        ...page,
+                                        layers: page.layers.map((l, idx) =>
+                                          l.id === layer.id ? { ...l, name: `Layer ${idx + 1}` } : l
+                                        ),
+                                      }),
+                                      false
+                                    );
+                                  }
+                                  setEditingLayerId(null);
+                                }}
+                                className="w-full px-1.5 py-0.5 rounded bg-white border border-[#0066ff] text-xs font-semibold text-slate-900 outline-none shadow-2xs"
+                              />
+                            ) : (
+                              <span
+                                data-layer-name="true"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveLayerId(layer.id);
+                                  setEditingLayerId(layer.id);
+                                }}
+                                className="font-semibold truncate hover:text-[#0066ff] hover:underline decoration-dotted cursor-text"
+                                title="Κλικ για μετονομασία του Layer"
+                              >
+                                {layer.name}
+                              </span>
+                            )}
                             <span className="text-[10px] text-slate-400">{count} αντικείμενα</span>
                           </div>
                         </div>
 
-                        {/* Right: Move Selection Here / Paste Here + Move Up / Move Down + Lock + Eye + Red Delete Trash Can */}
+                        {/* Right: Move Selection Here / Paste Here + Lock + Eye + Red Delete Trash Can */}
                         <div
                           onPointerDown={(e) => e.stopPropagation()}
                           onMouseDown={(e) => e.stopPropagation()}
@@ -46980,40 +47046,6 @@ export default function App() {
                                 📋 Paste
                               </button>
                             )}
-                          <button
-                            type="button"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              moveLayerToIndex(layerIdx, layerIdx - 1);
-                            }}
-                            disabled={layerIdx === 0}
-                            className={`p-1 rounded-lg transition cursor-pointer ${
-                              layerIdx === 0
-                                ? 'text-slate-200 cursor-not-allowed'
-                                : 'text-slate-500 hover:text-[#0066ff] hover:bg-slate-200'
-                            }`}
-                            title="Μετακίνηση Layer πιο ΠΑΝΩ (Μπροστά)"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              moveLayerToIndex(layerIdx, layerIdx + 1);
-                            }}
-                            disabled={layerIdx === activePage.layers.length - 1}
-                            className={`p-1 rounded-lg transition cursor-pointer ${
-                              layerIdx === activePage.layers.length - 1
-                                ? 'text-slate-200 cursor-not-allowed'
-                                : 'text-slate-500 hover:text-[#0066ff] hover:bg-slate-200'
-                            }`}
-                            title="Μετακίνηση Layer πιο ΚΑΤΩ (Πίσω)"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
 
                           <button
                             type="button"
