@@ -2338,8 +2338,10 @@ export default function App() {
   const internalClipboardRef = useRef<{
     strokes: StrokeObject[];
     image?: ImageObject;
+    images?: ImageObject[];
     text?: TextObject;
     texts?: TextObject[];
+    wasCut?: boolean;
   } | null>(null);
   const hasExternalFocusSinceInternalCopyRef = useRef<boolean>(true);
   const lastPasteHandledAtRef = useRef<number>(0);
@@ -8104,11 +8106,17 @@ export default function App() {
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
         : [];
+    const effectiveImgIds =
+      selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
     const baseSet = new Set(baseIds);
+    const imgSet = new Set(effectiveImgIds);
     const lassoTxtSet = new Set(selectedLassoTextIds);
     const groupIds = new Set<string>();
     for (const s of activePage.strokes) {
       if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const im of activePage.images || []) {
+      if (imgSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
     }
     for (const t of activePage.texts || []) {
       if (lassoTxtSet.has(t.id) && t.groupId) groupIds.add(t.groupId);
@@ -8116,22 +8124,27 @@ export default function App() {
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
+    const selImgs = (activePage.images || []).filter(
+      (im) => imgSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
+    );
     const selTexts = (activePage.texts || []).filter(
       (t) =>
         lassoTxtSet.has(t.id) ||
         (t.groupId && !t.groupId.startsWith('math-graph-grp-') && groupIds.has(t.groupId))
     );
-    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+    const selImg = selImgs[0];
     const selTxt = selectedTextId ? (activePage.texts || []).find((t) => t.id === selectedTextId) : undefined;
-    if (selStrokes.length === 0 && !selImg && !selTxt && selTexts.length === 0) {
+    if (selStrokes.length === 0 && selImgs.length === 0 && !selTxt && selTexts.length === 0) {
       showToast('ℹ️ Επίλεξε πρώτα σχήμα, εικόνα ή κείμενο με το Lasso για Copy (Ctrl+C)!');
       return;
     }
     internalClipboardRef.current = {
       strokes: structuredClone(selStrokes),
       image: selImg ? structuredClone(selImg) : undefined,
+      images: selImgs.length > 0 ? structuredClone(selImgs) : undefined,
       text: selTxt ? structuredClone(selTxt) : undefined,
       texts: selTexts.length > 0 ? structuredClone(selTexts) : undefined,
+      wasCut: false,
     };
     hasExternalFocusSinceInternalCopyRef.current = false;
     try {
@@ -8148,6 +8161,7 @@ export default function App() {
     selectedLassoTextIds,
     activeNodeStrokeId,
     selectedImageId,
+    selectedImageIds,
     selectedTextId,
     showToast,
   ]);
@@ -8159,11 +8173,17 @@ export default function App() {
         : activeNodeStrokeId
         ? [activeNodeStrokeId]
         : [];
+    const effectiveImgIds =
+      selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
     const baseSet = new Set(baseIds);
+    const imgSet = new Set(effectiveImgIds);
     const lassoTxtSet = new Set(selectedLassoTextIds);
     const groupIds = new Set<string>();
     for (const s of activePage.strokes) {
       if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const im of activePage.images || []) {
+      if (imgSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
     }
     for (const t of activePage.texts || []) {
       if (lassoTxtSet.has(t.id) && t.groupId) groupIds.add(t.groupId);
@@ -8171,22 +8191,27 @@ export default function App() {
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
+    const selImgs = (activePage.images || []).filter(
+      (im) => imgSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
+    );
     const selTexts = (activePage.texts || []).filter(
       (t) =>
         lassoTxtSet.has(t.id) ||
         (t.groupId && !t.groupId.startsWith('math-graph-grp-') && groupIds.has(t.groupId))
     );
-    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+    const selImg = selImgs[0];
     const selTxt = selectedTextId ? (activePage.texts || []).find((t) => t.id === selectedTextId) : undefined;
-    if (selStrokes.length === 0 && !selImg && !selTxt && selTexts.length === 0) {
+    if (selStrokes.length === 0 && selImgs.length === 0 && !selTxt && selTexts.length === 0) {
       showToast('ℹ️ Επίλεξε πρώτα σχήμα, εικόνα ή κείμενο με το Lasso για Cut (Ctrl+X)!');
       return;
     }
     internalClipboardRef.current = {
       strokes: structuredClone(selStrokes),
       image: selImg ? structuredClone(selImg) : undefined,
+      images: selImgs.length > 0 ? structuredClone(selImgs) : undefined,
       text: selTxt ? structuredClone(selTxt) : undefined,
       texts: selTexts.length > 0 ? structuredClone(selTexts) : undefined,
+      wasCut: true,
     };
     hasExternalFocusSinceInternalCopyRef.current = false;
     try {
@@ -8195,21 +8220,23 @@ export default function App() {
       // ignore
     }
     const targetStrokeIdSet = new Set(selStrokes.map((s) => s.id));
+    const targetImgIdSet = new Set(selImgs.map((im) => im.id));
     const targetTextIdSet = new Set(selTexts.map((t) => t.id));
     if (selectedTextId) targetTextIdSet.add(selectedTextId);
     updateActivePage((page) => ({
       ...page,
       strokes: page.strokes.filter((s) => !targetStrokeIdSet.has(s.id)),
-      images: (page.images || []).filter((im) => im.id !== selectedImageId),
+      images: (page.images || []).filter((im) => !targetImgIdSet.has(im.id)),
       texts: (page.texts || []).filter((t) => !targetTextIdSet.has(t.id)),
     }));
     setSelectedStrokeIds([]);
     setSelectedLassoTextIds([]);
     setActiveNodeStrokeId(null);
     setSelectedImageId(null);
+    setSelectedImageIds([]);
     setSelectedTextId(null);
     setImageCropMode('none');
-    showToast('✂️ Αποκόπηκε (Cut — Ctrl+X) στο πρόχειρο!');
+    showToast('✂️ Αποκόπηκε (Cut) — Επίλεξε Layer και πάτησε Paste για επικόλληση!');
   }, [
     activePage.strokes,
     activePage.images,
@@ -8218,6 +8245,7 @@ export default function App() {
     selectedLassoTextIds,
     activeNodeStrokeId,
     selectedImageId,
+    selectedImageIds,
     selectedTextId,
     updateActivePage,
     showToast,
@@ -9288,49 +9316,90 @@ export default function App() {
 
   const lastLassoEmptyTapPtRef = useRef<{ x: number; y: number } | null>(null);
 
-  const pasteFromInternalClipboard = useCallback((): boolean => {
+  const pasteFromInternalClipboard = useCallback((overrideLayerId?: string): boolean => {
     if (!internalClipboardRef.current) return false;
     const {
       strokes: copiedStrokes,
       image: copiedImg,
+      images: copiedImages,
       text: copiedTxt,
       texts: copiedTexts,
+      wasCut,
     } = internalClipboardRef.current;
+    const effectiveCopiedImgs =
+      copiedImages && copiedImages.length > 0
+        ? copiedImages
+        : copiedImg
+        ? [copiedImg]
+        : [];
     const tapPt = lastLassoEmptyTapPtRef.current;
+    const desiredLayerId =
+      typeof overrideLayerId === 'string' && overrideLayerId ? overrideLayerId : activeLayerId;
+    const targetLayerObj =
+      activePage.layers.find((l) => l.id === desiredLayerId) || activePage.layers[0];
+    const targetLayerId = targetLayerObj?.id || desiredLayerId;
+    const targetLayerName = targetLayerObj?.name || 'Ενεργό Layer';
 
-    if (copiedImg && copiedStrokes.length === 0 && !(copiedTexts && copiedTexts.length > 0)) {
-      const targetX = tapPt ? Math.max(12, Math.round(tapPt.x - copiedImg.width / 2)) : copiedImg.x + 28;
-      const targetY = tapPt ? Math.max(12, Math.round(tapPt.y - copiedImg.height / 2)) : copiedImg.y + 28;
+    if (
+      effectiveCopiedImgs.length === 1 &&
+      copiedStrokes.length === 0 &&
+      !(copiedTexts && copiedTexts.length > 0)
+    ) {
+      const srcImg = effectiveCopiedImgs[0];
+      const keepExactSpot = Boolean(wasCut) || srcImg.layerId !== targetLayerId;
+      const targetX = tapPt
+        ? Math.round(tapPt.x - srcImg.width / 2)
+        : keepExactSpot
+        ? srcImg.x
+        : srcImg.x + 28;
+      const targetY = tapPt
+        ? Math.round(tapPt.y - srcImg.height / 2)
+        : keepExactSpot
+        ? srcImg.y
+        : srcImg.y + 28;
       if (tapPt) {
         lastLassoEmptyTapPtRef.current = { x: tapPt.x + 26, y: tapPt.y + 26 };
       }
       const newImg: ImageObject = {
-        ...structuredClone(copiedImg),
+        ...structuredClone(srcImg),
         id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         x: targetX,
         y: targetY,
+        layerId: targetLayerId,
       };
       internalClipboardRef.current = {
         ...internalClipboardRef.current,
         image: structuredClone(newImg),
+        images: [structuredClone(newImg)],
+        wasCut: false,
       };
       updateActivePage((page) => ({
         ...page,
         images: [...(page.images || []), { ...newImg, zOrder: getNextPageZOrder(page) }],
       }));
       setSelectedImageId(newImg.id);
+      setSelectedImageIds([newImg.id]);
       setSelectedStrokeIds([]);
       setSelectedLassoTextIds([]);
       setActiveNodeStrokeId(null);
       setSelectedTextId(null);
       setActiveTool('lasso');
-      showToast('📥 Επικόλληση εικόνας (Paste — Ctrl+V)!');
+      showToast(`📥 Επικόλληση εικόνας στο "${targetLayerName}"!`);
       return true;
     }
 
-    if (copiedStrokes.length > 0 || (copiedTexts && copiedTexts.length > 0)) {
-      let dx = 26;
-      let dy = 26;
+    if (
+      copiedStrokes.length > 0 ||
+      effectiveCopiedImgs.length > 0 ||
+      (copiedTexts && copiedTexts.length > 0)
+    ) {
+      const allOnDifferentLayer =
+        copiedStrokes.every((s) => s.layerId !== targetLayerId) &&
+        effectiveCopiedImgs.every((im) => im.layerId !== targetLayerId) &&
+        (copiedTexts || []).every((t) => t.layerId !== targetLayerId);
+      const keepExactSpot = Boolean(wasCut) || allOnDifferentLayer;
+      let dx = keepExactSpot ? 0 : 26;
+      let dy = keepExactSpot ? 0 : 26;
       if (tapPt) {
         let minX = Infinity;
         let minY = Infinity;
@@ -9343,6 +9412,12 @@ export default function App() {
             if (p.x > maxX) maxX = p.x;
             if (p.y > maxY) maxY = p.y;
           }
+        }
+        for (const im of effectiveCopiedImgs) {
+          if (im.x < minX) minX = im.x;
+          if (im.y < minY) minY = im.y;
+          if (im.x + im.width > maxX) maxX = im.x + im.width;
+          if (im.y + im.height > maxY) maxY = im.y + im.height;
         }
         for (const t of copiedTexts || []) {
           if (t.x < minX) minX = t.x;
@@ -9357,12 +9432,23 @@ export default function App() {
         lastLassoEmptyTapPtRef.current = { x: tapPt.x + 26, y: tapPt.y + 26 };
       }
       const hasGrp =
-        copiedStrokes.some((s) => s.groupId) || (copiedTexts || []).some((t) => t.groupId);
+        copiedStrokes.some((s) => s.groupId) ||
+        effectiveCopiedImgs.some((im) => im.groupId) ||
+        (copiedTexts || []).some((t) => t.groupId);
       const newGroupId = hasGrp ? `grp-${Date.now()}` : undefined;
+      const pastedImgs = effectiveCopiedImgs.map((im) => ({
+        ...structuredClone(im),
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        groupId: im.groupId ? newGroupId : undefined,
+        x: Math.round(im.x + dx),
+        y: Math.round(im.y + dy),
+        layerId: targetLayerId,
+      }));
       const pasted = copiedStrokes.map((s) => ({
         ...structuredClone(s),
         id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         groupId: s.groupId ? newGroupId : undefined,
+        layerId: targetLayerId,
         attachedToWeightId: undefined,
         springSupport: undefined,
         points: s.points.map((p) => ({
@@ -9377,37 +9463,68 @@ export default function App() {
         ...structuredClone(t),
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         groupId: t.groupId ? newGroupId : undefined,
-        x: t.x + dx,
-        y: t.y + dy,
+        layerId: targetLayerId,
+        x: Math.round(t.x + dx),
+        y: Math.round(t.y + dy),
       }));
       internalClipboardRef.current = {
         ...internalClipboardRef.current,
         strokes: structuredClone(pasted),
+        image: pastedImgs[0] ? structuredClone(pastedImgs[0]) : undefined,
+        images: pastedImgs.length > 0 ? structuredClone(pastedImgs) : undefined,
         texts: pastedTxts.length > 0 ? structuredClone(pastedTxts) : undefined,
+        wasCut: false,
       };
       updateActivePage((page) => {
         const baseZ = getNextPageZOrder(page);
         return {
           ...page,
-          strokes: [...page.strokes, ...pasted.map((s, idx) => ({ ...s, zOrder: baseZ + idx }))],
+          images: [
+            ...(page.images || []),
+            ...pastedImgs.map((im, idx) => ({ ...im, zOrder: baseZ + idx })),
+          ],
+          strokes: [
+            ...page.strokes,
+            ...pasted.map((s, idx) => ({
+              ...s,
+              zOrder: baseZ + pastedImgs.length + idx,
+            })),
+          ],
           texts: [...(page.texts || []), ...pastedTxts],
         };
       });
       const pastedIds = pasted.map((s) => s.id);
+      const pastedImgIds = pastedImgs.map((im) => im.id);
       const pastedTxtIds = pastedTxts.map((t) => t.id);
       setSelectedStrokeIds(pastedIds);
+      setSelectedImageIds(pastedImgIds);
+      setSelectedImageId(pastedImgIds[0] || null);
       setSelectedLassoTextIds(pastedTxtIds);
-      setActiveNodeStrokeId(pastedIds.length === 1 && pastedTxtIds.length === 0 ? pastedIds[0] : null);
-      setSelectedImageId(null);
+      setActiveNodeStrokeId(
+        pastedIds.length === 1 && pastedImgIds.length === 0 && pastedTxtIds.length === 0
+          ? pastedIds[0]
+          : null
+      );
       setSelectedTextId(null);
       setActiveTool('lasso');
-      showToast(`📥 Επικόλληση (${pasted.length + pastedTxts.length} αντικείμενα — Ctrl+V)!`);
+      showToast(
+        `📥 Επικόλληση (${pasted.length + pastedImgs.length + pastedTxts.length} αντικείμενα) στο "${targetLayerName}"!`
+      );
       return true;
     }
 
     if (copiedTxt) {
-      const targetX = tapPt ? Math.max(12, Math.round(tapPt.x - 40)) : copiedTxt.x + 24;
-      const targetY = tapPt ? Math.max(12, Math.round(tapPt.y - 16)) : copiedTxt.y + 24;
+      const keepExactSpot = Boolean(wasCut) || copiedTxt.layerId !== targetLayerId;
+      const targetX = tapPt
+        ? Math.round(tapPt.x - 40)
+        : keepExactSpot
+        ? copiedTxt.x
+        : copiedTxt.x + 24;
+      const targetY = tapPt
+        ? Math.round(tapPt.y - 16)
+        : keepExactSpot
+        ? copiedTxt.y
+        : copiedTxt.y + 24;
       if (tapPt) {
         lastLassoEmptyTapPtRef.current = { x: tapPt.x + 24, y: tapPt.y + 24 };
       }
@@ -9416,10 +9533,12 @@ export default function App() {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         x: targetX,
         y: targetY,
+        layerId: targetLayerId,
       };
       internalClipboardRef.current = {
         ...internalClipboardRef.current,
         text: structuredClone(newTxt),
+        wasCut: false,
       };
       updateActivePage((page) => ({
         ...page,
@@ -9428,19 +9547,23 @@ export default function App() {
       setSelectedTextId(newTxt.id);
       setSelectedStrokeIds([]);
       setSelectedImageId(null);
-      showToast('📥 Επικόλληση πλαισίου κειμένου (Paste — Ctrl+V)!');
+      setSelectedImageIds([]);
+      showToast(`📥 Επικόλληση κειμένου στο "${targetLayerName}"!`);
       return true;
     }
 
     return false;
-  }, [updateActivePage, showToast]);
+  }, [activeLayerId, activePage.layers, updateActivePage, showToast]);
 
   const handlePaste = useCallback(async () => {
     lastPasteHandledAtRef.current = performance.now();
 
-    // 0. If the user copied an object inside BestNotes and has NOT switched to another window/tab since then,
+    // 0. If the user cut/copied an object inside BestNotes (or has an active Cut pending, or has NOT switched to another window/tab since then),
     //    paste directly from the internal clipboard in 0ms without calling navigator.clipboard.read() (zero browser popup!).
-    if (internalClipboardRef.current && !hasExternalFocusSinceInternalCopyRef.current) {
+    if (
+      internalClipboardRef.current &&
+      (internalClipboardRef.current.wasCut || !hasExternalFocusSinceInternalCopyRef.current)
+    ) {
       if (pasteFromInternalClipboard()) {
         return;
       }
@@ -41611,7 +41734,7 @@ export default function App() {
               <div
                 data-sticky-app-nav="true"
                 style={{ touchAction: 'manipulation' }}
-                className="sticky top-0 z-30 flex items-center justify-center px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0 overflow-x-auto overscroll-contain"
+                className="sticky top-0 z-30 flex items-center justify-center flex-wrap px-4 py-1 bg-white/95 border-b border-slate-200 text-xs gap-2 shrink-0"
               >
                 {(activeTool === 'text' || selectedTextId !== null) && (() => {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
@@ -46842,12 +46965,94 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Right: Move Up / Move Down + Lock + Eye + Red Delete Trash Can (isolated from drag handle!) */}
+                        {/* Right: Move Selection Here / Paste Here + Move Up / Move Down + Lock + Eye + Red Delete Trash Can */}
                         <div
                           onPointerDown={(e) => e.stopPropagation()}
                           onMouseDown={(e) => e.stopPropagation()}
                           className="flex items-center gap-0.5 shrink-0"
                         >
+                          {(selectedStrokeIds.length > 0 ||
+                            selectedImageId !== null ||
+                            selectedImageIds.length > 0 ||
+                            selectedLassoTextIds.length > 0 ||
+                            selectedTextId !== null) && (
+                            <button
+                              type="button"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const effImgIds =
+                                  selectedImageIds.length > 0
+                                    ? selectedImageIds
+                                    : selectedImageId
+                                    ? [selectedImageId]
+                                    : [];
+                                const effTxtIds =
+                                  selectedLassoTextIds.length > 0
+                                    ? selectedLassoTextIds
+                                    : selectedTextId
+                                    ? [selectedTextId]
+                                    : [];
+                                const stSet = new Set(selectedStrokeIds);
+                                const imSet = new Set(effImgIds);
+                                const txSet = new Set(effTxtIds);
+                                const grpSet = new Set<string>();
+                                for (const s of activePage.strokes) {
+                                  if (stSet.has(s.id) && s.groupId) grpSet.add(s.groupId);
+                                }
+                                for (const im of activePage.images || []) {
+                                  if (imSet.has(im.id) && im.groupId) grpSet.add(im.groupId);
+                                }
+                                for (const t of activePage.texts || []) {
+                                  if (txSet.has(t.id) && t.groupId) grpSet.add(t.groupId);
+                                }
+                                updateActivePage((page) => ({
+                                  ...page,
+                                  strokes: page.strokes.map((s) =>
+                                    stSet.has(s.id) || (s.groupId && grpSet.has(s.groupId))
+                                      ? { ...s, layerId: layer.id }
+                                      : s
+                                  ),
+                                  images: (page.images || []).map((im) =>
+                                    imSet.has(im.id) || (im.groupId && grpSet.has(im.groupId))
+                                      ? { ...im, layerId: layer.id }
+                                      : im
+                                  ),
+                                  texts: (page.texts || []).map((t) =>
+                                    txSet.has(t.id) || (t.groupId && grpSet.has(t.groupId))
+                                      ? { ...t, layerId: layer.id }
+                                      : t
+                                  ),
+                                }));
+                                setActiveLayerId(layer.id);
+                                showToast(`📥 Το επιλεγμένο αντικείμενο μεταφέρθηκε στο "${layer.name}"!`);
+                              }}
+                              className="px-1.5 py-0.5 mr-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-semibold transition cursor-pointer"
+                              title={`Άμεση μεταφορά του επιλεγμένου αντικειμένου στο "${layer.name}"`}
+                            >
+                              📥 Εδώ
+                            </button>
+                          )}
+                          {internalClipboardRef.current &&
+                            selectedStrokeIds.length === 0 &&
+                            selectedImageId === null &&
+                            selectedImageIds.length === 0 &&
+                            selectedLassoTextIds.length === 0 &&
+                            selectedTextId === null && (
+                              <button
+                                type="button"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveLayerId(layer.id);
+                                  pasteFromInternalClipboard(layer.id);
+                                }}
+                                className="px-1.5 py-0.5 mr-0.5 rounded-md bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 text-[10px] font-semibold transition cursor-pointer"
+                                title={`Επικόλληση (Paste) στο "${layer.name}"`}
+                              >
+                                📋 Paste
+                              </button>
+                            )}
                           <button
                             type="button"
                             onPointerDown={(e) => e.stopPropagation()}
