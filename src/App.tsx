@@ -2338,6 +2338,7 @@ export default function App() {
     image?: ImageObject;
     text?: TextObject;
   } | null>(null);
+  const hasExternalFocusSinceInternalCopyRef = useRef<boolean>(true);
   const lastPasteHandledAtRef = useRef<number>(0);
   const imageElementsCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const fileInputGoodnotesRef = useRef<HTMLInputElement | null>(null);
@@ -7947,6 +7948,7 @@ export default function App() {
       image: selImg ? structuredClone(selImg) : undefined,
       text: selTxt ? structuredClone(selTxt) : undefined,
     };
+    hasExternalFocusSinceInternalCopyRef.current = false;
     try {
       void navigator.clipboard?.writeText?.('__EXPLAINBOARDS_INTERNAL__')?.catch(() => {});
     } catch {
@@ -7991,6 +7993,7 @@ export default function App() {
       image: selImg ? structuredClone(selImg) : undefined,
       text: selTxt ? structuredClone(selTxt) : undefined,
     };
+    hasExternalFocusSinceInternalCopyRef.current = false;
     try {
       void navigator.clipboard?.writeText?.('__EXPLAINBOARDS_INTERNAL__')?.catch(() => {});
     } catch {
@@ -8558,10 +8561,16 @@ export default function App() {
         }
         const w = Math.max(24, Math.round(natW * scale));
         const h = Math.max(24, Math.round(natH * scale));
+        const tapPt = lastLassoEmptyTapPtRef.current;
+        const targetX = tapPt ? Math.max(12, Math.round(tapPt.x - w / 2)) : 160;
+        const targetY = tapPt ? Math.max(12, Math.round(tapPt.y - h / 2)) : 180;
+        if (tapPt) {
+          lastLassoEmptyTapPtRef.current = { x: tapPt.x + 26, y: tapPt.y + 26 };
+        }
         const newImg: ImageObject = {
           id: `img-${Date.now()}`,
-          x: 160,
-          y: 180,
+          x: targetX,
+          y: targetY,
           width: w,
           height: h,
           naturalWidth: natW,
@@ -9105,12 +9114,22 @@ export default function App() {
   const handlePaste = useCallback(async () => {
     lastPasteHandledAtRef.current = performance.now();
 
-    // 1. If we have an internal clipboard item, check if system clipboard has an external image first;
-    //    if not (or if system clipboard has our '__EXPLAINBOARDS_INTERNAL__' marker), paste internal item!
+    // 0. If the user copied an object inside BestNotes and has NOT switched to another window/tab since then,
+    //    paste directly from the internal clipboard in 0ms without calling navigator.clipboard.read() (zero browser popup!).
+    if (internalClipboardRef.current && !hasExternalFocusSinceInternalCopyRef.current) {
+      if (pasteFromInternalClipboard()) {
+        return;
+      }
+    }
+
+    // 1. Single-pass read from System Clipboard (handles images, HTML <img> tags, image URLs, and plain text in ONE call
+    //    so the browser never shows a second Paste prompt or loses user activation between read() and readText()!)
     try {
-      if (navigator.clipboard && 'read' in navigator.clipboard) {
-        const items = await navigator.clipboard.read();
+      const cb = navigator.clipboard as Clipboard | undefined;
+      if (cb && typeof cb.read === 'function') {
+        const items = await cb.read();
         for (const item of items) {
+          // 1a. Raw image blob (image/png, image/jpeg, image/webp, image/gif, image/svg+xml, etc.)
           const imgType = item.types.find((t) => t.startsWith('image/'));
           if (imgType) {
             const blob = await item.getType(imgType);
@@ -9123,45 +9142,104 @@ export default function App() {
             reader.readAsDataURL(blob);
             return;
           }
+
+          // 1b. HTML containing <img src="..."> (e.g. copied image from a webpage or document)
+          if (item.types.includes('text/html')) {
+            try {
+              const htmlBlob = await item.getType('text/html');
+              const htmlStr = await htmlBlob.text();
+              const imgSrcMatch = htmlStr.match(/<img[^>]+src=["']([^"']+)["']/i);
+              if (imgSrcMatch && imgSrcMatch[1] && /^(?:data:image\/|https?:\/\/|blob:)/i.test(imgSrcMatch[1])) {
+                insertImageDataUrlOnPage(imgSrcMatch[1]);
+                return;
+              }
+            } catch {
+              // continue to text/plain
+            }
+          }
+
+          // 1c. Plain text inside the same ClipboardItem
+          if (item.types.includes('text/plain')) {
+            try {
+              const txtBlob = await item.getType('text/plain');
+              const txt = (await txtBlob.text()).trim();
+              if (txt === '__EXPLAINBOARDS_INTERNAL__') {
+                if (pasteFromInternalClipboard()) return;
+                continue;
+              }
+              if (/^data:image\//i.test(txt) || /^https?:\/\/\S+\.(?:png|jpe?g|webp|gif|svg)(?:\?\S*)?$/i.test(txt)) {
+                insertImageDataUrlOnPage(txt);
+                return;
+              }
+              if (txt) {
+                const tapPt = lastLassoEmptyTapPtRef.current;
+                const newTxt: TextObject = {
+                  id: `txt-${Date.now()}`,
+                  x: tapPt ? Math.max(12, Math.round(tapPt.x - 40)) : 160,
+                  y: tapPt ? Math.max(12, Math.round(tapPt.y - 16)) : 200,
+                  text: txt,
+                  color: strokeColor,
+                  fontSize: 18,
+                  layerId: activeLayerId,
+                };
+                updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+                setSelectedTextId(newTxt.id);
+                showToast('📥 Επικόλληση κειμένου από το πρόχειρο!');
+                return;
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
+      } else if (cb && typeof cb.readText === 'function') {
+        const txt = (await cb.readText()).trim();
+        if (txt && txt !== '__EXPLAINBOARDS_INTERNAL__') {
+          if (/^data:image\//i.test(txt) || /^https?:\/\/\S+\.(?:png|jpe?g|webp|gif|svg)(?:\?\S*)?$/i.test(txt)) {
+            insertImageDataUrlOnPage(txt);
+            return;
+          }
+          const tapPt = lastLassoEmptyTapPtRef.current;
+          const newTxt: TextObject = {
+            id: `txt-${Date.now()}`,
+            x: tapPt ? Math.max(12, Math.round(tapPt.x - 40)) : 160,
+            y: tapPt ? Math.max(12, Math.round(tapPt.y - 16)) : 200,
+            text: txt,
+            color: strokeColor,
+            fontSize: 18,
+            layerId: activeLayerId,
+          };
+          updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+          setSelectedTextId(newTxt.id);
+          showToast('📥 Επικόλληση κειμένου από το πρόχειρο!');
+          return;
         }
       }
     } catch {
       // Fall back to internal clipboard if system clipboard permission is declined or empty
     }
 
-    // 2. Paste from Internal ExplainBoards Clipboard (strokes, image, or text box)
+    // 2. Fallback: Paste from Internal ExplainBoards Clipboard (strokes, image, or text box)
     if (pasteFromInternalClipboard()) {
       return;
     }
 
-    // 3. Try reading text from System Clipboard
-    try {
-      if (navigator.clipboard && 'readText' in navigator.clipboard) {
-        const txt = await navigator.clipboard.readText();
-        if (txt && txt.trim() && txt.trim() !== '__EXPLAINBOARDS_INTERNAL__') {
-          const newTxt: TextObject = {
-            id: `txt-${Date.now()}`,
-            x: 160,
-            y: 200,
-            text: txt.trim(),
-            color: strokeColor,
-            fontSize: 18,
-            layerId: activeLayerId,
-          };
-          updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
-          showToast('📥 Επικόλληση κειμένου από το πρόχειρο!');
-          return;
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    showToast('ℹ️ Το πρόχειρο είναι κενό (Κάνε Copy με Ctrl+C ή επίλεξε σχήμα/εικόνα με Lasso)!');
+    showToast('ℹ️ Το πρόχειρο είναι κενό (Κάνε Copy εικόνας/κειμένου ή επίλεξε σχήμα με Lasso)!');
   }, [insertImageDataUrlOnPage, pasteFromInternalClipboard, updateActivePage, strokeColor, activeLayerId, showToast]);
 
-  // Global Paste event listener (handles Ctrl+V / Cmd+V / iPad 3-finger Paste of both internal items & external photos)
+  // Global Paste event listener (handles Ctrl+V / Cmd+V / iPad 3-finger Paste / Safari native Paste callout)
   useEffect(() => {
+    const onWindowBlur = () => {
+      hasExternalFocusSinceInternalCopyRef.current = true;
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hasExternalFocusSinceInternalCopyRef.current = true;
+      }
+    };
+    window.addEventListener('blur', onWindowBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     const onWindowPaste = (e: ClipboardEvent) => {
       if (viewMode !== 'editor' || editingTextId !== null || showMathModal) return;
       const target = e.target as HTMLElement | null;
@@ -9176,6 +9254,7 @@ export default function App() {
         return;
       }
 
+      // 1. Check clipboardData.items for image/*
       const items = e.clipboardData?.items;
       if (items) {
         for (let i = 0; i < items.length; i++) {
@@ -9198,32 +9277,77 @@ export default function App() {
         }
       }
 
+      // 2. Check clipboardData.files for image files (e.g. Finder / Desktop file copy)
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (file.type.startsWith('image/')) {
+            e.preventDefault();
+            lastPasteHandledAtRef.current = performance.now();
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') {
+                insertImageDataUrlOnPage(reader.result);
+              }
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+      }
+
+      // 3. Check HTML clipboard for <img src="...">
+      const htmlData = e.clipboardData?.getData('text/html');
+      if (htmlData) {
+        const imgSrcMatch = htmlData.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (imgSrcMatch && imgSrcMatch[1] && /^(?:data:image\/|https?:\/\/|blob:)/i.test(imgSrcMatch[1])) {
+          e.preventDefault();
+          lastPasteHandledAtRef.current = performance.now();
+          insertImageDataUrlOnPage(imgSrcMatch[1]);
+          return;
+        }
+      }
+
+      // 4. Check plain text from external copy BEFORE internalClipboardRef so external copies from other apps always win!
+      const plainTxt = (e.clipboardData?.getData('text/plain') || '').trim();
+      if (plainTxt && plainTxt !== '__EXPLAINBOARDS_INTERNAL__') {
+        e.preventDefault();
+        lastPasteHandledAtRef.current = performance.now();
+        if (/^data:image\//i.test(plainTxt) || /^https?:\/\/\S+\.(?:png|jpe?g|webp|gif|svg)(?:\?\S*)?$/i.test(plainTxt)) {
+          insertImageDataUrlOnPage(plainTxt);
+          return;
+        }
+        const tapPt = lastLassoEmptyTapPtRef.current;
+        const newTxt: TextObject = {
+          id: `txt-${Date.now()}`,
+          x: tapPt ? Math.max(12, Math.round(tapPt.x - 40)) : 160,
+          y: tapPt ? Math.max(12, Math.round(tapPt.y - 16)) : 200,
+          text: plainTxt,
+          color: strokeColor,
+          fontSize: 18,
+          layerId: activeLayerId,
+        };
+        updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
+        setSelectedTextId(newTxt.id);
+        showToast('📥 Επικόλληση κειμένου από το πρόχειρο!');
+        return;
+      }
+
+      // 5. Internal ExplainBoards Clipboard
       if (internalClipboardRef.current) {
         e.preventDefault();
         lastPasteHandledAtRef.current = performance.now();
         pasteFromInternalClipboard();
         return;
       }
-
-      const plainTxt = e.clipboardData?.getData('text/plain');
-      if (plainTxt && plainTxt.trim() && plainTxt.trim() !== '__EXPLAINBOARDS_INTERNAL__') {
-        e.preventDefault();
-        lastPasteHandledAtRef.current = performance.now();
-        const newTxt: TextObject = {
-          id: `txt-${Date.now()}`,
-          x: 160,
-          y: 200,
-          text: plainTxt.trim(),
-          color: strokeColor,
-          fontSize: 18,
-          layerId: activeLayerId,
-        };
-        updateActivePage((page) => ({ ...page, texts: [...(page.texts || []), newTxt] }));
-        showToast('📥 Επικόλληση κειμένου από το πρόχειρο!');
-      }
     };
     window.addEventListener('paste', onWindowPaste);
-    return () => window.removeEventListener('paste', onWindowPaste);
+    return () => {
+      window.removeEventListener('paste', onWindowPaste);
+      window.removeEventListener('blur', onWindowBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [
     viewMode,
     editingTextId,
@@ -40060,13 +40184,21 @@ export default function App() {
 
               <div className="h-5 w-px bg-slate-200 mx-0.5" />
 
-              {/* Upload Photo / PDF / .goodnotes from Device + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
+              {/* Upload Photo / PDF / .goodnotes from Device + Direct 1-Click Paste + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
               <button
                 onClick={() => fileInputImageRef.current?.click()}
                 className="p-2 rounded-full text-sky-600 hover:bg-sky-50 transition cursor-pointer"
                 title="Εισαγωγή Εικόνας, PDF ή .goodnotes"
               >
                 <Upload className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={handlePaste}
+                className="p-2 rounded-full text-[#0066ff] hover:bg-sky-50 transition cursor-pointer"
+                title="Άμεση Επικόλληση (Paste — Ctrl+V / Cmd+V) εικόνας, κειμένου ή αντικειμένου"
+              >
+                <ClipboardPaste className="w-4 h-4" />
               </button>
 
               <button
@@ -40697,7 +40829,9 @@ export default function App() {
               activeTool === 'text' ||
               selectedTextId !== null ||
               (activeTool !== 'direct-node' &&
-                (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || activeTool === 'lasso')) ||
+                (selectedStrokeIds.length > 0 ||
+                  Boolean(selectedImgObj) ||
+                  (activeTool === 'lasso' && showAlignSubBar))) ||
               activeTool === 'eraser') &&
             showToolSubBar && (
               <div
@@ -41439,24 +41573,6 @@ export default function App() {
                   </div>
                 )}
 
-                {activeTool === 'lasso' &&
-                  !showAlignSubBar &&
-                  selectedStrokeIds.length === 0 &&
-                  !selectedImgObj &&
-                  !selectedTextId &&
-                  !editingTextId && (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={handlePaste}
-                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] font-normal cursor-pointer"
-                      title="Επικόλληση (Paste) στο σημείο που κάνατε κλικ με το Λάσο"
-                    >
-                      <ClipboardPaste className="w-3.5 h-3.5" />
-                      <span>Paste</span>
-                    </button>
-                  </div>
-                )}
-
                 {activeTool !== 'direct-node' &&
                   !showAlignSubBar &&
                   (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || Boolean(selectedTextId)) && (
@@ -41476,6 +41592,14 @@ export default function App() {
                     >
                       <Copy className="w-3.5 h-3.5" />
                       <span>Copy</span>
+                    </button>
+                    <button
+                      onClick={handlePaste}
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-normal cursor-pointer"
+                      title="Επικόλληση (Paste)"
+                    >
+                      <ClipboardPaste className="w-3.5 h-3.5" />
+                      <span>Paste</span>
                     </button>
                     <button
                       onClick={handleDuplicateSelected}
