@@ -6741,21 +6741,23 @@ export default function App() {
             const sideOffY = Math.min(22, Math.max(12, hh * 0.34));
 
             // 1. 4 Orange Stretch Dots (● #f97316) + Small Orange Resize Arrow (↔) ONLY on the Right side outside the frame
+            const isImgCenteredOnPageX =
+              Math.abs(bcx - getPageLogicalWidth(pageObj) / 2) <= 2.0;
             const imgStretchDots = [
-              { x: -sideOffX, y: -hh, ax: -sideOffX, ay: -hh - 14, isVert: true, showIcon: false }, // Top stretch
-              { x: hw, y: -sideOffY, ax: hw + 14, ay: -sideOffY, isVert: false, showIcon: true },   // Right stretch
-              { x: -sideOffX, y: hh, ax: -sideOffX, ay: hh + 14, isVert: true, showIcon: false },   // Bottom stretch
-              { x: -hw, y: -sideOffY, ax: -hw - 14, ay: -sideOffY, isVert: false, showIcon: false }, // Left stretch
+              { x: -sideOffX, y: -hh, ax: -sideOffX, ay: -hh - 14, isVert: true, showIcon: false, isTopMid: true }, // Top stretch
+              { x: hw, y: -sideOffY, ax: hw + 14, ay: -sideOffY, isVert: false, showIcon: true, isTopMid: false },   // Right stretch
+              { x: -sideOffX, y: hh, ax: -sideOffX, ay: hh + 14, isVert: true, showIcon: false, isTopMid: false },   // Bottom stretch
+              { x: -hw, y: -sideOffY, ax: -hw - 14, ay: -sideOffY, isVert: false, showIcon: false, isTopMid: false }, // Left stretch
             ];
             for (const m of imgStretchDots) {
               if (m.showIcon) {
                 drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
               }
-              ctx.fillStyle = '#f97316';
+              ctx.fillStyle = m.isTopMid && isImgCenteredOnPageX ? '#ef4444' : '#f97316';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.2;
               ctx.beginPath();
-              ctx.arc(m.x, m.y, 6.8, 0, Math.PI * 2);
+              ctx.arc(m.x, m.y, m.isTopMid && isImgCenteredOnPageX ? 7.8 : 6.8, 0, Math.PI * 2);
               ctx.fill();
               ctx.stroke();
             }
@@ -6840,26 +6842,42 @@ export default function App() {
               Boolean(mathDiagForFrame?.isOrthonormalXY) || selTextsList.length > 0;
             const isSmallSelForHandles = selBounds.hw < 30 || selBounds.hh < 30;
             const sideDotR = isSmallSelForHandles ? 5.2 : 6.8;
+            const isShapeCenteredOnPageX =
+              Math.abs(bcx - getPageLogicalWidth(pageObj) / 2) <= 2.0;
             if (!hide1DStretchForOrthonormalXY) {
               // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows on Top ↕ & Right ↔!)
               const localSideMidpoints = [
-                { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: true },  // Top (height stretch ↕)
-                { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true },   // Right (width stretch ↔)
-                { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true, showIcon: false },   // Bottom (height stretch)
-                { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false, showIcon: false }, // Left (width stretch)
+                { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: true, isTopMid: true },  // Top (height stretch ↕)
+                { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true, isTopMid: false },   // Right (width stretch ↔)
+                { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true, showIcon: false, isTopMid: false },   // Bottom (height stretch)
+                { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false, showIcon: false, isTopMid: false }, // Left (width stretch)
               ];
               for (const m of localSideMidpoints) {
                 if (m.showIcon) {
                   drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
                 }
-                ctx.fillStyle = '#f97316';
+                ctx.fillStyle = m.isTopMid && isShapeCenteredOnPageX ? '#ef4444' : '#f97316';
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 2.0;
                 ctx.beginPath();
-                ctx.arc(m.x, m.y, sideDotR, 0, Math.PI * 2);
+                ctx.arc(
+                  m.x,
+                  m.y,
+                  m.isTopMid && isShapeCenteredOnPageX ? sideDotR + 1.2 : sideDotR,
+                  0,
+                  Math.PI * 2
+                );
                 ctx.fill();
                 ctx.stroke();
               }
+            } else if (isShapeCenteredOnPageX) {
+              ctx.fillStyle = '#ef4444';
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2.0;
+              ctx.beginPath();
+              ctx.arc(0, -hh, sideDotR + 1.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
             }
           }
 
@@ -9989,7 +10007,15 @@ export default function App() {
         d.moved = true;
       }
       if (!d.moved) return;
-      const nextX = Math.round(d.origX + dx);
+      const pageCenterX = pW / 2;
+      const liveTxtEl = document.querySelector(
+        `[data-text-id="${d.id}"]`
+      ) as HTMLElement | null;
+      const curBoxW = liveTxtEl?.offsetWidth || d.origW || 180;
+      let nextX = Math.round(d.origX + dx);
+      if (Math.abs(nextX + curBoxW / 2 - pageCenterX) <= 7) {
+        nextX = Math.round(pageCenterX - curBoxW / 2);
+      }
       const nextY = Math.round(d.origY + dy);
       updateActivePage(
         (page) => ({
@@ -24635,9 +24661,12 @@ export default function App() {
   ) => {
     clearActiveOverlay();
     const aCtx = activeCtxRef.current;
-    if (!aCtx || refBoxes.length === 0) return;
+    if (!aCtx) return;
 
     const EPS = 0.9;
+    const pageCenterX = getPageLogicalWidth(activePage) / 2;
+    const pageH = getPageLogicalHeight(activePage);
+    const isSnappedToPageCenterX = Math.abs(selBox.cx - pageCenterX) <= 1.8;
     const vLines: { x: number; y1: number; y2: number }[] = [];
     const hLines: { y: number; x1: number; x2: number }[] = [];
     const centerLinks: {
@@ -24709,9 +24738,35 @@ export default function App() {
       }
     }
 
-    if (vLines.length === 0 && hLines.length === 0 && centerLinks.length === 0) return;
+    if (
+      !isSnappedToPageCenterX &&
+      vLines.length === 0 &&
+      hLines.length === 0 &&
+      centerLinks.length === 0
+    ) {
+      return;
+    }
 
     aCtx.save();
+
+    if (isSnappedToPageCenterX) {
+      aCtx.save();
+      aCtx.setLineDash([6, 5]);
+      aCtx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      aCtx.lineWidth = 3.2;
+      aCtx.beginPath();
+      aCtx.moveTo(pageCenterX, 0);
+      aCtx.lineTo(pageCenterX, pageH);
+      aCtx.stroke();
+
+      aCtx.strokeStyle = '#ef4444';
+      aCtx.lineWidth = 1.8;
+      aCtx.beginPath();
+      aCtx.moveTo(pageCenterX, 0);
+      aCtx.lineTo(pageCenterX, pageH);
+      aCtx.stroke();
+      aCtx.restore();
+    }
 
     // Draw thin red Edge Alignment lines (with subtle white halo for visibility on dark/grey fills)
     for (const vl of vLines) {
@@ -32357,8 +32412,10 @@ export default function App() {
               (activePage.springSims || []).some((sm) => sm.massStrokeId === sid)
             );
           });
-          if (curBox && refBoxes.length > 0 && !isAttachedOrUnhookingWeight) {
+          if (curBox && !isAttachedOrUnhookingWeight) {
             const SNAP_T = 2.2;
+            const PAGE_CENTER_SNAP_T = 6.5;
+            const pageCenterX = getPageLogicalWidth(activePage) / 2;
             const candMinX = curBox.minX + rawDx;
             const candMaxX = curBox.maxX + rawDx;
             const candCx = curBox.cx + rawDx;
@@ -32368,6 +32425,12 @@ export default function App() {
 
             let bestDiffX = SNAP_T;
             let bestDiffY = SNAP_T;
+
+            // Magnetic Snap to Horizontal Page Center (pW / 2)
+            const dPageCx = Math.abs(candCx - pageCenterX);
+            if (dPageCx <= PAGE_CENTER_SNAP_T) {
+              snapDx = pageCenterX - candCx;
+            }
 
             for (const ref of refBoxes) {
               // Center X snap
@@ -32412,7 +32475,7 @@ export default function App() {
         tf.startX += dx;
         tf.startY += dy;
 
-        if (curBox && refBoxes.length > 0) {
+        if (curBox) {
           drawSmartAlignmentGuidesForBox(
             {
               minX: curBox.minX + dx,
@@ -47102,6 +47165,45 @@ export default function App() {
                       }`}
                     />
 
+                    {/* Page-Center Red Guide Line + Blinking Red Top-Middle Handle for Centered Lasso Selection */}
+                    {isCurrentActive &&
+                      (() => {
+                        const selB = getSelectionBounds();
+                        if (!selB || Math.abs(selB.cx - pW / 2) > 2.0) return null;
+                        const pad = 8;
+                        const hw = selB.hw + pad;
+                        const hh = selB.hh + pad;
+                        const ang = selB.angle || 0;
+                        const isSingleImgOnly =
+                          Boolean(selectedImageId) &&
+                          selectedImageIds.length <= 1 &&
+                          selectedStrokeIds.length === 0 &&
+                          selectedLassoTextIds.length === 0;
+                        const localTopDotX = isSingleImgOnly
+                          ? -Math.min(22, Math.max(12, hw * 0.34))
+                          : 0;
+                        const localTopDotY = -hh;
+                        const cosA = Math.cos(ang);
+                        const sinA = Math.sin(ang);
+                        const dotPageX = selB.cx + localTopDotX * cosA - localTopDotY * sinA;
+                        const dotPageY = selB.cy + localTopDotX * sinA + localTopDotY * cosA;
+                        return (
+                          <div className="absolute inset-0 pointer-events-none z-20">
+                            <div
+                              style={{ left: pW / 2, top: 0, height: pH }}
+                              className="absolute -translate-x-1/2 w-0 border-l-2 border-dashed border-red-500/85"
+                            />
+                            <div
+                              style={{ left: dotPageX, top: dotPageY }}
+                              className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                            >
+                              <span className="absolute w-6 h-6 rounded-full bg-red-500/75 animate-ping" />
+                              <span className="relative w-3.5 h-3.5 rounded-full bg-red-600 border-2 border-white shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse" />
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                     {/* Rendered Interactive Text & LaTeX Blocks for this page */}
                     {(pageObj.texts || []).map((txt) => {
                       const txtLayer = pageObj.layers.find((l) => l.id === txt.layerId);
@@ -47110,6 +47212,23 @@ export default function App() {
                       const isSelectedTxt = isCurrentActive && selectedTextId === txt.id;
                       const isEditingTxt = isCurrentActive && editingTextId === txt.id;
                       const fontCss = getTextFontCss(txt.fontFamily, txt.bold);
+                      const liveTxtDom =
+                        isSelectedTxt || isEditingTxt
+                          ? (document.querySelector(
+                              `[data-text-id="${txt.id}"]`
+                            ) as HTMLElement | null)
+                          : null;
+                      const effTxtW =
+                        liveTxtDom?.offsetWidth ||
+                        txt.boxWidth ||
+                        (draggingTextRef.current?.id === txt.id
+                          ? draggingTextRef.current.origW
+                          : 0) ||
+                        0;
+                      const isTextCenteredOnPage =
+                        (isSelectedTxt || isEditingTxt) &&
+                        effTxtW > 0 &&
+                        Math.abs(txt.x + effTxtW / 2 - pW / 2) <= 2.0;
 
                       return (
                         <div
@@ -47439,16 +47558,31 @@ export default function App() {
                           {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (narrower side pills + small corner circles) */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <>
-                              {!txt.isMath && (
+                              {isTextCenteredOnPage && (
+                                <div
+                                  style={{ top: -txt.y, height: pH }}
+                                  className="absolute left-1/2 -translate-x-1/2 w-0 border-l-2 border-dashed border-red-500/85 pointer-events-none z-20"
+                                />
+                              )}
+                              {!txt.isMath ? (
                                 <>
-                                  {/* Top Edge Handle (N) */}
+                                  {/* Top Edge Handle (N) — Blinks bright red when horizontally centered on the page! */}
                                   <div
                                     data-text-resize="n"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
                                     className="absolute left-3 right-3 -top-[18px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
-                                    <div className="w-5 h-2 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                    {isTextCenteredOnPage && (
+                                      <span className="absolute w-7 h-4 rounded-full bg-red-500/75 animate-ping pointer-events-none" />
+                                    )}
+                                    <div
+                                      className={`w-5 h-2 rounded-full border-[1.5px] shadow-sm group-hover:scale-110 transition-transform pointer-events-none ${
+                                        isTextCenteredOnPage
+                                          ? 'bg-red-600 border-white ring-2 ring-red-400 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse'
+                                          : 'bg-white border-[#0066ff]'
+                                      }`}
+                                    />
                                   </div>
                                   {/* Bottom Edge Handle (S) */}
                                   <div
@@ -47478,6 +47612,13 @@ export default function App() {
                                     <div className="w-2 h-5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                 </>
+                              ) : (
+                                isTextCenteredOnPage && (
+                                  <div className="absolute left-3 right-3 -top-[18px] h-[32px] flex items-center justify-center pointer-events-none z-30">
+                                    <span className="absolute w-7 h-4 rounded-full bg-red-500/75 animate-ping" />
+                                    <div className="w-5 h-2 rounded-full bg-red-600 border-[1.5px] border-white ring-2 ring-red-400 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse" />
+                                  </div>
+                                )
                               )}
                               {/* 4 Corner Handles (NW, NE, SW, SE) — 32x32px touch zones with compact 10x10px circles */}
                               <div
