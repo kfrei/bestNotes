@@ -16766,6 +16766,7 @@ IMPORTANT RULES FOR "effects":
   ];
 
   const candidateModels = [
+    'gemini-3.8-flash',
     'gemini-2.5-flash',
     'gemini-3-flash-preview',
     'gemini-3.5-flash-lite',
@@ -16920,38 +16921,81 @@ export async function generateOmniVideoFromImage(
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: JSON.stringify({
           model: 'gemini-omni-1.1-flash',
           input: inputParts,
+          background: true,
           response_format: {
             type: 'video',
             aspect_ratio: aspectRatio,
-            duration: `${durationSec}s`,
             resolution,
           },
         }),
       }
     );
 
-    const data = await res.json().catch(() => null);
+    let data = await res.json().catch(() => null);
     if (!res.ok) {
       const msg = String(data?.error?.message || `HTTP ${res.status}`);
       const isFreeTierLimit =
-        res.status === 429 &&
-        (msg.toLowerCase().includes('free tier') || msg.includes('limit: 0'));
+        res.status === 429 ||
+        msg.toLowerCase().includes('free tier') ||
+        msg.includes('limit: 0') ||
+        msg.includes('RESOURCE_EXHAUSTED');
       if (isFreeTierLimit) {
         return {
           ok: false,
           needsPaidKey: true,
           error:
-            'Το προεπιλεγμένο API Key είναι σε Free Tier (όριο 0 για βίντεο Omni). Επικολλήστε παρακάτω το API Key του λογαριασμού σας (από το aistudio.google.com/apikey με ενεργό Billing) για παραγωγή βίντεο με το Gemini Omni 1.1 Flash!',
+            'Το API Key σας φορτώθηκε κανονικά από τη βάση Firebase, αλλά στο Google AI Studio (aistudio.google.com/apikey) η στήλη «Billing Tier» δίπλα στο project «ExplainBoards» γράφει ακόμα «Free tier (Set up billing)». Η συνδρομή Google AI Ultra ισχύει για το web, ενώ για εξωτερικό API Key βίντεο (Omni 1.1 Flash) η Google δίνει όριο 0 μέχρι να πατήσετε «Set up billing» δίπλα στο ExplainBoards.',
         };
       }
       return { ok: false, error: msg };
+    }
+
+    // If interaction is running in background ("in_progress"), poll until completed/failed
+    const interactionId = data?.id;
+    let pollAttempt = 0;
+    while (
+      interactionId &&
+      (data?.status === 'in_progress' || data?.status === 'queued' || data?.status === 'processing') &&
+      pollAttempt < 45
+    ) {
+      await new Promise((r) => window.setTimeout(r, 3000));
+      pollAttempt++;
+      const pollRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/interactions/${encodeURIComponent(
+          interactionId
+        )}?key=${encodeURIComponent(apiKey)}`,
+        {
+          headers: { 'x-goog-api-key': apiKey },
+        }
+      );
+      if (pollRes.ok) {
+        data = await pollRes.json().catch(() => data);
+      }
+    }
+
+    if (data?.status === 'failed') {
+      const errObj = Array.isArray(data?.errors) ? data.errors[0] : data?.error;
+      const errCode = String(errObj?.code || '');
+      const errMsg = String(errObj?.message || 'Η δημιουργία βίντεο απέτυχε.');
+      if (errCode === 'RESOURCE_EXHAUSTED' || errMsg.toLowerCase().includes('free tier')) {
+        return {
+          ok: false,
+          needsPaidKey: true,
+          error:
+            'Το API Key σας φορτώθηκε κανονικά από τη βάση Firebase, αλλά στο Google AI Studio (aistudio.google.com/apikey) η στήλη «Billing Tier» δίπλα στο project «ExplainBoards» γράφει ακόμα «Free tier (Set up billing)». Πατήστε «Set up billing» δίπλα στο project ExplainBoards στο aistudio.google.com/apikey για να ξεκλειδώσει το video quota του API Key!',
+        };
+      }
+      return { ok: false, error: errMsg };
     }
 
     // Extract base64 MP4 from steps[].content[] (or output_video)

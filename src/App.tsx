@@ -2026,6 +2026,31 @@ export default function App() {
   const [customGeminiKey, setCustomGeminiKey] = useState<string>(
     () => localStorage.getItem('bestnotes_custom_gemini_key') || ''
   );
+  const [showGeminiKeyInput, setShowGeminiKeyInput] = useState<boolean>(false);
+
+  // Automatically fetch the Gemini API Key from Firebase Firestore (`app_config/gemini`) on startup
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, 'app_config', 'gemini'),
+      (snap) => {
+        if (snap.exists()) {
+          const remoteKey = String(snap.data()?.geminiApiKey || '').trim();
+          if (remoteKey) {
+            setCustomGeminiKey(remoteKey);
+            try {
+              localStorage.setItem('bestnotes_custom_gemini_key', remoteKey);
+            } catch {
+              // ignore
+            }
+          }
+        }
+      },
+      () => {
+        // ignore read error if offline
+      }
+    );
+    return () => unsub();
+  }, []);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -51025,37 +51050,82 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Optional Custom Paid Gemini API Key Box (for freiderikos.kos@gmail.com) */}
+                {/* Firebase-Synced Gemini API Key Status Box */}
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold text-slate-700">
-                      🔑 Gemini API Key (από τον λογαριασμό σας `freiderikos.kos@gmail.com` για Omni Video):
-                    </label>
-                    <a
-                      href="https://aistudio.google.com/apikey"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[11px] font-semibold text-[#0066ff] hover:underline flex items-center gap-1"
-                    >
-                      <span>Άνοιγμα aistudio.google.com/apikey</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                      {customGeminiKey.trim() ? (
+                        <>
+                          <span className="text-emerald-600">☁️ API Key από Firebase:</span>
+                          <code className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px]">
+                            ...{customGeminiKey.trim().slice(-6)}
+                          </code>
+                        </>
+                      ) : (
+                        <span>🔑 Gemini API Key (αποθήκευση στο Firebase):</span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {customGeminiKey.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKeyInput((v) => !v)}
+                          className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline cursor-pointer"
+                        >
+                          {showGeminiKeyInput ? 'Κλείσιμο' : 'Αλλαγή Key'}
+                        </button>
+                      )}
+                      <a
+                        href="https://aistudio.google.com/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-semibold text-[#0066ff] hover:underline flex items-center gap-1"
+                      >
+                        <span>aistudio.google.com/apikey</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   </div>
-                  <input
-                    type="password"
-                    value={customGeminiKey}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setCustomGeminiKey(val);
-                      if (val.trim()) {
-                        localStorage.setItem('bestnotes_custom_gemini_key', val.trim());
-                      } else {
-                        localStorage.removeItem('bestnotes_custom_gemini_key');
-                      }
-                    }}
-                    placeholder="Επικολλήστε εδώ το API Key (AIzaSy...) αν θέλετε χρήση του Paid/Ultra project σας..."
-                    className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-mono text-slate-800 select-text"
-                  />
+                  {(showGeminiKeyInput || !customGeminiKey.trim()) && (
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <input
+                        type="password"
+                        value={customGeminiKey}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomGeminiKey(val);
+                          if (val.trim()) {
+                            localStorage.setItem('bestnotes_custom_gemini_key', val.trim());
+                          } else {
+                            localStorage.removeItem('bestnotes_custom_gemini_key');
+                          }
+                        }}
+                        placeholder="Επικολλήστε εδώ το API Key (AQ... ή AIzaSy...)..."
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-mono text-slate-800 select-text"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const trimmed = customGeminiKey.trim();
+                          if (!trimmed) return;
+                          try {
+                            await setDoc(doc(db, 'app_config', 'gemini'), {
+                              geminiApiKey: trimmed,
+                              updatedAt: new Date().toISOString(),
+                            });
+                            setShowGeminiKeyInput(false);
+                            showToast('☁️ Το API Key αποθηκεύτηκε μόνιμα στη βάση Firebase!');
+                          } catch {
+                            setShowGeminiKeyInput(false);
+                            showToast('✅ Το API Key αποθηκεύτηκε τοπικά!');
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-white text-[11px] font-bold cursor-pointer shrink-0"
+                      >
+                        💾 Firebase
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {aiAnimateModal.omniError && (

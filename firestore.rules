@@ -13,6 +13,7 @@ rules_version = '2';
 //   - customFoldersJson: string (optional, 0..1000000 chars) - serialized custom folders JSON
 //   - shapeLibraryJson: string (optional, 0..1000000 chars) - serialized shape library JSON
 //   - deviceId: string (optional, 0..256 chars) - originating client device identifier
+//   - geminiApiKey: string (optional, 0..512 chars) - user-configured Gemini API key
 //
 // Subcollection: users/{userId}/notebooks
 // Document ID: {notebookId} (must match data.id, immutable)
@@ -23,6 +24,12 @@ rules_version = '2';
 //   - dataJson: string (optional, 0..1000000 chars) - serialized notebook content JSON
 //   - deleted: bool (optional) - soft-deletion tombstone flag
 //   - deviceId: string (optional, 0..256 chars) - originating client device identifier
+//
+// Collection: app_config
+// Document ID: gemini
+// Fields:
+//   - geminiApiKey: string (required, 0..512 chars) - application-level Gemini API key
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of last configuration update
 //
 // ===============================================================
 
@@ -84,12 +91,13 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUserDoc(data) {
-      return data.keys().hasOnly(['customFoldersJson', 'shapeLibraryJson', 'updatedAt', 'deviceId']) &&
+      return data.keys().hasOnly(['customFoldersJson', 'shapeLibraryJson', 'updatedAt', 'deviceId', 'geminiApiKey']) &&
         hasRequiredFields(['updatedAt']) &&
         validStringLength('updatedAt', 1, 100) &&
         isValidOptionalString('customFoldersJson', 0, 1000000) &&
         isValidOptionalString('shapeLibraryJson', 0, 1000000) &&
-        isValidOptionalString('deviceId', 0, 256);
+        isValidOptionalString('deviceId', 0, 256) &&
+        isValidOptionalString('geminiApiKey', 0, 512);
     }
 
     function isValidNotebookDoc(data, notebookId) {
@@ -122,6 +130,14 @@ service cloud.firestore {
           areImmutableFieldsUnchanged(['id']);
         allow delete: if isOwner(userId);
       }
+    }
+
+    match /app_config/gemini {
+      allow get: if true;
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.keys().hasOnly(['geminiApiKey', 'updatedAt']) &&
+        validStringLength('geminiApiKey', 0, 512) &&
+        validStringLength('updatedAt', 1, 100);
     }
 
     // Default deny all other paths
