@@ -35949,6 +35949,53 @@ export default function App() {
           return;
         }
 
+        // Ctrl+A / Cmd+A -> Select all objects (strokes, images, texts) of the active layer!
+        if (code === 'KeyA' || key === 'a' || key === 'α') {
+          e.preventDefault();
+          const targetLayer =
+            activePage.layers.find((l) => l.id === activeLayerId) || activePage.layers[0];
+          if (!targetLayer) return;
+          if (!targetLayer.visible || targetLayer.locked) {
+            showToast(
+              `🔒 Το ενεργό Layer «${targetLayer.name}» είναι ${
+                targetLayer.locked ? 'κλειδωμένο' : 'κρυφό'
+              }!`
+            );
+            return;
+          }
+          const layerStrokeIds = activePage.strokes
+            .filter((s) => s.layerId === targetLayer.id)
+            .map((s) => s.id);
+          const layerImageIds = (activePage.images || [])
+            .filter((im) => im.layerId === targetLayer.id)
+            .map((im) => im.id);
+          const layerTextIds = (activePage.texts || [])
+            .filter((t) => t.layerId === targetLayer.id)
+            .map((t) => t.id);
+          const totalCount = layerStrokeIds.length + layerImageIds.length + layerTextIds.length;
+          if (totalCount === 0) {
+            showToast(`ℹ️ Δεν υπάρχουν αντικείμενα στο ενεργό Layer «${targetLayer.name}».`);
+            return;
+          }
+          setActiveTool('lasso');
+          setShowToolSubBar(true);
+          setShowAlignSubBar(false);
+          setImageCropMode('none');
+          setActiveNodeStrokeId(null);
+          setSelectedTextId(null);
+          setEditingTextId(null);
+          setSelectedStrokeIds(layerStrokeIds);
+          setSelectedImageIds(layerImageIds);
+          setSelectedImageId(
+            layerImageIds.length > 0 ? layerImageIds[layerImageIds.length - 1] : null
+          );
+          setSelectedLassoTextIds(layerTextIds);
+          showToast(
+            `✅ Επιλέχθηκαν όλα (${totalCount} αντικείμενα) του ενεργού Layer «${targetLayer.name}»!`
+          );
+          return;
+        }
+
         return;
       }
 
@@ -36270,10 +36317,14 @@ export default function App() {
     selectedStrokeIds,
     selectedImageId,
     selectedImageIds,
+    selectedLassoTextIds,
     selectedTextId,
     activeNodeStrokeId,
+    activeLayerId,
+    activePage.layers,
     activePage.strokes,
     activePage.images,
+    activePage.texts,
     updateActivePage,
     toggleFillStyleToSelection,
     handleAlignSelected,
