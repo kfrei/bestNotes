@@ -188,6 +188,7 @@ export interface ImageObject {
   groupId?: string;
   zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
   aiAnimation?: SmartSketchAnimationSpec;
+  aiAnimBox?: { x: number; y: number; width: number; height: number }; // Exact page rect that was analyzed
   aiVideoUrl?: string; // Data URL / Blob URL of MP4 generated via Gemini Omni 1.1 Flash
   aiAnimMode?: 'off' | 'sketch' | 'video';
   aiAnimMuted?: boolean;

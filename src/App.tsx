@@ -210,13 +210,57 @@ function normalizeGreekText(str: string): string {
 
 const AiAnimatedImageOverlay: React.FC<{
   image: ImageObject;
+  page?: NotePage;
+  fillParent?: boolean;
   onUpdateImage: (updater: (im: ImageObject) => ImageObject) => void;
   onOpenStudio: () => void;
-}> = ({ image, onUpdateImage, onOpenStudio }) => {
+}> = ({ image, page, fillParent = false, onUpdateImage, onOpenStudio }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioRef = useRef<SmartSketchAudioEngine | null>(null);
+  const [pillOffset, setPillOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const pillDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const mode = image.aiAnimMode || 'off';
   const muted = Boolean(image.aiAnimMuted);
+
+  const animBox = React.useMemo(() => {
+    if (image.aiAnimBox && image.aiAnimBox.width > 10 && image.aiAnimBox.height > 10) {
+      return image.aiAnimBox;
+    }
+    // Self-heal legacy composite animations where aiAnimBox was not yet persisted
+    if (page && !fillParent) {
+      const layerImgs = (page.images || []).filter((im) => im.layerId === image.layerId);
+      const layerStrokes = (page.strokes || []).filter((s) => s.layerId === image.layerId);
+      if (layerImgs.length > 1 || layerStrokes.length > 0) {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (const im of layerImgs) {
+          if (im.x < minX) minX = im.x;
+          if (im.y < minY) minY = im.y;
+          if (im.x + im.width > maxX) maxX = im.x + im.width;
+          if (im.y + im.height > maxY) maxY = im.y + im.height;
+        }
+        for (const s of layerStrokes) {
+          for (const pt of s.points) {
+            if (pt.x < minX) minX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+            if (pt.x > maxX) maxX = pt.x;
+            if (pt.y > maxY) maxY = pt.y;
+          }
+        }
+        if (Number.isFinite(minX) && Number.isFinite(minY) && maxX > minX + 20 && maxY > minY + 20) {
+          return {
+            x: Math.round(minX),
+            y: Math.round(minY),
+            width: Math.round(maxX - minX),
+            height: Math.round(maxY - minY),
+          };
+        }
+      }
+    }
+    return { x: image.x, y: image.y, width: image.width, height: image.height };
+  }, [image.aiAnimBox, image.x, image.y, image.width, image.height, image.layerId, page, fillParent]);
 
   useEffect(() => {
     if (mode !== 'sketch' || !image.aiAnimation) {
@@ -226,18 +270,35 @@ const AiAnimatedImageOverlay: React.FC<{
     let rafId = 0;
     const startMs = performance.now();
     const dpr = 2;
-    const w = Math.max(24, Math.round(image.width));
-    const h = Math.max(24, Math.round(image.height));
+    const w = Math.max(24, Math.round(animBox.width));
+    const h = Math.max(24, Math.round(animBox.height));
     const c = canvasRef.current;
     if (c) {
       c.width = w * dpr;
       c.height = h * dpr;
     }
+    const isSingleClipped =
+      !fillParent &&
+      Boolean(
+        image.clipPolygon &&
+          image.clipPolygon.length >= 3 &&
+          Math.abs(animBox.width - image.width) < 4 &&
+          Math.abs(animBox.height - image.height) < 4
+      );
     const loop = (now: number) => {
       const ctx = c?.getContext('2d');
       if (ctx && image.aiAnimation) {
         ctx.save();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (isSingleClipped && image.clipPolygon) {
+          ctx.beginPath();
+          ctx.moveTo(image.clipPolygon[0].x, image.clipPolygon[0].y);
+          for (let i = 1; i < image.clipPolygon.length; i++) {
+            ctx.lineTo(image.clipPolygon[i].x, image.clipPolygon[i].y);
+          }
+          ctx.closePath();
+          ctx.clip();
+        }
         renderSmartSketchOverlayFrame(ctx, w, h, image.aiAnimation, (now - startMs) / 1000);
         ctx.restore();
       }
@@ -247,7 +308,7 @@ const AiAnimatedImageOverlay: React.FC<{
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [mode, image.aiAnimation, image.width, image.height]);
+  }, [mode, image.aiAnimation, animBox.width, animBox.height, fillParent, image.clipPolygon, image.width, image.height]);
 
   useEffect(() => {
     if (mode === 'sketch' && image.aiAnimation && !muted) {
@@ -265,20 +326,28 @@ const AiAnimatedImageOverlay: React.FC<{
 
   return (
     <div
-      style={{
-        left: `${image.x}px`,
-        top: `${image.y}px`,
-        width: `${image.width}px`,
-        height: `${image.height}px`,
-        transform: image.rotation ? `rotate(${image.rotation}deg)` : undefined,
-      }}
-      className="absolute z-15 pointer-events-none"
+      style={
+        fillParent
+          ? { inset: 0, width: '100%', height: '100%' }
+          : {
+              left: `${animBox.x}px`,
+              top: `${animBox.y}px`,
+              width: `${animBox.width}px`,
+              height: `${animBox.height}px`,
+              transform: image.rotation ? `rotate(${image.rotation}deg)` : undefined,
+            }
+      }
+      className={
+        fillParent
+          ? 'absolute inset-0 w-full h-full z-15 pointer-events-none overflow-hidden'
+          : 'absolute z-15 pointer-events-none'
+      }
     >
       {mode === 'sketch' && image.aiAnimation && (
         <canvas
           ref={canvasRef}
-          style={{ width: `${image.width}px`, height: `${image.height}px` }}
-          className="w-full h-full pointer-events-none"
+          style={fillParent ? undefined : { width: `${animBox.width}px`, height: `${animBox.height}px` }}
+          className="w-full h-full block pointer-events-none"
         />
       )}
 
@@ -289,60 +358,89 @@ const AiAnimatedImageOverlay: React.FC<{
           loop
           playsInline
           muted={muted}
-          className="w-full h-full object-cover rounded-lg shadow-sm pointer-events-none"
+          className="w-full h-full object-contain rounded-lg pointer-events-none mix-blend-multiply"
         />
       )}
 
-      {/* Floating Compact Control Pill at Top-Right of Animated Image */}
-      <div
-        data-ui-panel="true"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        className="absolute -top-8 right-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/90 text-white text-[10px] font-semibold shadow-lg pointer-events-auto border border-white/15"
-      >
-        <span className="text-amber-300 truncate max-w-[110px]">
-          {mode === 'video' ? '🎬 Omni Video' : `⚡ ${image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}`}
-        </span>
-        <button
-          type="button"
-          onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMuted: !im.aiAnimMuted }))}
-          className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
-          title={muted ? 'Ενεργοποίηση Ήχου' : 'Σίγαση Ήχου'}
+      {/* Draggable Floating Compact Control Pill at Top-Right of Animated Diagram (hidden inside modal preview) */}
+      {!fillParent && (
+        <div
+          data-ui-panel="true"
+          style={{
+            transform: `translate(${pillOffset.x}px, ${pillOffset.y}px)`,
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            if ((e.target as HTMLElement).closest('button')) return;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            pillDragRef.current = {
+              startX: e.clientX,
+              startY: e.clientY,
+              origX: pillOffset.x,
+              origY: pillOffset.y,
+            };
+          }}
+          onPointerMove={(e) => {
+            if (!pillDragRef.current) return;
+            e.stopPropagation();
+            setPillOffset({
+              x: pillDragRef.current.origX + (e.clientX - pillDragRef.current.startX),
+              y: pillDragRef.current.origY + (e.clientY - pillDragRef.current.startY),
+            });
+          }}
+          onPointerUp={(e) => {
+            if (!pillDragRef.current) return;
+            e.stopPropagation();
+            pillDragRef.current = null;
+          }}
+          onClick={(e) => e.stopPropagation()}
+          title="Σύρετε την μπάρα για να τη μετακινήσετε όπου θέλετε"
+          className="absolute -top-7 right-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/90 text-white text-[10px] font-semibold shadow-lg pointer-events-auto border border-white/15 cursor-grab active:cursor-grabbing select-none"
         >
-          {muted ? '🔇' : '🔊'}
-        </button>
-        {image.aiAnimation && image.aiVideoUrl && (
+          <span className="text-amber-300 truncate max-w-[120px]">
+            {mode === 'video' ? '🎬 Omni Video' : `⚡ ${image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}`}
+          </span>
           <button
             type="button"
-            onClick={() =>
-              onUpdateImage((im) => ({
-                ...im,
-                aiAnimMode: im.aiAnimMode === 'video' ? 'sketch' : 'video',
-              }))
-            }
-            className="px-1.5 py-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 cursor-pointer"
-            title="Εναλλαγή ανάμεσα σε Ζωντανό Σκίτσο και Gemini Omni Video"
+            onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMuted: !im.aiAnimMuted }))}
+            className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
+            title={muted ? 'Ενεργοποίηση Ήχου' : 'Σίγαση Ήχου'}
           >
-            {mode === 'video' ? '⚡ Σκίτσο' : '🎬 Video'}
+            {muted ? '🔇' : '🔊'}
           </button>
-        )}
-        <button
-          type="button"
-          onClick={onOpenStudio}
-          className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
-          title="Ρυθμίσεις Ζωντανέματος (AI Animate Studio)"
-        >
-          ⚙️
-        </button>
-        <button
-          type="button"
-          onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
-          className="px-1 py-0.5 rounded-full hover:bg-rose-500/80 text-rose-300 hover:text-white cursor-pointer"
-          title="Διακοπή κίνησης (επιστροφή σε στατική εικόνα)"
-        >
-          ✕
-        </button>
-      </div>
+          {image.aiAnimation && image.aiVideoUrl && (
+            <button
+              type="button"
+              onClick={() =>
+                onUpdateImage((im) => ({
+                  ...im,
+                  aiAnimMode: im.aiAnimMode === 'video' ? 'sketch' : 'video',
+                }))
+              }
+              className="px-1.5 py-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 cursor-pointer"
+              title="Εναλλαγή ανάμεσα σε Ζωντανό Σκίτσο και Gemini Omni Video"
+            >
+              {mode === 'video' ? '⚡ Σκίτσο' : '🎬 Video'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onOpenStudio}
+            className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
+            title="Ρυθμίσεις Ζωντανέματος (AI Animate Studio)"
+          >
+            ⚙️
+          </button>
+          <button
+            type="button"
+            onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
+            className="px-1 py-0.5 rounded-full hover:bg-rose-500/80 text-rose-300 hover:text-white cursor-pointer"
+            title="Διακοπή κίνησης (επιστροφή σε στατική εικόνα)"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -38518,10 +38616,10 @@ export default function App() {
         : selectedImageId
         ? [selectedImageId]
         : [];
-    const selImgs = targetImgOverride
+    let selImgs = targetImgOverride
       ? [targetImgOverride]
       : (activePage.images || []).filter((im) => effImgIds.includes(im.id));
-    const selStrokes = targetImgOverride
+    let selStrokes = targetImgOverride
       ? []
       : activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
 
@@ -38530,65 +38628,21 @@ export default function App() {
       return;
     }
 
-    // Case 1: Single selected image (no extra strokes)
-    if (selImgs.length === 1 && selStrokes.length === 0) {
-      const img = selImgs[0];
-      const existingSpec = img.aiAnimation || null;
-      const existingVideo = img.aiVideoUrl || null;
-      setAiAnimateModal({
-        targetImageId: img.id,
-        snapshotDataUrl: img.dataUrl,
-        box: { x: img.x, y: img.y, width: img.width, height: img.height },
-        spec: existingSpec,
-        omniPrompt:
-          existingSpec?.omniPrompt ||
-          '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and arrows to life with subtle motion and gentle ambient nature sound effects. No dialogue.',
-        videoDataUrl: existingVideo,
-        activeTab: existingVideo && img.aiAnimMode === 'video' ? 'omni' : 'sketch',
-        isAnalyzing: !existingSpec,
-        isGeneratingVideo: false,
-        omniError: null,
-        needsPaidKey: false,
-        durationSec: 5,
-        resolution: '720p',
-        loopVideo: true,
-      });
-
-      if (!existingSpec) {
-        const analyzed = await analyzeImageForSmartSketchAnimation(img.dataUrl, customGeminiKey);
-        if (analyzed) {
-          setAiAnimateModal((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  spec: analyzed,
-                  omniPrompt: analyzed.omniPrompt,
-                  isAnalyzing: false,
-                }
-              : null
-          );
-          updateActivePage((page) => ({
-            ...page,
-            images: (page.images || []).map((im) =>
-              im.id === img.id
-                ? {
-                    ...im,
-                    aiAnimation: analyzed,
-                    aiAnimMode: im.aiAnimMode === 'video' ? 'video' : 'sketch',
-                  }
-                : im
-            ),
-          }));
-          showToast(`✨ Ζωντάνεμα «${analyzed.sceneTitle}» έτοιμο με ήχο!`);
-        } else {
-          setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: false } : null));
-          showToast('⚠️ Δεν ήταν δυνατή η ανάλυση της εικόνας από το Gemini Vision.');
-        }
+    // If opened from ⚙️ on an image that animates a composite diagram layer, include all objects on that layer
+    if (targetImgOverride) {
+      const layerImgs = (activePage.images || []).filter((im) => im.layerId === targetImgOverride.layerId);
+      const layerStrokes = (activePage.strokes || []).filter((s) => s.layerId === targetImgOverride.layerId);
+      const hasCompositeBox =
+        targetImgOverride.aiAnimBox &&
+        (Math.abs(targetImgOverride.aiAnimBox.width - targetImgOverride.width) > 12 ||
+          Math.abs(targetImgOverride.aiAnimBox.height - targetImgOverride.height) > 12);
+      if (hasCompositeBox || (!targetImgOverride.aiAnimBox && (layerImgs.length > 1 || layerStrokes.length > 0))) {
+        selImgs = layerImgs;
+        selStrokes = layerStrokes;
       }
-      return;
     }
 
-    // Case 2: Composite Lasso selection (multiple images and/or strokes, e.g. full Water Cycle diagram)
+    // Compute exact tight bounding box (zero padding so it never expands right/left/top/bottom)
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -38606,41 +38660,79 @@ export default function App() {
       if (b.maxX > maxX) maxX = b.maxX;
       if (b.maxY > maxY) maxY = b.maxY;
     }
-    const pad = 12;
-    minX = Math.max(0, minX - pad);
-    minY = Math.max(0, minY - pad);
-    const boxW = Math.max(80, Math.round(maxX - minX + pad * 2));
-    const boxH = Math.max(80, Math.round(maxY - minY + pad * 2));
+    minX = Math.round(minX);
+    minY = Math.round(minY);
+    const boxW = Math.max(40, Math.round(maxX - minX));
+    const boxH = Math.max(40, Math.round(maxY - minY));
+    const targetBox = { x: minX, y: minY, width: boxW, height: boxH };
 
+    // Render exact on-page visual snapshot (preserving transparency, exact aspect ratio, and clipPolygon)
+    let snapshotUrl = selImgs.length === 1 && selStrokes.length === 0 ? selImgs[0].dataUrl : '';
     const c = document.createElement('canvas');
     const scale = Math.min(2, 1280 / Math.max(boxW, boxH, 1));
-    c.width = Math.round(boxW * scale);
-    c.height = Math.round(boxH * scale);
-    const ctx = c.getContext('2d')!;
-    ctx.scale(scale, scale);
-    ctx.translate(-minX, -minY);
-    for (const im of selImgs) {
-      const el = imageElementsCacheRef.current.get(im.dataUrl);
-      if (el) {
-        ctx.drawImage(el, im.x, im.y, im.width, im.height);
+    c.width = Math.max(1, Math.round(boxW * scale));
+    c.height = Math.max(1, Math.round(boxH * scale));
+    const ctx = c.getContext('2d');
+    if (ctx) {
+      ctx.scale(scale, scale);
+      ctx.translate(-minX, -minY);
+      let drewAny = false;
+      for (const im of selImgs) {
+        const el = imageElementsCacheRef.current.get(im.dataUrl);
+        if (el) {
+          ctx.save();
+          if (im.rotation) {
+            const icx = im.x + im.width / 2;
+            const icy = im.y + im.height / 2;
+            ctx.translate(icx, icy);
+            ctx.rotate((im.rotation * Math.PI) / 180);
+            ctx.translate(-icx, -icy);
+          }
+          if (im.clipPolygon && im.clipPolygon.length >= 3) {
+            ctx.beginPath();
+            ctx.moveTo(im.x + im.clipPolygon[0].x, im.y + im.clipPolygon[0].y);
+            for (let i = 1; i < im.clipPolygon.length; i++) {
+              ctx.lineTo(im.x + im.clipPolygon[i].x, im.y + im.clipPolygon[i].y);
+            }
+            ctx.closePath();
+            ctx.clip();
+          }
+          ctx.drawImage(el, im.x, im.y, im.width, im.height);
+          ctx.restore();
+          drewAny = true;
+        }
+      }
+      for (const s of selStrokes) {
+        drawStrokeOnContext(ctx, s, false);
+        drewAny = true;
+      }
+      if (drewAny) {
+        snapshotUrl = c.toDataURL('image/png');
       }
     }
-    for (const s of selStrokes) {
-      drawStrokeOnContext(ctx, s, false);
-    }
-    const compositeUrl = c.toDataURL('image/png');
-    const primaryImgId = selImgs.length > 0 ? selImgs[0].id : null;
+
+    const primaryImg = targetImgOverride || (selImgs.length > 0 ? selImgs[0] : null);
+    const primaryImgId = primaryImg ? primaryImg.id : null;
+    const isSingleSameBox =
+      primaryImg &&
+      selImgs.length === 1 &&
+      selStrokes.length === 0 &&
+      (!primaryImg.aiAnimBox ||
+        (Math.abs(primaryImg.aiAnimBox.width - boxW) < 8 && Math.abs(primaryImg.aiAnimBox.height - boxH) < 8));
+    const existingSpec = isSingleSameBox ? primaryImg?.aiAnimation || null : null;
+    const existingVideo = primaryImg?.aiVideoUrl || null;
 
     setAiAnimateModal({
       targetImageId: primaryImgId,
-      snapshotDataUrl: compositeUrl,
-      box: { x: Math.round(minX), y: Math.round(minY), width: boxW, height: boxH },
-      spec: null,
+      snapshotDataUrl: snapshotUrl,
+      box: targetBox,
+      spec: existingSpec,
       omniPrompt:
-        '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and arrows to life with subtle motion and gentle ambient nature sound effects. No dialogue.',
-      videoDataUrl: null,
-      activeTab: 'sketch',
-      isAnalyzing: true,
+        existingSpec?.omniPrompt ||
+        '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate ONLY the existing hand-drawn elements in place within their exact boundaries on a clean pure white background, without expanding the scene or adding duplicate objects. Bring the natural elements and arrows to life with subtle motion and gentle ambient nature sound effects. No dialogue.',
+      videoDataUrl: existingVideo,
+      activeTab: existingVideo && primaryImg?.aiAnimMode === 'video' ? 'omni' : 'sketch',
+      isAnalyzing: !existingSpec,
       isGeneratingVideo: false,
       omniError: null,
       needsPaidKey: false,
@@ -38649,21 +38741,39 @@ export default function App() {
       loopVideo: true,
     });
 
-    const analyzed = await analyzeImageForSmartSketchAnimation(compositeUrl, customGeminiKey);
-    if (analyzed) {
-      setAiAnimateModal((prev) =>
-        prev
-          ? {
-              ...prev,
-              spec: analyzed,
-              omniPrompt: analyzed.omniPrompt,
-              isAnalyzing: false,
-            }
-          : null
-      );
-      showToast(`✨ Ζωντάνεμα «${analyzed.sceneTitle}» έτοιμο!`);
-    } else {
-      setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: false } : null));
+    if (!existingSpec) {
+      const analyzed = await analyzeImageForSmartSketchAnimation(snapshotUrl, customGeminiKey);
+      if (analyzed) {
+        setAiAnimateModal((prev) =>
+          prev
+            ? {
+                ...prev,
+                spec: analyzed,
+                omniPrompt: analyzed.omniPrompt,
+                isAnalyzing: false,
+              }
+            : null
+        );
+        if (primaryImgId) {
+          updateActivePage((page) => ({
+            ...page,
+            images: (page.images || []).map((im) =>
+              im.id === primaryImgId
+                ? {
+                    ...im,
+                    aiAnimation: analyzed,
+                    aiAnimBox: targetBox,
+                    aiAnimMode: im.aiAnimMode === 'video' ? 'video' : 'sketch',
+                  }
+                : im
+            ),
+          }));
+        }
+        showToast(`✨ Ζωντάνεμα «${analyzed.sceneTitle}» έτοιμο με ήχο!`);
+      } else {
+        setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: false } : null));
+        showToast('⚠️ Δεν ήταν δυνατή η ανάλυση της εικόνας από το Gemini Vision.');
+      }
     }
   };
 
@@ -47730,6 +47840,7 @@ export default function App() {
                           <AiAnimatedImageOverlay
                             key={`ai-anim-${im.id}`}
                             image={im}
+                            page={pageObj}
                             onUpdateImage={(updater) => {
                               updateActivePage((page) => ({
                                 ...page,
@@ -50584,12 +50695,14 @@ export default function App() {
                   />
                   {aiAnimateModal.spec && (
                     <AiAnimatedImageOverlay
+                      fillParent
                       image={{
                         id: 'modal-preview',
                         x: 0,
                         y: 0,
-                        width: Math.min(480, aiAnimateModal.box.width),
-                        height: Math.min(340, aiAnimateModal.box.height),
+                        width: aiAnimateModal.box.width,
+                        height: aiAnimateModal.box.height,
+                        aiAnimBox: aiAnimateModal.box,
                         dataUrl: aiAnimateModal.snapshotDataUrl,
                         layerId: activeLayerId,
                         aiAnimation: aiAnimateModal.spec,
@@ -50677,22 +50790,24 @@ export default function App() {
                     onClick={() => {
                       if (!aiAnimateModal.spec) return;
                       const spec = aiAnimateModal.spec;
+                      const box = aiAnimateModal.box;
                       if (aiAnimateModal.targetImageId) {
                         updateActivePage((page) => ({
                           ...page,
                           images: (page.images || []).map((im) =>
                             im.id === aiAnimateModal.targetImageId
-                              ? { ...im, aiAnimation: spec, aiAnimMode: 'sketch', aiAnimMuted: false }
+                              ? { ...im, aiAnimation: spec, aiAnimBox: box, aiAnimMode: 'sketch', aiAnimMuted: false }
                               : im
                           ),
                         }));
                       } else {
                         const newImg: ImageObject = {
                           id: `img-anim-${Date.now()}`,
-                          x: aiAnimateModal.box.x,
-                          y: aiAnimateModal.box.y,
-                          width: aiAnimateModal.box.width,
-                          height: aiAnimateModal.box.height,
+                          x: box.x,
+                          y: box.y,
+                          width: box.width,
+                          height: box.height,
+                          aiAnimBox: box,
                           dataUrl: aiAnimateModal.snapshotDataUrl,
                           layerId: activeLayerId,
                           zOrder: getNextPageZOrder(activePage),
@@ -50834,22 +50949,24 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           const vidUrl = aiAnimateModal.videoDataUrl!;
+                          const box = aiAnimateModal.box;
                           if (aiAnimateModal.targetImageId) {
                             updateActivePage((page) => ({
                               ...page,
                               images: (page.images || []).map((im) =>
                                 im.id === aiAnimateModal.targetImageId
-                                  ? { ...im, aiVideoUrl: vidUrl, aiAnimMode: 'video', aiAnimMuted: false }
+                                  ? { ...im, aiVideoUrl: vidUrl, aiAnimBox: box, aiAnimMode: 'video', aiAnimMuted: false }
                                   : im
                               ),
                             }));
                           } else {
                             const newImg: ImageObject = {
                               id: `img-omni-${Date.now()}`,
-                              x: aiAnimateModal.box.x,
-                              y: aiAnimateModal.box.y,
-                              width: aiAnimateModal.box.width,
-                              height: aiAnimateModal.box.height,
+                              x: box.x,
+                              y: box.y,
+                              width: box.width,
+                              height: box.height,
+                              aiAnimBox: box,
                               dataUrl: aiAnimateModal.snapshotDataUrl,
                               layerId: activeLayerId,
                               zOrder: getNextPageZOrder(activePage),

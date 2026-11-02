@@ -16744,16 +16744,16 @@ Return STRICTLY a valid JSON object matching this exact schema (no markdown fenc
 }
 
 IMPORTANT RULES FOR "effects":
-1. Coordinates [ymin, xmin, ymax, xmax] MUST be integers from 0 to 1000 (where [0,0] is top-left and [1000,1000] is bottom-right of the image).
-2. Detect ALL distinct animated zones visible in the drawing (typically 3 to 7 zones):
-   - "rain": where rain streaks/drops fall (set angleDeg to match the slant of the rain lines, e.g. 105 for slightly left-slanted downward rain, or 90 for vertical).
-   - "evaporation": where vapor/steam/evaporation arrows rise upward (angleDeg = -90).
-   - "water_flow": where a river, stream, or waterfall flows downward (set angleDeg along the flow, e.g. 85 to 120).
-   - "waves": where sea, lake, or water surface waves ripple horizontally.
-   - "sun_rays": around the sun or light source so its rays pulse/shimmer gently.
-   - "cloud_drift": over clouds so they drift gently.
-   - "flow_arrow": over any directional arrows (e.g. red or black cycle arrows, set color to "#991b1b" if red or "#1e293b" if dark ink, and angleDeg to the arrow direction: 180=left, 0=right, 90=down, -90=up).
-3. Match "color" to the ink color of that element in the drawing (e.g. "#1e293b" for black/charcoal ink, "#991b1b" for dark red arrows).`;
+1. Coordinates [ymin, xmin, ymax, xmax] MUST be integers from 0 to 1000 (where [0,0] is top-left and [1000,1000] is bottom-right of THIS exact image).
+2. STRICT TIGHT BOUNDING BOXES — NEVER EXPAND INTO EMPTY MARGINS:
+   Each "box" [ymin, xmin, ymax, xmax] MUST tightly hug ONLY the actual drawn ink pixels of that specific element in the image! NEVER place or extend a box into blank/white/empty background space to the right, left, top, or bottom of the drawing.
+3. Detect the distinct animated zones visible in the drawing (typically 3 to 6 zones):
+   - "rain": tightly around the drawn rain lines between the cloud and mountain (set angleDeg to match the slant of the rain lines, e.g. 105 for slightly left-slanted downward rain, or 90 for vertical).
+   - "evaporation": tightly around the drawn wavy upward evaporation arrows (angleDeg = -90).
+   - "water_flow": tightly around the drawn river, stream, and waterfall on the mountain.
+   - "waves": tightly inside the drawn sea/lake water lines ONLY (do NOT extend past the right edge of the drawn water!).
+   - "sun_rays": tightly centered on the drawn sun disk and its existing rays ONLY.
+   - "flow_arrow": tightly over any drawn directional arrows (set color to "#991b1b" if red or "#1e293b" if dark ink, and angleDeg to the arrow direction: 180=left, 0=right, 90=down, -90=up).`;
 
   const parts: any[] = [
     { text: prompt },
@@ -17020,6 +17020,11 @@ export function renderSmartSketchOverlayFrame(
     const intensity = ef.intensity ?? 1;
 
     ctx.save();
+    // Strictly clip to the detected element bounding box so animations NEVER expand outside the drawing
+    ctx.beginPath();
+    ctx.rect(x0, y0, bw, bh);
+    ctx.clip();
+
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineCap = 'round';
@@ -17030,23 +17035,21 @@ export function renderSmartSketchOverlayFrame(
       const angleRad = ((ef.angleDeg ?? 105) * Math.PI) / 180;
       const cosA = Math.cos(angleRad);
       const sinA = Math.sin(angleRad);
-      const cols = Math.max(5, Math.min(14, Math.round((bw / 22) * intensity)));
-      const rows = Math.max(4, Math.min(10, Math.round((bh / 28) * intensity)));
-      ctx.lineWidth = Math.max(1.3, Math.min(2.4, width * 0.0032));
+      const cols = Math.max(4, Math.min(10, Math.round((bw / 24) * intensity)));
+      const rows = Math.max(4, Math.min(8, Math.round((bh / 30) * intensity)));
+      ctx.lineWidth = Math.max(1.2, Math.min(2.1, width * 0.0028));
 
       for (let c = 0; c < cols; c++) {
         const colFrac = (c + 0.5) / cols;
-        const phaseOffset = ((c * 0.37) % 1);
+        const phaseOffset = (c * 0.37) % 1;
         for (let r = 0; r < rows; r++) {
           const u = (r / rows + elapsedSec * 0.78 + phaseOffset) % 1;
           const fade = Math.sin(u * Math.PI);
           if (fade < 0.08) continue;
-          const dropLen = Math.max(8, Math.min(20, bh * 0.09));
-          // Start near top of box, drift along angleRad as u goes 0 -> 1
-          const px = x0 + colFrac * bw + (u - 0.5) * bh * (cosA / Math.max(0.3, Math.abs(sinA))) * 0.45;
+          const dropLen = Math.max(7, Math.min(16, bh * 0.08));
+          const px = x0 + colFrac * bw + (u - 0.5) * bh * (cosA / Math.max(0.35, Math.abs(sinA))) * 0.35;
           const py = y0 + u * bh;
-          if (px < x0 - 15 || px > x0 + bw + 15) continue;
-          ctx.globalAlpha = 0.72 * fade;
+          ctx.globalAlpha = 0.65 * fade;
           ctx.beginPath();
           ctx.moveTo(px, py);
           ctx.lineTo(px + cosA * dropLen, py + sinA * dropLen);
@@ -17054,56 +17057,46 @@ export function renderSmartSketchOverlayFrame(
         }
       }
     } else if (ef.type === 'evaporation') {
-      // Rising wavy ink lines & vapor wisps (matching hand-drawn wavy upward arrows)
-      const cols = Math.max(3, Math.min(7, Math.round((bw / 28) * intensity)));
-      ctx.lineWidth = Math.max(1.4, Math.min(2.5, width * 0.0034));
+      // Subtle rising wavy ink vapor wisps strictly inside the evaporation arrows zone (no duplicate arrowheads)
+      const cols = Math.max(3, Math.min(5, Math.round((bw / 26) * intensity)));
+      ctx.lineWidth = Math.max(1.2, Math.min(2.0, width * 0.0028));
       for (let c = 0; c < cols; c++) {
         const baseX = x0 + ((c + 0.5) / cols) * bw;
-        for (let p = 0; p < 2; p++) {
-          const u = (elapsedSec * 0.42 + c * 0.23 + p * 0.5) % 1;
+        for (let p = 0; p < 3; p++) {
+          const u = (elapsedSec * 0.48 + c * 0.21 + p * 0.33) % 1;
           const fade = Math.sin(u * Math.PI);
-          const segH = bh * 0.32;
-          const bottomY = y0 + bh - u * (bh - segH * 0.4);
-          const topY = bottomY - segH;
-          ctx.globalAlpha = 0.75 * fade;
+          const segH = bh * 0.18;
+          const bottomY = y0 + bh - u * (bh - segH * 0.2);
+          ctx.globalAlpha = 0.6 * fade;
           ctx.beginPath();
-          const steps = 14;
+          const steps = 10;
           for (let s = 0; s <= steps; s++) {
             const t = s / steps;
             const sy = bottomY - t * segH;
-            const waveX = baseX + Math.sin(t * Math.PI * 3.5 - elapsedSec * 5 + c) * Math.max(3, bw * 0.045);
+            const waveX = baseX + Math.sin(t * Math.PI * 2.5 - elapsedSec * 5 + c) * Math.max(2, bw * 0.03);
             if (s === 0) ctx.moveTo(waveX, sy);
             else ctx.lineTo(waveX, sy);
           }
-          ctx.stroke();
-
-          // Tiny ink arrowhead at the rising tip
-          const tipX = baseX + Math.sin(Math.PI * 3.5 - elapsedSec * 5 + c) * Math.max(3, bw * 0.045);
-          ctx.beginPath();
-          ctx.moveTo(tipX - 3.5, topY + 5);
-          ctx.lineTo(tipX, topY - 1);
-          ctx.lineTo(tipX + 3.5, topY + 5);
           ctx.stroke();
         }
       }
     } else if (ef.type === 'water_flow') {
       // Flowing ink current lines & waterfall droplets along the river/waterfall path
-      const streams = Math.max(4, Math.min(10, Math.round(6 * intensity)));
-      ctx.lineWidth = Math.max(1.4, Math.min(2.4, width * 0.0032));
+      const streams = Math.max(4, Math.min(9, Math.round(6 * intensity)));
+      ctx.lineWidth = Math.max(1.3, Math.min(2.2, width * 0.003));
       for (let i = 0; i < streams; i++) {
-        const u = (elapsedSec * 0.55 + i / streams) % 1;
+        const u = (elapsedSec * 0.58 + i / streams) % 1;
         const fade = Math.sin(u * Math.PI);
-        // S-curve winding down the river bounding box
-        const t0 = Math.max(0, u - 0.14);
-        const t1 = Math.min(1, u + 0.08);
-        const lateralOffset = ((i % 3) - 1) * Math.max(4, bw * 0.11);
-        ctx.globalAlpha = 0.72 * fade;
+        const t0 = Math.max(0, u - 0.12);
+        const t1 = Math.min(1, u + 0.07);
+        const lateralOffset = ((i % 3) - 1) * Math.max(3, bw * 0.08);
+        ctx.globalAlpha = 0.68 * fade;
         ctx.beginPath();
-        const steps = 10;
+        const steps = 8;
         for (let s = 0; s <= steps; s++) {
           const t = t0 + (t1 - t0) * (s / steps);
           const py = y0 + t * bh;
-          const meander = Math.sin(t * Math.PI * 2.2) * (bw * 0.18) + lateralOffset * (0.6 + 0.4 * t);
+          const meander = Math.sin(t * Math.PI * 2.2) * (bw * 0.14) + lateralOffset * (0.6 + 0.4 * t);
           const px = cx + meander;
           if (s === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
@@ -17111,39 +17104,41 @@ export function renderSmartSketchOverlayFrame(
         ctx.stroke();
       }
     } else if (ef.type === 'waves') {
-      // Hand-drawn ink wave crests gently bobbing & rippling across the water surface
-      const rows = Math.max(3, Math.min(6, Math.round(bh / 26)));
-      const cols = Math.max(3, Math.min(7, Math.round(bw / 48)));
-      ctx.lineWidth = Math.max(1.3, Math.min(2.2, width * 0.003));
+      // Subtle ink wave ripples strictly inside the drawn water area
+      const rows = Math.max(2, Math.min(5, Math.round(bh / 28)));
+      const cols = Math.max(2, Math.min(5, Math.round(bw / 52)));
+      ctx.lineWidth = Math.max(1.2, Math.min(1.9, width * 0.0026));
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const phase = elapsedSec * 2.6 + r * 1.3 + c * 0.9;
-          const bobX = Math.sin(phase) * 5;
-          const bobY = Math.cos(phase * 1.2) * 2.2;
-          const wx = x0 + ((c + 0.5 + (r % 2) * 0.25) / (cols + 0.3)) * bw + bobX;
+          const phase = elapsedSec * 2.5 + r * 1.3 + c * 0.9;
+          const bobX = Math.sin(phase) * 4;
+          const bobY = Math.cos(phase * 1.2) * 1.8;
+          const wx = x0 + ((c + 0.5) / cols) * bw + bobX;
           const wy = y0 + ((r + 0.5) / rows) * bh + bobY;
-          const wLen = Math.max(12, Math.min(28, bw * 0.11));
-          const alpha = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(phase));
+          const wLen = Math.max(10, Math.min(22, bw * 0.09));
+          const alpha = 0.28 + 0.32 * (0.5 + 0.5 * Math.sin(phase));
           ctx.globalAlpha = alpha;
           ctx.beginPath();
-          ctx.moveTo(wx - wLen / 2, wy + 2);
-          ctx.quadraticCurveTo(wx - wLen * 0.15, wy - 3.5, wx, wy - 1);
-          ctx.quadraticCurveTo(wx + wLen * 0.2, wy + 2.5, wx + wLen / 2, wy + 1.5);
+          ctx.moveTo(wx - wLen / 2, wy + 1.5);
+          ctx.quadraticCurveTo(wx - wLen * 0.15, wy - 2.5, wx, wy - 0.5);
+          ctx.quadraticCurveTo(wx + wLen * 0.2, wy + 2, wx + wLen / 2, wy + 1);
           ctx.stroke();
         }
       }
     } else if (ef.type === 'sun_rays') {
-      // Shimmering radial pen-and-ink rays around the sun
-      const rx = Math.max(18, Math.min(bw, bh) * 0.48);
-      const innerR = rx * 0.56;
-      const numRays = 16;
-      ctx.lineWidth = Math.max(1.3, Math.min(2.2, width * 0.003));
+      // Subtle traveling light pulses along the existing sun rays (never draws a second sun disk!)
+      const rx = Math.max(14, Math.min(bw, bh) * 0.46);
+      const innerR = rx * 0.58;
+      const numRays = 12;
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = Math.max(1.2, Math.min(2.0, width * 0.0026));
       for (let i = 0; i < numRays; i++) {
-        const baseAngle = (i / numRays) * Math.PI * 2 + Math.sin(elapsedSec * 0.8) * 0.06;
-        const pulse = 0.5 + 0.5 * Math.sin(elapsedSec * 3.8 + i * 1.7);
-        const rStart = innerR + pulse * 4;
-        const rEnd = innerR + (rx - innerR) * (0.55 + 0.45 * pulse);
-        ctx.globalAlpha = 0.35 + 0.5 * pulse;
+        const baseAngle = (i / numRays) * Math.PI * 2;
+        const u = (elapsedSec * 0.6 + (i % 3) * 0.33) % 1;
+        const fade = Math.sin(u * Math.PI);
+        const rStart = innerR + u * (rx - innerR) * 0.55;
+        const rEnd = rStart + (rx - innerR) * 0.32;
+        ctx.globalAlpha = 0.55 * fade;
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(baseAngle) * rStart, cy + Math.sin(baseAngle) * rStart);
         ctx.lineTo(cx + Math.cos(baseAngle) * rEnd, cy + Math.sin(baseAngle) * rEnd);
