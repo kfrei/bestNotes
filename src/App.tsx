@@ -47662,135 +47662,137 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Right: Move Selection Here / Paste Here + Lock + Eye + Red Delete Trash Can */}
+                        {/* Right: Move Selection Here / Paste Here + Live stacked + Lock + Eye + Red Delete Trash Can */}
                         <div
                           onPointerDown={(e) => e.stopPropagation()}
                           onMouseDown={(e) => e.stopPropagation()}
                           className="flex items-center gap-0.5 shrink-0"
                         >
-                          {(selectedStrokeIds.length > 0 ||
-                            selectedImageId !== null ||
-                            selectedImageIds.length > 0 ||
-                            selectedLassoTextIds.length > 0 ||
-                            selectedTextId !== null) && (
-                            <button
-                              type="button"
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const effImgIds =
-                                  selectedImageIds.length > 0
-                                    ? selectedImageIds
-                                    : selectedImageId
-                                    ? [selectedImageId]
-                                    : [];
-                                const effTxtIds =
-                                  selectedLassoTextIds.length > 0
-                                    ? selectedLassoTextIds
-                                    : selectedTextId
-                                    ? [selectedTextId]
-                                    : [];
-                                const stSet = new Set(selectedStrokeIds);
-                                const imSet = new Set(effImgIds);
-                                const txSet = new Set(effTxtIds);
-                                const grpSet = new Set<string>();
-                                for (const s of activePage.strokes) {
-                                  if (stSet.has(s.id) && s.groupId) grpSet.add(s.groupId);
-                                }
-                                for (const im of activePage.images || []) {
-                                  if (imSet.has(im.id) && im.groupId) grpSet.add(im.groupId);
-                                }
-                                for (const t of activePage.texts || []) {
-                                  if (txSet.has(t.id) && t.groupId) grpSet.add(t.groupId);
-                                }
-                                updateActivePage((page) => ({
-                                  ...page,
-                                  strokes: page.strokes.map((s) =>
-                                    stSet.has(s.id) || (s.groupId && grpSet.has(s.groupId))
-                                      ? { ...s, layerId: layer.id }
-                                      : s
-                                  ),
-                                  images: (page.images || []).map((im) =>
-                                    imSet.has(im.id) || (im.groupId && grpSet.has(im.groupId))
-                                      ? { ...im, layerId: layer.id }
-                                      : im
-                                  ),
-                                  texts: (page.texts || []).map((t) =>
-                                    txSet.has(t.id) || (t.groupId && grpSet.has(t.groupId))
-                                      ? { ...t, layerId: layer.id }
-                                      : t
-                                  ),
-                                }));
-                                setActiveLayerId(layer.id);
-                                showToast(`📥 Το επιλεγμένο αντικείμενο μεταφέρθηκε στο "${layer.name}"!`);
-                              }}
-                              className="px-1.5 py-0.5 mr-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-semibold transition cursor-pointer"
-                              title={`Άμεση μεταφορά του επιλεγμένου αντικειμένου στο "${layer.name}"`}
-                            >
-                              📥 Εδώ
-                            </button>
-                          )}
-                          {internalClipboardRef.current &&
-                            selectedStrokeIds.length === 0 &&
-                            selectedImageId === null &&
-                            selectedImageIds.length === 0 &&
-                            selectedLassoTextIds.length === 0 &&
-                            selectedTextId === null && (
+                          <div className="flex flex-col items-stretch gap-0.5 mr-0.5">
+                            {(selectedStrokeIds.length > 0 ||
+                              selectedImageId !== null ||
+                              selectedImageIds.length > 0 ||
+                              selectedLassoTextIds.length > 0 ||
+                              selectedTextId !== null) && (
                               <button
                                 type="button"
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setActiveLayerId(layer.id);
-                                  pasteFromInternalClipboard(layer.id);
-                                }}
-                                className="px-1.5 py-0.5 mr-0.5 rounded-md bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 text-[10px] font-semibold transition cursor-pointer"
-                                title={`Επικόλληση (Paste) στο "${layer.name}"`}
-                              >
-                                📋 Paste
-                              </button>
-                            )}
-
-                          {(() => {
-                            const animImgOnLayer = (activePage.images || []).find(
-                              (im) => im.layerId === layer.id && Boolean(im.aiAnimation || im.aiVideoUrl)
-                            );
-                            if (!animImgOnLayer) return null;
-                            const isAnimActive =
-                              animImgOnLayer.aiAnimMode === 'sketch' || animImgOnLayer.aiAnimMode === 'video';
-                            const nextMode: 'sketch' | 'video' | 'off' = isAnimActive
-                              ? 'off'
-                              : animImgOnLayer.aiVideoUrl && !animImgOnLayer.aiAnimation
-                              ? 'video'
-                              : 'sketch';
-                            return (
-                              <button
-                                type="button"
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                  const effImgIds =
+                                    selectedImageIds.length > 0
+                                      ? selectedImageIds
+                                      : selectedImageId
+                                      ? [selectedImageId]
+                                      : [];
+                                  const effTxtIds =
+                                    selectedLassoTextIds.length > 0
+                                      ? selectedLassoTextIds
+                                      : selectedTextId
+                                      ? [selectedTextId]
+                                      : [];
+                                  const stSet = new Set(selectedStrokeIds);
+                                  const imSet = new Set(effImgIds);
+                                  const txSet = new Set(effTxtIds);
+                                  const grpSet = new Set<string>();
+                                  for (const s of activePage.strokes) {
+                                    if (stSet.has(s.id) && s.groupId) grpSet.add(s.groupId);
+                                  }
+                                  for (const im of activePage.images || []) {
+                                    if (imSet.has(im.id) && im.groupId) grpSet.add(im.groupId);
+                                  }
+                                  for (const t of activePage.texts || []) {
+                                    if (txSet.has(t.id) && t.groupId) grpSet.add(t.groupId);
+                                  }
                                   updateActivePage((page) => ({
                                     ...page,
+                                    strokes: page.strokes.map((s) =>
+                                      stSet.has(s.id) || (s.groupId && grpSet.has(s.groupId))
+                                        ? { ...s, layerId: layer.id }
+                                        : s
+                                    ),
                                     images: (page.images || []).map((im) =>
-                                      im.id === animImgOnLayer.id ? { ...im, aiAnimMode: nextMode } : im
+                                      imSet.has(im.id) || (im.groupId && grpSet.has(im.groupId))
+                                        ? { ...im, layerId: layer.id }
+                                        : im
+                                    ),
+                                    texts: (page.texts || []).map((t) =>
+                                      txSet.has(t.id) || (t.groupId && grpSet.has(t.groupId))
+                                        ? { ...t, layerId: layer.id }
+                                        : t
                                     ),
                                   }));
+                                  setActiveLayerId(layer.id);
+                                  showToast(`📥 Το επιλεγμένο αντικείμενο μεταφέρθηκε στο "${layer.name}"!`);
                                 }}
-                                className={`px-1.5 py-0.5 mr-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
-                                  isAnimActive
-                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
-                                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                                }`}
-                                title={
-                                  isAnimActive
-                                    ? 'Παύση Ζωντανέματος αυτού του Layer'
-                                    : 'Εκκίνηση αποθηκευμένου Ζωντανέματος αυτού του Layer'
-                                }
+                                className="px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-semibold text-center whitespace-nowrap transition cursor-pointer"
+                                title={`Άμεση μεταφορά του επιλεγμένου αντικειμένου στο "${layer.name}"`}
                               >
-                                {isAnimActive ? '⏸ Ζωντανό' : '▶️ Ζωντάνεμα'}
+                                📥 Εδώ
                               </button>
-                            );
-                          })()}
+                            )}
+                            {internalClipboardRef.current &&
+                              selectedStrokeIds.length === 0 &&
+                              selectedImageId === null &&
+                              selectedImageIds.length === 0 &&
+                              selectedLassoTextIds.length === 0 &&
+                              selectedTextId === null && (
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveLayerId(layer.id);
+                                    pasteFromInternalClipboard(layer.id);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded-md bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 text-[10px] font-semibold text-center whitespace-nowrap transition cursor-pointer"
+                                  title={`Επικόλληση (Paste) στο "${layer.name}"`}
+                                >
+                                  📋 Paste
+                                </button>
+                              )}
+
+                            {(() => {
+                              const animImgOnLayer = (activePage.images || []).find(
+                                (im) => im.layerId === layer.id && Boolean(im.aiAnimation || im.aiVideoUrl)
+                              );
+                              if (!animImgOnLayer) return null;
+                              const isAnimActive =
+                                animImgOnLayer.aiAnimMode === 'sketch' || animImgOnLayer.aiAnimMode === 'video';
+                              const nextMode: 'sketch' | 'video' | 'off' = isAnimActive
+                                ? 'off'
+                                : animImgOnLayer.aiVideoUrl && !animImgOnLayer.aiAnimation
+                                ? 'video'
+                                : 'sketch';
+                              return (
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      images: (page.images || []).map((im) =>
+                                        im.id === animImgOnLayer.id ? { ...im, aiAnimMode: nextMode } : im
+                                      ),
+                                    }));
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold border text-center whitespace-nowrap transition cursor-pointer ${
+                                    isAnimActive
+                                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                  }`}
+                                  title={
+                                    isAnimActive
+                                      ? 'Παύση Live αυτού του Layer'
+                                      : 'Εκκίνηση αποθηκευμένου Live αυτού του Layer'
+                                  }
+                                >
+                                  {isAnimActive ? '⏸ Live' : '▶️ Live'}
+                                </button>
+                              );
+                            })()}
+                          </div>
 
                           <button
                             type="button"
