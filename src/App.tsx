@@ -40805,14 +40805,10 @@ export default function App() {
                             ? 'rect'
                             : 'freehand';
                         setShowAlignSubBar(false);
-                        if (activeTool === 'lasso' && !showAlignSubBar && lassoMode === targetMode) {
-                          setShowToolSubBar((s) => !s);
-                        } else {
-                          lassoModeRef.current = targetMode;
-                          setLassoMode(targetMode);
-                          setActiveTool('lasso');
-                          setShowToolSubBar(true);
-                        }
+                        lassoModeRef.current = targetMode;
+                        setLassoMode(targetMode);
+                        setActiveTool('lasso');
+                        setShowToolSubBar(true);
                         setSelectedTextId(null);
                         setEditingTextId(null);
                         setImageCropMode('none');
@@ -41541,12 +41537,12 @@ export default function App() {
             !isMoveOnlyLassoSelection &&
             (activeTool === 'shape' ||
               activeTool === 'text' ||
+              activeTool === 'lasso' ||
               selectedTextId !== null ||
               (activeTool !== 'direct-node' &&
                 (selectedStrokeIds.length > 0 ||
                   selectedLassoTextIds.length > 0 ||
-                  Boolean(selectedImgObj) ||
-                  (activeTool === 'lasso' && showAlignSubBar))) ||
+                  Boolean(selectedImgObj))) ||
               activeTool === 'eraser') &&
             showToolSubBar && (
               <div
@@ -42377,6 +42373,24 @@ export default function App() {
                     })()}
                   </div>
                 )}
+
+                {activeTool === 'lasso' &&
+                  !showAlignSubBar &&
+                  selectedStrokeIds.length === 0 &&
+                  selectedLassoTextIds.length === 0 &&
+                  !selectedImgObj &&
+                  !selectedTextId && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handlePaste}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 font-normal cursor-pointer"
+                        title="Επικόλληση (Paste — Ctrl+V / Cmd+V)"
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5" />
+                        <span>Paste</span>
+                      </button>
+                    </div>
+                  )}
 
                 {activeTool !== 'direct-node' &&
                   !showAlignSubBar &&
