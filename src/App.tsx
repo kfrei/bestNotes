@@ -1720,6 +1720,10 @@ export default function App() {
   const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const layerDragStartYRef = useRef<number>(0);
+  const layerDragClickedNameRef = useRef<boolean>(false);
+  const layerDragMovedRef = useRef<boolean>(false);
+  const [layersPanelPos, setLayersPanelPos] = useState<{ x: number; y: number } | null>(null);
+  const layersPanelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -46714,18 +46718,77 @@ export default function App() {
               );
             })()}
 
-            {/* Floating Layers Popover (Draggable Reordering, Up/Down Move, Lock, Visibility & Red Trash Can Delete!) */}
+            {/* Floating Layers Popover (Draggable Window, Draggable Layer Reordering, Click-to-Rename, Lock, Visibility & Delete!) */}
             {showLayersPanel && (
               <div
                 data-ui-panel="true"
                 data-popover-panel="layers"
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                className="fixed right-5 top-28 z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800"
+                style={
+                  layersPanelPos
+                    ? { left: `${layersPanelPos.x}px`, top: `${layersPanelPos.y}px` }
+                    : undefined
+                }
+                className={`fixed z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 ${
+                  layersPanelPos ? '' : 'right-5 top-28'
+                }`}
               >
-                <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100">
+                <div
+                  style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+                  onDragStart={(e) => e.preventDefault()}
+                  onPointerDown={(e) => {
+                    const targetEl = e.target as HTMLElement | null;
+                    if (targetEl?.closest('button')) return;
+                    e.stopPropagation();
+                    const panelEl = e.currentTarget.parentElement;
+                    const rect = panelEl?.getBoundingClientRect();
+                    const origX = layersPanelPos ? layersPanelPos.x : rect ? rect.left : window.innerWidth - 340;
+                    const origY = layersPanelPos ? layersPanelPos.y : rect ? rect.top : 112;
+                    layersPanelDragRef.current = {
+                      startX: e.clientX,
+                      startY: e.clientY,
+                      origX,
+                      origY,
+                    };
+                    try {
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  onPointerMove={(e) => {
+                    if (!layersPanelDragRef.current) return;
+                    e.stopPropagation();
+                    const dx = e.clientX - layersPanelDragRef.current.startX;
+                    const dy = e.clientY - layersPanelDragRef.current.startY;
+                    const nextX = Math.max(8, Math.min(window.innerWidth - 328, layersPanelDragRef.current.origX + dx));
+                    const nextY = Math.max(8, Math.min(window.innerHeight - 120, layersPanelDragRef.current.origY + dy));
+                    setLayersPanelPos({ x: Math.round(nextX), y: Math.round(nextY) });
+                  }}
+                  onPointerUp={(e) => {
+                    if (!layersPanelDragRef.current) return;
+                    e.stopPropagation();
+                    layersPanelDragRef.current = null;
+                    try {
+                      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                        e.currentTarget.releasePointerCapture(e.pointerId);
+                      }
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  onPointerCancel={() => {
+                    layersPanelDragRef.current = null;
+                  }}
+                  className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 cursor-move select-none"
+                  title="Σύρετε από εδώ για να μετακινήσετε το παράθυρο των Layers"
+                >
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-[#1b2a4a]">Layers (Επίπεδα Σελίδας)</span>
+                    <span className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1">
+                      <GripVertical className="w-3.5 h-3.5 text-slate-400 -ml-1 shrink-0" />
+                      Layers (Επίπεδα Σελίδας)
+                    </span>
                     <span className="text-[10px] text-slate-400">Σύρε πάνω/κάτω (Πάνω = Μπροστά)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -46767,7 +46830,7 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
-                  {activePage.layers.map((layer, layerIdx) => {
+                  {activePage.layers.map((layer) => {
                     const isCurrent = layer.id === activeLayerId;
                     const isBeingDragged = draggingLayerId === layer.id;
                     const strokeCount = activePage.strokes.filter((s) => s.layerId === layer.id).length;
@@ -46838,11 +46901,11 @@ export default function App() {
                             if (editingLayerId === layer.id) return;
                             e.stopPropagation();
                             setActiveLayerId(layer.id);
-                            try {
-                              e.currentTarget.setPointerCapture(e.pointerId);
-                            } catch {
-                              // ignore
-                            }
+                            const targetEl = e.target as HTMLElement | null;
+                            layerDragClickedNameRef.current = Boolean(
+                              targetEl?.closest('[data-layer-name="true"]')
+                            );
+                            layerDragMovedRef.current = false;
                             setDraggingLayerId(layer.id);
                             layerDragStartYRef.current = e.clientY;
                           }}
@@ -46850,6 +46913,14 @@ export default function App() {
                             if (draggingLayerId !== layer.id) return;
                             e.stopPropagation();
                             const dy = e.clientY - layerDragStartYRef.current;
+                            if (Math.abs(dy) > 4 && !layerDragMovedRef.current) {
+                              layerDragMovedRef.current = true;
+                              try {
+                                e.currentTarget.setPointerCapture(e.pointerId);
+                              } catch {
+                                // ignore
+                              }
+                            }
                             const currIdx = activePage.layers.findIndex((l) => l.id === layer.id);
                             if (currIdx === -1) return;
                             if (dy <= -26 && currIdx > 0) {
@@ -46863,7 +46934,6 @@ export default function App() {
                           onPointerUp={(e) => {
                             if (editingLayerId === layer.id) return;
                             e.stopPropagation();
-                            const totalDy = Math.abs(e.clientY - layerDragStartYRef.current);
                             try {
                               if (e.currentTarget.hasPointerCapture(e.pointerId)) {
                                 e.currentTarget.releasePointerCapture(e.pointerId);
@@ -46871,13 +46941,20 @@ export default function App() {
                             } catch {
                               // ignore
                             }
+                            const shouldEditName =
+                              !layerDragMovedRef.current && layerDragClickedNameRef.current;
                             setDraggingLayerId(null);
-                            const targetEl = e.target as HTMLElement | null;
-                            if (totalDy <= 5 && targetEl?.closest('[data-layer-name="true"]')) {
+                            layerDragClickedNameRef.current = false;
+                            layerDragMovedRef.current = false;
+                            if (shouldEditName) {
                               setEditingLayerId(layer.id);
                             }
                           }}
-                          onPointerCancel={() => setDraggingLayerId(null)}
+                          onPointerCancel={() => {
+                            setDraggingLayerId(null);
+                            layerDragClickedNameRef.current = false;
+                            layerDragMovedRef.current = false;
+                          }}
                           className="flex items-center gap-1.5 min-w-0 flex-1 pr-2 cursor-grab active:cursor-grabbing"
                           title="Σύρε πάνω/κάτω για αλλαγή σειράς του Layer (ή κάνε κλικ στο όνομα για μετονομασία)"
                         >
@@ -46891,6 +46968,7 @@ export default function App() {
                                 type="text"
                                 autoFocus
                                 value={layer.name}
+                                onFocus={(e) => e.currentTarget.select()}
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={(e) => {
