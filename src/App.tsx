@@ -9360,14 +9360,24 @@ export default function App() {
     showToast,
   ]);
 
-  const getTextFontCss = (fontFamily?: TextFontStyle): React.CSSProperties => {
+  const getTextFontCss = (fontFamily?: TextFontStyle, isBold?: boolean): React.CSSProperties => {
     switch (fontFamily) {
       case 'calligraphic':
         return {
-          fontFamily: "'ExplainBoardsHand', 'Alegreya Sans', cursive",
+          fontFamily: isBold
+            ? "'ExplainBoardsHandBold', 'ExplainBoardsHand', 'Alegreya Sans', cursive"
+            : "'ExplainBoardsHand', 'Alegreya Sans', cursive",
           fontStyle: 'normal',
           letterSpacing: '0em',
-          WebkitTextStroke: '0.25px currentColor',
+          WebkitTextStroke: isBold ? '0.45px currentColor' : '0.2px currentColor',
+        };
+      case 'calligraphic-bold':
+        return {
+          fontFamily: "'ExplainBoardsHandBold', 'ExplainBoardsHand', 'Alegreya Sans', cursive",
+          fontStyle: 'normal',
+          fontWeight: 700,
+          letterSpacing: '0em',
+          WebkitTextStroke: '0.45px currentColor',
         };
       case 'marker':
         return {
@@ -40969,6 +40979,7 @@ export default function App() {
                         {(
                           [
                             { id: 'calligraphic', label: 'Καλλιγραφική' },
+                            { id: 'calligraphic-bold', label: 'Καλλιγραφική Bold' },
                             { id: 'marker', label: 'Πένα' },
                             { id: 'mansalva', label: 'Μαρκαδόρος' },
                             { id: 'handwritten', label: 'Χειρόγραφο' },
@@ -46271,7 +46282,7 @@ export default function App() {
                       const isLocked = Boolean(txtLayer?.locked);
                       const isSelectedTxt = isCurrentActive && selectedTextId === txt.id;
                       const isEditingTxt = isCurrentActive && editingTextId === txt.id;
-                      const fontCss = getTextFontCss(txt.fontFamily);
+                      const fontCss = getTextFontCss(txt.fontFamily, txt.bold);
 
                       return (
                         <div
@@ -46639,6 +46650,7 @@ export default function App() {
                                   onClick={() => {
                                     const order: TextFontStyle[] = [
                                       'calligraphic',
+                                      'calligraphic-bold',
                                       'marker',
                                       'mansalva',
                                       'handwritten',
@@ -46672,6 +46684,8 @@ export default function App() {
                                 >
                                   {txt.fontFamily === 'calligraphic'
                                     ? '✍️ Καλλιγραφική'
+                                    : txt.fontFamily === 'calligraphic-bold'
+                                    ? '✍️ Καλλιγρ. Bold'
                                     : txt.fontFamily === 'marker'
                                     ? '✒️ Πένα'
                                     : txt.fontFamily === 'mansalva'

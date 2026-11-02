@@ -114,6 +114,7 @@ export interface StrokeObject {
 export type TextFontStyle =
   | 'sans'
   | 'calligraphic'
+  | 'calligraphic-bold'
   | 'neohellenic'
   | 'handwritten'
   | 'marker'
