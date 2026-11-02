@@ -420,16 +420,16 @@ const AiAnimatedImageOverlay: React.FC<{
         >
           {isPlaying ? (
             <>
+              <span className="text-amber-300 truncate max-w-[115px] pl-1">
+                ⚡ {mode === 'video' ? 'Omni Video' : image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}
+              </span>
               <button
                 type="button"
                 onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/35 text-amber-300 cursor-pointer"
-                title="Παύση κίνησης (το κουμπί μένει εδώ για να το ξαναπατήσεις όποτε θέλεις!)"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold cursor-pointer"
+                title="Παύση κίνησης (δεν χάνεται — μένει εδώ ως κουμπί ▶️ Play!)"
               >
-                <span>⏸</span>
-                <span className="truncate max-w-[115px]">
-                  {mode === 'video' ? 'Omni Video' : image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}
-                </span>
+                <span>⏸ Παύση</span>
               </button>
               <button
                 type="button"
@@ -462,27 +462,19 @@ const AiAnimatedImageOverlay: React.FC<{
               >
                 ⚙️
               </button>
-              <button
-                type="button"
-                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
-                className="px-1 py-0.5 rounded-full hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
-                title="Παύση Ζωντανέματος (μένει αποθηκευμένο πάνω στο σχέδιο)"
-              >
-                ✕
-              </button>
             </>
           ) : (
             <>
+              <span className="text-slate-200 truncate max-w-[115px] pl-1">
+                ⚡ {image.aiAnimation?.sceneTitle || 'Ζωντάνεμα'}
+              </span>
               <button
                 type="button"
                 onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: defaultPlayMode }))}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-300 cursor-pointer"
-                title="Πάτησε για εκκίνηση του αποθηκευμένου Ζωντανέματος!"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold cursor-pointer"
+                title="Εκκίνηση του αποθηκευμένου Ζωντανέματος!"
               >
-                <span>▶️</span>
-                <span className="truncate max-w-[125px]">
-                  ⚡ {image.aiAnimation?.sceneTitle || 'Ζωντάνεμα'}
-                </span>
+                <span>▶️ Play</span>
               </button>
               <button
                 type="button"
