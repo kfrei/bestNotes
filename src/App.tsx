@@ -322,7 +322,10 @@ const AiAnimatedImageOverlay: React.FC<{
     };
   }, [mode, image.aiAnimation, muted]);
 
-  if (mode === 'off') return null;
+  if (!image.aiAnimation && !image.aiVideoUrl) return null;
+  const isPlaying = mode === 'sketch' || mode === 'video';
+  const defaultPlayMode: 'sketch' | 'video' =
+    image.aiVideoUrl && !image.aiAnimation ? 'video' : 'sketch';
 
   return (
     <div
@@ -362,7 +365,7 @@ const AiAnimatedImageOverlay: React.FC<{
         />
       )}
 
-      {/* Draggable Floating Compact Control Pill at Top-Right of Animated Diagram (hidden inside modal preview) */}
+      {/* Draggable Floating Compact Control Pill at Top-Right of Animated Diagram (stays visible even when paused!) */}
       {!fillParent && (
         <div
           data-ui-panel="true"
@@ -395,50 +398,88 @@ const AiAnimatedImageOverlay: React.FC<{
           }}
           onClick={(e) => e.stopPropagation()}
           title="Σύρετε την μπάρα για να τη μετακινήσετε όπου θέλετε"
-          className="absolute -top-7 right-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/90 text-white text-[10px] font-semibold shadow-lg pointer-events-auto border border-white/15 cursor-grab active:cursor-grabbing select-none"
+          className={`absolute -top-7 right-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[10px] font-semibold shadow-lg pointer-events-auto border cursor-grab active:cursor-grabbing select-none transition ${
+            isPlaying
+              ? 'bg-slate-900/90 border-white/15'
+              : 'bg-indigo-950/85 hover:bg-indigo-900/95 border-indigo-400/40'
+          }`}
         >
-          <span className="text-amber-300 truncate max-w-[120px]">
-            {mode === 'video' ? '🎬 Omni Video' : `⚡ ${image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}`}
-          </span>
-          <button
-            type="button"
-            onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMuted: !im.aiAnimMuted }))}
-            className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
-            title={muted ? 'Ενεργοποίηση Ήχου' : 'Σίγαση Ήχου'}
-          >
-            {muted ? '🔇' : '🔊'}
-          </button>
-          {image.aiAnimation && image.aiVideoUrl && (
-            <button
-              type="button"
-              onClick={() =>
-                onUpdateImage((im) => ({
-                  ...im,
-                  aiAnimMode: im.aiAnimMode === 'video' ? 'sketch' : 'video',
-                }))
-              }
-              className="px-1.5 py-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 cursor-pointer"
-              title="Εναλλαγή ανάμεσα σε Ζωντανό Σκίτσο και Gemini Omni Video"
-            >
-              {mode === 'video' ? '⚡ Σκίτσο' : '🎬 Video'}
-            </button>
+          {isPlaying ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/35 text-amber-300 cursor-pointer"
+                title="Παύση κίνησης (το κουμπί μένει εδώ για να το ξαναπατήσεις όποτε θέλεις!)"
+              >
+                <span>⏸</span>
+                <span className="truncate max-w-[115px]">
+                  {mode === 'video' ? 'Omni Video' : image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMuted: !im.aiAnimMuted }))}
+                className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
+                title={muted ? 'Ενεργοποίηση Ήχου' : 'Σίγαση Ήχου'}
+              >
+                {muted ? '🔇' : '🔊'}
+              </button>
+              {image.aiAnimation && image.aiVideoUrl && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateImage((im) => ({
+                      ...im,
+                      aiAnimMode: im.aiAnimMode === 'video' ? 'sketch' : 'video',
+                    }))
+                  }
+                  className="px-1.5 py-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 cursor-pointer"
+                  title="Εναλλαγή ανάμεσα σε Ζωντανό Σκίτσο και Gemini Omni Video"
+                >
+                  {mode === 'video' ? '⚡ Σκίτσο' : '🎬 Video'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onOpenStudio}
+                className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
+                title="Ρυθμίσεις Ζωντανέματος (AI Animate Studio)"
+              >
+                ⚙️
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
+                className="px-1 py-0.5 rounded-full hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
+                title="Παύση Ζωντανέματος (μένει αποθηκευμένο πάνω στο σχέδιο)"
+              >
+                ✕
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: defaultPlayMode }))}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-300 cursor-pointer"
+                title="Πάτησε για εκκίνηση του αποθηκευμένου Ζωντανέματος!"
+              >
+                <span>▶️</span>
+                <span className="truncate max-w-[125px]">
+                  ⚡ {image.aiAnimation?.sceneTitle || 'Ζωντάνεμα'}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={onOpenStudio}
+                className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
+                title="Άνοιγμα Ρυθμίσεων Ζωντανέματος (AI Animate Studio)"
+              >
+                ⚙️
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            onClick={onOpenStudio}
-            className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
-            title="Ρυθμίσεις Ζωντανέματος (AI Animate Studio)"
-          >
-            ⚙️
-          </button>
-          <button
-            type="button"
-            onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
-            className="px-1 py-0.5 rounded-full hover:bg-rose-500/80 text-rose-300 hover:text-white cursor-pointer"
-            title="Διακοπή κίνησης (επιστροφή σε στατική εικόνα)"
-          >
-            ✕
-          </button>
         </div>
       )}
     </div>
@@ -38762,15 +38803,12 @@ export default function App() {
       }
     }
 
-    const primaryImg = targetImgOverride || (selImgs.length > 0 ? selImgs[0] : null);
+    const primaryImg =
+      targetImgOverride ||
+      selImgs.find((im) => im.aiAnimation || im.aiVideoUrl) ||
+      (selImgs.length > 0 ? selImgs[0] : null);
     const primaryImgId = primaryImg ? primaryImg.id : null;
-    const isSingleSameBox =
-      primaryImg &&
-      selImgs.length === 1 &&
-      selStrokes.length === 0 &&
-      (!primaryImg.aiAnimBox ||
-        (Math.abs(primaryImg.aiAnimBox.width - boxW) < 8 && Math.abs(primaryImg.aiAnimBox.height - boxH) < 8));
-    const existingSpec = isSingleSameBox ? primaryImg?.aiAnimation || null : null;
+    const existingSpec = primaryImg?.aiAnimation || null;
     const existingVideo = primaryImg?.aiVideoUrl || null;
 
     setAiAnimateModal({
@@ -47682,6 +47720,47 @@ export default function App() {
                               </button>
                             )}
 
+                          {(() => {
+                            const animImgOnLayer = (activePage.images || []).find(
+                              (im) => im.layerId === layer.id && Boolean(im.aiAnimation || im.aiVideoUrl)
+                            );
+                            if (!animImgOnLayer) return null;
+                            const isAnimActive =
+                              animImgOnLayer.aiAnimMode === 'sketch' || animImgOnLayer.aiAnimMode === 'video';
+                            const nextMode: 'sketch' | 'video' | 'off' = isAnimActive
+                              ? 'off'
+                              : animImgOnLayer.aiVideoUrl && !animImgOnLayer.aiAnimation
+                              ? 'video'
+                              : 'sketch';
+                            return (
+                              <button
+                                type="button"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateActivePage((page) => ({
+                                    ...page,
+                                    images: (page.images || []).map((im) =>
+                                      im.id === animImgOnLayer.id ? { ...im, aiAnimMode: nextMode } : im
+                                    ),
+                                  }));
+                                }}
+                                className={`px-1.5 py-0.5 mr-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                                  isAnimActive
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                }`}
+                                title={
+                                  isAnimActive
+                                    ? 'Παύση Ζωντανέματος αυτού του Layer'
+                                    : 'Εκκίνηση αποθηκευμένου Ζωντανέματος αυτού του Layer'
+                                }
+                              >
+                                {isAnimActive ? '⏸ Ζωντανό' : '▶️ Ζωντάνεμα'}
+                              </button>
+                            );
+                          })()}
+
                           <button
                             type="button"
                             onPointerDown={(e) => e.stopPropagation()}
@@ -47883,8 +47962,7 @@ export default function App() {
                       (pageObj.images || [])
                         .filter(
                           (im) =>
-                            im.aiAnimMode &&
-                            im.aiAnimMode !== 'off' &&
+                            Boolean(im.aiAnimation || im.aiVideoUrl) &&
                             pageObj.layers.some((l) => l.id === im.layerId && l.visible)
                         )
                         .map((im) => (
