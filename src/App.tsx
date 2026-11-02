@@ -41757,21 +41757,6 @@ export default function App() {
                     : textFontFamily;
                   const currentFontFamily: TextFontStyle =
                     rawFontFamily === 'calligraphic-bold' ? 'calligraphic' : rawFontFamily;
-                  const currentAlign: 'left' | 'center' | 'right' = selTxt
-                    ? selTxt.textAlign || 'left'
-                    : textAlign;
-
-                  const applyTextAlign = (nextAlign: 'left' | 'center' | 'right') => {
-                    setTextAlign(nextAlign);
-                    if (selTxt) {
-                      updateActivePage((page) => ({
-                        ...page,
-                        texts: (page.texts || []).map((t) =>
-                          t.id === selTxt.id ? { ...t, textAlign: nextAlign } : t
-                        ),
-                      }));
-                    }
-                  };
 
                   const applyBold = (nextB: boolean) => {
                     setTextBold(nextB);
@@ -41908,7 +41893,7 @@ export default function App() {
                       >
                         A-
                       </button>
-                      {[14, 22, 28, 36].map((sz) => (
+                      {[20, 30].map((sz) => (
                         <button
                           key={sz}
                           onClick={() => applyFontSize(sz)}
@@ -41929,64 +41914,6 @@ export default function App() {
                       >
                         A+
                       </button>
-
-                      {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) right after A+ */}
-                      <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200 ml-0.5">
-                        <button
-                          type="button"
-                          onMouseDown={(ev) => ev.preventDefault()}
-                          onClick={() => applyTextAlign('left')}
-                          className={`p-1 rounded-full transition cursor-pointer flex items-center justify-center ${
-                            currentAlign === 'left'
-                              ? 'bg-[#0066ff] text-white shadow-xs'
-                              : 'text-slate-700 hover:bg-white'
-                          }`}
-                          title="Στοίχιση Αριστερά"
-                        >
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                            <line x1="2" y1="3.5" x2="14" y2="3.5" />
-                            <line x1="2" y1="7" x2="10" y2="7" />
-                            <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                            <line x1="2" y1="14" x2="8.5" y2="14" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onMouseDown={(ev) => ev.preventDefault()}
-                          onClick={() => applyTextAlign('center')}
-                          className={`p-1 rounded-full transition cursor-pointer flex items-center justify-center ${
-                            currentAlign === 'center'
-                              ? 'bg-[#0066ff] text-white shadow-xs'
-                              : 'text-slate-700 hover:bg-white'
-                          }`}
-                          title="Στοίχιση στο Κέντρο"
-                        >
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                            <line x1="2" y1="3.5" x2="14" y2="3.5" />
-                            <line x1="4" y1="7" x2="12" y2="7" />
-                            <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                            <line x1="4.5" y1="14" x2="11.5" y2="14" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onMouseDown={(ev) => ev.preventDefault()}
-                          onClick={() => applyTextAlign('right')}
-                          className={`p-1 rounded-full transition cursor-pointer flex items-center justify-center ${
-                            currentAlign === 'right'
-                              ? 'bg-[#0066ff] text-white shadow-xs'
-                              : 'text-slate-700 hover:bg-white'
-                          }`}
-                          title="Στοίχιση Δεξιά"
-                        >
-                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                            <line x1="2" y1="3.5" x2="14" y2="3.5" />
-                            <line x1="6" y1="7" x2="14" y2="7" />
-                            <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                            <line x1="7.5" y1="14" x2="14" y2="14" />
-                          </svg>
-                        </button>
-                      </div>
                     </div>
                   );
                 })()}
