@@ -285,6 +285,10 @@ const AiAnimatedImageOverlay: React.FC<{
           Math.abs(animBox.width - image.width) < 4 &&
           Math.abs(animBox.height - image.height) < 4
       );
+    const srcImg = new Image();
+    srcImg.crossOrigin = 'anonymous';
+    srcImg.src = image.dataUrl;
+
     const loop = (now: number) => {
       const ctx = c?.getContext('2d');
       if (ctx && image.aiAnimation) {
@@ -299,7 +303,7 @@ const AiAnimatedImageOverlay: React.FC<{
           ctx.closePath();
           ctx.clip();
         }
-        renderSmartSketchOverlayFrame(ctx, w, h, image.aiAnimation, (now - startMs) / 1000);
+        renderSmartSketchOverlayFrame(ctx, w, h, image.aiAnimation, (now - startMs) / 1000, srcImg);
         ctx.restore();
       }
       rafId = window.requestAnimationFrame(loop);
@@ -308,7 +312,17 @@ const AiAnimatedImageOverlay: React.FC<{
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [mode, image.aiAnimation, animBox.width, animBox.height, fillParent, image.clipPolygon, image.width, image.height]);
+  }, [
+    mode,
+    image.aiAnimation,
+    image.dataUrl,
+    animBox.width,
+    animBox.height,
+    fillParent,
+    image.clipPolygon,
+    image.width,
+    image.height,
+  ]);
 
   useEffect(() => {
     if (mode === 'sketch' && image.aiAnimation && !muted) {

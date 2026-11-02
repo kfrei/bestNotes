@@ -16733,9 +16733,12 @@ Return STRICTLY a valid JSON object matching this exact schema (no markdown fenc
   "effects": [
     {
       "id": "unique-id-1",
-      "type": "rain" | "evaporation" | "water_flow" | "waves" | "sun_rays" | "cloud_drift" | "flow_arrow" | "sparkles",
-      "label": "Short Greek label (e.g. 'Βροχόπτωση', 'Εξάτμιση', 'Ροή Ποταμού', 'Κύματα Θάλασσας', 'Ακτίνες Ήλιου')",
+      "type": "rain" | "evaporation" | "water_flow" | "waves" | "sun_rays" | "cloud_drift" | "flow_arrow" | "sliding_body" | "projectile_ball" | "sparkles",
+      "label": "Short Greek label (e.g. 'Βροχόπτωση', 'Εξάτμιση', 'Ακτίνες Ήλιου', 'Κίνηση Σώματος', 'Παραβολική Τροχιά')",
       "box": [ymin, xmin, ymax, xmax],
+      "bodyBox": [ymin, xmin, ymax, xmax],
+      "pathPoints": [[x0, y0], [x1, y1], ...],
+      "bodyShape": "box" | "ball" | "cart",
       "angleDeg": number,
       "color": "#1e293b",
       "intensity": 0.5 to 1.3
@@ -16744,16 +16747,29 @@ Return STRICTLY a valid JSON object matching this exact schema (no markdown fenc
 }
 
 IMPORTANT RULES FOR "effects":
-1. Coordinates [ymin, xmin, ymax, xmax] MUST be integers from 0 to 1000 (where [0,0] is top-left and [1000,1000] is bottom-right of THIS exact image).
+1. Coordinates [ymin, xmin, ymax, xmax] and [x, y] MUST be integers from 0 to 1000 (where [0,0] is top-left and [1000,1000] is bottom-right of THIS exact image; note that "box" and "bodyBox" are [ymin, xmin, ymax, xmax], whereas "pathPoints" items are [x, y] where x is horizontal 0..1000 and y is vertical 0..1000).
 2. STRICT TIGHT BOUNDING BOXES — NEVER EXPAND INTO EMPTY MARGINS:
-   Each "box" [ymin, xmin, ymax, xmax] MUST tightly hug ONLY the actual drawn ink pixels of that specific element in the image! NEVER place or extend a box into blank/white/empty background space to the right, left, top, or bottom of the drawing.
-3. Detect the distinct animated zones visible in the drawing (typically 3 to 6 zones):
-   - "rain": tightly around the drawn rain lines between the cloud and mountain (set angleDeg to match the slant of the rain lines, e.g. 105 for slightly left-slanted downward rain, or 90 for vertical).
-   - "evaporation": tightly around the drawn wavy upward evaporation arrows (angleDeg = -90).
-   - "water_flow": tightly around the drawn river, stream, and waterfall on the mountain.
-   - "waves": tightly inside the drawn sea/lake water lines ONLY (do NOT extend past the right edge of the drawn water!).
-   - "sun_rays": tightly centered on the drawn sun disk and its existing rays ONLY.
-   - "flow_arrow": tightly over any drawn directional arrows (set color to "#991b1b" if red or "#1e293b" if dark ink, and angleDeg to the arrow direction: 180=left, 0=right, 90=down, -90=up).`;
+   For nature effects, each "box" [ymin, xmin, ymax, xmax] MUST tightly hug ONLY the actual drawn ink pixels of that specific element in the image! NEVER place or extend a box into blank/white/empty background space to the right, left, top, or bottom of the drawing.
+3. Detect the distinct animated zones visible in the drawing:
+   A) NATURE & SCIENCE DIAGRAMS:
+      - "rain": tightly around the drawn rain lines between the cloud and mountain (set angleDeg to match the slant of the rain lines, e.g. 105 for slightly left-slanted downward rain, or 90 for vertical).
+      - "evaporation": tightly around the drawn wavy upward evaporation arrows (angleDeg = -90).
+      - "water_flow": tightly around the drawn river, stream, and waterfall on the mountain.
+      - "waves": tightly inside the drawn sea/lake water lines ONLY (do NOT extend past the right edge of the drawn water!).
+      - "sun_rays": tightly centered on the drawn sun disk and all its surrounding rays.
+      - "flow_arrow": tightly over any drawn directional arrows (set color to "#991b1b" if red or "#1e293b" if dark ink, and angleDeg to the arrow direction: 180=left, 0=right, 90=down, -90=up).
+   B) PHYSICS & MECHANICS TRAJECTORIES (Κιβώτιο σε ευθεία/κεκλιμένο ή Μπαλάκι σε παραβολική/καμπύλη τροχιά):
+      - "sliding_body": Use this whenever there is a box/block/crate/cart/mass (κιβώτιο / σώμα / μάζα) on a horizontal line or on an inclined plane (κεκλιμένο επίπεδο).
+        * Set "box": [0, 0, 1000, 1000].
+        * Set "bodyBox": [ymin, xmin, ymax, xmax] tightly around the drawn box/body at its initial position.
+        * Set "bodyShape": "box" (or "cart" / "ball").
+        * Set "pathPoints": [[xStart, yStart], [xEnd, yEnd]] where [xStart, yStart] is the center of bodyBox and [xEnd, yEnd] is the point along the straight line or inclined plane where the body slides to (strictly parallel to the line/incline surface!).
+        * Set "angleDeg" to the direction angle of motion in degrees (e.g. 0 = right, 180 = left, 30 = sliding down-right along a 30° incline, 150 = sliding down-left along an incline, -30 = moving up-right along an incline).
+      - "projectile_ball": Use this whenever there is a ball/sphere/particle (μπαλάκι / σφαίρα / βλήμα) at the start of (or along) a parabolic trajectory (οριζόντια βολή, πλάγια βολή, παραβολική ή καμπύλη τροχιά).
+        * Set "box": [0, 0, 1000, 1000].
+        * Set "bodyBox": [ymin, xmin, ymax, xmax] tightly around the drawn ball/sphere at its initial position.
+        * Set "bodyShape": "ball".
+        * Set "pathPoints": [[x0, y0], [x1, y1], [x2, y2], [x3, y3], [x4, y4], [x5, y5], [x6, y6]] with 5 to 7 points [x, y] in 0..1000 coordinates that smoothly trace the exact drawn parabolic curve (or natural parabolic trajectory if only the initial velocity arrow is drawn) from the ball's starting center [x0, y0] to the end of the trajectory.`;
 
   const parts: any[] = [
     { text: prompt },
@@ -16801,16 +16817,45 @@ IMPORTANT RULES FOR "effects":
       if (parsed && Array.isArray(parsed.effects) && parsed.effects.length > 0) {
         const effects: SmartSketchEffectRegion[] = parsed.effects
           .map((ef: any, idx: number) => {
-            const rawBox = Array.isArray(ef?.box) && ef.box.length === 4 ? ef.box : [200, 200, 800, 800];
+            const rawBox = Array.isArray(ef?.box) && ef.box.length === 4 ? ef.box : [0, 0, 1000, 1000];
             const ymin = Math.max(0, Math.min(990, Number(rawBox[0]) || 0));
             const xmin = Math.max(0, Math.min(990, Number(rawBox[1]) || 0));
             const ymax = Math.max(ymin + 20, Math.min(1000, Number(rawBox[2]) || 1000));
             const xmax = Math.max(xmin + 20, Math.min(1000, Number(rawBox[3]) || 1000));
+
+            let bodyBox: [number, number, number, number] | undefined;
+            if (Array.isArray(ef?.bodyBox) && ef.bodyBox.length === 4) {
+              const by0 = Math.max(0, Math.min(990, Number(ef.bodyBox[0]) || 0));
+              const bx0 = Math.max(0, Math.min(990, Number(ef.bodyBox[1]) || 0));
+              const by1 = Math.max(by0 + 10, Math.min(1000, Number(ef.bodyBox[2]) || by0 + 80));
+              const bx1 = Math.max(bx0 + 10, Math.min(1000, Number(ef.bodyBox[3]) || bx0 + 80));
+              bodyBox = [by0, bx0, by1, bx1];
+            }
+
+            let pathPoints: [number, number][] | undefined;
+            if (Array.isArray(ef?.pathPoints) && ef.pathPoints.length >= 2) {
+              pathPoints = ef.pathPoints
+                .filter((pt: any) => Array.isArray(pt) && pt.length >= 2)
+                .map(
+                  (pt: any) =>
+                    [
+                      Math.max(0, Math.min(1000, Number(pt[0]) || 0)),
+                      Math.max(0, Math.min(1000, Number(pt[1]) || 0)),
+                    ] as [number, number]
+                );
+            }
+
             return {
               id: String(ef?.id || `ef-${idx}`),
               type: ef?.type || 'sparkles',
               label: String(ef?.label || ef?.type || `Κίνηση ${idx + 1}`),
               box: [ymin, xmin, ymax, xmax] as [number, number, number, number],
+              bodyBox,
+              pathPoints,
+              bodyShape:
+                ef?.bodyShape === 'ball' || ef?.bodyShape === 'cart' || ef?.bodyShape === 'box'
+                  ? ef.bodyShape
+                  : undefined,
               angleDeg: typeof ef?.angleDeg === 'number' ? ef.angleDeg : 90,
               color: typeof ef?.color === 'string' && ef.color.startsWith('#') ? ef.color : '#1e293b',
               intensity: typeof ef?.intensity === 'number' ? Math.max(0.3, Math.min(1.5, ef.intensity)) : 1,
@@ -17037,17 +17082,127 @@ export async function generateOmniVideoFromImage(
   }
 }
 
+const bodySpriteCacheByImage = new WeakMap<HTMLImageElement, Map<string, HTMLCanvasElement | null>>();
+
+function getOrExtractBodySprite(
+  sourceImg: HTMLImageElement | null | undefined,
+  bodyBox: [number, number, number, number] | undefined
+): HTMLCanvasElement | null {
+  if (!sourceImg || !sourceImg.complete || sourceImg.naturalWidth <= 0 || !bodyBox) return null;
+  const key = bodyBox.join(',');
+  let map = bodySpriteCacheByImage.get(sourceImg);
+  if (!map) {
+    map = new Map();
+    bodySpriteCacheByImage.set(sourceImg, map);
+  }
+  if (map.has(key)) return map.get(key) || null;
+
+  try {
+    const [ymin, xmin, ymax, xmax] = bodyBox;
+    const sx = Math.max(0, Math.round((xmin / 1000) * sourceImg.naturalWidth));
+    const sy = Math.max(0, Math.round((ymin / 1000) * sourceImg.naturalHeight));
+    const sw = Math.max(8, Math.round(((xmax - xmin) / 1000) * sourceImg.naturalWidth));
+    const sh = Math.max(8, Math.round(((ymax - ymin) / 1000) * sourceImg.naturalHeight));
+
+    const c = document.createElement('canvas');
+    c.width = sw;
+    c.height = sh;
+    const cctx = c.getContext('2d');
+    if (!cctx) {
+      map.set(key, null);
+      return null;
+    }
+    cctx.drawImage(sourceImg, sx, sy, sw, sh, 0, 0, sw, sh);
+    const imgData = cctx.getImageData(0, 0, sw, sh);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i];
+      const g = d[i + 1];
+      const b = d[i + 2];
+      // Make near-white / paper background pixels transparent so only drawn ink/color moves
+      if (r > 235 && g > 231 && b > 222) {
+        d[i + 3] = 0;
+      } else if (r > 218 && g > 214 && b > 205) {
+        d[i + 3] = Math.round(d[i + 3] * 0.45);
+      }
+    }
+    cctx.putImageData(imgData, 0, 0);
+    map.set(key, c);
+    return c;
+  } catch {
+    map.set(key, null);
+    return null;
+  }
+}
+
+function sampleTrajectoryPoint(
+  pts: [number, number][],
+  u: number,
+  width: number,
+  height: number
+): { x: number; y: number; angleRad: number } {
+  const clampedU = Math.max(0, Math.min(1, u));
+  if (pts.length === 2) {
+    const x0 = (pts[0][0] / 1000) * width;
+    const y0 = (pts[0][1] / 1000) * height;
+    const x1 = (pts[1][0] / 1000) * width;
+    const y1 = (pts[1][1] / 1000) * height;
+    return {
+      x: x0 + (x1 - x0) * clampedU,
+      y: y0 + (y1 - y0) * clampedU,
+      angleRad: Math.atan2(y1 - y0, x1 - x0),
+    };
+  }
+  const n = pts.length - 1;
+  const scaled = clampedU * n;
+  const idx = Math.min(n - 1, Math.floor(scaled));
+  const localT = scaled - idx;
+  const p0 = pts[Math.max(0, idx - 1)];
+  const p1 = pts[idx];
+  const p2 = pts[Math.min(n, idx + 1)];
+  const p3 = pts[Math.min(n, idx + 2)];
+
+  // Catmull-Rom spline for smooth parabolic/curved trajectories
+  const t2 = localT * localT;
+  const t3 = t2 * localT;
+  const catmull = (v0: number, v1: number, v2: number, v3: number) =>
+    0.5 *
+    (2 * v1 +
+      (-v0 + v2) * localT +
+      (2 * v0 - 5 * v1 + 4 * v2 - v3) * t2 +
+      (-v0 + 3 * v1 - 3 * v2 + v3) * t3);
+  const catmullDeriv = (v0: number, v1: number, v2: number, v3: number) =>
+    0.5 *
+    (-v0 +
+      v2 +
+      2 * (2 * v0 - 5 * v1 + 4 * v2 - v3) * localT +
+      3 * (-v0 + 3 * v1 - 3 * v2 + v3) * t2);
+
+  const nx = catmull(p0[0], p1[0], p2[0], p3[0]);
+  const ny = catmull(p0[1], p1[1], p2[1], p3[1]);
+  const dx = (catmullDeriv(p0[0], p1[0], p2[0], p3[0]) / 1000) * width;
+  const dy = (catmullDeriv(p0[1], p1[1], p2[1], p3[1]) / 1000) * height;
+
+  return {
+    x: (nx / 1000) * width,
+    y: (ny / 1000) * height,
+    angleRad: Math.atan2(dy, dx),
+  };
+}
+
 /**
  * Renders a frame of the Smart Sketch Animation overlay in the exact pen-and-ink aesthetic
  * of the user's illustration (raindrops, rising wavy evaporation, flowing river/waterfall,
- * sea waves, shimmering sun rays, drifting clouds, and animated arrows).
+ * sea waves, shimmering sun rays, drifting clouds, animated arrows, and physics bodies
+ * moving along straight lines, inclined planes, or parabolic trajectories).
  */
 export function renderSmartSketchOverlayFrame(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   spec: SmartSketchAnimationSpec,
-  elapsedSec: number
+  elapsedSec: number,
+  sourceImg?: HTMLImageElement | null
 ): void {
   ctx.clearRect(0, 0, width, height);
   if (!spec?.effects || spec.effects.length === 0) return;
@@ -17170,24 +17325,237 @@ export function renderSmartSketchOverlayFrame(
         }
       }
     } else if (ef.type === 'sun_rays') {
-      // Subtle traveling light pulses along the existing sun rays (never draws a second sun disk!)
-      const rx = Math.max(14, Math.min(bw, bh) * 0.46);
-      const innerR = rx * 0.58;
-      const numRays = 12;
-      ctx.strokeStyle = '#d97706';
-      ctx.lineWidth = Math.max(1.2, Math.min(2.0, width * 0.0026));
+      // Active, shimmering & breathing crown of 24 rays around the sun disk (both sketch ink & warm golden rays!)
+      const rx = Math.max(16, Math.min(bw, bh) * 0.48);
+      const diskR = rx * 0.43;
+
+      // 1. Subtle breathing warm golden corona ring right around the sun disk
+      const coronaR = diskR * (1.03 + 0.05 * Math.sin(elapsedSec * 3.4));
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = Math.max(1.8, Math.min(2.8, width * 0.0035));
+      ctx.globalAlpha = 0.45 + 0.2 * Math.sin(elapsedSec * 3.4);
+      ctx.beginPath();
+      ctx.arc(cx, cy, coronaR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 2. 24 alternating long & medium radial rays that visibly extend/retract and radiate light pulses
+      const numRays = 24;
+      const sway = Math.sin(elapsedSec * 1.6) * 0.035;
       for (let i = 0; i < numRays; i++) {
-        const baseAngle = (i / numRays) * Math.PI * 2;
-        const u = (elapsedSec * 0.6 + (i % 3) * 0.33) % 1;
-        const fade = Math.sin(u * Math.PI);
-        const rStart = innerR + u * (rx - innerR) * 0.55;
-        const rEnd = rStart + (rx - innerR) * 0.32;
-        ctx.globalAlpha = 0.55 * fade;
+        const isLong = i % 2 === 0;
+        const baseAngle = (i / numRays) * Math.PI * 2 + sway * (isLong ? 1 : -1);
+        const cosA = Math.cos(baseAngle);
+        const sinA = Math.sin(baseAngle);
+
+        // Breathing ray extension in the exact engraving style of the sun
+        const breath = 0.5 + 0.5 * Math.sin(elapsedSec * 4.2 + i * 0.85);
+        const rInner = diskR * 1.1;
+        const rOuter = rx * (isLong ? 0.78 + 0.2 * breath : 0.64 + 0.16 * breath);
+
+        ctx.strokeStyle = i % 3 === 0 ? '#d97706' : color;
+        ctx.lineWidth = Math.max(1.15, Math.min(2.0, width * (isLong ? 0.0027 : 0.002)));
+        ctx.globalAlpha = 0.45 + 0.4 * breath;
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(baseAngle) * rStart, cy + Math.sin(baseAngle) * rStart);
-        ctx.lineTo(cx + Math.cos(baseAngle) * rEnd, cy + Math.sin(baseAngle) * rEnd);
+        ctx.moveTo(cx + cosA * rInner, cy + sinA * rInner);
+        ctx.lineTo(cx + cosA * rOuter, cy + sinA * rOuter);
         ctx.stroke();
+
+        // Traveling golden photon pulse shooting outward along each long ray
+        if (isLong) {
+          const u = (elapsedSec * 0.75 + (i % 4) * 0.25) % 1;
+          const fade = Math.sin(u * Math.PI);
+          const p0 = rInner + u * (rx * 0.96 - rInner) * 0.65;
+          const p1 = p0 + (rx * 0.96 - rInner) * 0.32;
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = Math.max(1.6, Math.min(2.6, width * 0.0032));
+          ctx.globalAlpha = 0.78 * fade;
+          ctx.beginPath();
+          ctx.moveTo(cx + cosA * p0, cy + sinA * p0);
+          ctx.lineTo(cx + cosA * p1, cy + sinA * p1);
+          ctx.stroke();
+        }
       }
+    } else if (ef.type === 'sliding_body' || ef.type === 'projectile_ball') {
+      // Physics Body Motion along Straight Line, Inclined Plane, or Parabolic Trajectory!
+      const isProjectile = ef.type === 'projectile_ball' || ef.bodyShape === 'ball';
+      const bBox = ef.bodyBox || [
+        Math.max(0, ymin),
+        Math.max(0, xmin),
+        Math.min(1000, ymin + 140),
+        Math.min(1000, xmin + 140),
+      ];
+      const bodyW = Math.max(18, Math.min(width * 0.26, ((bBox[3] - bBox[1]) / 1000) * width));
+      const bodyH = Math.max(18, Math.min(height * 0.26, ((bBox[2] - bBox[0]) / 1000) * height));
+      const initCx = ((bBox[1] + bBox[3]) * 0.5 / 1000) * width;
+      const initCy = ((bBox[0] + bBox[2]) * 0.5 / 1000) * height;
+
+      // Build trajectory points in 0..1000 normalized space
+      let pts: [number, number][] =
+        ef.pathPoints && ef.pathPoints.length >= 2 ? ef.pathPoints : [];
+      if (pts.length < 2) {
+        const startNx = (bBox[1] + bBox[3]) * 0.5;
+        const startNy = (bBox[0] + bBox[2]) * 0.5;
+        if (isProjectile) {
+          // Default smooth parabolic throw to the right
+          pts = [
+            [startNx, startNy],
+            [Math.min(940, startNx + 180), Math.max(60, startNy - 110)],
+            [Math.min(950, startNx + 360), Math.max(60, startNy - 90)],
+            [Math.min(960, startNx + 540), Math.min(940, startNy + 40)],
+            [Math.min(970, startNx + 680), Math.min(950, startNy + 240)],
+          ];
+        } else {
+          const ang = ((ef.angleDeg ?? 0) * Math.PI) / 180;
+          const dist = 460;
+          pts = [
+            [startNx, startNy],
+            [
+              Math.max(40, Math.min(960, startNx + Math.cos(ang) * dist)),
+              Math.max(40, Math.min(960, startNy + Math.sin(ang) * dist)),
+            ],
+          ];
+        }
+      }
+
+      // Compute normalized time u in [0..1] with realistic kinematics (2.6s travel + 0.4s hold)
+      const cycleDur = 3.0;
+      const rawPhase = (elapsedSec % cycleDur) / 2.5;
+      const clampedT = Math.min(1, rawPhase);
+      // Acceleration kinematics on inclined plane (0.45*t + 0.55*t^2), uniform horizontal time on projectile
+      const u = isProjectile ? clampedT : 0.4 * clampedT + 0.6 * clampedT * clampedT;
+
+      // 1. Softly ghost the static initial body when the moving body has left the start (u > 0.08)
+      if (u > 0.08) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(253, 251, 247, 0.58)';
+        ctx.fillRect(initCx - bodyW * 0.52, initCy - bodyH * 0.52, bodyW * 1.04, bodyH * 1.04);
+        ctx.restore();
+      }
+
+      // 2. Draw dashed trajectory curve from u=0 up to current u
+      ctx.save();
+      ctx.strokeStyle = isProjectile ? '#dc2626' : '#0284c7';
+      ctx.lineWidth = Math.max(1.5, Math.min(2.4, width * 0.003));
+      ctx.setLineDash([6, 5]);
+      ctx.globalAlpha = 0.65;
+      ctx.beginPath();
+      const trailSteps = 28;
+      for (let s = 0; s <= trailSteps; s++) {
+        const su = (s / trailSteps) * u;
+        const p = sampleTrajectoryPoint(pts, su, width, height);
+        if (s === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      // 3. Stroboscopic ghost positions along the trajectory (at u = 0.28, 0.56)
+      const sprite = getOrExtractBodySprite(sourceImg, ef.bodyBox);
+      for (const ghostU of [0.28, 0.56]) {
+        if (u > ghostU + 0.08) {
+          const gp = sampleTrajectoryPoint(pts, ghostU, width, height);
+          ctx.save();
+          ctx.translate(gp.x, gp.y);
+          if (!isProjectile) ctx.rotate(gp.angleRad);
+          ctx.globalAlpha = 0.24;
+          if (sprite) {
+            ctx.drawImage(sprite, -bodyW / 2, -bodyH / 2, bodyW, bodyH);
+          } else if (isProjectile) {
+            const r = Math.max(8, Math.min(bodyW, bodyH) * 0.45);
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.stroke();
+          } else {
+            ctx.strokeRect(-bodyW / 2, -bodyH / 2, bodyW, bodyH);
+          }
+          ctx.restore();
+        }
+      }
+
+      // 4. Draw the moving body at current position (px, py)
+      const curr = sampleTrajectoryPoint(pts, u, width, height);
+      ctx.save();
+      ctx.translate(curr.x, curr.y);
+      if (!isProjectile) {
+        ctx.rotate(curr.angleRad);
+      }
+      ctx.globalAlpha = 0.96;
+
+      if (sprite) {
+        ctx.drawImage(sprite, -bodyW / 2, -bodyH / 2, bodyW, bodyH);
+      }
+
+      // Crisp sketch contour overlay so the moving box/ball is always sharp and textbook-clear
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.8, Math.min(2.8, width * 0.0035));
+      if (isProjectile) {
+        const r = Math.max(8, Math.min(bodyW, bodyH) * 0.44);
+        if (!sprite) {
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.18)';
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        if (!sprite) {
+          ctx.fillStyle = 'rgba(253, 251, 247, 0.92)';
+          ctx.fillRect(-bodyW / 2, -bodyH / 2, bodyW, bodyH);
+        }
+        ctx.strokeRect(-bodyW / 2, -bodyH / 2, bodyW, bodyH);
+        // Subtle speed lines behind the sliding box
+        ctx.lineWidth = 1.3;
+        ctx.globalAlpha = 0.55;
+        for (let sl = -1; sl <= 1; sl++) {
+          const ly = sl * (bodyH * 0.25);
+          ctx.beginPath();
+          ctx.moveTo(-bodyW * 0.58, ly);
+          ctx.lineTo(-bodyW * 0.92, ly);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+
+      // 5. Instantaneous Tangent Velocity Vector Arrow v⃗ at the moving body!
+      const vLen = Math.max(24, Math.min(52, Math.max(bodyW, bodyH) * 0.85));
+      const vx = Math.cos(curr.angleRad) * vLen;
+      const vy = Math.sin(curr.angleRad) * vLen;
+      const startVx = curr.x + Math.cos(curr.angleRad) * (isProjectile ? Math.min(bodyW, bodyH) * 0.42 : bodyW * 0.5);
+      const startVy = curr.y + Math.sin(curr.angleRad) * (isProjectile ? Math.min(bodyW, bodyH) * 0.42 : bodyW * 0.5);
+      const endVx = startVx + vx;
+      const endVy = startVy + vy;
+
+      ctx.save();
+      ctx.strokeStyle = '#dc2626';
+      ctx.fillStyle = '#dc2626';
+      ctx.lineWidth = Math.max(1.8, Math.min(2.6, width * 0.0032));
+      ctx.globalAlpha = 0.88;
+      ctx.beginPath();
+      ctx.moveTo(startVx, startVy);
+      ctx.lineTo(endVx, endVy);
+      ctx.stroke();
+
+      // Arrowhead for v⃗
+      const headLen = 8;
+      ctx.beginPath();
+      ctx.moveTo(endVx, endVy);
+      ctx.lineTo(
+        endVx - headLen * Math.cos(curr.angleRad - 0.42),
+        endVy - headLen * Math.sin(curr.angleRad - 0.42)
+      );
+      ctx.lineTo(
+        endVx - headLen * Math.cos(curr.angleRad + 0.42),
+        endVy - headLen * Math.sin(curr.angleRad + 0.42)
+      );
+      ctx.closePath();
+      ctx.fill();
+
+      // Small "v⃗" label next to arrowhead
+      ctx.font = `italic bold ${Math.max(11, Math.round(width * 0.022))}px Georgia, serif`;
+      ctx.fillText('v⃗', endVx + 5, endVy - 4);
+      ctx.restore();
     } else if (ef.type === 'cloud_drift') {
       // Subtle drifting ink breeze lines & cloud contour motion
       const lines = 4;

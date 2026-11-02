@@ -149,9 +149,14 @@ export interface SmartSketchEffectRegion {
     | 'sun_rays'
     | 'cloud_drift'
     | 'flow_arrow'
+    | 'sliding_body'
+    | 'projectile_ball'
     | 'sparkles';
   label?: string;
   box: [number, number, number, number]; // [ymin, xmin, ymax, xmax] in 0..1000 normalized coords
+  bodyBox?: [number, number, number, number]; // [ymin, xmin, ymax, xmax] in 0..1000 of the moving body/ball at start
+  pathPoints?: [number, number][]; // Array of [x, y] points in 0..1000 normalized coords along the trajectory
+  bodyShape?: 'box' | 'ball' | 'cart';
   angleDeg?: number; // Direction of motion in degrees (0=right, 90=down, -90=up, 180=left)
   color?: string; // Ink color matching the drawing (e.g. '#1e293b', '#991b1b')
   intensity?: number; // 0.3 .. 1.5
