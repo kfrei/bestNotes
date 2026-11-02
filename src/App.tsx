@@ -6491,7 +6491,7 @@ export default function App() {
           const bcx = selBounds.cx;
           const bcy = selBounds.cy;
           const angle = selBounds.angle || 0;
-          const rotStemTopY = -hh - 32;
+          const rotStemTopY = bcy - hh - 40 < 0 ? hh + 32 : -hh - 32;
 
           const effectiveImgIds =
             selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
@@ -6539,8 +6539,8 @@ export default function App() {
           // Rotation Stem
           ctx.setLineDash([]);
           ctx.beginPath();
-          ctx.moveTo(0, -hh);
-          ctx.lineTo(0, rotStemTopY + 12);
+          ctx.moveTo(0, rotStemTopY > 0 ? hh : -hh);
+          ctx.lineTo(0, rotStemTopY > 0 ? rotStemTopY - 12 : rotStemTopY + 12);
           ctx.stroke();
 
           // Semicircular Rotation Arrow Badge (turns emerald when snapped to 0° / 90° / 180° / 270° / 360°)
@@ -6943,7 +6943,7 @@ export default function App() {
             const grpPillW = allSameGroup ? 116 : 120;
             const cntPillW = 104;
             const pillH = 26;
-            const pillY = hh + 26;
+            const pillY = bcy + hh + 42 > getPageLogicalHeight(pageObj) ? -hh - 26 : hh + 26;
             const grpCx = -56;
             const cntCx = 62;
 
@@ -9915,20 +9915,18 @@ export default function App() {
         let nextH = origH;
 
         if (d.resizeHandle.includes('e')) {
-          nextW = Math.max(64, Math.min(pW - d.origX - 8, Math.round(origW + dx)));
+          nextW = Math.max(64, Math.round(origW + dx));
         }
         if (d.resizeHandle.includes('w')) {
-          const maxLeftShift = d.origX - 8;
-          const clampedDx = Math.max(-maxLeftShift, Math.min(origW - 64, dx));
+          const clampedDx = Math.min(origW - 64, dx);
           nextX = Math.round(d.origX + clampedDx);
           nextW = Math.max(64, Math.round(origW - clampedDx));
         }
         if (d.resizeHandle.includes('s')) {
-          nextH = Math.max(30, Math.min(pH - d.origY - 8, Math.round(origH + dy)));
+          nextH = Math.max(30, Math.round(origH + dy));
         }
         if (d.resizeHandle.includes('n')) {
-          const maxTopShift = d.origY - 8;
-          const clampedDy = Math.max(-maxTopShift, Math.min(origH - 30, dy));
+          const clampedDy = Math.min(origH - 30, dy);
           nextY = Math.round(d.origY + clampedDy);
           nextH = Math.max(30, Math.round(origH - clampedDy));
         }
@@ -9991,8 +9989,8 @@ export default function App() {
         d.moved = true;
       }
       if (!d.moved) return;
-      const nextX = Math.max(8, Math.min(pW - 60, Math.round(d.origX + dx)));
-      const nextY = Math.max(8, Math.min(pH - 36, Math.round(d.origY + dy)));
+      const nextX = Math.round(d.origX + dx);
+      const nextY = Math.round(d.origY + dy);
       updateActivePage(
         (page) => ({
           ...page,
@@ -26178,8 +26176,8 @@ export default function App() {
 
       const pW = getPageLogicalWidth(targetPage);
       const pH = getPageLogicalHeight(targetPage);
-      const nextX = Math.max(16, Math.min(pW - 160, Math.round(pt.x)));
-      const nextY = Math.max(16, Math.min(pH - 50, Math.round(pt.y - textFontSize * 0.6)));
+      const nextX = Math.round(pt.x);
+      const nextY = Math.round(pt.y - textFontSize * 0.6);
 
       const newTxt: TextObject = {
         id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -26190,6 +26188,7 @@ export default function App() {
         fontSize: textFontSize,
         bold: textBold,
         fontFamily: textFontFamily,
+        textAlign,
         layerId: activeLayerId,
       };
       lastTextCreatedTimeRef.current = performance.now();
@@ -26980,7 +26979,9 @@ export default function App() {
         const dy = pt.y - bcy;
         const localX = dx * cosA + dy * sinA;
         const localY = -dx * sinA + dy * cosA;
-        const rotStemTopY = -hh - 32;
+        const pHForSel = getPageLogicalHeight(targetPage);
+        const rotStemTopY = bcy - hh - 40 < 0 ? hh + 32 : -hh - 32;
+        const groupPillLocalY = bcy + hh + 42 > pHForSel ? -hh - 26 : hh + 26;
 
         const effectiveImgIds =
           selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
@@ -27000,8 +27001,8 @@ export default function App() {
         );
         const totalSelCount = selStrokesList.length + selImagesList.length + selTextsList.length;
 
-        // 0. Check Floating On-Canvas "🔗 Group / 🔓 Ungroup" & "🎯 Κέντραρε" Quick Action Pills below Selection Frame!
-        if (!isMoveOnlyLassoSelection && totalSelCount >= 2 && Math.abs(localY - (hh + 26)) <= 16) {
+        // 0. Check Floating On-Canvas "🔗 Group / 🔓 Ungroup" & "🎯 Κέντραρε" Quick Action Pills below (or above) Selection Frame!
+        if (!isMoveOnlyLassoSelection && totalSelCount >= 2 && Math.abs(localY - groupPillLocalY) <= 16) {
           if (localX >= -124 && localX <= 6) {
             const firstGrpId =
               selStrokesList[0]?.groupId || selImagesList[0]?.groupId || selTextsList[0]?.groupId;
@@ -47117,6 +47118,10 @@ export default function App() {
                                 : txt.boxHeight
                                 ? `${txt.boxHeight}px`
                                 : undefined,
+                            clipPath:
+                              !isSelectedTxt && !isEditingTxt
+                                ? `polygon(${-txt.x}px ${-txt.y}px, ${pW - txt.x}px ${-txt.y}px, ${pW - txt.x}px ${pH - txt.y}px, ${-txt.x}px ${pH - txt.y}px)`
+                                : undefined,
                             color: txt.color,
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
@@ -47496,12 +47501,13 @@ export default function App() {
                             </>
                           )}
 
-                          {/* Floating Quick Format & Drag Pill above Selected/Editing Text Box */}
+                          {/* Floating Quick Format & Drag Pill above (or below when near top edge) Selected/Editing Text Box */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <div
                               data-text-drag="true"
                               onMouseDown={(ev) => ev.preventDefault()}
                               style={{
+                                left: txt.x < 8 ? `${8 - txt.x}px` : '0px',
                                 touchAction: 'none',
                                 WebkitUserSelect: 'none',
                                 userSelect: 'none',
@@ -47512,7 +47518,9 @@ export default function App() {
                                 letterSpacing: 'normal',
                                 WebkitTextStroke: '0px',
                               }}
-                              className="absolute -top-14 left-0 flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
+                              className={`absolute ${
+                                txt.y < 52 ? '-bottom-14' : '-top-14'
+                              } flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing`}
                             >
                               <span
                                 className="px-1 py-0.5 text-sky-300 font-normal select-none"
