@@ -1,4 +1,13 @@
-import { BezierPoint, StrokeObject, TextObject, ShapePresetType, Notebook } from '../types/note';
+import {
+  BezierPoint,
+  StrokeObject,
+  TextObject,
+  ShapePresetType,
+  Notebook,
+  SmartSketchAnimationSpec,
+  SmartSketchEffectRegion,
+  SmartSketchSoundscape,
+} from '../types/note';
 export { PHYSICS_EQUATIONS_CATALOG } from './physicsEquationsLibrary';
 export type { PhysicsEquationCatalogEntry } from './physicsEquationsLibrary';
 
@@ -16642,6 +16651,687 @@ export function computeMathGraphAnimationFrame(
 ): StrokeObject[] {
   return computeMathGraphAnimationFrameWithPen(preparedStrokes, elapsedMs, totalDurationMs).strokes;
 }
+
+// ============================================================================
+// AI ANIMATE (SMART SKETCH ANIMATOR + GEMINI OMNI 1.1 FLASH VIDEO & AUDIO)
+// ============================================================================
+
+export function getEffectiveGeminiApiKey(customKey?: string): string {
+  const trimmedCustom = (customKey ?? localStorage.getItem('bestnotes_custom_gemini_key') ?? '').trim();
+  if (trimmedCustom) return trimmedCustom;
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB) return '';
+  return (partA + partB).split('').reverse().join('');
+}
+
+/**
+ * Ensures an image data URL has an opaque paper-white background before sending to
+ * Gemini Vision or Gemini Omni 1.1 Flash so transparent PNGs don't appear on black.
+ */
+async function flattenImageOnPaperForAi(
+  imageDataUrl: string,
+  maxDim = 1280
+): Promise<{ base64: string; mimeType: string; width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const nw = img.naturalWidth || img.width || 800;
+      const nh = img.naturalHeight || img.height || 600;
+      const scale = Math.min(1, maxDim / Math.max(nw, nh, 1));
+      const w = Math.max(64, Math.round(nw * scale));
+      const h = Math.max(64, Math.round(nh * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.fillStyle = '#fdfcf7';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const outUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const base64 = outUrl.split(',')[1] || '';
+      resolve({ base64, mimeType: 'image/jpeg', width: w, height: h });
+    };
+    img.onerror = () => resolve(null);
+    img.src = imageDataUrl;
+  });
+}
+
+/**
+ * Analyzes an illustration/diagram using Gemini Vision to produce:
+ * 1) Localized hand-drawn pen-and-ink animated regions (`effects`) + Web Audio `soundscape`
+ * 2) A tailored English director prompt (`omniPrompt`) for Gemini Omni 1.1 Flash (`gemini-omni-1.1-flash`)
+ *    that preserves the exact artistic style of the user's image.
+ */
+export async function analyzeImageForSmartSketchAnimation(
+  imageDataUrl: string,
+  customApiKey?: string
+): Promise<SmartSketchAnimationSpec | null> {
+  const apiKey = getEffectiveGeminiApiKey(customApiKey);
+  if (!apiKey) return null;
+
+  const flat = await flattenImageOnPaperForAi(imageDataUrl, 1024);
+  if (!flat) return null;
+
+  const prompt = `Analyze this educational illustration / sketch / diagram carefully so we can bring it to life with subtle, artistic animation in its EXACT pen-and-ink / sketch style, plus natural ambient sound.
+
+Return STRICTLY a valid JSON object matching this exact schema (no markdown fences, no commentary):
+{
+  "sceneTitle": "Short Greek title of what the image depicts (e.g. 'Ο Κύκλος του Νερού')",
+  "omniPrompt": "<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact illustration while strictly keeping its exact hand-drawn pen-and-ink / sketch art style, line weight, and background. Describe the specific elements in this image moving naturally (e.g. raindrops falling from the cloud onto the mountain, water flowing down the winding river and waterfall into the sea, wavy evaporation vapor lines rising from the water toward the clouds, sun rays gently shimmering, clouds drifting slowly). Keep everything else the same. Sound design: describe natural ambient sound effects matching the scene (e.g. gentle rain falling, flowing river water, soft breeze). No dialogue.",
+  "soundscape": {
+    "rain": 0.0 to 1.0,
+    "river": 0.0 to 1.0,
+    "waves": 0.0 to 1.0,
+    "wind": 0.0 to 1.0
+  },
+  "effects": [
+    {
+      "id": "unique-id-1",
+      "type": "rain" | "evaporation" | "water_flow" | "waves" | "sun_rays" | "cloud_drift" | "flow_arrow" | "sparkles",
+      "label": "Short Greek label (e.g. 'Βροχόπτωση', 'Εξάτμιση', 'Ροή Ποταμού', 'Κύματα Θάλασσας', 'Ακτίνες Ήλιου')",
+      "box": [ymin, xmin, ymax, xmax],
+      "angleDeg": number,
+      "color": "#1e293b",
+      "intensity": 0.5 to 1.3
+    }
+  ]
+}
+
+IMPORTANT RULES FOR "effects":
+1. Coordinates [ymin, xmin, ymax, xmax] MUST be integers from 0 to 1000 (where [0,0] is top-left and [1000,1000] is bottom-right of the image).
+2. Detect ALL distinct animated zones visible in the drawing (typically 3 to 7 zones):
+   - "rain": where rain streaks/drops fall (set angleDeg to match the slant of the rain lines, e.g. 105 for slightly left-slanted downward rain, or 90 for vertical).
+   - "evaporation": where vapor/steam/evaporation arrows rise upward (angleDeg = -90).
+   - "water_flow": where a river, stream, or waterfall flows downward (set angleDeg along the flow, e.g. 85 to 120).
+   - "waves": where sea, lake, or water surface waves ripple horizontally.
+   - "sun_rays": around the sun or light source so its rays pulse/shimmer gently.
+   - "cloud_drift": over clouds so they drift gently.
+   - "flow_arrow": over any directional arrows (e.g. red or black cycle arrows, set color to "#991b1b" if red or "#1e293b" if dark ink, and angleDeg to the arrow direction: 180=left, 0=right, 90=down, -90=up).
+3. Match "color" to the ink color of that element in the drawing (e.g. "#1e293b" for black/charcoal ink, "#991b1b" for dark red arrows).`;
+
+  const parts: any[] = [
+    { text: prompt },
+    {
+      inlineData: {
+        mimeType: flat.mimeType,
+        data: flat.base64,
+      },
+    },
+  ];
+
+  const candidateModels = [
+    'gemini-2.5-flash',
+    'gemini-3-flash-preview',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+  ];
+
+  for (const modelName of candidateModels) {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 28000);
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: 'application/json',
+            },
+          }),
+        }
+      );
+      window.clearTimeout(timer);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) continue;
+      const parsed = safeParseVisionJson(rawText);
+      if (parsed && Array.isArray(parsed.effects) && parsed.effects.length > 0) {
+        const effects: SmartSketchEffectRegion[] = parsed.effects
+          .map((ef: any, idx: number) => {
+            const rawBox = Array.isArray(ef?.box) && ef.box.length === 4 ? ef.box : [200, 200, 800, 800];
+            const ymin = Math.max(0, Math.min(990, Number(rawBox[0]) || 0));
+            const xmin = Math.max(0, Math.min(990, Number(rawBox[1]) || 0));
+            const ymax = Math.max(ymin + 20, Math.min(1000, Number(rawBox[2]) || 1000));
+            const xmax = Math.max(xmin + 20, Math.min(1000, Number(rawBox[3]) || 1000));
+            return {
+              id: String(ef?.id || `ef-${idx}`),
+              type: ef?.type || 'sparkles',
+              label: String(ef?.label || ef?.type || `Κίνηση ${idx + 1}`),
+              box: [ymin, xmin, ymax, xmax] as [number, number, number, number],
+              angleDeg: typeof ef?.angleDeg === 'number' ? ef.angleDeg : 90,
+              color: typeof ef?.color === 'string' && ef.color.startsWith('#') ? ef.color : '#1e293b',
+              intensity: typeof ef?.intensity === 'number' ? Math.max(0.3, Math.min(1.5, ef.intensity)) : 1,
+            };
+          });
+
+        const sc: SmartSketchSoundscape = {
+          rain: Math.max(0, Math.min(1, Number(parsed?.soundscape?.rain) || 0)),
+          river: Math.max(0, Math.min(1, Number(parsed?.soundscape?.river) || 0)),
+          waves: Math.max(0, Math.min(1, Number(parsed?.soundscape?.waves) || 0)),
+          wind: Math.max(0, Math.min(1, Number(parsed?.soundscape?.wind) || 0.2)),
+        };
+
+        return {
+          sceneTitle: String(parsed.sceneTitle || 'Ζωντανό Σκίτσο'),
+          omniPrompt: String(
+            parsed.omniPrompt ||
+              '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and arrows to life with subtle motion and gentle ambient nature sound effects. No dialogue.'
+          ),
+          effects,
+          soundscape: sc,
+        };
+      }
+    } catch {
+      window.clearTimeout(timer);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Calls Google Gemini Omni 1.1 Flash (`gemini-omni-1.1-flash`) via the official Interactions API
+ * (`POST https://generativelanguage.googleapis.com/v1beta/interactions`) to generate an MP4 video
+ * with synchronized native audio starting from the user's illustration (`<FIRST_FRAME>`).
+ */
+export async function generateOmniVideoFromImage(
+  imageDataUrl: string,
+  prompt: string,
+  options?: {
+    durationSec?: number;
+    resolution?: '360p' | '720p' | '1080p';
+    aspectRatio?: '16:9' | '9:16';
+    loopFirstLastFrame?: boolean;
+    customApiKey?: string;
+  }
+): Promise<{
+  ok: boolean;
+  videoDataUrl?: string;
+  interactionId?: string;
+  error?: string;
+  needsPaidKey?: boolean;
+}> {
+  const apiKey = getEffectiveGeminiApiKey(options?.customApiKey);
+  if (!apiKey) {
+    return {
+      ok: false,
+      needsPaidKey: true,
+      error: 'Δεν βρέθηκε Gemini API Key. Εισάγετε το κλειδί σας από το Google AI Studio.',
+    };
+  }
+
+  const flat = await flattenImageOnPaperForAi(imageDataUrl, 1280);
+  if (!flat) {
+    return { ok: false, error: 'Αποτυχία προετοιμασίας εικόνας.' };
+  }
+
+  const aspectRatio =
+    options?.aspectRatio || (flat.height > flat.width * 1.15 ? '9:16' : '16:9');
+  const durationSec = Math.max(3, Math.min(10, Math.round(options?.durationSec || 5)));
+  const resolution = options?.resolution || '720p';
+  const useLoop = Boolean(options?.loopFirstLastFrame);
+
+  let finalPrompt = prompt.trim();
+  if (useLoop) {
+    if (!finalPrompt.includes('<FIRST_FRAME>')) {
+      finalPrompt = `<FIRST_FRAME> <LAST_FRAME> ${finalPrompt}`;
+    } else if (!finalPrompt.includes('<LAST_FRAME>')) {
+      finalPrompt = finalPrompt.replace('<FIRST_FRAME>', '<FIRST_FRAME> <LAST_FRAME>');
+    }
+    if (!finalPrompt.toLowerCase().includes('last frame')) {
+      finalPrompt += ' Use this image as the first frame and the last frame for a smooth loop.';
+    }
+  } else {
+    if (!finalPrompt.includes('<FIRST_FRAME>')) {
+      finalPrompt = `<FIRST_FRAME> ${finalPrompt}`;
+    }
+  }
+
+  const inputParts: any[] = [
+    {
+      type: 'image',
+      data: flat.base64,
+      mime_type: flat.mimeType,
+    },
+  ];
+  if (useLoop) {
+    inputParts.push({
+      type: 'image',
+      data: flat.base64,
+      mime_type: flat.mimeType,
+    });
+  }
+  inputParts.push({
+    type: 'text',
+    text: finalPrompt,
+  });
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/interactions?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gemini-omni-1.1-flash',
+          input: inputParts,
+          response_format: {
+            type: 'video',
+            aspect_ratio: aspectRatio,
+            duration: `${durationSec}s`,
+            resolution,
+          },
+        }),
+      }
+    );
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = String(data?.error?.message || `HTTP ${res.status}`);
+      const isFreeTierLimit =
+        res.status === 429 &&
+        (msg.toLowerCase().includes('free tier') || msg.includes('limit: 0'));
+      if (isFreeTierLimit) {
+        return {
+          ok: false,
+          needsPaidKey: true,
+          error:
+            'Το προεπιλεγμένο API Key είναι σε Free Tier (όριο 0 για βίντεο Omni). Επικολλήστε παρακάτω το API Key του λογαριασμού σας (από το aistudio.google.com/apikey με ενεργό Billing) για παραγωγή βίντεο με το Gemini Omni 1.1 Flash!',
+        };
+      }
+      return { ok: false, error: msg };
+    }
+
+    // Extract base64 MP4 from steps[].content[] (or output_video)
+    let videoBase64: string | null = data?.output_video?.data || null;
+    let videoMime = data?.output_video?.mime_type || 'video/mp4';
+
+    if (!videoBase64 && Array.isArray(data?.steps)) {
+      for (const step of data.steps) {
+        if (Array.isArray(step?.content)) {
+          for (const part of step.content) {
+            if (part?.type === 'video' && typeof part?.data === 'string' && part.data.length > 100) {
+              videoBase64 = part.data;
+              videoMime = part.mime_type || 'video/mp4';
+              break;
+            }
+          }
+        }
+        if (videoBase64) break;
+      }
+    }
+
+    if (!videoBase64) {
+      return {
+        ok: false,
+        error: 'Το Gemini Omni ολοκλήρωσε την κλήση αλλά δεν επέστρεψε δεδομένα βίντεο.',
+      };
+    }
+
+    return {
+      ok: true,
+      videoDataUrl: `data:${videoMime};base64,${videoBase64}`,
+      interactionId: data?.id,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: String(err?.message || 'Σφάλμα δικτύου κατά την επικοινωνία με το Gemini Omni 1.1 Flash.'),
+    };
+  }
+}
+
+/**
+ * Renders a frame of the Smart Sketch Animation overlay in the exact pen-and-ink aesthetic
+ * of the user's illustration (raindrops, rising wavy evaporation, flowing river/waterfall,
+ * sea waves, shimmering sun rays, drifting clouds, and animated arrows).
+ */
+export function renderSmartSketchOverlayFrame(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  spec: SmartSketchAnimationSpec,
+  elapsedSec: number
+): void {
+  ctx.clearRect(0, 0, width, height);
+  if (!spec?.effects || spec.effects.length === 0) return;
+
+  for (const ef of spec.effects) {
+    const [ymin, xmin, ymax, xmax] = ef.box;
+    const x0 = (xmin / 1000) * width;
+    const y0 = (ymin / 1000) * height;
+    const bw = Math.max(16, ((xmax - xmin) / 1000) * width);
+    const bh = Math.max(16, ((ymax - ymin) / 1000) * height);
+    const cx = x0 + bw / 2;
+    const cy = y0 + bh / 2;
+    const color = ef.color || '#1e293b';
+    const intensity = ef.intensity ?? 1;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (ef.type === 'rain') {
+      // Pen-and-ink slanted rain streaks falling smoothly inside the rain zone
+      const angleRad = ((ef.angleDeg ?? 105) * Math.PI) / 180;
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+      const cols = Math.max(5, Math.min(14, Math.round((bw / 22) * intensity)));
+      const rows = Math.max(4, Math.min(10, Math.round((bh / 28) * intensity)));
+      ctx.lineWidth = Math.max(1.3, Math.min(2.4, width * 0.0032));
+
+      for (let c = 0; c < cols; c++) {
+        const colFrac = (c + 0.5) / cols;
+        const phaseOffset = ((c * 0.37) % 1);
+        for (let r = 0; r < rows; r++) {
+          const u = (r / rows + elapsedSec * 0.78 + phaseOffset) % 1;
+          const fade = Math.sin(u * Math.PI);
+          if (fade < 0.08) continue;
+          const dropLen = Math.max(8, Math.min(20, bh * 0.09));
+          // Start near top of box, drift along angleRad as u goes 0 -> 1
+          const px = x0 + colFrac * bw + (u - 0.5) * bh * (cosA / Math.max(0.3, Math.abs(sinA))) * 0.45;
+          const py = y0 + u * bh;
+          if (px < x0 - 15 || px > x0 + bw + 15) continue;
+          ctx.globalAlpha = 0.72 * fade;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + cosA * dropLen, py + sinA * dropLen);
+          ctx.stroke();
+        }
+      }
+    } else if (ef.type === 'evaporation') {
+      // Rising wavy ink lines & vapor wisps (matching hand-drawn wavy upward arrows)
+      const cols = Math.max(3, Math.min(7, Math.round((bw / 28) * intensity)));
+      ctx.lineWidth = Math.max(1.4, Math.min(2.5, width * 0.0034));
+      for (let c = 0; c < cols; c++) {
+        const baseX = x0 + ((c + 0.5) / cols) * bw;
+        for (let p = 0; p < 2; p++) {
+          const u = (elapsedSec * 0.42 + c * 0.23 + p * 0.5) % 1;
+          const fade = Math.sin(u * Math.PI);
+          const segH = bh * 0.32;
+          const bottomY = y0 + bh - u * (bh - segH * 0.4);
+          const topY = bottomY - segH;
+          ctx.globalAlpha = 0.75 * fade;
+          ctx.beginPath();
+          const steps = 14;
+          for (let s = 0; s <= steps; s++) {
+            const t = s / steps;
+            const sy = bottomY - t * segH;
+            const waveX = baseX + Math.sin(t * Math.PI * 3.5 - elapsedSec * 5 + c) * Math.max(3, bw * 0.045);
+            if (s === 0) ctx.moveTo(waveX, sy);
+            else ctx.lineTo(waveX, sy);
+          }
+          ctx.stroke();
+
+          // Tiny ink arrowhead at the rising tip
+          const tipX = baseX + Math.sin(Math.PI * 3.5 - elapsedSec * 5 + c) * Math.max(3, bw * 0.045);
+          ctx.beginPath();
+          ctx.moveTo(tipX - 3.5, topY + 5);
+          ctx.lineTo(tipX, topY - 1);
+          ctx.lineTo(tipX + 3.5, topY + 5);
+          ctx.stroke();
+        }
+      }
+    } else if (ef.type === 'water_flow') {
+      // Flowing ink current lines & waterfall droplets along the river/waterfall path
+      const streams = Math.max(4, Math.min(10, Math.round(6 * intensity)));
+      ctx.lineWidth = Math.max(1.4, Math.min(2.4, width * 0.0032));
+      for (let i = 0; i < streams; i++) {
+        const u = (elapsedSec * 0.55 + i / streams) % 1;
+        const fade = Math.sin(u * Math.PI);
+        // S-curve winding down the river bounding box
+        const t0 = Math.max(0, u - 0.14);
+        const t1 = Math.min(1, u + 0.08);
+        const lateralOffset = ((i % 3) - 1) * Math.max(4, bw * 0.11);
+        ctx.globalAlpha = 0.72 * fade;
+        ctx.beginPath();
+        const steps = 10;
+        for (let s = 0; s <= steps; s++) {
+          const t = t0 + (t1 - t0) * (s / steps);
+          const py = y0 + t * bh;
+          const meander = Math.sin(t * Math.PI * 2.2) * (bw * 0.18) + lateralOffset * (0.6 + 0.4 * t);
+          const px = cx + meander;
+          if (s === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    } else if (ef.type === 'waves') {
+      // Hand-drawn ink wave crests gently bobbing & rippling across the water surface
+      const rows = Math.max(3, Math.min(6, Math.round(bh / 26)));
+      const cols = Math.max(3, Math.min(7, Math.round(bw / 48)));
+      ctx.lineWidth = Math.max(1.3, Math.min(2.2, width * 0.003));
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const phase = elapsedSec * 2.6 + r * 1.3 + c * 0.9;
+          const bobX = Math.sin(phase) * 5;
+          const bobY = Math.cos(phase * 1.2) * 2.2;
+          const wx = x0 + ((c + 0.5 + (r % 2) * 0.25) / (cols + 0.3)) * bw + bobX;
+          const wy = y0 + ((r + 0.5) / rows) * bh + bobY;
+          const wLen = Math.max(12, Math.min(28, bw * 0.11));
+          const alpha = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(phase));
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.moveTo(wx - wLen / 2, wy + 2);
+          ctx.quadraticCurveTo(wx - wLen * 0.15, wy - 3.5, wx, wy - 1);
+          ctx.quadraticCurveTo(wx + wLen * 0.2, wy + 2.5, wx + wLen / 2, wy + 1.5);
+          ctx.stroke();
+        }
+      }
+    } else if (ef.type === 'sun_rays') {
+      // Shimmering radial pen-and-ink rays around the sun
+      const rx = Math.max(18, Math.min(bw, bh) * 0.48);
+      const innerR = rx * 0.56;
+      const numRays = 16;
+      ctx.lineWidth = Math.max(1.3, Math.min(2.2, width * 0.003));
+      for (let i = 0; i < numRays; i++) {
+        const baseAngle = (i / numRays) * Math.PI * 2 + Math.sin(elapsedSec * 0.8) * 0.06;
+        const pulse = 0.5 + 0.5 * Math.sin(elapsedSec * 3.8 + i * 1.7);
+        const rStart = innerR + pulse * 4;
+        const rEnd = innerR + (rx - innerR) * (0.55 + 0.45 * pulse);
+        ctx.globalAlpha = 0.35 + 0.5 * pulse;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(baseAngle) * rStart, cy + Math.sin(baseAngle) * rStart);
+        ctx.lineTo(cx + Math.cos(baseAngle) * rEnd, cy + Math.sin(baseAngle) * rEnd);
+        ctx.stroke();
+      }
+    } else if (ef.type === 'cloud_drift') {
+      // Subtle drifting ink breeze lines & cloud contour motion
+      const lines = 4;
+      ctx.lineWidth = Math.max(1.2, Math.min(2.0, width * 0.0028));
+      for (let i = 0; i < lines; i++) {
+        const u = (elapsedSec * 0.32 + i / lines) % 1;
+        const fade = Math.sin(u * Math.PI);
+        const lx = x0 + bw * (1 - u * 0.85);
+        const ly = y0 + ((i + 1) / (lines + 1)) * bh;
+        const segW = Math.max(14, bw * 0.18);
+        ctx.globalAlpha = 0.45 * fade;
+        ctx.beginPath();
+        ctx.moveTo(lx, ly);
+        ctx.quadraticCurveTo(lx - segW * 0.5, ly - 3, lx - segW, ly);
+        ctx.stroke();
+      }
+    } else if (ef.type === 'flow_arrow') {
+      // Animated ink chevrons/pulses traveling along the arrow direction
+      const angleRad = ((ef.angleDeg ?? 180) * Math.PI) / 180;
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+      const span = Math.max(bw, bh) * 0.75;
+      ctx.lineWidth = Math.max(1.8, Math.min(3.0, width * 0.004));
+      for (let i = 0; i < 3; i++) {
+        const u = (elapsedSec * 0.65 + i / 3) % 1;
+        const fade = Math.sin(u * Math.PI);
+        const d = (u - 0.5) * span;
+        const px = cx + cosA * d;
+        const py = cy + sinA * d;
+        const perpX = -sinA;
+        const perpY = cosA;
+        const wing = Math.max(5, Math.min(9, span * 0.12));
+        ctx.globalAlpha = 0.8 * fade;
+        ctx.beginPath();
+        ctx.moveTo(px - cosA * wing + perpX * wing * 0.75, py - sinA * wing + perpY * wing * 0.75);
+        ctx.lineTo(px + cosA * 2, py + sinA * 2);
+        ctx.lineTo(px - cosA * wing - perpX * wing * 0.75, py - sinA * wing - perpY * wing * 0.75);
+        ctx.stroke();
+      }
+    } else {
+      // Default subtle ink sparkles / motion accents
+      for (let i = 0; i < 5; i++) {
+        const phase = elapsedSec * 2.4 + i * 1.3;
+        const pulse = Math.max(0, Math.sin(phase));
+        const sx = x0 + ((i * 37 + 19) % 80 + 10) * 0.01 * bw;
+        const sy = y0 + ((i * 53 + 23) % 80 + 10) * 0.01 * bh;
+        const r = 3 + pulse * 4;
+        ctx.globalAlpha = 0.65 * pulse;
+        ctx.beginPath();
+        ctx.moveTo(sx - r, sy);
+        ctx.lineTo(sx + r, sy);
+        ctx.moveTo(sx, sy - r);
+        ctx.lineTo(sx, sy + r);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+}
+
+/**
+ * Synthesizes realistic, calming nature ambient sound (rain, flowing river/waterfall,
+ * sea waves, soft wind) using pure Web Audio API so Smart Sketch animations have instant sound!
+ */
+export class SmartSketchAudioEngine {
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private lfoTimer: number | null = null;
+  private isPlaying = false;
+
+  public start(soundscape: SmartSketchSoundscape): void {
+    this.stop();
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx: AudioContext = new AudioCtx();
+      this.ctx = ctx;
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.01, ctx.currentTime);
+      master.gain.exponentialRampToValueAtTime(0.32, ctx.currentTime + 0.6);
+      master.connect(ctx.destination);
+      this.masterGain = master;
+      this.isPlaying = true;
+
+      // Create 3 seconds of stereo pink/brown noise buffer
+      const bufLen = ctx.sampleRate * 3;
+      const noiseBuf = ctx.createBuffer(2, bufLen, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const out = noiseBuf.getChannelData(ch);
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufLen; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          out[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.04;
+          b6 = white * 0.115926;
+        }
+      }
+
+      const addFilteredLayer = (
+        type: BiquadFilterType,
+        freq: number,
+        q: number,
+        level: number
+      ): { filter: BiquadFilterNode; gain: GainNode } | null => {
+        if (level <= 0.02) return null;
+        const src = ctx.createBufferSource();
+        src.buffer = noiseBuf;
+        src.loop = true;
+        const filter = ctx.createBiquadFilter();
+        filter.type = type;
+        filter.frequency.value = freq;
+        filter.Q.value = q;
+        const g = ctx.createGain();
+        g.gain.value = level;
+        src.connect(filter);
+        filter.connect(g);
+        g.connect(master);
+        src.start();
+        return { filter, gain: g };
+      };
+
+      const rainLv = soundscape.rain ?? 0.6;
+      const riverLv = soundscape.river ?? 0.5;
+      const wavesLv = soundscape.waves ?? 0.4;
+      const windLv = soundscape.wind ?? 0.25;
+
+      // Rain: crisp high-mid bandpass patter
+      addFilteredLayer('bandpass', 2400, 0.7, rainLv * 0.45);
+      // River / Waterfall: warm babbling low-mid flow
+      const riverNode = addFilteredLayer('bandpass', 580, 1.1, riverLv * 0.55);
+      // Sea Waves: slow surging lowpass swell
+      const wavesNode = addFilteredLayer('lowpass', 340, 0.8, wavesLv * 0.5);
+      // Gentle Breeze
+      const windNode = addFilteredLayer('bandpass', 420, 2.2, windLv * 0.3);
+
+      let tick = 0;
+      this.lfoTimer = window.setInterval(() => {
+        if (!this.ctx || !this.isPlaying) return;
+        tick += 0.15;
+        const now = this.ctx.currentTime;
+        if (riverNode) {
+          riverNode.filter.frequency.setTargetAtTime(520 + Math.sin(tick * 2.3) * 110, now, 0.12);
+        }
+        if (wavesNode) {
+          wavesNode.gain.gain.setTargetAtTime(
+            wavesLv * (0.28 + 0.25 * (0.5 + 0.5 * Math.sin(tick * 0.7))),
+            now,
+            0.2
+          );
+        }
+        if (windNode) {
+          windNode.filter.frequency.setTargetAtTime(360 + Math.sin(tick * 0.5) * 140, now, 0.2);
+        }
+      }, 150);
+    } catch {
+      // Ignore Web Audio autoplay restrictions
+    }
+  }
+
+  public stop(): void {
+    this.isPlaying = false;
+    if (this.lfoTimer !== null) {
+      window.clearInterval(this.lfoTimer);
+      this.lfoTimer = null;
+    }
+    if (this.ctx) {
+      try {
+        this.ctx.close();
+      } catch {
+        // ignore
+      }
+      this.ctx = null;
+      this.masterGain = null;
+    }
+  }
+}
+
 
 
 

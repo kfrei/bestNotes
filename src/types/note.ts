@@ -139,6 +139,38 @@ export interface TextObject {
   groupId?: string;
 }
 
+export interface SmartSketchEffectRegion {
+  id: string;
+  type:
+    | 'rain'
+    | 'evaporation'
+    | 'water_flow'
+    | 'waves'
+    | 'sun_rays'
+    | 'cloud_drift'
+    | 'flow_arrow'
+    | 'sparkles';
+  label?: string;
+  box: [number, number, number, number]; // [ymin, xmin, ymax, xmax] in 0..1000 normalized coords
+  angleDeg?: number; // Direction of motion in degrees (0=right, 90=down, -90=up, 180=left)
+  color?: string; // Ink color matching the drawing (e.g. '#1e293b', '#991b1b')
+  intensity?: number; // 0.3 .. 1.5
+}
+
+export interface SmartSketchSoundscape {
+  rain?: number; // 0..1
+  river?: number; // 0..1
+  waves?: number; // 0..1
+  wind?: number; // 0..1
+}
+
+export interface SmartSketchAnimationSpec {
+  sceneTitle: string;
+  omniPrompt: string;
+  effects: SmartSketchEffectRegion[];
+  soundscape: SmartSketchSoundscape;
+}
+
 export interface ImageObject {
   id: string;
   x: number;
@@ -155,6 +187,10 @@ export interface ImageObject {
   layerId: string;
   groupId?: string;
   zOrder?: number; // Unified Z-Order shared across both Images and Strokes/Shapes
+  aiAnimation?: SmartSketchAnimationSpec;
+  aiVideoUrl?: string; // Data URL / Blob URL of MP4 generated via Gemini Omni 1.1 Flash
+  aiAnimMode?: 'off' | 'sketch' | 'video';
+  aiAnimMuted?: boolean;
 }
 
 export interface TapeObject {

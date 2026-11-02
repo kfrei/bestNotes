@@ -101,6 +101,7 @@ import {
   FillStyleType,
   PaperTemplateType,
   ImageObject,
+  SmartSketchAnimationSpec,
   TextObject,
   TextFontStyle,
   TapeObject,
@@ -161,6 +162,10 @@ import {
   reverseBezierPointsExact,
   convertOpenStrokeToBezierSplinePoints,
   ensureWaveBezierPoints,
+  analyzeImageForSmartSketchAnimation,
+  generateOmniVideoFromImage,
+  renderSmartSketchOverlayFrame,
+  SmartSketchAudioEngine,
 } from './utils/geometryAndAlgorithms';
 import {
   MIND_MAPS_CATALOG,
@@ -202,6 +207,145 @@ function normalizeGreekText(str: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ς/g, 'σ');
 }
+
+const AiAnimatedImageOverlay: React.FC<{
+  image: ImageObject;
+  onUpdateImage: (updater: (im: ImageObject) => ImageObject) => void;
+  onOpenStudio: () => void;
+}> = ({ image, onUpdateImage, onOpenStudio }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioRef = useRef<SmartSketchAudioEngine | null>(null);
+  const mode = image.aiAnimMode || 'off';
+  const muted = Boolean(image.aiAnimMuted);
+
+  useEffect(() => {
+    if (mode !== 'sketch' || !image.aiAnimation) {
+      audioRef.current?.stop();
+      return;
+    }
+    let rafId = 0;
+    const startMs = performance.now();
+    const dpr = 2;
+    const w = Math.max(24, Math.round(image.width));
+    const h = Math.max(24, Math.round(image.height));
+    const c = canvasRef.current;
+    if (c) {
+      c.width = w * dpr;
+      c.height = h * dpr;
+    }
+    const loop = (now: number) => {
+      const ctx = c?.getContext('2d');
+      if (ctx && image.aiAnimation) {
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        renderSmartSketchOverlayFrame(ctx, w, h, image.aiAnimation, (now - startMs) / 1000);
+        ctx.restore();
+      }
+      rafId = window.requestAnimationFrame(loop);
+    };
+    rafId = window.requestAnimationFrame(loop);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [mode, image.aiAnimation, image.width, image.height]);
+
+  useEffect(() => {
+    if (mode === 'sketch' && image.aiAnimation && !muted) {
+      if (!audioRef.current) audioRef.current = new SmartSketchAudioEngine();
+      audioRef.current.start(image.aiAnimation.soundscape);
+    } else {
+      audioRef.current?.stop();
+    }
+    return () => {
+      audioRef.current?.stop();
+    };
+  }, [mode, image.aiAnimation, muted]);
+
+  if (mode === 'off') return null;
+
+  return (
+    <div
+      style={{
+        left: `${image.x}px`,
+        top: `${image.y}px`,
+        width: `${image.width}px`,
+        height: `${image.height}px`,
+        transform: image.rotation ? `rotate(${image.rotation}deg)` : undefined,
+      }}
+      className="absolute z-15 pointer-events-none"
+    >
+      {mode === 'sketch' && image.aiAnimation && (
+        <canvas
+          ref={canvasRef}
+          style={{ width: `${image.width}px`, height: `${image.height}px` }}
+          className="w-full h-full pointer-events-none"
+        />
+      )}
+
+      {mode === 'video' && image.aiVideoUrl && (
+        <video
+          src={image.aiVideoUrl}
+          autoPlay
+          loop
+          playsInline
+          muted={muted}
+          className="w-full h-full object-cover rounded-lg shadow-sm pointer-events-none"
+        />
+      )}
+
+      {/* Floating Compact Control Pill at Top-Right of Animated Image */}
+      <div
+        data-ui-panel="true"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute -top-8 right-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900/90 text-white text-[10px] font-semibold shadow-lg pointer-events-auto border border-white/15"
+      >
+        <span className="text-amber-300 truncate max-w-[110px]">
+          {mode === 'video' ? '🎬 Omni Video' : `⚡ ${image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}`}
+        </span>
+        <button
+          type="button"
+          onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMuted: !im.aiAnimMuted }))}
+          className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
+          title={muted ? 'Ενεργοποίηση Ήχου' : 'Σίγαση Ήχου'}
+        >
+          {muted ? '🔇' : '🔊'}
+        </button>
+        {image.aiAnimation && image.aiVideoUrl && (
+          <button
+            type="button"
+            onClick={() =>
+              onUpdateImage((im) => ({
+                ...im,
+                aiAnimMode: im.aiAnimMode === 'video' ? 'sketch' : 'video',
+              }))
+            }
+            className="px-1.5 py-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 cursor-pointer"
+            title="Εναλλαγή ανάμεσα σε Ζωντανό Σκίτσο και Gemini Omni Video"
+          >
+            {mode === 'video' ? '⚡ Σκίτσο' : '🎬 Video'}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onOpenStudio}
+          className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
+          title="Ρυθμίσεις Ζωντανέματος (AI Animate Studio)"
+        >
+          ⚙️
+        </button>
+        <button
+          type="button"
+          onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
+          className="px-1 py-0.5 rounded-full hover:bg-rose-500/80 text-rose-300 hover:text-white cursor-pointer"
+          title="Διακοπή κίνησης (επιστροφή σε στατική εικόνα)"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+};
 
 function matchesGreekSearchTokens(haystackNorm: string, qNorm: string): boolean {
   if (!qNorm) return true;
@@ -1724,6 +1868,25 @@ export default function App() {
   const layerDragMovedRef = useRef<boolean>(false);
   const [layersPanelPos, setLayersPanelPos] = useState<{ x: number; y: number } | null>(null);
   const layersPanelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const [aiAnimateModal, setAiAnimateModal] = useState<{
+    targetImageId: string | null;
+    snapshotDataUrl: string;
+    box: { x: number; y: number; width: number; height: number };
+    spec: SmartSketchAnimationSpec | null;
+    omniPrompt: string;
+    videoDataUrl: string | null;
+    activeTab: 'sketch' | 'omni';
+    isAnalyzing: boolean;
+    isGeneratingVideo: boolean;
+    omniError: string | null;
+    needsPaidKey: boolean;
+    durationSec: number;
+    resolution: '360p' | '720p' | '1080p';
+    loopVideo: boolean;
+  } | null>(null);
+  const [customGeminiKey, setCustomGeminiKey] = useState<string>(
+    () => localStorage.getItem('bestnotes_custom_gemini_key') || ''
+  );
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
@@ -38347,6 +38510,222 @@ export default function App() {
     showToast('🖼️ Προστέθηκε στη Συλλογή Εικόνων!');
   };
 
+  // Open AI Animate Studio (Smart Sketch Animator + Gemini Omni 1.1 Flash Video) for selected Image or Lasso composite
+  const handleOpenAiAnimateForSelection = async (targetImgOverride?: ImageObject) => {
+    const effImgIds =
+      selectedImageIds.length > 0
+        ? selectedImageIds
+        : selectedImageId
+        ? [selectedImageId]
+        : [];
+    const selImgs = targetImgOverride
+      ? [targetImgOverride]
+      : (activePage.images || []).filter((im) => effImgIds.includes(im.id));
+    const selStrokes = targetImgOverride
+      ? []
+      : activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+
+    if (selImgs.length === 0 && selStrokes.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα μια εικόνα ή ένα σχέδιο με το Lasso!');
+      return;
+    }
+
+    // Case 1: Single selected image (no extra strokes)
+    if (selImgs.length === 1 && selStrokes.length === 0) {
+      const img = selImgs[0];
+      const existingSpec = img.aiAnimation || null;
+      const existingVideo = img.aiVideoUrl || null;
+      setAiAnimateModal({
+        targetImageId: img.id,
+        snapshotDataUrl: img.dataUrl,
+        box: { x: img.x, y: img.y, width: img.width, height: img.height },
+        spec: existingSpec,
+        omniPrompt:
+          existingSpec?.omniPrompt ||
+          '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and arrows to life with subtle motion and gentle ambient nature sound effects. No dialogue.',
+        videoDataUrl: existingVideo,
+        activeTab: existingVideo && img.aiAnimMode === 'video' ? 'omni' : 'sketch',
+        isAnalyzing: !existingSpec,
+        isGeneratingVideo: false,
+        omniError: null,
+        needsPaidKey: false,
+        durationSec: 5,
+        resolution: '720p',
+        loopVideo: true,
+      });
+
+      if (!existingSpec) {
+        const analyzed = await analyzeImageForSmartSketchAnimation(img.dataUrl, customGeminiKey);
+        if (analyzed) {
+          setAiAnimateModal((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  spec: analyzed,
+                  omniPrompt: analyzed.omniPrompt,
+                  isAnalyzing: false,
+                }
+              : null
+          );
+          updateActivePage((page) => ({
+            ...page,
+            images: (page.images || []).map((im) =>
+              im.id === img.id
+                ? {
+                    ...im,
+                    aiAnimation: analyzed,
+                    aiAnimMode: im.aiAnimMode === 'video' ? 'video' : 'sketch',
+                  }
+                : im
+            ),
+          }));
+          showToast(`✨ Ζωντάνεμα «${analyzed.sceneTitle}» έτοιμο με ήχο!`);
+        } else {
+          setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: false } : null));
+          showToast('⚠️ Δεν ήταν δυνατή η ανάλυση της εικόνας από το Gemini Vision.');
+        }
+      }
+      return;
+    }
+
+    // Case 2: Composite Lasso selection (multiple images and/or strokes, e.g. full Water Cycle diagram)
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (const im of selImgs) {
+      if (im.x < minX) minX = im.x;
+      if (im.y < minY) minY = im.y;
+      if (im.x + im.width > maxX) maxX = im.x + im.width;
+      if (im.y + im.height > maxY) maxY = im.y + im.height;
+    }
+    for (const s of selStrokes) {
+      const b = getStrokeBounds(s);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+    }
+    const pad = 12;
+    minX = Math.max(0, minX - pad);
+    minY = Math.max(0, minY - pad);
+    const boxW = Math.max(80, Math.round(maxX - minX + pad * 2));
+    const boxH = Math.max(80, Math.round(maxY - minY + pad * 2));
+
+    const c = document.createElement('canvas');
+    const scale = Math.min(2, 1280 / Math.max(boxW, boxH, 1));
+    c.width = Math.round(boxW * scale);
+    c.height = Math.round(boxH * scale);
+    const ctx = c.getContext('2d')!;
+    ctx.scale(scale, scale);
+    ctx.translate(-minX, -minY);
+    for (const im of selImgs) {
+      const el = imageElementsCacheRef.current.get(im.dataUrl);
+      if (el) {
+        ctx.drawImage(el, im.x, im.y, im.width, im.height);
+      }
+    }
+    for (const s of selStrokes) {
+      drawStrokeOnContext(ctx, s, false);
+    }
+    const compositeUrl = c.toDataURL('image/png');
+    const primaryImgId = selImgs.length > 0 ? selImgs[0].id : null;
+
+    setAiAnimateModal({
+      targetImageId: primaryImgId,
+      snapshotDataUrl: compositeUrl,
+      box: { x: Math.round(minX), y: Math.round(minY), width: boxW, height: boxH },
+      spec: null,
+      omniPrompt:
+        '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and arrows to life with subtle motion and gentle ambient nature sound effects. No dialogue.',
+      videoDataUrl: null,
+      activeTab: 'sketch',
+      isAnalyzing: true,
+      isGeneratingVideo: false,
+      omniError: null,
+      needsPaidKey: false,
+      durationSec: 5,
+      resolution: '720p',
+      loopVideo: true,
+    });
+
+    const analyzed = await analyzeImageForSmartSketchAnimation(compositeUrl, customGeminiKey);
+    if (analyzed) {
+      setAiAnimateModal((prev) =>
+        prev
+          ? {
+              ...prev,
+              spec: analyzed,
+              omniPrompt: analyzed.omniPrompt,
+              isAnalyzing: false,
+            }
+          : null
+      );
+      showToast(`✨ Ζωντάνεμα «${analyzed.sceneTitle}» έτοιμο!`);
+    } else {
+      setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: false } : null));
+    }
+  };
+
+  const handleGenerateOmniVideoInModal = async () => {
+    if (!aiAnimateModal || aiAnimateModal.isGeneratingVideo) return;
+    setAiAnimateModal((prev) =>
+      prev ? { ...prev, isGeneratingVideo: true, omniError: null, needsPaidKey: false } : null
+    );
+    const res = await generateOmniVideoFromImage(
+      aiAnimateModal.snapshotDataUrl,
+      aiAnimateModal.omniPrompt,
+      {
+        durationSec: aiAnimateModal.durationSec,
+        resolution: aiAnimateModal.resolution,
+        loopFirstLastFrame: aiAnimateModal.loopVideo,
+        customApiKey: customGeminiKey,
+      }
+    );
+    if (!res.ok || !res.videoDataUrl) {
+      setAiAnimateModal((prev) =>
+        prev
+          ? {
+              ...prev,
+              isGeneratingVideo: false,
+              omniError: res.error || 'Αποτυχία δημιουργίας βίντεο.',
+              needsPaidKey: Boolean(res.needsPaidKey),
+            }
+          : null
+      );
+      return;
+    }
+
+    const vidUrl = res.videoDataUrl;
+    const targetId = aiAnimateModal.targetImageId;
+    setAiAnimateModal((prev) =>
+      prev
+        ? {
+            ...prev,
+            isGeneratingVideo: false,
+            videoDataUrl: vidUrl,
+            omniError: null,
+            needsPaidKey: false,
+          }
+        : null
+    );
+    if (targetId) {
+      updateActivePage((page) => ({
+        ...page,
+        images: (page.images || []).map((im) =>
+          im.id === targetId
+            ? {
+                ...im,
+                aiVideoUrl: vidUrl,
+                aiAnimMode: 'video',
+              }
+            : im
+        ),
+      }));
+    }
+    showToast('🎬 Το βίντεο με ήχο από το Gemini Omni 1.1 Flash δημιουργήθηκε!');
+  };
+
   // Insert a saved Shape / Group / Image from the Library onto the current active page
   const handleInsertFromShapeLibrary = (item: SavedLibraryItem) => {
     if (item.image) {
@@ -42569,6 +42948,15 @@ export default function App() {
                       <span>Προσθήκη</span>
                     </button>
 
+                    <button
+                      onClick={() => void handleOpenAiAnimateForSelection()}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-700 hover:to-indigo-700 text-white font-semibold cursor-pointer shadow-xs whitespace-nowrap"
+                      title="Ζωντάνεμα (AI Animate): Άμεσο Ζωντανό Σκίτσο με Ήχο + Gemini Omni 1.1 Flash AI Video!"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>🎬 Ζωντάνεμα</span>
+                    </button>
+
                     {selectedStrokeIds.length > 0 && (
                       <>
                         <button
@@ -43137,6 +43525,14 @@ export default function App() {
                     >
                       <Magnet className="w-3.5 h-3.5" />
                       <span>Magnetic Lasso</span>
+                    </button>
+                    <button
+                      onClick={() => void handleOpenAiAnimateForSelection(selectedImgObj)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-700 hover:to-indigo-700 text-white font-semibold cursor-pointer shadow-xs whitespace-nowrap"
+                      title="Ζωντάνεμα εικόνας (AI Animate): Άμεσο Ζωντανό Σκίτσο με Ήχο + Gemini Omni 1.1 Flash AI Video!"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>🎬 Ζωντάνεμα</span>
                     </button>
                     <button
                       onClick={() => {
@@ -47321,6 +47717,31 @@ export default function App() {
                       />
                     )}
 
+                    {/* Layer 1.6: AI Animated Images Overlay (Smart Sketch Animator + Gemini Omni 1.1 Flash Video) */}
+                    {isCurrentActive &&
+                      (pageObj.images || [])
+                        .filter(
+                          (im) =>
+                            im.aiAnimMode &&
+                            im.aiAnimMode !== 'off' &&
+                            pageObj.layers.some((l) => l.id === im.layerId && l.visible)
+                        )
+                        .map((im) => (
+                          <AiAnimatedImageOverlay
+                            key={`ai-anim-${im.id}`}
+                            image={im}
+                            onUpdateImage={(updater) => {
+                              updateActivePage((page) => ({
+                                ...page,
+                                images: (page.images || []).map((item) =>
+                                  item.id === im.id ? updater(item) : item
+                                ),
+                              }));
+                            }}
+                            onOpenStudio={() => void handleOpenAiAnimateForSelection(im)}
+                          />
+                        ))}
+
                     {/* Layer 2: 2x Retina Desynchronized 0ms Hardware Wet-Ink Canvas */}
                     <canvas
                       ref={(el) => {
@@ -50071,6 +50492,399 @@ export default function App() {
             >
               Ακύρωση
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* AI ANIMATE STUDIO MODAL (Smart Sketch Animator + Gemini Omni 1.1 Flash Video & Audio) */}
+      {aiAnimateModal && (
+        <div
+          className="fixed inset-0 z-[1060] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setAiAnimateModal(null)}
+        >
+          <div
+            data-ui-panel="true"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white text-slate-800 border border-slate-200 shadow-2xl p-5 flex flex-col gap-4"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-indigo-600 text-white flex items-center justify-center shadow-sm">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-[#1b2a4a] flex items-center gap-2">
+                    <span>🎬 Ζωντάνεμα Εικόνας (AI Animate Studio)</span>
+                    {aiAnimateModal.spec?.sceneTitle && (
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                        {aiAnimateModal.spec.sceneTitle}
+                      </span>
+                    )}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Δώστε κίνηση και φυσικό ήχο στην τεχνοτροπία του δικού σας σκίτσου (Smart Sketch ή Gemini Omni 1.1 Flash)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiAnimateModal(null)}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition cursor-pointer"
+                title="Κλείσιμο"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Mode Switcher Tabs */}
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setAiAnimateModal((prev) => (prev ? { ...prev, activeTab: 'sketch' } : null))}
+                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  aiAnimateModal.activeTab === 'sketch'
+                    ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>⚡ Άμεσο Ζωντανό Σκίτσο + Ήχος (Δωρεάν / 3s)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAiAnimateModal((prev) => (prev ? { ...prev, activeTab: 'omni' } : null))}
+                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  aiAnimateModal.activeTab === 'omni'
+                    ? 'bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>🎬 Gemini Omni 1.1 Flash (AI Video MP4 + Ήχος)</span>
+              </button>
+            </div>
+
+            {/* Live Stage Preview */}
+            <div className="relative w-full rounded-2xl bg-[#fdfcf7] border border-slate-200 overflow-hidden flex items-center justify-center min-h-[260px] max-h-[360px]">
+              {aiAnimateModal.activeTab === 'omni' && aiAnimateModal.videoDataUrl ? (
+                <video
+                  src={aiAnimateModal.videoDataUrl}
+                  controls
+                  autoPlay
+                  loop
+                  playsInline
+                  className="max-h-[350px] w-auto object-contain rounded-xl"
+                />
+              ) : (
+                <div className="relative inline-block">
+                  <img
+                    src={aiAnimateModal.snapshotDataUrl}
+                    alt="Preview"
+                    className="max-h-[340px] w-auto object-contain block select-none"
+                  />
+                  {aiAnimateModal.spec && (
+                    <AiAnimatedImageOverlay
+                      image={{
+                        id: 'modal-preview',
+                        x: 0,
+                        y: 0,
+                        width: Math.min(480, aiAnimateModal.box.width),
+                        height: Math.min(340, aiAnimateModal.box.height),
+                        dataUrl: aiAnimateModal.snapshotDataUrl,
+                        layerId: activeLayerId,
+                        aiAnimation: aiAnimateModal.spec,
+                        aiAnimMode: 'sketch',
+                        aiAnimMuted: false,
+                      }}
+                      onUpdateImage={() => {}}
+                      onOpenStudio={() => {}}
+                    />
+                  )}
+                </div>
+              )}
+
+              {aiAnimateModal.isAnalyzing && (
+                <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px] flex flex-col items-center justify-center text-white gap-2">
+                  <RefreshCw className="w-6 h-6 animate-spin text-amber-300" />
+                  <span className="text-xs font-bold">
+                    Το Gemini Vision αναλύει το σκίτσο σας (βροχή, ποτάμι, ατμούς, ήλιο, βέλη)...
+                  </span>
+                </div>
+              )}
+
+              {aiAnimateModal.isGeneratingVideo && (
+                <div className="absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex flex-col items-center justify-center text-white gap-2 p-6 text-center">
+                  <RefreshCw className="w-7 h-7 animate-spin text-fuchsia-400" />
+                  <span className="text-sm font-bold">
+                    Το Gemini Omni 1.1 Flash δημιουργεί το AI Video με φυσικό ήχο...
+                  </span>
+                  <span className="text-[11px] text-slate-300">
+                    Διατηρείται η ακριβής τεχνοτροπία της εικόνας σας (`&lt;FIRST_FRAME&gt;`). Αυτό διαρκεί ~25–45 δευτερόλεπτα.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {aiAnimateModal.activeTab === 'sketch' ? (
+              <div className="space-y-3">
+                {aiAnimateModal.spec && (
+                  <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-950">
+                        ✨ Αναγνωρίστηκαν {aiAnimateModal.spec.effects.length} ζώνες κίνησης & φυσικός ήχος:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
+                          const re = await analyzeImageForSmartSketchAnimation(
+                            aiAnimateModal.snapshotDataUrl,
+                            customGeminiKey
+                          );
+                          setAiAnimateModal((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  isAnalyzing: false,
+                                  spec: re || prev.spec,
+                                  omniPrompt: re?.omniPrompt || prev.omniPrompt,
+                                }
+                              : null
+                          );
+                        }}
+                        className="text-[11px] font-semibold text-indigo-700 hover:underline cursor-pointer"
+                      >
+                        🔄 Επανανάλυση
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {aiAnimateModal.spec.effects.map((ef) => (
+                        <span
+                          key={ef.id}
+                          className="px-2 py-0.5 rounded-full bg-white border border-indigo-200 text-[11px] font-medium text-slate-700"
+                        >
+                          • {ef.label || ef.type}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={!aiAnimateModal.spec}
+                    onClick={() => {
+                      if (!aiAnimateModal.spec) return;
+                      const spec = aiAnimateModal.spec;
+                      if (aiAnimateModal.targetImageId) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          images: (page.images || []).map((im) =>
+                            im.id === aiAnimateModal.targetImageId
+                              ? { ...im, aiAnimation: spec, aiAnimMode: 'sketch', aiAnimMuted: false }
+                              : im
+                          ),
+                        }));
+                      } else {
+                        const newImg: ImageObject = {
+                          id: `img-anim-${Date.now()}`,
+                          x: aiAnimateModal.box.x,
+                          y: aiAnimateModal.box.y,
+                          width: aiAnimateModal.box.width,
+                          height: aiAnimateModal.box.height,
+                          dataUrl: aiAnimateModal.snapshotDataUrl,
+                          layerId: activeLayerId,
+                          zOrder: getNextPageZOrder(activePage),
+                          aiAnimation: spec,
+                          aiAnimMode: 'sketch',
+                          aiAnimMuted: false,
+                        };
+                        updateActivePage((page) => ({
+                          ...page,
+                          images: [...(page.images || []), newImg],
+                        }));
+                      }
+                      setAiAnimateModal(null);
+                      showToast('⚡ Το Ζωντανό Σκίτσο με Ήχο ενεργοποιήθηκε πάνω στη σελίδα!');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm cursor-pointer"
+                  >
+                    📌 Εφαρμογή Ζωντανού Σκίτσου στη Σελίδα
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Σκηνοθετική Εντολή (Prompt) για το `gemini-omni-1.1-flash` (διατηρεί την τεχνοτροπία σας):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={aiAnimateModal.omniPrompt}
+                    onChange={(e) =>
+                      setAiAnimateModal((prev) =>
+                        prev ? { ...prev, omniPrompt: e.target.value } : null
+                      )
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 select-text"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1">Διάρκεια:</label>
+                    <select
+                      value={aiAnimateModal.durationSec}
+                      onChange={(e) =>
+                        setAiAnimateModal((prev) =>
+                          prev ? { ...prev, durationSec: Number(e.target.value) } : null
+                        )
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-xs font-semibold"
+                    >
+                      <option value={5}>5 δευτερόλεπτα</option>
+                      <option value={8}>8 δευτερόλεπτα</option>
+                      <option value={10}>10 δευτερόλεπτα</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-500 mb-1">Ανάλυση:</label>
+                    <select
+                      value={aiAnimateModal.resolution}
+                      onChange={(e) =>
+                        setAiAnimateModal((prev) =>
+                          prev ? { ...prev, resolution: e.target.value as '360p' | '720p' | '1080p' } : null
+                        )
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-xs font-semibold"
+                    >
+                      <option value="360p">360p (Γρήγορο)</option>
+                      <option value="720p">720p HD (Προτεινόμενο)</option>
+                      <option value="1080p">1080p Full HD</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700 pb-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={aiAnimateModal.loopVideo}
+                        onChange={(e) =>
+                          setAiAnimateModal((prev) =>
+                            prev ? { ...prev, loopVideo: e.target.checked } : null
+                          )
+                        }
+                      />
+                      <span>🔁 Loop (`&lt;FIRST_FRAME&gt; &lt;LAST_FRAME&gt;`)</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Optional Custom Paid Gemini API Key Box (for freiderikos.kos@gmail.com) */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-700">
+                      🔑 Gemini API Key (από τον λογαριασμό σας `freiderikos.kos@gmail.com` για Omni Video):
+                    </label>
+                    <a
+                      href="https://aistudio.google.com/apikey"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] font-semibold text-[#0066ff] hover:underline flex items-center gap-1"
+                    >
+                      <span>Άνοιγμα aistudio.google.com/apikey</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <input
+                    type="password"
+                    value={customGeminiKey}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomGeminiKey(val);
+                      if (val.trim()) {
+                        localStorage.setItem('bestnotes_custom_gemini_key', val.trim());
+                      } else {
+                        localStorage.removeItem('bestnotes_custom_gemini_key');
+                      }
+                    }}
+                    placeholder="Επικολλήστε εδώ το API Key (AIzaSy...) αν θέλετε χρήση του Paid/Ultra project σας..."
+                    className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-mono text-slate-800 select-text"
+                  />
+                </div>
+
+                {aiAnimateModal.omniError && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900">
+                    ⚠️ {aiAnimateModal.omniError}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                  {aiAnimateModal.videoDataUrl && (
+                    <>
+                      <a
+                        href={aiAnimateModal.videoDataUrl}
+                        download={`omni-animation-${Date.now()}.mp4`}
+                        className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+                      >
+                        ⬇️ Λήψη MP4
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const vidUrl = aiAnimateModal.videoDataUrl!;
+                          if (aiAnimateModal.targetImageId) {
+                            updateActivePage((page) => ({
+                              ...page,
+                              images: (page.images || []).map((im) =>
+                                im.id === aiAnimateModal.targetImageId
+                                  ? { ...im, aiVideoUrl: vidUrl, aiAnimMode: 'video', aiAnimMuted: false }
+                                  : im
+                              ),
+                            }));
+                          } else {
+                            const newImg: ImageObject = {
+                              id: `img-omni-${Date.now()}`,
+                              x: aiAnimateModal.box.x,
+                              y: aiAnimateModal.box.y,
+                              width: aiAnimateModal.box.width,
+                              height: aiAnimateModal.box.height,
+                              dataUrl: aiAnimateModal.snapshotDataUrl,
+                              layerId: activeLayerId,
+                              zOrder: getNextPageZOrder(activePage),
+                              aiAnimation: aiAnimateModal.spec || undefined,
+                              aiVideoUrl: vidUrl,
+                              aiAnimMode: 'video',
+                              aiAnimMuted: false,
+                            };
+                            updateActivePage((page) => ({
+                              ...page,
+                              images: [...(page.images || []), newImg],
+                            }));
+                          }
+                          setAiAnimateModal(null);
+                          showToast('🎬 Το βίντεο τοποθετήθηκε πάνω στη σελίδα!');
+                        }}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+                      >
+                        📌 Τοποθέτηση Video στη Σελίδα
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    disabled={aiAnimateModal.isGeneratingVideo}
+                    onClick={() => void handleGenerateOmniVideoInModal()}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-700 hover:to-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm cursor-pointer"
+                  >
+                    {aiAnimateModal.isGeneratingVideo
+                      ? '⏳ Δημιουργία με Gemini Omni 1.1...'
+                      : '🎬 Δημιουργία AI Video + Ήχου (Gemini Omni 1.1 Flash)'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
