@@ -9808,55 +9808,65 @@ export default function App() {
   ]);
 
   const getTextFontCss = (fontFamily?: TextFontStyle, isBold?: boolean): React.CSSProperties => {
+    const boldActive = Boolean(isBold) || fontFamily === 'calligraphic-bold';
     switch (fontFamily) {
       case 'calligraphic':
+      case 'calligraphic-bold':
         return {
-          fontFamily: isBold
+          fontFamily: boldActive
             ? "'ExplainBoardsHandBold', 'ExplainBoardsHand', 'Alegreya Sans', cursive"
             : "'ExplainBoardsHand', 'Alegreya Sans', cursive",
           fontStyle: 'normal',
+          fontWeight: boldActive ? 700 : 500,
           letterSpacing: '0em',
-          WebkitTextStroke: isBold ? '0.45px currentColor' : '0.2px currentColor',
-        };
-      case 'calligraphic-bold':
-        return {
-          fontFamily: "'ExplainBoardsHandBold', 'ExplainBoardsHand', 'Alegreya Sans', cursive",
-          fontStyle: 'normal',
-          fontWeight: 700,
-          letterSpacing: '0em',
-          WebkitTextStroke: '0.45px currentColor',
+          WebkitTextStroke: boldActive ? '0.5px currentColor' : '0.15px currentColor',
+          paintOrder: 'stroke fill',
         };
       case 'marker':
         return {
           fontFamily: "'ExplainBoardsPen', 'Mynerve', cursive",
           fontStyle: 'normal',
-          letterSpacing: '0em',
-          WebkitTextStroke: '0.45px currentColor',
+          fontWeight: boldActive ? 700 : 400,
+          letterSpacing: boldActive ? '0.01em' : '0em',
+          WebkitTextStroke: boldActive ? '1.15px currentColor' : '0.2px currentColor',
+          paintOrder: 'stroke fill',
         };
       case 'mansalva':
         return {
           fontFamily: "'Mansalva', 'ExplainBoardsPen', cursive",
           fontStyle: 'oblique 6deg',
-          letterSpacing: '-0.015em',
+          fontWeight: boldActive ? 700 : 400,
+          letterSpacing: boldActive ? '0em' : '-0.015em',
+          WebkitTextStroke: boldActive ? '1.2px currentColor' : '0px transparent',
+          paintOrder: 'stroke fill',
         };
       case 'handwritten':
         return {
           fontFamily: "'Playpen Sans', 'ExplainBoardsHand', cursive",
           fontStyle: 'oblique 7deg',
-          letterSpacing: '-0.01em',
+          fontWeight: boldActive ? 800 : 400,
+          letterSpacing: boldActive ? '0em' : '-0.01em',
+          WebkitTextStroke: boldActive ? '0.85px currentColor' : '0px transparent',
+          paintOrder: 'stroke fill',
         };
       case 'neohellenic':
         return {
           fontFamily: "'GFS Neohellenic', 'Ysabeau Infant', cursive",
           fontStyle: 'italic',
-          letterSpacing: '0.005em',
+          fontWeight: boldActive ? 700 : 400,
+          letterSpacing: boldActive ? '0.015em' : '0.005em',
+          WebkitTextStroke: boldActive ? '0.9px currentColor' : '0px transparent',
+          paintOrder: 'stroke fill',
         };
       case 'sans':
       default:
         return {
           fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
           fontStyle: 'normal',
-          letterSpacing: '0em',
+          fontWeight: boldActive ? 800 : 500,
+          letterSpacing: boldActive ? '0.01em' : '0em',
+          WebkitTextStroke: boldActive ? '0.6px currentColor' : '0px transparent',
+          paintOrder: 'stroke fill',
         };
     }
   };
@@ -41738,11 +41748,15 @@ export default function App() {
               >
                 {(activeTool === 'text' || selectedTextId !== null) && (() => {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
-                  const currentBold = selTxt ? Boolean(selTxt.bold) : textBold;
+                  const currentBold = selTxt
+                    ? Boolean(selTxt.bold) || selTxt.fontFamily === 'calligraphic-bold'
+                    : textBold;
                   const currentSize = selTxt ? selTxt.fontSize : textFontSize;
-                  const currentFontFamily: TextFontStyle = selTxt
+                  const rawFontFamily: TextFontStyle = selTxt
                     ? selTxt.fontFamily || 'sans'
                     : textFontFamily;
+                  const currentFontFamily: TextFontStyle =
+                    rawFontFamily === 'calligraphic-bold' ? 'calligraphic' : rawFontFamily;
                   const currentAlign: 'left' | 'center' | 'right' = selTxt
                     ? selTxt.textAlign || 'left'
                     : textAlign;
@@ -41766,12 +41780,22 @@ export default function App() {
                         ...page,
                         texts: (page.texts || []).map((t) => {
                           if (t.id !== selTxt.id) return t;
+                          const normFont: TextFontStyle =
+                            t.fontFamily === 'calligraphic-bold'
+                              ? 'calligraphic'
+                              : t.fontFamily || 'sans';
                           const nextFs =
                             t.boxWidth && t.boxHeight
-                              ? computeMaxFitFontSizeForBox(t.text, t.fontFamily, nextB, t.boxWidth, t.boxHeight)
+                              ? computeMaxFitFontSizeForBox(
+                                  t.text,
+                                  normFont,
+                                  nextB,
+                                  t.boxWidth,
+                                  t.boxHeight
+                                )
                               : t.fontSize;
                           if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                          return { ...t, bold: nextB, fontSize: nextFs };
+                          return { ...t, fontFamily: normFont, bold: nextB, fontSize: nextFs };
                         }),
                       }));
                     }
@@ -41850,7 +41874,6 @@ export default function App() {
                         {(
                           [
                             { id: 'calligraphic', label: 'Καλλιγραφική' },
-                            { id: 'calligraphic-bold', label: 'Καλλιγραφική Bold' },
                             { id: 'marker', label: 'Πένα' },
                             { id: 'mansalva', label: 'Μαρκαδόρος' },
                             { id: 'handwritten', label: 'Χειρόγραφο' },
@@ -41861,7 +41884,7 @@ export default function App() {
                           <button
                             key={fOpt.id}
                             onClick={() => applyFontFamily(fOpt.id)}
-                            style={getTextFontCss(fOpt.id)}
+                            style={getTextFontCss(fOpt.id, currentBold)}
                             className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
                               currentFontFamily === fOpt.id
                                 ? 'bg-purple-600 text-white shadow-xs'
@@ -41964,29 +41987,6 @@ export default function App() {
                           </svg>
                         </button>
                       </div>
-
-                      {/* Power Caret (^) & Subscript (_) in Text Bar */}
-                      {(!selTxt || !selTxt.isMath || editingTextId === selTxt.id) && (
-                        <>
-                          <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
-                          <button
-                            onMouseDown={(ev) => ev.preventDefault()}
-                            onClick={() => handleInsertPowerCaretInText(selTxt?.id)}
-                            className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 font-normal border border-amber-300 transition cursor-pointer"
-                            title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
-                          >
-                            <span>xⁿ (^)</span>
-                          </button>
-                          <button
-                            onMouseDown={(ev) => ev.preventDefault()}
-                            onClick={() => handleInsertSubscriptInText(selTxt?.id)}
-                            className="flex items-center gap-1 px-2 py-1 rounded-full bg-teal-100 hover:bg-teal-200 text-teal-900 font-normal border border-teal-300 transition cursor-pointer"
-                            title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max, K_max"
-                          >
-                            <span>xᵢ (_)</span>
-                          </button>
-                        </>
-                      )}
                     </div>
                   );
                 })()}
@@ -47896,42 +47896,49 @@ export default function App() {
                                   onClick={() => {
                                     const order: TextFontStyle[] = [
                                       'calligraphic',
-                                      'calligraphic-bold',
                                       'marker',
                                       'mansalva',
                                       'handwritten',
                                       'neohellenic',
                                       'sans',
                                     ];
-                                    const cur = txt.fontFamily || 'sans';
+                                    const rawCur = txt.fontFamily || 'sans';
+                                    const cur: TextFontStyle =
+                                      rawCur === 'calligraphic-bold' ? 'calligraphic' : rawCur;
                                     const nextFont = order[(order.indexOf(cur) + 1) % order.length];
                                     setTextFontFamily(nextFont);
                                     updateActivePage((page) => ({
                                       ...page,
                                       texts: (page.texts || []).map((t) => {
                                         if (t.id !== txt.id) return t;
+                                        const effBold =
+                                          Boolean(t.bold) || t.fontFamily === 'calligraphic-bold';
                                         const nextFs =
                                           t.boxWidth && t.boxHeight
                                             ? computeMaxFitFontSizeForBox(
                                                 t.text,
                                                 nextFont,
-                                                t.bold,
+                                                effBold,
                                                 t.boxWidth,
                                                 t.boxHeight
                                               )
                                             : t.fontSize;
                                         if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                                        return { ...t, fontFamily: nextFont, fontSize: nextFs };
+                                        return {
+                                          ...t,
+                                          fontFamily: nextFont,
+                                          bold: effBold,
+                                          fontSize: nextFs,
+                                        };
                                       }),
                                     }));
                                   }}
                                   className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
                                   title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                 >
-                                  {txt.fontFamily === 'calligraphic'
+                                  {txt.fontFamily === 'calligraphic' ||
+                                  txt.fontFamily === 'calligraphic-bold'
                                     ? '✍️ Καλλιγραφική'
-                                    : txt.fontFamily === 'calligraphic-bold'
-                                    ? '✍️ Καλλιγρ. Bold'
                                     : txt.fontFamily === 'marker'
                                     ? '✒️ Πένα'
                                     : txt.fontFamily === 'mansalva'
@@ -47948,29 +47955,42 @@ export default function App() {
                                   type="button"
                                   onMouseDown={(ev) => ev.preventDefault()}
                                   onClick={() => {
-                                    const nextB = !txt.bold;
+                                    const curBold =
+                                      Boolean(txt.bold) || txt.fontFamily === 'calligraphic-bold';
+                                    const nextB = !curBold;
                                     setTextBold(nextB);
                                     updateActivePage((page) => ({
                                       ...page,
                                       texts: (page.texts || []).map((t) => {
                                         if (t.id !== txt.id) return t;
+                                        const normFont: TextFontStyle =
+                                          t.fontFamily === 'calligraphic-bold'
+                                            ? 'calligraphic'
+                                            : t.fontFamily || 'sans';
                                         const nextFs =
                                           t.boxWidth && t.boxHeight
                                             ? computeMaxFitFontSizeForBox(
                                                 t.text,
-                                                t.fontFamily,
+                                                normFont,
                                                 nextB,
                                                 t.boxWidth,
                                                 t.boxHeight
                                               )
                                             : t.fontSize;
                                         if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                                        return { ...t, bold: nextB, fontSize: nextFs };
+                                        return {
+                                          ...t,
+                                          fontFamily: normFont,
+                                          bold: nextB,
+                                          fontSize: nextFs,
+                                        };
                                       }),
                                     }));
                                   }}
                                   className={`px-1.5 py-0.5 rounded font-normal cursor-pointer ${
-                                    txt.bold ? 'bg-[#0066ff] text-white' : 'hover:bg-white/15 text-slate-200'
+                                    txt.bold || txt.fontFamily === 'calligraphic-bold'
+                                      ? 'bg-[#0066ff] text-white'
+                                      : 'hover:bg-white/15 text-slate-200'
                                   }`}
                                   title="Bold (Έντονα)"
                                 >
