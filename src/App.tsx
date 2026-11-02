@@ -3762,7 +3762,6 @@ export default function App() {
       !showWidthPopover &&
       !showColorPopover &&
       !showFillTransPopover &&
-      !showLayersPanel &&
       !showShapeLibraryPanel &&
       !showThumbnailsModal &&
       !showMathModal &&
@@ -3791,7 +3790,6 @@ export default function App() {
         if (triggerType !== 'width') setShowWidthPopover(false);
         if (triggerType !== 'color') setShowColorPopover(false);
         if (triggerType !== 'fill-trans') setShowFillTransPopover(false);
-        if (triggerType !== 'layers') setShowLayersPanel(false);
         if (triggerType !== 'library') setShowShapeLibraryPanel(false);
         if (triggerType !== 'thumbnails') setShowThumbnailsModal(false);
         if (triggerType !== 'math') setShowMathModal(false);
@@ -3807,7 +3805,6 @@ export default function App() {
       setShowWidthPopover(false);
       setShowColorPopover(false);
       setShowFillTransPopover(false);
-      setShowLayersPanel(false);
       setShowShapeLibraryPanel(false);
       setShowThumbnailsModal(false);
       setShowMathModal(false);
@@ -3823,7 +3820,6 @@ export default function App() {
         setShowWidthPopover(false);
         setShowColorPopover(false);
         setShowFillTransPopover(false);
-        setShowLayersPanel(false);
         setShowShapeLibraryPanel(false);
         setShowThumbnailsModal(false);
         setShowMathModal(false);
@@ -3845,7 +3841,6 @@ export default function App() {
     showWidthPopover,
     showColorPopover,
     showFillTransPopover,
-    showLayersPanel,
     showShapeLibraryPanel,
     showThumbnailsModal,
     showMathModal,
@@ -41112,7 +41107,6 @@ export default function App() {
                 data-popover-trigger="library"
                 onClick={() => {
                   setShowShapeLibraryPanel((v) => !v);
-                  setShowLayersPanel(false);
                   setShowWidthPopover(false);
                   setShowColorPopover(false);
                 }}
@@ -41177,7 +41171,6 @@ export default function App() {
               <button
                 data-popover-trigger="simulation"
                 onClick={() => {
-                  setShowLayersPanel(false);
                   setShowShapeLibraryPanel(false);
                   setShowWidthPopover(false);
                   setShowColorPopover(false);
@@ -41281,7 +41274,6 @@ export default function App() {
                         if (Math.abs(strokeWidth - w) < 0.25) {
                           setShowWidthPopover((prev) => !prev);
                           setShowColorPopover(false);
-                          setShowLayersPanel(false);
                           setShowShapeLibraryPanel(false);
                         } else {
                           applyWidthToSelection(w);
@@ -41306,7 +41298,6 @@ export default function App() {
                   onClick={() => {
                     setShowWidthPopover((prev) => !prev);
                     setShowColorPopover(false);
-                    setShowLayersPanel(false);
                     setShowShapeLibraryPanel(false);
                   }}
                   className="px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-sky-50 text-[10px] font-bold text-[#0066ff] cursor-pointer"
@@ -41376,7 +41367,6 @@ export default function App() {
                   onClick={() => {
                     setShowColorPopover((v) => !v);
                     setShowWidthPopover(false);
-                    setShowLayersPanel(false);
                     setShowShapeLibraryPanel(false);
                   }}
                   className="w-6 h-6 shrink-0 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
@@ -41467,7 +41457,6 @@ export default function App() {
                             setShowFillTransPopover((prev) => !prev);
                             setShowWidthPopover(false);
                             setShowColorPopover(false);
-                            setShowLayersPanel(false);
                             setShowShapeLibraryPanel(false);
                           }}
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold transition cursor-pointer ${
@@ -46739,31 +46728,42 @@ export default function App() {
                     <span className="text-xs font-bold text-[#1b2a4a]">Layers (Επίπεδα Σελίδας)</span>
                     <span className="text-[10px] text-slate-400">Σύρε πάνω/κάτω (Πάνω = Μπροστά)</span>
                   </div>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => {
-                      const newId = `layer-${Date.now()}`;
-                      updateActivePage((page) => ({
-                        ...page,
-                        // Insert new Layer at the TOP so it sits in front of existing layers
-                        layers: [
-                          {
-                            id: newId,
-                            name: `Layer ${page.layers.length + 1}`,
-                            visible: true,
-                            locked: false,
-                            opacity: 1,
-                          },
-                          ...page.layers,
-                        ],
-                      }));
-                      setActiveLayerId(newId);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-white text-[11px] font-semibold cursor-pointer"
-                  >
-                    + Layer
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        const newId = `layer-${Date.now()}`;
+                        updateActivePage((page) => ({
+                          ...page,
+                          // Insert new Layer at the TOP so it sits in front of existing layers
+                          layers: [
+                            {
+                              id: newId,
+                              name: `Layer ${page.layers.length + 1}`,
+                              visible: true,
+                              locked: false,
+                              opacity: 1,
+                            },
+                            ...page.layers,
+                          ],
+                        }));
+                        setActiveLayerId(newId);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-white text-[11px] font-semibold cursor-pointer"
+                    >
+                      + Layer
+                    </button>
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => setShowLayersPanel(false)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                      title="Κλείσιμο παραθύρου Layers"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
