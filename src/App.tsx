@@ -1723,12 +1723,8 @@ export default function App() {
   const [selectedImageIds, setSelectedImageIds] = useState<string[]>([]);
   const [selectedLassoTextIds, setSelectedLassoTextIds] = useState<string[]>([]);
   const [showAlignSubBar, setShowAlignSubBar] = useState<boolean>(false);
-  const isMoveOnlyLassoSelection =
-    selectedLassoTextIds.length > 0 &&
-    (selectedStrokeIds.length > 0 ||
-      selectedImageIds.length > 0 ||
-      Boolean(selectedImageId) ||
-      selectedLassoTextIds.length >= 2);
+  const hasLassoTexts = selectedLassoTextIds.length > 0;
+  const isMoveOnlyLassoSelection = false;
   useEffect(() => {
     if (activeTool !== 'lasso') {
       setSelectedLassoTextIds((prev) => (prev.length > 0 ? [] : prev));
@@ -2337,6 +2333,7 @@ export default function App() {
     strokes: StrokeObject[];
     image?: ImageObject;
     text?: TextObject;
+    texts?: TextObject[];
   } | null>(null);
   const hasExternalFocusSinceInternalCopyRef = useRef<boolean>(true);
   const lastPasteHandledAtRef = useRef<number>(0);
@@ -4485,22 +4482,142 @@ export default function App() {
     return false;
   };
 
+  const textMeasureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const getTextVisualBounds = useCallback(
+    (
+      t: TextObject
+    ): {
+      minX: number;
+      minY: number;
+      maxX: number;
+      maxY: number;
+      cx: number;
+      cy: number;
+      width: number;
+      height: number;
+    } => {
+      const domEl = document.querySelector(`[data-text-id="${t.id}"]`) as HTMLElement | null;
+      if (domEl) {
+        const domRect = domEl.getBoundingClientRect();
+        const scaleX =
+          domRect.width > 0.5 && domEl.offsetWidth > 0 ? domEl.offsetWidth / domRect.width : 1;
+        const scaleY =
+          domRect.height > 0.5 && domEl.offsetHeight > 0 ? domEl.offsetHeight / domRect.height : 1;
+        const contentEl =
+          (domEl.querySelector('[data-text-content="true"]') as HTMLElement | null) || domEl;
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(contentEl);
+          const rRect = range.getBoundingClientRect();
+          if (rRect.width > 0.5 && rRect.height > 0.5 && domRect.width > 0.5) {
+            let minX = t.x + (rRect.left - domRect.left) * scaleX;
+            let maxX = t.x + (rRect.right - domRect.left) * scaleX;
+            let minY = t.y + (rRect.top - domRect.top) * scaleY;
+            let maxY = t.y + (rRect.bottom - domRect.top) * scaleY;
+            // Refine single-line plain text vertical & horizontal ink bounds via 2D Canvas TextMetrics
+            if (!t.isMath && !t.chemRawInput && t.text && !t.text.includes('\n')) {
+              const trimmed = t.text.trim();
+              if (trimmed.length > 0) {
+                const mCanvas =
+                  textMeasureCanvasRef.current ||
+                  (textMeasureCanvasRef.current = document.createElement('canvas'));
+                const mCtx = mCanvas.getContext('2d');
+                if (mCtx) {
+                  const cs = window.getComputedStyle(contentEl);
+                  mCtx.font = cs.font || `${t.bold ? 700 : 500} ${t.fontSize}px sans-serif`;
+                  const m = mCtx.measureText(trimmed);
+                  if (
+                    typeof m.fontBoundingBoxAscent === 'number' &&
+                    typeof m.fontBoundingBoxDescent === 'number' &&
+                    typeof m.actualBoundingBoxAscent === 'number' &&
+                    typeof m.actualBoundingBoxDescent === 'number' &&
+                    m.actualBoundingBoxAscent > 0
+                  ) {
+                    const lineH = maxY - minY;
+                    const fontBoxH = m.fontBoundingBoxAscent + m.fontBoundingBoxDescent;
+                    const baselineY = minY + (lineH - fontBoxH) / 2 + m.fontBoundingBoxAscent;
+                    const inkMinY = baselineY - m.actualBoundingBoxAscent;
+                    const inkMaxY = baselineY + m.actualBoundingBoxDescent;
+                    if (inkMaxY > inkMinY + 2) {
+                      minY = inkMinY;
+                      maxY = inkMaxY;
+                    }
+                  }
+                }
+              }
+            }
+            const width = Math.max(4, maxX - minX);
+            const height = Math.max(4, maxY - minY);
+            return {
+              minX,
+              minY,
+              maxX,
+              maxY,
+              cx: (minX + maxX) / 2,
+              cy: (minY + maxY) / 2,
+              width,
+              height,
+            };
+          }
+        } catch {
+          // fallback below
+        }
+        const boxW = domEl.offsetWidth || t.boxWidth || 80;
+        const boxH = domEl.offsetHeight || t.boxHeight || 36;
+        return {
+          minX: t.x,
+          minY: t.y,
+          maxX: t.x + boxW,
+          maxY: t.y + boxH,
+          cx: t.x + boxW / 2,
+          cy: t.y + boxH / 2,
+          width: boxW,
+          height: boxH,
+        };
+      }
+      const fallbackW =
+        t.boxWidth ||
+        (t.groupId?.startsWith('math-graph-grp-')
+          ? 36
+          : Math.max(28, (t.text || ' ').length * t.fontSize * 0.6 + 24));
+      const fallbackH =
+        t.boxHeight ||
+        (t.groupId?.startsWith('math-graph-grp-') ? 24 : Math.max(24, t.fontSize * 1.35 + 12));
+      return {
+        minX: t.x,
+        minY: t.y,
+        maxX: t.x + fallbackW,
+        maxY: t.y + fallbackH,
+        cx: t.x + fallbackW / 2,
+        cy: t.y + fallbackH / 2,
+        width: fallbackW,
+        height: fallbackH,
+      };
+    },
+    []
+  );
+
   const getSelectionBounds = useCallback(() => {
     const effectiveImgIds =
       selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+    const selStrokesForGrp = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+    const selImgsForGrp = (activePage.images || []).filter((i) => effectiveImgIds.includes(i.id));
+    const selAllGrpIds = new Set<string>();
+    for (const s of selStrokesForGrp) {
+      if (s.groupId) selAllGrpIds.add(s.groupId);
+    }
+    for (const im of selImgsForGrp) {
+      if (im.groupId) selAllGrpIds.add(im.groupId);
+    }
+    const selTexts = (activePage.texts || []).filter(
+      (t) => selectedLassoTextIds.includes(t.id) || (t.groupId && selAllGrpIds.has(t.groupId))
+    );
 
-    // 0. Unified Move-Only Selection containing standalone Text/Math boxes + Strokes/Diagrams/Images (or multiple Text/Math boxes)
-    if (selectedLassoTextIds.length > 0) {
-      const selImgs = (activePage.images || []).filter((i) => effectiveImgIds.includes(i.id));
-      const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
-      const selMathGrpIds = new Set(
-        selStrokes
-          .filter((s) => s.groupId?.startsWith('math-graph-grp-'))
-          .map((s) => s.groupId as string)
-      );
-      const selTexts = (activePage.texts || []).filter(
-        (t) => selectedLassoTextIds.includes(t.id) || (t.groupId && selMathGrpIds.has(t.groupId))
-      );
+    // 0. Unified Selection containing standalone or grouped Text/Math boxes + Strokes/Diagrams/Images (or multiple Text/Math boxes)
+    if (selectedLassoTextIds.length > 0 || selTexts.some((t) => !t.groupId?.startsWith('math-graph-grp-'))) {
+      const selImgs = selImgsForGrp;
+      const selStrokes = selStrokesForGrp;
       let minX = Infinity,
         minY = Infinity,
         maxX = -Infinity,
@@ -4521,13 +4638,11 @@ export default function App() {
         }
       }
       for (const t of selTexts) {
-        const domEl = document.querySelector(`[data-text-id="${t.id}"]`) as HTMLElement | null;
-        const boxW = t.boxWidth || domEl?.offsetWidth || (t.groupId?.startsWith('math-graph-grp-') ? 36 : 160);
-        const boxH = t.boxHeight || domEl?.offsetHeight || (t.groupId?.startsWith('math-graph-grp-') ? 24 : 48);
-        if (t.x < minX) minX = t.x;
-        if (t.y < minY) minY = t.y;
-        if (t.x + boxW > maxX) maxX = t.x + boxW;
-        if (t.y + boxH > maxY) maxY = t.y + boxH;
+        const tb = getTextVisualBounds(t);
+        if (tb.minX < minX) minX = tb.minX;
+        if (tb.minY < minY) minY = tb.minY;
+        if (tb.maxX > maxX) maxX = tb.maxX;
+        if (tb.maxY > maxY) maxY = tb.maxY;
       }
       if (minX < Infinity) {
         const cx = (minX + maxX) / 2;
@@ -4720,15 +4835,23 @@ export default function App() {
 
       if (Math.hypot(localX, localY - rotStemTopY) <= 24) return true;
       if (
-        selectedStrokeIds.length + selectedImageIds.length >= 2 &&
-        Math.abs(localX) <= 78 &&
+        selectedStrokeIds.length + selectedImageIds.length + selectedLassoTextIds.length >= 2 &&
+        Math.abs(localX) <= 136 &&
         Math.abs(localY - (hh + 26)) <= 20
       )
         return true;
       if (Math.abs(localX) <= hw + 28 && Math.abs(localY) <= hh + 28) return true;
       return false;
     },
-    [activeTool, activeNodeStrokeId, activePage.strokes, selectedStrokeIds.length, selectedImageIds.length, getSelectionBounds]
+    [
+      activeTool,
+      activeNodeStrokeId,
+      activePage.strokes,
+      selectedStrokeIds.length,
+      selectedImageIds.length,
+      selectedLassoTextIds.length,
+      getSelectionBounds,
+    ]
   );
 
   // Finds the top-most unlocked shape, stroke, group, or image at a page point `pt`
@@ -6368,7 +6491,19 @@ export default function App() {
             selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
           const selStrokesList = pageObj.strokes.filter((st) => selectedStrokeIds.includes(st.id));
           const selImagesList = (pageObj.images || []).filter((im) => effectiveImgIds.includes(im.id));
-          const totalSelObjects = selStrokesList.length + selImagesList.length;
+          const selAllGrpIds = new Set<string>();
+          for (const st of selStrokesList) {
+            if (st.groupId) selAllGrpIds.add(st.groupId);
+          }
+          for (const im of selImagesList) {
+            if (im.groupId) selAllGrpIds.add(im.groupId);
+          }
+          const selTextsList = (pageObj.texts || []).filter(
+            (t) =>
+              selectedLassoTextIds.includes(t.id) ||
+              (t.groupId && !t.groupId.startsWith('math-graph-grp-') && selAllGrpIds.has(t.groupId))
+          );
+          const totalSelObjects = selStrokesList.length + selImagesList.length + selTextsList.length;
 
           const isSelectedAttachedWeight =
             selImagesList.length === 0 &&
@@ -6394,6 +6529,7 @@ export default function App() {
           ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
 
           if (!isMoveOnlyLassoSelection && !isSelectedAttachedWeight) {
+          if (selTextsList.length === 0) {
           // Rotation Stem
           ctx.setLineDash([]);
           ctx.beginPath();
@@ -6460,6 +6596,7 @@ export default function App() {
             ctx.textBaseline = 'middle';
             ctx.fillText(`${degNorm}°`, 0, 0.5);
             ctx.restore();
+          }
           }
 
           // Helper to draw small orange double-headed resize arrows (↕ / ↔) next to Orange Stretch Dots
@@ -6693,7 +6830,8 @@ export default function App() {
             }
           } else {
             const mathDiagForFrame = resolveMathGraphDiagram(pageObj, selectedStrokeIds);
-            const hide1DStretchForOrthonormalXY = Boolean(mathDiagForFrame?.isOrthonormalXY);
+            const hide1DStretchForOrthonormalXY =
+              Boolean(mathDiagForFrame?.isOrthonormalXY) || selTextsList.length > 0;
             const isSmallSelForHandles = selBounds.hw < 30 || selBounds.hh < 30;
             const sideDotR = isSmallSelForHandles ? 5.2 : 6.8;
             if (!hide1DStretchForOrthonormalXY) {
@@ -6787,18 +6925,24 @@ export default function App() {
             ctx.restore();
           }
 
-          // 4b. Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill right below the Selection Frame!
+          // 4b. Floating On-Canvas "🔗 Group" / "🔓 Ungroup" & "🎯 Κέντραρε" Quick Action Pills right below the Selection Frame!
           if (totalSelObjects >= 2) {
-            const firstGrpId = selStrokesList[0]?.groupId || selImagesList[0]?.groupId;
+            const firstGrpId =
+              selStrokesList[0]?.groupId || selImagesList[0]?.groupId || selTextsList[0]?.groupId;
             const allSameGroup =
               Boolean(firstGrpId) &&
               selStrokesList.every((st) => st.groupId === firstGrpId) &&
-              selImagesList.every((im) => im.groupId === firstGrpId);
-            const pillW = allSameGroup ? 116 : 124;
+              selImagesList.every((im) => im.groupId === firstGrpId) &&
+              selTextsList.every((t) => t.groupId === firstGrpId);
+            const grpPillW = allSameGroup ? 116 : 120;
+            const cntPillW = 104;
             const pillH = 26;
             const pillY = hh + 26;
+            const grpCx = -56;
+            const cntCx = 62;
 
             ctx.save();
+            // Left Pill: Group / Ungroup
             ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
             ctx.shadowBlur = 8;
             ctx.shadowOffsetY = 2;
@@ -6806,22 +6950,30 @@ export default function App() {
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.roundRect(-pillW / 2, pillY - pillH / 2, pillW, pillH, 13);
+            ctx.roundRect(grpCx - grpPillW / 2, pillY - pillH / 2, grpPillW, pillH, 13);
+            ctx.fill();
+            ctx.stroke();
+
+            // Right Pill: Κέντραρε (Center X+Y)
+            ctx.fillStyle = '#4f46e5';
+            ctx.beginPath();
+            ctx.roundRect(cntCx - cntPillW / 2, pillY - pillH / 2, cntPillW, pillH, 13);
             ctx.fill();
             ctx.stroke();
 
             ctx.shadowBlur = 0;
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 11.5px sans-serif';
+            ctx.font = 'bold 11.2px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(
               allSameGroup
                 ? `🔓 Ungroup (${totalSelObjects})`
                 : `🔗 Group (${totalSelObjects})`,
-              0,
+              grpCx,
               pillY + 0.5
             );
+            ctx.fillText('🎯 Κέντραρε', cntCx, pillY + 0.5);
             ctx.restore();
           }
           }
@@ -7929,17 +8081,25 @@ export default function App() {
         ? [activeNodeStrokeId]
         : [];
     const baseSet = new Set(baseIds);
-    const groupIds = new Set(
-      activePage.strokes
-        .filter((s) => baseSet.has(s.id) && s.groupId)
-        .map((s) => s.groupId as string)
-    );
+    const lassoTxtSet = new Set(selectedLassoTextIds);
+    const groupIds = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const t of activePage.texts || []) {
+      if (lassoTxtSet.has(t.id) && t.groupId) groupIds.add(t.groupId);
+    }
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
+    const selTexts = (activePage.texts || []).filter(
+      (t) =>
+        lassoTxtSet.has(t.id) ||
+        (t.groupId && !t.groupId.startsWith('math-graph-grp-') && groupIds.has(t.groupId))
+    );
     const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
     const selTxt = selectedTextId ? (activePage.texts || []).find((t) => t.id === selectedTextId) : undefined;
-    if (selStrokes.length === 0 && !selImg && !selTxt) {
+    if (selStrokes.length === 0 && !selImg && !selTxt && selTexts.length === 0) {
       showToast('ℹ️ Επίλεξε πρώτα σχήμα, εικόνα ή κείμενο με το Lasso για Copy (Ctrl+C)!');
       return;
     }
@@ -7947,6 +8107,7 @@ export default function App() {
       strokes: structuredClone(selStrokes),
       image: selImg ? structuredClone(selImg) : undefined,
       text: selTxt ? structuredClone(selTxt) : undefined,
+      texts: selTexts.length > 0 ? structuredClone(selTexts) : undefined,
     };
     hasExternalFocusSinceInternalCopyRef.current = false;
     try {
@@ -7960,6 +8121,7 @@ export default function App() {
     activePage.images,
     activePage.texts,
     selectedStrokeIds,
+    selectedLassoTextIds,
     activeNodeStrokeId,
     selectedImageId,
     selectedTextId,
@@ -7974,17 +8136,25 @@ export default function App() {
         ? [activeNodeStrokeId]
         : [];
     const baseSet = new Set(baseIds);
-    const groupIds = new Set(
-      activePage.strokes
-        .filter((s) => baseSet.has(s.id) && s.groupId)
-        .map((s) => s.groupId as string)
-    );
+    const lassoTxtSet = new Set(selectedLassoTextIds);
+    const groupIds = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const t of activePage.texts || []) {
+      if (lassoTxtSet.has(t.id) && t.groupId) groupIds.add(t.groupId);
+    }
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
+    const selTexts = (activePage.texts || []).filter(
+      (t) =>
+        lassoTxtSet.has(t.id) ||
+        (t.groupId && !t.groupId.startsWith('math-graph-grp-') && groupIds.has(t.groupId))
+    );
     const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
     const selTxt = selectedTextId ? (activePage.texts || []).find((t) => t.id === selectedTextId) : undefined;
-    if (selStrokes.length === 0 && !selImg && !selTxt) {
+    if (selStrokes.length === 0 && !selImg && !selTxt && selTexts.length === 0) {
       showToast('ℹ️ Επίλεξε πρώτα σχήμα, εικόνα ή κείμενο με το Lasso για Cut (Ctrl+X)!');
       return;
     }
@@ -7992,6 +8162,7 @@ export default function App() {
       strokes: structuredClone(selStrokes),
       image: selImg ? structuredClone(selImg) : undefined,
       text: selTxt ? structuredClone(selTxt) : undefined,
+      texts: selTexts.length > 0 ? structuredClone(selTexts) : undefined,
     };
     hasExternalFocusSinceInternalCopyRef.current = false;
     try {
@@ -8000,13 +8171,16 @@ export default function App() {
       // ignore
     }
     const targetStrokeIdSet = new Set(selStrokes.map((s) => s.id));
+    const targetTextIdSet = new Set(selTexts.map((t) => t.id));
+    if (selectedTextId) targetTextIdSet.add(selectedTextId);
     updateActivePage((page) => ({
       ...page,
       strokes: page.strokes.filter((s) => !targetStrokeIdSet.has(s.id)),
       images: (page.images || []).filter((im) => im.id !== selectedImageId),
-      texts: (page.texts || []).filter((t) => t.id !== selectedTextId),
+      texts: (page.texts || []).filter((t) => !targetTextIdSet.has(t.id)),
     }));
     setSelectedStrokeIds([]);
+    setSelectedLassoTextIds([]);
     setActiveNodeStrokeId(null);
     setSelectedImageId(null);
     setSelectedTextId(null);
@@ -8017,6 +8191,7 @@ export default function App() {
     activePage.images,
     activePage.texts,
     selectedStrokeIds,
+    selectedLassoTextIds,
     activeNodeStrokeId,
     selectedImageId,
     selectedTextId,
@@ -8024,7 +8199,7 @@ export default function App() {
     showToast,
   ]);
 
-  // Instant 1-Tap Duplicate ("Αντίγραφο"): clones the selected shapes/groups and/or images slightly lower and slightly to the right (+28px, +28px)!
+  // Instant 1-Tap Duplicate ("Αντίγραφο"): clones the selected shapes/groups and/or images/texts slightly lower and slightly to the right (+28px, +28px)!
   const handleDuplicateSelected = useCallback(() => {
     const baseIds =
       selectedStrokeIds.length > 0
@@ -8034,8 +8209,15 @@ export default function App() {
         : [];
     const effectiveImgIds =
       selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+    const effectiveTxtIds =
+      selectedLassoTextIds.length > 0
+        ? selectedLassoTextIds
+        : selectedTextId
+        ? [selectedTextId]
+        : [];
     const baseSet = new Set(baseIds);
     const imgSet = new Set(effectiveImgIds);
+    const txtSet = new Set(effectiveTxtIds);
     const groupIds = new Set<string>();
     for (const s of activePage.strokes) {
       if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
@@ -8043,15 +8225,26 @@ export default function App() {
     for (const im of activePage.images || []) {
       if (imgSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
     }
+    for (const t of activePage.texts || []) {
+      if (txtSet.has(t.id) && t.groupId) groupIds.add(t.groupId);
+    }
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
     const selImgs = (activePage.images || []).filter(
       (im) => imgSet.has(im.id) || (im.groupId && groupIds.has(im.groupId))
     );
+    const selTexts = (activePage.texts || []).filter(
+      (t) =>
+        txtSet.has(t.id) ||
+        (t.groupId && !t.groupId.startsWith('math-graph-grp-') && groupIds.has(t.groupId))
+    );
 
-    if (selImgs.length > 0 || selStrokes.length > 0) {
-      const hadGroup = selStrokes.some((s) => s.groupId) || selImgs.some((im) => im.groupId);
+    if (selImgs.length > 0 || selStrokes.length > 0 || selTexts.length > 0) {
+      const hadGroup =
+        selStrokes.some((s) => s.groupId) ||
+        selImgs.some((im) => im.groupId) ||
+        selTexts.some((t) => t.groupId);
       const newGroupId = hadGroup ? `grp-${Date.now()}` : undefined;
       const duplicatedImgs: ImageObject[] = selImgs.map((im) => ({
         ...structuredClone(im),
@@ -8074,6 +8267,13 @@ export default function App() {
           cy: p.cy !== undefined ? p.cy + 28 : undefined,
         })),
       }));
+      const duplicatedTexts: TextObject[] = selTexts.map((t) => ({
+        ...structuredClone(t),
+        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        groupId: t.groupId ? newGroupId : undefined,
+        x: t.x + 28,
+        y: t.y + 28,
+      }));
 
       updateActivePage((page) => {
         const baseZ = getNextPageZOrder(page);
@@ -8090,16 +8290,22 @@ export default function App() {
               zOrder: baseZ + duplicatedImgs.length + idx,
             })),
           ],
+          texts: [...(page.texts || []), ...duplicatedTexts],
         };
       });
 
       const dupStrokeIds = duplicatedStrokes.map((s) => s.id);
       const dupImgIds = duplicatedImgs.map((im) => im.id);
+      const dupTxtIds = duplicatedTexts.map((t) => t.id);
       setSelectedStrokeIds(dupStrokeIds);
       setSelectedImageIds(dupImgIds);
       setSelectedImageId(dupImgIds[0] || null);
+      setSelectedLassoTextIds(dupTxtIds);
+      setSelectedTextId(null);
       setActiveNodeStrokeId(
-        dupStrokeIds.length === 1 && dupImgIds.length === 0 ? dupStrokeIds[0] : null
+        dupStrokeIds.length === 1 && dupImgIds.length === 0 && dupTxtIds.length === 0
+          ? dupStrokeIds[0]
+          : null
       );
       setActiveTool('lasso');
       showToast('📑 Δημιουργήθηκε αντίγραφο της επιλογής!');
@@ -8110,7 +8316,10 @@ export default function App() {
   }, [
     activePage.strokes,
     activePage.images,
+    activePage.texts,
     selectedStrokeIds,
+    selectedLassoTextIds,
+    selectedTextId,
     activeNodeStrokeId,
     selectedImageId,
     selectedImageIds,
@@ -8309,11 +8518,34 @@ export default function App() {
           : selectedImageId
           ? [selectedImageId]
           : [];
+      const effectiveTxtIds =
+        selectedLassoTextIds.length > 0
+          ? selectedLassoTextIds
+          : selectedTextId
+          ? [selectedTextId]
+          : [];
       const selStrokeSet = new Set(selectedStrokeIds);
       const selImgSet = new Set(effectiveImgIds);
+      const selTxtSet = new Set(effectiveTxtIds);
 
       const selStrokes = activePage.strokes.filter((s) => selStrokeSet.has(s.id));
       const selImgs = (activePage.images || []).filter((im) => selImgSet.has(im.id));
+      const selGrpIdsFromStrokesAndImgs = new Set<string>();
+      for (const s of selStrokes) {
+        if (s.groupId && !s.groupId.startsWith('math-graph-grp-')) {
+          selGrpIdsFromStrokesAndImgs.add(s.groupId);
+        }
+      }
+      for (const im of selImgs) {
+        if (im.groupId) selGrpIdsFromStrokesAndImgs.add(im.groupId);
+      }
+      const selTexts = (activePage.texts || []).filter(
+        (t) =>
+          selTxtSet.has(t.id) ||
+          (t.groupId &&
+            !t.groupId.startsWith('math-graph-grp-') &&
+            selGrpIdsFromStrokesAndImgs.has(t.groupId))
+      );
 
       // Check if all selected objects belong to a single groupId; if so, align each member individually!
       const distinctGroupIds = new Set<string>();
@@ -8326,12 +8558,17 @@ export default function App() {
         if (im.groupId) distinctGroupIds.add(im.groupId);
         else hasUngrouped = true;
       }
+      for (const t of selTexts) {
+        if (t.groupId) distinctGroupIds.add(t.groupId);
+        else hasUngrouped = true;
+      }
       const treatGroupsAsUnits = distinctGroupIds.size > 1 || (distinctGroupIds.size === 1 && hasUngrouped);
 
       type AlignUnit = {
         key: string;
         strokeIds: string[];
         imageIds: string[];
+        textIds: string[];
         minX: number;
         minY: number;
         maxX: number;
@@ -8348,6 +8585,7 @@ export default function App() {
             key,
             strokeIds: [],
             imageIds: [],
+            textIds: [],
             minX: Infinity,
             minY: Infinity,
             maxX: -Infinity,
@@ -8383,6 +8621,17 @@ export default function App() {
         if (im.y + im.height > u.maxY) u.maxY = im.y + im.height;
       }
 
+      for (const t of selTexts) {
+        const key = treatGroupsAsUnits && t.groupId ? `grp:${t.groupId}` : `txt:${t.id}`;
+        const u = ensureUnit(key);
+        u.textIds.push(t.id);
+        const tb = getTextVisualBounds(t);
+        if (tb.minX < u.minX) u.minX = tb.minX;
+        if (tb.minY < u.minY) u.minY = tb.minY;
+        if (tb.maxX > u.maxX) u.maxX = tb.maxX;
+        if (tb.maxY > u.maxY) u.maxY = tb.maxY;
+      }
+
       const units = Array.from(unitMap.values()).filter(
         (u) => Number.isFinite(u.minX) && Number.isFinite(u.minY)
       );
@@ -8411,15 +8660,28 @@ export default function App() {
         if (u.maxX > overallMaxX) overallMaxX = u.maxX;
         if (u.maxY > overallMaxY) overallMaxY = u.maxY;
       }
-      const overallCx = (overallMinX + overallMaxX) / 2;
-      const overallCy = (overallMinY + overallMaxY) / 2;
+      let overallCx = (overallMinX + overallMaxX) / 2;
+      let overallCy = (overallMinY + overallMaxY) / 2;
+
+      // When centering a Text box with a Shape/Image (e.g. a number "2" and a circle),
+      // anchor the center to the Shape/Image so the shape stays stationary on the grid and the text snaps into its exact center!
+      const shapeOrImgUnits = units.filter((u) => u.strokeIds.length > 0 || u.imageIds.length > 0);
+      const pureTextUnits = units.filter(
+        (u) => u.textIds.length > 0 && u.strokeIds.length === 0 && u.imageIds.length === 0
+      );
+      if (shapeOrImgUnits.length === 1 && pureTextUnits.length >= 1) {
+        overallCx = shapeOrImgUnits[0].cx;
+        overallCy = shapeOrImgUnits[0].cy;
+      }
 
       const deltaByStrokeId = new Map<string, { dx: number; dy: number }>();
       const deltaByImageId = new Map<string, { dx: number; dy: number }>();
+      const deltaByTextId = new Map<string, { dx: number; dy: number }>();
 
       const assignDelta = (u: AlignUnit, dx: number, dy: number) => {
         for (const sid of u.strokeIds) deltaByStrokeId.set(sid, { dx, dy });
         for (const iid of u.imageIds) deltaByImageId.set(iid, { dx, dy });
+        for (const tid of u.textIds) deltaByTextId.set(tid, { dx, dy });
       };
 
       if (mode === 'distribute-x') {
@@ -8483,6 +8745,15 @@ export default function App() {
             y: im.y + d.dy,
           };
         }),
+        texts: (page.texts || []).map((t) => {
+          const d = deltaByTextId.get(t.id);
+          if (!d || (Math.abs(d.dx) < 0.01 && Math.abs(d.dy) < 0.01)) return t;
+          return {
+            ...t,
+            x: t.x + d.dx,
+            y: t.y + d.dy,
+          };
+        }),
       }));
 
       const labelMap: Record<typeof mode, string> = {
@@ -8501,9 +8772,13 @@ export default function App() {
     [
       activePage.strokes,
       activePage.images,
+      activePage.texts,
       selectedStrokeIds,
       selectedImageId,
       selectedImageIds,
+      selectedLassoTextIds,
+      selectedTextId,
+      getTextVisualBounds,
       updateActivePage,
       showToast,
     ]
@@ -8991,10 +9266,15 @@ export default function App() {
 
   const pasteFromInternalClipboard = useCallback((): boolean => {
     if (!internalClipboardRef.current) return false;
-    const { strokes: copiedStrokes, image: copiedImg, text: copiedTxt } = internalClipboardRef.current;
+    const {
+      strokes: copiedStrokes,
+      image: copiedImg,
+      text: copiedTxt,
+      texts: copiedTexts,
+    } = internalClipboardRef.current;
     const tapPt = lastLassoEmptyTapPtRef.current;
 
-    if (copiedImg) {
+    if (copiedImg && copiedStrokes.length === 0 && !(copiedTexts && copiedTexts.length > 0)) {
       const targetX = tapPt ? Math.max(12, Math.round(tapPt.x - copiedImg.width / 2)) : copiedImg.x + 28;
       const targetY = tapPt ? Math.max(12, Math.round(tapPt.y - copiedImg.height / 2)) : copiedImg.y + 28;
       if (tapPt) {
@@ -9016,6 +9296,7 @@ export default function App() {
       }));
       setSelectedImageId(newImg.id);
       setSelectedStrokeIds([]);
+      setSelectedLassoTextIds([]);
       setActiveNodeStrokeId(null);
       setSelectedTextId(null);
       setActiveTool('lasso');
@@ -9023,7 +9304,7 @@ export default function App() {
       return true;
     }
 
-    if (copiedStrokes.length > 0) {
+    if (copiedStrokes.length > 0 || (copiedTexts && copiedTexts.length > 0)) {
       let dx = 26;
       let dy = 26;
       if (tapPt) {
@@ -9039,13 +9320,21 @@ export default function App() {
             if (p.y > maxY) maxY = p.y;
           }
         }
+        for (const t of copiedTexts || []) {
+          if (t.x < minX) minX = t.x;
+          if (t.y < minY) minY = t.y;
+          if (t.x + 36 > maxX) maxX = t.x + 36;
+          if (t.y + 28 > maxY) maxY = t.y + 28;
+        }
         if (Number.isFinite(minX) && Number.isFinite(minY)) {
           dx = tapPt.x - (minX + maxX) / 2;
           dy = tapPt.y - (minY + maxY) / 2;
         }
         lastLassoEmptyTapPtRef.current = { x: tapPt.x + 26, y: tapPt.y + 26 };
       }
-      const newGroupId = copiedStrokes.some((s) => s.groupId) ? `grp-${Date.now()}` : undefined;
+      const hasGrp =
+        copiedStrokes.some((s) => s.groupId) || (copiedTexts || []).some((t) => t.groupId);
+      const newGroupId = hasGrp ? `grp-${Date.now()}` : undefined;
       const pasted = copiedStrokes.map((s) => ({
         ...structuredClone(s),
         id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -9060,24 +9349,35 @@ export default function App() {
           cy: p.cy !== undefined ? p.cy + dy : undefined,
         })),
       }));
+      const pastedTxts = (copiedTexts || []).map((t) => ({
+        ...structuredClone(t),
+        id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        groupId: t.groupId ? newGroupId : undefined,
+        x: t.x + dx,
+        y: t.y + dy,
+      }));
       internalClipboardRef.current = {
         ...internalClipboardRef.current,
         strokes: structuredClone(pasted),
+        texts: pastedTxts.length > 0 ? structuredClone(pastedTxts) : undefined,
       };
       updateActivePage((page) => {
         const baseZ = getNextPageZOrder(page);
         return {
           ...page,
           strokes: [...page.strokes, ...pasted.map((s, idx) => ({ ...s, zOrder: baseZ + idx }))],
+          texts: [...(page.texts || []), ...pastedTxts],
         };
       });
       const pastedIds = pasted.map((s) => s.id);
+      const pastedTxtIds = pastedTxts.map((t) => t.id);
       setSelectedStrokeIds(pastedIds);
-      setActiveNodeStrokeId(pastedIds.length === 1 ? pastedIds[0] : null);
+      setSelectedLassoTextIds(pastedTxtIds);
+      setActiveNodeStrokeId(pastedIds.length === 1 && pastedTxtIds.length === 0 ? pastedIds[0] : null);
       setSelectedImageId(null);
       setSelectedTextId(null);
       setActiveTool('lasso');
-      showToast(`📥 Επικόλληση (${pasted.length} αντικείμενα — Ctrl+V)!`);
+      showToast(`📥 Επικόλληση (${pasted.length + pastedTxts.length} αντικείμενα — Ctrl+V)!`);
       return true;
     }
 
@@ -25905,11 +26205,17 @@ export default function App() {
       // Ignore pointer capture errors on rapid consecutive touches
     }
 
+    const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current);
+    const prevSelectedTextIdForAdditive = isAdditiveSelect && selectedTextId && !editingTextId ? selectedTextId : null;
+
     if (selectedTextId || editingTextId) {
       releaseActiveTextBox();
+      if (prevSelectedTextIdForAdditive) {
+        setSelectedLassoTextIds((prev) =>
+          prev.includes(prevSelectedTextIdForAdditive) ? prev : [...prev, prevSelectedTextIdForAdditive]
+        );
+      }
     }
-
-    const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current);
 
     // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image:
     //    - Only auto-select & drag when Lasso ('lasso') or Nodes ('direct-node') is active so 1-finger touch in Pen mode always allows Hold-to-Erase, 1-Finger Double-Tap, or Page Scroll!
@@ -25930,17 +26236,27 @@ export default function App() {
           const memberImgIds = grpId
             ? (targetPage.images || []).filter((im) => im.groupId === grpId).map((im) => im.id)
             : [];
+          const memberTextIds =
+            grpId && !grpId.startsWith('math-graph-grp-')
+              ? (targetPage.texts || []).filter((t) => t.groupId === grpId).map((t) => t.id)
+              : [];
           const curImgIds =
             selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
-          const hasExistingSel = selectedStrokeIds.length > 0 || curImgIds.length > 0;
+          const curTxtIds = prevSelectedTextIdForAdditive
+            ? Array.from(new Set([...selectedLassoTextIds, prevSelectedTextIdForAdditive]))
+            : selectedLassoTextIds;
+          const hasExistingSel =
+            selectedStrokeIds.length > 0 || curImgIds.length > 0 || curTxtIds.length > 0;
           const allAlreadySelected =
             fingerHit.memberIds.every((id) => selectedStrokeIds.includes(id)) &&
-            memberImgIds.every((id) => curImgIds.includes(id));
+            memberImgIds.every((id) => curImgIds.includes(id)) &&
+            memberTextIds.every((id) => curTxtIds.includes(id));
 
           const nextStrokeIds =
             isAdditiveSelect && hasExistingSel
               ? allAlreadySelected &&
-                selectedStrokeIds.length + curImgIds.length > fingerHit.memberIds.length + memberImgIds.length
+                selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+                  fingerHit.memberIds.length + memberImgIds.length + memberTextIds.length
                 ? selectedStrokeIds.filter((id) => !fingerHit.memberIds.includes(id))
                 : Array.from(new Set([...selectedStrokeIds, ...fingerHit.memberIds]))
               : fingerHit.memberIds;
@@ -25948,20 +26264,33 @@ export default function App() {
           const nextImgIds =
             isAdditiveSelect && hasExistingSel
               ? allAlreadySelected &&
-                selectedStrokeIds.length + curImgIds.length > fingerHit.memberIds.length + memberImgIds.length
+                selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+                  fingerHit.memberIds.length + memberImgIds.length + memberTextIds.length
                 ? curImgIds.filter((id) => !memberImgIds.includes(id))
                 : Array.from(new Set([...curImgIds, ...memberImgIds]))
               : memberImgIds;
 
+          const nextTxtIds =
+            isAdditiveSelect && hasExistingSel
+              ? allAlreadySelected &&
+                selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+                  fingerHit.memberIds.length + memberImgIds.length + memberTextIds.length
+                ? curTxtIds.filter((id) => !memberTextIds.includes(id))
+                : Array.from(new Set([...curTxtIds, ...memberTextIds]))
+              : memberTextIds;
+
           setSelectedStrokeIds(nextStrokeIds);
           setSelectedImageIds(nextImgIds);
           setSelectedImageId(nextImgIds[0] || null);
+          setSelectedLassoTextIds(nextTxtIds);
           setActiveNodeStrokeId(
-            nextStrokeIds.length === 1 && nextImgIds.length === 0 ? nextStrokeIds[0] : null
+            nextStrokeIds.length === 1 && nextImgIds.length === 0 && nextTxtIds.length === 0
+              ? nextStrokeIds[0]
+              : null
           );
-          if (isAdditiveSelect && nextStrokeIds.length + nextImgIds.length >= 2) {
+          if (isAdditiveSelect && nextStrokeIds.length + nextImgIds.length + nextTxtIds.length >= 2) {
             showToast(
-              `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
+              `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length + nextTxtIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
             );
           }
           unhookingDragStrokeIdsRef.current = new Set(
@@ -25996,17 +26325,27 @@ export default function App() {
           const memberStrokeIds = grpId
             ? targetPage.strokes.filter((s) => s.groupId === grpId).map((s) => s.id)
             : [];
+          const memberTextIds =
+            grpId && !grpId.startsWith('math-graph-grp-')
+              ? (targetPage.texts || []).filter((t) => t.groupId === grpId).map((t) => t.id)
+              : [];
           const curImgIds =
             selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
-          const hasExistingSel = selectedStrokeIds.length > 0 || curImgIds.length > 0;
+          const curTxtIds = prevSelectedTextIdForAdditive
+            ? Array.from(new Set([...selectedLassoTextIds, prevSelectedTextIdForAdditive]))
+            : selectedLassoTextIds;
+          const hasExistingSel =
+            selectedStrokeIds.length > 0 || curImgIds.length > 0 || curTxtIds.length > 0;
           const allAlreadySelected =
             memberImgIds.every((id) => curImgIds.includes(id)) &&
-            memberStrokeIds.every((id) => selectedStrokeIds.includes(id));
+            memberStrokeIds.every((id) => selectedStrokeIds.includes(id)) &&
+            memberTextIds.every((id) => curTxtIds.includes(id));
 
           const nextImgIds =
             isAdditiveSelect && hasExistingSel
               ? allAlreadySelected &&
-                selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length
+                selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+                  memberStrokeIds.length + memberImgIds.length + memberTextIds.length
                 ? curImgIds.filter((id) => !memberImgIds.includes(id))
                 : Array.from(new Set([...curImgIds, ...memberImgIds]))
               : memberImgIds;
@@ -26014,18 +26353,29 @@ export default function App() {
           const nextStrokeIds =
             isAdditiveSelect && hasExistingSel
               ? allAlreadySelected &&
-                selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length
+                selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+                  memberStrokeIds.length + memberImgIds.length + memberTextIds.length
                 ? selectedStrokeIds.filter((id) => !memberStrokeIds.includes(id))
                 : Array.from(new Set([...selectedStrokeIds, ...memberStrokeIds]))
               : memberStrokeIds;
 
+          const nextTxtIds =
+            isAdditiveSelect && hasExistingSel
+              ? allAlreadySelected &&
+                selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+                  memberStrokeIds.length + memberImgIds.length + memberTextIds.length
+                ? curTxtIds.filter((id) => !memberTextIds.includes(id))
+                : Array.from(new Set([...curTxtIds, ...memberTextIds]))
+              : memberTextIds;
+
           setSelectedImageIds(nextImgIds);
           setSelectedImageId(nextImgIds[0] || null);
           setSelectedStrokeIds(nextStrokeIds);
+          setSelectedLassoTextIds(nextTxtIds);
           setActiveNodeStrokeId(null);
-          if (isAdditiveSelect && nextStrokeIds.length + nextImgIds.length >= 2) {
+          if (isAdditiveSelect && nextStrokeIds.length + nextImgIds.length + nextTxtIds.length >= 2) {
             showToast(
-              `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
+              `➕ Επιλέχθηκαν ${nextStrokeIds.length + nextImgIds.length + nextTxtIds.length} αντικείμενα! Πάτησε «Group» (ή G) για ομαδοποίηση.`
             );
           }
           unhookingDragStrokeIdsRef.current = new Set(
@@ -26630,25 +26980,46 @@ export default function App() {
           selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
         const selStrokesList = activePage.strokes.filter((st) => selectedStrokeIds.includes(st.id));
         const selImagesList = (activePage.images || []).filter((im) => effectiveImgIds.includes(im.id));
-        const totalSelCount = selStrokesList.length + selImagesList.length;
+        const activeUserGrpIds = new Set<string>();
+        for (const st of selStrokesList) {
+          if (st.groupId && !st.groupId.startsWith('math-graph-grp-')) activeUserGrpIds.add(st.groupId);
+        }
+        for (const im of selImagesList) {
+          if (im.groupId && !im.groupId.startsWith('math-graph-grp-')) activeUserGrpIds.add(im.groupId);
+        }
+        const selTextsList = (activePage.texts || []).filter(
+          (t) =>
+            selectedLassoTextIds.includes(t.id) ||
+            (t.groupId && !t.groupId.startsWith('math-graph-grp-') && activeUserGrpIds.has(t.groupId))
+        );
+        const totalSelCount = selStrokesList.length + selImagesList.length + selTextsList.length;
 
-        // 0. Check Floating On-Canvas "🔗 Group" / "🔓 Ungroup" Quick Action Pill below Selection Frame!
-        if (!isMoveOnlyLassoSelection && totalSelCount >= 2 && Math.abs(localX) <= 72 && Math.abs(localY - (hh + 26)) <= 16) {
-          const firstGrpId = selStrokesList[0]?.groupId || selImagesList[0]?.groupId;
-          const allSameGroup =
-            Boolean(firstGrpId) &&
-            selStrokesList.every((st) => st.groupId === firstGrpId) &&
-            selImagesList.every((im) => im.groupId === firstGrpId);
-          if (allSameGroup) {
-            handleUngroupSelected();
-          } else {
-            handleGroupSelected();
+        // 0. Check Floating On-Canvas "🔗 Group / 🔓 Ungroup" & "🎯 Κέντραρε" Quick Action Pills below Selection Frame!
+        if (!isMoveOnlyLassoSelection && totalSelCount >= 2 && Math.abs(localY - (hh + 26)) <= 16) {
+          if (localX >= -124 && localX <= 6) {
+            const firstGrpId =
+              selStrokesList[0]?.groupId || selImagesList[0]?.groupId || selTextsList[0]?.groupId;
+            const allSameGroup =
+              Boolean(firstGrpId) &&
+              selStrokesList.every((st) => st.groupId === firstGrpId) &&
+              selImagesList.every((im) => im.groupId === firstGrpId) &&
+              selTextsList.every((t) => t.groupId === firstGrpId);
+            if (allSameGroup) {
+              handleUngroupSelected();
+            } else {
+              handleGroupSelected();
+            }
+            return;
           }
-          return;
+          if (localX > 6 && localX <= 124) {
+            handleAlignSelected('center-both');
+            return;
+          }
         }
 
         const isSelectedAttachedWeight =
           selImagesList.length === 0 &&
+          selTextsList.length === 0 &&
           selStrokesList.length > 0 &&
           selStrokesList.some(
             (st) =>
@@ -26666,7 +27037,7 @@ export default function App() {
         if (!isAdditiveSelect) {
           if (!isMoveOnlyLassoSelection && !isSelectedAttachedWeight) {
           // A. Check Top Semicircular Rotation Arrow Handle (↻)
-          if (Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
+          if (selTextsList.length === 0 && Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
             clearActiveOverlay();
             setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
@@ -26758,7 +27129,7 @@ export default function App() {
           // B2. Check 4 Mid-Side Handles:
           //     - For Selected Images: BOTH Orange Stretch Dots (● at -sideOff) AND Green Side Crop Bars (▬/▮ at +sideOff)!
           //     - For Selected Shapes/Strokes: 4 Orange Stretch Dots (● at 0)
-          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
+          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0 && selTextsList.length === 0) {
             const sideOffX = Math.min(22, Math.max(12, hw * 0.34));
             const sideOffY = Math.min(22, Math.max(12, hh * 0.34));
 
@@ -26865,7 +27236,7 @@ export default function App() {
                 return;
               }
             }
-          } else {
+          } else if (selTextsList.length === 0) {
             const mathDiagForSides = resolveMathGraphDiagram(targetPage, selectedStrokeIds);
             const hide1DStretchForOrthonormalXY = Boolean(mathDiagForSides?.isOrthonormalXY);
             const localSides: {
@@ -27104,7 +27475,7 @@ export default function App() {
     const strokeList = activePage.strokes || [];
     const lockedLayers = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
 
-    // Case 1: Quick Tap (< 16px movement) -> Select the top-most tapped shape/stroke or image at poly[0]!
+    // Case 1: Quick Tap (< 16px movement) -> Select the top-most tapped shape/stroke, text, or image at poly[0]!
     if (pathLen < 16 || poly.length < 3) {
       const pt = poly[0];
       let topHitImg: { img: ImageObject; z: number } | null = null;
@@ -27116,6 +27487,19 @@ export default function App() {
           if (!topHitImg || z >= topHitImg.z) {
             topHitImg = { img: im, z };
           }
+        }
+      }
+
+      const txtList = activePage.texts || [];
+      let topHitTxt: TextObject | null = null;
+      for (let idx = txtList.length - 1; idx >= 0; idx--) {
+        const txt = txtList[idx];
+        if (lockedLayers.has(txt.layerId)) continue;
+        if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) continue;
+        const tb = getTextVisualBounds(txt);
+        if (pt.x >= tb.minX - 6 && pt.x <= tb.maxX + 6 && pt.y >= tb.minY - 6 && pt.y <= tb.maxY + 6) {
+          topHitTxt = txt;
+          break;
         }
       }
 
@@ -27131,8 +27515,8 @@ export default function App() {
           }
         }
       }
-      // Pass 2: Fallback to interior fill hit-testing only if no drawn curve/edge was directly touched
-      if (!topHitStroke) {
+      // Pass 2: Fallback to interior fill hit-testing only if no drawn curve/edge and no text glyph was directly touched
+      if (!topHitStroke && !topHitTxt) {
         for (let idx = 0; idx < strokeList.length; idx++) {
           const s = strokeList[idx];
           if (lockedLayers.has(s.layerId)) continue;
@@ -27147,7 +27531,82 @@ export default function App() {
 
       const curImgIds =
         selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
-      const hasExistingSel = selectedStrokeIds.length > 0 || curImgIds.length > 0;
+      const curTxtIds = selectedLassoTextIds;
+      const hasExistingSel =
+        selectedStrokeIds.length > 0 || curImgIds.length > 0 || curTxtIds.length > 0;
+
+      if (topHitTxt && !topHitStroke) {
+        const grpId =
+          topHitTxt.groupId && !topHitTxt.groupId.startsWith('math-graph-grp-')
+            ? topHitTxt.groupId
+            : undefined;
+        const memberTextIds = grpId
+          ? txtList.filter((t) => t.groupId === grpId).map((t) => t.id)
+          : [topHitTxt.id];
+        const memberStrokeIds = grpId
+          ? strokeList.filter((s) => s.groupId === grpId).map((s) => s.id)
+          : [];
+        const memberImgIds = grpId
+          ? imgList.filter((im) => im.groupId === grpId).map((im) => im.id)
+          : [];
+
+        if (isAdditive && hasExistingSel) {
+          const allAlreadySelected =
+            memberStrokeIds.every((id) => selectedStrokeIds.includes(id)) &&
+            memberImgIds.every((id) => curImgIds.includes(id)) &&
+            memberTextIds.every((id) => curTxtIds.includes(id));
+          const canRemove =
+            allAlreadySelected &&
+            selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+              memberStrokeIds.length + memberImgIds.length + memberTextIds.length;
+          const nextStrokeIds = canRemove
+            ? selectedStrokeIds.filter((id) => !memberStrokeIds.includes(id))
+            : Array.from(new Set([...selectedStrokeIds, ...memberStrokeIds]));
+          const nextImgIds = canRemove
+            ? curImgIds.filter((id) => !memberImgIds.includes(id))
+            : Array.from(new Set([...curImgIds, ...memberImgIds]));
+          const nextTxtIds = canRemove
+            ? curTxtIds.filter((id) => !memberTextIds.includes(id))
+            : Array.from(new Set([...curTxtIds, ...memberTextIds]));
+
+          setSelectedStrokeIds(nextStrokeIds);
+          setSelectedImageIds(nextImgIds);
+          setSelectedImageId(nextImgIds[0] || null);
+          setSelectedLassoTextIds(nextTxtIds);
+          setSelectedTextId(null);
+          setEditingTextId(null);
+          setActiveNodeStrokeId(null);
+          setShowToolSubBar(true);
+          const totalCount = nextStrokeIds.length + nextImgIds.length + nextTxtIds.length;
+          showToast(
+            canRemove
+              ? `➖ Αφαιρέθηκε από την επιλογή (${totalCount} επιλεγμένα)`
+              : `➕ Επιλέχθηκαν ${totalCount} αντικείμενα! Πάτησε «Group» (ή πλήκτρο G) για ομαδοποίηση.`
+          );
+          return;
+        }
+
+        if (grpId && memberStrokeIds.length + memberImgIds.length + memberTextIds.length >= 2) {
+          setSelectedLassoTextIds(memberTextIds);
+          setSelectedStrokeIds(memberStrokeIds);
+          setSelectedImageIds(memberImgIds);
+          setSelectedImageId(memberImgIds[0] || null);
+          setSelectedTextId(null);
+          setEditingTextId(null);
+          setActiveNodeStrokeId(null);
+          setShowToolSubBar(true);
+          return;
+        }
+
+        setSelectedLassoTextIds([]);
+        setSelectedStrokeIds([]);
+        setSelectedImageIds([]);
+        setSelectedImageId(null);
+        setActiveNodeStrokeId(null);
+        setSelectedTextId(topHitTxt.id);
+        setShowToolSubBar(true);
+        return;
+      }
 
       if (topHitStroke && (!topHitImg || topHitStroke.z >= topHitImg.z)) {
         const tappedStroke = topHitStroke.stroke;
@@ -27158,28 +27617,43 @@ export default function App() {
         const memberImgIds = grpId
           ? imgList.filter((im) => im.groupId === grpId).map((im) => im.id)
           : [];
+        const memberTextIds =
+          grpId && !grpId.startsWith('math-graph-grp-')
+            ? txtList.filter((t) => t.groupId === grpId).map((t) => t.id)
+            : [];
 
         if (isAdditive && hasExistingSel) {
           const allAlreadySelected =
             memberStrokeIds.every((id) => selectedStrokeIds.includes(id)) &&
-            memberImgIds.every((id) => curImgIds.includes(id));
+            memberImgIds.every((id) => curImgIds.includes(id)) &&
+            memberTextIds.every((id) => curTxtIds.includes(id));
           const canRemove =
             allAlreadySelected &&
-            selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length;
+            selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+              memberStrokeIds.length + memberImgIds.length + memberTextIds.length;
           const nextStrokeIds = canRemove
             ? selectedStrokeIds.filter((id) => !memberStrokeIds.includes(id))
             : Array.from(new Set([...selectedStrokeIds, ...memberStrokeIds]));
           const nextImgIds = canRemove
             ? curImgIds.filter((id) => !memberImgIds.includes(id))
             : Array.from(new Set([...curImgIds, ...memberImgIds]));
+          const nextTxtIds = canRemove
+            ? curTxtIds.filter((id) => !memberTextIds.includes(id))
+            : Array.from(new Set([...curTxtIds, ...memberTextIds]));
 
           setSelectedStrokeIds(nextStrokeIds);
           setSelectedImageIds(nextImgIds);
           setSelectedImageId(nextImgIds[0] || null);
+          setSelectedLassoTextIds(nextTxtIds);
+          setSelectedTextId(null);
+          setEditingTextId(null);
           setActiveNodeStrokeId(
-            nextStrokeIds.length === 1 && nextImgIds.length === 0 ? nextStrokeIds[0] : null
+            nextStrokeIds.length === 1 && nextImgIds.length === 0 && nextTxtIds.length === 0
+              ? nextStrokeIds[0]
+              : null
           );
-          const totalCount = nextStrokeIds.length + nextImgIds.length;
+          setShowToolSubBar(true);
+          const totalCount = nextStrokeIds.length + nextImgIds.length + nextTxtIds.length;
           showToast(
             canRemove
               ? `➖ Αφαιρέθηκε από την επιλογή (${totalCount} επιλεγμένα)`
@@ -27210,11 +27684,14 @@ export default function App() {
           return;
         }
 
-        setSelectedLassoTextIds([]);
+        setSelectedLassoTextIds(memberTextIds);
         setSelectedStrokeIds(memberStrokeIds);
         setSelectedImageIds(memberImgIds);
         setSelectedImageId(memberImgIds[0] || null);
-        setActiveNodeStrokeId(memberImgIds.length === 0 ? tappedStroke.id : null);
+        setActiveNodeStrokeId(
+          memberImgIds.length === 0 && memberTextIds.length === 0 ? tappedStroke.id : null
+        );
+        setShowToolSubBar(true);
         if (
           tappedStroke.shapeType === 'switch-knob' ||
           tappedStroke.shapeType === 'switch-blade' ||
@@ -27242,26 +27719,39 @@ export default function App() {
         const memberStrokeIds = grpId
           ? strokeList.filter((s) => s.groupId === grpId).map((s) => s.id)
           : [];
+        const memberTextIds =
+          grpId && !grpId.startsWith('math-graph-grp-')
+            ? txtList.filter((t) => t.groupId === grpId).map((t) => t.id)
+            : [];
 
         if (isAdditive && hasExistingSel) {
           const allAlreadySelected =
             memberImgIds.every((id) => curImgIds.includes(id)) &&
-            memberStrokeIds.every((id) => selectedStrokeIds.includes(id));
+            memberStrokeIds.every((id) => selectedStrokeIds.includes(id)) &&
+            memberTextIds.every((id) => curTxtIds.includes(id));
           const canRemove =
             allAlreadySelected &&
-            selectedStrokeIds.length + curImgIds.length > memberStrokeIds.length + memberImgIds.length;
+            selectedStrokeIds.length + curImgIds.length + curTxtIds.length >
+              memberStrokeIds.length + memberImgIds.length + memberTextIds.length;
           const nextImgIds = canRemove
             ? curImgIds.filter((id) => !memberImgIds.includes(id))
             : Array.from(new Set([...curImgIds, ...memberImgIds]));
           const nextStrokeIds = canRemove
             ? selectedStrokeIds.filter((id) => !memberStrokeIds.includes(id))
             : Array.from(new Set([...selectedStrokeIds, ...memberStrokeIds]));
+          const nextTxtIds = canRemove
+            ? curTxtIds.filter((id) => !memberTextIds.includes(id))
+            : Array.from(new Set([...curTxtIds, ...memberTextIds]));
 
           setSelectedImageIds(nextImgIds);
           setSelectedImageId(nextImgIds[0] || null);
           setSelectedStrokeIds(nextStrokeIds);
+          setSelectedLassoTextIds(nextTxtIds);
+          setSelectedTextId(null);
+          setEditingTextId(null);
           setActiveNodeStrokeId(null);
-          const totalCount = nextStrokeIds.length + nextImgIds.length;
+          setShowToolSubBar(true);
+          const totalCount = nextStrokeIds.length + nextImgIds.length + nextTxtIds.length;
           showToast(
             canRemove
               ? `➖ Αφαιρέθηκε από την επιλογή (${totalCount} επιλεγμένα)`
@@ -27270,11 +27760,12 @@ export default function App() {
           return;
         }
 
-        setSelectedLassoTextIds([]);
+        setSelectedLassoTextIds(memberTextIds);
         setSelectedImageIds(memberImgIds);
         setSelectedImageId(memberImgIds[0] || null);
         setSelectedStrokeIds(memberStrokeIds);
         setActiveNodeStrokeId(null);
+        setShowToolSubBar(true);
         return;
       }
 
@@ -27380,12 +27871,39 @@ export default function App() {
       return false;
     });
 
+    // Also check if the Lasso loop / Rectangular Marquee enclosed or crossed any standalone Text / MathOCR equation boxes!
+    const matchedStandaloneTexts = (activePage.texts || []).filter((txt) => {
+      if (lockedLayers.has(txt.layerId)) return false;
+      if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) {
+        return false;
+      }
+      const tb = getTextVisualBounds(txt);
+      const checkPts = [
+        { x: (tb.minX + tb.maxX) / 2, y: (tb.minY + tb.maxY) / 2 },
+        { x: tb.minX + 2, y: tb.minY + 2 },
+        { x: tb.maxX - 2, y: tb.minY + 2 },
+        { x: tb.maxX - 2, y: tb.maxY - 2 },
+        { x: tb.minX + 2, y: tb.maxY - 2 },
+        { x: (tb.minX + tb.maxX) / 2, y: tb.minY + 2 },
+        { x: (tb.minX + tb.maxX) / 2, y: tb.maxY - 2 },
+        { x: tb.minX + 2, y: (tb.minY + tb.maxY) / 2 },
+        { x: tb.maxX - 2, y: (tb.minY + tb.maxY) / 2 },
+      ];
+      if (checkPts.some((p) => isPointInPolygon(p, poly))) return true;
+      return densePoly.some(
+        (lp) => lp.x >= tb.minX - 4 && lp.x <= tb.maxX + 4 && lp.y >= tb.minY - 4 && lp.y <= tb.maxY + 4
+      );
+    });
+
     const groupIds = new Set<string>();
     for (const s of directMatchedStrokes) {
       if (s.groupId) groupIds.add(s.groupId);
     }
     for (const im of directMatchedImgs) {
       if (im.groupId) groupIds.add(im.groupId);
+    }
+    for (const txt of matchedStandaloneTexts) {
+      if (txt.groupId && !txt.groupId.startsWith('math-graph-grp-')) groupIds.add(txt.groupId);
     }
 
     const finalStrokeIds = strokeList
@@ -27402,35 +27920,17 @@ export default function App() {
       )
       .map((im) => im.id);
 
+    const finalTextIds = (activePage.texts || [])
+      .filter(
+        (t) =>
+          !t.groupId?.startsWith('math-graph-grp-') &&
+          !t.id.startsWith('math-graph-txt-') &&
+          (matchedStandaloneTexts.some((m) => m.id === t.id) || (t.groupId && groupIds.has(t.groupId)))
+      )
+      .map((t) => t.id);
+
     const curImgIds =
       selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
-
-    // Also check if the Lasso loop / Rectangular Marquee enclosed or crossed any standalone Text / MathOCR equation boxes!
-    const matchedStandaloneTexts = (activePage.texts || []).filter((txt) => {
-      if (lockedLayers.has(txt.layerId)) return false;
-      if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) {
-        return false;
-      }
-      const domEl = document.querySelector(`[data-text-id="${txt.id}"]`) as HTMLElement | null;
-      const boxW = txt.boxWidth || domEl?.offsetWidth || 160;
-      const boxH = txt.boxHeight || domEl?.offsetHeight || 48;
-      const checkPts = [
-        { x: txt.x + boxW / 2, y: txt.y + boxH / 2 },
-        { x: txt.x + 8, y: txt.y + 8 },
-        { x: txt.x + boxW - 8, y: txt.y + 8 },
-        { x: txt.x + boxW - 8, y: txt.y + boxH - 8 },
-        { x: txt.x + 8, y: txt.y + boxH - 8 },
-        { x: txt.x + boxW / 2, y: txt.y + 4 },
-        { x: txt.x + boxW / 2, y: txt.y + boxH - 4 },
-        { x: txt.x + 4, y: txt.y + boxH / 2 },
-        { x: txt.x + boxW - 4, y: txt.y + boxH / 2 },
-      ];
-      if (checkPts.some((p) => isPointInPolygon(p, poly))) return true;
-      return densePoly.some(
-        (lp) => lp.x >= txt.x && lp.x <= txt.x + boxW && lp.y >= txt.y && lp.y <= txt.y + boxH
-      );
-    });
-    const matchedStandaloneTextIds = matchedStandaloneTexts.map((t) => t.id);
 
     const nextStrokeIds =
       isAdditive && selectedStrokeIds.length > 0
@@ -27442,10 +27942,10 @@ export default function App() {
         : finalImgIds;
     const nextLassoTextIds =
       isAdditive && selectedLassoTextIds.length > 0
-        ? Array.from(new Set([...selectedLassoTextIds, ...matchedStandaloneTextIds]))
-        : matchedStandaloneTextIds;
+        ? Array.from(new Set([...selectedLassoTextIds, ...finalTextIds]))
+        : finalTextIds;
 
-    // 1. Mixed selection (Text/Math box + Strokes/Diagram/Images) OR 2+ Text/Math boxes -> Unified Move-Only Selection!
+    // 1. Mixed selection (Text/Math box + Strokes/Diagram/Images) OR 2+ Text/Math boxes -> Unified Selection with Group, Center, Resize & Color!
     if (
       nextLassoTextIds.length > 0 &&
       (nextStrokeIds.length > 0 || nextImgIds.length > 0 || nextLassoTextIds.length >= 2)
@@ -27457,6 +27957,11 @@ export default function App() {
       setSelectedImageIds(nextImgIds);
       setSelectedImageId(nextImgIds[0] || null);
       setActiveNodeStrokeId(null);
+      setShowToolSubBar(true);
+      const totalSelected = nextStrokeIds.length + nextImgIds.length + nextLassoTextIds.length;
+      showToast(
+        `✅ Επιλέχθηκαν ${totalSelected} αντικείμενα (Κείμενο + Σχήμα)! Πάτησε «Group» ή «Κέντραρε» ή άλλαξε μέγεθος/χρώμα.`
+      );
       return;
     }
 
@@ -27471,6 +27976,7 @@ export default function App() {
       setActiveNodeStrokeId(
         nextStrokeIds.length === 1 && nextImgIds.length === 0 ? nextStrokeIds[0] : null
       );
+      setShowToolSubBar(true);
       const totalSelected = nextStrokeIds.length + nextImgIds.length;
       if (totalSelected >= 2) {
         showToast(
@@ -27481,13 +27987,13 @@ export default function App() {
     }
 
     // 3. Single standalone Text / MathOCR equation box only
-    if (matchedStandaloneTexts.length === 1) {
+    if (nextLassoTextIds.length === 1) {
       setSelectedLassoTextIds([]);
       setSelectedImageIds([]);
       setSelectedImageId(null);
       setSelectedStrokeIds([]);
       setActiveNodeStrokeId(null);
-      setSelectedTextId(matchedStandaloneTexts[0].id);
+      setSelectedTextId(nextLassoTextIds[0]);
       setShowToolSubBar(true);
       return;
     }
@@ -30143,7 +30649,12 @@ export default function App() {
 
           tf.initialDist = currDist;
 
-          if (selectedImageId && selImagesList.length === 1 && selStrokesList.length === 0) {
+          if (
+            selectedImageId &&
+            selImagesList.length === 1 &&
+            selStrokesList.length === 0 &&
+            selectedLassoTextIds.length === 0
+          ) {
             const fAngle = tf.frameAngle || 0;
             const cosF = Math.cos(fAngle);
             const sinF = Math.sin(fAngle);
@@ -30193,19 +30704,66 @@ export default function App() {
                   )
                   .map((s) => s.groupId as string)
               );
+              const selUserGroupIds = new Set<string>();
+              for (const s of page.strokes) {
+                if (
+                  selectedStrokeIds.includes(s.id) &&
+                  s.groupId &&
+                  !s.groupId.startsWith('math-graph-grp-')
+                ) {
+                  selUserGroupIds.add(s.groupId);
+                }
+              }
+              for (const im of page.images || []) {
+                if (
+                  effectiveImgIds.includes(im.id) &&
+                  im.groupId &&
+                  !im.groupId.startsWith('math-graph-grp-')
+                ) {
+                  selUserGroupIds.add(im.groupId);
+                }
+              }
               return {
                 ...page,
                 texts:
-                  selMathGroupIds.size > 0
+                  selMathGroupIds.size > 0 ||
+                  selUserGroupIds.size > 0 ||
+                  selectedLassoTextIds.length > 0
                     ? (page.texts || []).map((t) => {
-                        if (!t.groupId || !selMathGroupIds.has(t.groupId)) return t;
-                        const cx = t.x + 10;
-                        const cy = t.y + 8;
-                        return {
-                          ...t,
-                          x: tf.anchorX + (cx - tf.anchorX) * scaleFactor - 10,
-                          y: tf.anchorY + (cy - tf.anchorY) * scaleFactor - 8,
-                        };
+                        if (t.groupId && selMathGroupIds.has(t.groupId)) {
+                          const cx = t.x + 10;
+                          const cy = t.y + 8;
+                          return {
+                            ...t,
+                            x: tf.anchorX + (cx - tf.anchorX) * scaleFactor - 10,
+                            y: tf.anchorY + (cy - tf.anchorY) * scaleFactor - 8,
+                          };
+                        }
+                        if (
+                          selectedLassoTextIds.includes(t.id) ||
+                          (t.groupId &&
+                            !t.groupId.startsWith('math-graph-grp-') &&
+                            selUserGroupIds.has(t.groupId))
+                        ) {
+                          const padLeft = 12;
+                          const padTop = 6;
+                          const nextFontSize = Math.max(
+                            8,
+                            Math.min(240, Number((t.fontSize * scaleFactor).toFixed(2)))
+                          );
+                          return {
+                            ...t,
+                            x: tf.anchorX + (t.x + padLeft - tf.anchorX) * scaleFactor - padLeft,
+                            y: tf.anchorY + (t.y + padTop - tf.anchorY) * scaleFactor - padTop,
+                            fontSize: nextFontSize,
+                            boxWidth:
+                              t.boxWidth && t.text.includes('\n')
+                                ? Math.max(24, Math.round(t.boxWidth * scaleFactor))
+                                : undefined,
+                            boxHeight: undefined,
+                          };
+                        }
+                        return t;
                       })
                     : page.texts,
                 images: (page.images || []).map((im) => {
@@ -32130,6 +32688,25 @@ export default function App() {
                 )
                 .map((s) => s.groupId as string)
             );
+            const selUserGroupIds = new Set<string>();
+            for (const s of page.strokes) {
+              if (
+                movingStrokeSet.has(s.id) &&
+                s.groupId &&
+                !s.groupId.startsWith('math-graph-grp-')
+              ) {
+                selUserGroupIds.add(s.groupId);
+              }
+            }
+            for (const im of page.images || []) {
+              if (
+                targetImgIdList.includes(im.id) &&
+                im.groupId &&
+                !im.groupId.startsWith('math-graph-grp-')
+              ) {
+                selUserGroupIds.add(im.groupId);
+              }
+            }
 
             let nextSpringSims = page.springSims || [];
             if (unhookedPointerIds.size > 0) {
@@ -32161,9 +32738,12 @@ export default function App() {
             let nextPage: NotePage = {
               ...page,
               texts:
-                selMathGroupIds.size > 0 || selectedLassoTextIds.length > 0
+                selMathGroupIds.size > 0 ||
+                selUserGroupIds.size > 0 ||
+                selectedLassoTextIds.length > 0
                   ? (page.texts || []).map((t) =>
-                      (t.groupId && selMathGroupIds.has(t.groupId)) ||
+                      (t.groupId &&
+                        (selMathGroupIds.has(t.groupId) || selUserGroupIds.has(t.groupId))) ||
                       selectedLassoTextIds.includes(t.id)
                         ? { ...t, x: t.x + dx, y: t.y + dy }
                         : t
@@ -33906,7 +34486,14 @@ export default function App() {
   const handleGroupSelected = () => {
     const effectiveImgIds =
       selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
-    const totalCount = selectedStrokeIds.length + effectiveImgIds.length;
+    const effectiveTextIds =
+      selectedLassoTextIds.length > 0
+        ? selectedLassoTextIds
+        : selectedTextId
+        ? [selectedTextId]
+        : [];
+    const totalCount =
+      selectedStrokeIds.length + effectiveImgIds.length + effectiveTextIds.length;
     if (totalCount < 2) return;
     const newGroupId = `grp-${Date.now()}`;
     updateActivePage((page) => ({
@@ -33917,20 +34504,44 @@ export default function App() {
       images: (page.images || []).map((im) =>
         effectiveImgIds.includes(im.id) ? { ...im, groupId: newGroupId } : im
       ),
+      texts: (page.texts || []).map((t) =>
+        effectiveTextIds.includes(t.id) ? { ...t, groupId: newGroupId } : t
+      ),
     }));
+    if (selectedTextId && !selectedLassoTextIds.includes(selectedTextId)) {
+      setSelectedLassoTextIds(effectiveTextIds);
+      setSelectedTextId(null);
+    }
     showToast(`🔗 Group (${totalCount} αντικείμενα)`);
   };
 
   const handleUngroupSelected = () => {
     const effectiveImgIds =
       selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
-    if (selectedStrokeIds.length === 0 && effectiveImgIds.length === 0) return;
+    const effectiveTextIds =
+      selectedLassoTextIds.length > 0
+        ? selectedLassoTextIds
+        : selectedTextId
+        ? [selectedTextId]
+        : [];
+    if (
+      selectedStrokeIds.length === 0 &&
+      effectiveImgIds.length === 0 &&
+      effectiveTextIds.length === 0
+    ) {
+      return;
+    }
     const grpSet = new Set<string>();
     for (const s of activePage.strokes) {
       if (selectedStrokeIds.includes(s.id) && s.groupId) grpSet.add(s.groupId);
     }
     for (const im of activePage.images || []) {
       if (effectiveImgIds.includes(im.id) && im.groupId) grpSet.add(im.groupId);
+    }
+    for (const t of activePage.texts || []) {
+      if (effectiveTextIds.includes(t.id) && t.groupId && !t.groupId.startsWith('math-graph-grp-')) {
+        grpSet.add(t.groupId);
+      }
     }
     updateActivePage((page) => {
       const targetStrokes = page.strokes.filter(
@@ -33963,6 +34574,12 @@ export default function App() {
           effectiveImgIds.includes(im.id) || (im.groupId && grpSet.has(im.groupId))
             ? { ...im, groupId: undefined }
             : im
+        ),
+        texts: (page.texts || []).map((t) =>
+          effectiveTextIds.includes(t.id) ||
+          (t.groupId && !t.groupId.startsWith('math-graph-grp-') && grpSet.has(t.groupId))
+            ? { ...t, groupId: undefined }
+            : t
         ),
       };
     });
@@ -34220,10 +34837,11 @@ export default function App() {
           : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
           ? lastCreatedShapeIdsRef.current
           : [];
-      if (baseIds.length === 0) return;
+      if (baseIds.length === 0 && selectedLassoTextIds.length === 0) return;
 
       updateActivePage((page) => {
         const baseSet = new Set(baseIds);
+        const lassoTxtSet = new Set(selectedLassoTextIds);
         // Only expand a groupId to all its members if it's NOT a single-curve selection inside `math-graph-grp-...`
         const fullMathGroups = new Set(
           page.strokes
@@ -34245,6 +34863,15 @@ export default function App() {
             )
             .map((s) => s.groupId as string)
         );
+        for (const t of page.texts || []) {
+          if (
+            lassoTxtSet.has(t.id) &&
+            t.groupId &&
+            !t.groupId.startsWith('math-graph-grp-')
+          ) {
+            groupIds.add(t.groupId);
+          }
+        }
         const targetedCurveFnKeys = new Set<string>();
         for (const s of page.strokes) {
           if (baseSet.has(s.id) && s.groupId?.startsWith('math-graph-grp-')) {
@@ -34263,8 +34890,19 @@ export default function App() {
         return {
           ...page,
           texts:
-            fullMathGroups.size > 0 || targetedCurveFnKeys.size > 0
+            fullMathGroups.size > 0 ||
+            targetedCurveFnKeys.size > 0 ||
+            lassoTxtSet.size > 0 ||
+            groupIds.size > 0
               ? (page.texts || []).map((t) => {
+                  if (
+                    lassoTxtSet.has(t.id) ||
+                    (t.groupId &&
+                      !t.groupId.startsWith('math-graph-grp-') &&
+                      groupIds.has(t.groupId))
+                  ) {
+                    return { ...t, color: c };
+                  }
                   const eqTxtM = t.id.match(/-(math-graph-grp-[a-z0-9-]+)-fn(\d+)$/);
                   if (eqTxtM) {
                     const [, eqGrp, eqFn] = eqTxtM;
@@ -34347,7 +34985,16 @@ export default function App() {
         };
       });
     },
-    [activeTool, selectedStrokeIds, activeNodeStrokeId, selectedTextId, editingTextId, updateActivePage, recordRecentColor]
+    [
+      activeTool,
+      selectedStrokeIds,
+      activeNodeStrokeId,
+      selectedLassoTextIds,
+      selectedTextId,
+      editingTextId,
+      updateActivePage,
+      recordRecentColor,
+    ]
   );
 
   const applyWaveGuideColor = useCallback(
@@ -34854,10 +35501,15 @@ export default function App() {
             ? [activeNodeStrokeId]
             : [];
 
-        if (effectiveImgIds.length > 0 || baseIds.length > 0) {
+        if (
+          effectiveImgIds.length > 0 ||
+          baseIds.length > 0 ||
+          selectedLassoTextIds.length > 0
+        ) {
           e.preventDefault();
           const imgSet = new Set(effectiveImgIds);
           const baseSet = new Set(baseIds);
+          const lassoTxtSet = new Set(selectedLassoTextIds);
           const groupIds = new Set<string>();
           for (const s of activePage.strokes) {
             if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
@@ -34865,9 +35517,16 @@ export default function App() {
           for (const im of activePage.images || []) {
             if (imgSet.has(im.id) && im.groupId) groupIds.add(im.groupId);
           }
+          for (const t of activePage.texts || []) {
+            if (lassoTxtSet.has(t.id) && t.groupId && !t.groupId.startsWith('math-graph-grp-')) {
+              groupIds.add(t.groupId);
+            }
+          }
           updateActivePage((page) => ({
             ...page,
-            texts: (page.texts || []).filter((t) => !(t.groupId && groupIds.has(t.groupId))),
+            texts: (page.texts || []).filter(
+              (t) => !lassoTxtSet.has(t.id) && !(t.groupId && groupIds.has(t.groupId))
+            ),
             images: (page.images || []).filter(
               (im) => !imgSet.has(im.id) && !(im.groupId && groupIds.has(im.groupId))
             ),
@@ -34875,6 +35534,7 @@ export default function App() {
               (s) => !baseSet.has(s.id) && !(s.groupId && groupIds.has(s.groupId))
             ),
           }));
+          setSelectedLassoTextIds([]);
           setSelectedImageIds([]);
           setSelectedImageId(null);
           setSelectedStrokeIds([]);
@@ -34940,19 +35600,21 @@ export default function App() {
         }
       }
 
-      // G / Γ -> Group / Ungroup selected strokes/images when 2+ objects are selected!
+      // G / Γ -> Group / Ungroup selected strokes/images/texts when 2+ objects are selected!
       if (
         (code === 'KeyG' || key === 'g' || key === 'γ') &&
-        selectedStrokeIds.length + selectedImageIds.length >= 2
+        selectedStrokeIds.length + selectedImageIds.length + selectedLassoTextIds.length >= 2
       ) {
         e.preventDefault();
         const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
         const selImgs = (activePage.images || []).filter((im) => selectedImageIds.includes(im.id));
-        const firstGrp = selStrokes[0]?.groupId || selImgs[0]?.groupId;
+        const selTxts = (activePage.texts || []).filter((t) => selectedLassoTextIds.includes(t.id));
+        const firstGrp = selStrokes[0]?.groupId || selImgs[0]?.groupId || selTxts[0]?.groupId;
         const allInSameGroup =
           Boolean(firstGrp) &&
           selStrokes.every((s) => s.groupId === firstGrp) &&
-          selImgs.every((im) => im.groupId === firstGrp);
+          selImgs.every((im) => im.groupId === firstGrp) &&
+          selTxts.every((t) => t.groupId === firstGrp);
         if (allInSameGroup) {
           handleUngroupSelected();
         } else {
@@ -34968,6 +35630,7 @@ export default function App() {
         setShowToolSubBar(true);
         if (nextTool !== 'lasso' && nextTool !== 'direct-node') {
           setSelectedStrokeIds([]);
+          setSelectedLassoTextIds([]);
           setActiveNodeStrokeId(null);
           setSelectedImageId(null);
         }
@@ -34984,7 +35647,8 @@ export default function App() {
         e.preventDefault();
         const effectiveImgIds =
           selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
-        const totalSelected = selectedStrokeIds.length + effectiveImgIds.length;
+        const totalSelected =
+          selectedStrokeIds.length + effectiveImgIds.length + selectedLassoTextIds.length;
         if (activeTool === 'lasso' && showAlignSubBar && totalSelected >= 2) {
           handleAlignSelected('center-both');
           return;
@@ -40871,6 +41535,7 @@ export default function App() {
               selectedTextId !== null ||
               (activeTool !== 'direct-node' &&
                 (selectedStrokeIds.length > 0 ||
+                  selectedLassoTextIds.length > 0 ||
                   Boolean(selectedImgObj) ||
                   (activeTool === 'lasso' && showAlignSubBar))) ||
               activeTool === 'eraser') &&
@@ -41565,21 +42230,30 @@ export default function App() {
                           : selectedImageId
                           ? [selectedImageId]
                           : [];
-                      const totalSelCount = selectedStrokeIds.length + effectiveImgIds.length;
+                      const totalSelCount =
+                        selectedStrokeIds.length +
+                        effectiveImgIds.length +
+                        selectedLassoTextIds.length;
                       if (totalSelCount === 0) return null;
                       const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
                       const selImgs = (activePage.images || []).filter((im) =>
                         effectiveImgIds.includes(im.id)
                       );
+                      const selTxts = (activePage.texts || []).filter((t) =>
+                        selectedLassoTextIds.includes(t.id)
+                      );
                       const hasGroupedItem =
                         selStrokes.some((s) => Boolean(s.groupId)) ||
-                        selImgs.some((im) => Boolean(im.groupId));
-                      const firstGrpId = selStrokes[0]?.groupId || selImgs[0]?.groupId;
+                        selImgs.some((im) => Boolean(im.groupId)) ||
+                        selTxts.some((t) => Boolean(t.groupId));
+                      const firstGrpId =
+                        selStrokes[0]?.groupId || selImgs[0]?.groupId || selTxts[0]?.groupId;
                       const allAlreadyInSameGroup =
                         totalSelCount >= 2 &&
                         Boolean(firstGrpId) &&
                         selStrokes.every((s) => s.groupId === firstGrpId) &&
-                        selImgs.every((im) => im.groupId === firstGrpId);
+                        selImgs.every((im) => im.groupId === firstGrpId) &&
+                        selTxts.every((t) => t.groupId === firstGrpId);
 
                       if (hasGroupedItem && allAlreadyInSameGroup) {
                         return (
@@ -41624,7 +42298,10 @@ export default function App() {
 
                 {activeTool !== 'direct-node' &&
                   !showAlignSubBar &&
-                  (selectedStrokeIds.length > 0 || Boolean(selectedImgObj) || Boolean(selectedTextId)) && (
+                  (selectedStrokeIds.length > 0 ||
+                    selectedLassoTextIds.length > 0 ||
+                    Boolean(selectedImgObj) ||
+                    Boolean(selectedTextId)) && (
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={handleCutSelected}
@@ -41924,59 +42601,75 @@ export default function App() {
                           : selectedImageId
                           ? [selectedImageId]
                           : [];
-                      const totalSelCount = selectedStrokeIds.length + effectiveImgIds.length;
-                      if (totalSelCount === 0) return null;
                       const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
                       const selImgs = (activePage.images || []).filter((im) =>
                         effectiveImgIds.includes(im.id)
                       );
+                      const activeGrpSet = new Set<string>();
+                      for (const s of selStrokes) {
+                        if (s.groupId && !s.groupId.startsWith('math-graph-grp-')) activeGrpSet.add(s.groupId);
+                      }
+                      for (const im of selImgs) {
+                        if (im.groupId && !im.groupId.startsWith('math-graph-grp-')) activeGrpSet.add(im.groupId);
+                      }
+                      const selTxts = (activePage.texts || []).filter(
+                        (t) =>
+                          selectedLassoTextIds.includes(t.id) ||
+                          (t.groupId && !t.groupId.startsWith('math-graph-grp-') && activeGrpSet.has(t.groupId))
+                      );
+                      const totalSelCount = selStrokes.length + selImgs.length + selTxts.length;
+                      if (totalSelCount === 0) return null;
                       const hasGroupedItem =
                         selStrokes.some((s) => Boolean(s.groupId)) ||
-                        selImgs.some((im) => Boolean(im.groupId));
-                      const firstGrpId = selStrokes[0]?.groupId || selImgs[0]?.groupId;
+                        selImgs.some((im) => Boolean(im.groupId)) ||
+                        selTxts.some((t) => Boolean(t.groupId));
+                      const firstGrpId =
+                        selStrokes[0]?.groupId || selImgs[0]?.groupId || selTxts[0]?.groupId;
                       const allAlreadyInSameGroup =
                         totalSelCount >= 2 &&
                         Boolean(firstGrpId) &&
                         selStrokes.every((s) => s.groupId === firstGrpId) &&
-                        selImgs.every((im) => im.groupId === firstGrpId);
+                        selImgs.every((im) => im.groupId === firstGrpId) &&
+                        selTxts.every((t) => t.groupId === firstGrpId);
 
-                      if (hasGroupedItem && allAlreadyInSameGroup) {
-                        return (
-                          <button
-                            onClick={handleUngroupSelected}
-                            className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
-                            title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
-                          >
-                            <span>Ungroup</span>
-                          </button>
-                        );
-                      }
-
-                      if (totalSelCount >= 2) {
-                        return (
-                          <button
-                            onClick={handleGroupSelected}
-                            className="flex items-center px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer whitespace-nowrap"
-                            title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
-                          >
-                            <span>Group ({totalSelCount})</span>
-                          </button>
-                        );
-                      }
-
-                      if (hasGroupedItem) {
-                        return (
-                          <button
-                            onClick={handleUngroupSelected}
-                            className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
-                            title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
-                          >
-                            <span>Ungroup</span>
-                          </button>
-                        );
-                      }
-
-                      return null;
+                      return (
+                        <>
+                          {hasGroupedItem && allAlreadyInSameGroup ? (
+                            <button
+                              onClick={handleUngroupSelected}
+                              className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                              title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
+                            >
+                              <span>Ungroup</span>
+                            </button>
+                          ) : totalSelCount >= 2 ? (
+                            <button
+                              onClick={handleGroupSelected}
+                              className="flex items-center px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer whitespace-nowrap"
+                              title="Group (Ομαδοποίηση) — Συντόμευση: G / Γ"
+                            >
+                              <span>Group ({totalSelCount})</span>
+                            </button>
+                          ) : hasGroupedItem ? (
+                            <button
+                              onClick={handleUngroupSelected}
+                              className="flex items-center px-2 py-1 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-normal cursor-pointer whitespace-nowrap"
+                              title="Ungroup (Διαχωρισμός ομάδας) — Συντόμευση: G / Γ"
+                            >
+                              <span>Ungroup</span>
+                            </button>
+                          ) : null}
+                          {totalSelCount >= 2 && (
+                            <button
+                              onClick={() => handleAlignSelected('center-both')}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal cursor-pointer whitespace-nowrap shadow-2xs"
+                              title="Απόλυτο Κεντράρισμα Κειμένου & Σχήματος (Dead Center X + Y — J / Ξ)"
+                            >
+                              <span>🎯 Κέντραρε</span>
+                            </button>
+                          )}
+                        </>
+                      );
                     })()}
                     {/* 1-Click Circuit Component Conversion (Battery <-> Voltage Source, Bulb <-> Resistor) & Switch Toggle in Lasso! */}
                     {selectedStrokeIds.length > 0 &&
@@ -46254,6 +46947,44 @@ export default function App() {
                       onPointerMove={handlePointerMove}
                       onPointerUp={handlePointerUp}
                       onPointerCancel={handlePointerUp}
+                      onDoubleClick={(e) => {
+                        if (activeTool !== 'lasso') return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        if (rect.width <= 0 || rect.height <= 0) return;
+                        const ptX = (e.clientX - rect.left) * (pW / rect.width);
+                        const ptY = (e.clientY - rect.top) * (pH / rect.height);
+                        const lockedIds = new Set(
+                          pageObj.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+                        );
+                        const txtList = pageObj.texts || [];
+                        for (let idx = txtList.length - 1; idx >= 0; idx--) {
+                          const txt = txtList[idx];
+                          if (lockedIds.has(txt.layerId)) continue;
+                          if (
+                            txt.groupId?.startsWith('math-graph-grp-') ||
+                            txt.id.startsWith('math-graph-txt-')
+                          ) {
+                            continue;
+                          }
+                          const tb = getTextVisualBounds(txt);
+                          if (
+                            ptX >= tb.minX - 8 &&
+                            ptX <= tb.maxX + 8 &&
+                            ptY >= tb.minY - 8 &&
+                            ptY <= tb.maxY + 8
+                          ) {
+                            setSelectedLassoTextIds([]);
+                            setSelectedStrokeIds([]);
+                            setSelectedImageIds([]);
+                            setSelectedImageId(null);
+                            setActiveNodeStrokeId(null);
+                            setSelectedTextId(txt.id);
+                            setEditingTextId(txt.id);
+                            setShowToolSubBar(true);
+                            return;
+                          }
+                        }
+                      }}
                       onPointerLeave={(e) => {
                         if (hoverAddNodePreviewRef.current) {
                           hoverAddNodePreviewRef.current = null;
@@ -46374,6 +47105,40 @@ export default function App() {
                               ev.preventDefault();
                             }
 
+                            if (
+                              !isEditingTxt &&
+                              !resizeHandle &&
+                              txt.groupId &&
+                              !txt.groupId.startsWith('math-graph-grp-')
+                            ) {
+                              const grpId = txt.groupId;
+                              const grpStrokes = pageObj.strokes
+                                .filter((s) => s.groupId === grpId)
+                                .map((s) => s.id);
+                              const grpImgs = (pageObj.images || [])
+                                .filter((im) => im.groupId === grpId)
+                                .map((im) => im.id);
+                              const grpTxts = (pageObj.texts || [])
+                                .filter((t) => t.groupId === grpId)
+                                .map((t) => t.id);
+                              if (grpStrokes.length + grpImgs.length + grpTxts.length >= 2) {
+                                if (pageIdx !== activePageIndex) {
+                                  setActivePageIndex(pageIdx);
+                                }
+                                activeDrawingPageIndexRef.current = pageIdx;
+                                setActiveTool('lasso');
+                                setSelectedLassoTextIds(grpTxts);
+                                setSelectedStrokeIds(grpStrokes);
+                                setSelectedImageIds(grpImgs);
+                                setSelectedImageId(grpImgs[0] || null);
+                                setSelectedTextId(null);
+                                setEditingTextId(null);
+                                setActiveNodeStrokeId(null);
+                                setShowToolSubBar(true);
+                                return;
+                              }
+                            }
+
                             const curBoxW = (txt.isMath ? 0 : txt.boxWidth) || ev.currentTarget.offsetWidth || 180;
                             const curBoxH = (txt.isMath ? 0 : txt.boxHeight) || ev.currentTarget.offsetHeight || 48;
                             const wasAlreadySelected = selectedTextId === txt.id;
@@ -46465,6 +47230,36 @@ export default function App() {
                               resizeHandle = null;
                             }
 
+                            if (
+                              !isEditingTxt &&
+                              !resizeHandle &&
+                              txt.groupId &&
+                              !txt.groupId.startsWith('math-graph-grp-')
+                            ) {
+                              const grpId = txt.groupId;
+                              const grpStrokes = pageObj.strokes
+                                .filter((s) => s.groupId === grpId)
+                                .map((s) => s.id);
+                              const grpImgs = (pageObj.images || [])
+                                .filter((im) => im.groupId === grpId)
+                                .map((im) => im.id);
+                              const grpTxts = (pageObj.texts || [])
+                                .filter((t) => t.groupId === grpId)
+                                .map((t) => t.id);
+                              if (grpStrokes.length + grpImgs.length + grpTxts.length >= 2) {
+                                setActiveTool('lasso');
+                                setSelectedLassoTextIds(grpTxts);
+                                setSelectedStrokeIds(grpStrokes);
+                                setSelectedImageIds(grpImgs);
+                                setSelectedImageId(grpImgs[0] || null);
+                                setSelectedTextId(null);
+                                setEditingTextId(null);
+                                setActiveNodeStrokeId(null);
+                                setShowToolSubBar(true);
+                                return;
+                              }
+                            }
+
                             const curBoxW = (txt.isMath ? 0 : txt.boxWidth) || ev.currentTarget.offsetWidth || 180;
                             const curBoxH = (txt.isMath ? 0 : txt.boxHeight) || ev.currentTarget.offsetHeight || 48;
                             const wasAlreadySelected = selectedTextId === txt.id;
@@ -46532,6 +47327,7 @@ export default function App() {
                               ? 'px-1 py-0 leading-none rounded'
                               : 'px-3 py-1.5 rounded-lg'
                           } select-none z-10 transition-shadow ${
+                            (activeTool === 'lasso' && !isSelectedTxt && !isEditingTxt) ||
                             selectedLassoTextIds.includes(txt.id)
                               ? 'pointer-events-none'
                               : isSelectedTxt || isEditingTxt
@@ -46990,6 +47786,7 @@ export default function App() {
                             />
                           ) : txt.isMath && txt.latex ? (
                             <div
+                              data-text-content="true"
                               style={{ fontSize: `${txt.fontSize}px`, color: txt.color, ...fontCss }}
                               className={`flex flex-col items-start gap-2 [&_.katex-display]:!my-0 [&_.katex-display]:!text-left ${
                                 txt.fontFamily && txt.fontFamily !== 'sans'
@@ -47030,6 +47827,7 @@ export default function App() {
                             </div>
                           ) : (
                             <div
+                              data-text-content="true"
                               style={{
                                 width: txt.boxWidth ? '100%' : undefined,
                                 height: txt.boxHeight ? '100%' : undefined,
