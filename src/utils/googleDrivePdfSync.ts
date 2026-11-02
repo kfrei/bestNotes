@@ -1409,6 +1409,8 @@ function drawTextObjectForPdf(
   const fontStack =
     tx.fontFamily === 'calligraphic'
       ? '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
+      : tx.fontFamily === 'calligraphic-bold'
+      ? '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
       : tx.fontFamily === 'neohellenic'
       ? '"GFS Neohellenic", "Arima", Georgia, "Times New Roman", serif'
       : tx.fontFamily === 'handwritten'
@@ -1548,6 +1550,12 @@ function drawTextObjectForPdf(
   const lineH = isMathLabel ? fSize * 1.05 : fSize * 1.35;
   const multiM = tx.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
   const multiGrp = multiM ? multiM[1] : null;
+  const alignMode = tx.textAlign || 'left';
+
+  // Compute max rendered line width for center / right alignment when boxWidth is not explicitly set
+  ctx.font = makeFont(fSize);
+  const lineWidths = wrappedLines.map((ln) => ctx.measureText(cleanLatexLine(ln).replace(/[{}]/g, '')).width);
+  const contentAreaW = tx.boxWidth ? Math.max(24, tx.boxWidth - padX * 2) : Math.max(0, ...lineWidths);
 
   wrappedLines.forEach((line, idx) => {
     const rowFnColor = multiGrp
@@ -1557,7 +1565,14 @@ function drawTextObjectForPdf(
       : undefined;
     const effectiveColor = rowFnColor || tx.color || '#111827';
     const baseY = tx.y + padY + (idx + 0.82) * lineH;
-    drawRichMathLine(line, tx.x + padX, baseY, effectiveColor);
+    const lnW = lineWidths[idx] || 0;
+    const alignOffsetX =
+      alignMode === 'center'
+        ? Math.max(0, (contentAreaW - lnW) / 2)
+        : alignMode === 'right'
+        ? Math.max(0, contentAreaW - lnW)
+        : 0;
+    drawRichMathLine(line, tx.x + padX + alignOffsetX, baseY, effectiveColor);
   });
 
   ctx.restore();

@@ -764,6 +764,7 @@ export default function App() {
           textFontSize?: number;
           textBold?: boolean;
           textFontFamily?: TextFontStyle;
+          textAlign?: 'left' | 'center' | 'right';
           activeLayerId?: string;
           showLayersPanel?: boolean;
           showSimulationPanel?: boolean;
@@ -1819,6 +1820,9 @@ export default function App() {
   const [textFontFamily, setTextFontFamily] = useState<TextFontStyle>(
     () => initialSession?.textFontFamily || 'calligraphic'
   );
+  const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>(
+    () => initialSession?.textAlign || 'left'
+  );
   const [isConvertingHandwriting, setIsConvertingHandwriting] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -2133,6 +2137,7 @@ export default function App() {
       textFontSize,
       textBold,
       textFontFamily,
+      textAlign,
       activeLayerId,
       showLayersPanel,
       showSimulationPanel,
@@ -2183,6 +2188,7 @@ export default function App() {
       textFontSize,
       textBold,
       textFontFamily,
+      textAlign,
       activeLayerId,
       showLayersPanel,
       showSimulationPanel,
@@ -37494,6 +37500,7 @@ export default function App() {
       textFontSize,
       textBold,
       textFontFamily,
+      textAlign,
       activeLayerId,
       updateActivePage,
     ]
@@ -37565,6 +37572,7 @@ export default function App() {
       textFontSize,
       textBold,
       textFontFamily,
+      textAlign,
       activeLayerId,
       updateActivePage,
     ]
@@ -41552,6 +41560,21 @@ export default function App() {
                   const currentFontFamily: TextFontStyle = selTxt
                     ? selTxt.fontFamily || 'sans'
                     : textFontFamily;
+                  const currentAlign: 'left' | 'center' | 'right' = selTxt
+                    ? selTxt.textAlign || 'left'
+                    : textAlign;
+
+                  const applyTextAlign = (nextAlign: 'left' | 'center' | 'right') => {
+                    setTextAlign(nextAlign);
+                    if (selTxt) {
+                      updateActivePage((page) => ({
+                        ...page,
+                        texts: (page.texts || []).map((t) =>
+                          t.id === selTxt.id ? { ...t, textAlign: nextAlign } : t
+                        ),
+                      }));
+                    }
+                  };
 
                   const applyBold = (nextB: boolean) => {
                     setTextBold(nextB);
@@ -41610,7 +41633,7 @@ export default function App() {
                   };
 
                   const applyFontSize = (nextSize: number) => {
-                    const clamped = Math.max(8, Math.min(96, nextSize));
+                    const clamped = Math.max(8, Math.min(160, nextSize));
                     setTextFontSize(clamped);
                     if (selTxt) {
                       updateActivePage((page) => ({
@@ -41700,6 +41723,64 @@ export default function App() {
                       >
                         A+
                       </button>
+
+                      {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) right after A+ */}
+                      <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200 ml-0.5">
+                        <button
+                          type="button"
+                          onMouseDown={(ev) => ev.preventDefault()}
+                          onClick={() => applyTextAlign('left')}
+                          className={`p-1 rounded-full transition cursor-pointer flex items-center justify-center ${
+                            currentAlign === 'left'
+                              ? 'bg-[#0066ff] text-white shadow-xs'
+                              : 'text-slate-700 hover:bg-white'
+                          }`}
+                          title="Στοίχιση Αριστερά"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                            <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                            <line x1="2" y1="7" x2="10" y2="7" />
+                            <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                            <line x1="2" y1="14" x2="8.5" y2="14" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(ev) => ev.preventDefault()}
+                          onClick={() => applyTextAlign('center')}
+                          className={`p-1 rounded-full transition cursor-pointer flex items-center justify-center ${
+                            currentAlign === 'center'
+                              ? 'bg-[#0066ff] text-white shadow-xs'
+                              : 'text-slate-700 hover:bg-white'
+                          }`}
+                          title="Στοίχιση στο Κέντρο"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                            <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                            <line x1="4" y1="7" x2="12" y2="7" />
+                            <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                            <line x1="4.5" y1="14" x2="11.5" y2="14" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(ev) => ev.preventDefault()}
+                          onClick={() => applyTextAlign('right')}
+                          className={`p-1 rounded-full transition cursor-pointer flex items-center justify-center ${
+                            currentAlign === 'right'
+                              ? 'bg-[#0066ff] text-white shadow-xs'
+                              : 'text-slate-700 hover:bg-white'
+                          }`}
+                          title="Στοίχιση Δεξιά"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                            <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                            <line x1="6" y1="7" x2="14" y2="7" />
+                            <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                            <line x1="7.5" y1="14" x2="14" y2="14" />
+                          </svg>
+                        </button>
+                      </div>
 
                       {/* Power Caret (^) & Subscript (_) in Text Bar */}
                       {(!selTxt || !selTxt.isMath || editingTextId === selTxt.id) && (
@@ -47170,6 +47251,7 @@ export default function App() {
                             setTextFontSize(txt.fontSize);
                             setTextBold(Boolean(txt.bold));
                             setTextFontFamily(txt.fontFamily || 'sans');
+                            setTextAlign(txt.textAlign || 'left');
                             setSelectedStrokeIds([]);
                             setSelectedImageId(null);
                             setActiveNodeStrokeId(null);
@@ -47552,7 +47634,7 @@ export default function App() {
                                 type="button"
                                 onMouseDown={(ev) => ev.preventDefault()}
                                 onClick={() => {
-                                  const nextSz = Math.min(96, txt.fontSize + 2);
+                                  const nextSz = Math.min(160, txt.fontSize + 2);
                                   setTextFontSize(nextSz);
                                   updateActivePage((page) => ({
                                     ...page,
@@ -47568,6 +47650,87 @@ export default function App() {
                               >
                                 A+
                               </button>
+                              {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) right after A+ */}
+                              <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded">
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    setTextAlign('left');
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).map((t) =>
+                                        t.id === txt.id ? { ...t, textAlign: 'left' } : t
+                                      ),
+                                    }));
+                                  }}
+                                  className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
+                                    (txt.textAlign || 'left') === 'left'
+                                      ? 'bg-[#0066ff] text-white'
+                                      : 'text-white/85 hover:bg-white/15'
+                                  }`}
+                                  title="Στοίχιση Αριστερά"
+                                >
+                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                                    <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                                    <line x1="2" y1="7" x2="10" y2="7" />
+                                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                                    <line x1="2" y1="14" x2="8.5" y2="14" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    setTextAlign('center');
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).map((t) =>
+                                        t.id === txt.id ? { ...t, textAlign: 'center' } : t
+                                      ),
+                                    }));
+                                  }}
+                                  className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
+                                    txt.textAlign === 'center'
+                                      ? 'bg-[#0066ff] text-white'
+                                      : 'text-white/85 hover:bg-white/15'
+                                  }`}
+                                  title="Στοίχιση στο Κέντρο"
+                                >
+                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                                    <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                                    <line x1="4" y1="7" x2="12" y2="7" />
+                                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                                    <line x1="4.5" y1="14" x2="11.5" y2="14" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  onMouseDown={(ev) => ev.preventDefault()}
+                                  onClick={() => {
+                                    setTextAlign('right');
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      texts: (page.texts || []).map((t) =>
+                                        t.id === txt.id ? { ...t, textAlign: 'right' } : t
+                                      ),
+                                    }));
+                                  }}
+                                  className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
+                                    txt.textAlign === 'right'
+                                      ? 'bg-[#0066ff] text-white'
+                                      : 'text-white/85 hover:bg-white/15'
+                                  }`}
+                                  title="Στοίχιση Δεξιά"
+                                >
+                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                                    <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                                    <line x1="6" y1="7" x2="14" y2="7" />
+                                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                                    <line x1="7.5" y1="14" x2="14" y2="14" />
+                                  </svg>
+                                </button>
+                              </div>
                               {(!txt.isMath || isEditingTxt) && (
                                 <>
                                   <button
@@ -47773,6 +47936,7 @@ export default function App() {
                                 color: txt.color,
                                 fontSize: txt.fontSize,
                                 fontWeight: txt.bold ? 700 : 500,
+                                textAlign: txt.textAlign || 'left',
                                 lineHeight: 1.35,
                                 ...fontCss,
                                 touchAction: 'none',
@@ -47787,8 +47951,19 @@ export default function App() {
                           ) : txt.isMath && txt.latex ? (
                             <div
                               data-text-content="true"
-                              style={{ fontSize: `${txt.fontSize}px`, color: txt.color, ...fontCss }}
-                              className={`flex flex-col items-start gap-2 [&_.katex-display]:!my-0 [&_.katex-display]:!text-left ${
+                              style={{
+                                fontSize: `${txt.fontSize}px`,
+                                color: txt.color,
+                                textAlign: txt.textAlign || 'left',
+                                ...fontCss,
+                              }}
+                              className={`flex flex-col ${
+                                txt.textAlign === 'center'
+                                  ? 'items-center [&_.katex-display]:!text-center'
+                                  : txt.textAlign === 'right'
+                                  ? 'items-end [&_.katex-display]:!text-right'
+                                  : 'items-start [&_.katex-display]:!text-left'
+                              } gap-2 [&_.katex-display]:!my-0 ${
                                 txt.fontFamily && txt.fontFamily !== 'sans'
                                   ? '[&_.katex]:![font-family:inherit] [&_.katex_*]:![font-family:inherit] [&_.katex_*]:!font-normal'
                                   : ''
@@ -47835,6 +48010,7 @@ export default function App() {
                                 overflowWrap: 'break-word',
                                 whiteSpace: 'pre-wrap',
                                 fontWeight: txt.bold ? 700 : 500,
+                                textAlign: txt.textAlign || 'left',
                                 ...fontCss,
                               }}
                             >

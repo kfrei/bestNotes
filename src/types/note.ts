@@ -133,6 +133,7 @@ export interface TextObject {
   fontSize: number;
   bold?: boolean;
   fontFamily?: TextFontStyle;
+  textAlign?: 'left' | 'center' | 'right';
   chemRawInput?: string; // Original user input for ChemOCR / Chemistry check so missing/wrong subscripts & coefficients are highlighted in red
   layerId: string;
   groupId?: string;
