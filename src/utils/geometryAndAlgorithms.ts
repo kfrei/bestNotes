@@ -16665,6 +16665,19 @@ export function getEffectiveGeminiApiKey(customKey?: string): string {
   return (partA + partB).split('').reverse().join('');
 }
 
+function getAllCandidateGeminiApiKeys(customKey?: string): string[] {
+  const keys: string[] = [];
+  const trimmedCustom = (customKey ?? localStorage.getItem('bestnotes_custom_gemini_key') ?? '').trim();
+  if (trimmedCustom) keys.push(trimmedCustom);
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (partA && partB) {
+    const builtin = (partA + partB).split('').reverse().join('');
+    if (builtin && !keys.includes(builtin)) keys.push(builtin);
+  }
+  return keys;
+}
+
 /**
  * Ensures an image data URL has an opaque paper-white background before sending to
  * Gemini Vision or Gemini Omni 1.1 Flash so transparent PNGs don't appear on black.
@@ -16713,8 +16726,8 @@ export async function analyzeImageForSmartSketchAnimation(
   customApiKey?: string,
   userHint?: string
 ): Promise<SmartSketchAnimationSpec | null> {
-  const apiKey = getEffectiveGeminiApiKey(customApiKey);
-  if (!apiKey) return null;
+  const apiKeys = getAllCandidateGeminiApiKeys(customApiKey);
+  if (apiKeys.length === 0) return null;
 
   const flat = await flattenImageOnPaperForAi(imageDataUrl, 1024);
   if (!flat) return null;
@@ -16727,8 +16740,8 @@ export async function analyzeImageForSmartSketchAnimation(
 
 Return STRICTLY a valid JSON object matching this exact schema (no markdown fences, no commentary):
 {
-  "sceneTitle": "Short Greek title of what the image depicts (e.g. 'Το Αγόρι και το Μήλο', 'Ο Κύκλος του Νερού', 'Κίνηση σε Κεκλιμένο')",
-  "omniPrompt": "<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact illustration while strictly keeping its exact hand-drawn pen-and-ink / sketch art style, line weight, and background. Describe the specific physical actions or natural elements in this image moving naturally (e.g. the boy taking a big crisp bite of the green apple and chewing happily while his hand presses the apple to his mouth and the small leaf flutters away; or raindrops falling, river flowing, etc.). Keep everything else the same. Sound design: describe natural sound effects matching the action (e.g. crisp apple bite crunch and rhythmic chewing; or gentle rain and river). No dialogue.",
+  "sceneTitle": "Short Greek title of what the image depicts (e.g. 'Η Αναπνοή των Ψαριών', 'Το Αγόρι και το Μήλο', 'Ο Κύκλος του Νερού', 'Κίνηση σε Κεκλιμένο')",
+  "omniPrompt": "<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact illustration while strictly keeping its exact hand-drawn pen-and-ink / sketch art style, line weight, and background. Describe the specific physical actions or natural elements in this image moving naturally. Keep everything else the same. Sound design: describe natural sound effects matching the action. No dialogue.",
   "soundscape": {
     "rain": 0.0 to 1.0,
     "river": 0.0 to 1.0,
@@ -16740,8 +16753,8 @@ Return STRICTLY a valid JSON object matching this exact schema (no markdown fenc
   "effects": [
     {
       "id": "unique-id-1",
-      "type": "bite_chew" | "limb_motion" | "pulse_breathe" | "spin_wheel" | "sliding_body" | "projectile_ball" | "rain" | "evaporation" | "water_flow" | "waves" | "sun_rays" | "cloud_drift" | "flow_arrow" | "sparkles",
-      "label": "Short Greek label (e.g. 'Δάγκωμα & Μάσημα', 'Κίνηση Χεριού & Μήλου', 'Κίνηση Κεφαλιού', 'Πέταγμα Φύλλου', 'Βροχόπτωση', 'Κίνηση Σώματος')",
+      "type": "bite_chew" | "fish_swim" | "bubbles" | "limb_motion" | "pulse_breathe" | "spin_wheel" | "sliding_body" | "projectile_ball" | "rain" | "evaporation" | "water_flow" | "waves" | "sun_rays" | "cloud_drift" | "flow_arrow" | "sparkles",
+      "label": "Short Greek label (e.g. 'Κίνηση Ψαριού & Πτερυγίων', 'Παλμός Βραγχιών', 'Φυσαλίδες Νερού', 'Δάγκωμα & Μάσημα', 'Κίνηση Χεριού & Μήλου', 'Βροχόπτωση')",
       "box": [ymin, xmin, ymax, xmax],
       "bodyBox": [ymin, xmin, ymax, xmax],
       "pathPoints": [[x0, y0], [x1, y1], ...],
@@ -16756,22 +16769,19 @@ Return STRICTLY a valid JSON object matching this exact schema (no markdown fenc
 IMPORTANT RULES FOR "effects":
 1. Coordinates [ymin, xmin, ymax, xmax] and [x, y] MUST be integers from 0 to 1000 (where [0,0] is top-left and [1000,1000] is bottom-right of THIS exact image; note that "box" and "bodyBox" are [ymin, xmin, ymax, xmax], whereas "pathPoints" items are [x, y] where x is horizontal 0..1000 and y is vertical 0..1000).
 2. NEVER USE FAKE/UNRELATED WEATHER EFFECTS ON CHARACTER OR ACTION DRAWINGS:
-   - Never put "sun_rays" on someone's hair! Never put "sparkles" when there is a real physical action like biting, chewing, moving a hand, nodding a head, or throwing!
+   - Never put "sun_rays" on someone's hair! Never put "sparkles" when there is a real physical action like biting, chewing, fish swimming, bubbles rising, moving a hand, nodding a head, or throwing!
 3. Detect the true physical actions or animated zones visible in the drawing:
-   A) HUMAN / CHARACTER / ANIMAL ACTIONS & BIOLOGICAL MOTIONS (Δάγκωμα, Μάσημα, Κίνηση Χεριού/Κεφαλιού/Μέλους, Αναπνοή):
+   A) HUMAN / CHARACTER / ANIMAL / FISH ACTIONS & BIOLOGICAL MOTIONS:
       - "bite_chew": MUST be used whenever a person, child, or animal is biting, chewing, or eating food (e.g. a boy biting a green apple)!
         * Set "box": [ymin, xmin, ymax, xmax] tightly around the mouth, lower jaw/chin, teeth, and the bite contact point on the apple/food.
-        * Set "label": "Δάγκωμα & Μάσημα".
-        * Set "color" to the food/accent hex color (e.g. "#65a30d" for a green apple, "#dc2626" for a red apple, or "#1e293b").
-        * In "soundscape", set "crunch": 0.95 (and set rain: 0, river: 0, waves: 0, wind: 0).
-        * ALSO combine "bite_chew" with 2 or 3 companion "limb_motion" zones for the rest of the action:
-          1) A "limb_motion" zone around the hand holding the apple/food ("label": "Κίνηση Χεριού & Μήλου", "angleDeg": 180 or -165 pressing toward the mouth).
-          2) A "limb_motion" zone around the character's head ("label": "Κίνηση Κεφαλιού", "angleDeg": 15 nodding into the bite).
-          3) If there is a flying leaf, crumb, or detached piece nearby, a "limb_motion" zone tightly around it ("label": "Εκτίναξη Φύλλου", "angleDeg": -25).
-      - "limb_motion": Use for any articulated body part or object that rocks, waves, presses, nods, swings, or flutters in place (e.g. hand, arm, leg, head, flying leaf, pendulum, tree branch, bird wing).
-        * Set "box": [ymin, xmin, ymax, xmax] tightly around that specific body part or object.
-        * Set "angleDeg" to the primary direction of motion (0=right, 180=left, -90=up, 90=down).
-      - "pulse_breathe": Use for a breathing chest/torso, beating heart, lungs, stomach, or pulsing object.
+        * Set "label": "Δάγκωμα & Μάσημα", "color": "#65a30d" (or food color), and "soundscape": { "crunch": 0.95 }.
+        * ALSO combine "bite_chew" with 2 or 3 companion "limb_motion" zones (hand holding food, head nodding, flying leaf/crumb).
+      - "fish_swim": MUST be used whenever there is a fish or aquatic animal!
+        * Set "box": [ymin, xmin, ymax, xmax] around the fish's body & fins ("label": "Κίνηση Ψαριού & Πτερυγίων").
+        * Also add a "pulse_breathe" zone on its gills ("label": "Παλμός Βραγχιών"), a "limb_motion" zone on its mouth or seaweed ("label": "Κίνηση Στόματος" / "Κίνηση Φυκιών"), "flow_arrow" on any water arrows, and "bubbles" on any drawn water bubbles ("label": "Φυσαλίδες Νερού")!
+      - "bubbles": Use for rising air/water bubbles in underwater, chemistry, or boiling scenes!
+      - "limb_motion": Use for any articulated body part or object that rocks, waves, presses, nods, swings, or flutters in place (e.g. hand, arm, leg, head, fin, seaweed, flying leaf, pendulum, tree branch, bird wing).
+      - "pulse_breathe": Use for gills (βράγχια), breathing chest/torso, beating heart, lungs, stomach, or pulsing object.
       - "spin_wheel": Use for wheels, gears, pulleys (τροχαλίες), fans, or rotating objects.
    B) PHYSICS & MECHANICS TRAJECTORIES (Κιβώτιο σε ευθεία/κεκλιμένο ή Μπαλάκι σε παραβολική/καμπύλη τροχιά):
       - "sliding_body": Use whenever there is a box/block/crate/cart/mass on a horizontal line or inclined plane.
@@ -16796,121 +16806,138 @@ IMPORTANT RULES FOR "effects":
     },
   ];
 
+  // Put gemini-3.5-flash-lite FIRST: it responds in ~2.3s with 200 OK and uses only 1 request (preserving Free Tier RPM quota!)
   const candidateModels = [
-    'gemini-3.8-flash',
-    'gemini-2.5-flash',
-    'gemini-3-flash-preview',
     'gemini-3.5-flash-lite',
-    'gemini-flash-latest',
+    'gemini-3-flash-preview',
+    'gemini-3.8-flash',
   ];
 
-  for (const modelName of candidateModels) {
-    const ctrl = new AbortController();
-    const timer = window.setTimeout(() => ctrl.abort(), 28000);
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: ctrl.signal,
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: 'application/json',
-            },
-          }),
-        }
-      );
-      window.clearTimeout(timer);
-      if (!res.ok) continue;
-      const data = await res.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) continue;
-      const parsed = safeParseVisionJson(rawText);
-      if (parsed && Array.isArray(parsed.effects) && parsed.effects.length > 0) {
-        const effects: SmartSketchEffectRegion[] = parsed.effects
-          .map((ef: any, idx: number) => {
-            const rawBox = Array.isArray(ef?.box) && ef.box.length === 4 ? ef.box : [0, 0, 1000, 1000];
-            const ymin = Math.max(0, Math.min(990, Number(rawBox[0]) || 0));
-            const xmin = Math.max(0, Math.min(990, Number(rawBox[1]) || 0));
-            const ymax = Math.max(ymin + 20, Math.min(1000, Number(rawBox[2]) || 1000));
-            const xmax = Math.max(xmin + 20, Math.min(1000, Number(rawBox[3]) || 1000));
-
-            let bodyBox: [number, number, number, number] | undefined;
-            if (Array.isArray(ef?.bodyBox) && ef.bodyBox.length === 4) {
-              const by0 = Math.max(0, Math.min(990, Number(ef.bodyBox[0]) || 0));
-              const bx0 = Math.max(0, Math.min(990, Number(ef.bodyBox[1]) || 0));
-              const by1 = Math.max(by0 + 10, Math.min(1000, Number(ef.bodyBox[2]) || by0 + 80));
-              const bx1 = Math.max(bx0 + 10, Math.min(1000, Number(ef.bodyBox[3]) || bx0 + 80));
-              bodyBox = [by0, bx0, by1, bx1];
-            }
-
-            let pathPoints: [number, number][] | undefined;
-            if (Array.isArray(ef?.pathPoints) && ef.pathPoints.length >= 2) {
-              pathPoints = ef.pathPoints
-                .filter((pt: any) => Array.isArray(pt) && pt.length >= 2)
-                .map(
-                  (pt: any) =>
-                    [
-                      Math.max(0, Math.min(1000, Number(pt[0]) || 0)),
-                      Math.max(0, Math.min(1000, Number(pt[1]) || 0)),
-                    ] as [number, number]
-                );
-            }
-
-            return {
-              id: String(ef?.id || `ef-${idx}`),
-              type: ef?.type || 'sparkles',
-              label: String(ef?.label || ef?.type || `Κίνηση ${idx + 1}`),
-              box: [ymin, xmin, ymax, xmax] as [number, number, number, number],
-              bodyBox,
-              pathPoints,
-              bodyShape:
-                ef?.bodyShape === 'ball' || ef?.bodyShape === 'cart' || ef?.bodyShape === 'box'
-                  ? ef.bodyShape
-                  : undefined,
-              angleDeg: typeof ef?.angleDeg === 'number' ? ef.angleDeg : 90,
-              color: typeof ef?.color === 'string' && ef.color.startsWith('#') ? ef.color : '#1e293b',
-              intensity: typeof ef?.intensity === 'number' ? Math.max(0.3, Math.min(1.5, ef.intensity)) : 1,
-            };
-          });
-
-        const hasBite = effects.some((e) => e.type === 'bite_chew');
-        const hasPhysics = effects.some(
-          (e) => e.type === 'sliding_body' || e.type === 'projectile_ball' || e.type === 'limb_motion'
+  for (const key of apiKeys) {
+    for (const modelName of candidateModels) {
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => ctrl.abort(), 18000);
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(key)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: ctrl.signal,
+            body: JSON.stringify({
+              contents: [{ parts }],
+              generationConfig: {
+                temperature: 0.2,
+                responseMimeType: 'application/json',
+              },
+            }),
+          }
         );
-        const sc: SmartSketchSoundscape = {
-          rain: Math.max(0, Math.min(1, Number(parsed?.soundscape?.rain) || 0)),
-          river: Math.max(0, Math.min(1, Number(parsed?.soundscape?.river) || 0)),
-          waves: Math.max(0, Math.min(1, Number(parsed?.soundscape?.waves) || 0)),
-          wind: Math.max(
-            0,
-            Math.min(1, Number(parsed?.soundscape?.wind) ?? (hasBite || hasPhysics ? 0 : 0.15))
-          ),
-          crunch: Math.max(
-            hasBite ? 0.9 : 0,
-            Math.min(1, Number(parsed?.soundscape?.crunch) || 0)
-          ),
-          whoosh: Math.max(
-            hasPhysics && !hasBite ? 0.45 : 0,
-            Math.min(1, Number(parsed?.soundscape?.whoosh) || 0)
-          ),
-        };
+        window.clearTimeout(timer);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const candidateParts: any[] = data?.candidates?.[0]?.content?.parts || [];
+        let rawText = '';
+        for (const p of candidateParts) {
+          if (typeof p?.text === 'string' && p.text.includes('{')) {
+            rawText = p.text;
+          }
+        }
+        if (!rawText) rawText = candidateParts[0]?.text || '';
+        if (!rawText) continue;
+        const parsed = safeParseVisionJson(rawText);
+        if (parsed && Array.isArray(parsed.effects) && parsed.effects.length > 0) {
+          const effects: SmartSketchEffectRegion[] = parsed.effects
+            .map((ef: any, idx: number) => {
+              const rawBox = Array.isArray(ef?.box) && ef.box.length === 4 ? ef.box : [0, 0, 1000, 1000];
+              const ymin = Math.max(0, Math.min(990, Number(rawBox[0]) || 0));
+              const xmin = Math.max(0, Math.min(990, Number(rawBox[1]) || 0));
+              const ymax = Math.max(ymin + 20, Math.min(1000, Number(rawBox[2]) || 1000));
+              const xmax = Math.max(xmin + 20, Math.min(1000, Number(rawBox[3]) || 1000));
 
-        return {
-          sceneTitle: String(parsed.sceneTitle || 'Ζωντανό Σκίτσο'),
-          omniPrompt: String(
-            parsed.omniPrompt ||
-              '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and actions to life with subtle motion and matching sound effects. No dialogue.'
-          ),
-          effects,
-          soundscape: sc,
-        };
+              let bodyBox: [number, number, number, number] | undefined;
+              if (Array.isArray(ef?.bodyBox) && ef.bodyBox.length === 4) {
+                const by0 = Math.max(0, Math.min(990, Number(ef.bodyBox[0]) || 0));
+                const bx0 = Math.max(0, Math.min(990, Number(ef.bodyBox[1]) || 0));
+                const by1 = Math.max(by0 + 10, Math.min(1000, Number(ef.bodyBox[2]) || by0 + 80));
+                const bx1 = Math.max(bx0 + 10, Math.min(1000, Number(ef.bodyBox[3]) || bx0 + 80));
+                bodyBox = [by0, bx0, by1, bx1];
+              }
+
+              let pathPoints: [number, number][] | undefined;
+              if (Array.isArray(ef?.pathPoints) && ef.pathPoints.length >= 2) {
+                pathPoints = ef.pathPoints
+                  .filter((pt: any) => Array.isArray(pt) && pt.length >= 2)
+                  .map(
+                    (pt: any) =>
+                      [
+                        Math.max(0, Math.min(1000, Number(pt[0]) || 0)),
+                        Math.max(0, Math.min(1000, Number(pt[1]) || 0)),
+                      ] as [number, number]
+                  );
+              }
+
+              const lbl = String(ef?.label || ef?.type || `Κίνηση ${idx + 1}`);
+              let effType = ef?.type || 'sparkles';
+              if (
+                effType === 'sparkles' &&
+                /φυσαλ|φσαλ|bubble/i.test(lbl)
+              ) {
+                effType = 'bubbles';
+              }
+
+              return {
+                id: String(ef?.id || `ef-${idx}`),
+                type: effType,
+                label: lbl,
+                box: [ymin, xmin, ymax, xmax] as [number, number, number, number],
+                bodyBox,
+                pathPoints,
+                bodyShape:
+                  ef?.bodyShape === 'ball' || ef?.bodyShape === 'cart' || ef?.bodyShape === 'box'
+                    ? ef.bodyShape
+                    : undefined,
+                angleDeg: typeof ef?.angleDeg === 'number' ? ef.angleDeg : 90,
+                color: typeof ef?.color === 'string' && ef.color.startsWith('#') ? ef.color : '#1e293b',
+                intensity: typeof ef?.intensity === 'number' ? Math.max(0.3, Math.min(1.5, ef.intensity)) : 1,
+              };
+            });
+
+          const hasBite = effects.some((e) => e.type === 'bite_chew');
+          const hasPhysics = effects.some(
+            (e) => e.type === 'sliding_body' || e.type === 'projectile_ball' || e.type === 'limb_motion'
+          );
+          const sc: SmartSketchSoundscape = {
+            rain: Math.max(0, Math.min(1, Number(parsed?.soundscape?.rain) || 0)),
+            river: Math.max(0, Math.min(1, Number(parsed?.soundscape?.river) || 0)),
+            waves: Math.max(0, Math.min(1, Number(parsed?.soundscape?.waves) || 0)),
+            wind: Math.max(
+              0,
+              Math.min(1, Number(parsed?.soundscape?.wind) ?? (hasBite || hasPhysics ? 0 : 0.15))
+            ),
+            crunch: Math.max(
+              hasBite ? 0.9 : 0,
+              Math.min(1, Number(parsed?.soundscape?.crunch) || 0)
+            ),
+            whoosh: Math.max(
+              hasPhysics && !hasBite ? 0.45 : 0,
+              Math.min(1, Number(parsed?.soundscape?.whoosh) || 0)
+            ),
+          };
+
+          return {
+            sceneTitle: String(parsed.sceneTitle || 'Ζωντανό Σκίτσο'),
+            omniPrompt: String(
+              parsed.omniPrompt ||
+                '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and actions to life with subtle motion and matching sound effects. No dialogue.'
+            ),
+            effects,
+            soundscape: sc,
+          };
+        }
+      } catch {
+        window.clearTimeout(timer);
       }
-    } catch {
-      window.clearTimeout(timer);
     }
   }
 
@@ -17325,7 +17352,12 @@ export function renderSmartSketchOverlayFrame(
 
   // Render larger articulated patches first and focal bite_chew / particles on top
   const orderedEffects = [...spec.effects].sort((a, b) => {
-    const prio = (t: string) => (t === 'bite_chew' ? 2 : t === 'limb_motion' || t === 'pulse_breathe' ? 0 : 1);
+    const prio = (t: string) =>
+      t === 'bite_chew' || t === 'bubbles'
+        ? 2
+        : t === 'fish_swim' || t === 'limb_motion' || t === 'pulse_breathe'
+        ? 0
+        : 1;
     const pa = prio(a.type);
     const pb = prio(b.type);
     if (pa !== pb) return pa - pb;
@@ -17350,6 +17382,8 @@ export function renderSmartSketchOverlayFrame(
     // Clip nature zone fills tightly to [x0, y0, bw, bh]; allow articulated patches & trajectories room to move within canvas
     const isArticulatedOrTrajectory =
       ef.type === 'bite_chew' ||
+      ef.type === 'fish_swim' ||
+      ef.type === 'bubbles' ||
       ef.type === 'limb_motion' ||
       ef.type === 'pulse_breathe' ||
       ef.type === 'spin_wheel' ||
@@ -17596,6 +17630,59 @@ export function renderSmartSketchOverlayFrame(
         ctx.rotate(rot);
         ctx.translate(-cx, -cy);
         ctx.drawImage(art.patch, x0, y0, bw, bh);
+        ctx.restore();
+      }
+    } else if (ef.type === 'fish_swim') {
+      // Smooth swimming undulation & gentle hovering of fish body and fins!
+      const art = getOrExtractArticulatedPatch(sourceImg, ef.box);
+      const swimPhase = elapsedSec * 3.1;
+      const bobY = Math.sin(swimPhase) * Math.max(3, bh * 0.032) * intensity;
+      const swayX = Math.cos(swimPhase * 0.7) * Math.max(2.5, bw * 0.024) * intensity;
+      const tilt = Math.sin(swimPhase) * 0.036;
+      const scaleX = 1 + Math.sin(swimPhase * 2) * 0.025;
+
+      if (art) {
+        ctx.save();
+        ctx.globalAlpha = 0.82;
+        ctx.drawImage(art.mask, x0, y0, bw, bh);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(cx + swayX, cy + bobY);
+        ctx.rotate(tilt);
+        ctx.scale(scaleX, 1);
+        ctx.translate(-cx, -cy);
+        ctx.drawImage(art.patch, x0, y0, bw, bh);
+        ctx.restore();
+      }
+    } else if (ef.type === 'bubbles') {
+      // Crisp hand-drawn rising water/air bubbles with specular highlight arc!
+      const numBubbles = 5;
+      for (let b = 0; b < numBubbles; b++) {
+        const u = ((elapsedSec * 0.45 + b * 0.21) % 1);
+        const fade = Math.sin(u * Math.PI);
+        if (fade < 0.08) continue;
+        const wobbleX = Math.sin(elapsedSec * 3.8 + b * 1.7) * Math.max(3, bw * 0.14);
+        const bx = cx + ((b % 3) - 1) * (bw * 0.18) + wobbleX;
+        const by = y0 + bh - u * bh * 1.15;
+        const r = Math.max(3.5, Math.min(8.5, Math.min(bw, bh) * 0.11)) * (0.75 + 0.35 * ((b % 2) + u * 0.3));
+
+        ctx.save();
+        ctx.globalAlpha = 0.85 * fade;
+        ctx.fillStyle = 'rgba(224, 242, 254, 0.65)';
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = Math.max(1.3, Math.min(2.0, width * 0.0028));
+        ctx.beginPath();
+        ctx.arc(bx, by, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Tiny curved specular highlight inside the bubble
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(bx, by, r * 0.62, -Math.PI * 0.78, -Math.PI * 0.28);
+        ctx.stroke();
         ctx.restore();
       }
     } else if (ef.type === 'rain') {

@@ -155,6 +155,8 @@ export interface SmartSketchEffectRegion {
     | 'limb_motion'
     | 'pulse_breathe'
     | 'spin_wheel'
+    | 'bubbles'
+    | 'fish_swim'
     | 'sparkles';
   label?: string;
   box: [number, number, number, number]; // [ymin, xmin, ymax, xmax] in 0..1000 normalized coords
