@@ -1469,6 +1469,9 @@ export default function App() {
     oscUy: number;
     currentDisplacementPx: number;
   } | null>(null);
+  const [selectedSpringGraphKey, setSelectedSpringGraphKey] = useState<
+    'xt' | 'vt' | 'at' | 'hooke' | null
+  >(null);
   const draggingSpringGraphRef = useRef<{
     simId: string;
     graphKey: 'xt' | 'vt' | 'at' | 'hooke';
@@ -18501,56 +18504,65 @@ export default function App() {
 
               ctx.save();
 
-              // Resize handles: Height (↕) near top of F_ελ axis, Width (↔) to the right of Δl axis
-              const rhX = axisLeftX;
-              const rhY = axisTopY - 10;
-              ctx.save();
-              ctx.strokeStyle = '#2563eb';
-              ctx.lineWidth = 1.8;
-              ctx.beginPath();
-              ctx.moveTo(rhX, rhY - 5.5);
-              ctx.lineTo(rhX, rhY + 5.5);
-              ctx.moveTo(rhX - 2.8, rhY - 2.8);
-              ctx.lineTo(rhX, rhY - 5.5);
-              ctx.lineTo(rhX + 2.8, rhY - 2.8);
-              ctx.moveTo(rhX - 2.8, rhY + 2.8);
-              ctx.lineTo(rhX, rhY + 5.5);
-              ctx.lineTo(rhX + 2.8, rhY + 2.8);
-              ctx.stroke();
-              graphResizeHandlesHit.push({
-                key: 'hooke',
-                mode: 'height',
-                x: rhX,
-                y: rhY,
-                axisLeftX,
-                axisMidY: (axisTopY + axisBotY) / 2,
-                gx: hx,
-                customMoved: Boolean(hCfg.customMoved),
-              });
+              const isDraggingOrResizingHookeForHandles =
+                draggingSpringGraphRef.current?.graphKey === 'hooke' ||
+                draggingSpringGraphResizeRef.current?.graphKey === 'hooke';
+              const isHookeSelectedForHandles =
+                activeTool === 'lasso' &&
+                (selectedSpringGraphKey === 'hooke' || isDraggingOrResizingHookeForHandles);
 
-              const rwX = axisRightX + 9;
-              const rwY = axisBotY;
-              ctx.beginPath();
-              ctx.moveTo(rwX - 5.5, rwY);
-              ctx.lineTo(rwX + 5.5, rwY);
-              ctx.moveTo(rwX - 2.8, rwY - 2.8);
-              ctx.lineTo(rwX - 5.5, rwY);
-              ctx.lineTo(rwX - 2.8, rwY + 2.8);
-              ctx.moveTo(rwX + 2.8, rwY - 2.8);
-              ctx.lineTo(rwX + 5.5, rwY);
-              ctx.lineTo(rwX + 2.8, rwY + 2.8);
-              ctx.stroke();
-              graphResizeHandlesHit.push({
-                key: 'hooke',
-                mode: 'width',
-                x: rwX,
-                y: rwY,
-                axisLeftX,
-                axisMidY: axisBotY,
-                gx: hx,
-                customMoved: Boolean(hCfg.customMoved),
-              });
-              ctx.restore();
+              // Resize handles: Height (↕) near top of F_ελ axis, Width (↔) to the right of Δl axis (only when selected with Lasso/Select)
+              if (isHookeSelectedForHandles) {
+                const rhX = axisLeftX;
+                const rhY = axisTopY - 10;
+                ctx.save();
+                ctx.strokeStyle = '#2563eb';
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.moveTo(rhX, rhY - 5.5);
+                ctx.lineTo(rhX, rhY + 5.5);
+                ctx.moveTo(rhX - 2.8, rhY - 2.8);
+                ctx.lineTo(rhX, rhY - 5.5);
+                ctx.lineTo(rhX + 2.8, rhY - 2.8);
+                ctx.moveTo(rhX - 2.8, rhY + 2.8);
+                ctx.lineTo(rhX, rhY + 5.5);
+                ctx.lineTo(rhX + 2.8, rhY + 2.8);
+                ctx.stroke();
+                graphResizeHandlesHit.push({
+                  key: 'hooke',
+                  mode: 'height',
+                  x: rhX,
+                  y: rhY,
+                  axisLeftX,
+                  axisMidY: (axisTopY + axisBotY) / 2,
+                  gx: hx,
+                  customMoved: Boolean(hCfg.customMoved),
+                });
+
+                const rwX = axisRightX + 9;
+                const rwY = axisBotY;
+                ctx.beginPath();
+                ctx.moveTo(rwX - 5.5, rwY);
+                ctx.lineTo(rwX + 5.5, rwY);
+                ctx.moveTo(rwX - 2.8, rwY - 2.8);
+                ctx.lineTo(rwX - 5.5, rwY);
+                ctx.lineTo(rwX - 2.8, rwY + 2.8);
+                ctx.moveTo(rwX + 2.8, rwY - 2.8);
+                ctx.lineTo(rwX + 5.5, rwY);
+                ctx.lineTo(rwX + 2.8, rwY + 2.8);
+                ctx.stroke();
+                graphResizeHandlesHit.push({
+                  key: 'hooke',
+                  mode: 'width',
+                  x: rwX,
+                  y: rwY,
+                  axisLeftX,
+                  axisMidY: axisBotY,
+                  gx: hx,
+                  customMoved: Boolean(hCfg.customMoved),
+                });
+                ctx.restore();
+              }
 
               // Draw Vertical Axis F_ελ (N) and Horizontal Axis Δl (cm)
               ctx.save();
@@ -18787,62 +18799,67 @@ export default function App() {
               ctx.restore();
             }
 
-            // 6E-3. Outer Resizable Frame + Bottom-Right Corner Scale Handle (⤡) for the entire Table + Diagram block!
+            // 6E-3. Outer Resizable Frame + Bottom-Right Corner Scale Handle (⤡) for the entire Table + Diagram block (ONLY when selected with Lasso/Select)!
             const isDraggingOrResizingHooke =
               draggingSpringGraphRef.current?.graphKey === 'hooke' ||
               draggingSpringGraphResizeRef.current?.graphKey === 'hooke';
+            const isHookeSelected =
+              activeTool === 'lasso' &&
+              (selectedSpringGraphKey === 'hooke' || isDraggingOrResizingHooke);
             const frameX = hx - 4;
             const frameY = hy - 4;
             const frameW = hW + 8;
             const frameH = Math.max(40, frameBotY - hy + 8);
 
-            ctx.save();
-            ctx.strokeStyle = isDraggingOrResizingHooke
-              ? '#0284c7'
-              : 'rgba(2, 132, 199, 0.48)';
-            ctx.lineWidth = isDraggingOrResizingHooke ? 1.7 : 1.25;
-            ctx.setLineDash([5, 4]);
-            ctx.strokeRect(frameX, frameY, frameW, frameH);
-            ctx.setLineDash([]);
+            if (isHookeSelected) {
+              ctx.save();
+              ctx.strokeStyle = isDraggingOrResizingHooke
+                ? '#0284c7'
+                : 'rgba(2, 132, 199, 0.72)';
+              ctx.lineWidth = isDraggingOrResizingHooke ? 1.7 : 1.4;
+              ctx.setLineDash([5, 4]);
+              ctx.strokeRect(frameX, frameY, frameW, frameH);
+              ctx.setLineDash([]);
 
-            // Corner scale handle (⤡) at bottom-right of the frame to shrink/enlarge the whole Table + Diagram together
-            const cornerX = frameX + frameW;
-            const cornerY = frameY + frameH;
-            ctx.fillStyle = '#ffffff';
-            ctx.strokeStyle = '#0284c7';
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            ctx.arc(cornerX, cornerY, 7.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(cornerX - 3.2, cornerY - 3.2);
-            ctx.lineTo(cornerX + 3.2, cornerY + 3.2);
-            ctx.moveTo(cornerX + 0.5, cornerY + 3.2);
-            ctx.lineTo(cornerX + 3.2, cornerY + 3.2);
-            ctx.lineTo(cornerX + 3.2, cornerY + 0.5);
-            ctx.moveTo(cornerX - 0.5, cornerY - 3.2);
-            ctx.lineTo(cornerX - 3.2, cornerY - 3.2);
-            ctx.lineTo(cornerX - 3.2, cornerY - 0.5);
-            ctx.stroke();
-            ctx.restore();
+              // Corner scale handle (⤡) at bottom-right of the frame to shrink/enlarge the whole Table + Diagram together
+              const cornerX = frameX + frameW;
+              const cornerY = frameY + frameH;
+              ctx.fillStyle = '#ffffff';
+              ctx.strokeStyle = '#0284c7';
+              ctx.lineWidth = 1.8;
+              ctx.beginPath();
+              ctx.arc(cornerX, cornerY, 7.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(cornerX - 3.2, cornerY - 3.2);
+              ctx.lineTo(cornerX + 3.2, cornerY + 3.2);
+              ctx.moveTo(cornerX + 0.5, cornerY + 3.2);
+              ctx.lineTo(cornerX + 3.2, cornerY + 3.2);
+              ctx.lineTo(cornerX + 3.2, cornerY + 0.5);
+              ctx.moveTo(cornerX - 0.5, cornerY - 3.2);
+              ctx.lineTo(cornerX - 3.2, cornerY - 3.2);
+              ctx.lineTo(cornerX - 3.2, cornerY - 0.5);
+              ctx.stroke();
+              ctx.restore();
 
-            graphResizeHandlesHit.push({
-              key: 'hooke',
-              mode: 'scale',
-              x: cornerX,
-              y: cornerY,
-              axisLeftX: hx,
-              axisMidY: diagramTopY,
-              gx: hx,
-              customMoved: Boolean(hCfg.customMoved),
-            });
+              graphResizeHandlesHit.push({
+                key: 'hooke',
+                mode: 'scale',
+                x: cornerX,
+                y: cornerY,
+                axisLeftX: hx,
+                axisMidY: diagramTopY,
+                gx: hx,
+                customMoved: Boolean(hCfg.customMoved),
+              });
+            }
 
             graphBoxesHit.push({
               key: 'hooke',
               x: hx,
               y: hy - 4,
-              width: activeTool === 'lasso' ? hW : Math.min(hW, 110),
+              width: hW,
               height: frameH,
               closePt: { x: -9999, y: -9999, r: -1 },
             });
@@ -22914,7 +22931,14 @@ export default function App() {
     activeTool,
     activeChemCorrection,
     selectedReactionSimId,
+    selectedSpringGraphKey,
   ]);
+
+  useEffect(() => {
+    if (activeTool !== 'lasso') {
+      setSelectedSpringGraphKey(null);
+    }
+  }, [activeTool]);
 
   // Automatic External HDMI / 2nd Screen Projector Sync (Presentation API + BroadcastChannel)
   useEffect(() => {
@@ -22983,6 +23007,7 @@ export default function App() {
     activeTool,
     activeChemCorrection,
     selectedReactionSimId,
+    selectedSpringGraphKey,
   ]);
 
   useEffect(() => {
@@ -26357,6 +26382,17 @@ export default function App() {
           pt.y >= gb.y &&
           pt.y <= gb.y + gb.height
         ) {
+          if (gb.key === 'hooke' && activeTool !== 'lasso') {
+            continue;
+          }
+          if (gb.key === 'hooke') {
+            setSelectedSpringGraphKey('hooke');
+            setSelectedStrokeIds([]);
+            setSelectedImageIds([]);
+            setSelectedImageId(null);
+            setSelectedTextId(null);
+            setSelectedLassoTextIds([]);
+          }
           e.preventDefault();
           draggingSpringGraphRef.current = {
             simId: spHit.simId,
@@ -27984,6 +28020,7 @@ export default function App() {
 
     // Case 1: Quick Tap (< 16px movement) -> Select the top-most tapped shape/stroke, text, or image at poly[0]!
     if (pathLen < 16 || poly.length < 3) {
+      setSelectedSpringGraphKey(null);
       const pt = poly[0];
       let topHitImg: { img: ImageObject; z: number } | null = null;
       for (let idx = 0; idx < imgList.length; idx++) {
@@ -28377,6 +28414,35 @@ export default function App() {
       }
       return false;
     });
+
+    // Also check if the Lasso loop / Rectangular Marquee enclosed or crossed the Hooke's Law Table + Diagram!
+    const hookeBox = springOverlayHitRef.current?.graphBoxes.find((gb) => gb.key === 'hooke');
+    const matchedHookeBox = Boolean(
+      hookeBox &&
+        (() => {
+          const gridRatios = [0, 0.25, 0.5, 0.75, 1];
+          for (const u of gridRatios) {
+            for (const v of gridRatios) {
+              if (
+                isPointInPolygon(
+                  { x: hookeBox.x + hookeBox.width * u, y: hookeBox.y + hookeBox.height * v },
+                  poly
+                )
+              ) {
+                return true;
+              }
+            }
+          }
+          return densePoly.some(
+            (lp) =>
+              lp.x >= hookeBox.x &&
+              lp.x <= hookeBox.x + hookeBox.width &&
+              lp.y >= hookeBox.y &&
+              lp.y <= hookeBox.y + hookeBox.height
+          );
+        })()
+    );
+    setSelectedSpringGraphKey(matchedHookeBox ? 'hooke' : null);
 
     // Also check if the Lasso loop / Rectangular Marquee enclosed or crossed any standalone Text / MathOCR equation boxes!
     const matchedStandaloneTexts = (activePage.texts || []).filter((txt) => {
