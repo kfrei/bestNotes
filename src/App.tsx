@@ -2178,7 +2178,20 @@ export default function App() {
     angle: 90,
     showMm: true,
   };
-  const [rulersByPageId, setRulersByPageId] = useState<Record<string, PageRulerState>>({});
+  const [rulersByPageId, setRulersByPageId] = useState<Record<string, PageRulerState>>(() => {
+    try {
+      const saved = localStorage.getItem('bestnotes_rulers_by_page_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
   const activeNotebookForRuler =
     notebooks.find((n) => n.id === activeNotebookId) || notebooks[0] || FALLBACK_EMPTY_NOTEBOOK;
   const currentActivePageIdForRuler =
@@ -2195,7 +2208,13 @@ export default function App() {
       setRulersByPageId((prevMap) => {
         const cur = prevMap[pid] || DEFAULT_PAGE_RULER_STATE;
         const next = typeof updater === 'function' ? updater(cur) : updater;
-        return { ...prevMap, [pid]: next };
+        const nextMap = { ...prevMap, [pid]: next };
+        try {
+          localStorage.setItem('bestnotes_rulers_by_page_v1', JSON.stringify(nextMap));
+        } catch {
+          // ignore
+        }
+        return nextMap;
       });
     },
     [currentActivePageIdForRuler]
