@@ -43758,14 +43758,6 @@ export default function App() {
                       <span>Magnetic Lasso</span>
                     </button>
                     <button
-                      onClick={() => void handleOpenAiAnimateForSelection(selectedImgObj)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-700 hover:to-indigo-700 text-white font-semibold cursor-pointer shadow-xs whitespace-nowrap"
-                      title="Ζωντάνεμα εικόνας (AI Animate): Άμεσο Ζωντανό Σκίτσο με Ήχο + Gemini Omni 1.1 Flash AI Video!"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>🎬 Ζωντάνεμα</span>
-                    </button>
-                    <button
                       onClick={() => {
                         updateActivePage((page) => ({
                           ...page,
