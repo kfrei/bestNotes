@@ -223,14 +223,17 @@ const AiAnimatedImageOverlay: React.FC<{
   const muted = Boolean(image.aiAnimMuted);
 
   const animBox = React.useMemo(() => {
-    if (image.aiAnimBox && image.aiAnimBox.width > 10 && image.aiAnimBox.height > 10) {
+    if (fillParent && image.aiAnimBox && image.aiAnimBox.width > 10 && image.aiAnimBox.height > 10) {
       return image.aiAnimBox;
     }
-    // Self-heal legacy composite animations where aiAnimBox was not yet persisted
     if (page && !fillParent) {
-      const layerImgs = (page.images || []).filter((im) => im.layerId === image.layerId);
       const layerStrokes = (page.strokes || []).filter((s) => s.layerId === image.layerId);
-      if (layerImgs.length > 1 || layerStrokes.length > 0) {
+      // Only use a larger composite bounding box when the layer also has companion strokes (e.g. Water Cycle arrows)
+      if (layerStrokes.length > 0) {
+        if (image.aiAnimBox && image.aiAnimBox.width > 10 && image.aiAnimBox.height > 10) {
+          return image.aiAnimBox;
+        }
+        const layerImgs = (page.images || []).filter((im) => im.layerId === image.layerId);
         let minX = Infinity,
           minY = Infinity,
           maxX = -Infinity,
@@ -412,7 +415,7 @@ const AiAnimatedImageOverlay: React.FC<{
           }}
           onClick={(e) => e.stopPropagation()}
           title="Σύρετε την μπάρα για να τη μετακινήσετε όπου θέλετε"
-          className={`absolute -top-7 right-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[10px] font-semibold shadow-lg pointer-events-auto border cursor-grab active:cursor-grabbing select-none transition ${
+          className={`absolute ${animBox.y < 32 ? 'top-1.5' : '-top-7'} right-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[10px] font-semibold shadow-lg pointer-events-auto border cursor-grab active:cursor-grabbing select-none transition ${
             isPlaying
               ? 'bg-slate-900/90 border-white/15'
               : 'bg-indigo-950/85 hover:bg-indigo-900/95 border-indigo-400/40'
@@ -2696,6 +2699,14 @@ export default function App() {
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
   const pageWidth = getPageLogicalWidth(activePage);
   const pageHeight = getPageLogicalHeight(activePage);
+
+  // Keep activeLayerId synchronized with activePage.layers whenever switching pages or notebooks
+  useEffect(() => {
+    const layers = activePage?.layers || [];
+    if (layers.length > 0 && !layers.some((l) => l.id === activeLayerId)) {
+      setActiveLayerId(layers[0].id);
+    }
+  }, [activePage?.id, activePage?.layers, activeLayerId]);
 
   const showToast = useCallback((msg: string) => {
     setStatusBanner(msg);
@@ -38752,15 +38763,16 @@ export default function App() {
       return;
     }
 
-    // If opened from ⚙️ on an image that animates a composite diagram layer, include all objects on that layer
+    // If opened from ⚙️ on an image that animates a composite diagram layer with companion strokes, include all objects on that layer
     if (targetImgOverride) {
       const layerImgs = (activePage.images || []).filter((im) => im.layerId === targetImgOverride.layerId);
       const layerStrokes = (activePage.strokes || []).filter((s) => s.layerId === targetImgOverride.layerId);
       const hasCompositeBox =
+        layerStrokes.length > 0 &&
         targetImgOverride.aiAnimBox &&
         (Math.abs(targetImgOverride.aiAnimBox.width - targetImgOverride.width) > 12 ||
           Math.abs(targetImgOverride.aiAnimBox.height - targetImgOverride.height) > 12);
-      if (hasCompositeBox || (!targetImgOverride.aiAnimBox && (layerImgs.length > 1 || layerStrokes.length > 0))) {
+      if (hasCompositeBox) {
         selImgs = layerImgs;
         selStrokes = layerStrokes;
       }
@@ -47449,12 +47461,14 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
-                  {activePage.layers.map((layer) => {
+                  {activePage.layers.map((layer, layerIdx) => {
                     const isCurrent = layer.id === activeLayerId;
                     const isBeingDragged = draggingLayerId === layer.id;
-                    const strokeCount = activePage.strokes.filter((s) => s.layerId === layer.id).length;
-                    const imgCount = (activePage.images || []).filter((im) => im.layerId === layer.id).length;
-                    const txtCount = (activePage.texts || []).filter((t) => t.layerId === layer.id).length;
+                    const matchesLayer = (lid?: string) =>
+                      lid === layer.id || (layerIdx === 0 && !activePage.layers.some((l) => l.id === lid));
+                    const strokeCount = activePage.strokes.filter((s) => matchesLayer(s.layerId)).length;
+                    const imgCount = (activePage.images || []).filter((im) => matchesLayer(im.layerId)).length;
+                    const txtCount = (activePage.texts || []).filter((t) => matchesLayer(t.layerId)).length;
                     const count = strokeCount + imgCount + txtCount;
 
                     const moveLayerToIndex = (fromIdx: number, toIdx: number) => {
@@ -47747,7 +47761,7 @@ export default function App() {
 
                             {(() => {
                               const animImgOnLayer = (activePage.images || []).find(
-                                (im) => im.layerId === layer.id && Boolean(im.aiAnimation || im.aiVideoUrl)
+                                (im) => matchesLayer(im.layerId) && Boolean(im.aiAnimation || im.aiVideoUrl)
                               );
                               if (!animImgOnLayer) return null;
                               const isAnimActive =
@@ -47986,11 +48000,11 @@ export default function App() {
                     {/* Layer 1.6: AI Animated Images Overlay (Smart Sketch Animator + Gemini Omni 1.1 Flash Video) */}
                     {isCurrentActive &&
                       (pageObj.images || [])
-                        .filter(
-                          (im) =>
-                            Boolean(im.aiAnimation || im.aiVideoUrl) &&
-                            pageObj.layers.some((l) => l.id === im.layerId && l.visible)
-                        )
+                        .filter((im) => {
+                          if (!im.aiAnimation && !im.aiVideoUrl) return false;
+                          const matchedLayer = pageObj.layers.find((l) => l.id === im.layerId) || pageObj.layers[0];
+                          return !matchedLayer || matchedLayer.visible;
+                        })
                         .map((im) => (
                           <AiAnimatedImageOverlay
                             key={`ai-anim-${im.id}`}
@@ -50924,6 +50938,21 @@ export default function App() {
                               }
                             : null
                         );
+                        if (re && aiAnimateModal.targetImageId) {
+                          updateActivePage((page) => ({
+                            ...page,
+                            images: (page.images || []).map((im) =>
+                              im.id === aiAnimateModal.targetImageId
+                                ? {
+                                    ...im,
+                                    aiAnimation: re,
+                                    aiAnimBox: aiAnimateModal.box,
+                                    aiAnimMode: 'sketch',
+                                  }
+                                : im
+                            ),
+                          }));
+                        }
                       }}
                       className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-bold shadow-2xs cursor-pointer shrink-0"
                     >
@@ -50970,6 +50999,21 @@ export default function App() {
                                 }
                               : null
                           );
+                          if (re && aiAnimateModal.targetImageId) {
+                            updateActivePage((page) => ({
+                              ...page,
+                              images: (page.images || []).map((im) =>
+                                im.id === aiAnimateModal.targetImageId
+                                  ? {
+                                      ...im,
+                                      aiAnimation: re,
+                                      aiAnimBox: aiAnimateModal.box,
+                                      aiAnimMode: 'sketch',
+                                    }
+                                  : im
+                              ),
+                            }));
+                          }
                         }
                       }}
                       placeholder="Προαιρετική οδηγία κίνησης (π.χ. Κίνηση ψαριού, βράγχια και φυσαλίδες)..."
