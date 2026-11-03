@@ -1517,6 +1517,65 @@ function drawTextObjectForPdf(
     }
   };
 
+  if (!tx.isMath && tx.spans && tx.spans.length > 0) {
+    const padX = isMathLabel ? 4 : 12;
+    const padY = isMathLabel ? 0 : 6;
+    const rawLines = rawSource.split('\n');
+    let charOffset = 0;
+    let curTopY = tx.y + padY;
+    for (let lIdx = 0; lIdx < rawLines.length; lIdx++) {
+      const ln = rawLines[lIdx];
+      const lineStart = charOffset;
+      const lineEnd = lineStart + ln.length;
+      charOffset = lineEnd + 1;
+
+      const bSet = new Set<number>([lineStart, lineEnd]);
+      for (const sp of tx.spans) {
+        if (sp.start > lineStart && sp.start < lineEnd) bSet.add(sp.start);
+        if (sp.end > lineStart && sp.end < lineEnd) bSet.add(sp.end);
+      }
+      const bounds = Array.from(bSet).sort((a, b) => a - b);
+      let maxSzInLine = fSize;
+      const segs: { text: string; sz: number; bold: boolean; color: string }[] = [];
+      for (let i = 0; i < bounds.length - 1; i++) {
+        const s = bounds[i];
+        const e = bounds[i + 1];
+        if (e <= s) continue;
+        let segSz = fSize;
+        let segBold = Boolean(tx.bold || tx.fontFamily === 'calligraphic-bold');
+        let segColor = tx.color || '#111827';
+        for (const sp of tx.spans) {
+          if (s >= sp.start && s < sp.end) {
+            if (sp.fontSize !== undefined) segSz = sp.fontSize;
+            if (sp.bold !== undefined) segBold = sp.bold;
+            if (sp.color !== undefined) segColor = sp.color;
+          }
+        }
+        if (segSz > maxSzInLine) maxSzInLine = segSz;
+        segs.push({
+          text: rawSource.slice(s, e),
+          sz: segSz,
+          bold: segBold,
+          color: segColor,
+        });
+      }
+      const rowH = maxSzInLine * 1.35;
+      const baseY = curTopY + maxSzInLine * 0.92;
+      let curX = tx.x + padX;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      for (const seg of segs) {
+        ctx.font = makeFont(seg.sz, seg.bold);
+        ctx.fillStyle = seg.color;
+        ctx.fillText(seg.text, curX, baseY);
+        curX += ctx.measureText(seg.text).width;
+      }
+      curTopY += rowH;
+    }
+    ctx.restore();
+    return;
+  }
+
   ctx.font = makeFont(fSize);
   const rawParas = rawSource.split(/\r?\n/);
   const wrappedLines: string[] = [];

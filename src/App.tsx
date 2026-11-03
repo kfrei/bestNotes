@@ -103,6 +103,7 @@ import {
   ImageObject,
   SmartSketchAnimationSpec,
   TextObject,
+  TextStyleSpan,
   TextFontStyle,
   TapeObject,
   A4_SHORT_PX,
@@ -2124,6 +2125,16 @@ export default function App() {
   const [isConvertingHandwriting, setIsConvertingHandwriting] = useState<boolean>(false);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [activeTextRange, setActiveTextRange] = useState<{
+    textId: string;
+    start: number;
+    end: number;
+  } | null>(null);
+  const activeTextRangeRef = useRef<{
+    textId: string;
+    start: number;
+    end: number;
+  } | null>(null);
   const lastTextCreatedTimeRef = useRef<number>(0);
   const textMeasureCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const draggingTextRef = useRef<{
@@ -10174,6 +10185,212 @@ export default function App() {
         };
     }
   };
+
+  useEffect(() => {
+    const activeId = selectedTextId || editingTextId;
+    if (!activeId || (activeTextRangeRef.current && activeTextRangeRef.current.textId !== activeId)) {
+      activeTextRangeRef.current = null;
+      setActiveTextRange(null);
+    }
+  }, [selectedTextId, editingTextId]);
+
+  const getActiveRangeForText = useCallback(
+    (txtId: string, textLen: number): { start: number; end: number } | null => {
+      if (!txtId || textLen <= 0) return null;
+      const domBox = document.querySelector(`[data-text-id="${txtId}"]`);
+      const textarea = domBox?.querySelector('textarea') as HTMLTextAreaElement | null;
+      if (
+        textarea &&
+        typeof textarea.selectionStart === 'number' &&
+        typeof textarea.selectionEnd === 'number' &&
+        textarea.selectionEnd > textarea.selectionStart
+      ) {
+        const s = Math.max(0, Math.min(textLen, textarea.selectionStart));
+        const e = Math.max(0, Math.min(textLen, textarea.selectionEnd));
+        if (e > s) return { start: s, end: e };
+      }
+      const saved = activeTextRangeRef.current;
+      if (saved && saved.textId === txtId && saved.end > saved.start) {
+        const s = Math.max(0, Math.min(textLen, saved.start));
+        const e = Math.max(0, Math.min(textLen, saved.end));
+        if (e > s) return { start: s, end: e };
+      }
+      return null;
+    },
+    []
+  );
+
+  const getRangeEffectiveStyle = useCallback(
+    (
+      txt: TextObject,
+      start: number,
+      end: number
+    ): {
+      bold: boolean;
+      fontSize: number;
+      color: string;
+      fontFamily: TextFontStyle;
+    } => {
+      const baseBold = Boolean(txt.bold) || txt.fontFamily === 'calligraphic-bold';
+      const baseFont: TextFontStyle =
+        txt.fontFamily === 'calligraphic-bold' ? 'calligraphic' : txt.fontFamily || 'sans';
+      const spans = txt.spans || [];
+      if (spans.length === 0 || end <= start) {
+        return {
+          bold: baseBold,
+          fontSize: txt.fontSize,
+          color: txt.color,
+          fontFamily: baseFont,
+        };
+      }
+      let allBold = true;
+      let firstFontSize = txt.fontSize;
+      let firstColor = txt.color;
+      let firstFontFamily: TextFontStyle = baseFont;
+      for (let i = start; i < end; i++) {
+        let chBold = baseBold;
+        let chSize = txt.fontSize;
+        let chColor = txt.color;
+        let chFont: TextFontStyle = baseFont;
+        for (const sp of spans) {
+          if (i >= sp.start && i < sp.end) {
+            if (sp.bold !== undefined) chBold = sp.bold;
+            if (sp.fontSize !== undefined) chSize = sp.fontSize;
+            if (sp.color !== undefined) chColor = sp.color;
+            if (sp.fontFamily !== undefined) chFont = sp.fontFamily;
+          }
+        }
+        if (!chBold) allBold = false;
+        if (i === start) {
+          firstFontSize = chSize;
+          firstColor = chColor;
+          firstFontFamily = chFont;
+        }
+      }
+      return {
+        bold: allBold,
+        fontSize: firstFontSize,
+        color: firstColor,
+        fontFamily: firstFontFamily,
+      };
+    },
+    []
+  );
+
+  const applyStyleToTextRange = useCallback(
+    (
+      txt: TextObject,
+      start: number,
+      end: number,
+      patch: Partial<Omit<TextStyleSpan, 'start' | 'end'>>
+    ): TextStyleSpan[] => {
+      const len = (txt.text || '').length;
+      if (len === 0) return [];
+      const s0 = Math.max(0, Math.min(len, start));
+      const e0 = Math.max(0, Math.min(len, end));
+      if (e0 <= s0) return txt.spans || [];
+
+      const chars: Partial<Omit<TextStyleSpan, 'start' | 'end'>>[] = Array.from(
+        { length: len },
+        () => ({})
+      );
+      for (const sp of txt.spans || []) {
+        const spS = Math.max(0, Math.min(len, sp.start));
+        const spE = Math.max(0, Math.min(len, sp.end));
+        for (let i = spS; i < spE; i++) {
+          if (sp.bold !== undefined) chars[i].bold = sp.bold;
+          if (sp.fontSize !== undefined) chars[i].fontSize = sp.fontSize;
+          if (sp.color !== undefined) chars[i].color = sp.color;
+          if (sp.fontFamily !== undefined) chars[i].fontFamily = sp.fontFamily;
+        }
+      }
+      for (let i = s0; i < e0; i++) {
+        if (patch.bold !== undefined) chars[i].bold = patch.bold;
+        if (patch.fontSize !== undefined) chars[i].fontSize = patch.fontSize;
+        if (patch.color !== undefined) chars[i].color = patch.color;
+        if (patch.fontFamily !== undefined) chars[i].fontFamily = patch.fontFamily;
+      }
+
+      const result: TextStyleSpan[] = [];
+      let idx = 0;
+      while (idx < len) {
+        const c = chars[idx];
+        const hasAny =
+          c.bold !== undefined ||
+          c.fontSize !== undefined ||
+          c.color !== undefined ||
+          c.fontFamily !== undefined;
+        if (!hasAny) {
+          idx++;
+          continue;
+        }
+        let j = idx + 1;
+        while (
+          j < len &&
+          chars[j].bold === c.bold &&
+          chars[j].fontSize === c.fontSize &&
+          chars[j].color === c.color &&
+          chars[j].fontFamily === c.fontFamily
+        ) {
+          j++;
+        }
+        result.push({
+          start: idx,
+          end: j,
+          ...(c.bold !== undefined ? { bold: c.bold } : {}),
+          ...(c.fontSize !== undefined ? { fontSize: c.fontSize } : {}),
+          ...(c.color !== undefined ? { color: c.color } : {}),
+          ...(c.fontFamily !== undefined ? { fontFamily: c.fontFamily } : {}),
+        });
+        idx = j;
+      }
+      return result;
+    },
+    []
+  );
+
+  const adjustTextSpansOnEdit = useCallback(
+    (
+      oldText: string,
+      newText: string,
+      spans?: TextStyleSpan[]
+    ): TextStyleSpan[] | undefined => {
+      if (!spans || spans.length === 0) return undefined;
+      if (oldText === newText) return spans;
+      const oldLen = oldText.length;
+      const newLen = newText.length;
+      let prefixLen = 0;
+      const minLen = Math.min(oldLen, newLen);
+      while (prefixLen < minLen && oldText[prefixLen] === newText[prefixLen]) {
+        prefixLen++;
+      }
+      let suffixLen = 0;
+      while (
+        suffixLen < minLen - prefixLen &&
+        oldText[oldLen - 1 - suffixLen] === newText[newLen - 1 - suffixLen]
+      ) {
+        suffixLen++;
+      }
+      const oldEditEnd = oldLen - suffixLen;
+      const delta = newLen - oldLen;
+      const adjusted: TextStyleSpan[] = [];
+      for (const sp of spans) {
+        const mapPos = (pos: number, isEnd: boolean): number => {
+          if (pos < prefixLen) return pos;
+          if (pos === prefixLen) return isEnd && delta > 0 && sp.start < prefixLen ? pos + delta : pos;
+          if (pos >= oldEditEnd) return Math.max(0, Math.min(newLen, pos + delta));
+          return Math.max(0, Math.min(newLen, prefixLen + (isEnd ? Math.max(0, delta) : 0)));
+        };
+        const ns = mapPos(sp.start, false);
+        const ne = mapPos(sp.end, true);
+        if (ne > ns) {
+          adjusted.push({ ...sp, start: ns, end: ne });
+        }
+      }
+      return adjusted.length > 0 ? adjusted : undefined;
+    },
+    []
+  );
 
   // Reflows single line-wrap newlines (\n) inside a sentence/paragraph into normal spaces (' ')
   // while preserving double-newline paragraph breaks (\n\n) and bullet/numbered list items,
@@ -35357,23 +35574,61 @@ export default function App() {
 
       const activeTxtId = selectedTextId || editingTextId;
       if (activeTxtId) {
-        updateActivePage((page) => {
-          const targetTxt = (page.texts || []).find((t) => t.id === activeTxtId);
-          const clblMatch = targetTxt?.id.match(/-clbl-fn(\d+)$/);
-          const mathGrp = targetTxt?.groupId?.startsWith('math-graph-grp-') ? targetTxt.groupId : null;
-          return {
+        const curPageTxt = (activePage.texts || []).find((t) => t.id === activeTxtId);
+        const selRange = curPageTxt
+          ? getActiveRangeForText(activeTxtId, (curPageTxt.text || '').length)
+          : null;
+        if (selRange && curPageTxt && !curPageTxt.isMath) {
+          const nextRange = { textId: activeTxtId, start: selRange.start, end: selRange.end };
+          activeTextRangeRef.current = nextRange;
+          setActiveTextRange(nextRange);
+          setSelectedTextId(activeTxtId);
+          setEditingTextId(null);
+          updateActivePage((page) => ({
             ...page,
-            texts: (page.texts || []).map((t) => (t.id === activeTxtId ? { ...t, color: c } : t)),
-            strokes:
-              mathGrp && clblMatch
-                ? page.strokes.map((s) =>
-                    s.groupId === mathGrp && s.id.includes(`-crv-fn${clblMatch[1]}-`)
-                      ? { ...s, color: c }
-                      : s
-                  )
-                : page.strokes,
-          };
-        });
+            texts: (page.texts || []).map((t) =>
+              t.id === activeTxtId
+                ? {
+                    ...t,
+                    spans: applyStyleToTextRange(t, selRange.start, selRange.end, { color: c }),
+                  }
+                : t
+            ),
+          }));
+        } else {
+          updateActivePage((page) => {
+            const targetTxt = (page.texts || []).find((t) => t.id === activeTxtId);
+            const clblMatch = targetTxt?.id.match(/-clbl-fn(\d+)$/);
+            const mathGrp = targetTxt?.groupId?.startsWith('math-graph-grp-')
+              ? targetTxt.groupId
+              : null;
+            return {
+              ...page,
+              texts: (page.texts || []).map((t) =>
+                t.id === activeTxtId
+                  ? {
+                      ...t,
+                      color: c,
+                      spans: t.spans
+                        ? t.spans.map((sp) => {
+                            const { color: _unusedColor, ...rest } = sp;
+                            return rest;
+                          })
+                        : undefined,
+                    }
+                  : t
+              ),
+              strokes:
+                mathGrp && clblMatch
+                  ? page.strokes.map((s) =>
+                      s.groupId === mathGrp && s.id.includes(`-crv-fn${clblMatch[1]}-`)
+                        ? { ...s, color: c }
+                        : s
+                    )
+                  : page.strokes,
+            };
+          });
+        }
       }
       const baseIds =
         selectedStrokeIds.length > 0
@@ -48571,182 +48826,457 @@ export default function App() {
                           )}
 
                           {/* Floating Quick Format & Drag Pill above (or below when near top edge) Selected/Editing Text Box */}
-                          {(isSelectedTxt || isEditingTxt) && (
-                            <div
-                              data-text-drag="true"
-                              onMouseDown={(ev) => ev.preventDefault()}
-                              style={{
-                                left: txt.x < 8 ? `${8 - txt.x}px` : '0px',
-                                touchAction: 'none',
-                                WebkitUserSelect: 'none',
-                                userSelect: 'none',
-                                fontFamily:
-                                  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                                fontStyle: 'normal',
-                                fontStretch: 'normal',
-                                letterSpacing: 'normal',
-                                WebkitTextStroke: '0px',
-                              }}
-                              className={`absolute ${
-                                txt.y < 52 ? '-bottom-14' : '-top-14'
-                              } flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing`}
-                            >
-                              <span
-                                className="px-1 py-0.5 text-sky-300 font-normal select-none"
-                                title="Σύρετε με το δάχτυλο ή το πενάκι για μετακίνηση του παραθύρου κειμένου"
-                              >
-                                ✥ Σύρετε
-                              </span>
-                              <div className="h-3 w-px bg-white/20 mx-0.5" />
-                              {!txt.isMath && (
-                                <button
-                                  type="button"
+                          {(isSelectedTxt || isEditingTxt) &&
+                            (() => {
+                              const activeSubRange =
+                                !txt.isMath &&
+                                activeTextRange?.textId === txt.id &&
+                                activeTextRange.end > activeTextRange.start
+                                  ? {
+                                      start: Math.max(
+                                        0,
+                                        Math.min((txt.text || '').length, activeTextRange.start)
+                                      ),
+                                      end: Math.max(
+                                        0,
+                                        Math.min((txt.text || '').length, activeTextRange.end)
+                                      ),
+                                    }
+                                  : null;
+                              const hasValidSubRange = Boolean(
+                                activeSubRange && activeSubRange.end > activeSubRange.start
+                              );
+                              const effectiveSubStyle =
+                                hasValidSubRange && activeSubRange
+                                  ? getRangeEffectiveStyle(txt, activeSubRange.start, activeSubRange.end)
+                                  : null;
+                              const displayedFontFamily = effectiveSubStyle
+                                ? effectiveSubStyle.fontFamily
+                                : txt.fontFamily;
+                              const displayedBold = effectiveSubStyle
+                                ? effectiveSubStyle.bold
+                                : Boolean(txt.bold || txt.fontFamily === 'calligraphic-bold');
+                              const displayedFontSize = effectiveSubStyle
+                                ? effectiveSubStyle.fontSize
+                                : txt.fontSize;
+                              const displayedColor = effectiveSubStyle
+                                ? effectiveSubStyle.color
+                                : txt.color;
+
+                              return (
+                                <div
+                                  data-text-drag="true"
                                   onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => {
-                                    const order: TextFontStyle[] = [
-                                      'calligraphic',
-                                      'marker',
-                                      'mansalva',
-                                      'handwritten',
-                                      'neohellenic',
-                                      'sans',
-                                    ];
-                                    const rawCur = txt.fontFamily || 'sans';
-                                    const cur: TextFontStyle =
-                                      rawCur === 'calligraphic-bold' ? 'calligraphic' : rawCur;
-                                    const nextFont = order[(order.indexOf(cur) + 1) % order.length];
-                                    setTextFontFamily(nextFont);
-                                    updateActivePage((page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).map((t) => {
-                                        if (t.id !== txt.id) return t;
-                                        const effBold =
-                                          Boolean(t.bold) || t.fontFamily === 'calligraphic-bold';
-                                        const nextFs =
-                                          t.boxWidth && t.boxHeight
-                                            ? computeMaxFitFontSizeForBox(
-                                                t.text,
-                                                nextFont,
-                                                effBold,
-                                                t.boxWidth,
-                                                t.boxHeight
-                                              )
-                                            : t.fontSize;
-                                        if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                                        return {
-                                          ...t,
-                                          fontFamily: nextFont,
-                                          bold: effBold,
-                                          fontSize: nextFs,
-                                        };
-                                      }),
-                                    }));
+                                  style={{
+                                    left: txt.x < 8 ? `${8 - txt.x}px` : '0px',
+                                    touchAction: 'none',
+                                    WebkitUserSelect: 'none',
+                                    userSelect: 'none',
+                                    fontFamily:
+                                      'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                                    fontStyle: 'normal',
+                                    fontStretch: 'normal',
+                                    letterSpacing: 'normal',
+                                    WebkitTextStroke: '0px',
                                   }}
-                                  className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
-                                  title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
+                                  className={`absolute ${
+                                    txt.y < 52 ? '-bottom-14' : '-top-14'
+                                  } flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing`}
                                 >
-                                  {txt.fontFamily === 'calligraphic' ||
-                                  txt.fontFamily === 'calligraphic-bold'
-                                    ? '✍️ Καλλιγραφική'
-                                    : txt.fontFamily === 'marker'
-                                    ? '✒️ Πένα'
-                                    : txt.fontFamily === 'mansalva'
-                                    ? '🖊️ Μαρκαδ.'
-                                    : txt.fontFamily === 'handwritten'
-                                    ? '📝 Χειρόγρ.'
-                                    : txt.fontFamily === 'neohellenic'
-                                    ? '🖋️ Ρέουσα'
-                                    : '🔤 Τυπωμ.'}
-                                </button>
-                              )}
-                              {!txt.isMath && (
-                                <button
-                                  type="button"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => {
-                                    const curBold =
-                                      Boolean(txt.bold) || txt.fontFamily === 'calligraphic-bold';
-                                    const nextB = !curBold;
-                                    setTextBold(nextB);
-                                    updateActivePage((page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).map((t) => {
-                                        if (t.id !== txt.id) return t;
-                                        const normFont: TextFontStyle =
-                                          t.fontFamily === 'calligraphic-bold'
-                                            ? 'calligraphic'
-                                            : t.fontFamily || 'sans';
-                                        const nextFs =
-                                          t.boxWidth && t.boxHeight
-                                            ? computeMaxFitFontSizeForBox(
-                                                t.text,
-                                                normFont,
-                                                nextB,
-                                                t.boxWidth,
-                                                t.boxHeight
-                                              )
-                                            : t.fontSize;
-                                        if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                                        return {
-                                          ...t,
-                                          fontFamily: normFont,
-                                          bold: nextB,
-                                          fontSize: nextFs,
+                                  <span
+                                    className="px-1 py-0.5 text-sky-300 font-normal select-none"
+                                    title="Σύρετε με το δάχτυλο ή το πενάκι για μετακίνηση του παραθύρου κειμένου"
+                                  >
+                                    ✥ Σύρετε
+                                  </span>
+                                  {hasValidSubRange && (
+                                    <button
+                                      type="button"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        activeTextRangeRef.current = null;
+                                        setActiveTextRange(null);
+                                      }}
+                                      className="px-1.5 py-0.5 rounded bg-sky-500/35 hover:bg-sky-500/55 text-sky-100 text-[10px] font-semibold cursor-pointer"
+                                      title="Εφαρμογή αλλαγών μόνο στο μαρκαρισμένο τμήμα (κλικ για επιστροφή σε όλο το πλαίσιο)"
+                                    >
+                                      ✂ Επιλογή ✕
+                                    </button>
+                                  )}
+                                  <div className="h-3 w-px bg-white/20 mx-0.5" />
+                                  {!txt.isMath && (
+                                    <button
+                                      type="button"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        const order: TextFontStyle[] = [
+                                          'calligraphic',
+                                          'marker',
+                                          'mansalva',
+                                          'handwritten',
+                                          'neohellenic',
+                                          'sans',
+                                        ];
+                                        const liveRange = getActiveRangeForText(
+                                          txt.id,
+                                          (txt.text || '').length
+                                        );
+                                        if (liveRange) {
+                                          const curSub = getRangeEffectiveStyle(
+                                            txt,
+                                            liveRange.start,
+                                            liveRange.end
+                                          );
+                                          const nextFont =
+                                            order[(order.indexOf(curSub.fontFamily) + 1) % order.length];
+                                          const nextRng = {
+                                            textId: txt.id,
+                                            start: liveRange.start,
+                                            end: liveRange.end,
+                                          };
+                                          activeTextRangeRef.current = nextRng;
+                                          setActiveTextRange(nextRng);
+                                          setSelectedTextId(txt.id);
+                                          setEditingTextId(null);
+                                          updateActivePage((page) => ({
+                                            ...page,
+                                            texts: (page.texts || []).map((t) =>
+                                              t.id === txt.id
+                                                ? {
+                                                    ...t,
+                                                    spans: applyStyleToTextRange(
+                                                      t,
+                                                      liveRange.start,
+                                                      liveRange.end,
+                                                      { fontFamily: nextFont }
+                                                    ),
+                                                  }
+                                                : t
+                                            ),
+                                          }));
+                                          return;
+                                        }
+                                        const rawCur = txt.fontFamily || 'sans';
+                                        const cur: TextFontStyle =
+                                          rawCur === 'calligraphic-bold' ? 'calligraphic' : rawCur;
+                                        const nextFont = order[(order.indexOf(cur) + 1) % order.length];
+                                        setTextFontFamily(nextFont);
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) => {
+                                            if (t.id !== txt.id) return t;
+                                            const effBold =
+                                              Boolean(t.bold) || t.fontFamily === 'calligraphic-bold';
+                                            const nextFs =
+                                              t.boxWidth && t.boxHeight
+                                                ? computeMaxFitFontSizeForBox(
+                                                    t.text,
+                                                    nextFont,
+                                                    effBold,
+                                                    t.boxWidth,
+                                                    t.boxHeight
+                                                  )
+                                                : t.fontSize;
+                                            if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                                            return {
+                                              ...t,
+                                              fontFamily: nextFont,
+                                              bold: effBold,
+                                              fontSize: nextFs,
+                                            };
+                                          }),
+                                        }));
+                                      }}
+                                      className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
+                                      title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
+                                    >
+                                      {displayedFontFamily === 'calligraphic' ||
+                                      displayedFontFamily === 'calligraphic-bold'
+                                        ? '✍️ Καλλιγραφική'
+                                        : displayedFontFamily === 'marker'
+                                        ? '✒️ Πένα'
+                                        : displayedFontFamily === 'mansalva'
+                                        ? '🖊️ Μαρκαδ.'
+                                        : displayedFontFamily === 'handwritten'
+                                        ? '📝 Χειρόγρ.'
+                                        : displayedFontFamily === 'neohellenic'
+                                        ? '🖋️ Ρέουσα'
+                                        : '🔤 Τυπωμ.'}
+                                    </button>
+                                  )}
+                                  {!txt.isMath && (
+                                    <button
+                                      type="button"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        const liveRange = getActiveRangeForText(
+                                          txt.id,
+                                          (txt.text || '').length
+                                        );
+                                        if (liveRange) {
+                                          const curSub = getRangeEffectiveStyle(
+                                            txt,
+                                            liveRange.start,
+                                            liveRange.end
+                                          );
+                                          const nextB = !curSub.bold;
+                                          const nextRng = {
+                                            textId: txt.id,
+                                            start: liveRange.start,
+                                            end: liveRange.end,
+                                          };
+                                          activeTextRangeRef.current = nextRng;
+                                          setActiveTextRange(nextRng);
+                                          setSelectedTextId(txt.id);
+                                          setEditingTextId(null);
+                                          updateActivePage((page) => ({
+                                            ...page,
+                                            texts: (page.texts || []).map((t) =>
+                                              t.id === txt.id
+                                                ? {
+                                                    ...t,
+                                                    spans: applyStyleToTextRange(
+                                                      t,
+                                                      liveRange.start,
+                                                      liveRange.end,
+                                                      { bold: nextB }
+                                                    ),
+                                                  }
+                                                : t
+                                            ),
+                                          }));
+                                          return;
+                                        }
+                                        const curBold =
+                                          Boolean(txt.bold) || txt.fontFamily === 'calligraphic-bold';
+                                        const nextB = !curBold;
+                                        setTextBold(nextB);
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) => {
+                                            if (t.id !== txt.id) return t;
+                                            const normFont: TextFontStyle =
+                                              t.fontFamily === 'calligraphic-bold'
+                                                ? 'calligraphic'
+                                                : t.fontFamily || 'sans';
+                                            const nextFs =
+                                              t.boxWidth && t.boxHeight
+                                                ? computeMaxFitFontSizeForBox(
+                                                    t.text,
+                                                    normFont,
+                                                    nextB,
+                                                    t.boxWidth,
+                                                    t.boxHeight
+                                                  )
+                                                : t.fontSize;
+                                            if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                                            return {
+                                              ...t,
+                                              fontFamily: normFont,
+                                              bold: nextB,
+                                              fontSize: nextFs,
+                                            };
+                                          }),
+                                        }));
+                                      }}
+                                      className={`px-1.5 py-0.5 rounded font-normal cursor-pointer ${
+                                        displayedBold
+                                          ? 'bg-[#0066ff] text-white'
+                                          : 'hover:bg-white/15 text-slate-200'
+                                      }`}
+                                      title="Bold (Έντονα — στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
+                                    >
+                                      B
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => {
+                                      const liveRange = getActiveRangeForText(
+                                        txt.id,
+                                        (txt.text || '').length
+                                      );
+                                      if (liveRange && !txt.isMath) {
+                                        const curSub = getRangeEffectiveStyle(
+                                          txt,
+                                          liveRange.start,
+                                          liveRange.end
+                                        );
+                                        const nextSz = Math.max(8, curSub.fontSize - 2);
+                                        const nextRng = {
+                                          textId: txt.id,
+                                          start: liveRange.start,
+                                          end: liveRange.end,
                                         };
-                                      }),
-                                    }));
-                                  }}
-                                  className={`px-1.5 py-0.5 rounded font-normal cursor-pointer ${
-                                    txt.bold || txt.fontFamily === 'calligraphic-bold'
-                                      ? 'bg-[#0066ff] text-white'
-                                      : 'hover:bg-white/15 text-slate-200'
-                                  }`}
-                                  title="Bold (Έντονα)"
-                                >
-                                  B
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => {
-                                  const nextSz = Math.max(8, txt.fontSize - 2);
-                                  setTextFontSize(nextSz);
-                                  updateActivePage((page) => ({
-                                    ...page,
-                                    texts: (page.texts || []).map((t) =>
-                                      t.id === txt.id
-                                        ? { ...t, fontSize: nextSz, boxWidth: undefined, boxHeight: undefined }
-                                        : t
-                                    ),
-                                  }));
-                                }}
-                                className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
-                                title="Μικρότερη γραμματοσειρά"
-                              >
-                                A-
-                              </button>
-                              <span className="text-[10px] font-normal text-sky-200 px-0.5">{txt.fontSize}px</span>
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => {
-                                  const nextSz = Math.min(160, txt.fontSize + 2);
-                                  setTextFontSize(nextSz);
-                                  updateActivePage((page) => ({
-                                    ...page,
-                                    texts: (page.texts || []).map((t) =>
-                                      t.id === txt.id
-                                        ? { ...t, fontSize: nextSz, boxWidth: undefined, boxHeight: undefined }
-                                        : t
-                                    ),
-                                  }));
-                                }}
-                                className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
-                                title="Μεγαλύτερη γραμματοσειρά"
-                              >
-                                A+
-                              </button>
+                                        activeTextRangeRef.current = nextRng;
+                                        setActiveTextRange(nextRng);
+                                        setSelectedTextId(txt.id);
+                                        setEditingTextId(null);
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id
+                                              ? {
+                                                  ...t,
+                                                  boxWidth: undefined,
+                                                  boxHeight: undefined,
+                                                  spans: applyStyleToTextRange(
+                                                    t,
+                                                    liveRange.start,
+                                                    liveRange.end,
+                                                    { fontSize: nextSz }
+                                                  ),
+                                                }
+                                              : t
+                                          ),
+                                        }));
+                                        return;
+                                      }
+                                      const nextSz = Math.max(8, txt.fontSize - 2);
+                                      const deltaSz = nextSz - txt.fontSize;
+                                      setTextFontSize(nextSz);
+                                      updateActivePage((page) => ({
+                                        ...page,
+                                        texts: (page.texts || []).map((t) =>
+                                          t.id === txt.id
+                                            ? {
+                                                ...t,
+                                                fontSize: nextSz,
+                                                boxWidth: undefined,
+                                                boxHeight: undefined,
+                                                spans: t.spans
+                                                  ? t.spans.map((sp) =>
+                                                      sp.fontSize !== undefined
+                                                        ? {
+                                                            ...sp,
+                                                            fontSize: Math.max(
+                                                              8,
+                                                              sp.fontSize + deltaSz
+                                                            ),
+                                                          }
+                                                        : sp
+                                                    )
+                                                  : undefined,
+                                              }
+                                            : t
+                                        ),
+                                      }));
+                                    }}
+                                    className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    title="Μικρότερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
+                                  >
+                                    A-
+                                  </button>
+                                  <span className="text-[10px] font-normal text-sky-200 px-0.5">
+                                    {displayedFontSize}px
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => {
+                                      const liveRange = getActiveRangeForText(
+                                        txt.id,
+                                        (txt.text || '').length
+                                      );
+                                      if (liveRange && !txt.isMath) {
+                                        const curSub = getRangeEffectiveStyle(
+                                          txt,
+                                          liveRange.start,
+                                          liveRange.end
+                                        );
+                                        const nextSz = Math.min(160, curSub.fontSize + 2);
+                                        const nextRng = {
+                                          textId: txt.id,
+                                          start: liveRange.start,
+                                          end: liveRange.end,
+                                        };
+                                        activeTextRangeRef.current = nextRng;
+                                        setActiveTextRange(nextRng);
+                                        setSelectedTextId(txt.id);
+                                        setEditingTextId(null);
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id
+                                              ? {
+                                                  ...t,
+                                                  boxWidth: undefined,
+                                                  boxHeight: undefined,
+                                                  spans: applyStyleToTextRange(
+                                                    t,
+                                                    liveRange.start,
+                                                    liveRange.end,
+                                                    { fontSize: nextSz }
+                                                  ),
+                                                }
+                                              : t
+                                          ),
+                                        }));
+                                        return;
+                                      }
+                                      const nextSz = Math.min(160, txt.fontSize + 2);
+                                      const deltaSz = nextSz - txt.fontSize;
+                                      setTextFontSize(nextSz);
+                                      updateActivePage((page) => ({
+                                        ...page,
+                                        texts: (page.texts || []).map((t) =>
+                                          t.id === txt.id
+                                            ? {
+                                                ...t,
+                                                fontSize: nextSz,
+                                                boxWidth: undefined,
+                                                boxHeight: undefined,
+                                                spans: t.spans
+                                                  ? t.spans.map((sp) =>
+                                                      sp.fontSize !== undefined
+                                                        ? {
+                                                            ...sp,
+                                                            fontSize: Math.min(
+                                                              160,
+                                                              sp.fontSize + deltaSz
+                                                            ),
+                                                          }
+                                                        : sp
+                                                    )
+                                                  : undefined,
+                                              }
+                                            : t
+                                        ),
+                                      }));
+                                    }}
+                                    className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    title="Μεγαλύτερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
+                                  >
+                                    A+
+                                  </button>
+                                  {/* Quick Color Swatches for Selected Substring / Text Box */}
+                                  {!txt.isMath && (
+                                    <div className="flex items-center gap-1 bg-white/10 px-1.5 py-0.5 rounded-full">
+                                      {[
+                                        '#111827',
+                                        '#2563eb',
+                                        '#dc2626',
+                                        '#16a34a',
+                                        '#9333ea',
+                                        '#ea580c',
+                                      ].map((swColor) => (
+                                        <button
+                                          key={swColor}
+                                          type="button"
+                                          onMouseDown={(ev) => ev.preventDefault()}
+                                          onClick={() => applyColorToSelection(swColor)}
+                                          style={{ backgroundColor: swColor }}
+                                          className={`w-3.5 h-3.5 rounded-full cursor-pointer transition-transform hover:scale-115 ${
+                                            displayedColor?.toLowerCase() === swColor
+                                              ? 'ring-2 ring-white scale-110'
+                                              : 'border border-white/40'
+                                          }`}
+                                          title="Αλλαγή χρώματος (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
                               {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) right after A+ */}
                               <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded">
                                 <button
@@ -48941,8 +49471,9 @@ export default function App() {
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-white stroke-[2.3]" />
                               </button>
-                            </div>
-                          )}
+                                </div>
+                              );
+                            })()}
 
                           {isEditingTxt ? (
                             <textarea
@@ -48950,13 +49481,68 @@ export default function App() {
                               {...({ writingsuggestions: 'false' } as any)}
                               ref={(el) => {
                                 if (el && document.activeElement !== el) {
-                                  window.requestAnimationFrame(() => el.focus());
+                                  window.requestAnimationFrame(() => {
+                                    el.focus();
+                                    const savedRng = activeTextRangeRef.current;
+                                    if (
+                                      savedRng &&
+                                      savedRng.textId === txt.id &&
+                                      savedRng.end > savedRng.start
+                                    ) {
+                                      try {
+                                        el.setSelectionRange(savedRng.start, savedRng.end);
+                                      } catch {
+                                        // ignore
+                                      }
+                                    }
+                                  });
                                 }
                               }}
                               value={txt.text}
                               placeholder="Γράψε κείμενο..."
+                              onSelect={(ev) => {
+                                const el = ev.currentTarget;
+                                const s = el.selectionStart ?? 0;
+                                const e = el.selectionEnd ?? 0;
+                                if (e > s) {
+                                  const nextRng = { textId: txt.id, start: s, end: e };
+                                  activeTextRangeRef.current = nextRng;
+                                  setActiveTextRange(nextRng);
+                                } else if (activeTextRangeRef.current?.textId === txt.id) {
+                                  activeTextRangeRef.current = null;
+                                  setActiveTextRange(null);
+                                }
+                              }}
+                              onKeyUp={(ev) => {
+                                const el = ev.currentTarget;
+                                const s = el.selectionStart ?? 0;
+                                const e = el.selectionEnd ?? 0;
+                                if (e > s) {
+                                  const nextRng = { textId: txt.id, start: s, end: e };
+                                  activeTextRangeRef.current = nextRng;
+                                  setActiveTextRange(nextRng);
+                                } else if (activeTextRangeRef.current?.textId === txt.id) {
+                                  activeTextRangeRef.current = null;
+                                  setActiveTextRange(null);
+                                }
+                              }}
+                              onMouseUp={(ev) => {
+                                const el = ev.currentTarget;
+                                const s = el.selectionStart ?? 0;
+                                const e = el.selectionEnd ?? 0;
+                                if (e > s) {
+                                  const nextRng = { textId: txt.id, start: s, end: e };
+                                  activeTextRangeRef.current = nextRng;
+                                  setActiveTextRange(nextRng);
+                                } else if (activeTextRangeRef.current?.textId === txt.id) {
+                                  activeTextRangeRef.current = null;
+                                  setActiveTextRange(null);
+                                }
+                              }}
                               onChange={(ev) => {
                                 const val = ev.target.value;
+                                activeTextRangeRef.current = null;
+                                setActiveTextRange(null);
                                 updateActivePage(
                                   (page) => ({
                                     ...page,
@@ -48978,6 +49564,7 @@ export default function App() {
                                         text: val,
                                         latex: t.isMath ? convertPlainTextToMathLatex(val) : t.latex,
                                         fontSize: nextFs,
+                                        spans: adjustTextSpansOnEdit(t.text || '', val, t.spans),
                                       };
                                     }),
                                   }),
@@ -49191,7 +49778,10 @@ export default function App() {
                                   );
                                 })()
                               ) : txt.text &&
-                              (txt.text.includes('_') ||
+                              ((txt.spans && txt.spans.length > 0) ||
+                                (activeTextRange?.textId === txt.id &&
+                                  activeTextRange.end > activeTextRange.start) ||
+                                txt.text.includes('_') ||
                                 txt.text.includes('^') ||
                                 txt.id.endsWith('-multi')) ? (
                                 (() => {
@@ -49255,6 +49845,78 @@ export default function App() {
                                                 {renderLineTokens(ln)}
                                               </span>
                                             </React.Fragment>
+                                          );
+                                        })}
+                                      </span>
+                                    );
+                                  }
+                                  if (
+                                    (txt.spans && txt.spans.length > 0) ||
+                                    (activeTextRange?.textId === txt.id &&
+                                      activeTextRange.end > activeTextRange.start)
+                                  ) {
+                                    const fullStr = txt.text;
+                                    const bSet = new Set<number>([0, fullStr.length]);
+                                    for (const sp of txt.spans || []) {
+                                      bSet.add(Math.max(0, Math.min(fullStr.length, sp.start)));
+                                      bSet.add(Math.max(0, Math.min(fullStr.length, sp.end)));
+                                    }
+                                    const activeSub =
+                                      activeTextRange?.textId === txt.id &&
+                                      activeTextRange.end > activeTextRange.start
+                                        ? {
+                                            start: Math.max(
+                                              0,
+                                              Math.min(fullStr.length, activeTextRange.start)
+                                            ),
+                                            end: Math.max(
+                                              0,
+                                              Math.min(fullStr.length, activeTextRange.end)
+                                            ),
+                                          }
+                                        : null;
+                                    if (activeSub && activeSub.end > activeSub.start) {
+                                      bSet.add(activeSub.start);
+                                      bSet.add(activeSub.end);
+                                    }
+                                    const sortedBounds = Array.from(bSet).sort((a, b) => a - b);
+                                    return (
+                                      <span>
+                                        {sortedBounds.slice(0, -1).map((bStart, bIdx) => {
+                                          const bEnd = sortedBounds[bIdx + 1];
+                                          if (bEnd <= bStart) return null;
+                                          const segText = fullStr.slice(bStart, bEnd);
+                                          const segStyle = getRangeEffectiveStyle(
+                                            txt,
+                                            bStart,
+                                            bEnd
+                                          );
+                                          const segCss = getTextFontCss(
+                                            segStyle.fontFamily,
+                                            segStyle.bold
+                                          );
+                                          const isSubHighlighted = Boolean(
+                                            (isSelectedTxt || isEditingTxt) &&
+                                              activeSub &&
+                                              bStart >= activeSub.start &&
+                                              bEnd <= activeSub.end
+                                          );
+                                          return (
+                                            <span
+                                              key={bStart}
+                                              style={{
+                                                ...segCss,
+                                                fontSize: `${segStyle.fontSize}px`,
+                                                color: segStyle.color,
+                                                fontWeight: segStyle.bold ? 700 : 500,
+                                                backgroundColor: isSubHighlighted
+                                                  ? 'rgba(56, 189, 248, 0.25)'
+                                                  : undefined,
+                                                borderRadius: isSubHighlighted ? '3px' : undefined,
+                                              }}
+                                            >
+                                              {renderLineTokens(segText)}
+                                            </span>
                                           );
                                         })}
                                       </span>

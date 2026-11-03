@@ -120,6 +120,15 @@ export type TextFontStyle =
   | 'marker'
   | 'mansalva';
 
+export interface TextStyleSpan {
+  start: number; // Inclusive character index in text
+  end: number;   // Exclusive character index in text
+  bold?: boolean;
+  fontSize?: number;
+  color?: string;
+  fontFamily?: TextFontStyle;
+}
+
 export interface TextObject {
   id: string;
   x: number;
@@ -134,6 +143,7 @@ export interface TextObject {
   bold?: boolean;
   fontFamily?: TextFontStyle;
   textAlign?: 'left' | 'center' | 'right';
+  spans?: TextStyleSpan[];
   chemRawInput?: string; // Original user input for ChemOCR / Chemistry check so missing/wrong subscripts & coefficients are highlighted in red
   layerId: string;
   groupId?: string;
