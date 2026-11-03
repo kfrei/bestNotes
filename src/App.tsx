@@ -2019,6 +2019,7 @@ export default function App() {
     box: { x: number; y: number; width: number; height: number };
     spec: SmartSketchAnimationSpec | null;
     omniPrompt: string;
+    sketchHint?: string;
     videoDataUrl: string | null;
     activeTab: 'sketch' | 'omni';
     isAnalyzing: boolean;
@@ -50903,8 +50904,8 @@ export default function App() {
             {aiAnimateModal.activeTab === 'sketch' ? (
               <div className="space-y-3">
                 {aiAnimateModal.spec && (
-                  <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/80 space-y-2">
-                    <div className="flex items-center justify-between">
+                  <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/80 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold text-indigo-950">
                         ✨ Αναγνωρίστηκαν {aiAnimateModal.spec.effects.length} ζώνες κίνησης & φυσικός ήχος:
                       </span>
@@ -50914,7 +50915,8 @@ export default function App() {
                           setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
                           const re = await analyzeImageForSmartSketchAnimation(
                             aiAnimateModal.snapshotDataUrl,
-                            customGeminiKey
+                            customGeminiKey,
+                            aiAnimateModal.sketchHint
                           );
                           setAiAnimateModal((prev) =>
                             prev
@@ -50927,7 +50929,7 @@ export default function App() {
                               : null
                           );
                         }}
-                        className="text-[11px] font-semibold text-indigo-700 hover:underline cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-2xs cursor-pointer shrink-0"
                       >
                         🔄 Επανανάλυση
                       </button>
@@ -50941,6 +50943,40 @@ export default function App() {
                           • {ef.label || ef.type}
                         </span>
                       ))}
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <input
+                        type="text"
+                        value={aiAnimateModal.sketchHint || ''}
+                        onChange={(e) =>
+                          setAiAnimateModal((prev) =>
+                            prev ? { ...prev, sketchHint: e.target.value } : null
+                          )
+                        }
+                        onKeyDown={async (e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setAiAnimateModal((prev) => (prev ? { ...prev, isAnalyzing: true } : null));
+                            const re = await analyzeImageForSmartSketchAnimation(
+                              aiAnimateModal.snapshotDataUrl,
+                              customGeminiKey,
+                              aiAnimateModal.sketchHint
+                            );
+                            setAiAnimateModal((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    isAnalyzing: false,
+                                    spec: re || prev.spec,
+                                    omniPrompt: re?.omniPrompt || prev.omniPrompt,
+                                  }
+                                : null
+                            );
+                          }
+                        }}
+                        placeholder="Προαιρετική οδηγία κίνησης (π.χ. Δάγκωμα και μάσημα μήλου, κίνηση χεριού)..."
+                        className="flex-1 px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-[11px] text-slate-800 outline-none focus:border-indigo-500 select-text"
+                      />
                     </div>
                   </div>
                 )}

@@ -151,6 +151,10 @@ export interface SmartSketchEffectRegion {
     | 'flow_arrow'
     | 'sliding_body'
     | 'projectile_ball'
+    | 'bite_chew'
+    | 'limb_motion'
+    | 'pulse_breathe'
+    | 'spin_wheel'
     | 'sparkles';
   label?: string;
   box: [number, number, number, number]; // [ymin, xmin, ymax, xmax] in 0..1000 normalized coords
@@ -167,6 +171,8 @@ export interface SmartSketchSoundscape {
   river?: number; // 0..1
   waves?: number; // 0..1
   wind?: number; // 0..1
+  crunch?: number; // 0..1 (biting / chewing crisp apple or food)
+  whoosh?: number; // 0..1 (physical body motion / swing / throw)
 }
 
 export interface SmartSketchAnimationSpec {

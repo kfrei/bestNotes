@@ -16710,7 +16710,8 @@ async function flattenImageOnPaperForAi(
  */
 export async function analyzeImageForSmartSketchAnimation(
   imageDataUrl: string,
-  customApiKey?: string
+  customApiKey?: string,
+  userHint?: string
 ): Promise<SmartSketchAnimationSpec | null> {
   const apiKey = getEffectiveGeminiApiKey(customApiKey);
   if (!apiKey) return null;
@@ -16718,23 +16719,29 @@ export async function analyzeImageForSmartSketchAnimation(
   const flat = await flattenImageOnPaperForAi(imageDataUrl, 1024);
   if (!flat) return null;
 
-  const prompt = `Analyze this educational illustration / sketch / diagram carefully so we can bring it to life with subtle, artistic animation in its EXACT pen-and-ink / sketch style, plus natural ambient sound.
+  const hintClause = userHint?.trim()
+    ? `\nUSER HINT / PRIMARY ACTION REQUESTED: "${userHint.trim()}". Prioritize animating this exact action!`
+    : '';
+
+  const prompt = `Analyze this educational illustration / sketch / character drawing / diagram carefully so we can bring it to life with expressive, realistic animation of its actual drawn parts in its EXACT pen-and-ink / sketch style, plus matching sound effects.${hintClause}
 
 Return STRICTLY a valid JSON object matching this exact schema (no markdown fences, no commentary):
 {
-  "sceneTitle": "Short Greek title of what the image depicts (e.g. 'Ο Κύκλος του Νερού')",
-  "omniPrompt": "<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact illustration while strictly keeping its exact hand-drawn pen-and-ink / sketch art style, line weight, and background. Describe the specific elements in this image moving naturally (e.g. raindrops falling from the cloud onto the mountain, water flowing down the winding river and waterfall into the sea, wavy evaporation vapor lines rising from the water toward the clouds, sun rays gently shimmering, clouds drifting slowly). Keep everything else the same. Sound design: describe natural ambient sound effects matching the scene (e.g. gentle rain falling, flowing river water, soft breeze). No dialogue.",
+  "sceneTitle": "Short Greek title of what the image depicts (e.g. 'Το Αγόρι και το Μήλο', 'Ο Κύκλος του Νερού', 'Κίνηση σε Κεκλιμένο')",
+  "omniPrompt": "<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact illustration while strictly keeping its exact hand-drawn pen-and-ink / sketch art style, line weight, and background. Describe the specific physical actions or natural elements in this image moving naturally (e.g. the boy taking a big crisp bite of the green apple and chewing happily while his hand presses the apple to his mouth and the small leaf flutters away; or raindrops falling, river flowing, etc.). Keep everything else the same. Sound design: describe natural sound effects matching the action (e.g. crisp apple bite crunch and rhythmic chewing; or gentle rain and river). No dialogue.",
   "soundscape": {
     "rain": 0.0 to 1.0,
     "river": 0.0 to 1.0,
     "waves": 0.0 to 1.0,
-    "wind": 0.0 to 1.0
+    "wind": 0.0 to 1.0,
+    "crunch": 0.0 to 1.0,
+    "whoosh": 0.0 to 1.0
   },
   "effects": [
     {
       "id": "unique-id-1",
-      "type": "rain" | "evaporation" | "water_flow" | "waves" | "sun_rays" | "cloud_drift" | "flow_arrow" | "sliding_body" | "projectile_ball" | "sparkles",
-      "label": "Short Greek label (e.g. 'Βροχόπτωση', 'Εξάτμιση', 'Ακτίνες Ήλιου', 'Κίνηση Σώματος', 'Παραβολική Τροχιά')",
+      "type": "bite_chew" | "limb_motion" | "pulse_breathe" | "spin_wheel" | "sliding_body" | "projectile_ball" | "rain" | "evaporation" | "water_flow" | "waves" | "sun_rays" | "cloud_drift" | "flow_arrow" | "sparkles",
+      "label": "Short Greek label (e.g. 'Δάγκωμα & Μάσημα', 'Κίνηση Χεριού & Μήλου', 'Κίνηση Κεφαλιού', 'Πέταγμα Φύλλου', 'Βροχόπτωση', 'Κίνηση Σώματος')",
       "box": [ymin, xmin, ymax, xmax],
       "bodyBox": [ymin, xmin, ymax, xmax],
       "pathPoints": [[x0, y0], [x1, y1], ...],
@@ -16748,28 +16755,36 @@ Return STRICTLY a valid JSON object matching this exact schema (no markdown fenc
 
 IMPORTANT RULES FOR "effects":
 1. Coordinates [ymin, xmin, ymax, xmax] and [x, y] MUST be integers from 0 to 1000 (where [0,0] is top-left and [1000,1000] is bottom-right of THIS exact image; note that "box" and "bodyBox" are [ymin, xmin, ymax, xmax], whereas "pathPoints" items are [x, y] where x is horizontal 0..1000 and y is vertical 0..1000).
-2. STRICT TIGHT BOUNDING BOXES — NEVER EXPAND INTO EMPTY MARGINS:
-   For nature effects, each "box" [ymin, xmin, ymax, xmax] MUST tightly hug ONLY the actual drawn ink pixels of that specific element in the image! NEVER place or extend a box into blank/white/empty background space to the right, left, top, or bottom of the drawing.
-3. Detect the distinct animated zones visible in the drawing:
-   A) NATURE & SCIENCE DIAGRAMS:
-      - "rain": tightly around the drawn rain lines between the cloud and mountain (set angleDeg to match the slant of the rain lines, e.g. 105 for slightly left-slanted downward rain, or 90 for vertical).
-      - "evaporation": tightly around the drawn wavy upward evaporation arrows (angleDeg = -90).
-      - "water_flow": tightly around the drawn river, stream, and waterfall on the mountain.
-      - "waves": tightly inside the drawn sea/lake water lines ONLY (do NOT extend past the right edge of the drawn water!).
-      - "sun_rays": tightly centered on the drawn sun disk and all its surrounding rays.
-      - "flow_arrow": tightly over any drawn directional arrows (set color to "#991b1b" if red or "#1e293b" if dark ink, and angleDeg to the arrow direction: 180=left, 0=right, 90=down, -90=up).
+2. NEVER USE FAKE/UNRELATED WEATHER EFFECTS ON CHARACTER OR ACTION DRAWINGS:
+   - Never put "sun_rays" on someone's hair! Never put "sparkles" when there is a real physical action like biting, chewing, moving a hand, nodding a head, or throwing!
+3. Detect the true physical actions or animated zones visible in the drawing:
+   A) HUMAN / CHARACTER / ANIMAL ACTIONS & BIOLOGICAL MOTIONS (Δάγκωμα, Μάσημα, Κίνηση Χεριού/Κεφαλιού/Μέλους, Αναπνοή):
+      - "bite_chew": MUST be used whenever a person, child, or animal is biting, chewing, or eating food (e.g. a boy biting a green apple)!
+        * Set "box": [ymin, xmin, ymax, xmax] tightly around the mouth, lower jaw/chin, teeth, and the bite contact point on the apple/food.
+        * Set "label": "Δάγκωμα & Μάσημα".
+        * Set "color" to the food/accent hex color (e.g. "#65a30d" for a green apple, "#dc2626" for a red apple, or "#1e293b").
+        * In "soundscape", set "crunch": 0.95 (and set rain: 0, river: 0, waves: 0, wind: 0).
+        * ALSO combine "bite_chew" with 2 or 3 companion "limb_motion" zones for the rest of the action:
+          1) A "limb_motion" zone around the hand holding the apple/food ("label": "Κίνηση Χεριού & Μήλου", "angleDeg": 180 or -165 pressing toward the mouth).
+          2) A "limb_motion" zone around the character's head ("label": "Κίνηση Κεφαλιού", "angleDeg": 15 nodding into the bite).
+          3) If there is a flying leaf, crumb, or detached piece nearby, a "limb_motion" zone tightly around it ("label": "Εκτίναξη Φύλλου", "angleDeg": -25).
+      - "limb_motion": Use for any articulated body part or object that rocks, waves, presses, nods, swings, or flutters in place (e.g. hand, arm, leg, head, flying leaf, pendulum, tree branch, bird wing).
+        * Set "box": [ymin, xmin, ymax, xmax] tightly around that specific body part or object.
+        * Set "angleDeg" to the primary direction of motion (0=right, 180=left, -90=up, 90=down).
+      - "pulse_breathe": Use for a breathing chest/torso, beating heart, lungs, stomach, or pulsing object.
+      - "spin_wheel": Use for wheels, gears, pulleys (τροχαλίες), fans, or rotating objects.
    B) PHYSICS & MECHANICS TRAJECTORIES (Κιβώτιο σε ευθεία/κεκλιμένο ή Μπαλάκι σε παραβολική/καμπύλη τροχιά):
-      - "sliding_body": Use this whenever there is a box/block/crate/cart/mass (κιβώτιο / σώμα / μάζα) on a horizontal line or on an inclined plane (κεκλιμένο επίπεδο).
-        * Set "box": [0, 0, 1000, 1000].
-        * Set "bodyBox": [ymin, xmin, ymax, xmax] tightly around the drawn box/body at its initial position.
-        * Set "bodyShape": "box" (or "cart" / "ball").
-        * Set "pathPoints": [[xStart, yStart], [xEnd, yEnd]] where [xStart, yStart] is the center of bodyBox and [xEnd, yEnd] is the point along the straight line or inclined plane where the body slides to (strictly parallel to the line/incline surface!).
-        * Set "angleDeg" to the direction angle of motion in degrees (e.g. 0 = right, 180 = left, 30 = sliding down-right along a 30° incline, 150 = sliding down-left along an incline, -30 = moving up-right along an incline).
-      - "projectile_ball": Use this whenever there is a ball/sphere/particle (μπαλάκι / σφαίρα / βλήμα) at the start of (or along) a parabolic trajectory (οριζόντια βολή, πλάγια βολή, παραβολική ή καμπύλη τροχιά).
-        * Set "box": [0, 0, 1000, 1000].
-        * Set "bodyBox": [ymin, xmin, ymax, xmax] tightly around the drawn ball/sphere at its initial position.
-        * Set "bodyShape": "ball".
-        * Set "pathPoints": [[x0, y0], [x1, y1], [x2, y2], [x3, y3], [x4, y4], [x5, y5], [x6, y6]] with 5 to 7 points [x, y] in 0..1000 coordinates that smoothly trace the exact drawn parabolic curve (or natural parabolic trajectory if only the initial velocity arrow is drawn) from the ball's starting center [x0, y0] to the end of the trajectory.`;
+      - "sliding_body": Use whenever there is a box/block/crate/cart/mass on a horizontal line or inclined plane.
+        * Set "box": [0, 0, 1000, 1000], "bodyBox": [ymin, xmin, ymax, xmax] tightly around the body at start, "bodyShape": "box", and "pathPoints": [[xStart, yStart], [xEnd, yEnd]] parallel to the surface. Set "soundscape": { "whoosh": 0.7 }.
+      - "projectile_ball": Use whenever there is a ball/sphere at the start of or along a parabolic/curved trajectory.
+        * Set "box": [0, 0, 1000, 1000], "bodyBox": [ymin, xmin, ymax, xmax] around the ball at start, "bodyShape": "ball", and "pathPoints" with 5 to 7 [x, y] points along the parabolic curve. Set "soundscape": { "whoosh": 0.8 }.
+   C) NATURE & SCIENCE DIAGRAMS:
+      - "rain": tightly around drawn rain lines (angleDeg = 105 or 90).
+      - "evaporation": tightly around drawn wavy upward evaporation arrows (angleDeg = -90).
+      - "water_flow": tightly around drawn river, stream, and waterfall.
+      - "waves": tightly inside drawn sea/lake water lines ONLY.
+      - "sun_rays": ONLY when an actual astronomical Sun disk with rays is drawn in the sky!
+      - "flow_arrow": tightly over drawn directional arrows.`;
 
   const parts: any[] = [
     { text: prompt },
@@ -16862,18 +16877,33 @@ IMPORTANT RULES FOR "effects":
             };
           });
 
+        const hasBite = effects.some((e) => e.type === 'bite_chew');
+        const hasPhysics = effects.some(
+          (e) => e.type === 'sliding_body' || e.type === 'projectile_ball' || e.type === 'limb_motion'
+        );
         const sc: SmartSketchSoundscape = {
           rain: Math.max(0, Math.min(1, Number(parsed?.soundscape?.rain) || 0)),
           river: Math.max(0, Math.min(1, Number(parsed?.soundscape?.river) || 0)),
           waves: Math.max(0, Math.min(1, Number(parsed?.soundscape?.waves) || 0)),
-          wind: Math.max(0, Math.min(1, Number(parsed?.soundscape?.wind) || 0.2)),
+          wind: Math.max(
+            0,
+            Math.min(1, Number(parsed?.soundscape?.wind) ?? (hasBite || hasPhysics ? 0 : 0.15))
+          ),
+          crunch: Math.max(
+            hasBite ? 0.9 : 0,
+            Math.min(1, Number(parsed?.soundscape?.crunch) || 0)
+          ),
+          whoosh: Math.max(
+            hasPhysics && !hasBite ? 0.45 : 0,
+            Math.min(1, Number(parsed?.soundscape?.whoosh) || 0)
+          ),
         };
 
         return {
           sceneTitle: String(parsed.sceneTitle || 'Ζωντανό Σκίτσο'),
           omniPrompt: String(
             parsed.omniPrompt ||
-              '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and arrows to life with subtle motion and gentle ambient nature sound effects. No dialogue.'
+              '<FIRST_FRAME> In a single unbroken continuous shot with no scene cuts, animate this exact hand-drawn pen-and-ink illustration while keeping the exact same sketch art style and background. Bring the natural elements and actions to life with subtle motion and matching sound effects. No dialogue.'
           ),
           effects,
           soundscape: sc,
@@ -17083,6 +17113,92 @@ export async function generateOmniVideoFromImage(
 }
 
 const bodySpriteCacheByImage = new WeakMap<HTMLImageElement, Map<string, HTMLCanvasElement | null>>();
+const articulatedPatchCacheByImage = new WeakMap<
+  HTMLImageElement,
+  Map<string, { patch: HTMLCanvasElement; mask: HTMLCanvasElement } | null>
+>();
+
+function getOrExtractArticulatedPatch(
+  sourceImg: HTMLImageElement | null | undefined,
+  box: [number, number, number, number] | undefined
+): { patch: HTMLCanvasElement; mask: HTMLCanvasElement } | null {
+  if (!sourceImg || !sourceImg.complete || sourceImg.naturalWidth <= 0 || !box) return null;
+  const key = box.join(',');
+  let map = articulatedPatchCacheByImage.get(sourceImg);
+  if (!map) {
+    map = new Map();
+    articulatedPatchCacheByImage.set(sourceImg, map);
+  }
+  if (map.has(key)) return map.get(key) || null;
+
+  try {
+    const [ymin, xmin, ymax, xmax] = box;
+    const sx = Math.max(0, Math.round((xmin / 1000) * sourceImg.naturalWidth));
+    const sy = Math.max(0, Math.round((ymin / 1000) * sourceImg.naturalHeight));
+    const sw = Math.max(10, Math.round(((xmax - xmin) / 1000) * sourceImg.naturalWidth));
+    const sh = Math.max(10, Math.round(((ymax - ymin) / 1000) * sourceImg.naturalHeight));
+
+    const patch = document.createElement('canvas');
+    patch.width = sw;
+    patch.height = sh;
+    const pctx = patch.getContext('2d');
+
+    const mask = document.createElement('canvas');
+    mask.width = sw;
+    mask.height = sh;
+    const mctx = mask.getContext('2d');
+
+    if (!pctx || !mctx) {
+      map.set(key, null);
+      return null;
+    }
+
+    pctx.drawImage(sourceImg, sx, sy, sw, sh, 0, 0, sw, sh);
+    const pData = pctx.getImageData(0, 0, sw, sh);
+    const mData = mctx.createImageData(sw, sh);
+    const pd = pData.data;
+    const md = mData.data;
+
+    for (let y = 0; y < sh; y++) {
+      const ny = (y + 0.5) / sh;
+      const edgeY = Math.min(1, Math.min(ny, 1 - ny) / 0.16);
+      for (let x = 0; x < sw; x++) {
+        const nx = (x + 0.5) / sw;
+        const edgeX = Math.min(1, Math.min(nx, 1 - nx) / 0.16);
+        const feather = edgeX * edgeY;
+        const idx = (y * sw + x) * 4;
+        const r = pd[idx];
+        const g = pd[idx + 1];
+        const b = pd[idx + 2];
+        const a = pd[idx + 3];
+
+        // Treat transparent or near-paper pixels as background
+        const isPaper = a < 25 || (r > 238 && g > 234 && b > 224);
+        if (isPaper) {
+          pd[idx + 3] = 0;
+          md[idx + 3] = 0;
+        } else {
+          const effAlpha = Math.round(a * (0.2 + 0.8 * feather));
+          pd[idx + 3] = effAlpha;
+          // Paper-colored (#fdfcf7) mask to softly cover static copy underneath when patch moves
+          md[idx] = 253;
+          md[idx + 1] = 252;
+          md[idx + 2] = 247;
+          md[idx + 3] = Math.round(effAlpha * 0.82 * feather);
+        }
+      }
+    }
+
+    pctx.putImageData(pData, 0, 0);
+    mctx.putImageData(mData, 0, 0);
+    const res = { patch, mask };
+    map.set(key, res);
+    return res;
+  } catch {
+    map.set(key, null);
+    return null;
+  }
+}
 
 function getOrExtractBodySprite(
   sourceImg: HTMLImageElement | null | undefined,
@@ -17207,7 +17323,19 @@ export function renderSmartSketchOverlayFrame(
   ctx.clearRect(0, 0, width, height);
   if (!spec?.effects || spec.effects.length === 0) return;
 
-  for (const ef of spec.effects) {
+  // Render larger articulated patches first and focal bite_chew / particles on top
+  const orderedEffects = [...spec.effects].sort((a, b) => {
+    const prio = (t: string) => (t === 'bite_chew' ? 2 : t === 'limb_motion' || t === 'pulse_breathe' ? 0 : 1);
+    const pa = prio(a.type);
+    const pb = prio(b.type);
+    if (pa !== pb) return pa - pb;
+    const areaA = (a.box[2] - a.box[0]) * (a.box[3] - a.box[1]);
+    const areaB = (b.box[2] - b.box[0]) * (b.box[3] - b.box[1]);
+    return areaB - areaA;
+  });
+
+  for (let efIdx = 0; efIdx < orderedEffects.length; efIdx++) {
+    const ef = orderedEffects[efIdx];
     const [ymin, xmin, ymax, xmax] = ef.box;
     const x0 = (xmin / 1000) * width;
     const y0 = (ymin / 1000) * height;
@@ -17219,9 +17347,20 @@ export function renderSmartSketchOverlayFrame(
     const intensity = ef.intensity ?? 1;
 
     ctx.save();
-    // Strictly clip to the detected element bounding box so animations NEVER expand outside the drawing
+    // Clip nature zone fills tightly to [x0, y0, bw, bh]; allow articulated patches & trajectories room to move within canvas
+    const isArticulatedOrTrajectory =
+      ef.type === 'bite_chew' ||
+      ef.type === 'limb_motion' ||
+      ef.type === 'pulse_breathe' ||
+      ef.type === 'spin_wheel' ||
+      ef.type === 'sliding_body' ||
+      ef.type === 'projectile_ball';
     ctx.beginPath();
-    ctx.rect(x0, y0, bw, bh);
+    if (isArticulatedOrTrajectory) {
+      ctx.rect(0, 0, width, height);
+    } else {
+      ctx.rect(x0, y0, bw, bh);
+    }
     ctx.clip();
 
     ctx.strokeStyle = color;
@@ -17229,7 +17368,237 @@ export function renderSmartSketchOverlayFrame(
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    if (ef.type === 'rain') {
+    if (ef.type === 'bite_chew') {
+      // REAL ARTICULATED JAW/MOUTH BITING & CHEWING + CRISP SKETCH CRUNCH & FLYING APPLE/FOOD CRUMBS!
+      // 2.2s cycle:
+      // - 0.00..0.14: Mouth opens wide before bite
+      // - 0.14..0.24: Sharp BITE SNAP ("ΚΡΑΤΣ!") into the apple/food
+      // - 0.24..1.00: 3 rhythmic rotary chewing cycles ("Μάσημα")
+      const cycleDur = 2.2;
+      const tCycle = (elapsedSec % cycleDur) / cycleDur;
+      let jawDy = 0;
+      let jawDx = 0;
+      let jawRot = 0;
+      let jawScaleY = 1;
+      let crunchBurst = 0; // 0..1 intensity of impact lines / crumbs
+
+      if (tCycle < 0.14) {
+        // Opening mouth wide to take a bite
+        const u = tCycle / 0.14;
+        const ease = Math.sin((u * Math.PI) / 2);
+        jawDy = ease * Math.max(4, bh * 0.075);
+        jawDx = -ease * Math.max(1.5, bw * 0.02);
+        jawRot = ease * 0.055;
+        jawScaleY = 1 + ease * 0.085;
+      } else if (tCycle < 0.25) {
+        // SNAPPING shut into the apple ("ΚΡΑΤΣ!")
+        const u = (tCycle - 0.14) / 0.11;
+        const snap = 1 - Math.pow(1 - u, 3);
+        jawDy = (1 - snap) * Math.max(4, bh * 0.075) - snap * Math.max(3, bh * 0.045);
+        jawDx = (1 - snap) * -Math.max(1.5, bw * 0.02) + snap * Math.max(2.5, bw * 0.035);
+        jawRot = (1 - snap) * 0.055 - snap * 0.05;
+        jawScaleY = 1.085 - snap * 0.15;
+        crunchBurst = Math.sin(u * Math.PI);
+      } else {
+        // 3 rhythmic rotary chews (0.25 .. 1.00)
+        const chewU = (tCycle - 0.25) / 0.75;
+        const theta = chewU * Math.PI * 2 * 3;
+        const chewSin = Math.sin(theta);
+        const chewCos = Math.cos(theta);
+        jawDy = chewSin * Math.max(3.5, bh * 0.055);
+        jawDx = chewCos * Math.max(2.0, bw * 0.028);
+        jawRot = chewSin * 0.045;
+        jawScaleY = 1 + chewSin * 0.065;
+        // Secondary mini crunch burst on each upward chew closure (when chewSin < -0.35)
+        if (chewSin < -0.35) {
+          crunchBurst = Math.min(0.75, (-chewSin - 0.35) / 0.65);
+        }
+      }
+
+      // 1. Extract & animate the actual drawn mouth/jaw/bite patch from the user's illustration!
+      const art = getOrExtractArticulatedPatch(sourceImg, ef.box);
+      if (art) {
+        const dispMag = Math.min(1, (Math.hypot(jawDx, jawDy) + Math.abs(jawRot) * 40) / 5);
+        if (dispMag > 0.05) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(0.88, dispMag * 0.85);
+          ctx.drawImage(art.mask, x0, y0, bw, bh);
+          ctx.restore();
+        }
+
+        // Pivot around the jaw hinge (left-center of the mouth/jaw box)
+        const pivotX = x0 + bw * 0.25;
+        const pivotY = y0 + bh * 0.48;
+        ctx.save();
+        ctx.translate(pivotX + jawDx, pivotY + jawDy);
+        ctx.rotate(jawRot);
+        ctx.scale(1, jawScaleY);
+        ctx.translate(-pivotX, -pivotY);
+        ctx.drawImage(art.patch, x0, y0, bw, bh);
+        ctx.restore();
+      }
+
+      // 2. Hand-drawn Cheek / Jaw Chewing Motion Arcs "((" on the jaw side
+      const arcAlpha = 0.35 + 0.45 * Math.abs(Math.sin(elapsedSec * 8.5));
+      ctx.save();
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = Math.max(1.3, Math.min(2.1, width * 0.0028));
+      ctx.globalAlpha = arcAlpha;
+      for (let k = 0; k < 2; k++) {
+        const rArc = Math.max(8, Math.min(18, bh * (0.16 + k * 0.06)));
+        const ax = x0 + bw * 0.18 - k * 4 + jawDx * 0.4;
+        const ay = y0 + bh * 0.62 + jawDy * 0.5;
+        ctx.beginPath();
+        ctx.arc(ax, ay, rArc, Math.PI * 0.68, Math.PI * 1.18);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 3. Bite Contact Point: Crisp Comic Impact Ticks + Flying Apple/Food Crumbs & Droplets!
+      const biteX = x0 + bw * 0.68;
+      const biteY = y0 + bh * 0.46;
+      const crumbColor = color !== '#1e293b' ? color : '#65a30d'; // Green apple / food accent
+
+      if (crunchBurst > 0.05) {
+        ctx.save();
+        const numTicks = 7;
+        for (let i = 0; i < numTicks; i++) {
+          const ang = -Math.PI * 0.55 + (i / (numTicks - 1)) * Math.PI * 1.1;
+          const rIn = Math.max(6, Math.min(bw, bh) * 0.14) + (1 - crunchBurst) * 4;
+          const rOut = rIn + Math.max(7, Math.min(bw, bh) * 0.16) * crunchBurst;
+          ctx.strokeStyle = i % 2 === 0 ? '#1e293b' : crumbColor;
+          ctx.lineWidth = Math.max(1.5, Math.min(2.4, width * 0.0032));
+          ctx.globalAlpha = 0.85 * crunchBurst;
+          ctx.beginPath();
+          ctx.moveTo(biteX + Math.cos(ang) * rIn, biteY + Math.sin(ang) * rIn);
+          ctx.lineTo(biteX + Math.cos(ang) * rOut, biteY + Math.sin(ang) * rOut);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Continuous flying crumbs & tiny juice droplets ejected on each bite/chew
+      const numCrumbs = 6;
+      for (let c = 0; c < numCrumbs; c++) {
+        const crumbPeriod = 0.72;
+        const u = ((elapsedSec + c * 0.19) % crumbPeriod) / crumbPeriod;
+        const fade = Math.sin(u * Math.PI);
+        if (fade < 0.1) continue;
+        const launchAng = -0.85 + (c / (numCrumbs - 1)) * 1.45;
+        const speed = Math.max(18, Math.min(44, Math.max(bw, bh) * 0.42));
+        const px = biteX + Math.cos(launchAng) * speed * u;
+        const py = biteY + Math.sin(launchAng) * speed * u + 22 * u * u; // gravity arc
+        const sz = Math.max(2.2, Math.min(4.2, width * 0.005)) * (1 - u * 0.35);
+
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(u * 4 + c);
+        ctx.globalAlpha = 0.88 * fade;
+        ctx.fillStyle = c % 2 === 0 ? crumbColor : '#fef08a';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        if (c % 3 === 0) {
+          // Tiny triangular apple/food chunk
+          ctx.moveTo(-sz, sz * 0.7);
+          ctx.lineTo(sz, 0);
+          ctx.lineTo(-sz * 0.4, -sz);
+          ctx.closePath();
+        } else {
+          // Tiny juice droplet / crumb
+          ctx.arc(0, 0, sz * 0.75, 0, Math.PI * 2);
+        }
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else if (ef.type === 'limb_motion') {
+      // ARTICULATED BODY PART / HAND & APPLE / HEAD / FLYING LEAF MOTION!
+      // Syncs smoothly with the 2.2s action cycle so hand, head, and jaw move together naturally
+      const cycleDur = 2.2;
+      const tCycle = (elapsedSec % cycleDur) / cycleDur;
+      const angleRad = ((ef.angleDeg ?? 180) * Math.PI) / 180;
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+
+      // Rhythmic push-and-chew wave synced with bite_chew
+      let wave = 0;
+      if (tCycle < 0.25) {
+        wave = Math.sin((tCycle / 0.25) * Math.PI);
+      } else {
+        const chewU = (tCycle - 0.25) / 0.75;
+        wave = 0.65 * Math.sin(chewU * Math.PI * 2 * 3 + efIdx * 0.7);
+      }
+
+      const maxAmp = Math.max(3.5, Math.min(9, Math.min(bw, bh) * 0.055)) * intensity;
+      const dx = cosA * maxAmp * wave;
+      const dy = sinA * maxAmp * wave;
+      const rot = wave * 0.038 * (cosA >= 0 ? 1 : -1);
+
+      const art = getOrExtractArticulatedPatch(sourceImg, ef.box);
+      if (art) {
+        const dispMag = Math.min(1, Math.hypot(dx, dy) / 3.5);
+        if (dispMag > 0.05) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(0.84, dispMag * 0.8);
+          ctx.drawImage(art.mask, x0, y0, bw, bh);
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(cx + dx, cy + dy);
+        ctx.rotate(rot);
+        ctx.translate(-cx, -cy);
+        ctx.drawImage(art.patch, x0, y0, bw, bh);
+        ctx.restore();
+      }
+
+      // Subtle pen-and-ink motion accent lines around the moving limb/leaf
+      ctx.save();
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = Math.max(1.2, Math.min(1.9, width * 0.0026));
+      ctx.globalAlpha = 0.32 + 0.35 * Math.abs(wave);
+      const rArc = Math.max(10, Math.min(bw, bh) * 0.38);
+      ctx.beginPath();
+      ctx.arc(cx + dx * 0.5, cy + dy * 0.5, rArc, angleRad + Math.PI - 0.35, angleRad + Math.PI + 0.35);
+      ctx.stroke();
+      ctx.restore();
+    } else if (ef.type === 'pulse_breathe') {
+      // Breathing chest / beating heart / pulsing organ patch animation
+      const pulse = Math.sin(elapsedSec * 3.6);
+      const scale = 1 + 0.045 * pulse * intensity;
+      const art = getOrExtractArticulatedPatch(sourceImg, ef.box);
+      if (art) {
+        ctx.save();
+        ctx.globalAlpha = 0.65 * Math.abs(pulse);
+        ctx.drawImage(art.mask, x0, y0, bw, bh);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.translate(-cx, -cy);
+        ctx.drawImage(art.patch, x0, y0, bw, bh);
+        ctx.restore();
+      }
+    } else if (ef.type === 'spin_wheel') {
+      // Rotating wheel / pulley / gear / fan patch animation
+      const art = getOrExtractArticulatedPatch(sourceImg, ef.box);
+      const rot = elapsedSec * 2.4 * intensity;
+      if (art) {
+        ctx.save();
+        ctx.globalAlpha = 0.82;
+        ctx.drawImage(art.mask, x0, y0, bw, bh);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rot);
+        ctx.translate(-cx, -cy);
+        ctx.drawImage(art.patch, x0, y0, bw, bh);
+        ctx.restore();
+      }
+    } else if (ef.type === 'rain') {
       // Pen-and-ink slanted rain streaks falling smoothly inside the rain zone
       const angleRad = ((ef.angleDeg ?? 105) * Math.PI) / 180;
       const cosA = Math.cos(angleRad);
@@ -17683,10 +18052,14 @@ export class SmartSketchAudioEngine {
         return { filter, gain: g };
       };
 
-      const rainLv = soundscape.rain ?? 0.6;
-      const riverLv = soundscape.river ?? 0.5;
-      const wavesLv = soundscape.waves ?? 0.4;
-      const windLv = soundscape.wind ?? 0.25;
+      const crunchLv = soundscape.crunch ?? 0;
+      const whooshLv = soundscape.whoosh ?? 0;
+      const hasActionSound = crunchLv > 0.05 || whooshLv > 0.05;
+
+      const rainLv = soundscape.rain ?? (hasActionSound ? 0 : 0.6);
+      const riverLv = soundscape.river ?? (hasActionSound ? 0 : 0.5);
+      const wavesLv = soundscape.waves ?? (hasActionSound ? 0 : 0.4);
+      const windLv = soundscape.wind ?? (hasActionSound ? 0 : 0.25);
 
       // Rain: crisp high-mid bandpass patter
       addFilteredLayer('bandpass', 2400, 0.7, rainLv * 0.45);
@@ -17697,11 +18070,102 @@ export class SmartSketchAudioEngine {
       // Gentle Breeze
       const windNode = addFilteredLayer('bandpass', 420, 2.2, windLv * 0.3);
 
+      // Helper to schedule a realistic crisp apple/food crunch burst (or soft chew) at audioTime t0
+      const scheduleCrunchBurst = (t0: number, isBigBite: boolean, level: number) => {
+        if (!this.ctx || !this.masterGain) return;
+        const grains = isBigBite ? 14 : 7;
+        const spanSec = isBigBite ? 0.19 : 0.12;
+        for (let g = 0; g < grains; g++) {
+          const gt = t0 + (g / grains) * spanSec + Math.random() * 0.012;
+          const dur = isBigBite ? 0.024 + Math.random() * 0.018 : 0.02 + Math.random() * 0.014;
+          const src = this.ctx.createBufferSource();
+          src.buffer = noiseBuf;
+          const offset = Math.random() * 2.2;
+
+          const bp = this.ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.setValueAtTime(
+            isBigBite ? 1150 + Math.random() * 1950 : 680 + Math.random() * 1150,
+            gt
+          );
+          bp.Q.setValueAtTime(isBigBite ? 1.8 : 1.4, gt);
+
+          const env = this.ctx.createGain();
+          const peak = (isBigBite ? 1.35 : 0.78) * level * (0.65 + 0.35 * Math.random());
+          env.gain.setValueAtTime(0.001, gt);
+          env.gain.linearRampToValueAtTime(peak, gt + 0.004);
+          env.gain.exponentialRampToValueAtTime(0.001, gt + dur);
+
+          src.connect(bp);
+          bp.connect(env);
+          env.connect(this.masterGain);
+          src.start(gt, offset, dur + 0.01);
+        }
+      };
+
+      // Helper to schedule a soft motion whoosh at audioTime t0
+      const scheduleWhoosh = (t0: number, level: number) => {
+        if (!this.ctx || !this.masterGain) return;
+        const src = this.ctx.createBufferSource();
+        src.buffer = noiseBuf;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.Q.setValueAtTime(2.0, t0);
+        bp.frequency.setValueAtTime(240, t0);
+        bp.frequency.exponentialRampToValueAtTime(780, t0 + 0.35);
+        bp.frequency.exponentialRampToValueAtTime(280, t0 + 0.85);
+
+        const env = this.ctx.createGain();
+        env.gain.setValueAtTime(0.001, t0);
+        env.gain.linearRampToValueAtTime(0.45 * level, t0 + 0.25);
+        env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.85);
+
+        src.connect(bp);
+        bp.connect(env);
+        env.connect(this.masterGain);
+        src.start(t0, Math.random() * 1.5, 0.9);
+      };
+
+      // Schedule initial cycle immediately if crunch or whoosh is active
+      if (crunchLv > 0.05) {
+        const now0 = ctx.currentTime + 0.05;
+        scheduleCrunchBurst(now0 + 0.28, true, crunchLv); // Big Bite ("ΚΡΑΤΣ!")
+        scheduleCrunchBurst(now0 + 0.78, false, crunchLv); // Chew 1
+        scheduleCrunchBurst(now0 + 1.28, false, crunchLv); // Chew 2
+        scheduleCrunchBurst(now0 + 1.78, false, crunchLv); // Chew 3
+      } else if (whooshLv > 0.05) {
+        scheduleWhoosh(ctx.currentTime + 0.1, whooshLv);
+      }
+
       let tick = 0;
+      let lastCrunchCycle = 0;
+      let lastWhooshCycle = 0;
+      const startAudioTime = ctx.currentTime;
+
       this.lfoTimer = window.setInterval(() => {
         if (!this.ctx || !this.isPlaying) return;
         tick += 0.15;
         const now = this.ctx.currentTime;
+        const elapsed = now - startAudioTime;
+
+        if (crunchLv > 0.05) {
+          const cycleIdx = Math.floor(elapsed / 2.2);
+          if (cycleIdx > lastCrunchCycle) {
+            lastCrunchCycle = cycleIdx;
+            const cycleBase = startAudioTime + cycleIdx * 2.2;
+            scheduleCrunchBurst( Math.max(now + 0.02, cycleBase + 0.28), true, crunchLv);
+            scheduleCrunchBurst( Math.max(now + 0.45, cycleBase + 0.78), false, crunchLv);
+            scheduleCrunchBurst( Math.max(now + 0.95, cycleBase + 1.28), false, crunchLv);
+            scheduleCrunchBurst( Math.max(now + 1.45, cycleBase + 1.78), false, crunchLv);
+          }
+        } else if (whooshLv > 0.05) {
+          const wCycle = Math.floor(elapsed / 3.0);
+          if (wCycle > lastWhooshCycle) {
+            lastWhooshCycle = wCycle;
+            scheduleWhoosh(now + 0.05, whooshLv);
+          }
+        }
+
         if (riverNode) {
           riverNode.filter.frequency.setTargetAtTime(520 + Math.sin(tick * 2.3) * 110, now, 0.12);
         }
