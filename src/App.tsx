@@ -43197,7 +43197,7 @@ export default function App() {
                       title="Ζωντάνεμα (AI Animate): Άμεσο Ζωντανό Σκίτσο με Ήχο + Gemini Omni 1.1 Flash AI Video!"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>🎬 Ζωντάνεμα</span>
+                      <span>Ζωντάνεμα</span>
                     </button>
 
                     {selectedStrokeIds.length > 0 && (
