@@ -48862,13 +48862,25 @@ export default function App() {
                               const displayedColor = effectiveSubStyle
                                 ? effectiveSubStyle.color
                                 : txt.color;
+                              const estHalfBarW = 205;
+                              const boxWForBar = effTxtW > 0 ? effTxtW : 180;
+                              const boxCenterX = txt.x + boxWForBar / 2;
+                              let barShiftX = 0;
+                              if (boxCenterX - estHalfBarW < 6) {
+                                barShiftX = 6 - (boxCenterX - estHalfBarW);
+                              } else if (boxCenterX + estHalfBarW > pW - 6) {
+                                barShiftX = pW - 6 - (boxCenterX + estHalfBarW);
+                              }
 
                               return (
                                 <div
                                   data-text-drag="true"
                                   onMouseDown={(ev) => ev.preventDefault()}
                                   style={{
-                                    left: txt.x < 8 ? `${8 - txt.x}px` : '0px',
+                                    left: '50%',
+                                    transform: barShiftX
+                                      ? `translateX(calc(-50% + ${Math.round(barShiftX)}px))`
+                                      : 'translateX(-50%)',
                                     touchAction: 'none',
                                     WebkitUserSelect: 'none',
                                     userSelect: 'none',
@@ -48880,14 +48892,14 @@ export default function App() {
                                     WebkitTextStroke: '0px',
                                   }}
                                   className={`absolute ${
-                                    txt.y < 52 ? '-bottom-14' : '-top-14'
-                                  } flex items-center gap-1 bg-[#1b2a4a] text-white px-2 py-1 rounded-full shadow-lg text-[11px] font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing`}
+                                    txt.y < 44 ? '-bottom-10' : '-top-10'
+                                  } flex items-center gap-0.5 bg-[#1b2a4a]/95 text-white px-1.5 py-0.5 rounded-full shadow-md text-[9.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing`}
                                 >
                                   <span
-                                    className="px-1 py-0.5 text-sky-300 font-normal select-none"
+                                    className="px-1 py-0.5 text-sky-300 text-[10px] font-normal select-none"
                                     title="Σύρετε με το δάχτυλο ή το πενάκι για μετακίνηση του παραθύρου κειμένου"
                                   >
-                                    ✥ Σύρετε
+                                    ✥
                                   </span>
                                   {hasValidSubRange && (
                                     <button
@@ -48897,13 +48909,13 @@ export default function App() {
                                         activeTextRangeRef.current = null;
                                         setActiveTextRange(null);
                                       }}
-                                      className="px-1.5 py-0.5 rounded bg-sky-500/35 hover:bg-sky-500/55 text-sky-100 text-[10px] font-semibold cursor-pointer"
+                                      className="px-1 py-0.5 rounded bg-sky-500/35 hover:bg-sky-500/55 text-sky-100 text-[9px] font-semibold cursor-pointer"
                                       title="Εφαρμογή αλλαγών μόνο στο μαρκαρισμένο τμήμα (κλικ για επιστροφή σε όλο το πλαίσιο)"
                                     >
-                                      ✂ Επιλογή ✕
+                                      ✂✕
                                     </button>
                                   )}
-                                  <div className="h-3 w-px bg-white/20 mx-0.5" />
+                                  <div className="h-2.5 w-px bg-white/20 mx-0.5" />
                                   {!txt.isMath && (
                                     <button
                                       type="button"
@@ -48987,18 +48999,18 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
+                                      className="px-1 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
                                       title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                     >
                                       {displayedFontFamily === 'calligraphic' ||
                                       displayedFontFamily === 'calligraphic-bold'
-                                        ? '✍️ Καλλιγραφική'
+                                        ? '✍️ Καλλιγρ.'
                                         : displayedFontFamily === 'marker'
                                         ? '✒️ Πένα'
                                         : displayedFontFamily === 'mansalva'
-                                        ? '🖊️ Μαρκαδ.'
+                                        ? '🖊️ Μαρκ.'
                                         : displayedFontFamily === 'handwritten'
-                                        ? '📝 Χειρόγρ.'
+                                        ? '📝 Χειρ.'
                                         : displayedFontFamily === 'neohellenic'
                                         ? '🖋️ Ρέουσα'
                                         : '🔤 Τυπωμ.'}
@@ -49079,7 +49091,7 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className={`px-1.5 py-0.5 rounded font-normal cursor-pointer ${
+                                      className={`px-1 py-0.5 rounded font-bold cursor-pointer ${
                                         displayedBold
                                           ? 'bg-[#0066ff] text-white'
                                           : 'hover:bg-white/15 text-slate-200'
@@ -49163,13 +49175,13 @@ export default function App() {
                                         ),
                                       }));
                                     }}
-                                    className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
                                     title="Μικρότερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
                                   >
                                     A-
                                   </button>
-                                  <span className="text-[10px] font-normal text-sky-200 px-0.5">
-                                    {displayedFontSize}px
+                                  <span className="text-[9px] font-normal text-sky-200 px-0.5">
+                                    {displayedFontSize}
                                   </span>
                                   <button
                                     type="button"
@@ -49245,14 +49257,14 @@ export default function App() {
                                         ),
                                       }));
                                     }}
-                                    className="px-1.5 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
                                     title="Μεγαλύτερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
                                   >
                                     A+
                                   </button>
                                   {/* Quick Color Swatches for Selected Substring / Text Box */}
                                   {!txt.isMath && (
-                                    <div className="flex items-center gap-1 bg-white/10 px-1.5 py-0.5 rounded-full">
+                                    <div className="flex items-center gap-0.5 bg-white/10 px-1 py-0.5 rounded-full">
                                       {[
                                         '#111827',
                                         '#2563eb',
@@ -49267,9 +49279,9 @@ export default function App() {
                                           onMouseDown={(ev) => ev.preventDefault()}
                                           onClick={() => applyColorToSelection(swColor)}
                                           style={{ backgroundColor: swColor }}
-                                          className={`w-3.5 h-3.5 rounded-full cursor-pointer transition-transform hover:scale-115 ${
+                                          className={`w-2.5 h-2.5 rounded-full cursor-pointer transition-transform hover:scale-115 ${
                                             displayedColor?.toLowerCase() === swColor
-                                              ? 'ring-2 ring-white scale-110'
+                                              ? 'ring-1 ring-white scale-110'
                                               : 'border border-white/40'
                                           }`}
                                           title="Αλλαγή χρώματος (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
@@ -49277,200 +49289,200 @@ export default function App() {
                                       ))}
                                     </div>
                                   )}
-                              {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) right after A+ */}
-                              <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded">
-                                <button
-                                  type="button"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => {
-                                    setTextAlign('left');
-                                    updateActivePage((page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).map((t) =>
-                                        t.id === txt.id ? { ...t, textAlign: 'left' } : t
-                                      ),
-                                    }));
-                                  }}
-                                  className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
-                                    (txt.textAlign || 'left') === 'left'
-                                      ? 'bg-[#0066ff] text-white'
-                                      : 'text-white/85 hover:bg-white/15'
-                                  }`}
-                                  title="Στοίχιση Αριστερά"
-                                >
-                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                                    <line x1="2" y1="3.5" x2="14" y2="3.5" />
-                                    <line x1="2" y1="7" x2="10" y2="7" />
-                                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                                    <line x1="2" y1="14" x2="8.5" y2="14" />
-                                  </svg>
-                                </button>
-                                <button
-                                  type="button"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => {
-                                    setTextAlign('center');
-                                    updateActivePage((page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).map((t) =>
-                                        t.id === txt.id ? { ...t, textAlign: 'center' } : t
-                                      ),
-                                    }));
-                                  }}
-                                  className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
-                                    txt.textAlign === 'center'
-                                      ? 'bg-[#0066ff] text-white'
-                                      : 'text-white/85 hover:bg-white/15'
-                                  }`}
-                                  title="Στοίχιση στο Κέντρο"
-                                >
-                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                                    <line x1="2" y1="3.5" x2="14" y2="3.5" />
-                                    <line x1="4" y1="7" x2="12" y2="7" />
-                                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                                    <line x1="4.5" y1="14" x2="11.5" y2="14" />
-                                  </svg>
-                                </button>
-                                <button
-                                  type="button"
-                                  onMouseDown={(ev) => ev.preventDefault()}
-                                  onClick={() => {
-                                    setTextAlign('right');
-                                    updateActivePage((page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).map((t) =>
-                                        t.id === txt.id ? { ...t, textAlign: 'right' } : t
-                                      ),
-                                    }));
-                                  }}
-                                  className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
-                                    txt.textAlign === 'right'
-                                      ? 'bg-[#0066ff] text-white'
-                                      : 'text-white/85 hover:bg-white/15'
-                                  }`}
-                                  title="Στοίχιση Δεξιά"
-                                >
-                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                                    <line x1="2" y1="3.5" x2="14" y2="3.5" />
-                                    <line x1="6" y1="7" x2="14" y2="7" />
-                                    <line x1="2" y1="10.5" x2="14" y2="10.5" />
-                                    <line x1="7.5" y1="14" x2="14" y2="14" />
-                                  </svg>
-                                </button>
-                              </div>
-                              {(!txt.isMath || isEditingTxt) && (
-                                <>
+                                  {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) */}
+                                  <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded">
+                                    <button
+                                      type="button"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        setTextAlign('left');
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id ? { ...t, textAlign: 'left' } : t
+                                          ),
+                                        }));
+                                      }}
+                                      className={`p-0.5 rounded transition cursor-pointer flex items-center justify-center ${
+                                        (txt.textAlign || 'left') === 'left'
+                                          ? 'bg-[#0066ff] text-white'
+                                          : 'text-white/85 hover:bg-white/15'
+                                      }`}
+                                      title="Στοίχιση Αριστερά"
+                                    >
+                                      <svg viewBox="0 0 16 16" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                                        <line x1="2" y1="7" x2="10" y2="7" />
+                                        <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                                        <line x1="2" y1="14" x2="8.5" y2="14" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        setTextAlign('center');
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id ? { ...t, textAlign: 'center' } : t
+                                          ),
+                                        }));
+                                      }}
+                                      className={`p-0.5 rounded transition cursor-pointer flex items-center justify-center ${
+                                        txt.textAlign === 'center'
+                                          ? 'bg-[#0066ff] text-white'
+                                          : 'text-white/85 hover:bg-white/15'
+                                      }`}
+                                      title="Στοίχιση στο Κέντρο"
+                                    >
+                                      <svg viewBox="0 0 16 16" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                                        <line x1="4" y1="7" x2="12" y2="7" />
+                                        <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                                        <line x1="4.5" y1="14" x2="11.5" y2="14" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        setTextAlign('right');
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id ? { ...t, textAlign: 'right' } : t
+                                          ),
+                                        }));
+                                      }}
+                                      className={`p-0.5 rounded transition cursor-pointer flex items-center justify-center ${
+                                        txt.textAlign === 'right'
+                                          ? 'bg-[#0066ff] text-white'
+                                          : 'text-white/85 hover:bg-white/15'
+                                      }`}
+                                      title="Στοίχιση Δεξιά"
+                                    >
+                                      <svg viewBox="0 0 16 16" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                        <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                                        <line x1="6" y1="7" x2="14" y2="7" />
+                                        <line x1="2" y1="10.5" x2="14" y2="10.5" />
+                                        <line x1="7.5" y1="14" x2="14" y2="14" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                  {(!txt.isMath || isEditingTxt) && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onMouseDown={(ev) => ev.preventDefault()}
+                                        onClick={() => handleInsertPowerCaretInText(txt.id)}
+                                        className="px-1 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-normal cursor-pointer"
+                                        title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
+                                      >
+                                        xⁿ
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onMouseDown={(ev) => ev.preventDefault()}
+                                        onClick={() => handleInsertSubscriptInText(txt.id)}
+                                        className="px-1 py-0.5 rounded bg-teal-600/85 hover:bg-teal-500 text-white font-normal cursor-pointer"
+                                        title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max"
+                                      >
+                                        xᵢ
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onMouseDown={(ev) => ev.preventDefault()}
+                                        onClick={() => handleConvertTextToMath(txt.id)}
+                                        className="px-1 py-0.5 rounded font-normal cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
+                                        title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
+                                      >
+                                        Math
+                                      </button>
+                                    </>
+                                  )}
                                   <button
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
-                                    onClick={() => handleInsertPowerCaretInText(txt.id)}
-                                    className="px-1.5 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-normal cursor-pointer"
-                                    title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
+                                    onClick={() => handleCreateMathGraphFromTextBox(txt.id)}
+                                    className="px-1 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-normal cursor-pointer"
+                                    title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
                                   >
-                                    xⁿ (^)
+                                    Γράφ.
                                   </button>
                                   <button
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
-                                    onClick={() => handleInsertSubscriptInText(txt.id)}
-                                    className="px-1.5 py-0.5 rounded bg-teal-600/85 hover:bg-teal-500 text-white font-normal cursor-pointer"
-                                    title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max"
+                                    onClick={() => handleCheckChemistryInTextBox(txt.id)}
+                                    className="px-1 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-normal cursor-pointer whitespace-nowrap"
+                                    title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
                                   >
-                                    xᵢ (_)
+                                    Chem
                                   </button>
                                   <button
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
-                                    onClick={() => handleConvertTextToMath(txt.id)}
-                                    className="px-1.5 py-0.5 rounded font-normal cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
-                                    title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
+                                    onClick={() => handleCreate3DMoleculeFromTextBox(txt.id)}
+                                    className="px-1 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-normal cursor-pointer whitespace-nowrap"
+                                    title="3D.OCR: Άμεση δημιουργία του Draggable 3D Μορίου με χρωματικό νέφος φορτίου από την ένωση του πλαισίου κειμένου!"
                                   >
-                                    Text2Math
+                                    3D
                                   </button>
-                                </>
-                              )}
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => handleCreateMathGraphFromTextBox(txt.id)}
-                                className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-normal cursor-pointer"
-                                title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
-                              >
-                                Διάγραμμα
-                              </button>
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => handleCheckChemistryInTextBox(txt.id)}
-                                className="px-1.5 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-normal cursor-pointer whitespace-nowrap"
-                                title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
-                              >
-                                Chem / Δείκτες
-                              </button>
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => handleCreate3DMoleculeFromTextBox(txt.id)}
-                                className="px-1.5 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-normal cursor-pointer whitespace-nowrap"
-                                title="3D.OCR: Άμεση δημιουργία του Draggable 3D Μορίου με χρωματικό νέφος φορτίου από την ένωση του πλαισίου κειμένου!"
-                              >
-                                3D.OCR
-                              </button>
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => {
-                                  if (isEditingTxt && txt.isMath) {
-                                    const updatedLatex = convertPlainTextToMathLatex(txt.text || '');
-                                    updateActivePage((page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).map((t) =>
-                                        t.id === txt.id ? { ...t, latex: updatedLatex } : t
-                                      ),
-                                    }));
-                                  }
-                                  setEditingTextId(isEditingTxt ? null : txt.id);
-                                }}
-                                className="px-1.5 py-1 rounded bg-sky-600/85 hover:bg-sky-500 text-white font-normal flex items-center justify-center cursor-pointer"
-                                title={
-                                  isEditingTxt
-                                    ? 'Ολοκλήρωση επεξεργασίας (επιστροφή στη μαθηματική μορφή)'
-                                    : 'Επεξεργασία στην αρχική μορφή κειμένου'
-                                }
-                              >
-                                {isEditingTxt ? (
-                                  <span className="font-normal text-xs leading-none">✓</span>
-                                ) : (
-                                  <svg
-                                    viewBox="0 0 24 24"
-                                    className="w-3.5 h-3.5 text-white"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.3"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => {
+                                      if (isEditingTxt && txt.isMath) {
+                                        const updatedLatex = convertPlainTextToMathLatex(txt.text || '');
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id ? { ...t, latex: updatedLatex } : t
+                                          ),
+                                        }));
+                                      }
+                                      setEditingTextId(isEditingTxt ? null : txt.id);
+                                    }}
+                                    className="p-1 rounded bg-sky-600/85 hover:bg-sky-500 text-white font-normal flex items-center justify-center cursor-pointer"
+                                    title={
+                                      isEditingTxt
+                                        ? 'Ολοκλήρωση επεξεργασίας (επιστροφή στη μαθηματική μορφή)'
+                                        : 'Επεξεργασία στην αρχική μορφή κειμένου'
+                                    }
                                   >
-                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                                    <path d="m15 5 4 4" />
-                                  </svg>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onMouseDown={(ev) => ev.preventDefault()}
-                                onClick={() => {
-                                  updateActivePage((page) => ({
-                                    ...page,
-                                    texts: (page.texts || []).filter((t) => t.id !== txt.id),
-                                  }));
-                                  setSelectedTextId(null);
-                                  setEditingTextId(null);
-                                }}
-                                className="px-1.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center cursor-pointer"
-                                title="Διαγραφή κειμένου"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-white stroke-[2.3]" />
-                              </button>
+                                    {isEditingTxt ? (
+                                      <span className="font-normal text-[10px] leading-none">✓</span>
+                                    ) : (
+                                      <svg
+                                        viewBox="0 0 24 24"
+                                        className="w-2.5 h-2.5 text-white"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2.3"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      >
+                                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                                        <path d="m15 5 4 4" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => {
+                                      updateActivePage((page) => ({
+                                        ...page,
+                                        texts: (page.texts || []).filter((t) => t.id !== txt.id),
+                                      }));
+                                      setSelectedTextId(null);
+                                      setEditingTextId(null);
+                                    }}
+                                    className="p-1 rounded bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center cursor-pointer"
+                                    title="Διαγραφή κειμένου"
+                                  >
+                                    <Trash2 className="w-2.5 h-2.5 text-white stroke-[2.3]" />
+                                  </button>
                                 </div>
                               );
                             })()}
