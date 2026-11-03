@@ -212,12 +212,18 @@ const AiAnimatedImageOverlay: React.FC<{
   page?: NotePage;
   fillParent?: boolean;
   onUpdateImage: (updater: (im: ImageObject) => ImageObject) => void;
-  onOpenStudio: () => void;
-}> = ({ image, page, fillParent = false, onUpdateImage, onOpenStudio }) => {
+  onOpenStudio?: () => void;
+}> = ({ image, page, fillParent = false, onUpdateImage }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioRef = useRef<SmartSketchAudioEngine | null>(null);
   const [pillOffset, setPillOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const pillDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const pillDragRef = useRef<{
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+  } | null>(null);
   const mode = image.aiAnimMode || 'off';
   const muted = Boolean(image.aiAnimMuted);
 
@@ -381,99 +387,66 @@ const AiAnimatedImageOverlay: React.FC<{
         />
       )}
 
-      {/* Draggable Floating Compact Control Pill at Top-Right of Animated Diagram (stays visible even when paused!) */}
+      {/* Discreet Single Play/Pause Button at Top-Right of Animated Diagram */}
       {!fillParent && (
-        <div
+        <button
+          type="button"
           data-ui-panel="true"
           style={{
             transform: `translate(${pillOffset.x}px, ${pillOffset.y}px)`,
           }}
           onPointerDown={(e) => {
             e.stopPropagation();
-            if ((e.target as HTMLElement).closest('button')) return;
             e.currentTarget.setPointerCapture(e.pointerId);
             pillDragRef.current = {
               startX: e.clientX,
               startY: e.clientY,
               origX: pillOffset.x,
               origY: pillOffset.y,
+              moved: false,
             };
           }}
           onPointerMove={(e) => {
             if (!pillDragRef.current) return;
             e.stopPropagation();
-            setPillOffset({
-              x: pillDragRef.current.origX + (e.clientX - pillDragRef.current.startX),
-              y: pillDragRef.current.origY + (e.clientY - pillDragRef.current.startY),
-            });
+            const dx = e.clientX - pillDragRef.current.startX;
+            const dy = e.clientY - pillDragRef.current.startY;
+            if (Math.hypot(dx, dy) > 4) {
+              pillDragRef.current.moved = true;
+            }
+            if (pillDragRef.current.moved) {
+              setPillOffset({
+                x: pillDragRef.current.origX + dx,
+                y: pillDragRef.current.origY + dy,
+              });
+            }
           }}
           onPointerUp={(e) => {
             if (!pillDragRef.current) return;
             e.stopPropagation();
+            const wasDragged = pillDragRef.current.moved;
             pillDragRef.current = null;
+            if (!wasDragged) {
+              onUpdateImage((im) => ({
+                ...im,
+                aiAnimMode: isPlaying ? 'off' : defaultPlayMode,
+              }));
+            }
           }}
           onClick={(e) => e.stopPropagation()}
-          title="Σύρετε την μπάρα για να τη μετακινήσετε όπου θέλετε"
-          className={`absolute ${animBox.y < 32 ? 'top-1.5' : '-top-7'} right-0 flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[10px] font-semibold shadow-lg pointer-events-auto border cursor-grab active:cursor-grabbing select-none transition ${
+          title={
             isPlaying
-              ? 'bg-slate-900/90 border-white/15'
-              : 'bg-indigo-950/85 hover:bg-indigo-900/95 border-indigo-400/40'
+              ? `${image.aiAnimation?.sceneTitle || 'Ζωντάνεμα'} — Κλικ για Παύση (ή σύρετε)`
+              : `${image.aiAnimation?.sceneTitle || 'Ζωντάνεμα'} — Κλικ για Play (ή σύρετε)`
+          }
+          className={`absolute ${animBox.y < 28 ? 'top-1' : '-top-6'} right-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] leading-none shadow-sm pointer-events-auto border cursor-pointer select-none transition ${
+            isPlaying
+              ? 'bg-slate-900/65 hover:bg-slate-900/90 text-amber-300 border-white/20 backdrop-blur-[2px]'
+              : 'bg-slate-800/55 hover:bg-emerald-600/90 text-white border-white/25 backdrop-blur-[2px]'
           }`}
         >
-          {isPlaying ? (
-            <>
-              <span className="text-amber-300 truncate max-w-[115px] pl-1">
-                ⚡ {image.aiAnimation?.sceneTitle || 'Ζωντανό Σκίτσο'}
-              </span>
-              <button
-                type="button"
-                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: 'off' }))}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold cursor-pointer"
-                title="Παύση κίνησης (δεν χάνεται — μένει εδώ ως κουμπί ▶️ Play!)"
-              >
-                <span>⏸ Παύση</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMuted: !im.aiAnimMuted }))}
-                className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
-                title={muted ? 'Ενεργοποίηση Ήχου' : 'Σίγαση Ήχου'}
-              >
-                {muted ? '🔇' : '🔊'}
-              </button>
-              <button
-                type="button"
-                onClick={onOpenStudio}
-                className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
-                title="Ρυθμίσεις Ζωντανέματος"
-              >
-                ⚙️
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="text-slate-200 truncate max-w-[115px] pl-1">
-                ⚡ {image.aiAnimation?.sceneTitle || 'Ζωντάνεμα'}
-              </span>
-              <button
-                type="button"
-                onClick={() => onUpdateImage((im) => ({ ...im, aiAnimMode: defaultPlayMode }))}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold cursor-pointer"
-                title="Εκκίνηση του αποθηκευμένου Ζωντανέματος!"
-              >
-                <span>▶️ Play</span>
-              </button>
-              <button
-                type="button"
-                onClick={onOpenStudio}
-                className="px-1.5 py-0.5 rounded-full hover:bg-white/15 cursor-pointer"
-                title="Άνοιγμα Ρυθμίσεων Ζωντανέματος (AI Animate Studio)"
-              >
-                ⚙️
-              </button>
-            </>
-          )}
-        </div>
+          {isPlaying ? '⏸' : '▶'}
+        </button>
       )}
     </div>
   );
