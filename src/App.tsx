@@ -1578,6 +1578,8 @@ export default function App() {
     origCalcX?: number;
     origCalcY?: number;
     magnetTargetStrokeId?: string;
+    magnetCandidateId?: string;
+    magnetStartTime?: number;
   } | null>(null);
   const forceOverlayHitRef = useRef<{
     simId: string;
@@ -29307,7 +29309,7 @@ export default function App() {
         }
 
         let matchedOtherVec: StrokeObject | null = null;
-        let bestOriginDist = 64;
+        let bestOriginDist = 12;
         if (!matchedSpring) {
           for (const other of activePage.strokes) {
             if (
@@ -29336,6 +29338,8 @@ export default function App() {
         if (matchedSpring) {
           nx = Math.round(matchedSpring.x);
           ny = Math.round(matchedSpring.y);
+          dragF.magnetCandidateId = undefined;
+          dragF.magnetStartTime = undefined;
           dragF.magnetTargetStrokeId = matchedSpring.id;
           setNodeMagnetState({
             strokeId: draggedPrimaryId,
@@ -29345,18 +29349,32 @@ export default function App() {
             progress: 100,
           });
         } else if (matchedOtherVec) {
-          nx = Math.round(matchedOtherVec.points[0].x);
-          ny = Math.round(matchedOtherVec.points[0].y);
-          dragF.magnetTargetStrokeId = matchedOtherVec.id;
+          const nowT = performance.now();
+          if (dragF.magnetCandidateId !== matchedOtherVec.id || !dragF.magnetStartTime) {
+            dragF.magnetCandidateId = matchedOtherVec.id;
+            dragF.magnetStartTime = nowT;
+            dragF.magnetTargetStrokeId = undefined;
+          }
+          const elapsed = nowT - dragF.magnetStartTime;
+          const pct = Math.min(100, (elapsed / 900) * 100);
+          if (elapsed >= 900) {
+            nx = Math.round(matchedOtherVec.points[0].x);
+            ny = Math.round(matchedOtherVec.points[0].y);
+            dragF.magnetTargetStrokeId = matchedOtherVec.id;
+          } else {
+            dragF.magnetTargetStrokeId = undefined;
+          }
           setNodeMagnetState({
             strokeId: draggedPrimaryId,
             draggedKeyPosIdx: 0,
-            targetX: nx,
-            targetY: ny,
-            progress: 100,
+            targetX: Math.round(matchedOtherVec.points[0].x),
+            targetY: Math.round(matchedOtherVec.points[0].y),
+            progress: pct,
           });
-        } else if (dragF.magnetTargetStrokeId) {
+        } else if (dragF.magnetTargetStrokeId || dragF.magnetCandidateId) {
           dragF.magnetTargetStrokeId = undefined;
+          dragF.magnetCandidateId = undefined;
+          dragF.magnetStartTime = undefined;
           setNodeMagnetState(null);
         }
 
@@ -30265,7 +30283,7 @@ export default function App() {
               (other.shapeType === 'spring-pointer' ||
                 other.shapeType === 'arrow' ||
                 Boolean(other.arrowEnd));
-            const startSnapTol = isBothForceVectors && draggedEndSide === 'start' ? 56 : 26;
+            const startSnapTol = 12;
             if (startPt) {
               const dStart = distance(latestPt, startPt);
               if (dStart <= startSnapTol && (!bestMatch || dStart < bestMatch.dist)) {
@@ -30280,7 +30298,7 @@ export default function App() {
             }
             if (endPt && !isBothForceVectors) {
               const dEnd = distance(latestPt, endPt);
-              if (dEnd <= 26 && (!bestMatch || dEnd < bestMatch.dist)) {
+              if (dEnd <= 12 && (!bestMatch || dEnd < bestMatch.dist)) {
                 bestMatch = {
                   targetStrokeId: other.id,
                   targetEndSide: 'end',
@@ -30293,7 +30311,9 @@ export default function App() {
           }
 
           if (bestMatch) {
-            snapTargetPt = { x: bestMatch.x, y: bestMatch.y };
+            if (bestMatch.dist <= 6) {
+              snapTargetPt = { x: bestMatch.x, y: bestMatch.y };
+            }
             const curTimer = nodeMagnetTimerRef.current;
             if (
               !curTimer ||
@@ -30337,7 +30357,7 @@ export default function App() {
                       targetOtherSt.shapeType === 'arrow' ||
                       Boolean(targetOtherSt.arrowEnd))
                 );
-              const magnetDurationMs = isVecOriginPair ? 180 : 1000;
+              const magnetDurationMs = isVecOriginPair ? 900 : 1000;
 
               const stepMagnet = (now: number) => {
                 if (nodeMagnetTimerRef.current !== timerObj) return;
@@ -32335,7 +32355,7 @@ export default function App() {
               ) {
                 const otherTail = other.points[0];
                 const dVec = Math.hypot(candTailX - otherTail.x, candTailY - otherTail.y);
-                if (dVec <= 64 && (!matchedPhysicsMagnet || dVec < matchedPhysicsMagnet.dist)) {
+                if (dVec <= 12 && (!matchedPhysicsMagnet || dVec < matchedPhysicsMagnet.dist)) {
                   matchedPhysicsMagnet = {
                     kind: 'vector-to-vector',
                     springStrokeId: other.id,
@@ -32420,7 +32440,7 @@ export default function App() {
               ];
               for (const pr of pairs) {
                 const d = distance(pr.candPt, pr.targetPt);
-                if (d <= 32 && (!matchedWaveEndpoint || d < matchedWaveEndpoint.dist)) {
+                if (d <= 12 && (!matchedWaveEndpoint || d < matchedWaveEndpoint.dist)) {
                   matchedWaveEndpoint = {
                     draggedStrokeId: draggedWave.id,
                     draggedEndSide: pr.dragSide,
@@ -32439,8 +32459,10 @@ export default function App() {
         }
 
         if (matchedPhysicsMagnet) {
-          snapDx = matchedPhysicsMagnet.snapDx;
-          snapDy = matchedPhysicsMagnet.snapDy;
+          if (matchedPhysicsMagnet.kind !== 'vector-to-vector' || matchedPhysicsMagnet.dist <= 5) {
+            snapDx = matchedPhysicsMagnet.snapDx;
+            snapDy = matchedPhysicsMagnet.snapDy;
+          }
           const curPhys = pendingPhysicsMagnetRef.current;
           const isSameTarget =
             curPhys &&
@@ -32494,15 +32516,16 @@ export default function App() {
               progress: 0,
             });
 
-            // 180ms Ultra-Fast Magnet for Hooks & Force/Pendulum/Incline Assembly
+            // 900ms hold for vector-to-vector synthesis; 180ms for spring/pendulum/incline assembly
             const FAST_MAGNET_MS =
-              physObj.kind === 'pointer-to-spring' ||
-              physObj.kind === 'vector-to-vector' ||
-              physObj.kind === 'weight-to-weight' ||
-              physObj.kind === 'mass-to-spring' ||
-              physObj.kind === 'rod-to-support' ||
-              physObj.kind === 'bob-to-rod' ||
-              physObj.kind === 'block-to-incline'
+              physObj.kind === 'vector-to-vector'
+                ? 900
+                : physObj.kind === 'pointer-to-spring' ||
+                  physObj.kind === 'weight-to-weight' ||
+                  physObj.kind === 'mass-to-spring' ||
+                  physObj.kind === 'rod-to-support' ||
+                  physObj.kind === 'bob-to-rod' ||
+                  physObj.kind === 'block-to-incline'
                 ? 180
                 : 380;
             const stepPhysicsMagnet = (now: number) => {
@@ -32573,8 +32596,10 @@ export default function App() {
             };
           }
         } else if (matchedWaveEndpoint) {
-          snapDx = matchedWaveEndpoint.snapDx;
-          snapDy = matchedWaveEndpoint.snapDy;
+          if (matchedWaveEndpoint.dist <= 5) {
+            snapDx = matchedWaveEndpoint.snapDx;
+            snapDy = matchedWaveEndpoint.snapDy;
+          }
           const curTimer = nodeMagnetTimerRef.current;
           if (
             !curTimer ||
@@ -33896,11 +33921,6 @@ export default function App() {
         ) {
           attachPointerToSpring(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
         } else if (
-          pendingPhys.kind === 'vector-to-vector' &&
-          pendingPhys.pointerStrokeId
-        ) {
-          attachVectorsForSynthesis(pendingPhys.springStrokeId, pendingPhys.pointerStrokeId);
-        } else if (
           pendingPhys.kind === 'rod-to-support' &&
           pendingPhys.supportStrokeId &&
           pendingPhys.fixedEnd
@@ -34228,10 +34248,10 @@ export default function App() {
     snappedCurrentStrokeRef.current = null;
     holdAnchorPtRef.current = null;
 
-    // Auto-chain straight lines when starting (or ending) almost touching (<= 18px) an open straight line's endpoint!
-    // First, if drawn with Pen/Pencil without holding for 560ms, check if it started/ended <= 18px from an open 'line' endpoint and is straight:
-    const ALMOST_TOUCH_LINE_TOL = 18;
-    const CLOSE_POLYGON_RING_TOL = 22;
+    // Only chain straight lines into a polygon/corner when the endpoints are placed directly on top of each other (<= 8px),
+    // the user holds stationary for a sufficient time (>= 800ms), and the two segments are NOT parallel/collinear!
+    const ALMOST_TOUCH_LINE_TOL = 8;
+    const CLOSE_POLYGON_RING_TOL = 12;
     const isCandidateOpenLine = (s: StrokeObject): boolean =>
       Boolean(
         s.isShape &&
@@ -34244,53 +34264,6 @@ export default function App() {
           (s.layerId || 'layer-1') === activeLayerId
       );
 
-    if (
-      !isShape &&
-      (activeTool === 'pen' || activeTool === 'pencil') &&
-      !arrowEnd &&
-      rawPts.length >= 2
-    ) {
-      const rFirst = rawPts[0];
-      const rLast = rawPts[rawPts.length - 1];
-      const nearOpenLineEnd = activePage.strokes.some((s) => {
-        if (!isCandidateOpenLine(s)) return false;
-        const sStart = s.points[0];
-        const sEnd = s.points[s.points.length - 1];
-        return (
-          distance(rFirst, sStart) <= ALMOST_TOUCH_LINE_TOL ||
-          distance(rFirst, sEnd) <= ALMOST_TOUCH_LINE_TOL ||
-          distance(rLast, sStart) <= ALMOST_TOUCH_LINE_TOL ||
-          distance(rLast, sEnd) <= ALMOST_TOUCH_LINE_TOL
-        );
-      });
-      if (nearOpenLineEnd) {
-        const chordDx = rLast.x - rFirst.x;
-        const chordDy = rLast.y - rFirst.y;
-        const chordLen = Math.hypot(chordDx, chordDy);
-        if (chordLen >= 18) {
-          const nx = -chordDy / chordLen;
-          const ny = chordDx / chordLen;
-          let arcLen = 0;
-          let maxDev = 0;
-          for (let i = 1; i < rawPts.length; i++) {
-            arcLen += Math.hypot(rawPts[i].x - rawPts[i - 1].x, rawPts[i].y - rawPts[i - 1].y);
-            const dev = Math.abs((rawPts[i].x - rFirst.x) * nx + (rawPts[i].y - rFirst.y) * ny);
-            if (dev > maxDev) maxDev = dev;
-          }
-          if (maxDev <= Math.max(10, chordLen * 0.08) && arcLen <= chordLen * 1.18) {
-            const snappedLine = recognizeAndSnapShape(rawPts, 'line');
-            if (snappedLine) {
-              finalPts = snappedLine.points;
-              isShape = true;
-              shapeType = 'line';
-            }
-          }
-        }
-      }
-    }
-
-    // Check if this newly drawn straight line almost touches (<= 18px) the endpoint of an existing open 'line' stroke on the active layer.
-    // If so, weld them into a single connected polyline — and if it closes a loop of >= 3 vertices, automatically form a Polygon!
     let weldedIntoExistingStroke: StrokeObject | null = null;
     let weldedRemoveSecondaryId: string | null = null;
     let weldedClosedIntoPolygon = false;
@@ -34300,10 +34273,14 @@ export default function App() {
       shapeType === 'line' &&
       finalPts.length === 2 &&
       !arrowEnd &&
-      shapePreset !== 'arrow'
+      shapePreset !== 'arrow' &&
+      holdElapsedMs >= 800
     ) {
       const p0 = finalPts[0];
       const p1 = finalPts[1];
+      const newDx = p1.x - p0.x;
+      const newDy = p1.y - p0.y;
+      const newLen = Math.hypot(newDx, newDy);
       type EndpointMatch = {
         stroke: StrokeObject;
         which: 'start' | 'end';
@@ -34312,6 +34289,19 @@ export default function App() {
       let match0: EndpointMatch | null = null;
       let match1: EndpointMatch | null = null;
 
+      const isNonParallelToStrokeEnd = (s: StrokeObject, which: 'start' | 'end'): boolean => {
+        if (newLen < 1e-3 || s.points.length < 2) return false;
+        const a = which === 'start' ? s.points[0] : s.points[s.points.length - 2];
+        const b = which === 'start' ? s.points[1] : s.points[s.points.length - 1];
+        const sDx = b.x - a.x;
+        const sDy = b.y - a.y;
+        const sLen = Math.hypot(sDx, sDy);
+        if (sLen < 1e-3) return false;
+        const crossSin = Math.abs(newDx * sDy - newDy * sDx) / (newLen * sLen);
+        // Require >= ~20° angle between segments so two parallel/codirectional lines NEVER collapse into one line!
+        return crossSin >= 0.34;
+      };
+
       for (const s of activePage.strokes) {
         if (!isCandidateOpenLine(s)) continue;
         const sStart = s.points[0];
@@ -34319,11 +34309,19 @@ export default function App() {
         const d0Start = distance(p0, sStart);
         const d0End = distance(p0, sEnd);
         if (d0Start <= d0End) {
-          if (d0Start <= CLOSE_POLYGON_RING_TOL && (!match0 || d0Start < match0.dist)) {
+          if (
+            d0Start <= CLOSE_POLYGON_RING_TOL &&
+            isNonParallelToStrokeEnd(s, 'start') &&
+            (!match0 || d0Start < match0.dist)
+          ) {
             match0 = { stroke: s, which: 'start', dist: d0Start };
           }
         } else {
-          if (d0End <= CLOSE_POLYGON_RING_TOL && (!match0 || d0End < match0.dist)) {
+          if (
+            d0End <= CLOSE_POLYGON_RING_TOL &&
+            isNonParallelToStrokeEnd(s, 'end') &&
+            (!match0 || d0End < match0.dist)
+          ) {
             match0 = { stroke: s, which: 'end', dist: d0End };
           }
         }
@@ -34331,24 +34329,31 @@ export default function App() {
         const d1Start = distance(p1, sStart);
         const d1End = distance(p1, sEnd);
         if (d1Start <= d1End) {
-          if (d1Start <= CLOSE_POLYGON_RING_TOL && (!match1 || d1Start < match1.dist)) {
+          if (
+            d1Start <= CLOSE_POLYGON_RING_TOL &&
+            isNonParallelToStrokeEnd(s, 'start') &&
+            (!match1 || d1Start < match1.dist)
+          ) {
             match1 = { stroke: s, which: 'start', dist: d1Start };
           }
         } else {
-          if (d1End <= CLOSE_POLYGON_RING_TOL && (!match1 || d1End < match1.dist)) {
+          if (
+            d1End <= CLOSE_POLYGON_RING_TOL &&
+            isNonParallelToStrokeEnd(s, 'end') &&
+            (!match1 || d1End < match1.dist)
+          ) {
             match1 = { stroke: s, which: 'end', dist: d1End };
           }
         }
       }
 
-      // Require at least one endpoint to be strictly within ALMOST_TOUCH_LINE_TOL (18px)
+      // Require at least one endpoint to be strictly within ALMOST_TOUCH_LINE_TOL (8px)
       const m0Strict = match0 && match0.dist <= ALMOST_TOUCH_LINE_TOL;
       const m1Strict = match1 && match1.dist <= ALMOST_TOUCH_LINE_TOL;
       if (!m0Strict && !m1Strict) {
         match0 = null;
         match1 = null;
       } else {
-        // Only allow the 22px closing tolerance on the second end when the first end matched <= 18px
         if (match0 && !m0Strict && !m1Strict) match0 = null;
         if (match1 && !m1Strict && !m0Strict) match1 = null;
       }
@@ -34394,12 +34399,7 @@ export default function App() {
             const useM0 = match0.dist <= match1.dist;
             const m = useM0 ? match0 : match1;
             const freeP = useM0 ? p1 : p0;
-            const weldPt =
-              m.which === 'start' ? basePts[0] : basePts[basePts.length - 1];
-            const adjFree = {
-              x: isNewVert ? weldPt.x : freeP.x,
-              y: isNewHoriz ? weldPt.y : freeP.y,
-            };
+            const adjFree = { x: freeP.x, y: freeP.y };
             chainPts = m.which === 'end' ? [...basePts, adjFree] : [adjFree, ...basePts];
           }
         } else if (match0 && match1 && match0.stroke.id !== match1.stroke.id) {
@@ -34411,11 +34411,6 @@ export default function App() {
           const ptsB = secondaryStroke.points.map((pt) => ({ x: pt.x, y: pt.y }));
           const orientedA = match0.which === 'end' ? ptsA : ptsA.slice().reverse();
           const orientedB = match1.which === 'start' ? ptsB : ptsB.slice().reverse();
-          if (isNewHoriz && orientedA.length >= 1 && orientedB.length >= 1) {
-            orientedB[0].y = orientedA[orientedA.length - 1].y;
-          } else if (isNewVert && orientedA.length >= 1 && orientedB.length >= 1) {
-            orientedB[0].x = orientedA[orientedA.length - 1].x;
-          }
           chainPts = [...orientedA, ...orientedB];
           if (
             chainPts.length >= 4 &&
@@ -34434,10 +34429,7 @@ export default function App() {
             m.which === 'start' ? basePts[0] : basePts[basePts.length - 1];
           const oppPt =
             m.which === 'start' ? basePts[basePts.length - 1] : basePts[0];
-          const adjFree = {
-            x: isNewVert ? weldPt.x : freeP.x,
-            y: isNewHoriz ? weldPt.y : freeP.y,
-          };
+          const adjFree = { x: freeP.x, y: freeP.y };
           if (
             basePts.length >= 3 &&
             distance(adjFree, oppPt) <= CLOSE_POLYGON_RING_TOL
@@ -34939,31 +34931,6 @@ export default function App() {
         if (matchedSpringId) {
           const sid = matchedSpringId;
           window.setTimeout(() => attachPointerToSpring(sid, newStroke.id), 10);
-        } else {
-          // Check if the new vector's tail • was drawn near another unattached vector's tail • -> auto-pair for Synthesis!
-          let matchedVecId: string | null = null;
-          let bestVecDist = 52;
-          for (const other of activePage.strokes) {
-            if (
-              other.id === newStroke.id ||
-              (other.shapeType !== 'spring-pointer' &&
-                other.shapeType !== 'arrow' &&
-                !other.arrowEnd) ||
-              other.attachedToSpringId ||
-              other.points.length < 2
-            ) {
-              continue;
-            }
-            const dV = Math.hypot(tailX - other.points[0].x, tailY - other.points[0].y);
-            if (dV < bestVecDist) {
-              bestVecDist = dV;
-              matchedVecId = other.id;
-            }
-          }
-          if (matchedVecId) {
-            const vid = matchedVecId;
-            window.setTimeout(() => attachVectorsForSynthesis(vid, newStroke.id), 10);
-          }
         }
       }
     }
