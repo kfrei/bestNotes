@@ -2149,21 +2149,45 @@ export default function App() {
   const [cropPolygonPts, setCropPolygonPts] = useState<{ x: number; y: number }[]>([]);
   const edgeMapRef = useRef<{ id: string; map: Float32Array; w: number; h: number } | null>(null);
 
-  // Ruler (vertical by default: x = 460, y = 540, angle = 90°)
-  const [rulerState, setRulerState] = useState<{
+  // Per-Page Ruler State (each page remembers its own ruler visibility, position, angle, and mm toggle)
+  type PageRulerState = {
     visible: boolean;
     x: number;
     y: number;
     angle: number;
     showMm?: boolean;
-  }>({
+  };
+  const DEFAULT_PAGE_RULER_STATE: PageRulerState = {
     visible: false,
     x: 460,
     y: 540,
     angle: 90,
     showMm: true,
-  });
+  };
+  const [rulersByPageId, setRulersByPageId] = useState<Record<string, PageRulerState>>({});
+  const activeNotebookForRuler =
+    notebooks.find((n) => n.id === activeNotebookId) || notebooks[0] || FALLBACK_EMPTY_NOTEBOOK;
+  const currentActivePageIdForRuler =
+    activeNotebookForRuler.pages[activePageIndex]?.id || activeNotebookForRuler.pages[0]?.id || '';
+  const rulerState: PageRulerState =
+    rulersByPageId[currentActivePageIdForRuler] || DEFAULT_PAGE_RULER_STATE;
+  const setRulerState = useCallback(
+    (
+      updater: PageRulerState | ((prev: PageRulerState) => PageRulerState),
+      targetPageId?: string
+    ) => {
+      const pid = targetPageId || currentActivePageIdForRuler;
+      if (!pid) return;
+      setRulersByPageId((prevMap) => {
+        const cur = prevMap[pid] || DEFAULT_PAGE_RULER_STATE;
+        const next = typeof updater === 'function' ? updater(cur) : updater;
+        return { ...prevMap, [pid]: next };
+      });
+    },
+    [currentActivePageIdForRuler]
+  );
   const rulerDragRef = useRef<{
+    pageId: string;
     mode: 'move' | 'rotate';
     pointerId: number;
     startClientX: number;
@@ -8042,27 +8066,6 @@ export default function App() {
   const syncActivePageFromPanY = useCallback(
     (panY: number) => {
       const wsHeight = workspaceRef.current?.clientHeight || 820;
-      const viewTopDocY = -panY / zoomRef.current;
-      const viewBottomDocY = (-panY + wsHeight) / zoomRef.current;
-
-      // If the user has an active selection on the current page and that page is still visible in the viewport,
-      // do not switch activePageIndex away from the page they are actively working on!
-      const curIdx = activeDrawingPageIndexRef.current;
-      if (
-        (selectedStrokeIds.length > 0 || selectedImageId || selectedTextId) &&
-        curIdx >= 0 &&
-        curIdx < activeNotebook.pages.length
-      ) {
-        let curPageTop = 0;
-        for (let i = 0; i < curIdx; i++) {
-          curPageTop += getPageLogicalHeight(activeNotebook.pages[i]) + PAGE_GAP;
-        }
-        const curPageBottom = curPageTop + getPageLogicalHeight(activeNotebook.pages[curIdx]);
-        if (curPageBottom > viewTopDocY + 60 && curPageTop < viewBottomDocY - 60) {
-          return;
-        }
-      }
-
       const docFocusY = (-panY + wsHeight * 0.5) / zoomRef.current;
       let accumY = 0;
       let bestIdx = 0;
@@ -8083,7 +8086,7 @@ export default function App() {
         setActivePageIndex(bestIdx);
       }
     },
-    [activeNotebook.pages, selectedStrokeIds.length, selectedImageId, selectedTextId]
+    [activeNotebook.pages]
   );
 
   const insertPageAtIndex = useCallback(
@@ -14457,7 +14460,7 @@ export default function App() {
         (s) => s.attachedToSpringId === sp.id && s.points.length >= 2
       );
       if (!ptr) continue;
-      const readout = computeRulerPointerReadout(ptr, 0, 0, pW);
+      const readout = computeRulerPointerReadout(ptr, 0, 0, pW, page);
       if (!readout) continue;
 
       const spInfo = getSpringTerminalsAndWidthVec(sp);
@@ -15137,7 +15140,8 @@ export default function App() {
     ptrStroke: StrokeObject,
     dispDx = 0,
     dispDy = 0,
-    pW = getPageLogicalWidth(activePage)
+    pW = getPageLogicalWidth(activePage),
+    targetPage: NotePage = activePage
   ): {
     clampedXPos: number;
     mmVal: number;
@@ -15158,13 +15162,14 @@ export default function App() {
     dashDurationSec: number;
     readoutDelaySec: number;
   } | null => {
-    if (!rulerState.visible || ptrStroke.points.length < 2) return null;
+    const rState = rulersByPageId[targetPage.id] || DEFAULT_PAGE_RULER_STATE;
+    if (!rState.visible || ptrStroke.points.length < 2) return null;
     if (!ptrStroke.attachedToSpringId) return null;
 
     const rulerW = Math.round(pW * 0.8);
     const rulerH = 54;
     const oneMmPx = 920 / 20 / 10; // 4.6px per 1mm (46px per 1cm)
-    const rad = (rulerState.angle * Math.PI) / 180;
+    const rad = (rState.angle * Math.PI) / 180;
     const cosA = Math.cos(rad);
     const sinA = Math.sin(rad);
 
@@ -15177,7 +15182,7 @@ export default function App() {
     let isLockedAtZero = false;
     const validCandidates: { id: string; xPos: number }[] = [];
 
-    for (const cand of activePage.strokes) {
+    for (const cand of targetPage.strokes) {
       if (!cand.attachedToSpringId || cand.points.length < 2) continue;
       const isSelf = cand.id === ptrStroke.id;
       const cDx = isSelf ? dispDx : 0;
@@ -15187,13 +15192,13 @@ export default function App() {
         x: cand.points[cand.points.length - 1].x + cDx,
         y: cand.points[cand.points.length - 1].y + cDy,
       };
-      const sPerp0 = -(cP0.x - rulerState.x) * sinA + (cP0.y - rulerState.y) * cosA;
-      const sPerpEnd = -(cPEnd.x - rulerState.x) * sinA + (cPEnd.y - rulerState.y) * cosA;
+      const sPerp0 = -(cP0.x - rState.x) * sinA + (cP0.y - rState.y) * cosA;
+      const sPerpEnd = -(cPEnd.x - rState.x) * sinA + (cPEnd.y - rState.y) * cosA;
       const segPerpDist =
         sPerp0 * sPerpEnd <= 0 ? 0 : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
       const cTip = Math.abs(sPerpEnd) <= Math.abs(sPerp0) ? cPEnd : cP0;
-      const cLocalX = (cTip.x - rulerState.x) * cosA + (cTip.y - rulerState.y) * sinA;
-      const cLocalY = -(cTip.x - rulerState.x) * sinA + (cTip.y - rulerState.y) * cosA;
+      const cLocalX = (cTip.x - rState.x) * cosA + (cTip.y - rState.y) * sinA;
+      const cLocalY = -(cTip.x - rState.x) * sinA + (cTip.y - rState.y) * cosA;
       const cXPos = cLocalX + rulerW / 2;
       if (cXPos >= -6 && cXPos <= rulerW + 6 && Math.abs(cLocalY) <= maxPerp) {
         validCandidates.push({ id: cand.id, xPos: cXPos });
@@ -15212,15 +15217,15 @@ export default function App() {
       x: ptrStroke.points[ptrStroke.points.length - 1].x + dispDx,
       y: ptrStroke.points[ptrStroke.points.length - 1].y + dispDy,
     };
-    const sPerp0Self = -(p0.x - rulerState.x) * sinA + (p0.y - rulerState.y) * cosA;
-    const sPerpEndSelf = -(pEnd.x - rulerState.x) * sinA + (pEnd.y - rulerState.y) * cosA;
+    const sPerp0Self = -(p0.x - rState.x) * sinA + (p0.y - rState.y) * cosA;
+    const sPerpEndSelf = -(pEnd.x - rState.x) * sinA + (pEnd.y - rState.y) * cosA;
 
     const perp0 = Math.abs(sPerp0Self);
     const perpEnd = Math.abs(sPerpEndSelf);
     const tipPt = perpEnd <= perp0 ? pEnd : p0;
 
-    const dx = tipPt.x - rulerState.x;
-    const dy = tipPt.y - rulerState.y;
+    const dx = tipPt.x - rState.x;
+    const dy = tipPt.y - rState.y;
     const localX = dx * cosA + dy * sinA;
     const localY = -dx * sinA + dy * cosA;
     const xPos = localX + rulerW / 2;
@@ -15241,8 +15246,8 @@ export default function App() {
     const cmStr = `${cmVal.toString().replace('.', ',')} cm`;
     const ptrColor = ptrStroke.color || '#dc2626';
     const localAlong = clampedXPos - rulerW / 2;
-    const axisPtX = rulerState.x + localAlong * cosA;
-    const axisPtY = rulerState.y + localAlong * sinA;
+    const axisPtX = rState.x + localAlong * cosA;
+    const axisPtY = rState.y + localAlong * sinA;
 
     const isMostlyVertical = Math.abs(sinA) >= 0.35;
     const rightNormalSign = isMostlyVertical ? (-sinA >= 0 ? 1 : -1) : -1;
@@ -23222,18 +23227,23 @@ export default function App() {
     let x = (clientX - rect.left) * scaleX;
     let y = (clientY - rect.top) * scaleY;
 
-    if (rulerState.visible && ['pen', 'pencil', 'highlighter'].includes(activeTool)) {
-      const rad = (rulerState.angle * Math.PI) / 180;
-      const dx = x - rulerState.x;
-      const dy = y - rulerState.y;
+    const drawPageId =
+      activeNotebook.pages[activeDrawingPageIndexRef.current]?.id ||
+      activePage.id ||
+      currentActivePageIdForRuler;
+    const drawPageRuler = rulersByPageId[drawPageId] || rulerState;
+    if (drawPageRuler.visible && ['pen', 'pencil', 'highlighter'].includes(activeTool)) {
+      const rad = (drawPageRuler.angle * Math.PI) / 180;
+      const dx = x - drawPageRuler.x;
+      const dy = y - drawPageRuler.y;
       const localY = -dx * Math.sin(rad) + dy * Math.cos(rad);
       const localX = dx * Math.cos(rad) + dy * Math.sin(rad);
       const halfRulerW = (logicalW * 0.8) / 2;
       const halfRulerH = 27;
       if (Math.abs(localY) < halfRulerH + 18 && Math.abs(localX) <= halfRulerW + 12) {
         const snapLocalY = localY >= 0 ? halfRulerH : -halfRulerH;
-        x = rulerState.x + localX * Math.cos(rad) - snapLocalY * Math.sin(rad);
-        y = rulerState.y + localX * Math.sin(rad) + snapLocalY * Math.cos(rad);
+        x = drawPageRuler.x + localX * Math.cos(rad) - snapLocalY * Math.sin(rad);
+        y = drawPageRuler.y + localX * Math.sin(rad) + snapLocalY * Math.cos(rad);
       }
     }
 
@@ -41614,18 +41624,34 @@ export default function App() {
               </button>
 
               <button
-                onClick={() =>
-                  setRulerState((r) => ({
-                    ...r,
-                    visible: !r.visible,
-                    angle: !r.visible ? 90 : r.angle,
-                    showMm: !r.visible ? true : r.showMm,
-                  }))
-                }
+                onClick={() => {
+                  const targetPageObj =
+                    activeNotebook.pages[activePageIndex] || activePage;
+                  const targetPid = targetPageObj.id;
+                  const existingForPage = rulersByPageId[targetPid];
+                  const pH = getPageLogicalHeight(targetPageObj);
+                  const pageTopY = getPageTopOffset(activePageIndex);
+                  const wsH = workspaceRef.current?.clientHeight || 820;
+                  const viewCenterDocY = (-panRef.current.y + wsH * 0.5) / zoomRef.current;
+                  const localCenterY = Math.max(
+                    120,
+                    Math.min(pH - 120, Math.round(viewCenterDocY - pageTopY))
+                  );
+                  setRulerState(
+                    (r) => ({
+                      ...r,
+                      visible: !r.visible,
+                      y: !r.visible && !existingForPage ? localCenterY : r.y,
+                      angle: !r.visible ? 90 : r.angle,
+                      showMm: !r.visible ? true : r.showMm,
+                    }),
+                    targetPid
+                  );
+                }}
                 className={`p-2 rounded-full transition cursor-pointer ${
                   rulerState.visible ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'
                 }`}
-                title="Χάρακας (Ruler)"
+                title="Χάρακας (Ruler) — Εμφάνιση/Απόκρυψη στην τρέχουσα σελίδα"
               >
                 <Ruler className="w-4 h-4" />
               </button>
@@ -49415,66 +49441,90 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Movable & Rotatable Minimalist A4 Ruler (80% of paper width, soft gray, real A4 1cm tick marks, no text/degrees, top-center rotation handle) */}
-                    {isCurrentActive &&
-                      rulerState.visible &&
-                      (() => {
-                        // 100% of A4 Portrait width (920px) = 20cm => 1cm = 46px in page coordinates!
-                        // 80% of paper width = 736px (16cm) in Portrait, or 1008px in Landscape.
-                        const rulerW = Math.round(pW * 0.8);
-                        const rulerH = 54;
-                        const oneCmPx = 920 / 20; // 46px per 1cm
-                        const halfCmPx = oneCmPx / 2; // 23px per 0.5cm
-                        const totalHalfCmSteps = Math.floor(rulerW / halfCmPx);
-                        const pointerCandidates = activePage.strokes.filter(
-                          (s) =>
-                            s.points.length >= 2 &&
-                            (s.shapeType === 'spring-pointer' ||
-                              Boolean(s.attachedToSpringId) ||
-                              s.shapeType === 'arrow' ||
-                              Boolean(s.arrowEnd))
-                        );
+                    {/* Movable & Rotatable Minimalist A4 Ruler (per-page: stays on the page where it was added!) */}
+                    {(() => {
+                      const pageRuler =
+                        rulersByPageId[pageObj.id] || DEFAULT_PAGE_RULER_STATE;
+                      if (!pageRuler.visible) return null;
+                      // 100% of A4 Portrait width (920px) = 20cm => 1cm = 46px in page coordinates!
+                      // 80% of paper width = 736px (16cm) in Portrait, or 1008px in Landscape.
+                      const rulerW = Math.round(pW * 0.8);
+                      const rulerH = 54;
+                      const oneCmPx = 920 / 20; // 46px per 1cm
+                      const halfCmPx = oneCmPx / 2; // 23px per 0.5cm
+                      const totalHalfCmSteps = Math.floor(rulerW / halfCmPx);
+                      const pointerCandidates = pageObj.strokes.filter(
+                        (s) =>
+                          s.points.length >= 2 &&
+                          (s.shapeType === 'spring-pointer' ||
+                            Boolean(s.attachedToSpringId) ||
+                            s.shapeType === 'arrow' ||
+                            Boolean(s.arrowEnd))
+                      );
 
-                        return (
-                          <>
-                            <div
-                              data-ui-panel="true"
-                              data-ruler-root="true"
-                              tabIndex={0}
-                              aria-label="Χάρακας (σύρετε με το χέρι ή μετακινήστε με τα βελάκια)"
+                      return (
+                        <>
+                          <div
+                            data-ui-panel="true"
+                            data-ruler-root="true"
+                            tabIndex={0}
+                            aria-label="Χάρακας (σύρετε με το χέρι ή μετακινήστε με τα βελάκια)"
                             onKeyDown={(e) => {
                               const step = 15;
                               if (e.key === 'ArrowLeft') {
                                 e.preventDefault();
-                                setRulerState((r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x - step)) }));
+                                setRulerState(
+                                  (r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x - step)) }),
+                                  pageObj.id
+                                );
                               } else if (e.key === 'ArrowRight') {
                                 e.preventDefault();
-                                setRulerState((r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x + step)) }));
+                                setRulerState(
+                                  (r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x + step)) }),
+                                  pageObj.id
+                                );
                               } else if (e.key === 'ArrowUp') {
                                 e.preventDefault();
-                                setRulerState((r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y - step)) }));
+                                setRulerState(
+                                  (r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y - step)) }),
+                                  pageObj.id
+                                );
                               } else if (e.key === 'ArrowDown') {
                                 e.preventDefault();
-                                setRulerState((r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y + step)) }));
+                                setRulerState(
+                                  (r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y + step)) }),
+                                  pageObj.id
+                                );
                               }
                             }}
                             onPointerDown={(e) => {
                               if (e.pointerType === 'mouse' && e.button !== 0) return;
-                              if ((e.target as HTMLElement).closest('[data-ruler-rotate="true"], [data-ruler-mm="true"]')) return;
+                              if (
+                                (e.target as HTMLElement).closest(
+                                  '[data-ruler-rotate="true"], [data-ruler-mm="true"]'
+                                )
+                              ) {
+                                return;
+                              }
                               e.stopPropagation();
+                              if (pageIdx !== activePageIndex) {
+                                activeDrawingPageIndexRef.current = pageIdx;
+                                setActivePageIndex(pageIdx);
+                              }
                               try {
                                 e.currentTarget.setPointerCapture(e.pointerId);
                               } catch {
                                 // ignore capture error
                               }
                               rulerDragRef.current = {
+                                pageId: pageObj.id,
                                 mode: 'move',
                                 pointerId: e.pointerId,
                                 startClientX: e.clientX,
                                 startClientY: e.clientY,
-                                initialX: rulerState.x,
-                                initialY: rulerState.y,
-                                initialAngle: rulerState.angle,
+                                initialX: pageRuler.x,
+                                initialY: pageRuler.y,
+                                initialAngle: pageRuler.angle,
                                 startPointerAngleDeg: 0,
                                 centerClientX: 0,
                                 centerClientY: 0,
@@ -49482,19 +49532,26 @@ export default function App() {
                             }}
                             onPointerMove={(e) => {
                               const st = rulerDragRef.current;
-                              if (!st || st.mode !== 'move' || st.pointerId !== e.pointerId) return;
+                              if (
+                                !st ||
+                                st.mode !== 'move' ||
+                                st.pointerId !== e.pointerId ||
+                                st.pageId !== pageObj.id
+                              ) {
+                                return;
+                              }
                               e.stopPropagation();
                               const dx = (e.clientX - st.startClientX) / zoomRef.current;
                               const dy = (e.clientY - st.startClientY) / zoomRef.current;
                               const nextX = Math.max(40, Math.min(pW - 40, st.initialX + dx));
                               let nextY = Math.max(40, Math.min(pH - 40, st.initialY + dy));
-                              const rad = (rulerState.angle * Math.PI) / 180;
+                              const rad = (pageRuler.angle * Math.PI) / 180;
                               const sinA = Math.sin(rad);
                               const cosA = Math.cos(rad);
                               if (Math.abs(sinA) >= 0.96) {
                                 // Gently snap the 0 cm origin of the vertical ruler to a nearby spring pointer arrow
                                 const closeEdgeThreshold = rulerH / 2 + 36;
-                                for (const cand of activePage.strokes) {
+                                for (const cand of pageObj.strokes) {
                                   if (!cand.attachedToSpringId || cand.points.length < 2) continue;
                                   const cP0 = cand.points[0];
                                   const cPEnd = cand.points[cand.points.length - 1];
@@ -49513,7 +49570,10 @@ export default function App() {
                                   }
                                 }
                               }
-                              setRulerState((prev) => ({ ...prev, x: nextX, y: nextY }));
+                              setRulerState(
+                                (prev) => ({ ...prev, x: nextX, y: nextY }),
+                                pageObj.id
+                              );
                             }}
                             onPointerUp={(e) => {
                               if (rulerDragRef.current?.pointerId === e.pointerId) {
@@ -49528,9 +49588,9 @@ export default function App() {
                             style={{
                               width: rulerW,
                               height: rulerH,
-                              left: rulerState.x - rulerW / 2,
-                              top: rulerState.y - rulerH / 2,
-                              transform: `rotate(${rulerState.angle}deg)`,
+                              left: pageRuler.x - rulerW / 2,
+                              top: pageRuler.y - rulerH / 2,
+                              transform: `rotate(${pageRuler.angle}deg)`,
                               touchAction: 'none',
                               WebkitUserSelect: 'none',
                               userSelect: 'none',
@@ -49545,6 +49605,10 @@ export default function App() {
                               onPointerDown={(e) => {
                                 if (e.pointerType === 'mouse' && e.button !== 0) return;
                                 e.stopPropagation();
+                                if (pageIdx !== activePageIndex) {
+                                  activeDrawingPageIndexRef.current = pageIdx;
+                                  setActivePageIndex(pageIdx);
+                                }
                                 try {
                                   e.currentTarget.setPointerCapture(e.pointerId);
                                 } catch {
@@ -49557,13 +49621,14 @@ export default function App() {
                                 const startAng =
                                   (Math.atan2(e.clientY - centerClientY, e.clientX - centerClientX) * 180) / Math.PI;
                                 rulerDragRef.current = {
+                                  pageId: pageObj.id,
                                   mode: 'rotate',
                                   pointerId: e.pointerId,
                                   startClientX: e.clientX,
                                   startClientY: e.clientY,
-                                  initialX: rulerState.x,
-                                  initialY: rulerState.y,
-                                  initialAngle: rulerState.angle,
+                                  initialX: pageRuler.x,
+                                  initialY: pageRuler.y,
+                                  initialAngle: pageRuler.angle,
                                   startPointerAngleDeg: startAng,
                                   centerClientX,
                                   centerClientY,
@@ -49571,7 +49636,14 @@ export default function App() {
                               }}
                               onPointerMove={(e) => {
                                 const st = rulerDragRef.current;
-                                if (!st || st.mode !== 'rotate' || st.pointerId !== e.pointerId) return;
+                                if (
+                                  !st ||
+                                  st.mode !== 'rotate' ||
+                                  st.pointerId !== e.pointerId ||
+                                  st.pageId !== pageObj.id
+                                ) {
+                                  return;
+                                }
                                 e.stopPropagation();
                                 const currAng =
                                   (Math.atan2(e.clientY - st.centerClientY, e.clientX - st.centerClientX) * 180) /
@@ -49590,7 +49662,10 @@ export default function App() {
                                     break;
                                   }
                                 }
-                                setRulerState((prev) => ({ ...prev, angle: nextAngle }));
+                                setRulerState(
+                                  (prev) => ({ ...prev, angle: nextAngle }),
+                                  pageObj.id
+                                );
                               }}
                               onPointerUp={(e) => {
                                 if (rulerDragRef.current?.pointerId === e.pointerId) {
@@ -49626,13 +49701,16 @@ export default function App() {
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setRulerState((prev) => ({ ...prev, showMm: !prev.showMm }));
+                                setRulerState(
+                                  (prev) => ({ ...prev, showMm: !prev.showMm }),
+                                  pageObj.id
+                                );
                               }}
                               className="absolute left-[calc(50%+30px)] -top-9 -translate-x-1/2 flex flex-col items-center cursor-pointer outline-none"
                             >
                               <div
                                 className={`w-7 h-7 rounded-full border shadow-md flex items-center justify-center text-[9.5px] font-extrabold tracking-tight transition ${
-                                  rulerState.showMm
+                                  pageRuler.showMm
                                     ? 'bg-[#0066ff] text-white border-[#0052cc] ring-2 ring-[#0066ff]/30'
                                     : 'bg-white/95 text-slate-600 border-slate-400/80 hover:text-slate-900'
                                 }`}
@@ -49640,13 +49718,13 @@ export default function App() {
                                 <span
                                   style={{
                                     display: 'inline-block',
-                                    transform: `rotate(${-rulerState.angle}deg)`,
+                                    transform: `rotate(${-pageRuler.angle}deg)`,
                                   }}
                                 >
                                   cm
                                 </span>
                               </div>
-                              <div className={`w-[1.5px] h-2 ${rulerState.showMm ? 'bg-[#0066ff]/80' : 'bg-slate-400/80'}`} />
+                              <div className={`w-[1.5px] h-2 ${pageRuler.showMm ? 'bg-[#0066ff]/80' : 'bg-slate-400/80'}`} />
                             </button>
 
                             {/* Tick Lines & Optional cm Precision Labels Along Top and Bottom Edges */}
@@ -49654,13 +49732,13 @@ export default function App() {
                               {/* Subtle center groove */}
                               <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 h-px bg-slate-400/30" />
 
-                              {rulerState.showMm ? (
+                              {pageRuler.showMm ? (
                                 <>
                                   {/* 0 cm origin label */}
                                   <span
                                     style={{
                                       left: 7,
-                                      transform: `translate(-50%, -50%) rotate(${-rulerState.angle}deg)`,
+                                      transform: `translate(-50%, -50%) rotate(${-pageRuler.angle}deg)`,
                                     }}
                                     className="absolute top-1/2 text-[8.5px] font-mono font-bold text-slate-700/90 bg-slate-200/85 px-0.5 rounded select-none"
                                   >
@@ -49697,7 +49775,7 @@ export default function App() {
                                             <span
                                               style={{
                                                 left: xPos,
-                                                transform: `translate(-50%, -50%) rotate(${-rulerState.angle}deg)`,
+                                                transform: `translate(-50%, -50%) rotate(${-pageRuler.angle}deg)`,
                                               }}
                                               className="absolute top-1/2 text-[9px] font-mono font-extrabold text-slate-800 bg-slate-200/85 px-0.5 rounded select-none"
                                             >
@@ -49745,7 +49823,7 @@ export default function App() {
 
                               {/* Colored Indicator Line Across Ruler Matching the Attached Pointer Needle */}
                               {pointerCandidates.map((pSt) => {
-                                const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                                const info = computeRulerPointerReadout(pSt, 0, 0, pW, pageObj);
                                 const ptrColor = info ? info.ptrColor : pSt.color || '#dc2626';
                                 return (
                                   <div
@@ -49767,7 +49845,7 @@ export default function App() {
 
                           {/* Animated Dashed Projection Line from Pointer Arrow Tip to Ruler when Locked at 0 */}
                           {pointerCandidates.map((pSt) => {
-                            const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                            const info = computeRulerPointerReadout(pSt, 0, 0, pW, pageObj);
                             const ptrColor = info ? info.ptrColor : pSt.color || '#dc2626';
                             const showDash = Boolean(info && info.isLockedAtZero && info.dashLen > 1);
                             const dLen = info ? Math.max(1, info.dashLen) : 1;
@@ -49811,7 +49889,7 @@ export default function App() {
 
                           {/* Colored Numerical Readout (in cm) to the Right of the Ruler Matching the Pointer Arrow Color */}
                           {pointerCandidates.map((pSt) => {
-                            const info = computeRulerPointerReadout(pSt, 0, 0, pW);
+                            const info = computeRulerPointerReadout(pSt, 0, 0, pW, pageObj);
                             const ptrColor = info ? info.ptrColor : pSt.color || '#dc2626';
                             return (
                               <div
