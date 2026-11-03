@@ -2021,6 +2021,10 @@ export default function App() {
     if (activeTool !== 'lasso') {
       setSelectedLassoTextIds((prev) => (prev.length > 0 ? [] : prev));
     }
+    if (activeTool !== 'lasso' && activeTool !== 'text') {
+      setSelectedTextId((prev) => (prev !== null ? null : prev));
+      setEditingTextId((prev) => (prev !== null ? null : prev));
+    }
   }, [activeTool]);
   useEffect(() => {
     if (selectedImageId === null) {
@@ -25392,10 +25396,14 @@ export default function App() {
     if (draggingTextRef.current) return;
     const isPen = e.pointerType === 'pen';
 
-    // If a text box is currently selected/editing and the user touches or puts the Pencil within 32px of its border,
-    // treat it as resizing/moving that text box (never drawing a pen stroke or scrolling the page)!
+    // If a text box is currently selected/editing in Lasso or Text mode and the user touches or puts the Pencil within 32px of its border,
+    // treat it as resizing/moving that text box (never intercept when a drawing tool like Pen/Pencil/Highlighter/Shape/Eraser is active!).
     const currentActiveTxtId = selectedTextId || editingTextId;
-    if (currentActiveTxtId && pageIdx === activePageIndex && activeTool !== 'laser') {
+    if (
+      currentActiveTxtId &&
+      pageIdx === activePageIndex &&
+      (activeTool === 'lasso' || activeTool === 'text')
+    ) {
       const activeTxtEl = document.querySelector(
         `[data-text-id="${currentActiveTxtId}"]`
       ) as HTMLElement | null;
@@ -48006,8 +48014,12 @@ export default function App() {
                       const txtLayer = pageObj.layers.find((l) => l.id === txt.layerId);
                       if (txtLayer && !txtLayer.visible) return null;
                       const isLocked = Boolean(txtLayer?.locked);
-                      const isSelectedTxt = isCurrentActive && selectedTextId === txt.id;
-                      const isEditingTxt = isCurrentActive && editingTextId === txt.id;
+                      const canInteractWithText =
+                        activeTool === 'lasso' || activeTool === 'text';
+                      const isSelectedTxt =
+                        isCurrentActive && canInteractWithText && selectedTextId === txt.id;
+                      const isEditingTxt =
+                        isCurrentActive && canInteractWithText && editingTextId === txt.id;
                       const fontCss = getTextFontCss(txt.fontFamily, txt.bold);
                       const liveTxtDom =
                         isSelectedTxt || isEditingTxt
@@ -48058,13 +48070,22 @@ export default function App() {
                             lineHeight: 1.35,
                             ...fontCss,
                             touchAction: 'none',
-                            pointerEvents: activeTool === 'laser' ? 'none' : undefined,
+                            pointerEvents:
+                              (isSelectedTxt || isEditingTxt) &&
+                              !selectedLassoTextIds.includes(txt.id)
+                                ? 'auto'
+                                : 'none',
                             WebkitTouchCallout: 'none',
                             WebkitUserSelect: isEditingTxt ? 'text' : 'none',
                             userSelect: isEditingTxt ? 'text' : 'none',
                           }}
                           onPointerDown={(ev) => {
-                            if (isLocked || activeTool === 'laser') return;
+                            if (
+                              isLocked ||
+                              (activeTool !== 'lasso' && activeTool !== 'text')
+                            ) {
+                              return;
+                            }
                             if (ev.pointerType === 'mouse' && ev.button !== 0) return;
                             const targetEl =
                               ev.target instanceof Element
@@ -48201,7 +48222,13 @@ export default function App() {
                             }
                           }}
                           onTouchStart={(ev) => {
-                            if (isLocked || activeTool === 'laser' || ev.touches.length !== 1) return;
+                            if (
+                              isLocked ||
+                              (activeTool !== 'lasso' && activeTool !== 'text') ||
+                              ev.touches.length !== 1
+                            ) {
+                              return;
+                            }
                             const targetEl =
                               ev.target instanceof Element
                                 ? ev.target
@@ -48330,7 +48357,7 @@ export default function App() {
                             finishTextDrag();
                           }}
                           onDoubleClick={(ev) => {
-                            if (isLocked) return;
+                            if (isLocked || (activeTool !== 'lasso' && activeTool !== 'text')) return;
                             ev.stopPropagation();
                             setSelectedLassoTextIds([]);
                             setSelectedTextId(txt.id);
@@ -48344,12 +48371,10 @@ export default function App() {
                               ? 'px-1 py-0 leading-none rounded'
                               : 'px-3 py-1.5 rounded-lg'
                           } select-none z-10 transition-shadow ${
-                            (activeTool === 'lasso' && !isSelectedTxt && !isEditingTxt) ||
+                            (!isSelectedTxt && !isEditingTxt) ||
                             selectedLassoTextIds.includes(txt.id)
                               ? 'pointer-events-none'
-                              : isSelectedTxt || isEditingTxt
-                              ? 'ring-2 ring-[#0066ff] bg-white/90 shadow-md cursor-grab active:cursor-grabbing'
-                              : 'hover:ring-1 hover:ring-sky-400/70 cursor-pointer'
+                              : 'ring-2 ring-[#0066ff] bg-white/90 shadow-md cursor-grab active:cursor-grabbing'
                           }`}
                         >
                           {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (narrower side pills + small corner circles) */}
