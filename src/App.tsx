@@ -10428,11 +10428,11 @@ export default function App() {
         textMeasureCtxRef.current = c.getContext('2d');
       }
       const ctx = textMeasureCtxRef.current;
-      const availW = Math.max(24, boxW - 28);
-      const availH = Math.max(14, boxH - 16);
+      const availW = Math.max(20, boxW - 12);
+      const availH = Math.max(12, boxH - 4);
       const sampleText = rawText && rawText.trim().length > 0 ? rawText : 'Αβγ';
       if (!ctx) {
-        return Math.max(8, Math.min(96, Math.round(availH / 1.38)));
+        return Math.max(8, Math.min(96, Math.round(availH / 1.2)));
       }
 
       const css = getTextFontCss(fontFamily);
@@ -10444,7 +10444,7 @@ export default function App() {
 
       const fitsAtSize = (sz: number): boolean => {
         ctx.font = `${stylePrefix}${weightPrefix}${sz}px ${familyStr}`;
-        const spaceW = ctx.measureText(' ').width * 1.03;
+        const spaceW = ctx.measureText(' ').width * 1.01;
         let totalLines = 0;
 
         for (const para of paragraphs) {
@@ -10456,7 +10456,7 @@ export default function App() {
           let lineW = 0;
           let linesInPara = 1;
           for (const word of words) {
-            const wordW = ctx.measureText(word).width * 1.03;
+            const wordW = ctx.measureText(word).width * 1.01;
             if (wordW > availW) {
               return false;
             }
@@ -10472,7 +10472,7 @@ export default function App() {
           totalLines += linesInPara;
         }
 
-        const totalH = totalLines * (sz * 1.35);
+        const totalH = totalLines * (sz * 1.18);
         return totalH <= availH;
       };
 
@@ -10489,6 +10489,74 @@ export default function App() {
         }
       }
       return best;
+    },
+    []
+  );
+
+  const measureWrappedTextLayout = useCallback(
+    (
+      rawText: string,
+      fontFamily: TextFontStyle | undefined,
+      bold: boolean | undefined,
+      fontSize: number,
+      maxBoxW: number
+    ): { maxLineW: number; totalLines: number; tightW: number; tightH: number } => {
+      if (!textMeasureCtxRef.current) {
+        const c = document.createElement('canvas');
+        textMeasureCtxRef.current = c.getContext('2d');
+      }
+      const ctx = textMeasureCtxRef.current;
+      const availW = Math.max(20, maxBoxW - 12);
+      const sampleText = rawText && rawText.trim().length > 0 ? rawText : 'Αβγ';
+      if (!ctx) {
+        return {
+          maxLineW: availW,
+          totalLines: 1,
+          tightW: maxBoxW,
+          tightH: Math.max(20, Math.ceil(fontSize * 1.18 + 4)),
+        };
+      }
+      const css = getTextFontCss(fontFamily);
+      const stylePrefix =
+        css.fontStyle && css.fontStyle !== 'normal' ? `${css.fontStyle} ` : '';
+      const weightPrefix = bold ? '700 ' : '500 ';
+      const familyStr = String(css.fontFamily || 'sans-serif');
+      ctx.font = `${stylePrefix}${weightPrefix}${fontSize}px ${familyStr}`;
+      const spaceW = ctx.measureText(' ').width * 1.01;
+      const paragraphs = sampleText.split(/\r?\n/);
+      let totalLines = 0;
+      let maxLineW = 0;
+
+      for (const para of paragraphs) {
+        const words = para.split(/\s+/).filter(Boolean);
+        if (words.length === 0) {
+          totalLines += 1;
+          continue;
+        }
+        let lineW = 0;
+        let linesInPara = 1;
+        for (const word of words) {
+          const wordW = ctx.measureText(word).width * 1.01;
+          if (lineW === 0) {
+            lineW = wordW;
+          } else if (lineW + spaceW + wordW <= availW) {
+            lineW += spaceW + wordW;
+          } else {
+            if (lineW > maxLineW) maxLineW = lineW;
+            linesInPara += 1;
+            lineW = wordW;
+          }
+        }
+        if (lineW > maxLineW) maxLineW = lineW;
+        totalLines += linesInPara;
+      }
+
+      return {
+        maxLineW,
+        totalLines: Math.max(1, totalLines),
+        tightW: Math.max(36, Math.ceil(maxLineW + 12)),
+        tightH: Math.max(20, Math.ceil(Math.max(1, totalLines) * (fontSize * 1.18) + 4)),
+      };
     },
     []
   );
@@ -10633,18 +10701,45 @@ export default function App() {
                 };
               }
               const reflowedText = reflowTextForResponsiveBox(t.text);
+              const isPureVert = d.resizeHandle === 'n' || d.resizeHandle === 's';
+              const targetWForFit = isPureVert
+                ? Math.max(48, Math.round(origW * (nextH / Math.max(20, origH))))
+                : nextW;
               const autoFs =
                 reflowedText && reflowedText.trim().length > 0
-                  ? computeMaxFitFontSizeForBox(reflowedText, t.fontFamily, t.bold, nextW, nextH)
+                  ? computeMaxFitFontSizeForBox(
+                      reflowedText,
+                      t.fontFamily,
+                      t.bold,
+                      targetWForFit,
+                      nextH
+                    )
                   : t.fontSize;
               nextAutoFs = autoFs;
+              const tight = measureWrappedTextLayout(
+                reflowedText,
+                t.fontFamily,
+                t.bold,
+                autoFs,
+                targetWForFit
+              );
+              const finalW = isPureVert
+                ? tight.tightW
+                : Math.max(36, Math.min(nextW, tight.tightW));
+              const finalH = tight.tightH;
+              const finalX =
+                isPureVert && t.textAlign === 'center'
+                  ? Math.round(d.origX + (origW - finalW) / 2)
+                  : d.resizeHandle?.includes('w')
+                  ? Math.round(d.origX + (origW - finalW))
+                  : nextX;
               return {
                 ...t,
                 text: reflowedText,
-                x: nextX,
+                x: finalX,
                 y: nextY,
-                boxWidth: nextW,
-                boxHeight: nextH,
+                boxWidth: finalW,
+                boxHeight: finalH,
                 fontSize: autoFs,
               };
             }),
@@ -10681,7 +10776,7 @@ export default function App() {
         false
       );
     },
-    [computeMaxFitFontSizeForBox, updateActivePage]
+    [computeMaxFitFontSizeForBox, measureWrappedTextLayout, reflowTextForResponsiveBox, updateActivePage]
   );
 
   const finishTextDrag = useCallback(() => {
@@ -48398,15 +48493,12 @@ export default function App() {
                             width:
                               txt.isMath && !isEditingTxt
                                 ? 'max-content'
-                                : txt.boxWidth
+                                : 'fit-content',
+                            maxWidth:
+                              !txt.isMath && txt.boxWidth
                                 ? `${txt.boxWidth}px`
                                 : undefined,
-                            height:
-                              txt.isMath && !isEditingTxt
-                                ? 'auto'
-                                : txt.boxHeight
-                                ? `${txt.boxHeight}px`
-                                : undefined,
+                            height: 'auto',
                             clipPath:
                               !isSelectedTxt && !isEditingTxt
                                 ? `polygon(${-txt.x}px ${-txt.y}px, ${pW - txt.x}px ${-txt.y}px, ${pW - txt.x}px ${pH - txt.y}px, ${-txt.x}px ${pH - txt.y}px)`
@@ -48414,7 +48506,7 @@ export default function App() {
                             color: txt.color,
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
-                            lineHeight: 1.35,
+                            lineHeight: 1.18,
                             ...fontCss,
                             touchAction: 'none',
                             pointerEvents:
@@ -48523,8 +48615,8 @@ export default function App() {
                               }
                             }
 
-                            const curBoxW = (txt.isMath ? 0 : txt.boxWidth) || ev.currentTarget.offsetWidth || 180;
-                            const curBoxH = (txt.isMath ? 0 : txt.boxHeight) || ev.currentTarget.offsetHeight || 48;
+                            const curBoxW = ev.currentTarget.offsetWidth || (txt.isMath ? 0 : txt.boxWidth) || 180;
+                            const curBoxH = ev.currentTarget.offsetHeight || (txt.isMath ? 0 : txt.boxHeight) || 36;
                             const wasAlreadySelected = selectedTextId === txt.id;
 
                             draggingTextRef.current = {
@@ -48651,8 +48743,8 @@ export default function App() {
                               }
                             }
 
-                            const curBoxW = (txt.isMath ? 0 : txt.boxWidth) || ev.currentTarget.offsetWidth || 180;
-                            const curBoxH = (txt.isMath ? 0 : txt.boxHeight) || ev.currentTarget.offsetHeight || 48;
+                            const curBoxW = ev.currentTarget.offsetWidth || (txt.isMath ? 0 : txt.boxWidth) || 180;
+                            const curBoxH = ev.currentTarget.offsetHeight || (txt.isMath ? 0 : txt.boxHeight) || 36;
                             const wasAlreadySelected = selectedTextId === txt.id;
 
                             draggingTextRef.current = {
@@ -48716,15 +48808,15 @@ export default function App() {
                             !isSelectedTxt &&
                             !isEditingTxt
                               ? 'px-1 py-0 leading-none rounded'
-                              : 'px-3 py-1.5 rounded-lg'
+                              : 'px-1.5 py-0.5 rounded-md'
                           } select-none z-10 transition-shadow ${
                             (!isSelectedTxt && !isEditingTxt) ||
                             selectedLassoTextIds.includes(txt.id)
                               ? 'pointer-events-none'
-                              : 'ring-2 ring-[#0066ff] bg-white/90 shadow-md cursor-grab active:cursor-grabbing'
+                              : 'ring-[1.5px] ring-[#0066ff]/90 bg-white/35 shadow-sm cursor-grab active:cursor-grabbing'
                           }`}
                         >
-                          {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (narrower side pills + small corner circles) */}
+                          {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (compact side pills + small corner circles) */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <>
                               {isTextCenteredOnPage && (
@@ -48740,13 +48832,13 @@ export default function App() {
                                     data-text-resize="n"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute left-3 right-3 -top-[18px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
+                                    className="absolute left-3 right-3 -top-[16px] h-[30px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
                                     {isTextCenteredOnPage && (
-                                      <span className="absolute w-7 h-4 rounded-full bg-red-500/75 animate-ping pointer-events-none" />
+                                      <span className="absolute w-6 h-3.5 rounded-full bg-red-500/75 animate-ping pointer-events-none" />
                                     )}
                                     <div
-                                      className={`w-5 h-2 rounded-full border-[1.5px] shadow-sm group-hover:scale-110 transition-transform pointer-events-none ${
+                                      className={`w-3.5 h-1.5 rounded-full border shadow-sm group-hover:scale-110 transition-transform pointer-events-none ${
                                         isTextCenteredOnPage
                                           ? 'bg-red-600 border-white ring-2 ring-red-400 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse'
                                           : 'bg-white border-[#0066ff]'
@@ -48758,69 +48850,69 @@ export default function App() {
                                     data-text-resize="s"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute left-3 right-3 -bottom-[18px] h-[32px] flex items-center justify-center cursor-ns-resize z-30 group"
+                                    className="absolute left-3 right-3 -bottom-[16px] h-[30px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
-                                    <div className="w-5 h-2 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                    <div className="w-3.5 h-1.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                   {/* Left Edge Handle (W) */}
                                   <div
                                     data-text-resize="w"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute -left-[18px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
+                                    className="absolute -left-[16px] top-1 bottom-1 w-[30px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
-                                    <div className="w-2 h-5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                    <div className="w-1.5 h-3.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                   {/* Right Edge Handle (E) */}
                                   <div
                                     data-text-resize="e"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute -right-[18px] top-1 bottom-1 w-[32px] flex items-center justify-center cursor-ew-resize z-40 group"
+                                    className="absolute -right-[16px] top-1 bottom-1 w-[30px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
-                                    <div className="w-2 h-5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                    <div className="w-1.5 h-3.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                 </>
                               ) : (
                                 isTextCenteredOnPage && (
-                                  <div className="absolute left-3 right-3 -top-[18px] h-[32px] flex items-center justify-center pointer-events-none z-30">
-                                    <span className="absolute w-7 h-4 rounded-full bg-red-500/75 animate-ping" />
-                                    <div className="w-5 h-2 rounded-full bg-red-600 border-[1.5px] border-white ring-2 ring-red-400 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse" />
+                                  <div className="absolute left-3 right-3 -top-[16px] h-[30px] flex items-center justify-center pointer-events-none z-30">
+                                    <span className="absolute w-6 h-3.5 rounded-full bg-red-500/75 animate-ping" />
+                                    <div className="w-3.5 h-1.5 rounded-full bg-red-600 border border-white ring-2 ring-red-400 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse" />
                                   </div>
                                 )
                               )}
-                              {/* 4 Corner Handles (NW, NE, SW, SE) — 32x32px touch zones with compact 10x10px circles */}
+                              {/* 4 Corner Handles (NW, NE, SW, SE) — 30x30px touch zones with compact 8x8px circles */}
                               <div
                                 data-text-resize="nw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-[18px] -top-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
+                                className="absolute -left-[16px] -top-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
-                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="ne"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-[18px] -top-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
+                                className="absolute -right-[16px] -top-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
-                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="sw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-[18px] -bottom-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nesw-resize z-50 group"
+                                className="absolute -left-[16px] -bottom-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
-                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="se"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-[18px] -bottom-[18px] w-[32px] h-[32px] flex items-center justify-center cursor-nwse-resize z-50 group"
+                                className="absolute -right-[16px] -bottom-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
-                                <div className="w-2.5 h-2.5 rounded-full bg-white border-[1.5px] border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                             </>
                           )}
@@ -49613,27 +49705,21 @@ export default function App() {
                                 }
                               }}
                               style={{
-                                ...(txt.boxWidth && txt.boxHeight
-                                  ? {
-                                      width: '100%',
-                                      height: '100%',
-                                      overflow: 'hidden',
-                                      overflowWrap: 'break-word',
-                                    }
-                                  : {
-                                      fieldSizing: 'content',
-                                      width: 'auto',
-                                      height: 'auto',
-                                      minInlineSize: '12ch',
-                                      maxInlineSize: '42ch',
-                                      minBlockSize: '1.5lh',
-                                      maxBlockSize: '14lh',
-                                    }),
+                                fieldSizing: 'content',
+                                width: 'auto',
+                                height: 'auto',
+                                minInlineSize: '2ch',
+                                maxInlineSize: txt.boxWidth
+                                  ? `${Math.max(36, txt.boxWidth - 12)}px`
+                                  : '42ch',
+                                minBlockSize: '1.18lh',
+                                maxBlockSize: '16lh',
+                                overflowWrap: 'break-word',
                                 color: txt.color,
                                 fontSize: txt.fontSize,
                                 fontWeight: txt.bold ? 700 : 500,
                                 textAlign: txt.textAlign || 'left',
-                                lineHeight: 1.35,
+                                lineHeight: 1.18,
                                 ...fontCss,
                                 touchAction: 'none',
                                 pointerEvents:
@@ -49700,11 +49786,13 @@ export default function App() {
                             <div
                               data-text-content="true"
                               style={{
-                                width: txt.boxWidth ? '100%' : undefined,
-                                height: txt.boxHeight ? '100%' : undefined,
+                                width: 'fit-content',
+                                maxWidth: txt.boxWidth ? '100%' : undefined,
+                                height: 'auto',
                                 overflow: txt.boxWidth ? 'hidden' : undefined,
                                 overflowWrap: 'break-word',
                                 whiteSpace: 'pre-wrap',
+                                lineHeight: 1.18,
                                 fontWeight: txt.bold ? 700 : 500,
                                 textAlign: txt.textAlign || 'left',
                                 ...fontCss,

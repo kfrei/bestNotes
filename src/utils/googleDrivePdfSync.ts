@@ -1518,8 +1518,8 @@ function drawTextObjectForPdf(
   };
 
   if (!tx.isMath && tx.spans && tx.spans.length > 0) {
-    const padX = isMathLabel ? 4 : 12;
-    const padY = isMathLabel ? 0 : 6;
+    const padX = isMathLabel ? 4 : 6;
+    const padY = isMathLabel ? 0 : 2;
     const rawLines = rawSource.split('\n');
     let charOffset = 0;
     let curTopY = tx.y + padY;
@@ -1559,7 +1559,7 @@ function drawTextObjectForPdf(
           color: segColor,
         });
       }
-      const rowH = maxSzInLine * 1.35;
+      const rowH = maxSzInLine * 1.18;
       const baseY = curTopY + maxSzInLine * 0.92;
       let curX = tx.x + padX;
       ctx.textAlign = 'left';
@@ -1579,7 +1579,7 @@ function drawTextObjectForPdf(
   ctx.font = makeFont(fSize);
   const rawParas = rawSource.split(/\r?\n/);
   const wrappedLines: string[] = [];
-  const maxLineW = !tx.isMath && tx.boxWidth ? Math.max(24, tx.boxWidth - 24) : 0;
+  const maxLineW = !tx.isMath && tx.boxWidth ? Math.max(20, tx.boxWidth - 12) : 0;
 
   for (const para of rawParas) {
     if (!maxLineW || para.includes('^') || para.includes('_') || para.includes('\\')) {
@@ -1604,9 +1604,9 @@ function drawTextObjectForPdf(
     wrappedLines.push(currentLine);
   }
 
-  const padX = isMathLabel ? 4 : 12;
-  const padY = isMathLabel ? 0 : 6;
-  const lineH = isMathLabel ? fSize * 1.05 : fSize * 1.35;
+  const padX = isMathLabel ? 4 : 6;
+  const padY = isMathLabel ? 0 : 2;
+  const lineH = isMathLabel ? fSize * 1.05 : fSize * 1.18;
   const multiM = tx.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
   const multiGrp = multiM ? multiM[1] : null;
   const alignMode = tx.textAlign || 'left';
@@ -1614,7 +1614,7 @@ function drawTextObjectForPdf(
   // Compute max rendered line width for center / right alignment when boxWidth is not explicitly set
   ctx.font = makeFont(fSize);
   const lineWidths = wrappedLines.map((ln) => ctx.measureText(cleanLatexLine(ln).replace(/[{}]/g, '')).width);
-  const contentAreaW = tx.boxWidth ? Math.max(24, tx.boxWidth - padX * 2) : Math.max(0, ...lineWidths);
+  const contentAreaW = Math.max(0, ...lineWidths);
 
   wrappedLines.forEach((line, idx) => {
     const rowFnColor = multiGrp
