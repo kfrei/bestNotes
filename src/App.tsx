@@ -49340,11 +49340,11 @@ export default function App() {
                             !isEditingTxt
                               ? 'px-1 py-0 leading-none rounded'
                               : 'px-1.5 py-0.5 rounded-md'
-                          } select-none z-10 transition-shadow ${
+                          } select-none transition-shadow ${
                             (!isSelectedTxt && !isEditingTxt) ||
                             selectedLassoTextIds.includes(txt.id)
-                              ? 'pointer-events-none'
-                              : 'ring-[1.5px] ring-[#0066ff]/90 bg-white/35 shadow-sm cursor-grab active:cursor-grabbing'
+                              ? 'z-10 pointer-events-none'
+                              : 'z-50 ring-[1.5px] ring-[#0066ff]/90 bg-white/35 shadow-sm cursor-grab active:cursor-grabbing'
                           }`}
                         >
                           {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (compact side pills + small corner circles) */}
