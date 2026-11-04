@@ -7261,8 +7261,8 @@ export default function App() {
             ctx.stroke();
           }
 
-          // Dedicated Bottom 4-Way Move Handle (✥) for Small Single Objects so moving tiny shapes is always effortless!
-          if (totalSelObjects === 1 && (selBounds.hw < 32 || selBounds.hh < 32)) {
+          // Dedicated Bottom 4-Way Move Handle (✥) ONLY for very tiny single objects whose largest dimension is <= 25px!
+          if (totalSelObjects === 1 && Math.max(selBounds.hw * 2, selBounds.hh * 2) <= 25) {
             const moveBadgeY = hh + 24;
             ctx.save();
             ctx.setLineDash([]);
@@ -27937,10 +27937,10 @@ export default function App() {
             return;
           }
 
-          // A2. Check Dedicated Bottom 4-Way Move Handle (✥ at y = hh + 24) for Small Single Objects!
+          // A2. Check Dedicated Bottom 4-Way Move Handle (✥ at y = hh + 24) ONLY for very tiny single objects whose largest dimension is <= 25px!
           if (
             totalSelCount === 1 &&
-            (selBounds.hw < 32 || selBounds.hh < 32) &&
+            Math.max(selBounds.hw * 2, selBounds.hh * 2) <= 25 &&
             Math.hypot(localX, localY - (hh + 24)) < 19
           ) {
             clearActiveOverlay();
