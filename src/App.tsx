@@ -42650,6 +42650,7 @@ export default function App() {
                           {colorSlots.slice(0, 5).map((c, idx) => (
                             <button
                               key={`mem-${idx}`}
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => applyColorToSelection(c)}
                               className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
                                 strokeColor === c
@@ -42666,6 +42667,7 @@ export default function App() {
                           {colorSlots.slice(5, 10).map((c, idx) => (
                             <button
                               key={`rec-${idx}`}
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => applyColorToSelection(c)}
                               className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
                                 strokeColor === c
@@ -49509,10 +49511,7 @@ export default function App() {
                               const displayedFontSize = effectiveSubStyle
                                 ? effectiveSubStyle.fontSize
                                 : txt.fontSize;
-                              const displayedColor = effectiveSubStyle
-                                ? effectiveSubStyle.color
-                                : txt.color;
-                              const estHalfBarW = 205;
+                              const estHalfBarW = 145;
                               const boxWForBar = effTxtW > 0 ? effTxtW : 180;
                               const boxCenterX = txt.x + boxWForBar / 2;
                               let barShiftX = 0;
@@ -49586,7 +49585,7 @@ export default function App() {
                                         if (liveRange) {
                                           const curSub = getRangeEffectiveStyle(
                                             txt,
-                                            liveRange.start,
+                                          liveRange.start,
                                             liveRange.end
                                           );
                                           const nextFont =
@@ -49649,21 +49648,21 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className="px-1 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
+                                      className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
                                       title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                     >
                                       {displayedFontFamily === 'calligraphic' ||
                                       displayedFontFamily === 'calligraphic-bold'
-                                        ? '✍️ Καλλιγρ.'
+                                        ? 'Καλλιγρ.'
                                         : displayedFontFamily === 'marker'
-                                        ? '✒️ Πένα'
+                                        ? 'Πένα'
                                         : displayedFontFamily === 'mansalva'
-                                        ? '🖊️ Μαρκ.'
+                                        ? 'Μαρκ.'
                                         : displayedFontFamily === 'handwritten'
-                                        ? '📝 Χειρ.'
+                                        ? 'Χειρ.'
                                         : displayedFontFamily === 'neohellenic'
-                                        ? '🖋️ Ρέουσα'
-                                        : '🔤 Τυπωμ.'}
+                                        ? 'Ρέουσα'
+                                        : 'Τυπωμ.'}
                                     </button>
                                   )}
                                   {!txt.isMath && (
@@ -49751,194 +49750,9 @@ export default function App() {
                                       B
                                     </button>
                                   )}
-                                  <button
-                                    type="button"
-                                    onMouseDown={(ev) => ev.preventDefault()}
-                                    onClick={() => {
-                                      const liveRange = getActiveRangeForText(
-                                        txt.id,
-                                        (txt.text || '').length
-                                      );
-                                      if (liveRange && !txt.isMath) {
-                                        const curSub = getRangeEffectiveStyle(
-                                          txt,
-                                          liveRange.start,
-                                          liveRange.end
-                                        );
-                                        const nextSz = Math.max(8, curSub.fontSize - 2);
-                                        const nextRng = {
-                                          textId: txt.id,
-                                          start: liveRange.start,
-                                          end: liveRange.end,
-                                        };
-                                        activeTextRangeRef.current = nextRng;
-                                        setActiveTextRange(nextRng);
-                                        setSelectedTextId(txt.id);
-                                        setEditingTextId(null);
-                                        updateActivePage((page) => ({
-                                          ...page,
-                                          texts: (page.texts || []).map((t) =>
-                                            t.id === txt.id
-                                              ? {
-                                                  ...t,
-                                                  boxWidth: undefined,
-                                                  boxHeight: undefined,
-                                                  spans: applyStyleToTextRange(
-                                                    t,
-                                                    liveRange.start,
-                                                    liveRange.end,
-                                                    { fontSize: nextSz }
-                                                  ),
-                                                }
-                                              : t
-                                          ),
-                                        }));
-                                        return;
-                                      }
-                                      const nextSz = Math.max(8, txt.fontSize - 2);
-                                      const deltaSz = nextSz - txt.fontSize;
-                                      setTextFontSize(nextSz);
-                                      updateActivePage((page) => ({
-                                        ...page,
-                                        texts: (page.texts || []).map((t) =>
-                                          t.id === txt.id
-                                            ? {
-                                                ...t,
-                                                fontSize: nextSz,
-                                                boxWidth: undefined,
-                                                boxHeight: undefined,
-                                                spans: t.spans
-                                                  ? t.spans.map((sp) =>
-                                                      sp.fontSize !== undefined
-                                                        ? {
-                                                            ...sp,
-                                                            fontSize: Math.max(
-                                                              8,
-                                                              sp.fontSize + deltaSz
-                                                            ),
-                                                          }
-                                                        : sp
-                                                    )
-                                                  : undefined,
-                                              }
-                                            : t
-                                        ),
-                                      }));
-                                    }}
-                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
-                                    title="Μικρότερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
-                                  >
-                                    A-
-                                  </button>
-                                  <span className="text-[9px] font-normal text-sky-200 px-0.5">
+                                  <span className="text-[9px] font-normal text-sky-200 px-1">
                                     {displayedFontSize}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onMouseDown={(ev) => ev.preventDefault()}
-                                    onClick={() => {
-                                      const liveRange = getActiveRangeForText(
-                                        txt.id,
-                                        (txt.text || '').length
-                                      );
-                                      if (liveRange && !txt.isMath) {
-                                        const curSub = getRangeEffectiveStyle(
-                                          txt,
-                                          liveRange.start,
-                                          liveRange.end
-                                        );
-                                        const nextSz = Math.min(160, curSub.fontSize + 2);
-                                        const nextRng = {
-                                          textId: txt.id,
-                                          start: liveRange.start,
-                                          end: liveRange.end,
-                                        };
-                                        activeTextRangeRef.current = nextRng;
-                                        setActiveTextRange(nextRng);
-                                        setSelectedTextId(txt.id);
-                                        setEditingTextId(null);
-                                        updateActivePage((page) => ({
-                                          ...page,
-                                          texts: (page.texts || []).map((t) =>
-                                            t.id === txt.id
-                                              ? {
-                                                  ...t,
-                                                  boxWidth: undefined,
-                                                  boxHeight: undefined,
-                                                  spans: applyStyleToTextRange(
-                                                    t,
-                                                    liveRange.start,
-                                                    liveRange.end,
-                                                    { fontSize: nextSz }
-                                                  ),
-                                                }
-                                              : t
-                                          ),
-                                        }));
-                                        return;
-                                      }
-                                      const nextSz = Math.min(160, txt.fontSize + 2);
-                                      const deltaSz = nextSz - txt.fontSize;
-                                      setTextFontSize(nextSz);
-                                      updateActivePage((page) => ({
-                                        ...page,
-                                        texts: (page.texts || []).map((t) =>
-                                          t.id === txt.id
-                                            ? {
-                                                ...t,
-                                                fontSize: nextSz,
-                                                boxWidth: undefined,
-                                                boxHeight: undefined,
-                                                spans: t.spans
-                                                  ? t.spans.map((sp) =>
-                                                      sp.fontSize !== undefined
-                                                        ? {
-                                                            ...sp,
-                                                            fontSize: Math.min(
-                                                              160,
-                                                              sp.fontSize + deltaSz
-                                                            ),
-                                                          }
-                                                        : sp
-                                                    )
-                                                  : undefined,
-                                              }
-                                            : t
-                                        ),
-                                      }));
-                                    }}
-                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
-                                    title="Μεγαλύτερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
-                                  >
-                                    A+
-                                  </button>
-                                  {/* Quick Color Swatches for Selected Substring / Text Box */}
-                                  {!txt.isMath && (
-                                    <div className="flex items-center gap-0.5 bg-white/10 px-1 py-0.5 rounded-full">
-                                      {[
-                                        '#111827',
-                                        '#2563eb',
-                                        '#dc2626',
-                                        '#16a34a',
-                                        '#9333ea',
-                                        '#ea580c',
-                                      ].map((swColor) => (
-                                        <button
-                                          key={swColor}
-                                          type="button"
-                                          onMouseDown={(ev) => ev.preventDefault()}
-                                          onClick={() => applyColorToSelection(swColor)}
-                                          style={{ backgroundColor: swColor }}
-                                          className={`w-2.5 h-2.5 rounded-full cursor-pointer transition-transform hover:scale-115 ${
-                                            displayedColor?.toLowerCase() === swColor
-                                              ? 'ring-1 ring-white scale-110'
-                                              : 'border border-white/40'
-                                          }`}
-                                          title="Αλλαγή χρώματος (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
-                                        />
-                                      ))}
-                                    </div>
-                                  )}
                                   {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) */}
                                   <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded">
                                     <button
