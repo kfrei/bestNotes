@@ -49797,10 +49797,7 @@ export default function App() {
                               const displayedBold = effectiveSubStyle
                                 ? effectiveSubStyle.bold
                                 : Boolean(txt.bold || txt.fontFamily === 'calligraphic-bold');
-                              const displayedFontSize = effectiveSubStyle
-                                ? effectiveSubStyle.fontSize
-                                : txt.fontSize;
-                              const estHalfBarW = 145;
+                              const estHalfBarW = 155;
                               const boxWForBar = effTxtW > 0 ? effTxtW : 180;
                               const boxCenterX = txt.x + boxWForBar / 2;
                               let barShiftX = 0;
@@ -50039,9 +50036,164 @@ export default function App() {
                                       B
                                     </button>
                                   )}
-                                  <span className="text-[9px] font-normal text-sky-200 px-1">
-                                    {displayedFontSize}
-                                  </span>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => {
+                                      const liveRange = getActiveRangeForText(
+                                        txt.id,
+                                        (txt.text || '').length
+                                      );
+                                      if (liveRange && !txt.isMath) {
+                                        const curSub = getRangeEffectiveStyle(
+                                          txt,
+                                          liveRange.start,
+                                          liveRange.end
+                                        );
+                                        const nextSz = Math.max(8, curSub.fontSize - 2);
+                                        const nextRng = {
+                                          textId: txt.id,
+                                          start: liveRange.start,
+                                          end: liveRange.end,
+                                        };
+                                        activeTextRangeRef.current = nextRng;
+                                        setActiveTextRange(nextRng);
+                                        setSelectedTextId(txt.id);
+                                        setEditingTextId(null);
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id
+                                              ? {
+                                                  ...t,
+                                                  boxWidth: undefined,
+                                                  boxHeight: undefined,
+                                                  spans: applyStyleToTextRange(
+                                                    t,
+                                                    liveRange.start,
+                                                    liveRange.end,
+                                                    { fontSize: nextSz }
+                                                  ),
+                                                }
+                                              : t
+                                          ),
+                                        }));
+                                        return;
+                                      }
+                                      const nextSz = Math.max(8, txt.fontSize - 2);
+                                      const deltaSz = nextSz - txt.fontSize;
+                                      setTextFontSize(nextSz);
+                                      updateActivePage((page) => ({
+                                        ...page,
+                                        texts: (page.texts || []).map((t) =>
+                                          t.id === txt.id
+                                            ? {
+                                                ...t,
+                                                fontSize: nextSz,
+                                                boxWidth: undefined,
+                                                boxHeight: undefined,
+                                                spans: t.spans
+                                                  ? t.spans.map((sp) =>
+                                                      sp.fontSize !== undefined
+                                                        ? {
+                                                            ...sp,
+                                                            fontSize: Math.max(
+                                                              8,
+                                                              sp.fontSize + deltaSz
+                                                            ),
+                                                          }
+                                                        : sp
+                                                    )
+                                                  : undefined,
+                                              }
+                                            : t
+                                        ),
+                                      }));
+                                    }}
+                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    title="Μικρότερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
+                                  >
+                                    A-
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={() => {
+                                      const liveRange = getActiveRangeForText(
+                                        txt.id,
+                                        (txt.text || '').length
+                                      );
+                                      if (liveRange && !txt.isMath) {
+                                        const curSub = getRangeEffectiveStyle(
+                                          txt,
+                                          liveRange.start,
+                                          liveRange.end
+                                        );
+                                        const nextSz = Math.min(160, curSub.fontSize + 2);
+                                        const nextRng = {
+                                          textId: txt.id,
+                                          start: liveRange.start,
+                                          end: liveRange.end,
+                                        };
+                                        activeTextRangeRef.current = nextRng;
+                                        setActiveTextRange(nextRng);
+                                        setSelectedTextId(txt.id);
+                                        setEditingTextId(null);
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) =>
+                                            t.id === txt.id
+                                              ? {
+                                                  ...t,
+                                                  boxWidth: undefined,
+                                                  boxHeight: undefined,
+                                                  spans: applyStyleToTextRange(
+                                                    t,
+                                                    liveRange.start,
+                                                    liveRange.end,
+                                                    { fontSize: nextSz }
+                                                  ),
+                                                }
+                                              : t
+                                          ),
+                                        }));
+                                        return;
+                                      }
+                                      const nextSz = Math.min(160, txt.fontSize + 2);
+                                      const deltaSz = nextSz - txt.fontSize;
+                                      setTextFontSize(nextSz);
+                                      updateActivePage((page) => ({
+                                        ...page,
+                                        texts: (page.texts || []).map((t) =>
+                                          t.id === txt.id
+                                            ? {
+                                                ...t,
+                                                fontSize: nextSz,
+                                                boxWidth: undefined,
+                                                boxHeight: undefined,
+                                                spans: t.spans
+                                                  ? t.spans.map((sp) =>
+                                                      sp.fontSize !== undefined
+                                                        ? {
+                                                            ...sp,
+                                                            fontSize: Math.min(
+                                                              160,
+                                                              sp.fontSize + deltaSz
+                                                            ),
+                                                          }
+                                                        : sp
+                                                    )
+                                                  : undefined,
+                                              }
+                                            : t
+                                        ),
+                                      }));
+                                    }}
+                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    title="Μεγαλύτερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
+                                  >
+                                    A+
+                                  </button>
                                   {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) */}
                                   <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded">
                                     <button
