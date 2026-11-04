@@ -4925,7 +4925,12 @@ export default function App() {
     baseTol = 18,
     allowInteriorFill = false
   ): boolean => {
-    const tol = s.tool === 'highlighter' ? baseTol + (s.width || 3) * 1.9 : baseTol + (s.width || 2) * 0.35;
+    const effectiveBaseTol = s.isShape ? Math.min(baseTol, 10) : baseTol;
+    const tol =
+      s.tool === 'highlighter'
+        ? effectiveBaseTol + (s.width || 3) * 1.9
+        : effectiveBaseTol + (s.width || 2) * 0.35;
+    const hasOpaqueFill = Boolean(s.fillStyle && s.fillStyle !== 'none');
     const b = getStrokeBounds(s);
     if (pt.x < b.minX - tol || pt.x > b.maxX + tol || pt.y < b.minY - tol || pt.y > b.maxY + tol) {
       return false;
@@ -4956,7 +4961,7 @@ export default function App() {
           prevPt = curPt;
         }
       }
-      if (allowInteriorFill && n >= 3) {
+      if (allowInteriorFill && hasOpaqueFill && n >= 3) {
         let cx = 0,
           cy = 0;
         for (const p of pts) {
@@ -5068,7 +5073,7 @@ export default function App() {
           if (isPointNearSegment(pt, path[i - 1], path[i], tol)) return true;
         }
       }
-      if (allowInteriorFill) {
+      if (allowInteriorFill && hasOpaqueFill) {
         let inside = false;
         for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
           const xi = s.points[i].x,
@@ -5133,15 +5138,9 @@ export default function App() {
       }
     }
 
-    // Allow interior hit-testing when explicitly requested (Pass 2 fallback on closed polygons/shapes or filled strokes)
-    const isClosedPolygonShape =
-      s.shapeType === 'rectangle' ||
-      s.shapeType === 'parallelogram' ||
-      s.shapeType === 'trapezoid' ||
-      s.shapeType === 'triangle' ||
-      s.points[0]?.twist === 999 ||
-      (s.fillStyle && s.fillStyle !== 'none');
-    if (allowInteriorFill && isClosedPolygonShape && s.points.length >= 3) {
+    // Allow interior hit-testing ONLY on shapes that actually have an opaque interior fill (`hasOpaqueFill`).
+    // Transparent shapes (`!s.fillStyle || s.fillStyle === 'none'`) are ONLY selectable on their border lines!
+    if (allowInteriorFill && hasOpaqueFill && s.points.length >= 3) {
       let inside = false;
       for (let i = 0, j = s.points.length - 1; i < s.points.length; j = i++) {
         const xi = s.points[i].x,
@@ -5515,14 +5514,32 @@ export default function App() {
         Math.abs(localY - (hh + 26)) <= 20
       )
         return true;
-      if (Math.abs(localX) <= hw + 28 && Math.abs(localY) <= hh + 28) return true;
+      if (Math.abs(localX) <= hw + 28 && Math.abs(localY) <= hh + 28) {
+        const selStrokesOnly =
+          selectedImageIds.length === 0 &&
+          !selectedImageId &&
+          selectedLassoTextIds.length === 0 &&
+          selectedStrokeIds.length > 0
+            ? activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id))
+            : [];
+        if (
+          selStrokesOnly.length > 0 &&
+          selStrokesOnly.every((s) => s.isShape && (!s.fillStyle || s.fillStyle === 'none')) &&
+          Math.abs(localX) < hw - 16 &&
+          Math.abs(localY) < hh - 16
+        ) {
+          return selStrokesOnly.some((s) => isPointNearStroke({ x: ptX, y: ptY }, s, 16, false));
+        }
+        return true;
+      }
       return false;
     },
     [
       activeTool,
       activeNodeStrokeId,
       activePage.strokes,
-      selectedStrokeIds.length,
+      selectedStrokeIds,
+      selectedImageId,
       selectedImageIds.length,
       selectedLassoTextIds.length,
       getSelectionBounds,
@@ -28567,10 +28584,20 @@ export default function App() {
           }
 
           // C. Check inside rotated selection bounding box -> Move
-          if (
-            Math.abs(localX) <= hw + 8 &&
-            Math.abs(localY) <= (isSelectedAttachedWeight ? Math.max(hh + 8, 18) : hh + 6)
-          ) {
+          //    For transparent shapes (`!st.fillStyle || st.fillStyle === 'none'`), ONLY grab/move when clicking on the shape's lines (not its empty interior)!
+          const isTransparentShapeSelectionOnly =
+            selImagesList.length === 0 &&
+            selTextsList.length === 0 &&
+            selStrokesList.length > 0 &&
+            !isSelectedAttachedWeight &&
+            selStrokesList.every(
+              (st) => st.isShape && (!st.fillStyle || st.fillStyle === 'none')
+            );
+          const canMoveSelectionAtPt = isTransparentShapeSelectionOnly
+            ? selStrokesList.some((st) => isPointNearStroke(pt, st, 14, false))
+            : Math.abs(localX) <= hw + 8 &&
+              Math.abs(localY) <= (isSelectedAttachedWeight ? Math.max(hh + 8, 18) : hh + 6);
+          if (canMoveSelectionAtPt) {
             clearActiveOverlay();
             setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
             setRedoStack([]);
