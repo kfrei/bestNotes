@@ -727,8 +727,10 @@ interface SavedLibraryItem {
   title: string;
   createdAt: string;
   thumbnailDataUrl: string;
+  tags?: string[];
   strokes?: StrokeObject[];
   image?: ImageObject;
+  texts?: TextObject[];
 }
 
 // Photoshop / Illustrator-style Bezier Curve Nodes Icon:
@@ -1972,6 +1974,9 @@ export default function App() {
     }
     return [];
   });
+  const [editingLibItemId, setEditingLibItemId] = useState<string | null>(null);
+  const [editingLibTitle, setEditingLibTitle] = useState<string>('');
+  const [editingLibTagsInput, setEditingLibTagsInput] = useState<string>('');
   const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const layerDragStartYRef = useRef<number>(0);
@@ -39022,7 +39027,7 @@ export default function App() {
     }
   }, [currentUser, shapeLibrary]);
 
-  // Add currently selected Shape / Group of Strokes / Image to the Custom Shape Library ("(+) Βιβλιοθήκη")
+  // Add currently selected Shape / Group of Strokes / Image / Text to the Custom Shape Library ("+Βιβλιοθήκη")
   const handleAddSelectedToShapeLibrary = () => {
     const baseIds =
       selectedStrokeIds.length > 0
@@ -39031,35 +39036,57 @@ export default function App() {
         ? [activeNodeStrokeId]
         : [];
     const baseSet = new Set(baseIds);
-    const groupIds = new Set(
-      activePage.strokes
-        .filter((s) => baseSet.has(s.id) && s.groupId)
-        .map((s) => s.groupId as string)
-    );
+    const textBaseIds =
+      selectedLassoTextIds.length > 0
+        ? selectedLassoTextIds
+        : selectedTextId
+        ? [selectedTextId]
+        : editingTextId
+        ? [editingTextId]
+        : [];
+    const textBaseSet = new Set(textBaseIds);
+    const groupIds = new Set<string>();
+    for (const s of activePage.strokes) {
+      if (baseSet.has(s.id) && s.groupId) groupIds.add(s.groupId);
+    }
+    for (const t of activePage.texts || []) {
+      if (textBaseSet.has(t.id) && t.groupId) groupIds.add(t.groupId);
+    }
     const selStrokes = activePage.strokes.filter(
       (s) => baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
     );
-    const selImg = selectedImageId ? activePage.images?.find((im) => im.id === selectedImageId) : undefined;
+    const selTexts = (activePage.texts || []).filter(
+      (t) => textBaseSet.has(t.id) || (t.groupId && groupIds.has(t.groupId))
+    );
+    const targetImgId =
+      selectedImageId || (selectedImageIds.length > 0 ? selectedImageIds[0] : null);
+    const selImg = targetImgId ? activePage.images?.find((im) => im.id === targetImgId) : undefined;
 
-    if (selImg) {
+    if (selImg && selStrokes.length === 0 && selTexts.length === 0) {
       const newItem: SavedLibraryItem = {
         id: `lib-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         title: `Εικόνα #${shapeLibrary.length + 1}`,
         createdAt: new Date().toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit' }),
         thumbnailDataUrl: selImg.dataUrl,
+        tags: [],
         image: structuredClone(selImg),
       };
       setShapeLibrary((prev) => [newItem, ...prev]);
-      showToast('🖼️ Η εικόνα αποθηκεύτηκε στη Συλλογή Εικόνων!');
+      setShowShapeLibraryPanel(true);
+      setLibraryTab('custom');
+      setEditingLibItemId(newItem.id);
+      setEditingLibTitle(newItem.title);
+      setEditingLibTagsInput('');
+      showToast('📚 Προστέθηκε στη Βιβλιοθήκη — δώστε όνομα & tags δεξιά!');
       return;
     }
 
-    if (selStrokes.length === 0) {
-      showToast('ℹ️ Επίλεξε πρώτα ένα σχήμα με το Lasso!');
+    if (selStrokes.length === 0 && selTexts.length === 0) {
+      showToast('ℹ️ Επίλεξε πρώτα ένα αντικείμενο ή σχήμα με το Lasso!');
       return;
     }
 
-    // Compute tight bounding box of the selected stroke(s)
+    // Compute tight bounding box of the selected stroke(s) and text(s)
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -39072,6 +39099,14 @@ export default function App() {
         if (p.x > maxX) maxX = p.x;
         if (p.y > maxY) maxY = p.y;
       }
+    }
+    for (const t of selTexts) {
+      const tw = t.boxWidth || Math.max(80, (t.text?.length || 4) * ((t.fontSize || 24) * 0.55));
+      const th = t.boxHeight || Math.max(32, (t.fontSize || 24) * 1.35);
+      if (t.x < minX) minX = t.x;
+      if (t.y < minY) minY = t.y;
+      if (t.x + tw > maxX) maxX = t.x + tw;
+      if (t.y + th > maxY) maxY = t.y + th;
     }
     const spanW = Math.max(24, maxX - minX);
     const spanH = Math.max(24, maxY - minY);
@@ -39095,19 +39130,42 @@ export default function App() {
     for (const s of selStrokes) {
       drawStrokeOnContext(ctx, s, false);
     }
+    for (const t of selTexts) {
+      const fs = t.fontSize || 24;
+      ctx.save();
+      ctx.font = `${t.bold ? 'bold ' : ''}${fs}px sans-serif`;
+      ctx.fillStyle = t.color || '#1e293b';
+      ctx.textBaseline = 'top';
+      const lines = (t.text || '').split('\n');
+      lines.forEach((ln, idx) => {
+        ctx.fillText(ln, t.x + 4, t.y + 2 + idx * (fs * 1.18));
+      });
+      ctx.restore();
+    }
     ctx.restore();
 
     const thumbnailDataUrl = c.toDataURL('image/png');
+    const defaultTitle =
+      selTexts.length > 0 && selTexts[0].text?.trim()
+        ? selTexts[0].text.trim().split('\n')[0].slice(0, 28)
+        : `Σχήμα #${shapeLibrary.length + 1}`;
     const newItem: SavedLibraryItem = {
       id: `lib-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title: `Σχήμα #${shapeLibrary.length + 1}`,
+      title: defaultTitle,
       createdAt: new Date().toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit' }),
       thumbnailDataUrl,
-      strokes: structuredClone(selStrokes),
+      tags: [],
+      strokes: selStrokes.length > 0 ? structuredClone(selStrokes) : undefined,
+      texts: selTexts.length > 0 ? structuredClone(selTexts) : undefined,
     };
 
     setShapeLibrary((prev) => [newItem, ...prev]);
-    showToast('🖼️ Προστέθηκε στη Συλλογή Εικόνων!');
+    setShowShapeLibraryPanel(true);
+    setLibraryTab('custom');
+    setEditingLibItemId(newItem.id);
+    setEditingLibTitle(newItem.title);
+    setEditingLibTagsInput('');
+    showToast('📚 Προστέθηκε στη Βιβλιοθήκη — δώστε όνομα & tags δεξιά!');
   };
 
   // Open AI Animate Studio (Smart Sketch Animator + Gemini Omni 1.1 Flash Video) for selected Image or Lasso composite
@@ -39299,12 +39357,12 @@ export default function App() {
       return;
     }
 
-    if (item.strokes && item.strokes.length > 0) {
+    if ((item.strokes && item.strokes.length > 0) || (item.texts && item.texts.length > 0)) {
       let minX = Infinity,
         minY = Infinity,
         maxX = -Infinity,
         maxY = -Infinity;
-      for (const s of item.strokes) {
+      for (const s of item.strokes || []) {
         for (const p of s.points) {
           if (p.x < minX) minX = p.x;
           if (p.y < minY) minY = p.y;
@@ -39312,14 +39370,23 @@ export default function App() {
           if (p.y > maxY) maxY = p.y;
         }
       }
+      for (const t of item.texts || []) {
+        const tw = t.boxWidth || 120;
+        const th = t.boxHeight || 36;
+        if (t.x < minX) minX = t.x;
+        if (t.y < minY) minY = t.y;
+        if (t.x + tw > maxX) maxX = t.x + tw;
+        if (t.y + th > maxY) maxY = t.y + th;
+      }
       const targetCenterX = 420;
       const targetCenterY = 380;
       const dx = targetCenterX - (minX + maxX) / 2;
       const dy = targetCenterY - (minY + maxY) / 2;
-      const newGroupId = item.strokes.length > 1 ? `grp-${Date.now()}` : undefined;
+      const totalCount = (item.strokes?.length || 0) + (item.texts?.length || 0);
+      const newGroupId = totalCount > 1 ? `grp-${Date.now()}` : undefined;
 
       const baseZ = getNextPageZOrder(activePage);
-      const insertedStrokes: StrokeObject[] = item.strokes.map((s, idx) => ({
+      const insertedStrokes: StrokeObject[] = (item.strokes || []).map((s, idx) => ({
         ...structuredClone(s),
         id: `st-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
         layerId: activeLayerId,
@@ -39333,17 +39400,28 @@ export default function App() {
           cy: p.cy !== undefined ? p.cy + dy : undefined,
         })),
       }));
+      const insertedTexts: TextObject[] = (item.texts || []).map((t, idx) => ({
+        ...structuredClone(t),
+        id: `txt-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        layerId: activeLayerId,
+        groupId: newGroupId,
+        zOrder: baseZ + insertedStrokes.length + idx,
+        x: Math.round(t.x + dx),
+        y: Math.round(t.y + dy),
+      }));
 
       updateActivePage((page) => ({
         ...page,
         strokes: [...page.strokes, ...insertedStrokes],
+        texts: [...(page.texts || []), ...insertedTexts],
       }));
       setSelectedStrokeIds(insertedStrokes.map((s) => s.id));
+      setSelectedLassoTextIds(insertedTexts.map((t) => t.id));
       setSelectedImageId(null);
       setActiveNodeStrokeId(null);
       setActiveTool('lasso');
       setShowShapeLibraryPanel(false);
-      showToast(`📥 Εισήχθη "${item.title}" από τη Συλλογή Εικόνων!`);
+      showToast(`📥 Εισήχθη "${item.title}" από τη Βιβλιοθήκη Σχημάτων!`);
     }
   };
 
@@ -42842,7 +42920,6 @@ export default function App() {
                       <div className="h-4 w-px bg-slate-300 mx-0.5 shrink-0" />
 
                       {/* Font Size Controls */}
-                      <span className="text-[11px] font-normal text-slate-500">Μέγεθος:</span>
                       <button
                         onClick={() => applyFontSize(currentSize - 2)}
                         className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
@@ -43252,7 +43329,6 @@ export default function App() {
                     </button>
 
                     <div className="h-4 w-px bg-slate-300 mx-1 shrink-0" />
-                    <span className="text-[11px] font-semibold text-slate-500">Μέγεθος:</span>
                     {(
                       [
                         { id: 'small', label: 'Μικρή' },
@@ -43525,11 +43601,12 @@ export default function App() {
                     )}
 
                     <button
+                      data-popover-trigger="library"
                       onClick={handleAddSelectedToShapeLibrary}
                       className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal cursor-pointer shadow-2xs whitespace-nowrap"
-                      title="Προσθήκη του επιλεγμένου αντικειμένου στις αποθηκευμένες εικόνες"
+                      title="Προσθήκη του επιλεγμένου αντικειμένου στη Βιβλιοθήκη Σχημάτων (με όνομα & tags)"
                     >
-                      <span>Προσθήκη</span>
+                      <span>+Βιβλιοθήκη</span>
                     </button>
 
                     <button
@@ -44267,7 +44344,9 @@ export default function App() {
 
                     const matchedCustom = shapeLibrary.filter((item) => {
                       if (!qNorm) return true;
-                      const haystack = normalizeGreekText(item.title);
+                      const haystack = normalizeGreekText(
+                        `${item.title} ${(item.tags || []).join(' ')}`
+                      );
                       return matchesGreekSearchTokens(haystack, qNorm);
                     });
 
@@ -44461,6 +44540,19 @@ export default function App() {
                                       className="group relative flex flex-col items-center justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
                                       title={`Εισαγωγή "${item.title}" στη σελίδα`}
                                     >
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setLibraryTab('custom');
+                                          setEditingLibItemId(item.id);
+                                          setEditingLibTitle(item.title);
+                                          setEditingLibTagsInput((item.tags || []).join(', '));
+                                        }}
+                                        className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-white/90 hover:bg-emerald-50 text-emerald-700 border border-slate-200 text-[9px] font-bold transition cursor-pointer z-10"
+                                        title="Επεξεργασία ονόματος & tags"
+                                      >
+                                        ✏️
+                                      </button>
                                       <div className="w-full h-20 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
                                         <img
                                           src={item.thumbnailDataUrl}
@@ -44471,6 +44563,18 @@ export default function App() {
                                       <span className="mt-1 text-[10px] font-semibold text-slate-700 truncate w-full text-center">
                                         {item.title}
                                       </span>
+                                      {item.tags && item.tags.length > 0 && (
+                                        <div className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5 w-full">
+                                          {item.tags.slice(0, 3).map((tg) => (
+                                            <span
+                                              key={tg}
+                                              className="px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8.5px] font-semibold"
+                                            >
+                                              #{tg}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -45186,48 +45290,292 @@ export default function App() {
                     <p className="text-xs font-semibold text-slate-600">Τα Δικά μου Σχήματα είναι κενά</p>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
                       Επίλεξε οποιοδήποτε σχήμα, γραμμή ή group με το <b>Lasso</b> και πάτα το κουμπί{' '}
-                      <span className="text-emerald-700 font-bold">«+ 🖼️ Συλλογή»</span> στην πάνω μπάρα για να αποθηκευτεί εδώ!
+                      <span className="text-emerald-700 font-bold">«+Βιβλιοθήκη»</span> στην πάνω μπάρα για να αποθηκευτεί εδώ με όνομα και tags!
                     </p>
                   </div>
                 ) : (
-                  <div
-                    style={{ WebkitOverflowScrolling: 'touch' }}
-                    className="max-h-80 overflow-y-auto pr-1 grid grid-cols-2 gap-2.5"
-                  >
-                    {shapeLibrary.map((item) => (
-                      <div
-                        key={item.id}
-                        onClick={() => handleInsertFromShapeLibrary(item)}
-                        className="group relative flex flex-col items-center justify-between p-2 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400 transition cursor-pointer shadow-2xs"
-                        title={`Εισαγωγή "${item.title}" στη σελίδα`}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShapeLibrary((prev) => prev.filter((x) => x.id !== item.id));
-                            showToast('🗑️ Αφαιρέθηκε από τη Συλλογή Εικόνων!');
-                          }}
-                          className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition cursor-pointer z-10"
-                          title="Διαγραφή αυτού του σχήματος από τη Συλλογή Εικόνων"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                  (() => {
+                    const editingItem = editingLibItemId
+                      ? shapeLibrary.find((it) => it.id === editingLibItemId)
+                      : undefined;
+                    const saveEditingLibItem = () => {
+                      if (!editingItem) return;
+                      const cleanTitle = editingLibTitle.trim() || editingItem.title;
+                      const cleanTags = Array.from(
+                        new Set(
+                          editingLibTagsInput
+                            .split(/[,;#]+/)
+                            .map((t) => t.trim())
+                            .filter(Boolean)
+                        )
+                      );
+                      setShapeLibrary((prev) =>
+                        prev.map((it) =>
+                          it.id === editingItem.id
+                            ? { ...it, title: cleanTitle, tags: cleanTags }
+                            : it
+                        )
+                      );
+                      setEditingLibItemId(null);
+                      showToast(
+                        `✅ Αποθηκεύτηκε ως «${cleanTitle}»${
+                          cleanTags.length > 0 ? ` (${cleanTags.map((t) => `#${t}`).join(' ')})` : ''
+                        }!`
+                      );
+                    };
+                    const quickTagPresets = [
+                      'Φυσική',
+                      'Χημεία',
+                      'Μαθηματικά',
+                      'Βιολογία',
+                      'Κύκλωμα',
+                      'Μηχανική',
+                      'Άσκηση',
+                    ];
+                    const customQueryNorm = normalizeGreekText(shapeLibSearchQuery.trim());
+                    const filteredCustom = shapeLibrary.filter((item) => {
+                      if (!customQueryNorm) return true;
+                      const hay = normalizeGreekText(
+                        `${item.title} ${(item.tags || []).join(' ')}`
+                      );
+                      return matchesGreekSearchTokens(hay, customQueryNorm);
+                    });
 
-                        <div className="w-full h-24 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
-                          <img
-                            src={item.thumbnailDataUrl}
-                            alt={item.title}
-                            className="max-w-full max-h-full object-contain pointer-events-none select-none"
+                    return (
+                      <div className="flex flex-col min-h-0 flex-1 space-y-2.5">
+                        {/* Inline Name & Tags Editor Panel (auto-opens when +Βιβλιοθήκη is clicked or ✏️ is pressed) */}
+                        {editingItem && (
+                          <div className="p-2.5 rounded-xl bg-emerald-50/90 border-2 border-emerald-400 shadow-sm space-y-2 shrink-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-emerald-900">
+                                ✏️ Ονομασία & Tags Σχήματος
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingLibItemId(null)}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
+                                title="Κλείσιμο επεξεργασίας"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                              <div className="w-16 h-16 rounded-lg bg-[#fffdf7] border border-emerald-200 flex items-center justify-center overflow-hidden p-1 shrink-0">
+                                <img
+                                  src={editingItem.thumbnailDataUrl}
+                                  alt={editingItem.title}
+                                  className="max-w-full max-h-full object-contain"
+                                />
+                              </div>
+                              <div className="flex-1 space-y-1.5">
+                                <div>
+                                  <label className="block text-[9.5px] font-bold text-emerald-800 mb-0.5">
+                                    Όνομα:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    onFocus={(e) => e.currentTarget.select()}
+                                    value={editingLibTitle}
+                                    onChange={(e) => setEditingLibTitle(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        saveEditingLibItem();
+                                      }
+                                    }}
+                                    placeholder="π.χ. Ελατήριο με μάζα, Κύκλωμα..."
+                                    className="w-full px-2 py-1 rounded-lg bg-white border border-emerald-300 text-xs font-semibold text-slate-800 focus:outline-none focus:border-emerald-600"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[9.5px] font-bold text-emerald-800 mb-0.5">
+                                    Tags (χωρισμένα με κόμμα):
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editingLibTagsInput}
+                                    onChange={(e) => setEditingLibTagsInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        saveEditingLibItem();
+                                      }
+                                    }}
+                                    placeholder="π.χ. φυσική, ταλάντωση, ελατήριο..."
+                                    className="w-full px-2 py-1 rounded-lg bg-white border border-emerald-300 text-[11px] text-slate-700 focus:outline-none focus:border-emerald-600"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Quick 1-click Tag Presets */}
+                            <div className="flex items-center flex-wrap gap-1 pt-0.5">
+                              <span className="text-[9px] font-semibold text-emerald-800 mr-0.5">
+                                Γρήγορα tags:
+                              </span>
+                              {quickTagPresets.map((preset) => {
+                                const currentTags = editingLibTagsInput
+                                  .split(/[,;#]+/)
+                                  .map((t) => t.trim())
+                                  .filter(Boolean);
+                                const isAdded = currentTags.some(
+                                  (t) => t.toLowerCase() === preset.toLowerCase()
+                                );
+                                return (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => {
+                                      const nextTags = isAdded
+                                        ? currentTags.filter(
+                                            (t) => t.toLowerCase() !== preset.toLowerCase()
+                                          )
+                                        : [...currentTags, preset];
+                                      setEditingLibTagsInput(nextTags.join(', '));
+                                    }}
+                                    className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold border transition cursor-pointer ${
+                                      isAdded
+                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                        : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                                    }`}
+                                  >
+                                    {isAdded ? `✓ ${preset}` : `+ ${preset}`}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-1.5 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingLibItemId(null)}
+                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 text-[10.5px] font-semibold cursor-pointer"
+                              >
+                                Ακύρωση
+                              </button>
+                              <button
+                                type="button"
+                                onClick={saveEditingLibItem}
+                                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold shadow-xs cursor-pointer"
+                              >
+                                ✓ Αποθήκευση
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Search input inside Custom Tab */}
+                        <div className="relative shrink-0">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={shapeLibSearchQuery}
+                            onChange={(e) => setShapeLibSearchQuery(e.target.value)}
+                            placeholder="Αναζήτηση στα δικά μου (όνομα ή #tag)..."
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
                           />
+                          {shapeLibSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setShapeLibSearchQuery('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              title="Καθαρισμός αναζήτησης"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
 
-                        <div className="w-full flex items-center justify-between mt-1.5 px-0.5">
-                          <span className="text-[10px] font-semibold text-slate-700 truncate">{item.title}</span>
-                          <span className="text-[9px] text-slate-400">{item.createdAt}</span>
+                        <div
+                          style={{ WebkitOverflowScrolling: 'touch' }}
+                          className="max-h-80 overflow-y-auto pr-1 grid grid-cols-2 gap-2.5"
+                        >
+                          {filteredCustom.map((item) => {
+                            const isBeingEdited = editingLibItemId === item.id;
+                            return (
+                              <div
+                                key={item.id}
+                                onClick={() => handleInsertFromShapeLibrary(item)}
+                                className={`group relative flex flex-col items-center justify-between p-2 rounded-xl border transition cursor-pointer shadow-2xs ${
+                                  isBeingEdited
+                                    ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-300'
+                                    : 'border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400'
+                                }`}
+                                title={`Εισαγωγή "${item.title}" στη σελίδα`}
+                              >
+                                <div className="absolute top-1.5 right-1.5 flex items-center gap-1 z-10">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingLibItemId(item.id);
+                                      setEditingLibTitle(item.title);
+                                      setEditingLibTagsInput((item.tags || []).join(', '));
+                                    }}
+                                    className="p-1 rounded-lg bg-white/95 hover:bg-emerald-50 text-emerald-700 border border-slate-200/90 text-[10px] leading-none transition cursor-pointer"
+                                    title="Μετονομασία & επεξεργασία tags"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (editingLibItemId === item.id) {
+                                        setEditingLibItemId(null);
+                                      }
+                                      setShapeLibrary((prev) => prev.filter((x) => x.id !== item.id));
+                                      showToast('🗑️ Αφαιρέθηκε από τη Βιβλιοθήκη Σχημάτων!');
+                                    }}
+                                    className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition cursor-pointer"
+                                    title="Διαγραφή αυτού του σχήματος από τη Βιβλιοθήκη"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+
+                                <div className="w-full h-24 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
+                                  <img
+                                    src={item.thumbnailDataUrl}
+                                    alt={item.title}
+                                    className="max-w-full max-h-full object-contain pointer-events-none select-none"
+                                  />
+                                </div>
+
+                                <div className="w-full flex items-center justify-between mt-1.5 px-0.5 gap-1">
+                                  <span className="text-[10.5px] font-bold text-slate-700 truncate">
+                                    {item.title}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 shrink-0">
+                                    {item.createdAt}
+                                  </span>
+                                </div>
+
+                                {item.tags && item.tags.length > 0 && (
+                                  <div className="w-full flex flex-wrap items-center gap-1 mt-1 px-0.5">
+                                    {item.tags.map((tg) => (
+                                      <span
+                                        key={tg}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShapeLibSearchQuery(tg);
+                                        }}
+                                        className="px-1.5 py-0.2 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[8.5px] font-semibold cursor-pointer"
+                                        title={`Φιλτράρισμα με #${tg}`}
+                                      >
+                                        #{tg}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()
                 )}
               </div>
             )}
