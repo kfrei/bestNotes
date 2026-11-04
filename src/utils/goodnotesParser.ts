@@ -325,10 +325,85 @@ function parseGoodnotesPageBuffer(buf: Uint8Array, pageId: string, pageNum: numb
 }
 
 /**
- * Parses a .goodnotes ZIP file directly in the browser and returns a BestNotes Notebook!
+ * Exports a BestNotes Notebook as a lossless, human-readable JSON `.bestnotes` file
+ * containing all pages, strokes, rich texts, transparent images, layers, tags, and simulations.
+ */
+export function exportBestnotesFile(notebook: Notebook): void {
+  const payload = {
+    format: 'bestnotes-v2',
+    exportedAt: new Date().toISOString(),
+    notebook,
+  };
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const safeTitle =
+    (notebook.title || 'Σημείωση')
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, '_') || 'Σημείωση';
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safeTitle.endsWith('.bestnotes') ? safeTitle : `${safeTitle}.bestnotes`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function normalizeImportedBestnotesJson(rawObj: any, fallbackTitle: string): Notebook | null {
+  const candidate = rawObj?.notebook && Array.isArray(rawObj.notebook.pages) ? rawObj.notebook : rawObj;
+  if (!candidate || !Array.isArray(candidate.pages)) return null;
+  return {
+    ...candidate,
+    id: `nb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title: String(candidate.title || fallbackTitle || 'Σημείωση'),
+    folder: typeof candidate.folder === 'string' ? candidate.folder : '',
+    coverColor: typeof candidate.coverColor === 'string' ? candidate.coverColor : '#0284c7',
+    updatedAt: new Date().toISOString(),
+    sourceFormat: '.bestNotes',
+    tags: Array.isArray(candidate.tags) ? candidate.tags : [],
+    pages: candidate.pages,
+  };
+}
+
+/**
+ * Parses a `.bestnotes` JSON file or `.goodnotes` ZIP file directly in the browser and returns a BestNotes Notebook!
  */
 export async function importGoodnotesFile(file: File): Promise<Notebook> {
+  const cleanTitle = file.name.replace(/\.(goodnotes|bestnotes|json)$/i, '');
+
+  // 1. Check if this is a lossless JSON .bestnotes file
+  try {
+    const headBuf = await file.slice(0, 64).arrayBuffer();
+    const headText = new TextDecoder('utf-8').decode(headBuf).trimStart();
+    if (headText.startsWith('{')) {
+      const fullText = await file.text();
+      const parsed = JSON.parse(fullText);
+      const restored = normalizeImportedBestnotesJson(parsed, cleanTitle);
+      if (restored) {
+        return restored;
+      }
+    }
+  } catch {
+    // Fall back to ZIP parsing
+  }
+
+  // 2. Otherwise parse as ZIP (.goodnotes or zipped .bestnotes)
   const zip = await JSZip.loadAsync(file);
+  const embeddedBestnotes = zip.file('bestnotes.json');
+  if (embeddedBestnotes) {
+    try {
+      const jsonText = await embeddedBestnotes.async('string');
+      const parsed = JSON.parse(jsonText);
+      const restored = normalizeImportedBestnotesJson(parsed, cleanTitle);
+      if (restored) {
+        return restored;
+      }
+    } catch {
+      // Fall back to Goodnotes notes/ parsing
+    }
+  }
+
   const noteFiles: { path: string; name: string }[] = [];
 
   zip.folder('notes')?.forEach((relativePath, zipEntry) => {
@@ -363,7 +438,6 @@ export async function importGoodnotesFile(file: File): Promise<Notebook> {
     });
   }
 
-  const cleanTitle = file.name.replace(/\.(goodnotes|bestnotes)$/i, '');
   return {
     id: `nb-${Date.now()}`,
     title: cleanTitle,

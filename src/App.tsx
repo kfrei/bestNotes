@@ -57,6 +57,7 @@ import {
   Search,
   ArrowUpDown,
   Share2,
+  Download,
   Tag,
 } from 'lucide-react';
 import {
@@ -112,7 +113,8 @@ import {
   getPageLogicalWidth,
   getPageLogicalHeight,
 } from './types/note';
-import { importGoodnotesFile } from './utils/goodnotesParser';
+import { importGoodnotesFile, exportBestnotesFile } from './utils/goodnotesParser';
+import { buildVolcanoCreationNotebook, VOLCANO_NOTEBOOK_ID } from './utils/volcanoNoteSeed';
 import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
 import {
   distance,
@@ -3999,6 +4001,105 @@ export default function App() {
       showToast(`❌ Σφάλμα εξαγωγής PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
     }
   }, [activeNotebook, activePage.id, showToast]);
+
+  const handleExportBestnotesFile = useCallback(
+    (targetNotebook?: Notebook) => {
+      const nb = targetNotebook ?? activeNotebook;
+      try {
+        exportBestnotesFile(nb);
+        showToast(`💾 Αποθηκεύτηκε τοπικά το αρχείο «${nb.title}.bestnotes»!`);
+      } catch (err: any) {
+        showToast(`❌ Σφάλμα αποθήκευσης .bestnotes: ${err?.message || 'Άγνωστο σφάλμα'}`);
+      }
+    },
+    [activeNotebook, showToast]
+  );
+
+  // Auto-provision the "Η Δημιουργία Ηφαιστείου" (Page 3 of the PDF) notebook in the user's library
+  useEffect(() => {
+    const seedKey = 'bestnotes_volcano_seeded_v1';
+    try {
+      if (localStorage.getItem(seedKey) === 'deleted') return;
+    } catch {
+      // ignore
+    }
+    if (deletedCloudNotebooks.some((n) => n.id === VOLCANO_NOTEBOOK_ID)) {
+      return;
+    }
+
+    const existingVolcano = notebooks.find(
+      (n) =>
+        n.id === VOLCANO_NOTEBOOK_ID ||
+        normalizeGreekSearchText(n.title || '').includes('ηφαιστει')
+    );
+    const waterCycleNb = notebooks.find((n) => {
+      const norm = normalizeGreekSearchText(n.title || '');
+      return norm.includes('κυκλ') && norm.includes('νερ');
+    });
+
+    if (existingVolcano) {
+      try {
+        localStorage.setItem(seedKey, 'present');
+      } catch {
+        // ignore
+      }
+      if (
+        existingVolcano.id === VOLCANO_NOTEBOOK_ID &&
+        !existingVolcano.folder &&
+        waterCycleNb?.folder
+      ) {
+        const updatedVolcano = {
+          ...existingVolcano,
+          folder: waterCycleNb.folder,
+          updatedAt: new Date().toISOString(),
+        };
+        setNotebooks((prev) =>
+          prev.map((n) => (n.id === VOLCANO_NOTEBOOK_ID ? updatedVolcano : n))
+        );
+        if (currentUser) {
+          pushNotebookToCloudTracked(currentUser.uid, updatedVolcano);
+        }
+      }
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      try {
+        if (localStorage.getItem(seedKey) === 'deleted') return;
+      } catch {
+        // ignore
+      }
+      const curList = notebooksRef.current;
+      if (
+        curList.some(
+          (n) =>
+            n.id === VOLCANO_NOTEBOOK_ID ||
+            normalizeGreekSearchText(n.title || '').includes('ηφαιστει')
+        )
+      ) {
+        return;
+      }
+      const wc = curList.find((n) => {
+        const norm = normalizeGreekSearchText(n.title || '');
+        return norm.includes('κυκλ') && norm.includes('νερ');
+      });
+      const volcanoNb = buildVolcanoCreationNotebook(wc?.folder || '');
+      try {
+        localStorage.setItem(seedKey, 'present');
+      } catch {
+        // ignore
+      }
+      setNotebooks((prev) => {
+        if (prev.some((n) => n.id === VOLCANO_NOTEBOOK_ID)) return prev;
+        return [volcanoNb, ...prev];
+      });
+      if (currentUser) {
+        pushNotebookToCloudTracked(currentUser.uid, volcanoNb);
+      }
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [notebooks, deletedCloudNotebooks, currentUser, pushNotebookToCloudTracked]);
 
   const handleDownloadLivePdfHtml = useCallback(async () => {
     try {
@@ -39973,6 +40074,16 @@ export default function App() {
                 <span className="hidden sm:inline">PDF</span>
               </button>
 
+              {/* Direct 1-Click Local .bestnotes Save Button */}
+              <button
+                onClick={() => handleExportBestnotesFile(activeNotebook)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-emerald-600 text-[11px] font-semibold text-emerald-200 hover:text-white transition cursor-pointer"
+                title={`Αποθήκευση τοπικά ως «${activeNotebook.title}.bestnotes» (πλήρες επεξεργάσιμο αρχείο)`}
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-300" />
+                <span className="hidden md:inline">.bestnotes</span>
+              </button>
+
               {/* Live PDF Interactive Player & Standalone Export Button (No Edit Tools, Only Simulation Interaction + Play/Stop) */}
               <button
                 onClick={() => {
@@ -40194,10 +40305,18 @@ export default function App() {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => void handleDownloadActiveNotebookPdf()}
-                          className="flex-1 flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer"
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer"
                         >
                           <FileText className="w-3 h-3" />
                           <span>Λήψη PDF</span>
+                        </button>
+                        <button
+                          onClick={() => handleExportBestnotesFile(activeNotebook)}
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition cursor-pointer"
+                          title={`Αποθήκευση τοπικά ως «${activeNotebook.title}.bestnotes»`}
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>.bestnotes</span>
                         </button>
                         {lastDrivePdfLink && (
                           <a
@@ -40255,6 +40374,13 @@ export default function App() {
                       >
                         <FileText className="w-3.5 h-3.5" />
                         <span>Εξαγωγή & Λήψη PDF ({activeNotebook.title}.pdf)</span>
+                      </button>
+                      <button
+                        onClick={() => handleExportBestnotesFile(activeNotebook)}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Αποθήκευση τοπικά ({activeNotebook.title}.bestnotes)</span>
                       </button>
                     </div>
                   )}
@@ -41320,6 +41446,16 @@ export default function App() {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          handleExportBestnotesFile(nb);
+                                        }}
+                                        className="p-2 rounded-xl bg-white/95 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        title={`Αποθήκευση τοπικά ως "${nb.title}.bestnotes"`}
+                                      >
+                                        <Download className="w-[18px] h-[18px]" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           void handleShareNotebookPdf(nb);
                                         }}
                                         className="p-2 rounded-xl bg-white/95 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
@@ -41718,6 +41854,16 @@ export default function App() {
                             <span className="text-[11px] text-slate-400 hidden sm:inline">
                               {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                             </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExportBestnotesFile(nb);
+                              }}
+                              className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200/80 transition cursor-pointer"
+                              title={`Αποθήκευση τοπικά ως "${nb.title}.bestnotes"`}
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
