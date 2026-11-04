@@ -2714,6 +2714,13 @@ export default function App() {
     texts?: TextObject[];
     wasCut?: boolean;
   } | null>(null);
+  const [copiedLayerClip, setCopiedLayerClip] = useState<{
+    name: string;
+    opacity: number;
+    strokes: StrokeObject[];
+    images: ImageObject[];
+    texts: TextObject[];
+  } | null>(null);
   const hasExternalFocusSinceInternalCopyRef = useRef<boolean>(true);
   const lastPasteHandledAtRef = useRef<number>(0);
   const imageElementsCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -48598,6 +48605,73 @@ export default function App() {
                     <span className="text-[10px] text-slate-400">Σύρε πάνω/κάτω (Πάνω = Μπροστά)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {copiedLayerClip && (
+                      <button
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => {
+                          const newLayerId = `layer-${Date.now()}`;
+                          const grpMap = new Map<string, string>();
+                          const remapGrp = (gid?: string) => {
+                            if (!gid) return undefined;
+                            let mapped = grpMap.get(gid);
+                            if (!mapped) {
+                              mapped = `grp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                              grpMap.set(gid, mapped);
+                            }
+                            return mapped;
+                          };
+                          updateActivePage((page) => {
+                            let nextZ = getNextPageZOrder(page);
+                            const newStrokes = copiedLayerClip.strokes.map((s) => ({
+                              ...structuredClone(s),
+                              id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              layerId: newLayerId,
+                              groupId: remapGrp(s.groupId),
+                              zOrder: nextZ++,
+                            }));
+                            const newImages = copiedLayerClip.images.map((im) => ({
+                              ...structuredClone(im),
+                              id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              layerId: newLayerId,
+                              groupId: remapGrp(im.groupId),
+                              zOrder: nextZ++,
+                            }));
+                            const newTexts = copiedLayerClip.texts.map((t) => ({
+                              ...structuredClone(t),
+                              id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              layerId: newLayerId,
+                              groupId: remapGrp(t.groupId),
+                            }));
+                            return {
+                              ...page,
+                              layers: [
+                                {
+                                  id: newLayerId,
+                                  name: copiedLayerClip.name,
+                                  visible: true,
+                                  locked: false,
+                                  opacity: copiedLayerClip.opacity ?? 1,
+                                },
+                                ...page.layers,
+                              ],
+                              strokes: [...page.strokes, ...newStrokes],
+                              images: [...(page.images || []), ...newImages],
+                              texts: [...(page.texts || []), ...newTexts],
+                            };
+                          });
+                          setActiveLayerId(newLayerId);
+                          showToast(
+                            `📥 Επικολλήθηκε ως νέο Layer «${copiedLayerClip.name}» στη σελίδα!`
+                          );
+                        }}
+                        className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold cursor-pointer flex items-center gap-1 shadow-2xs"
+                        title={`Επικόλληση του αντιγραμμένου Layer «${copiedLayerClip.name}» ως νέο Layer σε αυτή τη σελίδα`}
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5" />
+                        <span>+Layer</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
@@ -48975,6 +49049,58 @@ export default function App() {
                               );
                             })()}
                           </div>
+
+                          <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const layerStrokes = activePage.strokes.filter((s) =>
+                                matchesLayer(s.layerId)
+                              );
+                              const layerImages = (activePage.images || []).filter((im) =>
+                                matchesLayer(im.layerId)
+                              );
+                              const layerTexts = (activePage.texts || []).filter((t) =>
+                                matchesLayer(t.layerId)
+                              );
+                              const totalItems =
+                                layerStrokes.length + layerImages.length + layerTexts.length;
+                              if (totalItems === 0) {
+                                showToast(`⚠️ Το Layer «${layer.name}» είναι άδειο!`);
+                                return;
+                              }
+                              setCopiedLayerClip({
+                                name: layer.name,
+                                opacity: layer.opacity ?? 1,
+                                strokes: structuredClone(layerStrokes),
+                                images: structuredClone(layerImages),
+                                texts: structuredClone(layerTexts),
+                              });
+                              lastLassoEmptyTapPtRef.current = null;
+                              internalClipboardRef.current = {
+                                strokes: structuredClone(layerStrokes),
+                                images: structuredClone(layerImages),
+                                image:
+                                  layerImages.length === 1
+                                    ? structuredClone(layerImages[0])
+                                    : undefined,
+                                texts: structuredClone(layerTexts),
+                                text:
+                                  layerTexts.length === 1
+                                    ? structuredClone(layerTexts[0])
+                                    : undefined,
+                                wasCut: true,
+                              };
+                              showToast(
+                                `📋 Αντιγράφηκε το Layer «${layer.name}» (${totalItems} αντικείμενα) — πηγαίνετε σε άλλη σελίδα και πατήστε «+Layer» ή «📋 Paste»!`
+                              );
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-[#0066ff] hover:bg-sky-50 transition cursor-pointer"
+                            title={`Αντιγραφή ολόκληρου του Layer «${layer.name}» (${count} αντικείμενα)`}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
 
                           <button
                             type="button"
