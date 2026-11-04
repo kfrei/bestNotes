@@ -10724,20 +10724,30 @@ export default function App() {
   );
 
   // Reflows single line-wrap newlines (\n) inside a sentence/paragraph into normal spaces (' ')
-  // while preserving double-newline paragraph breaks (\n\n) and bullet/numbered list items,
-  // so that dragging a text box wider/narrower pulls words from lower lines up (or pushes them down) smoothly!
+  // while preserving Shift+Enter permanent line breaks (\u200B\n), double-newline paragraph breaks (\n\n),
+  // and bullet/numbered list items, so that dragging a text box wider/narrower pulls words from lower lines up
+  // (or pushes them down) smoothly unless locked with Shift+Enter!
   const reflowTextForResponsiveBox = useCallback((rawText: string): string => {
     if (!rawText || !rawText.includes('\n')) return rawText;
     const lines = rawText.split(/\r?\n/);
     if (lines.length <= 1) return rawText;
-    let out = lines[0].trimEnd();
+    const firstHasPerm = lines[0].endsWith('\u200B');
+    let out = lines[0].replace(/\u200B+$/, '').trimEnd() + (firstHasPerm ? '\u200B' : '');
     for (let i = 1; i < lines.length; i++) {
-      const prev = lines[i - 1].trim();
-      const cur = lines[i].trimStart();
-      const isBulletOrNumbered = /^(?:[-•*▪‣]|\d+[.)]|[α-ωΑ-Ωa-zA-Z][.)])\s/.test(cur);
-      if (prev.length === 0 || cur.length === 0 || isBulletOrNumbered) {
+      const prevRaw = lines[i - 1];
+      const hasPermanentBreak = prevRaw.endsWith('\u200B');
+      const curHasPerm = lines[i].endsWith('\u200B');
+      const prev = prevRaw.replace(/\u200B/g, '').trim();
+      const cur = lines[i].replace(/\u200B+$/, '').trimStart() + (curHasPerm ? '\u200B' : '');
+      const curClean = cur.replace(/\u200B/g, '');
+      const isBulletOrNumbered = /^(?:[-•*▪‣]|\d+[.)]|[α-ωΑ-Ωa-zA-Z][.)])\s/.test(curClean);
+      if (hasPermanentBreak || prev.length === 0 || curClean.length === 0 || isBulletOrNumbered) {
+        if (hasPermanentBreak && !out.endsWith('\u200B')) {
+          out += '\u200B';
+        }
         out += '\n' + cur;
       } else {
+        out = out.replace(/\u200B+$/, '');
         out += (out.endsWith(' ') ? '' : ' ') + cur;
       }
     }
@@ -10779,7 +10789,7 @@ export default function App() {
         let totalLines = 0;
 
         for (const para of paragraphs) {
-          const words = para.split(/\s+/).filter(Boolean);
+          const words = para.replace(/\u200B/g, '').split(/\s+/).filter(Boolean);
           if (words.length === 0) {
             totalLines += 1;
             continue;
@@ -10859,7 +10869,7 @@ export default function App() {
       let maxLineW = 0;
 
       for (const para of paragraphs) {
-        const words = para.split(/\s+/).filter(Boolean);
+        const words = para.replace(/\u200B/g, '').split(/\s+/).filter(Boolean);
         if (words.length === 0) {
           totalLines += 1;
           continue;
@@ -11086,110 +11096,57 @@ export default function App() {
                   fontSize: mathFs,
                 };
               }
+              const reflowedText = reflowTextForResponsiveBox(t.text);
+              const isPureVert = d.resizeHandle === 'n' || d.resizeHandle === 's';
               const isCorner =
                 d.resizeHandle === 'nw' ||
                 d.resizeHandle === 'ne' ||
                 d.resizeHandle === 'sw' ||
                 d.resizeHandle === 'se';
-              const isPureVert = d.resizeHandle === 'n' || d.resizeHandle === 's';
-              if (isCorner || isPureVert) {
-                const baseFs = d.origFontSize || t.fontSize || 20;
-                if (d.lockedCornerText === undefined) {
-                  d.lockedCornerText = bakeSoftWrappedLinesForBox(
-                    t.text,
-                    t.fontFamily,
-                    t.bold,
-                    baseFs,
-                    origW
-                  );
-                  d.origSpans = t.spans ? t.spans.map((sp) => ({ ...sp })) : undefined;
-                }
-                const wRatio = nextW / Math.max(36, origW);
-                const hRatio = nextH / Math.max(20, origH);
-                const scale = isPureVert
-                  ? hRatio
-                  : Math.max(0.25, (wRatio + hRatio) / 2);
-                const autoFs = Math.max(8, Math.min(96, Math.round(baseFs * scale)));
-                nextAutoFs = autoFs;
-                const lockedText = d.lockedCornerText || t.text;
-                const tight = measureWrappedTextLayout(
-                  lockedText,
-                  t.fontFamily,
-                  t.bold,
-                  autoFs,
-                  99999
-                );
-                const finalW = tight.tightW;
-                const finalH = tight.tightH;
-                const finalX =
-                  isPureVert && t.textAlign === 'center'
-                    ? Math.round(d.origX + (origW - finalW) / 2)
-                    : d.resizeHandle?.includes('w')
-                    ? Math.round(d.origX + (origW - finalW))
-                    : d.origX;
-                const finalY = d.resizeHandle?.includes('n')
-                  ? Math.round(d.origY + (origH - finalH))
-                  : d.origY;
-                const fsRatio = autoFs / Math.max(8, baseFs);
-                const adjustedSpans = adjustTextSpansOnEdit(
-                  t.text || '',
-                  lockedText,
-                  d.origSpans || t.spans
-                );
-                const scaledSpans = adjustedSpans
-                  ? adjustedSpans.map((sp) =>
-                      sp.fontSize
-                        ? {
-                            ...sp,
-                            fontSize: Math.max(8, Math.min(96, Math.round(sp.fontSize * fsRatio))),
-                          }
-                        : sp
-                    )
-                  : undefined;
-                return {
-                  ...t,
-                  text: lockedText,
-                  x: finalX,
-                  y: finalY,
-                  boxWidth: finalW,
-                  boxHeight: finalH,
-                  fontSize: autoFs,
-                  spans: scaledSpans,
-                };
-              }
-              const preservedText = t.text;
-              const targetWForFit = nextW;
+              const targetWForFit = isPureVert
+                ? Math.max(48, Math.round(origW * (nextH / Math.max(20, origH))))
+                : nextW;
+              const targetHForFit =
+                isCorner && reflowedText.includes('\u200B\n')
+                  ? Math.max(nextH, Math.round(origH * (nextW / Math.max(36, origW))))
+                  : nextH;
               const autoFs =
-                preservedText && preservedText.trim().length > 0
+                reflowedText && reflowedText.trim().length > 0
                   ? computeMaxFitFontSizeForBox(
-                      preservedText,
+                      reflowedText,
                       t.fontFamily,
                       t.bold,
                       targetWForFit,
-                      nextH
+                      targetHForFit
                     )
                   : t.fontSize;
               nextAutoFs = autoFs;
               const tight = measureWrappedTextLayout(
-                preservedText,
+                reflowedText,
                 t.fontFamily,
                 t.bold,
                 autoFs,
                 targetWForFit
               );
-              const finalW = Math.max(36, Math.min(nextW, tight.tightW));
+              const finalW = isPureVert
+                ? tight.tightW
+                : Math.max(36, Math.min(nextW, tight.tightW));
               const finalH = tight.tightH;
-              const finalX = d.resizeHandle?.includes('w')
-                ? Math.round(d.origX + (origW - finalW))
-                : nextX;
+              const finalX =
+                isPureVert && t.textAlign === 'center'
+                  ? Math.round(d.origX + (origW - finalW) / 2)
+                  : d.resizeHandle?.includes('w')
+                  ? Math.round(d.origX + (origW - finalW))
+                  : nextX;
               return {
                 ...t,
-                text: preservedText,
+                text: reflowedText,
                 x: finalX,
                 y: nextY,
                 boxWidth: finalW,
                 boxHeight: finalH,
                 fontSize: autoFs,
+                spans: adjustTextSpansOnEdit(t.text || '', reflowedText, t.spans),
               };
             }),
           }),
@@ -50653,7 +50610,9 @@ export default function App() {
                                   const curVal = el.value || '';
                                   const selStart = el.selectionStart ?? curVal.length;
                                   const selEnd = el.selectionEnd ?? selStart;
-                                  const before = curVal.slice(0, selStart).replace(/[ \t]+$/, '');
+                                  const before = curVal
+                                    .slice(0, selStart)
+                                    .replace(/[ \t\u200B]+$/, '');
                                   const after = curVal.slice(selEnd).replace(/^[ \t]+/, '');
                                   let nextVal: string;
                                   let nextCursorPos: number;
@@ -50662,19 +50621,22 @@ export default function App() {
                                     const nlLen = nlMatch ? nlMatch[0].length : 1;
                                     nextVal =
                                       before +
-                                      '\n' +
+                                      '\u200B\n' +
                                       after.slice(nlLen).replace(/^[ \t]+/, '');
-                                    nextCursorPos = before.length + 1;
+                                    nextCursorPos = before.length + 2;
                                   } else if (
                                     before.endsWith('\n') &&
                                     !before.endsWith('\n\n') &&
                                     after.length > 0
                                   ) {
-                                    nextVal = before + after;
-                                    nextCursorPos = before.length;
+                                    const beforeWithoutNl = before
+                                      .replace(/\r?\n$/, '')
+                                      .replace(/[ \t\u200B]+$/, '');
+                                    nextVal = beforeWithoutNl + '\u200B\n' + after;
+                                    nextCursorPos = beforeWithoutNl.length + 2;
                                   } else {
-                                    nextVal = before + '\n' + after;
-                                    nextCursorPos = before.length + 1;
+                                    nextVal = before + '\u200B\n' + after;
+                                    nextCursorPos = before.length + 2;
                                   }
                                   activeTextRangeRef.current = null;
                                   setActiveTextRange(null);
@@ -50683,29 +50645,20 @@ export default function App() {
                                       ...page,
                                       texts: (page.texts || []).map((t) => {
                                         if (t.id !== txt.id) return t;
-                                        const lockedNextVal = t.boxWidth
-                                          ? bakeSoftWrappedLinesForBox(
+                                        const tight = t.boxWidth
+                                          ? measureWrappedTextLayout(
                                               nextVal,
                                               t.fontFamily,
                                               t.bold,
                                               t.fontSize,
                                               t.boxWidth
                                             )
-                                          : nextVal;
-                                        const tight = t.boxWidth
-                                          ? measureWrappedTextLayout(
-                                              lockedNextVal,
-                                              t.fontFamily,
-                                              t.bold,
-                                              t.fontSize,
-                                              99999
-                                            )
                                           : null;
                                         return {
                                           ...t,
-                                          text: lockedNextVal,
+                                          text: nextVal,
                                           latex: t.isMath
-                                            ? convertPlainTextToMathLatex(lockedNextVal)
+                                            ? convertPlainTextToMathLatex(nextVal)
                                             : t.latex,
                                           boxWidth: tight
                                             ? Math.max(t.boxWidth || 0, tight.tightW)
@@ -50713,7 +50666,7 @@ export default function App() {
                                           boxHeight: tight ? tight.tightH : t.boxHeight,
                                           spans: adjustTextSpansOnEdit(
                                             t.text || '',
-                                            lockedNextVal,
+                                            nextVal,
                                             t.spans
                                           ),
                                         };
