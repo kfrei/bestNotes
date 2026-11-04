@@ -43296,11 +43296,26 @@ export default function App() {
               >
                 {(activeTool === 'text' || selectedTextId !== null) && (() => {
                   const selTxt = (activePage.texts || []).find((t) => t.id === (selectedTextId || editingTextId));
-                  const currentBold = selTxt
+                  const subStyle =
+                    selTxt &&
+                    !selTxt.isMath &&
+                    activeTextRange?.textId === selTxt.id &&
+                    activeTextRange.end > activeTextRange.start
+                      ? getRangeEffectiveStyle(selTxt, activeTextRange.start, activeTextRange.end)
+                      : null;
+                  const currentBold = subStyle
+                    ? subStyle.bold
+                    : selTxt
                     ? Boolean(selTxt.bold) || selTxt.fontFamily === 'calligraphic-bold'
                     : textBold;
-                  const currentSize = selTxt ? selTxt.fontSize : textFontSize;
-                  const rawFontFamily: TextFontStyle = selTxt
+                  const currentSize = subStyle
+                    ? subStyle.fontSize
+                    : selTxt
+                    ? selTxt.fontSize
+                    : textFontSize;
+                  const rawFontFamily: TextFontStyle = subStyle
+                    ? subStyle.fontFamily
+                    : selTxt
                     ? selTxt.fontFamily || 'sans'
                     : textFontFamily;
                   const currentFontFamily: TextFontStyle =
@@ -43440,20 +43455,12 @@ export default function App() {
                       >
                         A-
                       </button>
-                      {[20, 30].map((sz) => (
-                        <button
-                          key={sz}
-                          onClick={() => applyFontSize(sz)}
-                          className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
-                            currentSize === sz
-                              ? 'bg-[#0066ff] text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                          title={`Μέγεθος γραμματοσειράς ${sz}px`}
-                        >
-                          {sz}px
-                        </button>
-                      ))}
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-[11px] font-semibold tabular-nums select-none"
+                        title={`Τρέχον μέγεθος γραμματοσειράς: ${currentSize}px`}
+                      >
+                        {currentSize}
+                      </span>
                       <button
                         onClick={() => applyFontSize(currentSize + 2)}
                         className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
