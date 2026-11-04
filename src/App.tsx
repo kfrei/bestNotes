@@ -127,6 +127,12 @@ import {
   ACIDS_NOTEBOOK_ID,
   BASES_NOTEBOOK_ID,
 } from './utils/scienceNotesSeed';
+import {
+  buildWeightMeasurementNotebook,
+  buildWaterPhasesNotebook,
+  WEIGHT_NOTEBOOK_ID,
+  WATER_PHASES_NOTEBOOK_ID,
+} from './utils/weightAndWaterPhasesSeed';
 import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
 import {
   distance,
@@ -4219,6 +4225,16 @@ export default function App() {
         id: BASES_NOTEBOOK_ID,
         seedKey: 'bestnotes_bases_seeded_v1',
         build: buildBasesNotebook,
+      },
+      {
+        id: WEIGHT_NOTEBOOK_ID,
+        seedKey: 'bestnotes_weight_seeded_v1',
+        build: buildWeightMeasurementNotebook,
+      },
+      {
+        id: WATER_PHASES_NOTEBOOK_ID,
+        seedKey: 'bestnotes_water_phases_seeded_v1',
+        build: buildWaterPhasesNotebook,
       },
     ];
 
