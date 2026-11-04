@@ -119,6 +119,14 @@ import {
   createBestnotesFileBlob,
 } from './utils/goodnotesParser';
 import { buildVolcanoCreationNotebook, VOLCANO_NOTEBOOK_ID } from './utils/volcanoNoteSeed';
+import {
+  buildPhotosynthesisNotebook,
+  buildAcidsNotebook,
+  buildBasesNotebook,
+  PHOTOSYNTHESIS_NOTEBOOK_ID,
+  ACIDS_NOTEBOOK_ID,
+  BASES_NOTEBOOK_ID,
+} from './utils/scienceNotesSeed';
 import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
 import {
   distance,
@@ -4157,6 +4165,90 @@ export default function App() {
         pushNotebookToCloudTracked(currentUser.uid, volcanoNb);
       }
     }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [notebooks, deletedCloudNotebooks, currentUser, pushNotebookToCloudTracked]);
+
+  // Auto-provision the 3 Science Infographic Notebooks ("Η Φωτοσύνθεση", "Τα Οξέα", "Οι Βάσεις")
+  // with 2 layers per page: Layer 1 ('Κείμενα & Σχήματα') and Layer 2 ('Εικόνες')
+  useEffect(() => {
+    const seedSpecs = [
+      {
+        id: PHOTOSYNTHESIS_NOTEBOOK_ID,
+        seedKey: 'bestnotes_photosynthesis_seeded_v1',
+        build: buildPhotosynthesisNotebook,
+      },
+      {
+        id: ACIDS_NOTEBOOK_ID,
+        seedKey: 'bestnotes_acids_seeded_v1',
+        build: buildAcidsNotebook,
+      },
+      {
+        id: BASES_NOTEBOOK_ID,
+        seedKey: 'bestnotes_bases_seeded_v1',
+        build: buildBasesNotebook,
+      },
+    ];
+
+    const missingSpecs = seedSpecs.filter((spec) => {
+      try {
+        if (localStorage.getItem(spec.seedKey) === 'deleted') return false;
+      } catch {
+        // ignore
+      }
+      if (deletedCloudNotebooks.some((n) => n.id === spec.id)) return false;
+      if (notebooks.some((n) => n.id === spec.id)) {
+        try {
+          localStorage.setItem(spec.seedKey, 'present');
+        } catch {
+          // ignore
+        }
+        return false;
+      }
+      return true;
+    });
+
+    if (missingSpecs.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      const curList = notebooksRef.current;
+      const wc = curList.find((n) => {
+        const norm = normalizeGreekSearchText(n.title || '');
+        return norm.includes('κυκλ') && norm.includes('νερ');
+      });
+      const defaultFolder = wc?.folder || '';
+      const created: Notebook[] = [];
+
+      for (const spec of missingSpecs) {
+        try {
+          if (localStorage.getItem(spec.seedKey) === 'deleted') continue;
+        } catch {
+          // ignore
+        }
+        if (curList.some((n) => n.id === spec.id)) continue;
+        const nb = spec.build(defaultFolder);
+        try {
+          localStorage.setItem(spec.seedKey, 'present');
+        } catch {
+          // ignore
+        }
+        created.push(nb);
+      }
+
+      if (created.length === 0) return;
+
+      setNotebooks((prev) => {
+        const fresh = created.filter((nb) => !prev.some((p) => p.id === nb.id));
+        if (fresh.length === 0) return prev;
+        return [...fresh, ...prev];
+      });
+
+      if (currentUser) {
+        for (const nb of created) {
+          pushNotebookToCloudTracked(currentUser.uid, nb);
+        }
+      }
+    }, 950);
 
     return () => window.clearTimeout(timer);
   }, [notebooks, deletedCloudNotebooks, currentUser, pushNotebookToCloudTracked]);

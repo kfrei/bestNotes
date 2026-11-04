@@ -168,7 +168,8 @@ export function buildVolcanoCreationNotebook(folder = ''): Notebook {
         title: 'Η Δημιουργία Ηφαιστείου',
         template: 'grid',
         layers: [
-          { id: 'layer-1', name: 'Βασικό Επίπεδο', visible: true, locked: false, opacity: 1 },
+          { id: 'layer-1', name: 'Κείμενα & Σχήματα', visible: true, locked: false, opacity: 1 },
+          { id: 'layer-2', name: 'Εικόνες', visible: true, locked: false, opacity: 1 },
         ],
         strokes,
         images: [
@@ -179,7 +180,7 @@ export function buildVolcanoCreationNotebook(folder = ''): Notebook {
             y: 155,
             width: 816,
             height: 828,
-            layerId: 'layer-1',
+            layerId: 'layer-2',
           },
           {
             id: 'volc-img-cloud-left',
@@ -188,7 +189,7 @@ export function buildVolcanoCreationNotebook(folder = ''): Notebook {
             y: 440,
             width: 210,
             height: 66,
-            layerId: 'layer-1',
+            layerId: 'layer-2',
           },
           {
             id: 'volc-img-cloud-right',
@@ -197,7 +198,7 @@ export function buildVolcanoCreationNotebook(folder = ''): Notebook {
             y: 444,
             width: 222,
             height: 63,
-            layerId: 'layer-1',
+            layerId: 'layer-2',
           },
         ],
         texts: [
