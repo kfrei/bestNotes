@@ -43449,9 +43449,9 @@ export default function App() {
 
                       {/* Font Size Controls */}
                       <button
-                        onClick={() => applyFontSize(currentSize - 2)}
+                        onClick={() => applyFontSize(currentSize - 1)}
                         className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
-                        title="Μικρότερη γραμματοσειρά (-2px)"
+                        title="Μικρότερη γραμματοσειρά (-1px)"
                       >
                         A-
                       </button>
@@ -43462,9 +43462,9 @@ export default function App() {
                         {currentSize}
                       </span>
                       <button
-                        onClick={() => applyFontSize(currentSize + 2)}
+                        onClick={() => applyFontSize(currentSize + 1)}
                         className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-normal cursor-pointer"
-                        title="Μεγαλύτερη γραμματοσειρά (+2px)"
+                        title="Μεγαλύτερη γραμματοσειρά (+1px)"
                       >
                         A+
                       </button>
@@ -50199,7 +50199,7 @@ export default function App() {
                                           liveRange.start,
                                           liveRange.end
                                         );
-                                        const nextSz = Math.max(8, curSub.fontSize - 2);
+                                        const nextSz = Math.max(8, curSub.fontSize - 1);
                                         const nextRng = {
                                           textId: txt.id,
                                           start: liveRange.start,
@@ -50229,7 +50229,7 @@ export default function App() {
                                         }));
                                         return;
                                       }
-                                      const nextSz = Math.max(8, txt.fontSize - 2);
+                                      const nextSz = Math.max(8, txt.fontSize - 1);
                                       const deltaSz = nextSz - txt.fontSize;
                                       setTextFontSize(nextSz);
                                       updateActivePage((page) => ({
@@ -50260,7 +50260,7 @@ export default function App() {
                                       }));
                                     }}
                                     className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
-                                    title="Μικρότερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
+                                    title="Μικρότερη γραμματοσειρά (-1px)"
                                   >
                                     A-
                                   </button>
@@ -50278,7 +50278,7 @@ export default function App() {
                                           liveRange.start,
                                           liveRange.end
                                         );
-                                        const nextSz = Math.min(160, curSub.fontSize + 2);
+                                        const nextSz = Math.min(160, curSub.fontSize + 1);
                                         const nextRng = {
                                           textId: txt.id,
                                           start: liveRange.start,
@@ -50308,7 +50308,7 @@ export default function App() {
                                         }));
                                         return;
                                       }
-                                      const nextSz = Math.min(160, txt.fontSize + 2);
+                                      const nextSz = Math.min(160, txt.fontSize + 1);
                                       const deltaSz = nextSz - txt.fontSize;
                                       setTextFontSize(nextSz);
                                       updateActivePage((page) => ({
