@@ -3840,8 +3840,13 @@ export default function App() {
       }
 
       setSyncStatus('syncing');
+      const pdfExportOpts = {
+        activePageId: activePage.id,
+        liveSimCanvas: simCanvasRef.current,
+        rulersByPageId,
+      };
       try {
-        const res = await syncNotebookPdfToGoogleDrive(token, targetNb);
+        const res = await syncNotebookPdfToGoogleDrive(token, targetNb, pdfExportOpts);
         setSyncStatus('synced');
         setIsDirty(false);
         setSecondsToNextSync(30);
@@ -3872,7 +3877,11 @@ export default function App() {
                 err?.message === 'DRIVE_SCOPE_MISSING'
               );
               saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              const retryRes = await syncNotebookPdfToGoogleDrive(refreshed.accessToken, targetNb);
+              const retryRes = await syncNotebookPdfToGoogleDrive(
+                refreshed.accessToken,
+                targetNb,
+                pdfExportOpts
+              );
               setSyncStatus('synced');
               setIsDirty(false);
               setSecondsToNextSync(30);
@@ -3986,6 +3995,7 @@ export default function App() {
       const blob = await exportNotebookToPdfBlob(activeNotebook, {
         activePageId: activePage.id,
         liveSimCanvas: simCanvasRef.current,
+        rulersByPageId,
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -4130,6 +4140,7 @@ export default function App() {
         const blob = await exportNotebookToPdfBlob(nb, {
           activePageId: activePage.id,
           liveSimCanvas: simCanvasRef.current,
+          rulersByPageId,
         });
         const pdfFile = new File([blob], fileName, {
           type: 'application/pdf',
@@ -41361,7 +41372,49 @@ export default function App() {
                                       })}
                                       {(p0.texts || []).map((tx) => {
                                         const fCss = getTextFontCss(tx.fontFamily);
-                                        const fSize = (tx.fontSize || 20) * 1.2;
+                                        const fSize = (tx.fontSize || 20) * 1.15;
+                                        const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
+                                          .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
+                                          .replace(/\\lambda(?![A-Za-z])/g, 'λ')
+                                          .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
+                                          .replace(/\\delta(?![A-Za-z])/g, 'δ')
+                                          .replace(/\\omega(?![A-Za-z])/g, 'ω')
+                                          .replace(/\\pi(?![A-Za-z])/g, 'π')
+                                          .replace(/\\alpha(?![A-Za-z])/g, 'α')
+                                          .replace(/\\beta(?![A-Za-z])/g, 'β')
+                                          .replace(/\\gamma(?![A-Za-z])/g, 'γ')
+                                          .replace(/\\theta(?![A-Za-z])/g, 'θ')
+                                          .replace(/\\mu(?![A-Za-z])/g, 'μ')
+                                          .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·')
+                                          .replace(/[{}]/g, '');
+                                        const pW = getPageLogicalWidth(p0);
+                                        const maxW = Math.max(
+                                          60,
+                                          (tx.boxWidth && tx.boxWidth > 20
+                                            ? Math.min(tx.boxWidth, pW - tx.x)
+                                            : pW - tx.x) - 12
+                                        );
+                                        const approxCharW = fSize * 0.52;
+                                        const maxChars = Math.max(8, Math.floor(maxW / Math.max(4, approxCharW)));
+                                        const wrappedPreviewLines: string[] = [];
+                                        for (const para of rawTxt.split('\n')) {
+                                          if (tx.isMath || para.length <= maxChars) {
+                                            wrappedPreviewLines.push(para);
+                                            continue;
+                                          }
+                                          const words = para.split(/\s+/).filter(Boolean);
+                                          let cur = '';
+                                          for (const w of words) {
+                                            const cand = cur ? `${cur} ${w}` : w;
+                                            if (cand.length <= maxChars || !cur) {
+                                              cur = cand;
+                                            } else {
+                                              wrappedPreviewLines.push(cur);
+                                              cur = w;
+                                            }
+                                          }
+                                          if (cur) wrappedPreviewLines.push(cur);
+                                        }
                                         return (
                                           <text
                                             key={tx.id}
@@ -41373,11 +41426,11 @@ export default function App() {
                                             fontStyle={fCss.fontStyle}
                                             fontFamily={fCss.fontFamily}
                                           >
-                                            {(tx.text || '').split('\n').map((line, lIdx) => (
+                                            {wrappedPreviewLines.map((line, lIdx) => (
                                               <tspan
                                                 key={lIdx}
                                                 x={tx.x}
-                                                dy={lIdx === 0 ? 0 : fSize * 1.3}
+                                                dy={lIdx === 0 ? 0 : fSize * 1.25}
                                               >
                                                 {line}
                                               </tspan>

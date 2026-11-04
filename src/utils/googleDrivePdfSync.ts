@@ -39,9 +39,18 @@ import {
   normalizeCovalentAtomPositions,
 } from './periodicTableData';
 
+export interface PageRulerSnapshotState {
+  visible: boolean;
+  x: number;
+  y: number;
+  angle: number;
+  showMm?: boolean;
+}
+
 export interface PdfExportOptions {
   activePageId?: string;
   liveSimCanvas?: HTMLCanvasElement | null;
+  rulersByPageId?: Record<string, PageRulerSnapshotState>;
 }
 
 const PDF_SCALE = 1.5; // High-clarity A4 PDF page render
@@ -1253,6 +1262,54 @@ function drawPageSimulationsSnapshotForPdf(ctx: CanvasRenderingContext2D, page: 
 
       const isLineDrawn =
         Boolean(hookeSim.hookeLineDrawn) || springSims.some((sm) => sm.hookeLineDrawn);
+      const cbSize = Math.max(12, Math.round(14 * uiScale));
+      const cbBoxW = Math.max(58, Math.round(68 * uiScale));
+      const cbBoxH = Math.max(18, Math.round(21 * uiScale));
+      const cbBoxX = axisRightX - cbBoxW;
+      const cbBoxY = axisTopY - Math.round(5 * uiScale);
+      const cbSqX = cbBoxX + 4;
+      const cbSqY = cbBoxY + (cbBoxH - cbSize) / 2;
+
+      ctx.save();
+      ctx.fillStyle = isDarkGrid ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.92)';
+      ctx.strokeStyle = isLineDrawn ? '#16a34a' : isDarkGrid ? '#475569' : '#cbd5e1';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.roundRect(cbBoxX, cbBoxY, cbBoxW, cbBoxH, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.roundRect(cbSqX, cbSqY, cbSize, cbSize, 3);
+      if (isLineDrawn) {
+        ctx.fillStyle = '#16a34a';
+        ctx.fill();
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(cbSqX + cbSize * 0.22, cbSqY + cbSize * 0.52);
+        ctx.lineTo(cbSqX + cbSize * 0.44, cbSqY + cbSize * 0.74);
+        ctx.lineTo(cbSqX + cbSize * 0.78, cbSqY + cbSize * 0.26);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+      ctx.font = `bold ${Math.max(8, Math.round(9.5 * uiScale))}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = isLineDrawn ? '#15803d' : isDarkGrid ? '#e2e8f0' : '#334155';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Γραμμή', cbSqX + cbSize + 4, cbBoxY + cbBoxH / 2 + 0.5);
+      ctx.restore();
+
       const plottedRows = recordedRows.filter((r) => r.plotted);
 
       for (const row of plottedRows) {
@@ -1432,29 +1489,54 @@ function drawTextObjectForPdf(
       .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
       .replace(/\\sigma\s*\\upsilon\s*\\nu/gi, 'συν')
       .replace(/\\eta\s*\\mu/gi, 'ημ')
-      .replace(/\\omega\b/g, 'ω')
-      .replace(/\\Lambda\b/g, 'Λ')
-      .replace(/\\lambda\b/g, 'λ')
-      .replace(/\\Delta\b/g, 'Δ')
-      .replace(/\\Sigma\b/g, 'Σ')
-      .replace(/\\pi\b/g, 'π')
-      .replace(/\\alpha\b/g, 'α')
-      .replace(/\\beta\b/g, 'β')
-      .replace(/\\gamma\b/g, 'γ')
-      .replace(/\\theta\b/g, 'θ')
-      .replace(/\\mu\b/g, 'μ')
-      .replace(/\\cdot\b|\\times\b/g, '·')
-      .replace(/\\le\b/g, '≤')
-      .replace(/\\ge\b/g, '≥')
-      .replace(/\\ne\b/g, '≠')
-      .replace(/\\pm\b/g, '±')
-      .replace(/\\Rightarrow\b/g, '⇒')
-      .replace(/\\Leftrightarrow\b/g, '⇔')
-      .replace(/\\sin\b/g, 'sin')
-      .replace(/\\cos\b/g, 'cos')
-      .replace(/\\tan\b/g, 'tan')
-      .replace(/\\ln\b/g, 'ln')
-      .replace(/\\log\b/g, 'log');
+      .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
+      .replace(/\\(?:varphi|phi)(?![A-Za-z])/g, 'φ')
+      .replace(/\\(?:vartheta|theta)(?![A-Za-z])/g, 'θ')
+      .replace(/\\omega(?![A-Za-z])/g, 'ω')
+      .replace(/\\Omega(?![A-Za-z])/g, 'Ω')
+      .replace(/\\Lambda(?![A-Za-z])/g, 'Λ')
+      .replace(/\\lambda(?![A-Za-z])/g, 'λ')
+      .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
+      .replace(/\\delta(?![A-Za-z])/g, 'δ')
+      .replace(/\\Sigma(?![A-Za-z])/g, 'Σ')
+      .replace(/\\sigma(?![A-Za-z])/g, 'σ')
+      .replace(/\\Gamma(?![A-Za-z])/g, 'Γ')
+      .replace(/\\Theta(?![A-Za-z])/g, 'Θ')
+      .replace(/\\Phi(?![A-Za-z])/g, 'Φ')
+      .replace(/\\Psi(?![A-Za-z])/g, 'Ψ')
+      .replace(/\\pi(?![A-Za-z])/g, 'π')
+      .replace(/\\alpha(?![A-Za-z])/g, 'α')
+      .replace(/\\beta(?![A-Za-z])/g, 'β')
+      .replace(/\\gamma(?![A-Za-z])/g, 'γ')
+      .replace(/\\mu(?![A-Za-z])/g, 'μ')
+      .replace(/\\nu(?![A-Za-z])/g, 'ν')
+      .replace(/\\rho(?![A-Za-z])/g, 'ρ')
+      .replace(/\\tau(?![A-Za-z])/g, 'τ')
+      .replace(/\\kappa(?![A-Za-z])/g, 'κ')
+      .replace(/\\zeta(?![A-Za-z])/g, 'ζ')
+      .replace(/\\eta(?![A-Za-z])/g, 'η')
+      .replace(/\\xi(?![A-Za-z])/g, 'ξ')
+      .replace(/\\chi(?![A-Za-z])/g, 'χ')
+      .replace(/\\psi(?![A-Za-z])/g, 'ψ')
+      .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·')
+      .replace(/\\(?:le|leq)(?![A-Za-z])/g, '≤')
+      .replace(/\\(?:ge|geq)(?![A-Za-z])/g, '≥')
+      .replace(/\\(?:ne|neq)(?![A-Za-z])/g, '≠')
+      .replace(/\\approx(?![A-Za-z])/g, '≈')
+      .replace(/\\equiv(?![A-Za-z])/g, '≡')
+      .replace(/\\pm(?![A-Za-z])/g, '±')
+      .replace(/\\(?:rightarrow|to)(?![A-Za-z])/g, '→')
+      .replace(/\\leftarrow(?![A-Za-z])/g, '←')
+      .replace(/\\Rightarrow(?![A-Za-z])/g, '⇒')
+      .replace(/\\Leftrightarrow(?![A-Za-z])/g, '⇔')
+      .replace(/\\infty(?![A-Za-z])/g, '∞')
+      .replace(/\\partial(?![A-Za-z])/g, '∂')
+      .replace(/\\nabla(?![A-Za-z])/g, '∇')
+      .replace(/\\sin(?![A-Za-z])/g, 'sin')
+      .replace(/\\cos(?![A-Za-z])/g, 'cos')
+      .replace(/\\tan(?![A-Za-z])/g, 'tan')
+      .replace(/\\ln(?![A-Za-z])/g, 'ln')
+      .replace(/\\log(?![A-Za-z])/g, 'log');
 
   const drawRichMathLine = (lineStr: string, startX: number, baseY: number, lineColor: string) => {
     const cleaned = cleanLatexLine(lineStr);
@@ -1517,58 +1599,171 @@ function drawTextObjectForPdf(
     }
   };
 
+  const logicalW = getPageLogicalWidth(page);
+  const padX = isMathLabel ? 4 : 6;
+  const padY = isMathLabel ? 0 : 2;
+  const effectiveBoxW =
+    !tx.isMath
+      ? tx.boxWidth && tx.boxWidth > 20
+        ? Math.min(tx.boxWidth, Math.max(48, logicalW - tx.x))
+        : Math.max(48, logicalW - tx.x)
+      : 0;
+  const maxLineW = !tx.isMath ? Math.max(36, effectiveBoxW - padX * 2) : 0;
+
   if (!tx.isMath && tx.spans && tx.spans.length > 0) {
-    const padX = isMathLabel ? 4 : 6;
-    const padY = isMathLabel ? 0 : 2;
+    const getFontStackForFamily = (fam: TextObject['fontFamily']) =>
+      fam === 'calligraphic'
+        ? '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
+        : fam === 'calligraphic-bold'
+        ? '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
+        : fam === 'neohellenic'
+        ? '"GFS Neohellenic", "Arima", Georgia, "Times New Roman", serif'
+        : fam === 'handwritten'
+        ? '"Playpen Sans", "Arima", "Mansalva", cursive, sans-serif'
+        : fam === 'mansalva'
+        ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
+        : fam === 'marker'
+        ? '"ExplainBoardsPen", "Mynerve", "Mansalva", cursive, sans-serif'
+        : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    const getStyleAt = (charIdx: number) => {
+      let segSz = fSize;
+      let segBold = Boolean(tx.bold || tx.fontFamily === 'calligraphic-bold');
+      let segColor = tx.color || '#111827';
+      let segFam = tx.fontFamily;
+      for (const sp of tx.spans || []) {
+        if (charIdx >= sp.start && charIdx < sp.end) {
+          if (sp.fontSize !== undefined) segSz = sp.fontSize;
+          if (sp.bold !== undefined) segBold = sp.bold;
+          if (sp.color !== undefined) segColor = sp.color;
+          if (sp.fontFamily !== undefined) segFam = sp.fontFamily;
+        }
+      }
+      const segItalic = segFam === 'neohellenic';
+      const segFont = `${segItalic ? 'italic ' : ''}${segBold ? 'bold ' : '500 '}${Math.max(
+        7,
+        segSz
+      ).toFixed(1)}px ${getFontStackForFamily(segFam)}`;
+      return { sz: segSz, bold: segBold, color: segColor, font: segFont };
+    };
+
+    const splitIntoStyleRuns = (s: number, e: number) => {
+      const bSet = new Set<number>([s, e]);
+      for (const sp of tx.spans || []) {
+        if (sp.start > s && sp.start < e) bSet.add(sp.start);
+        if (sp.end > s && sp.end < e) bSet.add(sp.end);
+      }
+      const bounds = Array.from(bSet).sort((a, b) => a - b);
+      const runs: { text: string; sz: number; bold: boolean; color: string; font: string; width: number }[] = [];
+      for (let i = 0; i < bounds.length - 1; i++) {
+        const rs = bounds[i];
+        const re = bounds[i + 1];
+        if (re <= rs) continue;
+        const st = getStyleAt(rs);
+        const txt = rawSource.slice(rs, re);
+        ctx.font = st.font;
+        const w = ctx.measureText(txt).width;
+        runs.push({ text: txt, ...st, width: w });
+      }
+      return runs;
+    };
+
+    const measureRangeWidth = (s: number, e: number): number => {
+      if (e <= s) return 0;
+      const runs = splitIntoStyleRuns(s, e);
+      let totalW = 0;
+      for (const r of runs) totalW += r.width;
+      return totalW;
+    };
+
     const rawLines = rawSource.split('\n');
     let charOffset = 0;
-    let curTopY = tx.y + padY;
+    const visualLines: { start: number; end: number }[] = [];
+
     for (let lIdx = 0; lIdx < rawLines.length; lIdx++) {
       const ln = rawLines[lIdx];
       const lineStart = charOffset;
       const lineEnd = lineStart + ln.length;
       charOffset = lineEnd + 1;
 
-      const bSet = new Set<number>([lineStart, lineEnd]);
-      for (const sp of tx.spans) {
-        if (sp.start > lineStart && sp.start < lineEnd) bSet.add(sp.start);
-        if (sp.end > lineStart && sp.end < lineEnd) bSet.add(sp.end);
+      if (lineEnd <= lineStart) {
+        visualLines.push({ start: lineStart, end: lineEnd });
+        continue;
       }
-      const bounds = Array.from(bSet).sort((a, b) => a - b);
-      let maxSzInLine = fSize;
-      const segs: { text: string; sz: number; bold: boolean; color: string }[] = [];
-      for (let i = 0; i < bounds.length - 1; i++) {
-        const s = bounds[i];
-        const e = bounds[i + 1];
-        if (e <= s) continue;
-        let segSz = fSize;
-        let segBold = Boolean(tx.bold || tx.fontFamily === 'calligraphic-bold');
-        let segColor = tx.color || '#111827';
-        for (const sp of tx.spans) {
-          if (s >= sp.start && s < sp.end) {
-            if (sp.fontSize !== undefined) segSz = sp.fontSize;
-            if (sp.bold !== undefined) segBold = sp.bold;
-            if (sp.color !== undefined) segColor = sp.color;
-          }
-        }
-        if (segSz > maxSzInLine) maxSzInLine = segSz;
-        segs.push({
-          text: rawSource.slice(s, e),
-          sz: segSz,
-          bold: segBold,
-          color: segColor,
+
+      const tokRe = /\s+|\S+/g;
+      const tokens: { start: number; end: number; isSpace: boolean }[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = tokRe.exec(ln)) !== null) {
+        tokens.push({
+          start: lineStart + m.index,
+          end: lineStart + m.index + m[0].length,
+          isSpace: /^\s+$/.test(m[0]),
         });
       }
-      const rowH = maxSzInLine * 1.18;
-      const baseY = curTopY + maxSzInLine * 0.92;
-      let curX = tx.x + padX;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      for (const seg of segs) {
-        ctx.font = makeFont(seg.sz, seg.bold);
+
+      let curStart: number | null = null;
+      let curEnd = lineStart;
+      for (const tok of tokens) {
+        if (curStart === null) {
+          if (tok.isSpace && visualLines.length > 0) continue;
+          curStart = tok.start;
+          curEnd = tok.end;
+          continue;
+        }
+        if (tok.isSpace) {
+          continue;
+        }
+        const candidateW = measureRangeWidth(curStart, tok.end);
+        if (maxLineW > 0 && candidateW > maxLineW) {
+          visualLines.push({ start: curStart, end: curEnd });
+          curStart = tok.start;
+          curEnd = tok.end;
+        } else {
+          curEnd = tok.end;
+        }
+      }
+      if (curStart !== null) {
+        visualLines.push({ start: curStart, end: curEnd });
+      } else {
+        visualLines.push({ start: lineStart, end: lineStart });
+      }
+    }
+
+    const alignMode = tx.textAlign || 'left';
+    const renderedLines = visualLines.map((vl) => {
+      const runs = splitIntoStyleRuns(vl.start, vl.end);
+      let maxSzInLine = fSize;
+      let lineW = 0;
+      for (const r of runs) {
+        if (r.sz > maxSzInLine) maxSzInLine = r.sz;
+        lineW += r.width;
+      }
+      return { runs, maxSzInLine, lineW };
+    });
+    const contentAreaW =
+      tx.boxWidth && tx.boxWidth > 20
+        ? Math.max(maxLineW, ...renderedLines.map((rl) => rl.lineW))
+        : Math.max(0, ...renderedLines.map((rl) => rl.lineW));
+
+    let curTopY = tx.y + padY;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    for (const rl of renderedLines) {
+      const rowH = rl.maxSzInLine * 1.18;
+      const baseY = curTopY + rl.maxSzInLine * 0.92;
+      const alignOffsetX =
+        alignMode === 'center'
+          ? Math.max(0, (contentAreaW - rl.lineW) / 2)
+          : alignMode === 'right'
+          ? Math.max(0, contentAreaW - rl.lineW)
+          : 0;
+      let curX = tx.x + padX + alignOffsetX;
+      for (const seg of rl.runs) {
+        ctx.font = seg.font;
         ctx.fillStyle = seg.color;
         ctx.fillText(seg.text, curX, baseY);
-        curX += ctx.measureText(seg.text).width;
+        curX += seg.width;
       }
       curTopY += rowH;
     }
@@ -1579,7 +1774,6 @@ function drawTextObjectForPdf(
   ctx.font = makeFont(fSize);
   const rawParas = rawSource.split(/\r?\n/);
   const wrappedLines: string[] = [];
-  const maxLineW = !tx.isMath && tx.boxWidth ? Math.max(20, tx.boxWidth - 12) : 0;
 
   for (const para of rawParas) {
     if (!maxLineW || para.includes('^') || para.includes('_') || para.includes('\\')) {
@@ -1604,8 +1798,6 @@ function drawTextObjectForPdf(
     wrappedLines.push(currentLine);
   }
 
-  const padX = isMathLabel ? 4 : 6;
-  const padY = isMathLabel ? 0 : 2;
   const lineH = isMathLabel ? fSize * 1.05 : fSize * 1.18;
   const multiM = tx.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
   const multiGrp = multiM ? multiM[1] : null;
@@ -1637,9 +1829,336 @@ function drawTextObjectForPdf(
   ctx.restore();
 }
 
+function getStoredRulersByPageId(
+  options?: PdfExportOptions
+): Record<string, PageRulerSnapshotState> {
+  if (options?.rulersByPageId) return options.rulersByPageId;
+  try {
+    const raw = localStorage.getItem('bestnotes_rulers_by_page_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, PageRulerSnapshotState>;
+      }
+    }
+  } catch {
+    // ignore storage parse errors
+  }
+  return {};
+}
+
+function computeRulerPointerReadoutForPdf(
+  ptrStroke: StrokeObject,
+  rState: PageRulerSnapshotState,
+  pW: number,
+  targetPage: NotePage
+) {
+  if (!rState.visible || ptrStroke.points.length < 2) return null;
+  if (!ptrStroke.attachedToSpringId) return null;
+
+  const rulerW = Math.round(pW * 0.8);
+  const rulerH = 54;
+  const oneMmPx = 920 / 20 / 10; // 4.6px per 1mm (46px per 1cm)
+  const rad = (rState.angle * Math.PI) / 180;
+  const cosA = Math.cos(rad);
+  const sinA = Math.sin(rad);
+
+  if (Math.abs(sinA) < 0.96) return null;
+
+  const closeEdgeThreshold = rulerH / 2 + 36;
+  const maxPerp = 880;
+  let isLockedAtZero = false;
+  const validCandidates: { id: string; xPos: number }[] = [];
+
+  for (const cand of targetPage.strokes || []) {
+    if (!cand.attachedToSpringId || cand.points.length < 2) continue;
+    const cP0 = cand.points[0];
+    const cPEnd = cand.points[cand.points.length - 1];
+    const sPerp0 = -(cP0.x - rState.x) * sinA + (cP0.y - rState.y) * cosA;
+    const sPerpEnd = -(cPEnd.x - rState.x) * sinA + (cPEnd.y - rState.y) * cosA;
+    const segPerpDist =
+      sPerp0 * sPerpEnd <= 0 ? 0 : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
+    const cTip = Math.abs(sPerpEnd) <= Math.abs(sPerp0) ? cPEnd : cP0;
+    const cLocalX = (cTip.x - rState.x) * cosA + (cTip.y - rState.y) * sinA;
+    const cLocalY = -(cTip.x - rState.x) * sinA + (cTip.y - rState.y) * cosA;
+    const cXPos = cLocalX + rulerW / 2;
+    if (cXPos >= -6 && cXPos <= rulerW + 6 && Math.abs(cLocalY) <= maxPerp) {
+      validCandidates.push({ id: cand.id, xPos: cXPos });
+      if (segPerpDist <= closeEdgeThreshold && Math.abs(cXPos) <= 2.3) {
+        isLockedAtZero = true;
+      }
+    }
+  }
+  if (!isLockedAtZero) return null;
+
+  const p0 = ptrStroke.points[0];
+  const pEnd = ptrStroke.points[ptrStroke.points.length - 1];
+  const sPerp0Self = -(p0.x - rState.x) * sinA + (p0.y - rState.y) * cosA;
+  const sPerpEndSelf = -(pEnd.x - rState.x) * sinA + (pEnd.y - rState.y) * cosA;
+  const tipPt = Math.abs(sPerpEndSelf) <= Math.abs(sPerp0Self) ? pEnd : p0;
+
+  const dx = tipPt.x - rState.x;
+  const dy = tipPt.y - rState.y;
+  const localX = dx * cosA + dy * sinA;
+  const localY = -dx * sinA + dy * cosA;
+  const xPos = localX + rulerW / 2;
+
+  if (xPos < -6 || xPos > rulerW + 6 || Math.abs(localY) > maxPerp) {
+    return null;
+  }
+
+  const clampedXPos = Math.max(0, Math.min(rulerW, xPos));
+  const mmVal = Math.max(0, Math.round(clampedXPos / oneMmPx));
+  const cmVal = Number((mmVal / 10).toFixed(1));
+  const cmStr = `${cmVal.toString().replace('.', ',')} cm`;
+  const ptrColor = ptrStroke.color || '#dc2626';
+  const localAlong = clampedXPos - rulerW / 2;
+  const axisPtX = rState.x + localAlong * cosA;
+  const axisPtY = rState.y + localAlong * sinA;
+
+  const isMostlyVertical = Math.abs(sinA) >= 0.35;
+  const rightNormalSign = isMostlyVertical ? (-sinA >= 0 ? 1 : -1) : -1;
+  const normX = rightNormalSign * -sinA;
+  const normY = rightNormalSign * cosA;
+  const badgeX = axisPtX + normX * (rulerH / 2 + 8);
+  const badgeY = axisPtY + normY * (rulerH / 2 + 8);
+
+  const toTipDotNorm = (tipPt.x - axisPtX) * normX + (tipPt.y - axisPtY) * normY;
+  const edgeSign = toTipDotNorm >= 0 ? 1 : -1;
+  const rulerEdgeX = axisPtX + edgeSign * normX * (rulerH / 2);
+  const rulerEdgeY = axisPtY + edgeSign * normY * (rulerH / 2);
+  const dashDx = rulerEdgeX - tipPt.x;
+  const dashDy = rulerEdgeY - tipPt.y;
+  const dashLen = Math.abs(localY) > rulerH / 2 + 1 ? Math.hypot(dashDx, dashDy) : 0;
+
+  return {
+    clampedXPos,
+    cmStr,
+    ptrColor,
+    badgeX,
+    badgeY,
+    isMostlyVertical,
+    isLockedAtZero,
+    tipX: tipPt.x,
+    tipY: tipPt.y,
+    rulerEdgeX,
+    rulerEdgeY,
+    dashLen,
+  };
+}
+
+function drawRulerAndPointersForPdf(
+  ctx: CanvasRenderingContext2D,
+  page: NotePage,
+  options?: PdfExportOptions
+) {
+  const rulersMap = getStoredRulersByPageId(options);
+  const pageRuler = rulersMap[page.id];
+  if (!pageRuler || !pageRuler.visible) return;
+
+  const pW = getPageLogicalWidth(page);
+  const rulerW = Math.round(pW * 0.8);
+  const rulerH = 54;
+  const oneCmPx = 920 / 20; // 46px
+  const halfCmPx = oneCmPx / 2; // 23px
+  const totalHalfCmSteps = Math.floor(rulerW / halfCmPx);
+  const showMm = pageRuler.showMm !== false;
+  const rad = (pageRuler.angle * Math.PI) / 180;
+
+  const pointerCandidates = (page.strokes || []).filter(
+    (s) =>
+      (s.shapeType === 'spring-pointer' ||
+        Boolean(s.attachedToSpringId) ||
+        s.shapeType === 'arrow' ||
+        Boolean(s.arrowEnd)) &&
+      s.points.length >= 2 &&
+      !(
+        s.groupId &&
+        (s.groupId.startsWith('axes-') ||
+          s.groupId.startsWith('wave-axes-') ||
+          s.groupId.startsWith('math-graph-'))
+      )
+  );
+  const pointerInfos = pointerCandidates
+    .map((pSt) => computeRulerPointerReadoutForPdf(pSt, pageRuler, pW, page))
+    .filter((x): x is NonNullable<typeof x> => Boolean(x));
+
+  // 1. Dashed Projection Lines from Pointer Arrow Tips to Ruler Edge
+  for (const info of pointerInfos) {
+    if (info.isLockedAtZero && info.dashLen > 1) {
+      ctx.save();
+      ctx.strokeStyle = info.ptrColor;
+      ctx.lineWidth = 1.45;
+      ctx.setLineDash([5, 3.5]);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(info.tipX, info.tipY);
+      ctx.lineTo(info.rulerEdgeX, info.rulerEdgeY);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // 2. Ruler Body, Ticks, Upright cm Labels, Center Buttons & Colored Indicator Lines
+  ctx.save();
+  ctx.translate(pageRuler.x, pageRuler.y);
+  ctx.rotate(rad);
+  ctx.translate(-rulerW / 2, -rulerH / 2);
+
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.72)';
+  ctx.strokeStyle = 'rgba(100, 116, 139, 0.75)';
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, rulerW, rulerH, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  // Subtle center groove
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(12, rulerH / 2);
+  ctx.lineTo(rulerW - 12, rulerH / 2);
+  ctx.stroke();
+
+  if (showMm) {
+    // 0 cm origin label
+    ctx.save();
+    ctx.translate(7, rulerH / 2);
+    ctx.rotate(-rad);
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
+    ctx.beginPath();
+    ctx.roundRect(-4.5, -5.5, 9, 11, 2);
+    ctx.fill();
+    ctx.font = 'bold 8.5px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+    ctx.fillStyle = '#334155';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('0', 0, 0.5);
+    ctx.restore();
+
+    const maxMm = Math.floor(rulerW / (oneCmPx / 10)) - 1;
+    for (let mmIdx = 1; mmIdx <= maxMm; mmIdx++) {
+      const isFullCm = mmIdx % 10 === 0;
+      const isHalfCm = mmIdx % 5 === 0 && !isFullCm;
+      const xPos = mmIdx * (oneCmPx / 10);
+      const tickH = isFullCm ? 13 : isHalfCm ? 8.5 : 4.5;
+      const tickW = isFullCm ? 1.5 : isHalfCm ? 1.15 : 0.85;
+      ctx.fillStyle = isFullCm
+        ? 'rgba(51, 65, 85, 0.85)'
+        : isHalfCm
+        ? 'rgba(71, 85, 105, 0.68)'
+        : 'rgba(100, 116, 139, 0.48)';
+      ctx.fillRect(xPos - tickW / 2, 0, tickW, tickH);
+      ctx.fillRect(xPos - tickW / 2, rulerH - tickH, tickW, tickH);
+
+      if (isFullCm && xPos < rulerW - 14) {
+        const cmNumStr = String(mmIdx / 10);
+        ctx.save();
+        ctx.translate(xPos, rulerH / 2);
+        ctx.rotate(-rad);
+        const pillW = cmNumStr.length > 1 ? 13 : 9;
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(-pillW / 2, -5.5, pillW, 11, 2);
+        ctx.fill();
+        ctx.font = '800 9px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+        ctx.fillStyle = '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(cmNumStr, 0, 0.5);
+        ctx.restore();
+      }
+    }
+  } else {
+    for (let stepIdx = 1; stepIdx < totalHalfCmSteps; stepIdx++) {
+      const isFullCm = stepIdx % 2 === 0;
+      const xPos = stepIdx * halfCmPx;
+      const tickH = isFullCm ? 12 : 6;
+      const tickW = isFullCm ? 1.5 : 1;
+      ctx.fillStyle = isFullCm ? 'rgba(100, 116, 139, 0.6)' : 'rgba(148, 163, 184, 0.45)';
+      ctx.fillRect(xPos - tickW / 2, 0, tickW, tickH);
+      ctx.fillRect(xPos - tickW / 2, rulerH - tickH, tickW, tickH);
+    }
+  }
+
+  // Colored indicator lines across the ruler
+  for (const info of pointerInfos) {
+    ctx.fillStyle = info.ptrColor;
+    ctx.fillRect(info.clampedXPos - 1, 0, 2, rulerH);
+  }
+
+  // Center 'cm' badge on the right edge of the ruler
+  ctx.save();
+  ctx.translate(rulerW / 2, rulerH - 13);
+  ctx.rotate(-rad);
+  ctx.beginPath();
+  ctx.arc(0, 0, 10, 0, Math.PI * 2);
+  ctx.fillStyle = showMm ? '#0066ff' : 'rgba(255, 255, 255, 0.9)';
+  ctx.fill();
+  ctx.strokeStyle = showMm ? '#60a5fa' : '#cbd5e1';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.font = '800 7.5px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+  ctx.fillStyle = showMm ? '#ffffff' : '#334155';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('cm', 0, 0.5);
+  ctx.restore();
+
+  ctx.restore();
+
+  // 3. Colored Readout Badges (◀ 0 cm, ◀ 1 cm, ◀ 2 cm, ◀ 3 cm) outside the Ruler
+  for (const info of pointerInfos) {
+    ctx.save();
+    ctx.font = '800 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+    const valW = ctx.measureText(info.cmStr).width;
+    const pillW = Math.ceil(valW + 22);
+    const pillH = 19;
+    const bx = info.isMostlyVertical ? info.badgeX : info.badgeX - pillW / 2;
+    const by = info.isMostlyVertical ? info.badgeY - pillH / 2 : info.badgeY - pillH;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    ctx.strokeStyle = info.ptrColor;
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, pillW, pillH, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = info.ptrColor;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 8.5px system-ui, -apple-system, sans-serif';
+    ctx.fillText('◀', bx + 5, by + pillH / 2 + 0.5);
+    ctx.font = '800 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+    ctx.fillText(info.cmStr, bx + 15, by + pillH / 2 + 0.5);
+    ctx.restore();
+  }
+}
+
+function hasCanvasAnyVisiblePixels(srcCanvas: HTMLCanvasElement): boolean {
+  try {
+    if (srcCanvas.width <= 0 || srcCanvas.height <= 0) return false;
+    const probe = document.createElement('canvas');
+    probe.width = 48;
+    probe.height = 48;
+    const pCtx = probe.getContext('2d');
+    if (!pCtx) return false;
+    pCtx.drawImage(srcCanvas, 0, 0, 48, 48);
+    const data = pCtx.getImageData(0, 0, 48, 48).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] > 4) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Renders all pages of a Notebook into a standard multi-page PDF-1.4 binary Blob (`application/pdf`).
- * Includes all live simulations (atoms, 3D molecules, circuits, springs, pendulums, force vectors).
+ * Includes all live simulations (atoms, 3D molecules, circuits, springs, pendulums, force vectors) and the Ruler.
  */
 export async function exportNotebookToPdfBlob(
   notebook: Notebook,
@@ -1698,12 +2217,11 @@ export async function exportNotebookToPdfBlob(
       drawStrokeForPdf(ctx, st);
     }
 
-    // Composite live simulation canvas on active page OR static simulation snapshot on other pages!
+    // Composite live simulation canvas on active page (if non-empty) OR static simulation snapshot!
     if (
       options?.activePageId === page.id &&
       options?.liveSimCanvas &&
-      options.liveSimCanvas.width > 0 &&
-      options.liveSimCanvas.height > 0
+      hasCanvasAnyVisiblePixels(options.liveSimCanvas)
     ) {
       ctx.save();
       ctx.drawImage(options.liveSimCanvas, 0, 0, logicalW, logicalH);
@@ -1711,6 +2229,9 @@ export async function exportNotebookToPdfBlob(
     } else {
       drawPageSimulationsSnapshotForPdf(ctx, page);
     }
+
+    // Render Ruler (Χάρακας) and its Pointer Laser Projections & < X cm Readouts if visible on this page!
+    drawRulerAndPointersForPdf(ctx, page, options);
 
     for (const tx of page.texts || []) {
       drawTextObjectForPdf(ctx, tx, page);
