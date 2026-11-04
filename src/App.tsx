@@ -10992,32 +10992,34 @@ export default function App() {
       clientX: number,
       clientY: number,
       rect: DOMRect,
-      outerMargin = 32,
-      innerMargin = 10
+      hitRadius = 14
     ): 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se' | null => {
-      if (
-        clientX < rect.left - outerMargin ||
-        clientX > rect.right + outerMargin ||
-        clientY < rect.top - outerMargin ||
-        clientY > rect.bottom + outerMargin
-      ) {
-        return null;
+      const cx = (rect.left + rect.right) / 2;
+      const cy = (rect.top + rect.bottom) / 2;
+      const handles: {
+        id: 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'w' | 'e';
+        x: number;
+        y: number;
+      }[] = [
+        { id: 'nw', x: rect.left, y: rect.top },
+        { id: 'ne', x: rect.right, y: rect.top },
+        { id: 'sw', x: rect.left, y: rect.bottom },
+        { id: 'se', x: rect.right, y: rect.bottom },
+        { id: 'n', x: cx, y: rect.top },
+        { id: 's', x: cx, y: rect.bottom },
+        { id: 'w', x: rect.left, y: cy },
+        { id: 'e', x: rect.right, y: cy },
+      ];
+      let bestId: 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se' | null = null;
+      let bestDist = hitRadius;
+      for (const h of handles) {
+        const d = Math.hypot(clientX - h.x, clientY - h.y);
+        if (d <= bestDist) {
+          bestDist = d;
+          bestId = h.id;
+        }
       }
-      const inX = Math.min(innerMargin, Math.max(6, rect.width * 0.2));
-      const inY = Math.min(innerMargin, Math.max(6, rect.height * 0.2));
-      const nearW = clientX <= rect.left + inX;
-      const nearE = clientX >= rect.right - inX;
-      const nearN = clientY <= rect.top + inY;
-      const nearS = clientY >= rect.bottom - inY;
-      if (nearN && nearW) return 'nw';
-      if (nearN && nearE) return 'ne';
-      if (nearS && nearW) return 'sw';
-      if (nearS && nearE) return 'se';
-      if (nearW) return 'w';
-      if (nearE) return 'e';
-      if (nearN) return 'n';
-      if (nearS) return 's';
-      return null;
+      return bestId;
     },
     []
   );
@@ -26170,7 +26172,7 @@ export default function App() {
       const activeTxtObj = (targetPageForTxt.texts || []).find((t) => t.id === currentActiveTxtId);
       if (activeTxtEl && activeTxtObj) {
         const rect = activeTxtEl.getBoundingClientRect();
-        const edgeHandle = resolveTextResizeHandleFromRect(e.clientX, e.clientY, rect, 32, 10);
+        const edgeHandle = resolveTextResizeHandleFromRect(e.clientX, e.clientY, rect, 14);
         if (edgeHandle) {
           e.preventDefault();
           e.stopPropagation();
@@ -49512,8 +49514,7 @@ export default function App() {
                                 ev.clientX,
                                 ev.clientY,
                                 ev.currentTarget.getBoundingClientRect(),
-                                32,
-                                10
+                                12
                               );
                             }
                             if (
@@ -49654,8 +49655,7 @@ export default function App() {
                                 t.clientX,
                                 t.clientY,
                                 ev.currentTarget.getBoundingClientRect(),
-                                32,
-                                10
+                                12
                               );
                             }
                             if (
@@ -49787,7 +49787,7 @@ export default function App() {
                                     data-text-resize="n"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute left-3 right-3 -top-[16px] h-[30px] flex items-center justify-center cursor-ns-resize z-30 group"
+                                    className="absolute left-1/2 -translate-x-1/2 -top-[10px] w-[24px] h-[20px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
                                     {isTextCenteredOnPage && (
                                       <span className="absolute w-6 h-3.5 rounded-full bg-red-500/75 animate-ping pointer-events-none" />
@@ -49805,7 +49805,7 @@ export default function App() {
                                     data-text-resize="s"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute left-3 right-3 -bottom-[16px] h-[30px] flex items-center justify-center cursor-ns-resize z-30 group"
+                                    className="absolute left-1/2 -translate-x-1/2 -bottom-[10px] w-[24px] h-[20px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
                                     <div className="w-3.5 h-1.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
@@ -49814,7 +49814,7 @@ export default function App() {
                                     data-text-resize="w"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute -left-[16px] top-1 bottom-1 w-[30px] flex items-center justify-center cursor-ew-resize z-40 group"
+                                    className="absolute -left-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[24px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
                                     <div className="w-1.5 h-3.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
@@ -49823,25 +49823,25 @@ export default function App() {
                                     data-text-resize="e"
                                     style={{ touchAction: 'none' }}
                                     title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
-                                    className="absolute -right-[16px] top-1 bottom-1 w-[30px] flex items-center justify-center cursor-ew-resize z-40 group"
+                                    className="absolute -right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[24px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
                                     <div className="w-1.5 h-3.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                 </>
                               ) : (
                                 isTextCenteredOnPage && (
-                                  <div className="absolute left-3 right-3 -top-[16px] h-[30px] flex items-center justify-center pointer-events-none z-30">
+                                  <div className="absolute left-1/2 -translate-x-1/2 -top-[10px] w-[24px] h-[20px] flex items-center justify-center pointer-events-none z-30">
                                     <span className="absolute w-6 h-3.5 rounded-full bg-red-500/75 animate-ping" />
                                     <div className="w-3.5 h-1.5 rounded-full bg-red-600 border border-white ring-2 ring-red-400 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse" />
                                   </div>
                                 )
                               )}
-                              {/* 4 Corner Handles (NW, NE, SW, SE) — 30x30px touch zones with compact 8x8px circles */}
+                              {/* 4 Corner Handles (NW, NE, SW, SE) — compact 20x20px touch zones around the 8x8px corner circles */}
                               <div
                                 data-text-resize="nw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-[16px] -top-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nwse-resize z-50 group"
+                                className="absolute -left-[10px] -top-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
@@ -49849,7 +49849,7 @@ export default function App() {
                                 data-text-resize="ne"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-[16px] -top-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nesw-resize z-50 group"
+                                className="absolute -right-[10px] -top-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
@@ -49857,7 +49857,7 @@ export default function App() {
                                 data-text-resize="sw"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -left-[16px] -bottom-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nesw-resize z-50 group"
+                                className="absolute -left-[10px] -bottom-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
@@ -49865,7 +49865,7 @@ export default function App() {
                                 data-text-resize="se"
                                 style={{ touchAction: 'none' }}
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
-                                className="absolute -right-[16px] -bottom-[16px] w-[30px] h-[30px] flex items-center justify-center cursor-nwse-resize z-50 group"
+                                className="absolute -right-[10px] -bottom-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
