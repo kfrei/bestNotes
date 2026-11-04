@@ -36222,8 +36222,8 @@ export default function App() {
       if (showFeedbackToast) {
         showToast(
           nextFill !== 'none'
-            ? `🎨 Fill (Γέμισμα: Ενεργό ${fillTransparency}% — F / Φ)`
-            : '⭕ Fill (Χωρίς Γέμισμα — F / Φ)'
+            ? `Γεμάτο (${fillTransparency}% — F / Φ)`
+            : 'Διάφανο (F / Φ)'
         );
       }
     },
@@ -42210,187 +42210,234 @@ export default function App() {
 
             {/* Right: Authentic Goodnotes 6 Contextual 3 Stroke Slots (with 12-Step Popover!) + 3 Color Slots */}
             <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow-xs border border-slate-200/90 relative">
-              {/* 3 Stroke Thickness Slots + 12-Preset Popover Trigger */}
-              <div className="flex items-center gap-1">
-                {widthSlots.map((w, idx) => {
-                  const isSlotActive = Math.abs(strokeWidth - w) < 0.25 && activeWidthSlotIdx === idx;
-                  return (
-                    <button
-                      key={idx}
-                      data-popover-trigger="width"
-                      onClick={() => {
-                        setActiveWidthSlotIdx(idx);
-                        if (Math.abs(strokeWidth - w) < 0.25) {
+              {(() => {
+                const selIds =
+                  selectedStrokeIds.length > 0
+                    ? selectedStrokeIds
+                    : activeNodeStrokeId
+                    ? [activeNodeStrokeId]
+                    : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
+                    ? lastCreatedShapeIdsRef.current
+                    : [];
+                const selSet = new Set(selIds);
+                const fullMathGroups = new Set(
+                  activePage.strokes
+                    .filter(
+                      (s) =>
+                        selSet.has(s.id) &&
+                        s.groupId?.startsWith('math-graph-grp-') &&
+                        (s.id.endsWith('-axx') || s.id.endsWith('-axy'))
+                    )
+                    .map((s) => s.groupId as string)
+                );
+                const groupIds = new Set(
+                  activePage.strokes
+                    .filter(
+                      (s) =>
+                        selSet.has(s.id) &&
+                        s.groupId &&
+                        (!s.groupId.startsWith('math-graph-grp-') || fullMathGroups.has(s.groupId))
+                    )
+                    .map((s) => s.groupId as string)
+                );
+                const targetStrokes = activePage.strokes.filter(
+                  (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
+                );
+                const styleTargetStrokes = targetStrokes.filter(
+                  (s) =>
+                    !(
+                      s.groupId?.startsWith('math-graph-grp-') &&
+                      (s.shapeType === 'wave-axis-x' ||
+                        s.shapeType === 'wave-axis-y' ||
+                        s.shapeType === 'wave-guide-top' ||
+                        s.shapeType === 'wave-guide-bottom' ||
+                        s.id.startsWith('math-graph-lbl-'))
+                    )
+                );
+                const effectiveFilled =
+                  targetStrokes.length > 0
+                    ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
+                    : fillStyle !== 'none';
+                const rawTrans =
+                  targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency > 0)
+                    ?.fillTransparency ?? fillTransparency;
+                const effectiveTrans = Math.max(5, Math.min(95, Math.round(rawTrans / 5) * 5));
+                const effectiveDashed =
+                  styleTargetStrokes.length > 0
+                    ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
+                    : lineStyle === 'dashed';
+                const activeFillColor = targetStrokes[0]?.color || strokeColor || '#0066ff';
+                const fillAlpha = Math.max(0.08, Math.min(0.95, (100 - effectiveTrans) / 100));
+
+                return (
+                  <>
+                    {/* 3 Stroke Thickness Slots + 12-Preset Popover Trigger + Solid/Dashed Line Toggle */}
+                    <div className="flex items-center gap-1">
+                      {widthSlots.map((w, idx) => {
+                        const isSlotActive = Math.abs(strokeWidth - w) < 0.25 && activeWidthSlotIdx === idx;
+                        return (
+                          <button
+                            key={idx}
+                            data-popover-trigger="width"
+                            onClick={() => {
+                              setActiveWidthSlotIdx(idx);
+                              if (Math.abs(strokeWidth - w) < 0.25) {
+                                setShowWidthPopover((prev) => !prev);
+                                setShowColorPopover(false);
+                                setShowShapeLibraryPanel(false);
+                              } else {
+                                applyWidthToSelection(w);
+                              }
+                            }}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
+                              isSlotActive || Math.abs(strokeWidth - w) < 0.25
+                                ? 'bg-sky-50 ring-2 ring-[#0066ff]'
+                                : 'hover:bg-slate-100'
+                            }`}
+                            title={`Πάχος ${w}px (Πάτα ξανά για 12 επιλογές πάχους)`}
+                          >
+                            <span
+                              className="rounded-full bg-slate-800"
+                              style={{ width: Math.min(18, Math.max(4, w * 1.9)), height: Math.min(18, Math.max(4, w * 1.9)) }}
+                            />
+                          </button>
+                        );
+                      })}
+                      <button
+                        data-popover-trigger="width"
+                        onClick={() => {
                           setShowWidthPopover((prev) => !prev);
                           setShowColorPopover(false);
                           setShowShapeLibraryPanel(false);
-                        } else {
-                          applyWidthToSelection(w);
+                        }}
+                        className="px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-sky-50 text-[10px] font-bold text-[#0066ff] cursor-pointer"
+                        title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
+                      >
+                        {strokeWidth.toFixed(1)}px
+                      </button>
+                      <button
+                        onClick={() => {
+                          const nextLineStyle: LineStyleType = effectiveDashed ? 'solid' : 'dashed';
+                          applyLineStyleToSelection(nextLineStyle);
+                        }}
+                        className={`w-[58px] h-[24px] ml-0.5 inline-flex items-center justify-center rounded-full border transition cursor-pointer ${
+                          effectiveDashed
+                            ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
+                            : 'bg-slate-100 border-slate-200/90 text-slate-800 hover:bg-slate-200'
+                        }`}
+                        title={
+                          effectiveDashed
+                            ? 'Διακεκομμένη Γραμμή (Κλικ για Συνεχή Γραμμή)'
+                            : 'Συνεχής Γραμμή (Κλικ για Διακεκομμένη Γραμμή)'
                         }
-                      }}
-                      className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
-                        isSlotActive || Math.abs(strokeWidth - w) < 0.25
-                          ? 'bg-sky-50 ring-2 ring-[#0066ff]'
-                          : 'hover:bg-slate-100'
-                      }`}
-                      title={`Πάχος ${w}px (Πάτα ξανά για 12 επιλογές πάχους)`}
-                    >
-                      <span
-                        className="rounded-full bg-slate-800"
-                        style={{ width: Math.min(18, Math.max(4, w * 1.9)), height: Math.min(18, Math.max(4, w * 1.9)) }}
-                      />
-                    </button>
-                  );
-                })}
-                <button
-                  data-popover-trigger="width"
-                  onClick={() => {
-                    setShowWidthPopover((prev) => !prev);
-                    setShowColorPopover(false);
-                    setShowShapeLibraryPanel(false);
-                  }}
-                  className="px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-sky-50 text-[10px] font-bold text-[#0066ff] cursor-pointer"
-                  title="Άνοιγμα όλων των 12 επιλογών πάχους γραμμής"
-                >
-                  {strokeWidth.toFixed(1)}px
-                </button>
-              </div>
+                      >
+                        <svg width="40" height="8" viewBox="0 0 40 8" fill="none" className="overflow-visible">
+                          <line
+                            x1="2"
+                            y1="4"
+                            x2="38"
+                            y2="4"
+                            stroke="currentColor"
+                            strokeWidth="3.2"
+                            strokeLinecap="round"
+                            strokeDasharray={effectiveDashed ? '6 5.5' : undefined}
+                          />
+                        </svg>
+                      </button>
+                    </div>
 
-              <div className="h-5 w-px bg-slate-200" />
+                    <div className="h-5 w-px bg-slate-200" />
 
-              {/* 5 Color Memories + Scroll Left/Right for 5 Most Recent Colors + Rainbow Picker */}
-              <div className="flex items-center gap-1">
-                <div
-                  ref={colorStripRef}
-                  onWheel={(e) => {
-                    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-                    if (Math.abs(delta) > 2) {
-                      e.preventDefault();
-                      e.currentTarget.scrollBy({ left: delta > 0 ? 156 : -156, behavior: 'smooth' });
-                    }
-                  }}
-                  style={{
-                    scrollbarWidth: 'none',
-                    msOverflowStyle: 'none',
-                    touchAction: 'pan-x',
-                    WebkitOverflowScrolling: 'touch',
-                  }}
-                  className="w-[152px] overflow-x-auto snap-x snap-mandatory flex items-center scroll-smooth [&::-webkit-scrollbar]:hidden"
-                  title="5 Μνήμες Χρωμάτων — Κάνε scroll δεξιά-αριστερά για τα 5 πιο πρόσφατα χρώματα!"
-                >
-                  {/* Page 1: 5 Primary Color Memories */}
-                  <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
-                    {colorSlots.slice(0, 5).map((c, idx) => (
+                    {/* 5 Color Memories + Scroll Left/Right for 5 Most Recent Colors + Rainbow Picker + Fill Controls */}
+                    <div className="flex items-center gap-1">
+                      <div
+                        ref={colorStripRef}
+                        onWheel={(e) => {
+                          const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+                          if (Math.abs(delta) > 2) {
+                            e.preventDefault();
+                            e.currentTarget.scrollBy({ left: delta > 0 ? 156 : -156, behavior: 'smooth' });
+                          }
+                        }}
+                        style={{
+                          scrollbarWidth: 'none',
+                          msOverflowStyle: 'none',
+                          touchAction: 'pan-x',
+                          WebkitOverflowScrolling: 'touch',
+                        }}
+                        className="w-[152px] overflow-x-auto snap-x snap-mandatory flex items-center scroll-smooth [&::-webkit-scrollbar]:hidden"
+                        title="5 Μνήμες Χρωμάτων — Κάνε scroll δεξιά-αριστερά για τα 5 πιο πρόσφατα χρώματα!"
+                      >
+                        {/* Page 1: 5 Primary Color Memories */}
+                        <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
+                          {colorSlots.slice(0, 5).map((c, idx) => (
+                            <button
+                              key={`mem-${idx}`}
+                              onClick={() => applyColorToSelection(c)}
+                              className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
+                                strokeColor === c
+                                  ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
+                                  : 'opacity-85 hover:opacity-100'
+                              }`}
+                              style={{ backgroundColor: c }}
+                              title={`Μνήμη Χρώματος #${idx + 1} (${c}) — Σύρε αριστερά για τα 5 πρόσφατα`}
+                            />
+                          ))}
+                        </div>
+                        {/* Page 2: 5 Most Recent Colors */}
+                        <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
+                          {colorSlots.slice(5, 10).map((c, idx) => (
+                            <button
+                              key={`rec-${idx}`}
+                              onClick={() => applyColorToSelection(c)}
+                              className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
+                                strokeColor === c
+                                  ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
+                                  : 'opacity-85 hover:opacity-100'
+                              }`}
+                              style={{ backgroundColor: c }}
+                              title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Σύρε δεξιά για τις 5 βασικές μνήμες`}
+                            />
+                          ))}
+                        </div>
+                      </div>
                       <button
-                        key={`mem-${idx}`}
-                        onClick={() => applyColorToSelection(c)}
-                        className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
-                          strokeColor === c
-                            ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
-                            : 'opacity-85 hover:opacity-100'
-                        }`}
-                        style={{ backgroundColor: c }}
-                        title={`Μνήμη Χρώματος #${idx + 1} (${c}) — Σύρε αριστερά για τα 5 πρόσφατα`}
+                        data-popover-trigger="color"
+                        onClick={() => {
+                          setShowColorPopover((v) => !v);
+                          setShowWidthPopover(false);
+                          setShowShapeLibraryPanel(false);
+                        }}
+                        className="w-6 h-6 shrink-0 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
+                        title="Όλα τα Χρώματα & Στυλ Γραμμής"
                       />
-                    ))}
-                  </div>
-                  {/* Page 2: 5 Most Recent Colors */}
-                  <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
-                    {colorSlots.slice(5, 10).map((c, idx) => (
-                      <button
-                        key={`rec-${idx}`}
-                        onClick={() => applyColorToSelection(c)}
-                        className={`w-6 h-6 shrink-0 rounded-full transition cursor-pointer ${
-                          strokeColor === c
-                            ? 'ring-2 ring-offset-1 ring-[#0066ff] scale-110'
-                            : 'opacity-85 hover:opacity-100'
-                        }`}
-                        style={{ backgroundColor: c }}
-                        title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Σύρε δεξιά για τις 5 βασικές μνήμες`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <button
-                  data-popover-trigger="color"
-                  onClick={() => {
-                    setShowColorPopover((v) => !v);
-                    setShowWidthPopover(false);
-                    setShowShapeLibraryPanel(false);
-                  }}
-                  className="w-6 h-6 shrink-0 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-sky-500 ring-1 ring-slate-300 cursor-pointer"
-                  title="Όλα τα Χρώματα & Στυλ Γραμμής"
-                />
-                <div className="h-4 w-px bg-slate-200 mx-0.5" />
-                {(() => {
-                  const selIds =
-                    selectedStrokeIds.length > 0
-                      ? selectedStrokeIds
-                      : activeNodeStrokeId
-                      ? [activeNodeStrokeId]
-                      : activeTool === 'shape' && lastCreatedShapeIdsRef.current.length > 0
-                      ? lastCreatedShapeIdsRef.current
-                      : [];
-                  const selSet = new Set(selIds);
-                  const fullMathGroups = new Set(
-                    activePage.strokes
-                      .filter(
-                        (s) =>
-                          selSet.has(s.id) &&
-                          s.groupId?.startsWith('math-graph-grp-') &&
-                          (s.id.endsWith('-axx') || s.id.endsWith('-axy'))
-                      )
-                      .map((s) => s.groupId as string)
-                  );
-                  const groupIds = new Set(
-                    activePage.strokes
-                      .filter(
-                        (s) =>
-                          selSet.has(s.id) &&
-                          s.groupId &&
-                          (!s.groupId.startsWith('math-graph-grp-') || fullMathGroups.has(s.groupId))
-                      )
-                      .map((s) => s.groupId as string)
-                  );
-                  const targetStrokes = activePage.strokes.filter(
-                    (s) => selSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))
-                  );
-                  const styleTargetStrokes = targetStrokes.filter(
-                    (s) =>
-                      !(
-                        s.groupId?.startsWith('math-graph-grp-') &&
-                        (s.shapeType === 'wave-axis-x' ||
-                          s.shapeType === 'wave-axis-y' ||
-                          s.shapeType === 'wave-guide-top' ||
-                          s.shapeType === 'wave-guide-bottom' ||
-                          s.id.startsWith('math-graph-lbl-'))
-                      )
-                  );
-                  const effectiveFilled =
-                    targetStrokes.length > 0
-                      ? targetStrokes.some((s) => s.fillStyle && s.fillStyle !== 'none')
-                      : fillStyle !== 'none';
-                  const rawTrans =
-                    targetStrokes.find((s) => typeof s.fillTransparency === 'number' && s.fillTransparency > 0)
-                      ?.fillTransparency ?? fillTransparency;
-                  const effectiveTrans = Math.max(5, Math.min(95, Math.round(rawTrans / 5) * 5));
-                  const effectiveDashed =
-                    styleTargetStrokes.length > 0
-                      ? styleTargetStrokes.some((s) => s.lineStyle === 'dashed')
-                      : lineStyle === 'dashed';
-                  return (
-                    <>
-                      <div className="inline-flex items-center gap-2">
+                      <div className="h-4 w-px bg-slate-200 mx-0.5" />
+                      <div className="inline-flex items-center gap-1.5">
                         <button
                           onClick={() => toggleFillStyleToSelection(false)}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border transition cursor-pointer ${
-                            effectiveFilled
-                              ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
-                              : 'bg-slate-100 border-slate-200/90 text-slate-700 hover:bg-slate-200'
-                          }`}
-                          title="Fill (Γέμισμα / Χωρίς Γέμισμα) — Συντόμευση: F / Φ"
+                          style={{
+                            borderColor: activeFillColor,
+                            color: effectiveFilled && fillAlpha >= 0.55 ? '#ffffff' : activeFillColor,
+                            textShadow:
+                              effectiveFilled && fillAlpha >= 0.55
+                                ? '0 1px 2px rgba(0,0,0,0.45)'
+                                : undefined,
+                          }}
+                          className="relative overflow-hidden px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap border-[1.5px] bg-white transition cursor-pointer"
+                          title="Εναλλαγή Γεμάτο / Διάφανο (Συντόμευση: F / Φ)"
                         >
-                          {effectiveFilled ? '🎨 Γέμισμα' : 'Χωρίς Γέμισμα'}
+                          {effectiveFilled && (
+                            <span
+                              className="absolute inset-0 pointer-events-none transition-opacity"
+                              style={{
+                                backgroundColor: activeFillColor,
+                                opacity: fillAlpha,
+                              }}
+                            />
+                          )}
+                          <span className="relative z-10">
+                            {effectiveFilled ? 'Γεμάτο' : 'Διάφανο'}
+                          </span>
                         </button>
                         <button
                           data-popover-trigger="fill-trans"
@@ -42419,39 +42466,10 @@ export default function App() {
                           <span className="text-[9px] opacity-75">▾</span>
                         </button>
                       </div>
-                      <button
-                        onClick={() => {
-                          const nextLineStyle: LineStyleType = effectiveDashed ? 'solid' : 'dashed';
-                          applyLineStyleToSelection(nextLineStyle);
-                        }}
-                        className={`w-[68px] h-[26px] inline-flex items-center justify-center rounded-full border transition cursor-pointer ${
-                          effectiveDashed
-                            ? 'bg-[#0066ff] border-[#0066ff] text-white shadow-xs'
-                            : 'bg-slate-100 border-slate-200/90 text-slate-800 hover:bg-slate-200'
-                        }`}
-                        title={
-                          effectiveDashed
-                            ? 'Διακεκομμένη Γραμμή (Κλικ για Συνεχή Γραμμή)'
-                            : 'Συνεχής Γραμμή (Κλικ για Διακεκομμένη Γραμμή)'
-                        }
-                      >
-                        <svg width="46" height="8" viewBox="0 0 46 8" fill="none" className="overflow-visible">
-                          <line
-                            x1="2"
-                            y1="4"
-                            x2="44"
-                            y2="4"
-                            stroke="currentColor"
-                            strokeWidth="3.2"
-                            strokeLinecap="round"
-                            strokeDasharray={effectiveDashed ? '6.5 6' : undefined}
-                          />
-                        </svg>
-                      </button>
-                    </>
-                  );
-                })()}
-              </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
