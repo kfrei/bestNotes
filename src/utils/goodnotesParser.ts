@@ -324,11 +324,7 @@ function parseGoodnotesPageBuffer(buf: Uint8Array, pageId: string, pageNum: numb
   };
 }
 
-/**
- * Exports a BestNotes Notebook as a lossless, human-readable JSON `.bestnotes` file
- * containing all pages, strokes, rich texts, transparent images, layers, tags, and simulations.
- */
-export function exportBestnotesFile(notebook: Notebook): void {
+export function createBestnotesFileBlob(notebook: Notebook): { blob: Blob; fileName: string } {
   const payload = {
     format: 'bestnotes-v2',
     exportedAt: new Date().toISOString(),
@@ -336,14 +332,24 @@ export function exportBestnotesFile(notebook: Notebook): void {
   };
   const jsonStr = JSON.stringify(payload, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
   const safeTitle =
     (notebook.title || 'Σημείωση')
       .trim()
       .replace(/[\\/:*?"<>|]+/g, '_') || 'Σημείωση';
+  const fileName = safeTitle.endsWith('.bestnotes') ? safeTitle : `${safeTitle}.bestnotes`;
+  return { blob, fileName };
+}
+
+/**
+ * Exports a BestNotes Notebook as a lossless, human-readable JSON `.bestnotes` file
+ * containing all pages, strokes, rich texts, transparent images, layers, tags, and simulations.
+ */
+export function exportBestnotesFile(notebook: Notebook): void {
+  const { blob, fileName } = createBestnotesFileBlob(notebook);
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = safeTitle.endsWith('.bestnotes') ? safeTitle : `${safeTitle}.bestnotes`;
+  a.download = fileName;
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -113,7 +113,11 @@ import {
   getPageLogicalWidth,
   getPageLogicalHeight,
 } from './types/note';
-import { importGoodnotesFile, exportBestnotesFile } from './utils/goodnotesParser';
+import {
+  importGoodnotesFile,
+  exportBestnotesFile,
+  createBestnotesFileBlob,
+} from './utils/goodnotesParser';
 import { buildVolcanoCreationNotebook, VOLCANO_NOTEBOOK_ID } from './utils/volcanoNoteSeed';
 import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
 import {
@@ -3988,29 +3992,37 @@ export default function App() {
   );
 
   const [pendingShareFile, setPendingShareFile] = useState<{ file: File; title: string } | null>(null);
+  const [shareMenuTarget, setShareMenuTarget] = useState<{
+    context: 'header' | 'card' | 'list';
+    notebookId: string;
+  } | null>(null);
 
-  const handleDownloadActiveNotebookPdf = useCallback(async () => {
-    try {
-      showToast(`📄 Δημιουργία PDF «${activeNotebook.title}.pdf» (με όλες τις προσομοιώσεις)...`);
-      const blob = await exportNotebookToPdfBlob(activeNotebook, {
-        activePageId: activePage.id,
-        liveSimCanvas: simCanvasRef.current,
-        rulersByPageId,
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const safeTitle = (activeNotebook.title || 'Σημείωση').replace(/[\\/:*?"<>|]/g, '_').trim();
-      a.href = url;
-      a.download = `${safeTitle}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.setTimeout(() => URL.revokeObjectURL(url), 5000);
-      showToast(`📥 Κατέβηκε το PDF «${safeTitle}.pdf»!`);
-    } catch (err: any) {
-      showToast(`❌ Σφάλμα εξαγωγής PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
-    }
-  }, [activeNotebook, activePage.id, showToast]);
+  const handleDownloadActiveNotebookPdf = useCallback(
+    async (targetNotebook?: Notebook) => {
+      const nb = targetNotebook ?? activeNotebook;
+      try {
+        showToast(`📄 Δημιουργία PDF «${nb.title}.pdf» (με όλες τις προσομοιώσεις)...`);
+        const blob = await exportNotebookToPdfBlob(nb, {
+          activePageId: activePage.id,
+          liveSimCanvas: simCanvasRef.current,
+          rulersByPageId,
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const safeTitle = (nb.title || 'Σημείωση').replace(/[\\/:*?"<>|]/g, '_').trim();
+        a.href = url;
+        a.download = `${safeTitle}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast(`📥 Κατέβηκε το PDF «${safeTitle}.pdf»!`);
+      } catch (err: any) {
+        showToast(`❌ Σφάλμα εξαγωγής PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
+      }
+    },
+    [activeNotebook, activePage.id, rulersByPageId, showToast]
+  );
 
   const handleExportBestnotesFile = useCallback(
     (targetNotebook?: Notebook) => {
@@ -4020,6 +4032,44 @@ export default function App() {
         showToast(`💾 Αποθηκεύτηκε τοπικά το αρχείο «${nb.title}.bestnotes»!`);
       } catch (err: any) {
         showToast(`❌ Σφάλμα αποθήκευσης .bestnotes: ${err?.message || 'Άγνωστο σφάλμα'}`);
+      }
+    },
+    [activeNotebook, showToast]
+  );
+
+  const handleShareBestnotesFile = useCallback(
+    async (targetNotebook?: Notebook) => {
+      const nb = targetNotebook ?? activeNotebook;
+      try {
+        const { blob, fileName } = createBestnotesFileBlob(nb);
+        const bnFile = new File([blob], fileName, {
+          type: 'application/json',
+          lastModified: Date.now(),
+        });
+        const nav = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean;
+          share?: (data?: ShareData) => Promise<void>;
+        };
+        if (typeof nav.share === 'function') {
+          const canShareFiles =
+            typeof nav.canShare === 'function' ? nav.canShare({ files: [bnFile] }) : true;
+          if (canShareFiles) {
+            try {
+              await nav.share({ files: [bnFile] });
+              showToast(`✅ Κοινοποιήθηκε το πρωτότυπο «${fileName}»!`);
+              return;
+            } catch (shareErr: any) {
+              if (shareErr?.name === 'AbortError') {
+                setStatusBanner(null);
+                return;
+              }
+            }
+          }
+        }
+        exportBestnotesFile(nb);
+        showToast(`💾 Αποθηκεύτηκε τοπικά το αρχείο «${fileName}»!`);
+      } catch (err: any) {
+        showToast(`❌ Σφάλμα κοινοποίησης .bestnotes: ${err?.message || 'Άγνωστο σφάλμα'}`);
       }
     },
     [activeNotebook, showToast]
@@ -4245,7 +4295,8 @@ export default function App() {
       !showUserDropdown &&
       !showTagsPopover &&
       !libraryTagEditorNbId &&
-      !folderPickerNbId
+      !folderPickerNbId &&
+      !shareMenuTarget
     ) {
       return;
     }
@@ -4274,6 +4325,7 @@ export default function App() {
         if (triggerType !== 'tags') setShowTagsPopover(false);
         if (triggerType !== 'lib-tags') setLibraryTagEditorNbId(null);
         if (triggerType !== 'lib-folder') setFolderPickerNbId(null);
+        if (triggerType !== 'share-menu') setShareMenuTarget(null);
         return;
       }
 
@@ -4289,6 +4341,7 @@ export default function App() {
       setShowTagsPopover(false);
       setLibraryTagEditorNbId(null);
       setFolderPickerNbId(null);
+      setShareMenuTarget(null);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -4304,6 +4357,7 @@ export default function App() {
         setShowTagsPopover(false);
         setLibraryTagEditorNbId(null);
         setFolderPickerNbId(null);
+        setShareMenuTarget(null);
       }
     };
 
@@ -4325,6 +4379,7 @@ export default function App() {
     showTagsPopover,
     libraryTagEditorNbId,
     folderPickerNbId,
+    shareMenuTarget,
   ]);
 
   // NATIVE iPAD APP VIEWPORT LOCK:
@@ -40085,16 +40140,6 @@ export default function App() {
                 <span className="hidden sm:inline">PDF</span>
               </button>
 
-              {/* Direct 1-Click Local .bestnotes Save Button */}
-              <button
-                onClick={() => handleExportBestnotesFile(activeNotebook)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-emerald-600 text-[11px] font-semibold text-emerald-200 hover:text-white transition cursor-pointer"
-                title={`Αποθήκευση τοπικά ως «${activeNotebook.title}.bestnotes» (πλήρες επεξεργάσιμο αρχείο)`}
-              >
-                <Download className="w-3.5 h-3.5 text-emerald-300" />
-                <span className="hidden md:inline">.bestnotes</span>
-              </button>
-
               {/* Live PDF Interactive Player & Standalone Export Button (No Edit Tools, Only Simulation Interaction + Play/Stop) */}
               <button
                 onClick={() => {
@@ -40130,15 +40175,81 @@ export default function App() {
                 <span>{isLivePdfMode ? '🎬 Live PDF ON' : '▶️ Live PDF'}</span>
               </button>
 
-              {/* Native iPadOS / System Share PDF Button (AirDrop, Viber, Messenger, Goodnotes, Mail, Files) */}
-              <button
-                onClick={() => void handleShareNotebookPdf(activeNotebook)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#0066ff] text-[11px] font-semibold text-sky-100 hover:text-white transition cursor-pointer"
-                title={`Κοινοποίηση PDF «${activeNotebook.title}.pdf» (AirDrop, Viber, Messenger, Goodnotes, Mail, Αρχεία)`}
-              >
-                <Share2 className="w-3.5 h-3.5 text-sky-300" />
-                <span className="hidden sm:inline">Share</span>
-              </button>
+              {/* Share & Download Menu Button (PDF & .bestnotes Download + System Share) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  data-popover-trigger="share-menu"
+                  onClick={() =>
+                    setShareMenuTarget((prev) =>
+                      prev?.context === 'header'
+                        ? null
+                        : { context: 'header', notebookId: activeNotebook.id }
+                    )
+                  }
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#263961] hover:bg-[#0066ff] text-[11px] font-semibold text-sky-100 hover:text-white transition cursor-pointer"
+                  title="Κοινοποίηση & Λήψη PDF ή Πρωτοτύπου (.bestnotes)"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-sky-300" />
+                  <span className="hidden sm:inline">Share</span>
+                </button>
+                {shareMenuTarget?.context === 'header' && (
+                  <div
+                    data-popover-panel="share-menu"
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-full mt-2 w-60 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-2 z-50 space-y-1"
+                  >
+                    <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Λήψη & Κοινοποίηση «{activeNotebook.title}»
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShareMenuTarget(null);
+                        void handleDownloadActiveNotebookPdf(activeNotebook);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] text-xs font-semibold transition cursor-pointer text-left"
+                    >
+                      <Download className="w-4 h-4 text-[#0066ff] shrink-0" />
+                      <span>Λήψη PDF (.pdf)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShareMenuTarget(null);
+                        handleExportBestnotesFile(activeNotebook);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-xs font-semibold transition cursor-pointer text-left"
+                    >
+                      <Download className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Λήψη Πρωτοτύπου (.bestnotes)</span>
+                    </button>
+                    <div className="my-1 border-t border-slate-100" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShareMenuTarget(null);
+                        void handleShareNotebookPdf(activeNotebook);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] text-xs font-semibold transition cursor-pointer text-left"
+                    >
+                      <Share2 className="w-4 h-4 text-[#0066ff] shrink-0" />
+                      <span>Κοινοποίηση PDF (AirDrop, Mail...)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShareMenuTarget(null);
+                        void handleShareBestnotesFile(activeNotebook);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-xs font-semibold transition cursor-pointer text-left"
+                    >
+                      <Share2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Κοινοποίηση .bestnotes</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <button
                 data-popover-trigger="settings"
@@ -41495,27 +41606,80 @@ export default function App() {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-1.5 relative">
                                       <button
+                                        type="button"
+                                        data-popover-trigger="share-menu"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleExportBestnotesFile(nb);
-                                        }}
-                                        className="p-2 rounded-xl bg-white/95 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
-                                        title={`Αποθήκευση τοπικά ως "${nb.title}.bestnotes"`}
-                                      >
-                                        <Download className="w-[18px] h-[18px]" />
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          void handleShareNotebookPdf(nb);
+                                          setShareMenuTarget((prev) =>
+                                            prev?.context === 'card' && prev.notebookId === nb.id
+                                              ? null
+                                              : { context: 'card', notebookId: nb.id }
+                                          );
                                         }}
                                         className="p-2 rounded-xl bg-white/95 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
-                                        title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
+                                        title={`Λήψη & Κοινοποίηση PDF / .bestnotes («${nb.title}»)`}
                                       >
                                         <Share2 className="w-[18px] h-[18px]" />
                                       </button>
+                                      {shareMenuTarget?.context === 'card' &&
+                                        shareMenuTarget.notebookId === nb.id && (
+                                          <div
+                                            data-popover-panel="share-menu"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="absolute right-8 bottom-full mb-1.5 w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-left"
+                                          >
+                                            <div className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-slate-400 truncate">
+                                              Λήψη & Κοινοποίηση
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setShareMenuTarget(null);
+                                                void handleDownloadActiveNotebookPdf(nb);
+                                              }}
+                                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                            >
+                                              <Download className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                                              <span>Λήψη PDF (.pdf)</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setShareMenuTarget(null);
+                                                handleExportBestnotesFile(nb);
+                                              }}
+                                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                            >
+                                              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                              <span>Λήψη Πρωτοτύπου (.bestnotes)</span>
+                                            </button>
+                                            <div className="my-1 border-t border-slate-100" />
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setShareMenuTarget(null);
+                                                void handleShareNotebookPdf(nb);
+                                              }}
+                                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                            >
+                                              <Share2 className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                                              <span>Κοινοποίηση PDF</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setShareMenuTarget(null);
+                                                void handleShareBestnotesFile(nb);
+                                              }}
+                                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                            >
+                                              <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                              <span>Κοινοποίηση .bestnotes</span>
+                                            </button>
+                                          </div>
+                                        )}
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -41907,26 +42071,81 @@ export default function App() {
                             <span className="text-[11px] text-slate-400 hidden sm:inline">
                               {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                             </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleExportBestnotesFile(nb);
-                              }}
-                              className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200/80 transition cursor-pointer"
-                              title={`Αποθήκευση τοπικά ως "${nb.title}.bestnotes"`}
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleShareNotebookPdf(nb);
-                              }}
-                              className="p-2 rounded-xl bg-sky-50 hover:bg-sky-600 text-sky-600 hover:text-white border border-sky-200/80 transition cursor-pointer"
-                              title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
-                            >
-                              <Share2 className="w-4 h-4" />
-                            </button>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                data-popover-trigger="share-menu"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShareMenuTarget((prev) =>
+                                    prev?.context === 'list' && prev.notebookId === nb.id
+                                      ? null
+                                      : { context: 'list', notebookId: nb.id }
+                                  );
+                                }}
+                                className="p-2 rounded-xl bg-sky-50 hover:bg-sky-600 text-sky-600 hover:text-white border border-sky-200/80 transition cursor-pointer"
+                                title={`Λήψη & Κοινοποίηση PDF / .bestnotes («${nb.title}»)`}
+                              >
+                                <Share2 className="w-4 h-4" />
+                              </button>
+                              {shareMenuTarget?.context === 'list' &&
+                                shareMenuTarget.notebookId === nb.id && (
+                                  <div
+                                    data-popover-panel="share-menu"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute right-0 bottom-full mb-1.5 w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-left"
+                                  >
+                                    <div className="px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-slate-400 truncate">
+                                      Λήψη & Κοινοποίηση
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShareMenuTarget(null);
+                                        void handleDownloadActiveNotebookPdf(nb);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                                      <span>Λήψη PDF (.pdf)</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShareMenuTarget(null);
+                                        handleExportBestnotesFile(nb);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      <span>Λήψη Πρωτοτύπου (.bestnotes)</span>
+                                    </button>
+                                    <div className="my-1 border-t border-slate-100" />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShareMenuTarget(null);
+                                        void handleShareNotebookPdf(nb);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                    >
+                                      <Share2 className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                                      <span>Κοινοποίηση PDF</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShareMenuTarget(null);
+                                        void handleShareBestnotesFile(nb);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-[11.5px] font-semibold transition cursor-pointer text-left"
+                                    >
+                                      <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      <span>Κοινοποίηση .bestnotes</span>
+                                    </button>
+                                  </div>
+                                )}
+                            </div>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
