@@ -42768,27 +42768,62 @@ export default function App() {
                                   onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
                                   onDrop={(e) => handleFolderDrop(e, folder.path)}
                                   onClick={() => setActiveLibraryFolder(folder.path)}
-                                  className={`group relative rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between h-36 ${
+                                  className={`group relative pt-8 pb-3.5 px-4 transition-all cursor-pointer flex flex-col justify-between h-38 select-none ${
                                     isDropHover
-                                      ? 'bg-amber-50/95 border-2 border-[#0066ff] ring-4 ring-[#0066ff]/20 shadow-xl -translate-y-1 scale-[1.03]'
-                                      : draggingLibraryNbId
-                                      ? 'bg-amber-50/35 border-2 border-dashed border-amber-400 shadow-md hover:border-[#0066ff]'
-                                      : 'bg-white hover:bg-amber-50/40 border border-slate-200/90 hover:border-amber-400 shadow-xs hover:shadow-md'
+                                      ? '-translate-y-1.5 scale-[1.03] drop-shadow-xl'
+                                      : 'hover:-translate-y-1 drop-shadow-xs hover:drop-shadow-md'
                                   }`}
                                 >
-                                  <div className="flex items-start justify-between">
-                                    {/* Custom Folder Icon & Color Badge */}
+                                  {/* Authentic Two-Tone Folder Silhouette SVG (Back Tab Flap + Front Rounded Pocket) */}
+                                  <svg
+                                    viewBox="0 0 240 160"
+                                    preserveAspectRatio="none"
+                                    className="absolute inset-0 w-full h-full pointer-events-none"
+                                  >
+                                    {/* 1. Back Flap + Top-Left Folder Tab (Richer Shade of Chosen Color) */}
+                                    <path
+                                      d="M 0,48 L 0,22 Q 0,0 22,0 L 66,0 C 84,0 88,20 106,20 L 218,20 Q 240,20 240,42 L 240,136 Q 240,160 216,160 L 24,160 Q 0,160 0,136 Z"
+                                      fill="#ffffff"
+                                    />
+                                    <path
+                                      d="M 0,48 L 0,22 Q 0,0 22,0 L 66,0 C 84,0 88,20 106,20 L 218,20 Q 240,20 240,42 L 240,136 Q 240,160 216,160 L 24,160 Q 0,160 0,136 Z"
+                                      fill={folderColor}
+                                      fillOpacity="0.56"
+                                    />
+
+                                    {/* 2. Front Folder Pocket (Lighter Shade of Chosen Color) */}
+                                    <rect
+                                      x="0"
+                                      y="30"
+                                      width="240"
+                                      height="130"
+                                      rx="24"
+                                      ry="24"
+                                      fill="#ffffff"
+                                    />
+                                    <rect
+                                      x="0"
+                                      y="30"
+                                      width="240"
+                                      height="130"
+                                      rx="24"
+                                      ry="24"
+                                      fill={folderColor}
+                                      fillOpacity="0.28"
+                                      stroke={isDropHover ? '#0066ff' : folderColor}
+                                      strokeOpacity={isDropHover ? '0.95' : '0.42'}
+                                      strokeWidth={isDropHover ? '3.5' : '1.5'}
+                                      strokeDasharray={
+                                        draggingLibraryNbId && !isDropHover ? '6 4' : undefined
+                                      }
+                                    />
+                                  </svg>
+
+                                  <div className="relative z-10 flex items-center justify-between">
+                                    {/* Custom Folder Icon directly on the folder pocket (no border box) */}
                                     <div
-                                      style={{
-                                        backgroundColor: isDropHover
-                                          ? undefined
-                                          : `${folderColor}1f`,
-                                        borderColor: isDropHover ? undefined : `${folderColor}55`,
-                                      }}
-                                      className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition ${
-                                        isDropHover
-                                          ? 'bg-amber-200 border-[#0066ff] scale-110'
-                                          : 'group-hover:scale-105'
+                                      className={`flex items-center justify-center transition ${
+                                        isDropHover ? 'scale-110' : 'group-hover:scale-105'
                                       }`}
                                     >
                                       {renderFolderCustomIcon(
@@ -42810,10 +42845,10 @@ export default function App() {
                                             e.stopPropagation();
                                             toggleFolderFavorite(folder.path);
                                           }}
-                                          className={`p-1.5 rounded-lg border transition cursor-pointer focus:outline-none ${
+                                          className={`p-1.5 rounded-lg border transition cursor-pointer focus:outline-none backdrop-blur-xs ${
                                             folder.favorite
-                                              ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
-                                              : 'bg-slate-50 border-slate-200/80 text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
+                                              ? 'bg-amber-50/95 border-amber-300 text-amber-500 hover:bg-amber-100'
+                                              : 'bg-white/75 border-white/80 text-slate-500 hover:text-amber-500 hover:bg-white'
                                           }`}
                                           title={
                                             folder.favorite
@@ -42835,8 +42870,8 @@ export default function App() {
                                             e.stopPropagation();
                                             openFolderEditorModal(folder);
                                           }}
-                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer focus:outline-none"
-                                          title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Θέση)`}
+                                          className="p-1.5 rounded-lg bg-white/75 hover:bg-[#0066ff] text-slate-700 hover:text-white border border-white/80 transition cursor-pointer focus:outline-none backdrop-blur-xs"
+                                          title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Μετακίνηση)`}
                                         >
                                           <Pen className="w-3.5 h-3.5" />
                                         </button>
@@ -42846,7 +42881,7 @@ export default function App() {
                                             e.stopPropagation();
                                             deleteFolderByName(folder.path);
                                           }}
-                                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer focus:outline-none"
+                                          className="p-1.5 rounded-lg bg-white/75 hover:bg-rose-600 text-rose-600 hover:text-white border border-white/80 transition cursor-pointer focus:outline-none backdrop-blur-xs"
                                           title={`Διαγραφή φακέλου "${folder.name}"`}
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
@@ -42855,11 +42890,11 @@ export default function App() {
                                     )}
                                   </div>
 
-                                  <div>
-                                    <p className="text-sm font-bold text-[#1b2a4a] group-hover:text-[#0066ff] transition truncate">
+                                  <div className="relative z-10">
+                                    <p className="text-sm font-extrabold text-[#1b2a4a] group-hover:text-[#0066ff] transition truncate">
                                       {folder.name}
                                     </p>
-                                    <p className="text-[11px] text-slate-500 truncate">
+                                    <p className="text-[11px] font-medium text-slate-600 truncate">
                                       {folder.subfolderCount > 0
                                         ? `${folder.subfolderCount} ${
                                             folder.subfolderCount === 1 ? 'υποφάκελος' : 'υποφάκελοι'
