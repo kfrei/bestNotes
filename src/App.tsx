@@ -587,7 +587,12 @@ function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
   try {
     localStorage.setItem(`${STORAGE_KEY}_${uid}`, JSON.stringify(nbs.map(cleanNotebookForStorage)));
   } catch {
-    // If localStorage 5MB quota is exceeded, IndexedDB above still persists the full notebooks!
+    // If localStorage 5MB quota is exceeded, remove the stale localStorage snapshot so it can NEVER overwrite IndexedDB on reload!
+    try {
+      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -953,6 +958,19 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
     }
   }
 
+  // Auto-recover "Τα Οξέα" (nb-acids-v1) if it was reverted to the landscape seed
+  if (nb.id === ACIDS_NOTEBOOK_ID && nextPages.length >= 1 && nextPages[0]?.orientation !== 'portrait') {
+    const recoveredAcids = buildAcidsNotebook(nb.folder || '');
+    return {
+      nb: {
+        ...recoveredAcids,
+        folder: nb.folder || recoveredAcids.folder,
+        updatedAt: new Date().toISOString(),
+      },
+      repaired: true,
+    };
+  }
+
   if (!repaired) return { nb, repaired: false };
   return {
     nb: {
@@ -1079,6 +1097,10 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const explicitLandingNavRef = useRef<boolean>(false);
+  const hasLoadedIndexedDbRef = useRef<boolean>(false);
+  const hasCompletedInitialCloudLoadRef = useRef<boolean>(false);
+  const allRemotePrimaryIdsRef = useRef<Set<string>>(new Set());
+  const [cloudInitialLoaded, setCloudInitialLoaded] = useState<boolean>(false);
 
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(() => {
     if (Array.isArray(initialSession?.openNotebookIds) && initialSession.openNotebookIds.length > 0) {
@@ -1191,35 +1213,40 @@ export default function App() {
           activeDrawingPageIndexRef.current = restoredPageIdx;
 
           // Also load from high-capacity IndexedDB (which never suffers from localStorage 5MB limit!)
-          void loadNotebooksFromIndexedDB(user.uid).then((idbNbs) => {
-            if (!idbNbs || idbNbs.length === 0) return;
-            const cleanIdb = idbNbs
-              .filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
-              .map((n) => repairNotebookPagesAndMetrisiMazas(n).nb);
-            if (cleanIdb.length === 0) return;
-            setNotebooks((prev) => {
-              const map = new Map<string, Notebook>();
-              for (const n of prev) map.set(n.id, n);
-              let changed = false;
-              for (const idbNb of cleanIdb) {
-                const cur = map.get(idbNb.id);
-                if (!cur) {
-                  map.set(idbNb.id, idbNb);
-                  changed = true;
-                } else {
-                  const idbTime = idbNb.updatedAt || '';
-                  const curTime = cur.updatedAt || '';
-                  const idbScore = getNotebookContentScore(idbNb);
-                  const curScore = getNotebookContentScore(cur);
-                  if (idbTime > curTime || (idbTime === curTime && idbScore > curScore)) {
+          hasLoadedIndexedDbRef.current = false;
+          void loadNotebooksFromIndexedDB(user.uid)
+            .then((idbNbs) => {
+              if (!idbNbs || idbNbs.length === 0) return;
+              const cleanIdb = idbNbs
+                .filter((n) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
+                .map((n) => repairNotebookPagesAndMetrisiMazas(n).nb);
+              if (cleanIdb.length === 0) return;
+              setNotebooks((prev) => {
+                const map = new Map<string, Notebook>();
+                for (const n of prev) map.set(n.id, n);
+                let changed = false;
+                for (const idbNb of cleanIdb) {
+                  const cur = map.get(idbNb.id);
+                  if (!cur) {
                     map.set(idbNb.id, idbNb);
                     changed = true;
+                  } else {
+                    const idbTime = idbNb.updatedAt || '';
+                    const curTime = cur.updatedAt || '';
+                    const idbScore = getNotebookContentScore(idbNb);
+                    const curScore = getNotebookContentScore(cur);
+                    if (idbTime > curTime || (idbTime === curTime && idbScore > curScore)) {
+                      map.set(idbNb.id, idbNb);
+                      changed = true;
+                    }
                   }
                 }
-              }
-              return changed ? Array.from(map.values()) : prev;
+                return changed ? Array.from(map.values()) : prev;
+              });
+            })
+            .finally(() => {
+              hasLoadedIndexedDbRef.current = true;
             });
-          });
 
           // Load this user's saved folders (or start with 0 folders if newly registered!)
           const savedFolders = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${user.uid}`);
@@ -1256,6 +1283,10 @@ export default function App() {
             );
           }
         } else {
+          hasLoadedIndexedDbRef.current = true;
+          hasCompletedInitialCloudLoadRef.current = false;
+          allRemotePrimaryIdsRef.current.clear();
+          setCloudInitialLoaded(false);
           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
           localStorage.removeItem(AUTH_UID_STORAGE_KEY);
           // Guest mode: strictly ephemeral empty library (0 notes, 0 folders)
@@ -3299,6 +3330,8 @@ export default function App() {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
           if (data.id.includes('__chunk_') || data.title === '__CHUNK__') {
+            const baseId = data.id.split('__chunk_')[0];
+            if (baseId) allRemotePrimaryIds.add(baseId);
             if (typeof data.dataJson === 'string') {
               chunkMap.set(data.id, { dataJson: data.dataJson, updatedAt: data.updatedAt });
             }
@@ -3306,6 +3339,11 @@ export default function App() {
             allRemotePrimaryIds.add(data.id);
           }
         });
+        allRemotePrimaryIdsRef.current = allRemotePrimaryIds;
+        if (!hasCompletedInitialCloudLoadRef.current) {
+          hasCompletedInitialCloudLoadRef.current = true;
+          setCloudInitialLoaded(true);
+        }
 
         // Pass 2: Reassemble and parse primary notebook documents
         const remoteMap = new Map<
@@ -3519,9 +3557,17 @@ export default function App() {
               continue;
             }
 
+            // Never let a smaller local seed copy overwrite a larger or portrait-converted cloud version!
+            const isLocalSeedOverwritingEditedCloud =
+              rem.dataJson.length > localJson.length + 30000 ||
+              (id === ACIDS_NOTEBOOK_ID &&
+                rem.nb.pages[0]?.orientation === 'portrait' &&
+                localNb.pages[0]?.orientation !== 'portrait');
+
             // On initial load (when prevSeenRemoteJson is undefined), if local (e.g. from LocalStorage / IndexedDB) is strictly newer,
             // push local to Cloud instead of overwriting with an older 30s-delayed Firestore snapshot!
             if (
+              !isLocalSeedOverwritingEditedCloud &&
               prevSeenRemoteJson === undefined &&
               (localNb.updatedAt || '') > (rem.updatedAt || '') &&
               (localScore > 0 || remoteScore === 0)
@@ -3666,6 +3712,8 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser) return;
+    // CRITICAL: Never overwrite IndexedDB with stale localStorage state before initial IndexedDB load has completed!
+    if (!hasLoadedIndexedDbRef.current) return;
     const uid = currentUser.uid;
     // Save to IndexedDB immediately so even an instant Refresh never loses a large pasted image!
     void saveNotebooksToIndexedDB(uid, notebooks);
@@ -4123,11 +4171,18 @@ export default function App() {
 
   // Auto-provision the "Η Δημιουργία Ηφαιστείου" (Page 3 of the PDF) notebook in the user's library
   useEffect(() => {
+    if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
+      return;
+    }
     const seedKey = 'bestnotes_volcano_seeded_v1';
     try {
-      if (localStorage.getItem(seedKey) === 'deleted') return;
+      const status = localStorage.getItem(seedKey);
+      if (status === 'deleted' || status === 'present') return;
     } catch {
       // ignore
+    }
+    if (allRemotePrimaryIdsRef.current.has(VOLCANO_NOTEBOOK_ID)) {
+      return;
     }
     if (deletedCloudNotebooks.some((n) => n.id === VOLCANO_NOTEBOOK_ID)) {
       return;
@@ -4170,8 +4225,13 @@ export default function App() {
     }
 
     const timer = window.setTimeout(() => {
+      if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
+        return;
+      }
+      if (allRemotePrimaryIdsRef.current.has(VOLCANO_NOTEBOOK_ID)) return;
       try {
-        if (localStorage.getItem(seedKey) === 'deleted') return;
+        const status = localStorage.getItem(seedKey);
+        if (status === 'deleted' || status === 'present') return;
       } catch {
         // ignore
       }
@@ -4205,11 +4265,14 @@ export default function App() {
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [notebooks, deletedCloudNotebooks, currentUser, pushNotebookToCloudTracked]);
+  }, [notebooks, deletedCloudNotebooks, currentUser, cloudInitialLoaded, pushNotebookToCloudTracked]);
 
   // Auto-provision the 3 Science Infographic Notebooks ("Η Φωτοσύνθεση", "Τα Οξέα", "Οι Βάσεις")
   // with 2 layers per page: Layer 1 ('Κείμενα & Σχήματα') and Layer 2 ('Εικόνες')
   useEffect(() => {
+    if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
+      return;
+    }
     const seedSpecs = [
       {
         id: PHOTOSYNTHESIS_NOTEBOOK_ID,
@@ -4239,8 +4302,10 @@ export default function App() {
     ];
 
     const missingSpecs = seedSpecs.filter((spec) => {
+      if (allRemotePrimaryIdsRef.current.has(spec.id)) return false;
       try {
-        if (localStorage.getItem(spec.seedKey) === 'deleted') return false;
+        const status = localStorage.getItem(spec.seedKey);
+        if (status === 'deleted' || status === 'present') return false;
       } catch {
         // ignore
       }
@@ -4259,6 +4324,9 @@ export default function App() {
     if (missingSpecs.length === 0) return;
 
     const timer = window.setTimeout(() => {
+      if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
+        return;
+      }
       const curList = notebooksRef.current;
       const wc = curList.find((n) => {
         const norm = normalizeGreekSearchText(n.title || '');
@@ -4268,8 +4336,10 @@ export default function App() {
       const created: Notebook[] = [];
 
       for (const spec of missingSpecs) {
+        if (allRemotePrimaryIdsRef.current.has(spec.id)) continue;
         try {
-          if (localStorage.getItem(spec.seedKey) === 'deleted') continue;
+          const status = localStorage.getItem(spec.seedKey);
+          if (status === 'deleted' || status === 'present') continue;
         } catch {
           // ignore
         }
@@ -4299,7 +4369,7 @@ export default function App() {
     }, 950);
 
     return () => window.clearTimeout(timer);
-  }, [notebooks, deletedCloudNotebooks, currentUser, pushNotebookToCloudTracked]);
+  }, [notebooks, deletedCloudNotebooks, currentUser, cloudInitialLoaded, pushNotebookToCloudTracked]);
 
   const handleDownloadLivePdfHtml = useCallback(async () => {
     try {
