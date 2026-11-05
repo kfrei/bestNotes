@@ -1350,6 +1350,7 @@ export default function App() {
   const zoomRef = useRef<number>(initialZoom);
   const panRef = useRef<{ x: number; y: number }>({ x: 0, y: initialPanY });
   const paperTransformElRef = useRef<HTMLDivElement | null>(null);
+  const lastTextBarDirectTapTimeRef = useRef<number>(0);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const canvasRectRef = useRef<DOMRect | null>(null);
   const pinchStateRef = useRef<{
@@ -4691,6 +4692,7 @@ export default function App() {
         zoomRef.current = nextZoom;
         if (paperTransformElRef.current) {
           paperTransformElRef.current.style.transform = `translate3d(0px, ${panRef.current.y}px, 0) scale(${nextZoom})`;
+          paperTransformElRef.current.style.setProperty('--inv-zoom', String(1 / nextZoom));
         }
         setZoom(nextZoom);
       }
@@ -8481,6 +8483,7 @@ export default function App() {
       panRef.current = { x: 0, y: nextPanY };
       if (paperTransformElRef.current) {
         paperTransformElRef.current.style.transform = `translate3d(0px, ${nextPanY}px, 0) scale(${clampedZoom})`;
+        paperTransformElRef.current.style.setProperty('--inv-zoom', String(1 / clampedZoom));
       }
       if (didScrollVertically) {
         triggerPageControlsVisibility();
@@ -11644,9 +11647,12 @@ export default function App() {
       const targetEl =
         e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement || null;
       if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
+        const isOnTextBoxNonButton =
+          targetEl?.closest('[data-text-box="true"]') &&
+          !targetEl?.closest('button, input, select, a');
         if (
           (e.target instanceof HTMLCanvasElement ||
-            targetEl?.closest('[data-text-box="true"]') ||
+            isOnTextBoxNonButton ||
             draggingTextRef.current) &&
           e.cancelable
         ) {
@@ -49305,6 +49311,7 @@ export default function App() {
               style={{
                 transformOrigin: '50% 0',
                 transform: `translate3d(0px, ${pan.y}px, 0) scale(${zoom})`,
+                ['--inv-zoom' as any]: 1 / Math.max(0.2, zoom),
                 willChange: 'transform',
                 gap: `${PAGE_GAP}px`,
               }}
@@ -50084,25 +50091,59 @@ export default function App() {
                               const displayedBold = effectiveSubStyle
                                 ? effectiveSubStyle.bold
                                 : Boolean(txt.bold || txt.fontFamily === 'calligraphic-bold');
-                              const estHalfBarW = 155;
+                              const safeZoom = Math.max(0.25, zoom || 1);
+                              const invZoom = 1 / safeZoom;
+                              const estHalfBarW = 190 * invZoom;
                               const boxWForBar = effTxtW > 0 ? effTxtW : 180;
                               const boxCenterX = txt.x + boxWForBar / 2;
                               let barShiftX = 0;
-                              if (boxCenterX - estHalfBarW < 6) {
-                                barShiftX = 6 - (boxCenterX - estHalfBarW);
-                              } else if (boxCenterX + estHalfBarW > pW - 6) {
-                                barShiftX = pW - 6 - (boxCenterX + estHalfBarW);
+                              if (estHalfBarW * 2 < pW - 12) {
+                                if (boxCenterX - estHalfBarW < 6) {
+                                  barShiftX = 6 - (boxCenterX - estHalfBarW);
+                                } else if (boxCenterX + estHalfBarW > pW - 6) {
+                                  barShiftX = pW - 6 - (boxCenterX + estHalfBarW);
+                                }
                               }
+                              const placeBarBelow = txt.y * safeZoom < 46;
+                              const barGapPx = Math.max(2, Math.round(8 * invZoom));
 
                               return (
                                 <div
                                   data-text-drag="true"
                                   onMouseDown={(ev) => ev.preventDefault()}
+                                  onPointerDownCapture={(ev) => {
+                                    const btn = (
+                                      ev.target instanceof Element
+                                        ? ev.target
+                                        : (ev.target as Node | null)?.parentElement
+                                    )?.closest('button') as HTMLButtonElement | null;
+                                    if (btn && (ev.pointerType === 'pen' || ev.pointerType === 'touch')) {
+                                      ev.stopPropagation();
+                                      ev.preventDefault();
+                                      lastTextBarDirectTapTimeRef.current = performance.now();
+                                      btn.click();
+                                    }
+                                  }}
+                                  onClickCapture={(ev) => {
+                                    if (
+                                      ev.detail > 0 &&
+                                      performance.now() - lastTextBarDirectTapTimeRef.current < 450
+                                    ) {
+                                      ev.stopPropagation();
+                                      ev.preventDefault();
+                                    }
+                                  }}
                                   style={{
                                     left: '50%',
-                                    transform: barShiftX
-                                      ? `translateX(calc(-50% + ${Math.round(barShiftX)}px))`
-                                      : 'translateX(-50%)',
+                                    ...(placeBarBelow
+                                      ? { top: `calc(100% + ${barGapPx}px)` }
+                                      : { bottom: `calc(100% + ${barGapPx}px)` }),
+                                    transformOrigin: placeBarBelow ? '50% 0%' : '50% 100%',
+                                    transform: `${
+                                      barShiftX
+                                        ? `translateX(calc(-50% + ${Math.round(barShiftX)}px))`
+                                        : 'translateX(-50%)'
+                                    } scale(var(--inv-zoom, ${invZoom}))`,
                                     touchAction: 'none',
                                     WebkitUserSelect: 'none',
                                     userSelect: 'none',
@@ -50113,12 +50154,10 @@ export default function App() {
                                     letterSpacing: 'normal',
                                     WebkitTextStroke: '0px',
                                   }}
-                                  className={`absolute ${
-                                    txt.y < 44 ? '-bottom-10' : '-top-10'
-                                  } flex items-center gap-0.5 bg-[#1b2a4a]/95 text-white px-1.5 py-0.5 rounded-full shadow-md text-[9.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing`}
+                                  className="absolute flex items-center gap-1 bg-[#1b2a4a]/95 text-white px-2 py-1 rounded-full shadow-lg text-[11px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
                                 >
                                   <span
-                                    className="px-1 py-0.5 text-sky-300 text-[10px] font-normal select-none"
+                                    className="px-1 py-0.5 text-sky-300 text-[11px] font-normal select-none"
                                     title="Σύρετε με το δάχτυλο ή το πενάκι για μετακίνηση του παραθύρου κειμένου"
                                   >
                                     ✥
