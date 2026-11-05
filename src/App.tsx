@@ -41040,31 +41040,16 @@ export default function App() {
                       </button>
 
                       <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => void handleDownloadActiveNotebookPdf()}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer"
-                        >
-                          <FileText className="w-3 h-3" />
-                          <span>Λήψη PDF</span>
-                        </button>
-                        <button
-                          onClick={() => handleExportBestnotesFile(activeNotebook)}
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition cursor-pointer"
-                          title={`Αποθήκευση τοπικά ως «${activeNotebook.title}.bestnotes»`}
-                        >
-                          <Download className="w-3 h-3" />
-                          <span>.bestnotes</span>
-                        </button>
                         {lastDrivePdfLink && (
                           <a
                             href={lastDrivePdfLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition"
+                            className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition"
                             title="Άνοιγμα του συγχρονισμένου PDF στο Google Drive"
                           >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Drive</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Άνοιγμα στο Drive</span>
                           </a>
                         )}
                         <button
@@ -41077,10 +41062,12 @@ export default function App() {
                               showToast(`⚠️ Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
                             }
                           }}
-                          className="px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold text-slate-600 transition cursor-pointer"
+                          className={`${
+                            lastDrivePdfLink ? 'px-3' : 'w-full'
+                          } py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-600 transition cursor-pointer`}
                           title="Αλλαγή ή ανανέωση λογαριασμού Google Drive"
                         >
-                          Αλλαγή
+                          Αλλαγή Λογαριασμού
                         </button>
                       </div>
                     </div>
@@ -41104,20 +41091,6 @@ export default function App() {
                       >
                         <Cloud className="w-4 h-4" />
                         <span>Google Drive Login</span>
-                      </button>
-                      <button
-                        onClick={() => void handleDownloadActiveNotebookPdf()}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700 transition cursor-pointer"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Εξαγωγή & Λήψη PDF ({activeNotebook.title}.pdf)</span>
-                      </button>
-                      <button
-                        onClick={() => handleExportBestnotesFile(activeNotebook)}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Αποθήκευση τοπικά ({activeNotebook.title}.bestnotes)</span>
                       </button>
                     </div>
                   )}
