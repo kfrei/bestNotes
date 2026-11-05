@@ -3970,6 +3970,9 @@ export default function App() {
                 : typeof data.updatedAt === 'string'
                 ? data.updatedAt
                 : '';
+            if (remoteFoldersTs && localFoldersTs && remoteFoldersTs > localFoldersTs) {
+              userEditedFoldersInSessionRef.current = false;
+            }
             const localEditedInSession = userEditedFoldersInSessionRef.current;
             const localIsStrictlyNewerInSession =
               localEditedInSession && Boolean(localFoldersTs && (!remoteFoldersTs || localFoldersTs > remoteFoldersTs));
@@ -3978,7 +3981,7 @@ export default function App() {
             const mergedFolders = ensureGymnasioArnaiasSubfolders(
               localIsStrictlyNewerInSession
                 ? mergeCustomFoldersNewest(currentLocal, parsedRemote, false)
-                : mergeCustomFoldersNewest(parsedRemote, currentLocal, true)
+                : mergeCustomFoldersNewest(parsedRemote, currentLocal, false)
             );
             const mergedStr = JSON.stringify(mergedFolders);
             const bestTs =
@@ -41679,12 +41682,6 @@ export default function App() {
 
               for (const cf of customFolders) {
                 ensureFolderHierarchy(cf.name, cf.updatedAt, cf);
-              }
-              // If user has "Γυμνάσιο Αρναίας" open or created, ensure Α1, Β1, Γ1, Γ2 appear inside it!
-              if (folderMap.has('Γυμνάσιο Αρναίας')) {
-                for (const subCls of ['Α1', 'Β1', 'Γ1', 'Γ2']) {
-                  ensureFolderHierarchy(`Γυμνάσιο Αρναίας/${subCls}`);
-                }
               }
               for (const nb of notebooks) {
                 const fPath = normalizeFolderPath(nb.folder || '');
