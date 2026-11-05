@@ -43713,12 +43713,6 @@ export default function App() {
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 hidden sm:inline">
-                              {nbSizeLabel}
-                            </span>
-                            <span className="text-[11px] text-slate-400 hidden sm:inline">
-                              {formatLibraryTimestamp(nb.updatedAt, nb.id)}
-                            </span>
                             <button
                               type="button"
                               data-popover-trigger="share-menu"
