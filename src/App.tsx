@@ -6313,7 +6313,7 @@ export default function App() {
   const isClientPointOnSelectableOrLasso = useCallback(
     (clientX: number, clientY: number, targetEl?: EventTarget | null): boolean => {
       const currentTxtId = selectedTextId || editingTextId;
-      if (currentTxtId) {
+      if (currentTxtId && (activeTool === 'lasso' || activeTool === 'text')) {
         const txtDom = document.querySelector(`[data-text-id="${currentTxtId}"]`) as HTMLElement | null;
         if (txtDom) {
           const r = txtDom.getBoundingClientRect();
@@ -6330,19 +6330,21 @@ export default function App() {
           return false;
         }
       }
-      const allTxtEls = document.querySelectorAll('[data-text-id]');
-      for (let i = 0; i < allTxtEls.length; i++) {
-        const r = allTxtEls[i].getBoundingClientRect();
-        if (
-          clientX >= r.left - 10 &&
-          clientX <= r.right + 10 &&
-          clientY >= r.top - 10 &&
-          clientY <= r.bottom + 10
-        ) {
-          return true;
+      if (activeTool === 'lasso' || activeTool === 'text') {
+        const allTxtEls = document.querySelectorAll('[data-text-id]');
+        for (let i = 0; i < allTxtEls.length; i++) {
+          const r = allTxtEls[i].getBoundingClientRect();
+          if (
+            clientX >= r.left - 10 &&
+            clientX <= r.right + 10 &&
+            clientY >= r.top - 10 &&
+            clientY <= r.bottom + 10
+          ) {
+            return true;
+          }
         }
       }
-      if (isClientPointInLassoSelection(clientX, clientY)) return true;
+      if (activeTool === 'lasso' && isClientPointInLassoSelection(clientX, clientY)) return true;
       const canvas = targetEl instanceof HTMLCanvasElement ? targetEl : activeCanvasRef.current;
       if (!canvas) return false;
       const rect = canvas.getBoundingClientRect();
@@ -28397,6 +28399,22 @@ export default function App() {
       if (pencilOnlyMode) {
         return;
       }
+    }
+
+    // CRITICAL PENCIL-ONLY GUARD:
+    // When Pencil-Only Mode is ON, a finger ('touch') must NEVER fall through into Pen, Pencil,
+    // Highlighter, Eraser, Shape, or Tape drawing (even if the touch started over a text box or simulation area)!
+    if (
+      e.pointerType === 'touch' &&
+      pencilOnlyMode &&
+      effectiveTool !== 'lasso' &&
+      effectiveTool !== 'direct-node' &&
+      effectiveTool !== 'laser'
+    ) {
+      isDrawingRef.current = false;
+      activePointerIdRef.current = null;
+      activePointerTypeRef.current = null;
+      return;
     }
 
     // 1. Image Crop Mode
