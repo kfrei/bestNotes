@@ -41851,10 +41851,179 @@ export default function App() {
                             const p0 = nb.pages[0];
                             const pW = getPageLogicalWidth(p0);
                             const pH = getPageLogicalHeight(p0);
+                            const isLandscapeNb = pW > pH;
                             const hasDocBg = Boolean(p0?.backgroundDataUrl);
                             const isDraggingThisNb = draggingLibraryNbId === nb.id;
                             const nbBytes = getNotebookSizeBytes(nb);
                             const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
+                            const paperBgColor = hasDocBg
+                              ? '#ffffff'
+                              : p0?.template === 'dark-grid'
+                              ? '#0f172a'
+                              : '#fffdf7';
+                            const paperBgImage = hasDocBg
+                              ? undefined
+                              : p0?.template === 'grid' || !p0?.template
+                              ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
+                              : p0?.template === 'ruled'
+                              ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
+                              : undefined;
+
+                            const renderPageSvgContent = () => (
+                              <>
+                                {p0?.backgroundDataUrl && (
+                                  <img
+                                    src={p0.backgroundDataUrl}
+                                    alt={nb.title}
+                                    draggable={false}
+                                    className="absolute inset-0 w-full h-full object-cover pointer-events-none pl-3"
+                                  />
+                                )}
+                                {p0 && (
+                                  <svg
+                                    viewBox={`0 0 ${pW} ${pH}`}
+                                    preserveAspectRatio="xMidYMid meet"
+                                    className="absolute inset-0 w-full h-full pointer-events-none pl-3"
+                                  >
+                                    {(p0.images || []).map((im) => (
+                                      <image
+                                        key={im.id}
+                                        href={im.dataUrl}
+                                        x={im.x}
+                                        y={im.y}
+                                        width={im.width}
+                                        height={im.height}
+                                      />
+                                    ))}
+                                    {(p0.strokes || []).map((st) => {
+                                      if (!st.points || st.points.length === 0) return null;
+                                      if (st.points.length === 1) {
+                                        return (
+                                          <circle
+                                            key={st.id}
+                                            cx={st.points[0].x}
+                                            cy={st.points[0].y}
+                                            r={Math.max(3, st.width * 1.2)}
+                                            fill={st.color}
+                                          />
+                                        );
+                                      }
+                                      const renderPts =
+                                        (st.shapeType === 'resistor' || st.shapeType === 'spring') &&
+                                        st.points.length >= 4
+                                          ? computeResistorOrSpringPoints(st.shapeType, st.points)
+                                          : st.points;
+                                      const ptsStr = renderPts
+                                        .map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`)
+                                        .join(' ');
+                                      return (
+                                        <polyline
+                                          key={st.id}
+                                          fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
+                                          fillOpacity={Math.max(
+                                            0.05,
+                                            Math.min(0.95, (100 - (st.fillTransparency ?? 90)) / 100)
+                                          )}
+                                          stroke={st.color}
+                                          strokeWidth={Math.max(2, st.width * 1.15)}
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          opacity={st.opacity ?? 1}
+                                          points={ptsStr}
+                                        />
+                                      );
+                                    })}
+                                    {(p0.texts || []).map((tx) => {
+                                      const fCss = getTextFontCss(tx.fontFamily);
+                                      const fSize = tx.fontSize || 20;
+                                      const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
+                                        .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
+                                        .replace(/\\lambda(?![A-Za-z])/g, 'λ')
+                                        .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
+                                        .replace(/\\delta(?![A-Za-z])/g, 'δ')
+                                        .replace(/\\omega(?![A-Za-z])/g, 'ω')
+                                        .replace(/\\pi(?![A-Za-z])/g, 'π')
+                                        .replace(/\\alpha(?![A-Za-z])/g, 'α')
+                                        .replace(/\\beta(?![A-Za-z])/g, 'β')
+                                        .replace(/\\gamma(?![A-Za-z])/g, 'γ')
+                                        .replace(/\\theta(?![A-Za-z])/g, 'θ')
+                                        .replace(/\\mu(?![A-Za-z])/g, 'μ')
+                                        .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·')
+                                        .replace(/[{}]/g, '');
+                                      const hasExplicitBox = Boolean(tx.boxWidth && tx.boxWidth > 20);
+                                      const maxW = Math.max(
+                                        60,
+                                        hasExplicitBox
+                                          ? Math.min(tx.boxWidth!, pW - tx.x)
+                                          : pW - tx.x - 8
+                                      );
+                                      const isCondensedHand =
+                                        !tx.fontFamily ||
+                                        tx.fontFamily === 'calligraphic' ||
+                                        tx.fontFamily === 'calligraphic-bold';
+                                      const approxCharW = fSize * (isCondensedHand ? 0.39 : 0.47);
+                                      const maxChars = Math.max(10, Math.floor(maxW / Math.max(3, approxCharW)));
+                                      const wrappedPreviewLines: string[] = [];
+                                      for (const para of rawTxt.split('\n')) {
+                                        if (tx.isMath || !hasExplicitBox || para.length <= maxChars) {
+                                          wrappedPreviewLines.push(para);
+                                          continue;
+                                        }
+                                        const words = para.split(/\s+/).filter(Boolean);
+                                        let cur = '';
+                                        for (const w of words) {
+                                          const cand = cur ? `${cur} ${w}` : w;
+                                          if (cand.length <= maxChars || !cur) {
+                                            cur = cand;
+                                          } else {
+                                            wrappedPreviewLines.push(cur);
+                                            cur = w;
+                                          }
+                                        }
+                                        if (cur) wrappedPreviewLines.push(cur);
+                                      }
+                                      const align = tx.textAlign || 'left';
+                                      const textAnchor =
+                                        align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
+                                      const anchorX =
+                                        align === 'center' && hasExplicitBox
+                                          ? tx.x + tx.boxWidth! / 2
+                                          : align === 'right' && hasExplicitBox
+                                          ? tx.x + tx.boxWidth!
+                                          : tx.x;
+                                      const resolvedFontFamily =
+                                        tx.bold && String(fCss.fontFamily || '').includes('ExplainBoardsHand')
+                                          ? "'ExplainBoardsHandBold', 'ExplainBoardsHand', sans-serif"
+                                          : fCss.fontFamily;
+                                      return (
+                                        <text
+                                          key={tx.id}
+                                          x={anchorX}
+                                          y={tx.y + fSize * 0.88}
+                                          textAnchor={textAnchor}
+                                          fill={tx.color}
+                                          fontSize={fSize}
+                                          fontWeight={tx.bold ? 'bold' : 'normal'}
+                                          fontStyle={fCss.fontStyle}
+                                          fontFamily={resolvedFontFamily}
+                                        >
+                                          {wrappedPreviewLines.map((line, lIdx) => (
+                                            <tspan
+                                              key={lIdx}
+                                              x={anchorX}
+                                              dy={lIdx === 0 ? 0 : fSize * 1.16}
+                                            >
+                                              {line}
+                                            </tspan>
+                                          ))}
+                                        </text>
+                                      );
+                                    })}
+                                  </svg>
+                                )}
+                              </>
+                            );
+
                             return (
                               <div
                                 key={nb.id}
@@ -41866,175 +42035,64 @@ export default function App() {
                                 }`}
                               >
                                 <div
-                                  className={`w-full aspect-[3/4] rounded-r-2xl rounded-l-md shadow-md group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border flex flex-col justify-between touch-none select-none ${
+                                  className={`w-full aspect-[3/4] ${
+                                    isLandscapeNb
+                                      ? 'rounded-2xl bg-gradient-to-b from-slate-100/90 via-slate-100/60 to-slate-200/70 border-slate-200/90 shadow-xs'
+                                      : 'rounded-r-2xl rounded-l-md shadow-md border-slate-300/90'
+                                  } group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border flex flex-col justify-between touch-none select-none ${
                                     isDraggingThisNb
                                       ? 'border-[#0066ff] ring-2 ring-[#0066ff] ring-dashed'
-                                      : 'border-slate-300/90'
+                                      : ''
                                   }`}
-                                  style={{
-                                    backgroundColor: hasDocBg
-                                      ? '#ffffff'
-                                      : p0?.template === 'dark-grid'
-                                      ? '#0f172a'
-                                      : '#fffdf7',
-                                    backgroundImage: hasDocBg
+                                  style={
+                                    isLandscapeNb
                                       ? undefined
-                                      : p0?.template === 'grid' || !p0?.template
-                                      ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
-                                      : p0?.template === 'ruled'
-                                      ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
-                                      : undefined,
-                                    backgroundSize: '14px 14px',
-                                  }}
+                                      : {
+                                          backgroundColor: paperBgColor,
+                                          backgroundImage: paperBgImage,
+                                          backgroundSize: '14px 14px',
+                                        }
+                                  }
                                 >
-                                  {/* Colored Spine on Left */}
-                                  <div
-                                    className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
-                                    style={{ backgroundColor: nb.coverColor }}
-                                  />
-
                                   {/* File Size Badge (KB / MB) at Top-Right of .bestnotes Card */}
                                   <div
-                                    className="absolute top-2 right-2 z-20 px-2 py-0.5 rounded-lg bg-slate-900/70 backdrop-blur-[2px] text-white text-[10px] font-bold tracking-tight shadow-2xs pointer-events-none"
+                                    className="absolute top-2 right-2 z-30 px-2 py-0.5 rounded-lg bg-slate-900/70 backdrop-blur-[2px] text-white text-[10px] font-bold tracking-tight shadow-2xs pointer-events-none"
                                     title={`Μέγεθος αρχείου .bestnotes: ${nbSizeLabel}`}
                                   >
                                     {nbSizeLabel}
                                   </div>
 
-                                  {/* 1st Page PDF / Image Background if present */}
-                                  {p0?.backgroundDataUrl && (
-                                    <img
-                                      src={p0.backgroundDataUrl}
-                                      alt={nb.title}
-                                      draggable={false}
-                                      className="absolute inset-0 w-full h-full object-cover pointer-events-none pl-3"
-                                    />
-                                  )}
-
-                                  {/* 1st Page Live Vector SVG Miniature Thumbnail */}
-                                  {p0 && (
-                                    <svg
-                                      viewBox={`0 0 ${pW} ${pH}`}
-                                      preserveAspectRatio="xMidYMid meet"
-                                      className="absolute inset-0 w-full h-full pointer-events-none pl-3"
-                                    >
-                                      {(p0.images || []).map((im) => (
-                                        <image
-                                          key={im.id}
-                                          href={im.dataUrl}
-                                          x={im.x}
-                                          y={im.y}
-                                          width={im.width}
-                                          height={im.height}
+                                  {isLandscapeNb ? (
+                                    /* IDEA 2: Authentic GoodNotes-Style Horizontal Notebook (4:3 / A4 Landscape) nested cleanly in the upper section above the action ribbon */
+                                    <div className="absolute inset-x-0 top-0 bottom-[24%] flex items-center justify-center px-1 pt-2 pb-1 pointer-events-none">
+                                      <div
+                                        className="relative w-full rounded-r-xl rounded-l-md shadow-md border border-slate-300/95 overflow-hidden"
+                                        style={{
+                                          aspectRatio: `${pW} / ${pH}`,
+                                          backgroundColor: paperBgColor,
+                                          backgroundImage: paperBgImage,
+                                          backgroundSize: '12px 12px',
+                                          boxShadow:
+                                            '0 6px 16px -4px rgba(15, 23, 42, 0.16), 0 2px 0 0 #e2e8f0, 0 4px 0 0 #cbd5e1',
+                                        }}
+                                      >
+                                        {/* Colored Spine on Left of Landscape Notebook */}
+                                        <div
+                                          className="absolute left-0 top-0 bottom-0 w-2.5 z-20 shadow-xs"
+                                          style={{ backgroundColor: nb.coverColor }}
                                         />
-                                      ))}
-                                      {(p0.strokes || []).map((st) => {
-                                        if (!st.points || st.points.length === 0) return null;
-                                        if (st.points.length === 1) {
-                                          return (
-                                            <circle
-                                              key={st.id}
-                                              cx={st.points[0].x}
-                                              cy={st.points[0].y}
-                                              r={Math.max(4, st.width * 1.5)}
-                                              fill={st.color}
-                                            />
-                                          );
-                                        }
-                                        const renderPts =
-                                          (st.shapeType === 'resistor' || st.shapeType === 'spring') &&
-                                          st.points.length >= 4
-                                            ? computeResistorOrSpringPoints(st.shapeType, st.points)
-                                            : st.points;
-                                        const ptsStr = renderPts
-                                          .map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`)
-                                          .join(' ');
-                                        return (
-                                          <polyline
-                                            key={st.id}
-                                            fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
-                                            fillOpacity={Math.max(
-                                              0.05,
-                                              Math.min(0.95, (100 - (st.fillTransparency ?? 90)) / 100)
-                                            )}
-                                            stroke={st.color}
-                                            strokeWidth={Math.max(3.5, st.width * 1.8)}
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            opacity={st.opacity ?? 1}
-                                            points={ptsStr}
-                                          />
-                                        );
-                                      })}
-                                      {(p0.texts || []).map((tx) => {
-                                        const fCss = getTextFontCss(tx.fontFamily);
-                                        const fSize = (tx.fontSize || 20) * 1.15;
-                                        const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
-                                          .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
-                                          .replace(/\\lambda(?![A-Za-z])/g, 'λ')
-                                          .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
-                                          .replace(/\\delta(?![A-Za-z])/g, 'δ')
-                                          .replace(/\\omega(?![A-Za-z])/g, 'ω')
-                                          .replace(/\\pi(?![A-Za-z])/g, 'π')
-                                          .replace(/\\alpha(?![A-Za-z])/g, 'α')
-                                          .replace(/\\beta(?![A-Za-z])/g, 'β')
-                                          .replace(/\\gamma(?![A-Za-z])/g, 'γ')
-                                          .replace(/\\theta(?![A-Za-z])/g, 'θ')
-                                          .replace(/\\mu(?![A-Za-z])/g, 'μ')
-                                          .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·')
-                                          .replace(/[{}]/g, '');
-                                        const pW = getPageLogicalWidth(p0);
-                                        const maxW = Math.max(
-                                          60,
-                                          (tx.boxWidth && tx.boxWidth > 20
-                                            ? Math.min(tx.boxWidth, pW - tx.x)
-                                            : pW - tx.x) - 12
-                                        );
-                                        const approxCharW = fSize * 0.52;
-                                        const maxChars = Math.max(8, Math.floor(maxW / Math.max(4, approxCharW)));
-                                        const wrappedPreviewLines: string[] = [];
-                                        for (const para of rawTxt.split('\n')) {
-                                          if (tx.isMath || para.length <= maxChars) {
-                                            wrappedPreviewLines.push(para);
-                                            continue;
-                                          }
-                                          const words = para.split(/\s+/).filter(Boolean);
-                                          let cur = '';
-                                          for (const w of words) {
-                                            const cand = cur ? `${cur} ${w}` : w;
-                                            if (cand.length <= maxChars || !cur) {
-                                              cur = cand;
-                                            } else {
-                                              wrappedPreviewLines.push(cur);
-                                              cur = w;
-                                            }
-                                          }
-                                          if (cur) wrappedPreviewLines.push(cur);
-                                        }
-                                        return (
-                                          <text
-                                            key={tx.id}
-                                            x={tx.x}
-                                            y={tx.y + fSize}
-                                            fill={tx.color}
-                                            fontSize={fSize}
-                                            fontWeight={tx.bold ? 'bold' : 'normal'}
-                                            fontStyle={fCss.fontStyle}
-                                            fontFamily={fCss.fontFamily}
-                                          >
-                                            {wrappedPreviewLines.map((line, lIdx) => (
-                                              <tspan
-                                                key={lIdx}
-                                                x={tx.x}
-                                                dy={lIdx === 0 ? 0 : fSize * 1.25}
-                                              >
-                                                {line}
-                                              </tspan>
-                                            ))}
-                                          </text>
-                                        );
-                                      })}
-                                    </svg>
+                                        {renderPageSvgContent()}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {/* Colored Spine on Left of Portrait Notebook */}
+                                      <div
+                                        className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
+                                        style={{ backgroundColor: nb.coverColor }}
+                                      />
+                                      {renderPageSvgContent()}
+                                    </>
                                   )}
 
                                   {/* Ribbon at ~5/6 of Card Height: Folder/.bestNotes Badge + Larger Share PDF & Red Trash Delete */}
@@ -52325,23 +52383,65 @@ export default function App() {
                           })}
                           {(pObj.texts || []).map((tx) => {
                             const fCss = getTextFontCss(tx.fontFamily);
-                            const fSize = (tx.fontSize || 20) * 1.15;
+                            const fSize = tx.fontSize || 20;
+                            const hasExplicitBox = Boolean(tx.boxWidth && tx.boxWidth > 20);
+                            const maxW = Math.max(
+                              60,
+                              hasExplicitBox ? Math.min(tx.boxWidth!, pW - tx.x) : pW - tx.x - 8
+                            );
+                            const isCondensedHand =
+                              !tx.fontFamily || tx.fontFamily === 'calligraphic' || tx.fontFamily === 'calligraphic-bold';
+                            const approxCharW = fSize * (isCondensedHand ? 0.39 : 0.47);
+                            const maxChars = Math.max(10, Math.floor(maxW / Math.max(3, approxCharW)));
+                            const wrappedLines: string[] = [];
+                            for (const para of (tx.text || '').split('\n')) {
+                              if (tx.isMath || !hasExplicitBox || para.length <= maxChars) {
+                                wrappedLines.push(para);
+                                continue;
+                              }
+                              const words = para.split(/\s+/).filter(Boolean);
+                              let cur = '';
+                              for (const w of words) {
+                                const cand = cur ? `${cur} ${w}` : w;
+                                if (cand.length <= maxChars || !cur) {
+                                  cur = cand;
+                                } else {
+                                  wrappedLines.push(cur);
+                                  cur = w;
+                                }
+                              }
+                              if (cur) wrappedLines.push(cur);
+                            }
+                            const align = tx.textAlign || 'left';
+                            const textAnchor =
+                              align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
+                            const anchorX =
+                              align === 'center' && hasExplicitBox
+                                ? tx.x + tx.boxWidth! / 2
+                                : align === 'right' && hasExplicitBox
+                                ? tx.x + tx.boxWidth!
+                                : tx.x;
+                            const resolvedFontFamily =
+                              tx.bold && String(fCss.fontFamily || '').includes('ExplainBoardsHand')
+                                ? "'ExplainBoardsHandBold', 'ExplainBoardsHand', sans-serif"
+                                : fCss.fontFamily;
                             return (
                               <text
                                 key={tx.id}
-                                x={tx.x}
-                                y={tx.y + fSize}
+                                x={anchorX}
+                                y={tx.y + fSize * 0.88}
+                                textAnchor={textAnchor}
                                 fill={tx.color}
                                 fontSize={fSize}
                                 fontWeight={tx.bold ? 'bold' : 'normal'}
                                 fontStyle={fCss.fontStyle}
-                                fontFamily={fCss.fontFamily}
+                                fontFamily={resolvedFontFamily}
                               >
-                                {(tx.text || '').split('\n').map((line, lIdx) => (
+                                {wrappedLines.map((line, lIdx) => (
                                   <tspan
                                     key={lIdx}
-                                    x={tx.x}
-                                    dy={lIdx === 0 ? 0 : fSize * 1.3}
+                                    x={anchorX}
+                                    dy={lIdx === 0 ? 0 : fSize * 1.16}
                                   >
                                     {line}
                                   </tspan>
