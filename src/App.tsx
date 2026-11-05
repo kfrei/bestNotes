@@ -41022,7 +41022,7 @@ export default function App() {
                         <span>
                           {syncStatus === 'syncing'
                             ? 'Συγχρονισμός PDF...'
-                            : 'Συγχρονισμός σε PDF (ίδιο όνομα)'}
+                            : 'Συγχρονισμός Τρέχουσας Σημείωσης'}
                         </span>
                       </button>
 
