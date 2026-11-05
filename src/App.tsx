@@ -41933,92 +41933,108 @@ export default function App() {
                                         />
                                       );
                                     })}
-                                    {(p0.texts || []).map((tx) => {
-                                      const fCss = getTextFontCss(tx.fontFamily);
-                                      const fSize = tx.fontSize || 20;
-                                      const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
-                                        .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
-                                        .replace(/\\lambda(?![A-Za-z])/g, 'λ')
-                                        .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
-                                        .replace(/\\delta(?![A-Za-z])/g, 'δ')
-                                        .replace(/\\omega(?![A-Za-z])/g, 'ω')
-                                        .replace(/\\pi(?![A-Za-z])/g, 'π')
-                                        .replace(/\\alpha(?![A-Za-z])/g, 'α')
-                                        .replace(/\\beta(?![A-Za-z])/g, 'β')
-                                        .replace(/\\gamma(?![A-Za-z])/g, 'γ')
-                                        .replace(/\\theta(?![A-Za-z])/g, 'θ')
-                                        .replace(/\\mu(?![A-Za-z])/g, 'μ')
-                                        .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·')
-                                        .replace(/[{}]/g, '');
-                                      const hasExplicitBox = Boolean(tx.boxWidth && tx.boxWidth > 20);
-                                      const maxW = Math.max(
-                                        60,
-                                        hasExplicitBox
-                                          ? Math.min(tx.boxWidth!, pW - tx.x)
-                                          : pW - tx.x - 8
-                                      );
-                                      const isCondensedHand =
-                                        !tx.fontFamily ||
-                                        tx.fontFamily === 'calligraphic' ||
-                                        tx.fontFamily === 'calligraphic-bold';
-                                      const approxCharW = fSize * (isCondensedHand ? 0.39 : 0.47);
-                                      const maxChars = Math.max(10, Math.floor(maxW / Math.max(3, approxCharW)));
-                                      const wrappedPreviewLines: string[] = [];
-                                      for (const para of rawTxt.split('\n')) {
-                                        if (tx.isMath || !hasExplicitBox || para.length <= maxChars) {
-                                          wrappedPreviewLines.push(para);
-                                          continue;
-                                        }
-                                        const words = para.split(/\s+/).filter(Boolean);
-                                        let cur = '';
-                                        for (const w of words) {
-                                          const cand = cur ? `${cur} ${w}` : w;
-                                          if (cand.length <= maxChars || !cur) {
-                                            cur = cand;
-                                          } else {
-                                            wrappedPreviewLines.push(cur);
-                                            cur = w;
-                                          }
-                                        }
-                                        if (cur) wrappedPreviewLines.push(cur);
-                                      }
-                                      const align = tx.textAlign || 'left';
-                                      const textAnchor =
-                                        align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
-                                      const anchorX =
-                                        align === 'center' && hasExplicitBox
-                                          ? tx.x + tx.boxWidth! / 2
-                                          : align === 'right' && hasExplicitBox
-                                          ? tx.x + tx.boxWidth!
-                                          : tx.x;
-                                      const resolvedFontFamily =
-                                        tx.bold && String(fCss.fontFamily || '').includes('ExplainBoardsHand')
-                                          ? "'ExplainBoardsHandBold', 'ExplainBoardsHand', sans-serif"
-                                          : fCss.fontFamily;
-                                      return (
-                                        <text
-                                          key={tx.id}
-                                          x={anchorX}
-                                          y={tx.y + fSize * 0.88}
-                                          textAnchor={textAnchor}
-                                          fill={tx.color}
-                                          fontSize={fSize}
-                                          fontWeight={tx.bold ? 'bold' : 'normal'}
-                                          fontStyle={fCss.fontStyle}
-                                          fontFamily={resolvedFontFamily}
+                                    {(p0.texts && p0.texts.length > 0) && (
+                                      <foreignObject x={0} y={0} width={pW} height={pH}>
+                                        <div
+                                          style={{
+                                            position: 'relative',
+                                            width: `${pW}px`,
+                                            height: `${pH}px`,
+                                            overflow: 'hidden',
+                                            pointerEvents: 'none',
+                                          }}
                                         >
-                                          {wrappedPreviewLines.map((line, lIdx) => (
-                                            <tspan
-                                              key={lIdx}
-                                              x={anchorX}
-                                              dy={lIdx === 0 ? 0 : fSize * 1.16}
-                                            >
-                                              {line}
-                                            </tspan>
-                                          ))}
-                                        </text>
-                                      );
-                                    })}
+                                          {(p0.texts || []).map((tx) => {
+                                            const fontCss = getTextFontCss(tx.fontFamily, tx.bold);
+                                            const fSize = tx.fontSize || 20;
+                                            const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
+                                              .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
+                                              .replace(/\\lambda(?![A-Za-z])/g, 'λ')
+                                              .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
+                                              .replace(/\\delta(?![A-Za-z])/g, 'δ')
+                                              .replace(/\\omega(?![A-Za-z])/g, 'ω')
+                                              .replace(/\\pi(?![A-Za-z])/g, 'π')
+                                              .replace(/\\alpha(?![A-Za-z])/g, 'α')
+                                              .replace(/\\beta(?![A-Za-z])/g, 'β')
+                                              .replace(/\\gamma(?![A-Za-z])/g, 'γ')
+                                              .replace(/\\theta(?![A-Za-z])/g, 'θ')
+                                              .replace(/\\mu(?![A-Za-z])/g, 'μ')
+                                              .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·');
+                                            const tokenRegex =
+                                              /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
+                                            const hasSubSup =
+                                              !tx.isMath && (rawTxt.includes('_') || rawTxt.includes('^'));
+                                            return (
+                                              <div
+                                                key={tx.id}
+                                                style={{
+                                                  position: 'absolute',
+                                                  left: `${tx.x}px`,
+                                                  top: `${tx.y}px`,
+                                                  width: tx.isMath ? 'max-content' : 'fit-content',
+                                                  maxWidth:
+                                                    !tx.isMath && tx.boxWidth
+                                                      ? `${tx.boxWidth}px`
+                                                      : `${Math.max(40, pW - tx.x)}px`,
+                                                  padding: '2px 6px',
+                                                  boxSizing: 'border-box',
+                                                  color: tx.color,
+                                                  fontSize: `${fSize}px`,
+                                                  fontWeight: tx.bold ? 700 : 500,
+                                                  lineHeight: 1.18,
+                                                  overflow: tx.boxWidth ? 'hidden' : undefined,
+                                                  overflowWrap: 'break-word',
+                                                  whiteSpace: 'pre-wrap',
+                                                  textAlign: tx.textAlign || 'left',
+                                                  ...fontCss,
+                                                }}
+                                              >
+                                                {hasSubSup
+                                                  ? rawTxt.split(tokenRegex).map((part, pIdx) => {
+                                                      if (!part) return null;
+                                                      if (part.startsWith('^') && part.length > 1) {
+                                                        let inner = part.slice(1);
+                                                        if (
+                                                          (inner.startsWith('(') && inner.endsWith(')')) ||
+                                                          (inner.startsWith('{') && inner.endsWith('}'))
+                                                        ) {
+                                                          inner = inner.slice(1, -1);
+                                                        }
+                                                        return (
+                                                          <sup
+                                                            key={pIdx}
+                                                            style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'super' }}
+                                                          >
+                                                            {inner}
+                                                          </sup>
+                                                        );
+                                                      }
+                                                      if (part.startsWith('_') && part.length > 1) {
+                                                        let inner = part.slice(1);
+                                                        if (
+                                                          (inner.startsWith('(') && inner.endsWith(')')) ||
+                                                          (inner.startsWith('{') && inner.endsWith('}'))
+                                                        ) {
+                                                          inner = inner.slice(1, -1);
+                                                        }
+                                                        return (
+                                                          <sub
+                                                            key={pIdx}
+                                                            style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'sub' }}
+                                                          >
+                                                            {inner}
+                                                          </sub>
+                                                        );
+                                                      }
+                                                      return <React.Fragment key={pIdx}>{part}</React.Fragment>;
+                                                    })
+                                                  : rawTxt.replace(/[{}]/g, '')}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </foreignObject>
+                                    )}
                                   </svg>
                                 )}
                               </>
@@ -52381,74 +52397,108 @@ export default function App() {
                               />
                             );
                           })}
-                          {(pObj.texts || []).map((tx) => {
-                            const fCss = getTextFontCss(tx.fontFamily);
-                            const fSize = tx.fontSize || 20;
-                            const hasExplicitBox = Boolean(tx.boxWidth && tx.boxWidth > 20);
-                            const maxW = Math.max(
-                              60,
-                              hasExplicitBox ? Math.min(tx.boxWidth!, pW - tx.x) : pW - tx.x - 8
-                            );
-                            const isCondensedHand =
-                              !tx.fontFamily || tx.fontFamily === 'calligraphic' || tx.fontFamily === 'calligraphic-bold';
-                            const approxCharW = fSize * (isCondensedHand ? 0.39 : 0.47);
-                            const maxChars = Math.max(10, Math.floor(maxW / Math.max(3, approxCharW)));
-                            const wrappedLines: string[] = [];
-                            for (const para of (tx.text || '').split('\n')) {
-                              if (tx.isMath || !hasExplicitBox || para.length <= maxChars) {
-                                wrappedLines.push(para);
-                                continue;
-                              }
-                              const words = para.split(/\s+/).filter(Boolean);
-                              let cur = '';
-                              for (const w of words) {
-                                const cand = cur ? `${cur} ${w}` : w;
-                                if (cand.length <= maxChars || !cur) {
-                                  cur = cand;
-                                } else {
-                                  wrappedLines.push(cur);
-                                  cur = w;
-                                }
-                              }
-                              if (cur) wrappedLines.push(cur);
-                            }
-                            const align = tx.textAlign || 'left';
-                            const textAnchor =
-                              align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
-                            const anchorX =
-                              align === 'center' && hasExplicitBox
-                                ? tx.x + tx.boxWidth! / 2
-                                : align === 'right' && hasExplicitBox
-                                ? tx.x + tx.boxWidth!
-                                : tx.x;
-                            const resolvedFontFamily =
-                              tx.bold && String(fCss.fontFamily || '').includes('ExplainBoardsHand')
-                                ? "'ExplainBoardsHandBold', 'ExplainBoardsHand', sans-serif"
-                                : fCss.fontFamily;
-                            return (
-                              <text
-                                key={tx.id}
-                                x={anchorX}
-                                y={tx.y + fSize * 0.88}
-                                textAnchor={textAnchor}
-                                fill={tx.color}
-                                fontSize={fSize}
-                                fontWeight={tx.bold ? 'bold' : 'normal'}
-                                fontStyle={fCss.fontStyle}
-                                fontFamily={resolvedFontFamily}
+                          {(pObj.texts && pObj.texts.length > 0) && (
+                            <foreignObject x={0} y={0} width={pW} height={pH}>
+                              <div
+                                style={{
+                                  position: 'relative',
+                                  width: `${pW}px`,
+                                  height: `${pH}px`,
+                                  overflow: 'hidden',
+                                  pointerEvents: 'none',
+                                }}
                               >
-                                {wrappedLines.map((line, lIdx) => (
-                                  <tspan
-                                    key={lIdx}
-                                    x={anchorX}
-                                    dy={lIdx === 0 ? 0 : fSize * 1.16}
-                                  >
-                                    {line}
-                                  </tspan>
-                                ))}
-                              </text>
-                            );
-                          })}
+                                {(pObj.texts || []).map((tx) => {
+                                  const fontCss = getTextFontCss(tx.fontFamily, tx.bold);
+                                  const fSize = tx.fontSize || 20;
+                                  const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
+                                    .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
+                                    .replace(/\\lambda(?![A-Za-z])/g, 'λ')
+                                    .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
+                                    .replace(/\\delta(?![A-Za-z])/g, 'δ')
+                                    .replace(/\\omega(?![A-Za-z])/g, 'ω')
+                                    .replace(/\\pi(?![A-Za-z])/g, 'π')
+                                    .replace(/\\alpha(?![A-Za-z])/g, 'α')
+                                    .replace(/\\beta(?![A-Za-z])/g, 'β')
+                                    .replace(/\\gamma(?![A-Za-z])/g, 'γ')
+                                    .replace(/\\theta(?![A-Za-z])/g, 'θ')
+                                    .replace(/\\mu(?![A-Za-z])/g, 'μ')
+                                    .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·');
+                                  const tokenRegex =
+                                    /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
+                                  const hasSubSup =
+                                    !tx.isMath && (rawTxt.includes('_') || rawTxt.includes('^'));
+                                  return (
+                                    <div
+                                      key={tx.id}
+                                      style={{
+                                        position: 'absolute',
+                                        left: `${tx.x}px`,
+                                        top: `${tx.y}px`,
+                                        width: tx.isMath ? 'max-content' : 'fit-content',
+                                        maxWidth:
+                                          !tx.isMath && tx.boxWidth
+                                            ? `${tx.boxWidth}px`
+                                            : `${Math.max(40, pW - tx.x)}px`,
+                                        padding: '2px 6px',
+                                        boxSizing: 'border-box',
+                                        color: tx.color,
+                                        fontSize: `${fSize}px`,
+                                        fontWeight: tx.bold ? 700 : 500,
+                                        lineHeight: 1.18,
+                                        overflow: tx.boxWidth ? 'hidden' : undefined,
+                                        overflowWrap: 'break-word',
+                                        whiteSpace: 'pre-wrap',
+                                        textAlign: tx.textAlign || 'left',
+                                        ...fontCss,
+                                      }}
+                                    >
+                                      {hasSubSup
+                                        ? rawTxt.split(tokenRegex).map((part, pIdx) => {
+                                            if (!part) return null;
+                                            if (part.startsWith('^') && part.length > 1) {
+                                              let inner = part.slice(1);
+                                              if (
+                                                (inner.startsWith('(') && inner.endsWith(')')) ||
+                                                (inner.startsWith('{') && inner.endsWith('}'))
+                                              ) {
+                                                inner = inner.slice(1, -1);
+                                              }
+                                              return (
+                                                <sup
+                                                  key={pIdx}
+                                                  style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'super' }}
+                                                >
+                                                  {inner}
+                                                </sup>
+                                              );
+                                            }
+                                            if (part.startsWith('_') && part.length > 1) {
+                                              let inner = part.slice(1);
+                                              if (
+                                                (inner.startsWith('(') && inner.endsWith(')')) ||
+                                                (inner.startsWith('{') && inner.endsWith('}'))
+                                              ) {
+                                                inner = inner.slice(1, -1);
+                                              }
+                                              return (
+                                                <sub
+                                                  key={pIdx}
+                                                  style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'sub' }}
+                                                >
+                                                  {inner}
+                                                </sub>
+                                              );
+                                            }
+                                            return <React.Fragment key={pIdx}>{part}</React.Fragment>;
+                                          })
+                                        : rawTxt.replace(/[{}]/g, '')}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </foreignObject>
+                          )}
                         </svg>
                       </div>
                     </div>
