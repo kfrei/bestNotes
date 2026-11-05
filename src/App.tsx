@@ -982,7 +982,12 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
   }
 
   // Auto-recover "Τα Οξέα" (nb-acids-v1) if it was reverted to the landscape seed
-  if (nb.id === ACIDS_NOTEBOOK_ID && nextPages.length >= 1 && nextPages[0]?.orientation !== 'portrait') {
+  if (
+    nb.id === ACIDS_NOTEBOOK_ID &&
+    (nb.updatedAt || '') <= '2026-11-05T10:45:00.000Z' &&
+    nextPages.length >= 1 &&
+    nextPages[0]?.orientation !== 'portrait'
+  ) {
     const recoveredAcids = buildAcidsNotebook(nb.folder || '');
     return {
       nb: {
@@ -994,11 +999,13 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
     };
   }
 
-  // Auto-recover "Η Φωτοσύνθεση" (nb-photosynthesis-v1) with the magnifying glass (img-1793828927520) if reverted to seed
+  // Auto-recover "Η Φωτοσύνθεση" (nb-photosynthesis-v1) with the magnifying glass (img-1793828927520) and 3 green frames (st-1793865037881-lub3) if reverted to an older copy
   if (
     nb.id === PHOTOSYNTHESIS_NOTEBOOK_ID &&
+    (nb.updatedAt || '') <= '2026-11-05T10:45:00.000Z' &&
     nextPages.length >= 1 &&
-    !(nextPages[0]?.images || []).some((im) => im.id === 'img-1793828927520')
+    (!(nextPages[0]?.images || []).some((im) => im.id === 'img-1793828927520') ||
+      !(nextPages[0]?.strokes || []).some((s) => s.id === 'st-1793865037881-lub3'))
   ) {
     const recoveredPhoto = buildPhotosynthesisNotebook(nb.folder || '');
     return {
@@ -1140,6 +1147,7 @@ export default function App() {
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
   const hasCompletedInitialCloudLoadRef = useRef<boolean>(false);
   const allRemotePrimaryIdsRef = useRef<Set<string>>(new Set());
+  const userEditedInSessionRef = useRef<Set<string>>(new Set());
   const [cloudInitialLoaded, setCloudInitialLoaded] = useState<boolean>(false);
 
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(() => {
@@ -1266,6 +1274,11 @@ export default function App() {
                 for (const n of prev) map.set(n.id, n);
                 let changed = false;
                 for (const idbNb of cleanIdb) {
+                  // CRITICAL: If Cloud Firestore has ALREADY delivered this notebook before IndexedDB finished reading,
+                  // never allow local IndexedDB cache to overwrite the authoritative Cloud version!
+                  if (allRemotePrimaryIdsRef.current.has(idbNb.id)) {
+                    continue;
+                  }
                   const cur = map.get(idbNb.id);
                   if (!cur) {
                     map.set(idbNb.id, idbNb);
@@ -2847,6 +2860,7 @@ export default function App() {
       setRenamingNotebookContext(null);
       if (!trimmed) return;
       let changed = false;
+      userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== nbId) return nb;
@@ -2877,6 +2891,7 @@ export default function App() {
       if (newTags.length === 0) return;
 
       let addedCount = 0;
+      userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== nbId) return nb;
@@ -2906,6 +2921,7 @@ export default function App() {
 
   const removeTagFromNotebook = useCallback(
     (nbId: string, tagToRemove: string) => {
+      userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== nbId) return nb;
@@ -3030,13 +3046,22 @@ export default function App() {
             ) {
               return nb;
             }
-            return { ...nb, tags: merged, updatedAt: new Date().toISOString() };
+            if (!silent) {
+              userEditedInSessionRef.current.add(targetNb.id);
+            }
+            return {
+              ...nb,
+              tags: merged,
+              updatedAt: silent ? nb.updatedAt : new Date().toISOString(),
+            };
           })
         );
 
         if (addedList.length > 0) {
-          setIsDirty(true);
-          setSyncStatus('dirty');
+          if (!silent) {
+            setIsDirty(true);
+            setSyncStatus('dirty');
+          }
           showToast(`🏷️ Auto-Tags: ${addedList.join(', ')}`);
         } else if (!silent) {
           showToast(`✅ Τα βασικά tags υπάρχουν ήδη (${aiTags.join(', ')})!`);
@@ -3050,6 +3075,7 @@ export default function App() {
 
   // Automatically extract #tags for notebooks (<= 3 pages) when untagged OR when handwritten strokes are added
   useEffect(() => {
+    if (currentUser && !hasCompletedInitialCloudLoadRef.current) return;
     const genericShapeTagNorms = new Set([
       'σχημα',
       'γωνια',
@@ -3145,6 +3171,7 @@ export default function App() {
   const changeNotebookFolder = useCallback(
     (nbId: string, nextFolder: string) => {
       const cleanFolder = nextFolder.trim();
+      userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
         prev.map((nb) =>
           nb.id === nbId
@@ -3600,10 +3627,15 @@ export default function App() {
             const remoteUpdatedAt = rem.updatedAt || rem.nb.updatedAt || '';
 
             // 1. ABSOLUTE MULTI-DEVICE RULE:
-            // Whenever the Cloud version has a strictly newer updatedAt timestamp than this device's local copy,
-            // ALWAYS pull the newer Cloud version down to this device!
-            // (Guarantees that opening an iPad or 2nd device 7 hours later ALWAYS downloads the latest Cloud version!)
-            if (remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) {
+            // - If the user has NOT explicitly edited this notebook in the current session (!userEditedInSessionRef.current.has(id)),
+            //   this device was just opened, refreshed, or is idle -> ALWAYS pull the authoritative Cloud version down!
+            // - OR if the Cloud version has a strictly newer updatedAt timestamp than this device's local copy,
+            //   ALWAYS pull the newer Cloud version down!
+            if (
+              !userEditedInSessionRef.current.has(id) ||
+              (remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt))
+            ) {
+              userEditedInSessionRef.current.delete(id);
               mergedMap.set(id, rem.nb);
               lastSyncedJsonMapRef.current.set(id, rem.dataJson);
               lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
@@ -3611,56 +3643,9 @@ export default function App() {
               continue;
             }
 
-            const prevSeenRemoteJson = lastSeenRemoteJsonMapRef.current.get(id);
-            const remoteChangedSinceLastSeen = prevSeenRemoteJson !== rem.dataJson;
-
-            // 2. If Firestore's document for this notebook HAS NOT CHANGED since we last saw it in this active session,
-            // and localUpdatedAt >= remoteUpdatedAt, then localNb has new local edits made on this device!
-            if (!remoteChangedSinceLastSeen) {
-              continue;
-            }
-
-            const localScore = getNotebookContentScore(localNb);
-            const remoteScore = getNotebookContentScore(rem.nb);
-
-            // Never let an empty default notebook from a 2nd device overwrite a non-empty notebook!
-            if (localScore > 0 && remoteScore === 0) {
-              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
-              notebooksToPushBack.push(localNb);
-              continue;
-            }
-
-            // Never let a smaller local seed copy overwrite a larger or portrait-converted cloud version!
-            const isLocalSeedOverwritingEditedCloud =
-              rem.dataJson.length > localJson.length + 30000 ||
-              (id === ACIDS_NOTEBOOK_ID &&
-                rem.nb.pages[0]?.orientation === 'portrait' &&
-                localNb.pages[0]?.orientation !== 'portrait');
-
-            // 3. On initial load (when prevSeenRemoteJson is undefined), ONLY push localNb over Cloud if:
-            // - localUpdatedAt > remoteUpdatedAt, AND
-            // - localNb was edited very recently (< 2 minutes ago, e.g. user pressed Refresh before the 20s sync timer fired).
-            // If this device is being opened hours later, ALWAYS pull the Cloud version down!
-            const localAgeMs = localUpdatedAt ? Date.now() - Date.parse(localUpdatedAt) : Infinity;
-            const isRecentLocalRefresh = Number.isFinite(localAgeMs) && localAgeMs >= 0 && localAgeMs < 120000;
-
-            if (
-              !isLocalSeedOverwritingEditedCloud &&
-              prevSeenRemoteJson === undefined &&
-              localUpdatedAt > remoteUpdatedAt &&
-              isRecentLocalRefresh &&
-              (localScore > 0 || remoteScore === 0)
-            ) {
-              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
-              notebooksToPushBack.push(localNb);
-              continue;
-            }
-
-            // Otherwise, remote is the authoritative Cloud version -> adopt remote!
-            mergedMap.set(id, rem.nb);
-            lastSyncedJsonMapRef.current.set(id, rem.dataJson);
-            lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
-            anyChanged = true;
+            // 2. Otherwise, userEditedInSessionRef.current.has(id) is true AND localUpdatedAt >= remoteUpdatedAt:
+            // Keep the active in-session user edits on this device; they will be synced by performCloudFirestoreSyncNow.
+            continue;
           }
 
           // Only push local notebooks that genuinely do not exist in Firestore at all (not in allRemotePrimaryIds)
@@ -3776,8 +3761,13 @@ export default function App() {
     let pushedAny = false;
     for (const nb of notebooksRef.current) {
       try {
-        // CRITICAL MULTI-DEVICE GUARD: Only push a notebook if its local updatedAt is strictly newer than the Cloud version!
-        // Never allow an idle or newly-opened device with an older/equal timestamp to overwrite the Cloud!
+        // CRITICAL MULTI-DEVICE GUARD:
+        // 1) Never allow an existing Cloud notebook to be overwritten by this device unless the user
+        //    has explicitly edited it during this active session (userEditedInSessionRef)!
+        if (allRemotePrimaryIdsRef.current.has(nb.id) && !userEditedInSessionRef.current.has(nb.id)) {
+          continue;
+        }
+        // 2) Only push a notebook if its local updatedAt is strictly newer than the Cloud version!
         const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
         if (remoteTime && (nb.updatedAt || '') <= remoteTime) {
           continue;
@@ -3804,12 +3794,16 @@ export default function App() {
     const uid = currentUser.uid;
     // Save to IndexedDB immediately so even an instant Refresh never loses a large pasted image!
     void saveNotebooksToIndexedDB(uid, notebooks);
+    let fastCloudTimer: number | null = null;
     const timer = window.setTimeout(() => {
       saveNotebooksToLocalAndIdb(uid, notebooks);
       if (!hasCompletedInitialCloudLoadRef.current) return;
       let anyUnsynced = false;
       for (const nb of notebooks) {
         try {
+          if (allRemotePrimaryIdsRef.current.has(nb.id) && !userEditedInSessionRef.current.has(nb.id)) {
+            continue;
+          }
           const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
           if (remoteTime && (nb.updatedAt || '') <= remoteTime) continue;
           const dataJson = serializeNotebookForFirestore(nb);
@@ -3825,12 +3819,21 @@ export default function App() {
         hasPendingDrivePdfSyncRef.current = true;
         setIsDirty(true);
         setSyncStatus('dirty');
+        fastCloudTimer = window.setTimeout(() => {
+          if (performCloudFirestoreSyncNow()) {
+            setIsDirty(false);
+            setSyncStatus('synced');
+          }
+        }, 1500);
       }
     }, 250);
     return () => {
       window.clearTimeout(timer);
+      if (fastCloudTimer !== null) {
+        window.clearTimeout(fastCloudTimer);
+      }
     };
-  }, [currentUser, notebooks]);
+  }, [currentUser, notebooks, performCloudFirestoreSyncNow]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -4757,6 +4760,7 @@ export default function App() {
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
       const targetIdx = activeDrawingPageIndexRef.current ?? activePageIndex;
+      userEditedInSessionRef.current.add(activeNotebook.id);
       setNotebooks((prevNotebooks) =>
         prevNotebooks.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
@@ -4791,6 +4795,7 @@ export default function App() {
     }
     const prevPage = undoStack[undoStack.length - 1];
     setUndoStack((u) => u.slice(0, -1));
+    userEditedInSessionRef.current.add(activeNotebook.id);
 
     // Match the exact page by ID so Undo on Page 2 NEVER overwrites Page 1 even if scroll position shifted!
     const matchedIdx = activeNotebook.pages.findIndex((p) => p.id === prevPage.id);
@@ -4837,6 +4842,7 @@ export default function App() {
     }
     const nextPage = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
+    userEditedInSessionRef.current.add(activeNotebook.id);
 
     const matchedIdx = activeNotebook.pages.findIndex((p) => p.id === nextPage.id);
     const targetIdx =
@@ -8633,6 +8639,7 @@ export default function App() {
         newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
 
+      userEditedInSessionRef.current.add(activeNotebook.id);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
@@ -8683,6 +8690,7 @@ export default function App() {
         const p = activeNotebook.pages[i];
         newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
+      userEditedInSessionRef.current.add(activeNotebook.id);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
@@ -8724,6 +8732,7 @@ export default function App() {
         newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
 
+      userEditedInSessionRef.current.add(activeNotebook.id);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
@@ -40020,6 +40029,7 @@ export default function App() {
     }
     try {
       const importedNb = await importGoodnotesFile(file);
+      userEditedInSessionRef.current.add(importedNb.id);
       setNotebooks((prev) => [importedNb, ...prev]);
       setOpenNotebookIds((prev) => (prev.includes(importedNb.id) ? prev : [...prev, importedNb.id]));
       setActiveNotebookId(importedNb.id);
@@ -40079,6 +40089,7 @@ export default function App() {
             ? activeLibraryFolder
             : importedNb.folder || '';
         const nbWithFolder = { ...importedNb, folder: finalFolder };
+        userEditedInSessionRef.current.add(nbWithFolder.id);
         setNotebooks((prev) => [nbWithFolder, ...prev]);
         setOpenNotebookIds((prev) =>
           prev.includes(nbWithFolder.id) ? prev : [...prev, nbWithFolder.id]
@@ -40148,6 +40159,7 @@ export default function App() {
           sourceFormat: '.bestnotes',
           pages: importedPages,
         };
+        userEditedInSessionRef.current.add(newNb.id);
         setNotebooks((prev) => [newNb, ...prev]);
         setOpenNotebookIds((prev) => (prev.includes(newNb.id) ? prev : [...prev, newNb.id]));
         if (targetFolderOverride !== undefined && viewMode === 'library') {
@@ -40185,6 +40197,7 @@ export default function App() {
           newTopY += getPageLogicalHeight(p) + PAGE_GAP;
         }
 
+        userEditedInSessionRef.current.add(activeNotebook.id);
         setNotebooks((prev) =>
           prev.map((nb) => {
             if (nb.id !== activeNotebook.id) return nb;
@@ -41196,6 +41209,7 @@ export default function App() {
                               },
                             ],
                           };
+                          userEditedInSessionRef.current.add(newNb.id);
                           setNotebooks((prev) => [newNb, ...prev]);
                           setOpenNotebookIds((prev) => [...prev, newNb.id]);
                           setActiveNotebookId(newNb.id);
@@ -41324,6 +41338,7 @@ export default function App() {
                                       { merge: true }
                                     );
                                   }
+                                  userEditedInSessionRef.current.add(delNb.id);
                                   setNotebooks((prev) =>
                                     prev.some((n) => n.id === delNb.id)
                                       ? prev
