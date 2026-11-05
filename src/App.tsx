@@ -42053,9 +42053,9 @@ export default function App() {
                                 <div
                                   className={`w-full aspect-[3/4] ${
                                     isLandscapeNb
-                                      ? 'rounded-2xl bg-gradient-to-b from-slate-100/90 via-slate-100/60 to-slate-200/70 border-slate-200/90 shadow-xs'
-                                      : 'rounded-r-2xl rounded-l-md shadow-md border-slate-300/90'
-                                  } group-hover:shadow-xl group-hover:-translate-y-1 transition relative overflow-hidden border flex flex-col justify-between touch-none select-none ${
+                                      ? 'rounded-2xl bg-transparent border-transparent shadow-none'
+                                      : 'rounded-r-2xl rounded-l-md shadow-md border border-slate-300/90 group-hover:shadow-xl'
+                                  } group-hover:-translate-y-1 transition relative overflow-hidden flex flex-col justify-between touch-none select-none ${
                                     isDraggingThisNb
                                       ? 'border-[#0066ff] ring-2 ring-[#0066ff] ring-dashed'
                                       : ''
@@ -42070,19 +42070,11 @@ export default function App() {
                                         }
                                   }
                                 >
-                                  {/* File Size Badge (KB / MB) at Top-Right of .bestnotes Card */}
-                                  <div
-                                    className="absolute top-2 right-2 z-30 px-2 py-0.5 rounded-lg bg-slate-900/70 backdrop-blur-[2px] text-white text-[10px] font-bold tracking-tight shadow-2xs pointer-events-none"
-                                    title={`Μέγεθος αρχείου .bestnotes: ${nbSizeLabel}`}
-                                  >
-                                    {nbSizeLabel}
-                                  </div>
-
                                   {isLandscapeNb ? (
-                                    /* IDEA 2: Authentic GoodNotes-Style Horizontal Notebook (4:3 / A4 Landscape) nested cleanly in the upper section above the action ribbon */
-                                    <div className="absolute inset-x-0 top-0 bottom-[24%] flex items-center justify-center px-1 pt-2 pb-1 pointer-events-none">
+                                    /* IDEA 2: Authentic GoodNotes-Style Horizontal Notebook (4:3 / A4 Landscape) floating cleanly with no vertical background frame */
+                                    <div className="absolute inset-x-0 top-0 bottom-[18%] flex items-center justify-center pointer-events-none">
                                       <div
-                                        className="relative w-full rounded-r-xl rounded-l-md shadow-md border border-slate-300/95 overflow-hidden"
+                                        className="relative w-full rounded-r-xl rounded-l-md shadow-md group-hover:shadow-xl border border-slate-300/95 overflow-hidden transition"
                                         style={{
                                           aspectRatio: `${pW} / ${pH}`,
                                           backgroundColor: paperBgColor,
@@ -42111,8 +42103,14 @@ export default function App() {
                                     </>
                                   )}
 
-                                  {/* Ribbon at ~5/6 of Card Height: Folder/.bestNotes Badge + Larger Share PDF & Red Trash Delete */}
-                                  <div className="absolute left-0 right-0 top-[83%] -translate-y-1/2 z-20 flex items-center justify-between pl-4 pr-2.5 py-1.5 bg-slate-200/75 backdrop-blur-[2px] border-y border-slate-300/70 shadow-2xs">
+                                  {/* Slim Ribbon at bottom of Card: Folder/.bestNotes Badge + Compact Download, Share PDF & Trash Delete */}
+                                  <div
+                                    className={`absolute left-0 right-0 top-[86%] -translate-y-1/2 z-20 flex items-center justify-between pl-3.5 pr-2 py-1 bg-slate-200/75 backdrop-blur-[2px] shadow-2xs ${
+                                      isLandscapeNb
+                                        ? 'rounded-xl border border-slate-300/70'
+                                        : 'border-y border-slate-300/70'
+                                    }`}
+                                  >
                                     <div className="relative">
                                       <button
                                         type="button"
@@ -42123,7 +42121,7 @@ export default function App() {
                                             prev === nb.id ? null : nb.id
                                           );
                                         }}
-                                        className="text-[9.5px] tracking-wider px-2.5 py-1 rounded-md text-white font-bold shadow-2xs truncate max-w-[88px] cursor-pointer hover:opacity-90"
+                                        className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[84px] cursor-pointer hover:opacity-90"
                                         style={{ backgroundColor: nb.coverColor }}
                                         title="Πάτα για αλλαγή ή αφαίρεση Φακέλου"
                                       >
@@ -42165,15 +42163,15 @@ export default function App() {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-1">
                                       <button
                                         type="button"
                                         data-popover-trigger="share-menu"
                                         onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
-                                        className="p-2 rounded-xl bg-white/95 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        className="p-1.5 rounded-lg bg-white/95 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
                                         title={`Λήψη PDF ή .bestnotes («${nb.title}»)`}
                                       >
-                                        <Download className="w-[18px] h-[18px]" />
+                                        <Download className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         type="button"
@@ -42181,20 +42179,20 @@ export default function App() {
                                           e.stopPropagation();
                                           void handleShareNotebookPdf(nb);
                                         }}
-                                        className="p-2 rounded-xl bg-white/95 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        className="p-1.5 rounded-lg bg-white/95 hover:bg-sky-600 text-sky-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
                                         title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
                                       >
-                                        <Share2 className="w-[18px] h-[18px]" />
+                                        <Share2 className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           deleteNotebookById(nb);
                                         }}
-                                        className="p-2 rounded-xl bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-xs transition cursor-pointer"
+                                        className="p-1.5 rounded-lg bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
                                         title={`Διαγραφή σημείωσης "${nb.title}"`}
                                       >
-                                        <Trash2 className="w-[18px] h-[18px]" />
+                                        <Trash2 className="w-3.5 h-3.5" />
                                       </button>
                                     </div>
                                   </div>
