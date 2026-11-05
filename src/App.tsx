@@ -2838,6 +2838,47 @@ export default function App() {
       window.removeEventListener('pagehide', flushSessionBeforeReload);
     };
   }, [currentUser, buildCurrentSessionSnapshot]);
+
+  // Automatic New-Version Detector for iPad Home-Screen Web App ("ψευδο app") & Desktop tabs:
+  // Whenever the app starts or wakes up from background, checks if a newer JS bundle hash exists on the server.
+  useEffect(() => {
+    let checking = false;
+    const checkServerBundleVersion = async () => {
+      if (checking || document.visibilityState === 'hidden') return;
+      checking = true;
+      try {
+        const currentScript = Array.from(document.querySelectorAll('script[src]'))
+          .map((s) => s.getAttribute('src') || '')
+          .find((src) => src.includes('/assets/index-'));
+        if (!currentScript) return;
+        const res = await fetch(`/index.html?_vcheck=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const html = await res.text();
+        const match = html.match(/\/assets\/index-[A-Za-z0-9_-]+\.js/);
+        if (match && match[0] && !currentScript.includes(match[0])) {
+          await fetch(window.location.href, { cache: 'reload' }).catch(() => {});
+          window.location.reload();
+        }
+      } catch {
+        // ignore offline
+      } finally {
+        checking = false;
+      }
+    };
+    const initTimer = window.setTimeout(checkServerBundleVersion, 1200);
+    const onWake = () => {
+      if (document.visibilityState === 'visible') {
+        void checkServerBundleVersion();
+      }
+    };
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('focus', onWake);
+    return () => {
+      window.clearTimeout(initTimer);
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('focus', onWake);
+    };
+  }, []);
   const pencilHoverTwistRef = useRef<{
     baseTwist: number;
     baseTime: number;
@@ -41002,13 +41043,17 @@ export default function App() {
                   // ignore
                 }
               }
+              await fetch(`${window.location.origin}/?_cb=${Date.now()}`, { cache: 'reload' }).catch(
+                () => {}
+              );
+              await fetch(window.location.href, { cache: 'reload' }).catch(() => {});
               window.location.reload();
             }}
-            className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white/85 hover:text-white transition cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
             title="Ανανέωση εφαρμογής & λήψη τελευταίων αλλαγών από το Cloud (ιδανικό για iPad Web App)"
           >
             <RefreshCw className="w-3.5 h-3.5 text-sky-300" />
-            <span className="text-[11px] font-semibold hidden lg:inline">Ανανέωση</span>
+            <span className="text-xs font-semibold hidden sm:inline">Ανανέωση</span>
           </button>
 
           {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
