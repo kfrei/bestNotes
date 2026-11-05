@@ -65,6 +65,8 @@ import {
   db,
   doc,
   collection,
+  getDoc,
+  getDocFromServer,
   setDoc,
   onSnapshot,
   onAuthStateChanged,
@@ -604,13 +606,33 @@ async function saveNotebookToFirestoreChunked(
   nb: Notebook,
   dataJson: string,
   deviceId: string
-): Promise<void> {
+): Promise<boolean> {
   const updatedAt = nb.updatedAt || new Date().toISOString();
   const safeTitle = (nb.title || 'Σημείωση').slice(0, 900);
+  const primaryRef = doc(db, 'users', uid, 'notebooks', nb.id);
+
+  // STRICT SERVER-SIDE TIMESTAMP GUARD:
+  // Query live Firestore server before writing so a second device (e.g. iPad opened hours later)
+  // can NEVER overwrite a newer Cloud document with an older local version!
+  try {
+    const existingSnap = await getDocFromServer(primaryRef).catch(() => getDoc(primaryRef));
+    if (existingSnap.exists()) {
+      const existingData = existingSnap.data();
+      const cloudUpdatedAt = typeof existingData?.updatedAt === 'string' ? existingData.updatedAt : '';
+      if (cloudUpdatedAt && updatedAt < cloudUpdatedAt && existingData?.deleted !== true) {
+        console.warn(
+          `[CloudSync] Blocked stale overwrite of ${nb.id} (local ${updatedAt} < cloud ${cloudUpdatedAt})`
+        );
+        return false;
+      }
+    }
+  } catch {
+    // Offline or transient network error -> proceed
+  }
 
   if (dataJson.length <= FIRESTORE_CHUNK_SIZE) {
     await setDoc(
-      doc(db, 'users', uid, 'notebooks', nb.id),
+      primaryRef,
       {
         id: nb.id,
         title: safeTitle,
@@ -621,7 +643,7 @@ async function saveNotebookToFirestoreChunked(
       },
       { merge: true }
     );
-    return;
+    return true;
   }
 
   // Multi-chunk storage for large notebooks (>380 KB, e.g. 2-10 MB with multiple cropped high-res images)
@@ -661,7 +683,7 @@ async function saveNotebookToFirestoreChunked(
   });
 
   await setDoc(
-    doc(db, 'users', uid, 'notebooks', nb.id),
+    primaryRef,
     {
       id: nb.id,
       title: safeTitle,
@@ -672,6 +694,7 @@ async function saveNotebookToFirestoreChunked(
     },
     { merge: true }
   );
+  return true;
 }
 
 const STORAGE_KEY = 'bestnotes_notebooks_v2';
@@ -965,7 +988,7 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       nb: {
         ...recoveredAcids,
         folder: nb.folder || recoveredAcids.folder,
-        updatedAt: new Date().toISOString(),
+        updatedAt: recoveredAcids.updatedAt,
       },
       repaired: true,
     };
@@ -982,7 +1005,7 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       nb: {
         ...recoveredPhoto,
         folder: nb.folder || recoveredPhoto.folder,
-        updatedAt: new Date().toISOString(),
+        updatedAt: recoveredPhoto.updatedAt,
       },
       repaired: true,
     };
@@ -992,7 +1015,7 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
   return {
     nb: {
       ...nb,
-      updatedAt: nb.updatedAt || new Date().toISOString(),
+      updatedAt: nb.updatedAt || '2026-11-04T18:00:00.000Z',
       pages: nextPages,
     },
     repaired: true,
@@ -2312,10 +2335,10 @@ export default function App() {
   const [undoStack, setUndoStack] = useState<NotePage[]>([]);
   const [redoStack, setRedoStack] = useState<NotePage[]>([]);
 
-  // 30s Google Drive Auto-Sync & Profile Dropdown
+  // 20s Cloud Auto-Sync & Profile Dropdown
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'dirty'>('synced');
-  const [secondsToNextSync, setSecondsToNextSync] = useState<number>(5);
+  const [secondsToNextSync, setSecondsToNextSync] = useState<number>(20);
   const [showUserDropdown, setShowUserDropdown] = useState<boolean>(false);
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
     try {
@@ -3291,17 +3314,25 @@ export default function App() {
 
   const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string) => {
     try {
+      const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
+      if (remoteTime && (nb.updatedAt || '') < remoteTime) {
+        return;
+      }
       const dataJson = explicitJson ?? serializeNotebookForFirestore(nb);
       lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-      if (nb.updatedAt) {
+      if (nb.updatedAt && nb.updatedAt > remoteTime) {
         remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
       }
       inFlightSavesMapRef.current.set(nb.id, (inFlightSavesMapRef.current.get(nb.id) || 0) + 1);
       saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current)
-        .then(() => {
-          lastSeenRemoteJsonMapRef.current.set(nb.id, dataJson);
-          if (nb.updatedAt) {
-            remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
+        .then((didWrite) => {
+          if (didWrite) {
+            lastSeenRemoteJsonMapRef.current.set(nb.id, dataJson);
+            if (nb.updatedAt) {
+              remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
+            }
+          } else {
+            lastSyncedJsonMapRef.current.delete(nb.id);
           }
         })
         .catch((err) => {
@@ -3524,7 +3555,6 @@ export default function App() {
             const { nb: localNb, repaired: localWasRepaired } = repairNotebookPagesAndMetrisiMazas(rawLocalNb);
             if (localWasRepaired) {
               anyChanged = true;
-              notebooksToPushBack.push(localNb);
             }
             mergedMap.set(localNb.id, localNb);
           }
@@ -3565,11 +3595,26 @@ export default function App() {
               continue;
             }
 
+            const localUpdatedAt = localNb.updatedAt || '';
+            const remoteUpdatedAt = rem.updatedAt || rem.nb.updatedAt || '';
+
+            // 1. ABSOLUTE MULTI-DEVICE RULE:
+            // Whenever the Cloud version has a strictly newer updatedAt timestamp than this device's local copy,
+            // ALWAYS pull the newer Cloud version down to this device!
+            // (Guarantees that opening an iPad or 2nd device 7 hours later ALWAYS downloads the latest Cloud version!)
+            if (remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt)) {
+              mergedMap.set(id, rem.nb);
+              lastSyncedJsonMapRef.current.set(id, rem.dataJson);
+              lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
+              anyChanged = true;
+              continue;
+            }
+
             const prevSeenRemoteJson = lastSeenRemoteJsonMapRef.current.get(id);
             const remoteChangedSinceLastSeen = prevSeenRemoteJson !== rem.dataJson;
 
-            // CRITICAL: If Firestore's document for this notebook HAS NOT CHANGED since we last saw it,
-            // then localNb has NEW local edits made on this device! Never let old remote state overwrite local edits!
+            // 2. If Firestore's document for this notebook HAS NOT CHANGED since we last saw it in this active session,
+            // and localUpdatedAt >= remoteUpdatedAt, then localNb has new local edits made on this device!
             if (!remoteChangedSinceLastSeen) {
               continue;
             }
@@ -3591,12 +3636,18 @@ export default function App() {
                 rem.nb.pages[0]?.orientation === 'portrait' &&
                 localNb.pages[0]?.orientation !== 'portrait');
 
-            // On initial load (when prevSeenRemoteJson is undefined), if local (e.g. from LocalStorage / IndexedDB) is strictly newer,
-            // push local to Cloud instead of overwriting with an older 30s-delayed Firestore snapshot!
+            // 3. On initial load (when prevSeenRemoteJson is undefined), ONLY push localNb over Cloud if:
+            // - localUpdatedAt > remoteUpdatedAt, AND
+            // - localNb was edited very recently (< 2 minutes ago, e.g. user pressed Refresh before the 20s sync timer fired).
+            // If this device is being opened hours later, ALWAYS pull the Cloud version down!
+            const localAgeMs = localUpdatedAt ? Date.now() - Date.parse(localUpdatedAt) : Infinity;
+            const isRecentLocalRefresh = Number.isFinite(localAgeMs) && localAgeMs >= 0 && localAgeMs < 120000;
+
             if (
               !isLocalSeedOverwritingEditedCloud &&
               prevSeenRemoteJson === undefined &&
-              (localNb.updatedAt || '') > (rem.updatedAt || '') &&
+              localUpdatedAt > remoteUpdatedAt &&
+              isRecentLocalRefresh &&
               (localScore > 0 || remoteScore === 0)
             ) {
               lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
@@ -3604,7 +3655,7 @@ export default function App() {
               continue;
             }
 
-            // Otherwise, remote has genuinely changed (e.g. edited on the other device or newer in Cloud) -> adopt remote!
+            // Otherwise, remote is the authoritative Cloud version -> adopt remote!
             mergedMap.set(id, rem.nb);
             lastSyncedJsonMapRef.current.set(id, rem.dataJson);
             lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
@@ -3724,9 +3775,10 @@ export default function App() {
     let pushedAny = false;
     for (const nb of notebooksRef.current) {
       try {
-        // CRITICAL MULTI-DEVICE GUARD: Never allow a device with an older local timestamp to overwrite a newer Cloud version!
+        // CRITICAL MULTI-DEVICE GUARD: Only push a notebook if its local updatedAt is strictly newer than the Cloud version!
+        // Never allow an idle or newly-opened device with an older/equal timestamp to overwrite the Cloud!
         const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-        if (remoteTime && (nb.updatedAt || '') < remoteTime) {
+        if (remoteTime && (nb.updatedAt || '') <= remoteTime) {
           continue;
         }
         const dataJson = serializeNotebookForFirestore(nb);
@@ -3740,7 +3792,7 @@ export default function App() {
     return pushedAny;
   }, [currentUser, pushNotebookToCloudTracked]);
 
-  // 2. Fast Local Save (IndexedDB + LocalStorage) on change + Fast Cloud Firestore Sync (1.5s debounce + 5s loop)!
+  // 2. Fast Local Save (IndexedDB + LocalStorage) on change + 20-second Cloud Firestore Auto-Sync countdown!
   const secondsToNextDrivePdfSyncRef = useRef<number>(120);
   const hasPendingDrivePdfSyncRef = useRef<boolean>(false);
 
@@ -3751,7 +3803,6 @@ export default function App() {
     const uid = currentUser.uid;
     // Save to IndexedDB immediately so even an instant Refresh never loses a large pasted image!
     void saveNotebooksToIndexedDB(uid, notebooks);
-    let fastCloudTimer: number | undefined;
     const timer = window.setTimeout(() => {
       saveNotebooksToLocalAndIdb(uid, notebooks);
       if (!hasCompletedInitialCloudLoadRef.current) return;
@@ -3759,7 +3810,7 @@ export default function App() {
       for (const nb of notebooks) {
         try {
           const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-          if (remoteTime && (nb.updatedAt || '') < remoteTime) continue;
+          if (remoteTime && (nb.updatedAt || '') <= remoteTime) continue;
           const dataJson = serializeNotebookForFirestore(nb);
           if (lastSyncedJsonMapRef.current.get(nb.id) !== dataJson) {
             anyUnsynced = true;
@@ -3773,20 +3824,12 @@ export default function App() {
         hasPendingDrivePdfSyncRef.current = true;
         setIsDirty(true);
         setSyncStatus('dirty');
-        fastCloudTimer = window.setTimeout(() => {
-          if (performCloudFirestoreSyncNow()) {
-            setSyncStatus('synced');
-            setIsDirty(false);
-            setSecondsToNextSync(5);
-          }
-        }, 1500);
       }
     }, 250);
     return () => {
       window.clearTimeout(timer);
-      if (fastCloudTimer !== undefined) window.clearTimeout(fastCloudTimer);
     };
-  }, [currentUser, notebooks, performCloudFirestoreSyncNow]);
+  }, [currentUser, notebooks]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -3846,8 +3889,10 @@ export default function App() {
   }, [currentUser, customFolders, shapeLibrary]);
 
   // 4. Automatic Background Optimizer for any legacy unoptimized >300KB PNGs already inside notebooks
+  // CRITICAL: Never bump updatedAt on automatic background optimization so a 2nd device opened hours later never looks newly edited!
   const checkedLegacyImgIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    if (currentUser && !hasCompletedInitialCloudLoadRef.current) return;
     for (const nb of notebooks) {
       for (const p of nb.pages || []) {
         for (const im of p.images || []) {
@@ -3881,7 +3926,6 @@ export default function App() {
                         ? n
                         : {
                             ...n,
-                            updatedAt: new Date().toISOString(),
                             pages: n.pages.map((pg) =>
                               pg.id !== targetPageId
                                 ? pg
@@ -3907,7 +3951,7 @@ export default function App() {
         }
       }
     }
-  }, [notebooks]);
+  }, [notebooks, currentUser]);
 
   const performDrivePdfSync = useCallback(
     async (
@@ -3946,7 +3990,7 @@ export default function App() {
         window.setTimeout(() => {
           setSyncStatus('synced');
           setIsDirty(false);
-          setSecondsToNextSync(30);
+          setSecondsToNextSync(20);
           if (showFeedback) {
             showToast('☁️ Cloud Sync: Συγχρονίστηκαν όλες οι σημειώσεις σε πραγματικό χρόνο (Mac & iPad)!');
           }
@@ -3964,7 +4008,7 @@ export default function App() {
         const res = await syncNotebookPdfToGoogleDrive(token, targetNb, pdfExportOpts);
         setSyncStatus('synced');
         setIsDirty(false);
-        setSecondsToNextSync(30);
+        setSecondsToNextSync(20);
         secondsToNextDrivePdfSyncRef.current = 120;
         hasPendingDrivePdfSyncRef.current = false;
         if (res.webViewLink) {
@@ -3999,7 +4043,7 @@ export default function App() {
               );
               setSyncStatus('synced');
               setIsDirty(false);
-              setSecondsToNextSync(30);
+              setSecondsToNextSync(20);
               secondsToNextDrivePdfSyncRef.current = 120;
               hasPendingDrivePdfSyncRef.current = false;
               if (retryRes.webViewLink) setLastDrivePdfLink(retryRes.webViewLink);
@@ -4080,7 +4124,7 @@ export default function App() {
         if (lastLink) setLastDrivePdfLink(lastLink);
         setSyncStatus('synced');
         setIsDirty(false);
-        setSecondsToNextSync(30);
+        setSecondsToNextSync(20);
         secondsToNextDrivePdfSyncRef.current = 120;
         hasPendingDrivePdfSyncRef.current = false;
         showToast(`☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & φάκελοι σε PDF στον φάκελο /BestNotes του Google Drive!`);
@@ -4252,7 +4296,7 @@ export default function App() {
         const updatedVolcano = {
           ...existingVolcano,
           folder: waterCycleNb.folder,
-          updatedAt: new Date().toISOString(),
+          updatedAt: existingVolcano.updatedAt || '2026-11-04T18:00:00.000Z',
         };
         setNotebooks((prev) =>
           prev.map((n) => (n.id === VOLCANO_NOTEBOOK_ID ? updatedVolcano : n))
@@ -4499,10 +4543,10 @@ export default function App() {
     [activeNotebook, showToast]
   );
 
-  // 5-second Cloud Firestore Auto-Sync loop + 2-minute (120s) Google Drive PDF Auto-Sync loop
+  // 20-second Cloud Firestore Auto-Sync loop + 2-minute (120s) Google Drive PDF Auto-Sync loop
   useEffect(() => {
     const interval = window.setInterval(() => {
-      // 1) Cloud Firestore Sync every 5 seconds
+      // 1) Cloud Firestore Sync every 20 seconds
       setSecondsToNextSync((prev) => {
         if (prev <= 1) {
           if (isDirty) {
@@ -4513,7 +4557,7 @@ export default function App() {
               setIsDirty(false);
             }, 350);
           }
-          return 5;
+          return 20;
         }
         return prev - 1;
       });
@@ -40480,11 +40524,11 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 30s Cloud Sync & 2min Google Drive PDF Sync Pill */}
+              {/* 20s Cloud Sync & 2min Google Drive PDF Sync Pill */}
               <button
                 onClick={() => void performDrivePdfSync(true)}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#263961] hover:bg-[#31487a] text-[11px] text-sky-200 transition cursor-pointer"
-                title="Αυτόματος Συγχρονισμός Cloud κάθε 30s & PDF στο Google Drive (/BestNotes) κάθε 2 λεπτά (Πάτησε για άμεσο συγχρονισμό)"
+                title="Αυτόματος Συγχρονισμός Cloud κάθε 20s & PDF στο Google Drive (/BestNotes) κάθε 2 λεπτά (Πάτησε για άμεσο συγχρονισμό)"
               >
                 <Cloud className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'text-amber-300 animate-pulse' : 'text-emerald-400'}`} />
                 <span className="hidden md:inline">{isDirty ? `${secondsToNextSync}s` : 'Synced'}</span>

@@ -159,7 +159,7 @@ export function buildVolcanoCreationNotebook(folder = ''): Notebook {
     title: 'Η Δημιουργία Ηφαιστείου',
     folder,
     coverColor: '#dc2626',
-    updatedAt: new Date().toISOString(),
+    updatedAt: '2026-11-04T18:00:00.000Z',
     sourceFormat: '.bestNotes',
     tags: ['ηφαίστειο', 'μάγμα', 'λάβα', 'γεωγραφία', 'φυσική'],
     pages: [

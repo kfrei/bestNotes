@@ -748,7 +748,7 @@ export function buildWeightMeasurementNotebook(folder = ''): Notebook {
     folder,
     tags: ['φυσική', 'βάρος', 'μάζα', 'δυναμόμετρο', 'βαρύτητα'],
     coverColor: '#1e40af',
-    updatedAt: new Date().toISOString(),
+    updatedAt: '2026-11-04T18:00:00.000Z',
     sourceFormat: '.bestNotes',
     pages: [
       {
@@ -1077,7 +1077,7 @@ export function buildWaterPhasesNotebook(folder = ''): Notebook {
     folder,
     tags: ['φυσική', 'χημεία', 'νερό', 'πάγος', 'υδρατμός', 'φάσεις'],
     coverColor: '#0284c7',
-    updatedAt: new Date().toISOString(),
+    updatedAt: '2026-11-04T18:00:00.000Z',
     sourceFormat: '.bestNotes',
     pages: [
       {

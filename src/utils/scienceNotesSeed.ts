@@ -1022,7 +1022,7 @@ export function buildPhotosynthesisNotebook(folder = ""): Notebook {
     folder,
     tags: ["βιολογία","φωτοσύνθεση","χλωροπλάστης","φυτικό κύτταρο"],
     coverColor: "#15803d",
-    updatedAt: new Date().toISOString(),
+    updatedAt: "2026-11-04T21:56:01.092Z",
     sourceFormat: ".bestNotes",
     pages: [
       {
@@ -3402,7 +3402,7 @@ export function buildAcidsNotebook(folder = ""): Notebook {
     folder,
     tags: ["χημεία","οξέα","δείκτες","ιοντισμός"],
     coverColor: "#dc2626",
-    updatedAt: new Date().toISOString(),
+    updatedAt: "2026-11-04T23:42:12.094Z",
     sourceFormat: ".bestNotes",
     pages: [
       {
@@ -3680,7 +3680,7 @@ export function buildBasesNotebook(folder = ''): Notebook {
     folder,
     tags: ["χημεία", "βάσεις", "υδροξείδια", "ιοντισμός"],
     coverColor: '#1d4ed8',
-    updatedAt: new Date().toISOString(),
+    updatedAt: '2026-11-04T18:00:00.000Z',
     sourceFormat: '.bestNotes',
     pages: [
       {
