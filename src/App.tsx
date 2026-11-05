@@ -870,52 +870,10 @@ function renderFolderCustomIcon(
 function ensureGymnasioArnaiasSubfolders(
   folders: CustomFolderMeta[]
 ): CustomFolderMeta[] {
-  const hasGymnasio = folders.some(
-    (f) =>
-      f.name.trim() === 'Γυμνάσιο Αρναίας' ||
-      f.name.trim().startsWith('Γυμνάσιο Αρναίας/')
-  );
-  if (!hasGymnasio) return folders;
-  const nowIso = new Date().toISOString();
-  const classNames = ['Α1', 'Β1', 'Γ1', 'Γ2'];
-  // Convert any root-level Α1, Β1, Γ1, Γ2 into Γυμνάσιο Αρναίας/Α1 etc.
-  const migrated = folders.map((f) => {
-    const trimmed = f.name.trim();
-    if (classNames.includes(trimmed)) {
-      return { ...f, name: `Γυμνάσιο Αρναίας/${trimmed}` };
-    }
-    return f;
-  });
-  let seededAlready = false;
-  try {
-    seededAlready = localStorage.getItem('bestnotes_gymnasio_subfolders_seeded_v1') === '1';
-  } catch {
-    // ignore
-  }
-  const hasAnySubfolder = migrated.some((f) => f.name.trim().startsWith('Γυμνάσιο Αρναίας/'));
-  if (!seededAlready && !hasAnySubfolder) {
-    try {
-      localStorage.setItem('bestnotes_gymnasio_subfolders_seeded_v1', '1');
-    } catch {
-      // ignore
-    }
-    const existingSet = new Set(migrated.map((f) => f.name.trim()));
-    const added = [...migrated];
-    if (!existingSet.has('Γυμνάσιο Αρναίας')) {
-      added.push({ name: 'Γυμνάσιο Αρναίας', updatedAt: nowIso });
-    }
-    for (const cls of classNames) {
-      const subPath = `Γυμνάσιο Αρναίας/${cls}`;
-      if (!existingSet.has(subPath)) {
-        added.push({ name: subPath, updatedAt: nowIso });
-      }
-    }
-    return added;
-  }
-  // Deduplicate by trimmed name
+  // Strictly preserve user folders as-is across refreshes (only deduplicate empty/duplicate names)
   const seen = new Set<string>();
-  return migrated.filter((f) => {
-    const k = f.name.trim();
+  return folders.filter((f) => {
+    const k = (f.name || '').trim();
     if (!k || seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -1093,112 +1051,6 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
     });
     return pageModified ? { ...p, id: pid, strokes: nextStrokes } : p;
   });
-
-  const normTitle = (nb.title || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-
-  if (normTitle.includes('μετρηση μαζας') && nextPages.length >= 1) {
-    const p0 = nextPages[0];
-    const p0HasDiagram = (p0.images || []).some((im) => im.dataUrl && im.dataUrl.length > 0);
-    if (!p0HasDiagram) {
-      nextPages[0] = {
-        ...p0,
-        id: p0.id === nextPages[1]?.id ? 'page-maza-1' : p0.id || 'page-maza-1',
-        title: 'Σελίδα 1',
-        template: p0.template || 'grid',
-        orientation: 'portrait',
-        strokes: [],
-        images: [
-          {
-            id: 'img-maza-diagram-1',
-            dataUrl: '/showcase/maza-diagram.png',
-            originalDataUrl: '/showcase/maza-diagram.png',
-            x: 55,
-            y: 18,
-            width: 670,
-            height: 595,
-            layerId: 'layer-1',
-            zOrder: 1,
-          },
-        ],
-        texts: [
-          {
-            id: 'txt-maza-1',
-            x: 118,
-            y: 625,
-            text: 'Μονάδα μέτρησης της μάζας είναι το 1kg',
-            color: '#0f172a',
-            fontSize: 32,
-            bold: true,
-            fontFamily: 'calligraphic',
-            layerId: 'layer-1',
-          },
-          {
-            id: 'txt-maza-2',
-            x: 162,
-            y: 695,
-            text: 'Η μάζα αποτελεί μέτρο αδράνειας',
-            color: '#0f172a',
-            fontSize: 28,
-            fontFamily: 'handwritten',
-            layerId: 'layer-1',
-          },
-          {
-            id: 'math-maza-3',
-            x: 158,
-            y: 765,
-            text: 'u = \\frac{\\Delta x}{\\Delta t} \\Rightarrow u = \\frac{60\\,\\text{m}}{20\\,\\text{s}} \\Rightarrow u = 3\\,\\text{m/s}',
-            latex:
-              'u = \\frac{\\Delta x}{\\Delta t} \\Rightarrow u = \\frac{60\\,\\text{m}}{20\\,\\text{s}} \\Rightarrow u = 3\\,\\text{m/s}',
-            isMath: true,
-            color: '#0f172a',
-            fontSize: 28,
-            layerId: 'layer-1',
-          },
-        ],
-      };
-      repaired = true;
-    }
-  }
-
-  // Auto-recover "Τα Οξέα" (nb-acids-v1) if it was reverted to the landscape seed
-  if (
-    nb.id === ACIDS_NOTEBOOK_ID &&
-    (nb.updatedAt || '') <= '2026-11-05T10:45:00.000Z' &&
-    nextPages.length >= 1 &&
-    nextPages[0]?.orientation !== 'portrait'
-  ) {
-    const recoveredAcids = buildAcidsNotebook(nb.folder || '');
-    return {
-      nb: {
-        ...recoveredAcids,
-        folder: nb.folder || recoveredAcids.folder,
-        updatedAt: recoveredAcids.updatedAt,
-      },
-      repaired: true,
-    };
-  }
-
-  // Auto-recover "Η Φωτοσύνθεση" (nb-photosynthesis-v1) with the magnifying glass (img-1793828927520) and 3 green frames (st-1793865037881-lub3) if reverted to an older copy
-  if (
-    nb.id === PHOTOSYNTHESIS_NOTEBOOK_ID &&
-    (nb.updatedAt || '') <= '2026-11-05T10:45:00.000Z' &&
-    nextPages.length >= 1 &&
-    (!(nextPages[0]?.images || []).some((im) => im.id === 'img-1793828927520') ||
-      !(nextPages[0]?.strokes || []).some((s) => s.id === 'st-1793865037881-lub3'))
-  ) {
-    const recoveredPhoto = buildPhotosynthesisNotebook(nb.folder || '');
-    return {
-      nb: {
-        ...recoveredPhoto,
-        folder: nb.folder || recoveredPhoto.folder,
-        updatedAt: recoveredPhoto.updatedAt,
-      },
-      repaired: true,
-    };
-  }
 
   if (!repaired) return { nb, repaired: false };
   return {
@@ -1398,16 +1250,27 @@ export default function App() {
           const finalNbs = loadedNbs || createDefaultBlankNotebooks();
           setNotebooks(finalNbs);
 
-          // Preserve active notebook & page across Refresh if saved in session storage
+          // Preserve exact viewMode, activeLibraryFolder, openNotebookIds, activeNotebookId & page across Refresh
           let restoredActiveId = finalNbs[0]?.id || '';
-          let restoredOpenIds = finalNbs[0] ? [finalNbs[0].id] : [];
+          let restoredOpenIds: string[] = [];
           let restoredPageIdx = 0;
+          let restoredViewMode: 'library' | 'editor' | null = null;
           try {
             const rawSession =
               localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${user.uid}`) ||
               localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_latest`);
             if (rawSession) {
               const sess = JSON.parse(rawSession);
+              if (sess && (sess.viewMode === 'library' || sess.viewMode === 'editor')) {
+                restoredViewMode = sess.viewMode;
+              }
+              if (sess && 'activeLibraryFolder' in sess) {
+                setActiveLibraryFolder(
+                  typeof sess.activeLibraryFolder === 'string' && sess.activeLibraryFolder.trim().length > 0
+                    ? sess.activeLibraryFolder.trim()
+                    : null
+                );
+              }
               if (
                 sess &&
                 typeof sess.activeNotebookId === 'string' &&
@@ -1417,10 +1280,9 @@ export default function App() {
                 restoredActiveId = sess.activeNotebookId;
               }
               if (sess && Array.isArray(sess.openNotebookIds)) {
-                const validOpen = sess.openNotebookIds.filter(
+                restoredOpenIds = sess.openNotebookIds.filter(
                   (id: string) => typeof id === 'string' && id.length > 0 && id !== 'nb-blank-1'
                 );
-                if (validOpen.length > 0) restoredOpenIds = validOpen;
               }
               if (sess && typeof sess.activePageIndex === 'number') {
                 restoredPageIdx = Math.max(0, sess.activePageIndex);
@@ -1442,6 +1304,13 @@ export default function App() {
           setActiveNotebookId(restoredActiveId);
           setActivePageIndex(restoredPageIdx);
           activeDrawingPageIndexRef.current = restoredPageIdx;
+          if (!explicitLandingNavRef.current) {
+            if (restoredViewMode) {
+              setViewMode(restoredViewMode);
+            } else {
+              setViewMode((prev) => (prev === 'landing' ? 'library' : prev));
+            }
+          }
 
           // Also load from high-capacity IndexedDB (which never suffers from localStorage 5MB limit!)
           hasLoadedIndexedDbRef.current = false;
@@ -1510,13 +1379,6 @@ export default function App() {
             }
           } else {
             setShapeLibrary([]);
-          }
-
-          // If user is already logged in on page load/refresh and didn't explicitly navigate to Landing Page, keep them in the app!
-          if (!explicitLandingNavRef.current) {
-            setViewMode((prev) =>
-              prev === 'landing' ? (finalNbs.length > 0 ? 'editor' : 'library') : prev
-            );
           }
         } else {
           hasLoadedIndexedDbRef.current = true;
@@ -3860,11 +3722,19 @@ export default function App() {
             const localUpdatedAt = localNb.updatedAt || '';
             const remoteUpdatedAt = rem.updatedAt || rem.nb.updatedAt || '';
 
-            // 1. ABSOLUTE MULTI-DEVICE RULE:
-            // - If the user has NOT explicitly edited this notebook in the current session (!userEditedInSessionRef.current.has(id)),
-            //   this device was just opened, refreshed, or is idle -> ALWAYS pull the authoritative Cloud version down!
-            // - OR if the Cloud version has a strictly newer updatedAt timestamp than this device's local copy,
-            //   ALWAYS pull the newer Cloud version down!
+            // 1. MULTI-DEVICE & REFRESH-SAFE TIMESTAMP RULE:
+            // - If this device's local copy has a strictly NEWER updatedAt than the Cloud snapshot
+            //   (e.g. the user edited/moved it right before hitting Refresh!), keep the newer local copy
+            //   and push it to the Cloud so Refresh NEVER reverts a recent action!
+            if (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt) {
+              if ((inFlightSavesMapRef.current.get(id) || 0) === 0) {
+                notebooksToPushBack.push(localNb);
+              }
+              continue;
+            }
+
+            // 2. Otherwise, if the user has NOT edited this notebook in the current session OR the Cloud version
+            //    has a newer/equal timestamp, pull the authoritative Cloud version down!
             if (
               !userEditedInSessionRef.current.has(id) ||
               (remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt))
@@ -3967,10 +3837,41 @@ export default function App() {
           data.customFoldersJson !== lastSyncedMetaRef.current.folders
         ) {
           try {
-            const parsedF = JSON.parse(data.customFoldersJson);
-            if (Array.isArray(parsedF)) {
-              lastSyncedMetaRef.current.folders = data.customFoldersJson;
-              setCustomFolders(ensureGymnasioArnaiasSubfolders(parsedF));
+            const localFoldersTs = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`) || '';
+            const remoteFoldersTs =
+              typeof data.foldersUpdatedAt === 'string'
+                ? data.foldersUpdatedAt
+                : typeof data.updatedAt === 'string'
+                ? data.updatedAt
+                : '';
+            if (localFoldersTs && remoteFoldersTs && localFoldersTs > remoteFoldersTs) {
+              const localRaw = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`);
+              if (localRaw && localRaw.length < 900000) {
+                lastSyncedMetaRef.current.folders = localRaw;
+                void setDoc(
+                  doc(db, 'users', uid),
+                  {
+                    customFoldersJson: localRaw,
+                    foldersUpdatedAt: localFoldersTs,
+                    updatedAt: localFoldersTs,
+                    deviceId: deviceIdRef.current,
+                  },
+                  { merge: true }
+                );
+              }
+            } else {
+              const parsedF = JSON.parse(data.customFoldersJson);
+              if (Array.isArray(parsedF)) {
+                lastSyncedMetaRef.current.folders = data.customFoldersJson;
+                if (remoteFoldersTs) {
+                  try {
+                    localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, remoteFoldersTs);
+                  } catch {
+                    // ignore
+                  }
+                }
+                setCustomFolders(ensureGymnasioArnaiasSubfolders(parsedF));
+              }
             }
           } catch {
             // ignore
@@ -4125,6 +4026,14 @@ export default function App() {
     ) {
       return;
     }
+    const nowIso = new Date().toISOString();
+    if (foldersStr !== lastSyncedMetaRef.current.folders) {
+      try {
+        localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, nowIso);
+      } catch {
+        // ignore
+      }
+    }
     const timer = window.setTimeout(() => {
       lastSyncedMetaRef.current = { folders: foldersStr, shapeLib: shapeLibStr };
       if (foldersStr.length < 900000 && shapeLibStr.length < 900000) {
@@ -4132,14 +4041,15 @@ export default function App() {
           doc(db, 'users', uid),
           {
             customFoldersJson: foldersStr,
+            foldersUpdatedAt: nowIso,
             shapeLibraryJson: shapeLibStr,
-            updatedAt: new Date().toISOString(),
+            updatedAt: nowIso,
             deviceId: deviceIdRef.current,
           },
           { merge: true }
         );
       }
-    }, 400);
+    }, 150);
     return () => window.clearTimeout(timer);
   }, [currentUser, customFolders, shapeLibrary]);
 
@@ -40936,6 +40846,16 @@ export default function App() {
           <button
             onClick={async () => {
               showToast('🔄 Ανανέωση εφαρμογής & συγχρονισμός Cloud...');
+              try {
+                const uid = currentUser?.uid || initialAuthUid;
+                const serialized = JSON.stringify(buildCurrentSessionSnapshot());
+                localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_latest`, serialized);
+                if (uid) {
+                  localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
+                }
+              } catch {
+                // ignore
+              }
               if (currentUser && userEditedInSessionRef.current.size > 0) {
                 try {
                   saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
