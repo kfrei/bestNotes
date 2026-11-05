@@ -1255,6 +1255,7 @@ export default function App() {
       if (raw) {
         return JSON.parse(raw) as {
           viewMode?: 'landing' | 'editor' | 'library';
+          activeLibraryFolder?: string | null;
           openNotebookIds?: string[];
           activeNotebookId?: string;
           activePageIndex?: number;
@@ -2687,7 +2688,11 @@ export default function App() {
   });
   const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
   const [showLibraryFavoritesOnly, setShowLibraryFavoritesOnly] = useState<boolean>(false);
-  const [activeLibraryFolder, setActiveLibraryFolder] = useState<string | null>(null);
+  const [activeLibraryFolder, setActiveLibraryFolder] = useState<string | null>(() =>
+    typeof initialSession?.activeLibraryFolder === 'string' && initialSession.activeLibraryFolder.trim().length > 0
+      ? initialSession.activeLibraryFolder.trim()
+      : null
+  );
   const [customFolders, setCustomFolders] = useState<CustomFolderMeta[]>(() => {
     if (initialAuthUid) {
       try {
@@ -2800,6 +2805,7 @@ export default function App() {
   const buildCurrentSessionSnapshot = useCallback(
     () => ({
       viewMode,
+      activeLibraryFolder,
       openNotebookIds,
       activeNotebookId,
       activePageIndex,
@@ -2853,6 +2859,7 @@ export default function App() {
     }),
     [
       viewMode,
+      activeLibraryFolder,
       openNotebookIds,
       activeNotebookId,
       activePageIndex,
@@ -40910,7 +40917,12 @@ export default function App() {
             />
           </button>
           <button
-            onClick={() => setViewMode('library')}
+            onClick={() => {
+              if (viewMode === 'editor' && !activeLibraryFolder && activeNotebook?.folder) {
+                setActiveLibraryFolder(activeNotebook.folder);
+              }
+              setViewMode('library');
+            }}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer ${
               viewMode === 'library' ? 'bg-white/15 text-white' : 'text-white/90'
             }`}
@@ -41045,6 +41057,9 @@ export default function App() {
                     const rem = openNotebookIds.filter((id) => id !== nb.id);
                     setOpenNotebookIds(rem);
                     if (rem.length === 0) {
+                      if (!activeLibraryFolder && nb.folder) {
+                        setActiveLibraryFolder(nb.folder);
+                      }
                       setViewMode('library');
                     } else if (activeNotebook.id === nb.id) {
                       setActiveNotebookId(rem[0]);
