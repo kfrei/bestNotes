@@ -42228,10 +42228,6 @@ export default function App() {
               };
 
               const activeBreadcrumbParts = currentFolderPath ? currentFolderPath.split('/') : [];
-              const parentFolderForBack =
-                activeBreadcrumbParts.length > 1
-                  ? activeBreadcrumbParts.slice(0, -1).join('/')
-                  : null;
 
               return (
                 <>
@@ -42267,6 +42263,7 @@ export default function App() {
                           }`}
                           title="Μετάβαση στην Αρχική Βιβλιοθήκη"
                         >
+                          <Home className="w-6 h-6 shrink-0" />
                           <span>Βιβλιοθήκη</span>
                         </button>
                         {activeBreadcrumbParts.map((seg, bIdx) => {
@@ -42324,36 +42321,6 @@ export default function App() {
                               <span>Αγαπημένα</span>
                             </span>
                           </>
-                        )}
-                        {activeLibraryFolder && (
-                          <button
-                            type="button"
-                            data-library-folder-drop={parentFolderForBack || '__ROOT__'}
-                            onDragEnter={(e) =>
-                              handleFolderDragOver(e, parentFolderForBack || '__ROOT__')
-                            }
-                            onDragOver={(e) =>
-                              handleFolderDragOver(e, parentFolderForBack || '__ROOT__')
-                            }
-                            onDragLeave={(e) =>
-                              handleFolderDragLeave(e, parentFolderForBack || '__ROOT__')
-                            }
-                            onDrop={(e) => handleFolderDrop(e, parentFolderForBack || '__ROOT__')}
-                            onClick={() => setActiveLibraryFolder(parentFolderForBack)}
-                            className={`ml-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer focus:outline-none ${
-                              dragOverFolderName === (parentFolderForBack || '__ROOT__')
-                                ? 'bg-[#0066ff] text-white ring-4 ring-[#0066ff]/25 scale-105 shadow-md'
-                                : draggingLibraryNbId
-                                ? 'bg-sky-100 text-[#0066ff] border border-dashed border-[#0066ff]'
-                                : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                            }`}
-                          >
-                            {dragOverFolderName === (parentFolderForBack || '__ROOT__')
-                              ? `📥 Άφησε για μετακίνηση σε ${parentFolderForBack || 'Βιβλιοθήκη'}`
-                              : parentFolderForBack
-                              ? `← Πίσω (${activeBreadcrumbParts[activeBreadcrumbParts.length - 2]})`
-                              : '← Όλοι οι Φάκελοι'}
-                          </button>
                         )}
                       </div>
                       <p className="text-sm text-slate-500 mt-0.5">
@@ -43749,16 +43716,6 @@ export default function App() {
                                   nb.favorite ? 'fill-amber-400 text-amber-500' : ''
                                 }`}
                               />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openNotebookDirectly(nb);
-                              }}
-                              className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
-                              title={`Άνοιγμα & Επεξεργασία "${nb.title}"`}
-                            >
-                              <Pen className="w-4 h-4" />
                             </button>
                             <button
                               onClick={(e) => {
