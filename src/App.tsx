@@ -879,6 +879,51 @@ function ensureGymnasioArnaiasSubfolders(
     return true;
   });
 }
+
+function normalizeFolderKeyForMerge(raw: string): string {
+  return (raw || '')
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('/');
+}
+
+function mergeCustomFoldersNewest(
+  primaryList: CustomFolderMeta[],
+  secondaryList: CustomFolderMeta[],
+  allowSecondaryStylingOverrideWhenNewer: boolean
+): CustomFolderMeta[] {
+  const secondaryMap = new Map<string, CustomFolderMeta>();
+  for (const item of secondaryList) {
+    const k = normalizeFolderKeyForMerge(item.name);
+    if (k && !secondaryMap.has(k)) {
+      secondaryMap.set(k, { ...item, name: k });
+    }
+  }
+  const seen = new Set<string>();
+  const result: CustomFolderMeta[] = [];
+  for (const p of primaryList) {
+    const k = normalizeFolderKeyForMerge(p.name);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    const s = secondaryMap.get(k);
+    if (!s) {
+      result.push({ ...p, name: k });
+      continue;
+    }
+    const pTime = p.updatedAt || '';
+    const sTime = s.updatedAt || '';
+    const sIsNewer = Boolean(allowSecondaryStylingOverrideWhenNewer && sTime && sTime > pTime);
+    result.push({
+      name: k,
+      updatedAt: sTime > pTime ? sTime : pTime || sTime,
+      color: sIsNewer ? s.color ?? p.color : p.color ?? s.color,
+      icon: sIsNewer ? s.icon ?? p.icon : p.icon ?? s.icon,
+      favorite: sIsNewer ? s.favorite ?? p.favorite : p.favorite ?? s.favorite,
+    });
+  }
+  return result;
+}
 const PRESET_COLORS = [
   '#111827',
   '#dc2626',
@@ -1183,6 +1228,8 @@ export default function App() {
   const hasCompletedInitialCloudLoadRef = useRef<boolean>(false);
   const allRemotePrimaryIdsRef = useRef<Set<string>>(new Set());
   const userEditedInSessionRef = useRef<Set<string>>(new Set());
+  const userEditedFoldersInSessionRef = useRef<boolean>(false);
+  const hasLoadedUserDocRef = useRef<boolean>(false);
   const [cloudInitialLoaded, setCloudInitialLoaded] = useState<boolean>(false);
 
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(() => {
@@ -2949,6 +2996,102 @@ export default function App() {
     []
   );
 
+  // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
+  const deviceIdRef = useRef<string>(
+    (() => {
+      try {
+        const existing = localStorage.getItem('bestnotes_device_id_v1');
+        if (existing) return existing;
+        const created = `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        localStorage.setItem('bestnotes_device_id_v1', created);
+        return created;
+      } catch {
+        return `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      }
+    })()
+  );
+  const lastSyncedJsonMapRef = useRef<Map<string, string>>(new Map());
+  const lastSeenRemoteJsonMapRef = useRef<Map<string, string>>(new Map());
+  const remoteUpdatedAtMapRef = useRef<Map<string, string>>(new Map());
+  const inFlightSavesMapRef = useRef<Map<string, number>>(new Map());
+  const lastSyncedMetaRef = useRef<{ folders: string; shapeLib: string }>({ folders: '', shapeLib: '' });
+  const notebooksRef = useRef<Notebook[]>(notebooks);
+  notebooksRef.current = notebooks;
+  const customFoldersRef = useRef<CustomFolderMeta[]>(customFolders);
+  customFoldersRef.current = customFolders;
+
+  const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string) => {
+    try {
+      const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
+      if (remoteTime && (nb.updatedAt || '') < remoteTime) {
+        return;
+      }
+      const dataJson = explicitJson ?? serializeNotebookForFirestore(nb);
+      lastSyncedJsonMapRef.current.set(nb.id, dataJson);
+      if (nb.updatedAt && nb.updatedAt > remoteTime) {
+        remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
+      }
+      inFlightSavesMapRef.current.set(nb.id, (inFlightSavesMapRef.current.get(nb.id) || 0) + 1);
+      saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current)
+        .then((didWrite) => {
+          if (didWrite) {
+            lastSeenRemoteJsonMapRef.current.set(nb.id, dataJson);
+            if (nb.updatedAt) {
+              remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
+            }
+          } else {
+            lastSyncedJsonMapRef.current.delete(nb.id);
+          }
+        })
+        .catch((err) => {
+          console.error('Firestore notebook sync error:', err);
+        })
+        .finally(() => {
+          const count = inFlightSavesMapRef.current.get(nb.id) || 1;
+          if (count <= 1) {
+            inFlightSavesMapRef.current.delete(nb.id);
+          } else {
+            inFlightSavesMapRef.current.set(nb.id, count - 1);
+          }
+        });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const commitUserFoldersChange = useCallback(
+    (nextFolders: CustomFolderMeta[]) => {
+      const nowIso = new Date().toISOString();
+      userEditedFoldersInSessionRef.current = true;
+      customFoldersRef.current = nextFolders;
+      setCustomFolders(nextFolders);
+      const foldersStr = JSON.stringify(nextFolders);
+      const uid = currentUser?.uid || initialAuthUid;
+      if (uid) {
+        try {
+          localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, foldersStr);
+          localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, nowIso);
+        } catch {
+          // ignore
+        }
+      }
+      if (currentUser && foldersStr.length < 900000) {
+        lastSyncedMetaRef.current.folders = foldersStr;
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          {
+            customFoldersJson: foldersStr,
+            foldersUpdatedAt: nowIso,
+            updatedAt: nowIso,
+            deviceId: deviceIdRef.current,
+          },
+          { merge: true }
+        );
+      }
+    },
+    [currentUser, initialAuthUid]
+  );
+
   const commitRenamingNotebook = useCallback(
     (nbId: string, draftTitle: string) => {
       const trimmed = draftTitle.trim();
@@ -2956,22 +3099,28 @@ export default function App() {
       setRenamingNotebookContext(null);
       if (!trimmed) return;
       let changed = false;
+      let updatedNb: Notebook | null = null;
+      const nowIso = new Date().toISOString();
       userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== nbId) return nb;
           if (nb.title === trimmed) return nb;
           changed = true;
-          return { ...nb, title: trimmed, updatedAt: new Date().toISOString() };
+          updatedNb = { ...nb, title: trimmed, updatedAt: nowIso };
+          return updatedNb;
         })
       );
       if (changed) {
+        if (currentUser && updatedNb) {
+          pushNotebookToCloudTracked(currentUser.uid, updatedNb);
+        }
         setIsDirty(true);
         setSyncStatus('dirty');
         showToast(`✏️ Μετονομάστηκε σε «${trimmed}»!`);
       }
     },
-    [showToast]
+    [showToast, currentUser, pushNotebookToCloudTracked]
   );
 
   const addTagsToNotebook = useCallback(
@@ -2987,6 +3136,8 @@ export default function App() {
       if (newTags.length === 0) return;
 
       let addedCount = 0;
+      let updatedNb: Notebook | null = null;
+      const nowIso = new Date().toISOString();
       userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
         prev.map((nb) => {
@@ -3003,32 +3154,42 @@ export default function App() {
             }
           }
           if (merged.length === existing.length) return nb;
-          return { ...nb, tags: merged, updatedAt: new Date().toISOString() };
+          updatedNb = { ...nb, tags: merged, updatedAt: nowIso };
+          return updatedNb;
         })
       );
       if (addedCount > 0) {
+        if (currentUser && updatedNb) {
+          pushNotebookToCloudTracked(currentUser.uid, updatedNb);
+        }
         setIsDirty(true);
         setSyncStatus('dirty');
         showToast(`🏷️ Προστέθηκαν ${addedCount} tag(s) στη σημείωση!`);
       }
     },
-    [showToast]
+    [showToast, currentUser, pushNotebookToCloudTracked]
   );
 
   const removeTagFromNotebook = useCallback(
     (nbId: string, tagToRemove: string) => {
+      let updatedNb: Notebook | null = null;
+      const nowIso = new Date().toISOString();
       userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
         prev.map((nb) => {
           if (nb.id !== nbId) return nb;
           const nextTags = (nb.tags || []).filter((t) => t !== tagToRemove);
-          return { ...nb, tags: nextTags, updatedAt: new Date().toISOString() };
+          updatedNb = { ...nb, tags: nextTags, updatedAt: nowIso };
+          return updatedNb;
         })
       );
+      if (currentUser && updatedNb) {
+        pushNotebookToCloudTracked(currentUser.uid, updatedNb);
+      }
       setIsDirty(true);
       setSyncStatus('dirty');
     },
-    []
+    [currentUser, pushNotebookToCloudTracked]
   );
 
   const [isAutoTaggingNbId, setIsAutoTaggingNbId] = useState<string | null>(null);
@@ -3267,14 +3428,19 @@ export default function App() {
   const changeNotebookFolder = useCallback(
     (nbId: string, nextFolder: string) => {
       const cleanFolder = nextFolder.trim();
+      const nowIso = new Date().toISOString();
+      let updatedNb: Notebook | null = null;
       userEditedInSessionRef.current.add(nbId);
       setNotebooks((prev) =>
-        prev.map((nb) =>
-          nb.id === nbId
-            ? { ...nb, folder: cleanFolder, updatedAt: new Date().toISOString() }
-            : nb
-        )
+        prev.map((nb) => {
+          if (nb.id !== nbId) return nb;
+          updatedNb = { ...nb, folder: cleanFolder, updatedAt: nowIso };
+          return updatedNb;
+        })
       );
+      if (currentUser && updatedNb) {
+        pushNotebookToCloudTracked(currentUser.uid, updatedNb);
+      }
       setFolderPickerNbId(null);
       setIsDirty(true);
       setSyncStatus('dirty');
@@ -3284,7 +3450,7 @@ export default function App() {
           : '📁 Αφαιρέθηκε ο φάκελος από τη σημείωση!'
       );
     },
-    [showToast]
+    [showToast, currentUser, pushNotebookToCloudTracked]
   );
 
   const startLibraryNotebookPointerDrag = useCallback(
@@ -3413,67 +3579,6 @@ export default function App() {
       window.removeEventListener('pointercancel', handleGlobalPointerCancel);
     };
   }, [viewMode, changeNotebookFolder]);
-
-  // DEBOUNCED LocalStorage + Real-Time Cloud Firestore Multi-Device Sync (Mac Mini <-> iPad)
-  const deviceIdRef = useRef<string>(
-    (() => {
-      try {
-        const existing = localStorage.getItem('bestnotes_device_id_v1');
-        if (existing) return existing;
-        const created = `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        localStorage.setItem('bestnotes_device_id_v1', created);
-        return created;
-      } catch {
-        return `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      }
-    })()
-  );
-  const lastSyncedJsonMapRef = useRef<Map<string, string>>(new Map());
-  const lastSeenRemoteJsonMapRef = useRef<Map<string, string>>(new Map());
-  const remoteUpdatedAtMapRef = useRef<Map<string, string>>(new Map());
-  const inFlightSavesMapRef = useRef<Map<string, number>>(new Map());
-  const lastSyncedMetaRef = useRef<{ folders: string; shapeLib: string }>({ folders: '', shapeLib: '' });
-  const notebooksRef = useRef<Notebook[]>(notebooks);
-  notebooksRef.current = notebooks;
-
-  const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string) => {
-    try {
-      const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-      if (remoteTime && (nb.updatedAt || '') < remoteTime) {
-        return;
-      }
-      const dataJson = explicitJson ?? serializeNotebookForFirestore(nb);
-      lastSyncedJsonMapRef.current.set(nb.id, dataJson);
-      if (nb.updatedAt && nb.updatedAt > remoteTime) {
-        remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
-      }
-      inFlightSavesMapRef.current.set(nb.id, (inFlightSavesMapRef.current.get(nb.id) || 0) + 1);
-      saveNotebookToFirestoreChunked(uid, nb, dataJson, deviceIdRef.current)
-        .then((didWrite) => {
-          if (didWrite) {
-            lastSeenRemoteJsonMapRef.current.set(nb.id, dataJson);
-            if (nb.updatedAt) {
-              remoteUpdatedAtMapRef.current.set(nb.id, nb.updatedAt);
-            }
-          } else {
-            lastSyncedJsonMapRef.current.delete(nb.id);
-          }
-        })
-        .catch((err) => {
-          console.error('Firestore notebook sync error:', err);
-        })
-        .finally(() => {
-          const count = inFlightSavesMapRef.current.get(nb.id) || 1;
-          if (count <= 1) {
-            inFlightSavesMapRef.current.delete(nb.id);
-          } else {
-            inFlightSavesMapRef.current.set(nb.id, count - 1);
-          }
-        });
-    } catch {
-      // ignore
-    }
-  }, []);
 
   // 1. Real-Time Cloud Firestore Listener for Logged-In Users (syncs notebooks, folders & shapeLibrary across Mac Mini & iPad!)
   useEffect(() => {
@@ -3777,66 +3882,60 @@ export default function App() {
       }
     );
 
-    const unsubUserDoc = onSnapshot(
-      userDocRef,
-      (docSnap) => {
-        if (!docSnap.exists()) return;
-        const data = docSnap.data();
-        if (!data) return;
+    const applyRemoteUserDocData = (data: Record<string, any> | undefined) => {
+      if (!data) return;
+      hasLoadedUserDocRef.current = true;
 
-        // Always restore Google Drive linked email & active token across devices / PWA sessions
-        if (typeof data.driveEmail === 'string' && data.driveEmail.length > 0) {
-          setDriveEmail((prev) => {
-            if (prev === data.driveEmail) return prev;
-            try {
-              localStorage.setItem('bestnotes_drive_email_v1', data.driveEmail);
-            } catch {
-              // ignore
-            }
-            return data.driveEmail;
-          });
-        }
-        if (
-          typeof data.driveAccessTokenV2 === 'string' &&
-          data.driveAccessTokenV2.length > 0 &&
-          typeof data.driveTokenIssuedAt === 'number' &&
-          Date.now() - data.driveTokenIssuedAt < 52 * 60 * 1000
-        ) {
-          setDriveAccessToken((prev) => {
-            if (prev === data.driveAccessTokenV2) return prev;
-            try {
-              localStorage.setItem('bestnotes_drive_token_v2', data.driveAccessTokenV2);
-              localStorage.setItem('bestnotes_drive_token_time_v2', String(data.driveTokenIssuedAt));
-            } catch {
-              // ignore
-            }
-            return data.driveAccessTokenV2;
-          });
-        }
-        if (
-          typeof data.driveBasePath === 'string' &&
-          data.driveBasePath.trim().length > 0 &&
-          data.driveBasePath.trim() !== 'BestNotes'
-        ) {
-          const remoteBase = data.driveBasePath.trim();
-          setDriveBasePath((prev) => {
-            if (prev === remoteBase) return prev;
-            try {
-              localStorage.setItem('bestnotes_drive_base_path_v1', remoteBase);
-            } catch {
-              // ignore
-            }
-            return remoteBase;
-          });
-        }
-
-        if (data.deviceId === deviceIdRef.current && lastSyncedMetaRef.current.folders !== '') return;
-
-        if (
-          typeof data.customFoldersJson === 'string' &&
-          data.customFoldersJson !== lastSyncedMetaRef.current.folders
-        ) {
+      // Always restore Google Drive linked email & active token across devices / PWA sessions
+      if (typeof data.driveEmail === 'string' && data.driveEmail.length > 0) {
+        setDriveEmail((prev) => {
+          if (prev === data.driveEmail) return prev;
           try {
+            localStorage.setItem('bestnotes_drive_email_v1', data.driveEmail);
+          } catch {
+            // ignore
+          }
+          return data.driveEmail;
+        });
+      }
+      if (
+        typeof data.driveAccessTokenV2 === 'string' &&
+        data.driveAccessTokenV2.length > 0 &&
+        typeof data.driveTokenIssuedAt === 'number' &&
+        Date.now() - data.driveTokenIssuedAt < 52 * 60 * 1000
+      ) {
+        setDriveAccessToken((prev) => {
+          if (prev === data.driveAccessTokenV2) return prev;
+          try {
+            localStorage.setItem('bestnotes_drive_token_v2', data.driveAccessTokenV2);
+            localStorage.setItem('bestnotes_drive_token_time_v2', String(data.driveTokenIssuedAt));
+          } catch {
+            // ignore
+          }
+          return data.driveAccessTokenV2;
+        });
+      }
+      if (
+        typeof data.driveBasePath === 'string' &&
+        data.driveBasePath.trim().length > 0 &&
+        data.driveBasePath.trim() !== 'BestNotes'
+      ) {
+        const remoteBase = data.driveBasePath.trim();
+        setDriveBasePath((prev) => {
+          if (prev === remoteBase) return prev;
+          try {
+            localStorage.setItem('bestnotes_drive_base_path_v1', remoteBase);
+          } catch {
+            // ignore
+          }
+          return remoteBase;
+        });
+      }
+
+      if (typeof data.customFoldersJson === 'string' && data.customFoldersJson.length > 0) {
+        try {
+          const parsedRemote = JSON.parse(data.customFoldersJson);
+          if (Array.isArray(parsedRemote)) {
             const localFoldersTs = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`) || '';
             const remoteFoldersTs =
               typeof data.foldersUpdatedAt === 'string'
@@ -3844,63 +3943,104 @@ export default function App() {
                 : typeof data.updatedAt === 'string'
                 ? data.updatedAt
                 : '';
-            if (localFoldersTs && remoteFoldersTs && localFoldersTs > remoteFoldersTs) {
-              const localRaw = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`);
-              if (localRaw && localRaw.length < 900000) {
-                lastSyncedMetaRef.current.folders = localRaw;
-                void setDoc(
-                  doc(db, 'users', uid),
-                  {
-                    customFoldersJson: localRaw,
-                    foldersUpdatedAt: localFoldersTs,
-                    updatedAt: localFoldersTs,
-                    deviceId: deviceIdRef.current,
-                  },
-                  { merge: true }
-                );
-              }
-            } else {
-              const parsedF = JSON.parse(data.customFoldersJson);
-              if (Array.isArray(parsedF)) {
-                lastSyncedMetaRef.current.folders = data.customFoldersJson;
-                if (remoteFoldersTs) {
-                  try {
-                    localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, remoteFoldersTs);
-                  } catch {
-                    // ignore
-                  }
-                }
-                setCustomFolders(ensureGymnasioArnaiasSubfolders(parsedF));
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
+            const localEditedInSession = userEditedFoldersInSessionRef.current;
+            const localIsStrictlyNewerInSession =
+              localEditedInSession && Boolean(localFoldersTs && (!remoteFoldersTs || localFoldersTs > remoteFoldersTs));
 
-        if (
-          typeof data.shapeLibraryJson === 'string' &&
-          data.shapeLibraryJson !== lastSyncedMetaRef.current.shapeLib
-        ) {
-          try {
-            const parsedL = JSON.parse(data.shapeLibraryJson);
-            if (Array.isArray(parsedL)) {
-              lastSyncedMetaRef.current.shapeLib = data.shapeLibraryJson;
-              setShapeLibrary(parsedL);
+            const currentLocal = customFoldersRef.current;
+            const mergedFolders = ensureGymnasioArnaiasSubfolders(
+              localIsStrictlyNewerInSession
+                ? mergeCustomFoldersNewest(currentLocal, parsedRemote, false)
+                : mergeCustomFoldersNewest(parsedRemote, currentLocal, true)
+            );
+            const mergedStr = JSON.stringify(mergedFolders);
+            const bestTs =
+              localFoldersTs > remoteFoldersTs ? localFoldersTs : remoteFoldersTs || new Date().toISOString();
+
+            if (mergedStr !== JSON.stringify(currentLocal)) {
+              customFoldersRef.current = mergedFolders;
+              setCustomFolders(mergedFolders);
             }
-          } catch {
-            // ignore
+            try {
+              localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, mergedStr);
+              if (bestTs) {
+                localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, bestTs);
+              }
+            } catch {
+              // ignore
+            }
+
+            if (mergedStr !== data.customFoldersJson && mergedStr.length < 900000) {
+              // Either local had newer in-session edits OR rescued defined color/icon/favorite metadata missing in Cloud -> sync back!
+              lastSyncedMetaRef.current.folders = mergedStr;
+              void setDoc(
+                doc(db, 'users', uid),
+                {
+                  customFoldersJson: mergedStr,
+                  foldersUpdatedAt: bestTs,
+                  updatedAt: bestTs,
+                  deviceId: deviceIdRef.current,
+                },
+                { merge: true }
+              );
+            } else {
+              lastSyncedMetaRef.current.folders = data.customFoldersJson;
+            }
           }
+        } catch {
+          // ignore
         }
+      }
+
+      if (
+        typeof data.shapeLibraryJson === 'string' &&
+        data.shapeLibraryJson !== lastSyncedMetaRef.current.shapeLib
+      ) {
+        try {
+          const parsedL = JSON.parse(data.shapeLibraryJson);
+          if (Array.isArray(parsedL)) {
+            lastSyncedMetaRef.current.shapeLib = data.shapeLibraryJson;
+            setShapeLibrary(parsedL);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    const unsubUserDoc = onSnapshot(
+      userDocRef,
+      (docSnap) => {
+        hasLoadedUserDocRef.current = true;
+        if (!docSnap.exists()) return;
+        applyRemoteUserDocData(docSnap.data());
       },
       () => {
         // Ignore transient offline errors
       }
     );
 
+    const refreshUserDocFromServerOnWake = () => {
+      if (document.visibilityState !== 'visible') return;
+      void getDocFromServer(userDocRef)
+        .then((snap) => {
+          if (snap.exists()) {
+            applyRemoteUserDocData(snap.data());
+          }
+        })
+        .catch(() => {
+          // ignore if offline
+        });
+    };
+
+    document.addEventListener('visibilitychange', refreshUserDocFromServerOnWake);
+    window.addEventListener('focus', refreshUserDocFromServerOnWake);
+
     return () => {
       unsubNotebooks();
       unsubUserDoc();
+      document.removeEventListener('visibilitychange', refreshUserDocFromServerOnWake);
+      window.removeEventListener('focus', refreshUserDocFromServerOnWake);
     };
   }, [currentUser, pushNotebookToCloudTracked]);
 
@@ -3992,11 +4132,21 @@ export default function App() {
       if (document.visibilityState === 'hidden') {
         saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
         performCloudFirestoreSyncNow();
+        if (userEditedFoldersInSessionRef.current) {
+          commitUserFoldersChange(customFoldersRef.current);
+        }
+        // Clear in-session edit flags once this device goes to sleep / background so when it wakes up later,
+        // any newer changes made on another device (Mac mini <-> iPad) are accepted immediately!
+        userEditedInSessionRef.current.clear();
+        userEditedFoldersInSessionRef.current = false;
       }
     };
     const flushOnPageHide = () => {
       saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
       performCloudFirestoreSyncNow();
+      if (userEditedFoldersInSessionRef.current) {
+        commitUserFoldersChange(customFoldersRef.current);
+      }
     };
     document.addEventListener('visibilitychange', flushOnHide);
     window.addEventListener('pagehide', flushOnPageHide);
@@ -4006,7 +4156,7 @@ export default function App() {
       window.removeEventListener('pagehide', flushOnPageHide);
       window.removeEventListener('beforeunload', flushOnPageHide);
     };
-  }, [currentUser, performCloudFirestoreSyncNow]);
+  }, [currentUser, performCloudFirestoreSyncNow, commitUserFoldersChange]);
 
   // 3. Persist customFolders & shapeLibrary to LocalStorage + Cloud Firestore
   useEffect(() => {
@@ -4019,15 +4169,15 @@ export default function App() {
     } catch {
       // ignore quota
     }
-    if (!hasCompletedInitialCloudLoadRef.current) return;
-    if (
-      foldersStr === lastSyncedMetaRef.current.folders &&
-      shapeLibStr === lastSyncedMetaRef.current.shapeLib
-    ) {
+    if (!hasCompletedInitialCloudLoadRef.current || !hasLoadedUserDocRef.current) return;
+    const foldersNeedPush =
+      userEditedFoldersInSessionRef.current && foldersStr !== lastSyncedMetaRef.current.folders;
+    const shapeLibNeedsPush = shapeLibStr !== lastSyncedMetaRef.current.shapeLib;
+    if (!foldersNeedPush && !shapeLibNeedsPush) {
       return;
     }
     const nowIso = new Date().toISOString();
-    if (foldersStr !== lastSyncedMetaRef.current.folders) {
+    if (foldersNeedPush) {
       try {
         localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, nowIso);
       } catch {
@@ -4035,20 +4185,20 @@ export default function App() {
       }
     }
     const timer = window.setTimeout(() => {
-      lastSyncedMetaRef.current = { folders: foldersStr, shapeLib: shapeLibStr };
-      if (foldersStr.length < 900000 && shapeLibStr.length < 900000) {
-        void setDoc(
-          doc(db, 'users', uid),
-          {
-            customFoldersJson: foldersStr,
-            foldersUpdatedAt: nowIso,
-            shapeLibraryJson: shapeLibStr,
-            updatedAt: nowIso,
-            deviceId: deviceIdRef.current,
-          },
-          { merge: true }
-        );
+      const payload: Record<string, any> = {
+        updatedAt: nowIso,
+        deviceId: deviceIdRef.current,
+      };
+      if (foldersNeedPush && foldersStr.length < 900000) {
+        lastSyncedMetaRef.current.folders = foldersStr;
+        payload.customFoldersJson = foldersStr;
+        payload.foldersUpdatedAt = nowIso;
       }
+      if (shapeLibNeedsPush && shapeLibStr.length < 900000) {
+        lastSyncedMetaRef.current.shapeLib = shapeLibStr;
+        payload.shapeLibraryJson = shapeLibStr;
+      }
+      void setDoc(doc(db, 'users', uid), payload, { merge: true });
     }, 150);
     return () => window.clearTimeout(timer);
   }, [currentUser, customFolders, shapeLibrary]);
@@ -41693,7 +41843,7 @@ export default function App() {
                       },
                       ...customFolders,
                     ];
-                setCustomFolders(nextCustom);
+                commitUserFoldersChange(nextCustom);
                 setIsDirty(true);
                 setSyncStatus('dirty');
                 showToast(
@@ -41706,14 +41856,14 @@ export default function App() {
               const toggleNotebookFavorite = (nb: Notebook) => {
                 const nextFav = !nb.favorite;
                 const nowIso = new Date().toISOString();
+                const updatedNb: Notebook = { ...nb, favorite: nextFav, updatedAt: nowIso };
                 userEditedInSessionRef.current.add(nb.id);
                 setNotebooks((prev) =>
-                  prev.map((item) =>
-                    item.id === nb.id
-                      ? { ...item, favorite: nextFav, updatedAt: nowIso }
-                      : item
-                  )
+                  prev.map((item) => (item.id === nb.id ? updatedNb : item))
                 );
+                if (currentUser) {
+                  pushNotebookToCloudTracked(currentUser.uid, updatedNb);
+                }
                 setIsDirty(true);
                 setSyncStatus('dirty');
                 showToast(
@@ -41815,27 +41965,37 @@ export default function App() {
                     });
                   }
                 }
-                setCustomFolders(Array.from(dedupMap.values()));
+                commitUserFoldersChange(Array.from(dedupMap.values()));
 
                 if (normOrig !== newFullPath) {
+                  const movedNbs: Notebook[] = [];
                   setNotebooks((prev) =>
                     prev.map((nb) => {
                       const nbF = normalizeFolderPath(nb.folder || '');
                       if (nbF === normOrig) {
                         userEditedInSessionRef.current.add(nb.id);
-                        return { ...nb, folder: newFullPath, updatedAt: nowIso };
+                        const moved = { ...nb, folder: newFullPath, updatedAt: nowIso };
+                        movedNbs.push(moved);
+                        return moved;
                       }
                       if (nbF.startsWith(`${normOrig}/`)) {
                         userEditedInSessionRef.current.add(nb.id);
-                        return {
+                        const moved = {
                           ...nb,
                           folder: `${newFullPath}${nbF.slice(normOrig.length)}`,
                           updatedAt: nowIso,
                         };
+                        movedNbs.push(moved);
+                        return moved;
                       }
                       return nb;
                     })
                   );
+                  if (currentUser) {
+                    for (const movedNb of movedNbs) {
+                      pushNotebookToCloudTracked(currentUser.uid, movedNb);
+                    }
+                  }
                   if (activeLibraryFolder) {
                     const normActive = normalizeFolderPath(activeLibraryFolder);
                     if (normActive === normOrig) {
@@ -41967,20 +42127,31 @@ export default function App() {
                 const parentOfDeleted = normTarget.includes('/')
                   ? normTarget.split('/').slice(0, -1).join('/')
                   : '';
+                const nowIso = new Date().toISOString();
                 const nextCustom = customFolders.filter((f) => {
                   const nf = normalizeFolderPath(f.name);
                   return nf !== normTarget && !nf.startsWith(`${normTarget}/`);
                 });
-                setCustomFolders(nextCustom);
+                commitUserFoldersChange(nextCustom);
                 // Move any notebooks inside this folder (or its subfolders) to its parent folder so no user work is lost
+                const movedNbs: Notebook[] = [];
                 setNotebooks((prev) =>
                   prev.map((nb) => {
                     const nbF = normalizeFolderPath(nb.folder || '');
-                    return nbF === normTarget || nbF.startsWith(`${normTarget}/`)
-                      ? { ...nb, folder: parentOfDeleted }
-                      : nb;
+                    if (nbF === normTarget || nbF.startsWith(`${normTarget}/`)) {
+                      userEditedInSessionRef.current.add(nb.id);
+                      const moved = { ...nb, folder: parentOfDeleted, updatedAt: nowIso };
+                      movedNbs.push(moved);
+                      return moved;
+                    }
+                    return nb;
                   })
                 );
+                if (currentUser) {
+                  for (const movedNb of movedNbs) {
+                    pushNotebookToCloudTracked(currentUser.uid, movedNb);
+                  }
+                }
                 if (
                   activeLibraryFolder &&
                   (normalizeFolderPath(activeLibraryFolder) === normTarget ||
@@ -42010,7 +42181,7 @@ export default function App() {
                     (f) => !createdPaths.includes(normalizeFolderPath(f.name))
                   ),
                 ];
-                setCustomFolders(nextCustom);
+                commitUserFoldersChange(nextCustom);
                 setNewFolderNameInput('');
                 setIsCreatingFolder(false);
                 showToast(
