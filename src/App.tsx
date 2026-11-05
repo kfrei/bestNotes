@@ -4691,7 +4691,7 @@ export default function App() {
     };
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      if (e.ctrlKey || e.metaKey || e.altKey) {
         const target = e.target as HTMLElement | null;
         if (workspaceRef.current && target && workspaceRef.current.contains(target)) {
           // Handled by workspaceRef's onWheel listener with exact focal-point math
@@ -8570,10 +8570,25 @@ export default function App() {
     [pageWidth]
   );
 
-  // Responsive Fit-to-Width on browser window resize (narrowing/widening) so the full width of the page
-  // is always visible and its height adapts proportionally
+  // Smoothly zoom in/out around the vertical center of the visible workspace viewport
+  const zoomAroundViewportCenter = useCallback(
+    (targetZoom: number) => {
+      const clampedNext = Math.min(3.5, Math.max(0.2, targetZoom));
+      const oldZoom = zoomRef.current;
+      const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
+      const focusY = wsHeight * 0.5;
+      const docFocusY = (focusY - panRef.current.y) / Math.max(0.05, oldZoom);
+      const nextPanY = focusY - docFocusY * clampedNext;
+      const nextPanX = oldZoom > 0.05 ? panRef.current.x * (clampedNext / oldZoom) : 0;
+      applyPaperTransformDirect(clampedNext, nextPanX, nextPanY, true);
+    },
+    [applyPaperTransformDirect]
+  );
+
+  // Responsive Fit-to-Width on initial notebook open or browser window width resize,
+  // without ever overriding manual zoom-out or resetting zoom when scrolling between Portrait & Landscape pages!
   const lastObservedWsWidthRef = useRef<number | null>(null);
-  const lastObservedPageWidthRef = useRef<number | null>(null);
+  const lastObservedNotebookIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (viewMode !== 'editor') return;
     const ws = workspaceRef.current;
@@ -8587,18 +8602,23 @@ export default function App() {
       const fitWidthZoom = Math.min(3.5, Math.max(0.2, (wsWidth - horizMargin) / pW));
 
       const prevWsW = lastObservedWsWidthRef.current;
-      const prevPW = lastObservedPageWidthRef.current;
-      const didWsWidthChange = prevWsW !== null && Math.abs(wsWidth - prevWsW) >= 1;
-      const didPageWidthChange = prevPW !== null && Math.abs(pW - prevPW) >= 1;
+      const prevNbId = lastObservedNotebookIdRef.current;
+      const didWsWidthChange = prevWsW !== null && Math.abs(wsWidth - prevWsW) >= 4;
+      const didNotebookChange = prevNbId !== activeNotebook.id;
       lastObservedWsWidthRef.current = wsWidth;
-      lastObservedPageWidthRef.current = pW;
+      lastObservedNotebookIdRef.current = activeNotebook.id;
 
       const curZoom = zoomRef.current;
-      if (forceFit || didWsWidthChange || didPageWidthChange || curZoom > fitWidthZoom + 0.002) {
+      if (forceFit || didNotebookChange || prevWsW === null) {
         if (Math.abs(fitWidthZoom - curZoom) > 0.002) {
           const nextPanY = curZoom > 0.05 ? panRef.current.y * (fitWidthZoom / curZoom) : panRef.current.y;
           applyPaperTransformDirect(fitWidthZoom, 0, nextPanY, true);
         }
+      } else if (didWsWidthChange && prevWsW > 0) {
+        // Scale zoom proportionally when the browser window itself is widened/narrowed
+        const scaledZoom = Math.min(3.5, Math.max(0.2, curZoom * (wsWidth / prevWsW)));
+        const nextPanY = curZoom > 0.05 ? panRef.current.y * (scaledZoom / curZoom) : panRef.current.y;
+        applyPaperTransformDirect(scaledZoom, 0, nextPanY, true);
       }
     };
 
@@ -8619,7 +8639,7 @@ export default function App() {
       if (ro) ro.disconnect();
       window.removeEventListener('resize', onWinResize);
     };
-  }, [viewMode, pageWidth, applyPaperTransformDirect]);
+  }, [viewMode, activeNotebook.id, pageWidth, applyPaperTransformDirect]);
 
   // Smoothly jump to a specific page in the Word-style vertical document stack
   const scrollToPageIndex = useCallback(
@@ -11946,7 +11966,7 @@ export default function App() {
         return;
       }
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
+      if (e.ctrlKey || e.metaKey || e.altKey) {
         const paperRect = paperTransformElRef.current?.getBoundingClientRect();
         const oldZoom = zoomRef.current;
         const factor = Math.exp(-e.deltaY * 0.0045);
@@ -11960,7 +11980,6 @@ export default function App() {
         const newPanX = panRef.current.x - offsetX * (newZoom - oldZoom);
         const newPanY = panRef.current.y - offsetY * (newZoom - oldZoom);
         applyPaperTransformDirect(newZoom, newPanX, newPanY, true);
-        syncActivePageFromPanY(newPanY);
       } else {
         const nextPanY = panRef.current.y - e.deltaY;
         applyPaperTransformDirect(zoomRef.current, panRef.current.x - e.deltaX, nextPanY, false);
@@ -36971,13 +36990,35 @@ export default function App() {
       if (e.key === 'Shift') {
         shiftKeyPressedRef.current = true;
       }
+
+      // Always intercept Cmd/Ctrl + Minus / Plus / 0 in editor so Mac mini & desktop keyboard zoom
+      // smoothly zooms the BestNotes canvas instead of zooming the browser UI!
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (e.code === 'Minus' || e.code === 'NumpadSubtract' || e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          zoomAroundViewportCenter(zoomRef.current - 0.15);
+          return;
+        }
+        if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          zoomAroundViewportCenter(zoomRef.current + 0.15);
+          return;
+        }
+        if (e.code === 'Digit0' || e.code === 'Numpad0' || e.key === '0') {
+          e.preventDefault();
+          const fitZ = computeFitWidthZoom();
+          zoomAroundViewportCenter(Math.abs(zoomRef.current - fitZ) < 0.03 ? 1.0 : fitZ);
+          return;
+        }
+      }
+
       if (editingTextId !== null || showMathModal) return;
 
       const target = e.target as HTMLElement | null;
       if (
         target &&
         (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
+          (target.tagName === 'TEXTAREA' && (!target.closest('[data-text-id]') || editingTextId !== null)) ||
           target.tagName === 'SELECT' ||
           target.isContentEditable ||
           target.closest('[contenteditable="true"]'))
@@ -37437,6 +37478,8 @@ export default function App() {
     handleCutSelected,
     handlePaste,
     handleDuplicateSelected,
+    zoomAroundViewportCenter,
+    computeFitWidthZoom,
     showToast,
   ]);
 
@@ -40549,27 +40592,29 @@ export default function App() {
               {/* 2-Finger Pinch Zoom Pill (- / 100% Reset / +) */}
               <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
                 <button
-                  onClick={() => applyPaperTransformDirect(zoomRef.current - 0.15, panRef.current.x, panRef.current.y, true)}
+                  onClick={() => zoomAroundViewportCenter(zoomRef.current - 0.15)}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
-                  title="Σμίκρυνση (Zoom Out)"
+                  title="Σμίκρυνση (Zoom Out — ή Cmd - / Ctrl -)"
                 >
                   <ZoomOut className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => {
-                    const fitZ = computeFitWidthZoom();
-                    const nextPanY = zoomRef.current > 0.05 ? panRef.current.y * (fitZ / zoomRef.current) : 0;
-                    applyPaperTransformDirect(fitZ, 0, nextPanY, true);
+                    const fitWidthZ = computeFitWidthZoom();
+                    const wsH = workspaceRef.current?.clientHeight || window.innerHeight || 820;
+                    const fitPageZ = Math.min(fitWidthZ, Math.max(0.35, (wsH - 36) / Math.max(200, pageHeight)));
+                    const targetZ = Math.abs(zoomRef.current - fitWidthZ) <= 0.03 ? fitPageZ : fitWidthZ;
+                    zoomAroundViewportCenter(targetZ);
                   }}
                   className="px-1.5 font-semibold text-sky-200 hover:text-white cursor-pointer"
-                  title="Προσαρμογή σε όλο το πλάτος παραθύρου (Fit to Width)"
+                  title="Εναλλαγή Προσαρμογής Πλάτους (Fit Width) / Ολόκληρης Σελίδας (Fit Full Page)"
                 >
                   {Math.round(zoom * 100)}%
                 </button>
                 <button
-                  onClick={() => applyPaperTransformDirect(zoomRef.current + 0.15, panRef.current.x, panRef.current.y, true)}
+                  onClick={() => zoomAroundViewportCenter(zoomRef.current + 0.15)}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
-                  title="Μεγέθυνση (Zoom In)"
+                  title="Μεγέθυνση (Zoom In — ή Cmd + / Ctrl +)"
                 >
                   <ZoomIn className="w-3.5 h-3.5" />
                 </button>
