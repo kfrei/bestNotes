@@ -42846,7 +42846,7 @@ export default function App() {
                                         📥 Άφησε εδώ
                                       </span>
                                     ) : (
-                                      <div className="mt-1 flex items-center gap-1">
+                                      <div className="mt-1 -mr-1.5 flex items-center gap-2">
                                         <button
                                           type="button"
                                           onClick={(e) => {
