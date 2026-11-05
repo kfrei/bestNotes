@@ -59,6 +59,24 @@ import {
   Share2,
   Download,
   Tag,
+  Star,
+  BookOpen,
+  GraduationCap,
+  Atom,
+  FlaskConical,
+  Dna,
+  Leaf,
+  Compass,
+  Zap,
+  Globe,
+  Rocket,
+  Lightbulb,
+  Microscope,
+  ClipboardList,
+  Trophy,
+  Heart,
+  Target,
+  Music,
 } from 'lucide-react';
 import {
   auth,
@@ -85,6 +103,7 @@ import {
 } from './utils/googleDrivePdfSync';
 import {
   Notebook,
+  CustomFolderMeta,
   NotePage,
   CircuitSimConfig,
   SpringSimConfig,
@@ -739,11 +758,118 @@ const FALLBACK_EMPTY_NOTEBOOK: Notebook = {
 // New users and guests start completely empty: 0 notebooks and 0 folders
 const createDefaultBlankNotebooks = (): Notebook[] => [];
 
-const createDefaultFolders = (): { name: string; updatedAt: string }[] => [];
+const createDefaultFolders = (): CustomFolderMeta[] => [];
+
+const FOLDER_PRESET_NAMES: string[] = [
+  'Γενικά',
+  'Γυμνάσιο Αρναίας',
+  'Φυσική',
+  'Χημεία',
+  'Βιολογία',
+  'Μαθηματικά',
+  'Α1',
+  'Β1',
+  'Γ1',
+  'Γ2',
+  'Διαγωνίσματα',
+  'Ασκήσεις',
+];
+
+const FOLDER_PRESET_COLORS: { hex: string; label: string }[] = [
+  { hex: '#f59e0b', label: 'Κεχριμπάρι' },
+  { hex: '#0066ff', label: 'Μπλε' },
+  { hex: '#10b981', label: 'Σμαραγδί' },
+  { hex: '#ef4444', label: 'Κόκκινο' },
+  { hex: '#8b5cf6', label: 'Μωβ' },
+  { hex: '#06b6d4', label: 'Κυανό' },
+  { hex: '#f97316', label: 'Πορτοκαλί' },
+  { hex: '#ec4899', label: 'Ροζ' },
+  { hex: '#6366f1', label: 'Ινδικό' },
+  { hex: '#475569', label: 'Γκρι-Μπλε' },
+];
+
+const FOLDER_PRESET_ICONS: { id: string; label: string }[] = [
+  { id: 'folder', label: 'Φάκελος' },
+  { id: 'school', label: 'Σχολείο' },
+  { id: 'book', label: 'Βιβλίο' },
+  { id: 'atom', label: 'Φυσική / Άτομο' },
+  { id: 'flask', label: 'Χημεία / Φιάλη' },
+  { id: 'dna', label: 'Βιολογία / DNA' },
+  { id: 'leaf', label: 'Φύση / Φύλλο' },
+  { id: 'calculator', label: 'Μαθηματικά' },
+  { id: 'compass', label: 'Γεωμετρία' },
+  { id: 'zap', label: 'Ηλεκτρισμός' },
+  { id: 'magnet', label: 'Μαγνητισμός' },
+  { id: 'globe', label: 'Γεωγραφία' },
+  { id: 'rocket', label: 'Διάστημα' },
+  { id: 'lightbulb', label: 'Ιδέες' },
+  { id: 'microscope', label: 'Εργαστήριο' },
+  { id: 'pen', label: 'Σημειώσεις' },
+  { id: 'clipboard', label: 'Διαγωνίσματα' },
+  { id: 'trophy', label: 'Επιτυχίες' },
+  { id: 'target', label: 'Στόχοι' },
+  { id: 'music', label: 'Μουσική' },
+];
+
+function renderFolderCustomIcon(
+  iconId: string | undefined,
+  colorHex: string | undefined,
+  sizeClass = 'w-7 h-7'
+) {
+  const c = colorHex || '#f59e0b';
+  const style = { color: c };
+  switch (iconId) {
+    case 'school':
+      return <GraduationCap className={sizeClass} style={style} />;
+    case 'book':
+      return <BookOpen className={sizeClass} style={style} />;
+    case 'atom':
+      return <Atom className={sizeClass} style={style} />;
+    case 'flask':
+      return <FlaskConical className={sizeClass} style={style} />;
+    case 'dna':
+      return <Dna className={sizeClass} style={style} />;
+    case 'leaf':
+      return <Leaf className={sizeClass} style={style} />;
+    case 'calculator':
+      return <Calculator className={sizeClass} style={style} />;
+    case 'compass':
+      return <Compass className={sizeClass} style={style} />;
+    case 'zap':
+      return <Zap className={sizeClass} style={{ color: c, fill: `${c}33` }} />;
+    case 'magnet':
+      return <Magnet className={sizeClass} style={style} />;
+    case 'globe':
+      return <Globe className={sizeClass} style={style} />;
+    case 'rocket':
+      return <Rocket className={sizeClass} style={style} />;
+    case 'lightbulb':
+      return <Lightbulb className={sizeClass} style={{ color: c, fill: `${c}33` }} />;
+    case 'microscope':
+      return <Microscope className={sizeClass} style={style} />;
+    case 'pen':
+      return <Pen className={sizeClass} style={style} />;
+    case 'clipboard':
+      return <ClipboardList className={sizeClass} style={style} />;
+    case 'trophy':
+      return <Trophy className={sizeClass} style={style} />;
+    case 'target':
+      return <Target className={sizeClass} style={style} />;
+    case 'music':
+      return <Music className={sizeClass} style={style} />;
+    case 'heart':
+      return <Heart className={sizeClass} style={{ color: c, fill: `${c}33` }} />;
+    case 'star':
+      return <Star className={sizeClass} style={{ color: c, fill: `${c}33` }} />;
+    case 'folder':
+    default:
+      return <Folder className={sizeClass} style={{ color: c, fill: c }} />;
+  }
+}
 
 function ensureGymnasioArnaiasSubfolders(
-  folders: { name: string; updatedAt: string }[]
-): { name: string; updatedAt: string }[] {
+  folders: CustomFolderMeta[]
+): CustomFolderMeta[] {
   const hasGymnasio = folders.some(
     (f) =>
       f.name.trim() === 'Γυμνάσιο Αρναίας' ||
@@ -2560,8 +2686,9 @@ export default function App() {
     return 'date';
   });
   const [librarySearchQuery, setLibrarySearchQuery] = useState<string>('');
+  const [showLibraryFavoritesOnly, setShowLibraryFavoritesOnly] = useState<boolean>(false);
   const [activeLibraryFolder, setActiveLibraryFolder] = useState<string | null>(null);
-  const [customFolders, setCustomFolders] = useState<{ name: string; updatedAt: string }[]>(() => {
+  const [customFolders, setCustomFolders] = useState<CustomFolderMeta[]>(() => {
     if (initialAuthUid) {
       try {
         const raw = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${initialAuthUid}`);
@@ -2575,6 +2702,14 @@ export default function App() {
     }
     return createDefaultFolders();
   });
+  const [editingFolderModal, setEditingFolderModal] = useState<{
+    originalPath: string;
+    name: string;
+    parentPath: string;
+    color: string;
+    icon: string;
+    favorite: boolean;
+  } | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [newFolderNameInput, setNewFolderNameInput] = useState<string>('');
   const [pendingDeleteNotebook, setPendingDeleteNotebook] = useState<Notebook | null>(null);
@@ -41129,10 +41264,17 @@ export default function App() {
                   count: number;
                   subfolderCount: number;
                   totalBytes: number;
+                  color?: string;
+                  icon?: string;
+                  favorite?: boolean;
                 }
               >();
 
-              const ensureFolderHierarchy = (rawPath: string, updatedAtIso?: string) => {
+              const ensureFolderHierarchy = (
+                rawPath: string,
+                updatedAtIso?: string,
+                leafMeta?: CustomFolderMeta
+              ) => {
                 const norm = normalizeFolderPath(rawPath);
                 if (!norm) return;
                 const parts = norm.split('/');
@@ -41141,6 +41283,7 @@ export default function App() {
                   const seg = parts[i];
                   const parentPath = acc;
                   acc = acc ? `${acc}/${seg}` : seg;
+                  const isLeaf = i === parts.length - 1;
                   const existing = folderMap.get(acc);
                   const ts = updatedAtIso || new Date().toISOString();
                   if (!existing) {
@@ -41152,15 +41295,27 @@ export default function App() {
                       count: 0,
                       subfolderCount: 0,
                       totalBytes: 0,
+                      color: isLeaf ? leafMeta?.color : undefined,
+                      icon: isLeaf ? leafMeta?.icon : undefined,
+                      favorite: isLeaf ? Boolean(leafMeta?.favorite) : false,
                     });
-                  } else if (ts > existing.updatedAt) {
-                    existing.updatedAt = ts;
+                  } else {
+                    if (ts > existing.updatedAt) {
+                      existing.updatedAt = ts;
+                    }
+                    if (isLeaf && leafMeta) {
+                      if (leafMeta.color) existing.color = leafMeta.color;
+                      if (leafMeta.icon) existing.icon = leafMeta.icon;
+                      if (leafMeta.favorite !== undefined) {
+                        existing.favorite = Boolean(leafMeta.favorite);
+                      }
+                    }
                   }
                 }
               };
 
               for (const cf of customFolders) {
-                ensureFolderHierarchy(cf.name, cf.updatedAt);
+                ensureFolderHierarchy(cf.name, cf.updatedAt, cf);
               }
               // If user has "Γυμνάσιο Αρναίας" open or created, ensure Α1, Β1, Γ1, Γ2 appear inside it!
               if (folderMap.has('Γυμνάσιο Αρναίας')) {
@@ -41197,6 +41352,9 @@ export default function App() {
               }
 
               const query = librarySearchQuery.trim();
+              const totalFavoritesCount =
+                Array.from(folderMap.values()).filter((f) => f.favorite).length +
+                notebooks.filter((nb) => nb.favorite).length;
 
               // Collect all unique tags across notebooks (filtered by active folder or its subfolders if inside one)
               const allLibraryTags = Array.from(
@@ -41219,9 +41377,20 @@ export default function App() {
                 )
               );
 
-              // Filter & Sort Folders (shows direct child folders of currentFolderPath, or matching folders when searching)
+              // Filter & Sort Folders (shows direct child folders of currentFolderPath, or matching folders when searching / filtering by Favorites)
               const visibleFolders = Array.from(folderMap.values())
                 .filter((f) => {
+                  if (showLibraryFavoritesOnly) {
+                    if (!f.favorite) return false;
+                    if (
+                      currentFolderPath &&
+                      f.parentPath !== currentFolderPath &&
+                      !f.path.startsWith(`${currentFolderPath}/`)
+                    ) {
+                      return false;
+                    }
+                    return query ? matchesGreekSmartQuery(f.name, query) : true;
+                  }
                   if (query) {
                     return (
                       (!currentFolderPath || f.path.startsWith(`${currentFolderPath}/`)) &&
@@ -41244,13 +41413,24 @@ export default function App() {
               // Filter & Sort Notes (Greek Smart Search: accent/case/inflection-insensitive across title, folder, #tags & page texts)
               const visibleNotebooks = notebooks
                 .filter((nb) => {
+                  if (showLibraryFavoritesOnly && !nb.favorite) {
+                    return false;
+                  }
                   const nbF = normalizeFolderPath(nb.folder || '');
-                  if (currentFolderPath !== '' && nbF !== currentFolderPath) {
-                    if (!query || !nbF.startsWith(`${currentFolderPath}/`)) {
+                  if (!showLibraryFavoritesOnly) {
+                    if (currentFolderPath !== '' && nbF !== currentFolderPath) {
+                      if (!query || !nbF.startsWith(`${currentFolderPath}/`)) {
+                        return false;
+                      }
+                    }
+                    if (currentFolderPath === '' && !query && nbF !== '') {
                       return false;
                     }
-                  }
-                  if (currentFolderPath === '' && !query && nbF !== '') {
+                  } else if (
+                    currentFolderPath !== '' &&
+                    nbF !== currentFolderPath &&
+                    !nbF.startsWith(`${currentFolderPath}/`)
+                  ) {
                     return false;
                   }
                   if (query) {
@@ -41306,6 +41486,189 @@ export default function App() {
                 setViewMode('editor');
               };
 
+              const toggleFolderFavorite = (targetPath: string) => {
+                const normPath = normalizeFolderPath(targetPath);
+                if (!normPath) return;
+                const nowIso = new Date().toISOString();
+                const existingEntry = folderMap.get(normPath);
+                const nextFav = !existingEntry?.favorite;
+                const foundInCustom = customFolders.some(
+                  (cf) => normalizeFolderPath(cf.name) === normPath
+                );
+                const nextCustom = foundInCustom
+                  ? customFolders.map((cf) =>
+                      normalizeFolderPath(cf.name) === normPath
+                        ? { ...cf, favorite: nextFav, updatedAt: nowIso }
+                        : cf
+                    )
+                  : [
+                      {
+                        name: normPath,
+                        updatedAt: nowIso,
+                        color: existingEntry?.color,
+                        icon: existingEntry?.icon,
+                        favorite: nextFav,
+                      },
+                      ...customFolders,
+                    ];
+                setCustomFolders(nextCustom);
+                setIsDirty(true);
+                setSyncStatus('dirty');
+                showToast(
+                  nextFav
+                    ? `⭐ Ο φάκελος «${existingEntry?.name || normPath}» προστέθηκε στα Αγαπημένα!`
+                    : `Αφαιρέθηκε ο φάκελος «${existingEntry?.name || normPath}» από τα Αγαπημένα.`
+                );
+              };
+
+              const toggleNotebookFavorite = (nb: Notebook) => {
+                const nextFav = !nb.favorite;
+                const nowIso = new Date().toISOString();
+                userEditedInSessionRef.current.add(nb.id);
+                setNotebooks((prev) =>
+                  prev.map((item) =>
+                    item.id === nb.id
+                      ? { ...item, favorite: nextFav, updatedAt: nowIso }
+                      : item
+                  )
+                );
+                setIsDirty(true);
+                setSyncStatus('dirty');
+                showToast(
+                  nextFav
+                    ? `⭐ Η σημείωση «${nb.title}» προστέθηκε στα Αγαπημένα!`
+                    : `Αφαιρέθηκε η σημείωση «${nb.title}» από τα Αγαπημένα.`
+                );
+              };
+
+              const openFolderEditorModal = (folder: {
+                path: string;
+                name: string;
+                parentPath: string;
+                color?: string;
+                icon?: string;
+                favorite?: boolean;
+              }) => {
+                setEditingFolderModal({
+                  originalPath: folder.path,
+                  name: folder.name,
+                  parentPath: folder.parentPath,
+                  color: folder.color || '#f59e0b',
+                  icon: folder.icon || 'folder',
+                  favorite: Boolean(folder.favorite),
+                });
+              };
+
+              const saveOrMoveFolderHierarchy = (
+                originalPath: string,
+                newLeafName: string,
+                newParentPath: string,
+                nextColor?: string,
+                nextIcon?: string,
+                nextFav?: boolean
+              ) => {
+                const normOrig = normalizeFolderPath(originalPath);
+                if (!normOrig) return;
+                const cleanLeaf =
+                  newLeafName.trim().replace(/^\/+|\/+$/g, '').replace(/\//g, '-') ||
+                  normOrig.split('/').slice(-1)[0] ||
+                  'Φάκελος';
+                const cleanParent = normalizeFolderPath(newParentPath);
+                if (cleanParent === normOrig || cleanParent.startsWith(`${normOrig}/`)) {
+                  showToast('⚠️ Δεν μπορείς να μετακινήσεις έναν φάκελο μέσα στον εαυτό του!');
+                  return;
+                }
+                const newFullPath = cleanParent ? `${cleanParent}/${cleanLeaf}` : cleanLeaf;
+                const nowIso = new Date().toISOString();
+
+                let foundExact = false;
+                const updatedCustom = customFolders.map((cf) => {
+                  const nf = normalizeFolderPath(cf.name);
+                  if (nf === normOrig) {
+                    foundExact = true;
+                    return {
+                      ...cf,
+                      name: newFullPath,
+                      updatedAt: nowIso,
+                      color: nextColor ?? cf.color,
+                      icon: nextIcon ?? cf.icon,
+                      favorite: nextFav !== undefined ? nextFav : cf.favorite,
+                    };
+                  }
+                  if (nf.startsWith(`${normOrig}/`)) {
+                    const suffix = nf.slice(normOrig.length);
+                    return {
+                      ...cf,
+                      name: `${newFullPath}${suffix}`,
+                      updatedAt: nowIso,
+                    };
+                  }
+                  return cf;
+                });
+                if (!foundExact) {
+                  updatedCustom.unshift({
+                    name: newFullPath,
+                    updatedAt: nowIso,
+                    color: nextColor,
+                    icon: nextIcon,
+                    favorite: nextFav,
+                  });
+                }
+                // Deduplicate customFolders by normalized path while preserving metadata
+                const dedupMap = new Map<string, CustomFolderMeta>();
+                for (const item of updatedCustom) {
+                  const k = normalizeFolderPath(item.name);
+                  if (!k) continue;
+                  const prev = dedupMap.get(k);
+                  if (!prev) {
+                    dedupMap.set(k, { ...item, name: k });
+                  } else {
+                    dedupMap.set(k, {
+                      ...prev,
+                      ...item,
+                      name: k,
+                      color: item.color || prev.color,
+                      icon: item.icon || prev.icon,
+                      favorite: item.favorite ?? prev.favorite,
+                    });
+                  }
+                }
+                setCustomFolders(Array.from(dedupMap.values()));
+
+                if (normOrig !== newFullPath) {
+                  setNotebooks((prev) =>
+                    prev.map((nb) => {
+                      const nbF = normalizeFolderPath(nb.folder || '');
+                      if (nbF === normOrig) {
+                        userEditedInSessionRef.current.add(nb.id);
+                        return { ...nb, folder: newFullPath, updatedAt: nowIso };
+                      }
+                      if (nbF.startsWith(`${normOrig}/`)) {
+                        userEditedInSessionRef.current.add(nb.id);
+                        return {
+                          ...nb,
+                          folder: `${newFullPath}${nbF.slice(normOrig.length)}`,
+                          updatedAt: nowIso,
+                        };
+                      }
+                      return nb;
+                    })
+                  );
+                  if (activeLibraryFolder) {
+                    const normActive = normalizeFolderPath(activeLibraryFolder);
+                    if (normActive === normOrig) {
+                      setActiveLibraryFolder(newFullPath);
+                    } else if (normActive.startsWith(`${normOrig}/`)) {
+                      setActiveLibraryFolder(`${newFullPath}${normActive.slice(normOrig.length)}`);
+                    }
+                  }
+                }
+
+                setIsDirty(true);
+                setSyncStatus('dirty');
+                showToast(`✅ Αποθηκεύτηκε ο φάκελος «${newFullPath.replace(/\//g, ' › ')}»!`);
+              };
+
               const handleFolderDragOver = (
                 e: React.DragEvent<HTMLElement>,
                 targetFolderKey: string
@@ -41342,6 +41705,24 @@ export default function App() {
                 dragOverFolderNameRef.current = null;
                 setDragOverFolderName(null);
                 const destFolder = targetFolderKey === '__ROOT__' ? '' : targetFolderKey;
+                const draggedFolderPath =
+                  e.dataTransfer?.getData('text/bestnotes-folder-path') || '';
+                if (draggedFolderPath) {
+                  const normDragged = normalizeFolderPath(draggedFolderPath);
+                  if (normDragged && normDragged !== destFolder) {
+                    const meta = folderMap.get(normDragged);
+                    const leaf = normDragged.split('/').slice(-1)[0] || normDragged;
+                    saveOrMoveFolderHierarchy(
+                      normDragged,
+                      leaf,
+                      destFolder,
+                      meta?.color,
+                      meta?.icon,
+                      meta?.favorite
+                    );
+                  }
+                  return;
+                }
                 const draggedNbId =
                   draggingLibraryNbIdRef.current ||
                   e.dataTransfer?.getData('text/bestnotes-nb-id') ||
@@ -41468,8 +41849,9 @@ export default function App() {
                   {/* Top Header Row: Title / Folder Breadcrumb + Create Note / Create Folder / Import Buttons */}
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <div>
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button
+                          type="button"
                           data-library-folder-drop={activeLibraryFolder ? '__ROOT__' : undefined}
                           onDragEnter={(e) => {
                             if (activeLibraryFolder) handleFolderDragOver(e, '__ROOT__');
@@ -41483,24 +41865,30 @@ export default function App() {
                           onDrop={(e) => {
                             if (activeLibraryFolder) handleFolderDrop(e, '__ROOT__');
                           }}
-                          onClick={() => setActiveLibraryFolder(null)}
-                          className={`text-2xl font-bold transition cursor-pointer rounded-xl px-1.5 py-0.5 ${
+                          onClick={() => {
+                            setActiveLibraryFolder(null);
+                            setShowLibraryFavoritesOnly(false);
+                          }}
+                          className={`flex items-center gap-1.5 text-2xl font-bold transition cursor-pointer rounded-xl px-2 py-0.5 focus:outline-none ${
                             activeLibraryFolder && dragOverFolderName === '__ROOT__'
                               ? 'bg-sky-100 text-[#0066ff] ring-2 ring-[#0066ff]'
-                              : activeLibraryFolder
-                              ? 'text-slate-500 hover:text-[#1b2a4a]'
+                              : activeLibraryFolder || showLibraryFavoritesOnly
+                              ? 'text-slate-500 hover:text-[#1b2a4a] hover:bg-slate-200/60'
                               : 'text-[#1b2a4a]'
                           }`}
+                          title="Μετάβαση στην Αρχική Βιβλιοθήκη"
                         >
-                          Βιβλιοθήκη
+                          <span>Βιβλιοθήκη</span>
                         </button>
                         {activeBreadcrumbParts.map((seg, bIdx) => {
                           const crumbPath = activeBreadcrumbParts.slice(0, bIdx + 1).join('/');
-                          const isLastCrumb = bIdx === activeBreadcrumbParts.length - 1;
+                          const crumbMeta = folderMap.get(crumbPath);
+                          const isLastCrumb =
+                            bIdx === activeBreadcrumbParts.length - 1 && !showLibraryFavoritesOnly;
                           const isCrumbDropHover = dragOverFolderName === crumbPath;
                           return (
                             <React.Fragment key={crumbPath}>
-                              <ChevronRight className="w-5 h-5 text-slate-400" />
+                              <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
                               <button
                                 type="button"
                                 data-library-folder-drop={!isLastCrumb ? crumbPath : undefined}
@@ -41516,23 +41904,41 @@ export default function App() {
                                 onDrop={(e) => {
                                   if (!isLastCrumb) handleFolderDrop(e, crumbPath);
                                 }}
-                                onClick={() => setActiveLibraryFolder(crumbPath)}
-                                className={`flex items-center gap-1.5 text-2xl font-bold rounded-xl px-1.5 py-0.5 transition cursor-pointer ${
+                                onClick={() => {
+                                  setActiveLibraryFolder(crumbPath);
+                                  setShowLibraryFavoritesOnly(false);
+                                }}
+                                className={`flex items-center gap-1.5 text-2xl font-bold rounded-xl px-2 py-0.5 transition cursor-pointer focus:outline-none ${
                                   isCrumbDropHover
                                     ? 'bg-amber-100 text-[#0066ff] ring-2 ring-[#0066ff]'
                                     : isLastCrumb
-                                    ? 'text-[#0066ff]'
-                                    : 'text-slate-600 hover:text-[#0066ff]'
+                                    ? 'text-[#0066ff] bg-sky-50/80 border border-sky-200/80'
+                                    : 'text-slate-600 hover:text-[#0066ff] hover:bg-slate-200/60'
                                 }`}
+                                title={`Μετάβαση στον φάκελο «${crumbPath.replace(/\//g, ' › ')}»`}
                               >
-                                <Folder className="w-6 h-6 fill-amber-400 text-amber-500" />
+                                {renderFolderCustomIcon(
+                                  crumbMeta?.icon,
+                                  crumbMeta?.color || '#f59e0b',
+                                  'w-6 h-6 shrink-0'
+                                )}
                                 <span>{seg}</span>
                               </button>
                             </React.Fragment>
                           );
                         })}
+                        {showLibraryFavoritesOnly && (
+                          <>
+                            <ChevronRight className="w-5 h-5 text-slate-400 shrink-0" />
+                            <span className="flex items-center gap-1.5 text-xl font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-xl">
+                              <Star className="w-5 h-5 fill-amber-400 text-amber-500" />
+                              <span>Αγαπημένα</span>
+                            </span>
+                          </>
+                        )}
                         {activeLibraryFolder && (
                           <button
+                            type="button"
                             data-library-folder-drop={parentFolderForBack || '__ROOT__'}
                             onDragEnter={(e) =>
                               handleFolderDragOver(e, parentFolderForBack || '__ROOT__')
@@ -41545,7 +41951,7 @@ export default function App() {
                             }
                             onDrop={(e) => handleFolderDrop(e, parentFolderForBack || '__ROOT__')}
                             onClick={() => setActiveLibraryFolder(parentFolderForBack)}
-                            className={`ml-2 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                            className={`ml-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer focus:outline-none ${
                               dragOverFolderName === (parentFolderForBack || '__ROOT__')
                                 ? 'bg-[#0066ff] text-white ring-4 ring-[#0066ff]/25 scale-105 shadow-md'
                                 : draggingLibraryNbId
@@ -41828,8 +42234,40 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* Right Controls: Sort (Alphabetical vs Date) + View Mode (Icons vs List) */}
+                      {/* Right Controls: Favorites + Sort (Alphabetical vs Date) + View Mode (Icons vs List) */}
                       <div className="flex items-center gap-2.5 flex-wrap">
+                        {/* Favorites Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={() => setShowLibraryFavoritesOnly((v) => !v)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer focus:outline-none ${
+                            showLibraryFavoritesOnly
+                              ? 'bg-amber-400 text-slate-900 border-amber-500 shadow-xs'
+                              : 'bg-amber-50/80 hover:bg-amber-100 text-amber-800 border-amber-200/90'
+                          }`}
+                          title="Προβολή μόνο των Αγαπημένων φακέλων και σημειώσεων"
+                        >
+                          <Star
+                            className={`w-3.5 h-3.5 ${
+                              showLibraryFavoritesOnly
+                                ? 'fill-slate-900 text-slate-900'
+                                : 'fill-amber-400 text-amber-500'
+                            }`}
+                          />
+                          <span>Αγαπημένα</span>
+                          {totalFavoritesCount > 0 && (
+                            <span
+                              className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                                showLibraryFavoritesOnly
+                                  ? 'bg-slate-900/15 text-slate-900'
+                                  : 'bg-amber-200/80 text-amber-900'
+                              }`}
+                            >
+                              {totalFavoritesCount}
+                            </span>
+                          )}
+                        </button>
+
                         {/* Sort Selector (Left of View Toggle) */}
                         <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
                           <span className="flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-500">
@@ -41931,9 +42369,18 @@ export default function App() {
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
                             {visibleFolders.map((folder) => {
                               const isDropHover = dragOverFolderName === folder.path;
+                              const folderColor = folder.color || '#f59e0b';
                               return (
                                 <div
                                   key={folder.path}
+                                  draggable
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData(
+                                      'text/bestnotes-folder-path',
+                                      folder.path
+                                    );
+                                    e.dataTransfer.effectAllowed = 'move';
+                                  }}
                                   data-library-folder-drop={folder.path}
                                   onDragEnter={(e) => handleFolderDragOver(e, folder.path)}
                                   onDragOver={(e) => handleFolderDragOver(e, folder.path)}
@@ -41949,17 +42396,27 @@ export default function App() {
                                   }`}
                                 >
                                   <div className="flex items-start justify-between">
-                                    {/* Classic Folder Icon */}
+                                    {/* Custom Folder Icon & Color Badge */}
                                     <div
-                                      className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-amber-500 transition ${
+                                      style={{
+                                        backgroundColor: isDropHover
+                                          ? undefined
+                                          : `${folderColor}1f`,
+                                        borderColor: isDropHover ? undefined : `${folderColor}55`,
+                                      }}
+                                      className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition ${
                                         isDropHover
                                           ? 'bg-amber-200 border-[#0066ff] scale-110'
-                                          : 'bg-amber-100/80 border-amber-200 group-hover:scale-105'
+                                          : 'group-hover:scale-105'
                                       }`}
                                     >
-                                      <Folder className="w-7 h-7 fill-amber-400 text-amber-500" />
+                                      {renderFolderCustomIcon(
+                                        folder.icon,
+                                        folderColor,
+                                        'w-7 h-7'
+                                      )}
                                     </div>
-                                    {/* Direct Open (Pencil Edit) + Red Trash Delete or Drop Badge */}
+                                    {/* Star Favorite Toggle + Pencil Edit (Name/Color/Icon/Parent) + Red Trash Delete */}
                                     {isDropHover ? (
                                       <span className="px-2.5 py-1 rounded-xl bg-[#0066ff] text-white text-[11px] font-bold shadow-sm">
                                         📥 Άφησε εδώ
@@ -41967,21 +42424,48 @@ export default function App() {
                                     ) : (
                                       <div className="flex items-center gap-1">
                                         <button
+                                          type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setActiveLibraryFolder(folder.path);
+                                            toggleFolderFavorite(folder.path);
                                           }}
-                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
-                                          title={`Άνοιγμα φακέλου "${folder.name}"`}
+                                          className={`p-1.5 rounded-lg border transition cursor-pointer focus:outline-none ${
+                                            folder.favorite
+                                              ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
+                                              : 'bg-slate-50 border-slate-200/80 text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
+                                          }`}
+                                          title={
+                                            folder.favorite
+                                              ? 'Αφαίρεση από τα Αγαπημένα'
+                                              : 'Προσθήκη στα Αγαπημένα'
+                                          }
+                                        >
+                                          <Star
+                                            className={`w-3.5 h-3.5 ${
+                                              folder.favorite
+                                                ? 'fill-amber-400 text-amber-500'
+                                                : ''
+                                            }`}
+                                          />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openFolderEditorModal(folder);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer focus:outline-none"
+                                          title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Θέση)`}
                                         >
                                           <Pen className="w-3.5 h-3.5" />
                                         </button>
                                         <button
+                                          type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             deleteFolderByName(folder.path);
                                           }}
-                                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
+                                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer focus:outline-none"
                                           title={`Διαγραφή φακέλου "${folder.name}"`}
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
@@ -41991,7 +42475,9 @@ export default function App() {
                                   </div>
 
                                   <div>
-                                    <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
+                                    <p className="text-sm font-bold text-[#1b2a4a] group-hover:text-[#0066ff] transition truncate">
+                                      {folder.name}
+                                    </p>
                                     <p className="text-[11px] text-slate-500 truncate">
                                       {folder.subfolderCount > 0
                                         ? `${folder.subfolderCount} ${
@@ -42012,7 +42498,7 @@ export default function App() {
 
                       {/* Notes Section in Grid Mode */}
                       <div>
-                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                        <div className="flex items-center gap-2.5 mb-3 flex-wrap">
                           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                             Σημειώσεις ({visibleNotebooks.length})
                           </h2>
@@ -42450,6 +42936,29 @@ export default function App() {
                                     <div className="flex items-center gap-1">
                                       <button
                                         type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleNotebookFavorite(nb);
+                                        }}
+                                        className={`p-1.5 rounded-lg border shadow-2xs transition cursor-pointer focus:outline-none ${
+                                          nb.favorite
+                                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-500 border-amber-300'
+                                            : 'bg-white/95 hover:bg-amber-50 text-slate-400 hover:text-amber-500 border-slate-200/80'
+                                        }`}
+                                        title={
+                                          nb.favorite
+                                            ? 'Αφαίρεση από τα Αγαπημένα'
+                                            : 'Προσθήκη στα Αγαπημένα'
+                                        }
+                                      >
+                                        <Star
+                                          className={`w-3.5 h-3.5 ${
+                                            nb.favorite ? 'fill-amber-400 text-amber-500' : ''
+                                          }`}
+                                        />
+                                      </button>
+                                      <button
+                                        type="button"
                                         data-popover-trigger="share-menu"
                                         onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
                                         className="p-1.5 rounded-lg bg-white/95 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-slate-200/80 shadow-2xs transition cursor-pointer"
@@ -42661,9 +43170,15 @@ export default function App() {
                       {/* Folders in List Mode */}
                       {visibleFolders.map((folder) => {
                         const isDropHover = dragOverFolderName === folder.path;
+                        const folderColor = folder.color || '#f59e0b';
                         return (
                           <div
                             key={`list-folder-${folder.path}`}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/bestnotes-folder-path', folder.path);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
                             data-library-folder-drop={folder.path}
                             onDragEnter={(e) => handleFolderDragOver(e, folder.path)}
                             onDragOver={(e) => handleFolderDragOver(e, folder.path)}
@@ -42680,13 +43195,17 @@ export default function App() {
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                               <div
+                                style={{
+                                  backgroundColor: isDropHover ? undefined : `${folderColor}1f`,
+                                  borderColor: isDropHover ? undefined : `${folderColor}55`,
+                                }}
                                 className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition ${
                                   isDropHover
                                     ? 'bg-amber-200 border-[#0066ff] scale-110'
-                                    : 'bg-amber-100/80 border-amber-200'
+                                    : ''
                                 }`}
                               >
-                                <Folder className="w-5 h-5 fill-amber-400 text-amber-500" />
+                                {renderFolderCustomIcon(folder.icon, folderColor, 'w-5 h-5')}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
@@ -42715,21 +43234,46 @@ export default function App() {
                                     {formatLibraryTimestamp(folder.updatedAt)}
                                   </span>
                                   <button
+                                    type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setActiveLibraryFolder(folder.path);
+                                      toggleFolderFavorite(folder.path);
                                     }}
-                                    className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
-                                    title={`Άνοιγμα φακέλου "${folder.name}"`}
+                                    className={`p-2 rounded-xl border transition cursor-pointer focus:outline-none ${
+                                      folder.favorite
+                                        ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
+                                        : 'bg-slate-50 border-slate-200/80 text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
+                                    }`}
+                                    title={
+                                      folder.favorite
+                                        ? 'Αφαίρεση από τα Αγαπημένα'
+                                        : 'Προσθήκη στα Αγαπημένα'
+                                    }
+                                  >
+                                    <Star
+                                      className={`w-4 h-4 ${
+                                        folder.favorite ? 'fill-amber-400 text-amber-500' : ''
+                                      }`}
+                                    />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openFolderEditorModal(folder);
+                                    }}
+                                    className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer focus:outline-none"
+                                    title={`Επεξεργασία φακέλου "${folder.name}" (Όνομα, Χρώμα, Εικονίδιο, Θέση)`}
                                   >
                                     <Pen className="w-4 h-4" />
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       deleteFolderByName(folder.path);
                                     }}
-                                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
+                                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer focus:outline-none"
                                     title={`Διαγραφή φακέλου "${folder.name}"`}
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -42869,6 +43413,29 @@ export default function App() {
                             </span>
                             <button
                               type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleNotebookFavorite(nb);
+                              }}
+                              className={`p-2 rounded-xl border transition cursor-pointer focus:outline-none ${
+                                nb.favorite
+                                  ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
+                                  : 'bg-slate-50 border-slate-200/80 text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
+                              }`}
+                              title={
+                                nb.favorite
+                                  ? 'Αφαίρεση από τα Αγαπημένα'
+                                  : 'Προσθήκη στα Αγαπημένα'
+                              }
+                            >
+                              <Star
+                                className={`w-4 h-4 ${
+                                  nb.favorite ? 'fill-amber-400 text-amber-500' : ''
+                                }`}
+                              />
+                            </button>
+                            <button
+                              type="button"
                               data-popover-trigger="share-menu"
                               onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
                               className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200/80 transition cursor-pointer"
@@ -42952,6 +43519,301 @@ export default function App() {
                           : dragOverFolderName
                           ? `📁 Μετακίνηση σε «${dragOverFolderName}»`
                           : 'Σύρε πάνω σε φάκελο...'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Edit Folder Modal (Name + 12 Preset Names + 10 Colors + 20 Icons + Parent Folder Move + Favorite Star) */}
+                  {editingFolderModal && (
+                    <div
+                      onClick={() => setEditingFolderModal(null)}
+                      className="fixed inset-0 z-[220] bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4"
+                    >
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-slate-200/90 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+                      >
+                        {/* Header with Live Preview + Favorite Star + Close */}
+                        <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              style={{
+                                backgroundColor: `${editingFolderModal.color}1f`,
+                                borderColor: `${editingFolderModal.color}55`,
+                              }}
+                              className="w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0"
+                            >
+                              {renderFolderCustomIcon(
+                                editingFolderModal.icon,
+                                editingFolderModal.color,
+                                'w-7 h-7'
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-base font-extrabold text-[#1b2a4a] truncate">
+                                Επεξεργασία Φακέλου
+                              </h3>
+                              <p className="text-xs text-slate-500 truncate">
+                                {editingFolderModal.parentPath
+                                  ? `Βιβλιοθήκη › ${editingFolderModal.parentPath.replace(
+                                      /\//g,
+                                      ' › '
+                                    )} › `
+                                  : 'Βιβλιοθήκη › '}
+                                <span className="font-bold text-[#0066ff]">
+                                  {editingFolderModal.name || 'Φάκελος'}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingFolderModal((prev) =>
+                                  prev ? { ...prev, favorite: !prev.favorite } : null
+                                )
+                              }
+                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer focus:outline-none ${
+                                editingFolderModal.favorite
+                                  ? 'bg-amber-50 border-amber-300 text-amber-700'
+                                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-amber-600'
+                              }`}
+                              title="Προσθήκη / Αφαίρεση από τα Αγαπημένα"
+                            >
+                              <Star
+                                className={`w-4 h-4 ${
+                                  editingFolderModal.favorite
+                                    ? 'fill-amber-400 text-amber-500'
+                                    : ''
+                                }`}
+                              />
+                              <span>Αγαπημένο</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingFolderModal(null)}
+                              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 1. Folder Name Input + 12 Ready-Made Preset Names */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Όνομα Φακέλου
+                          </label>
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editingFolderModal.name}
+                            onChange={(e) =>
+                              setEditingFolderModal((prev) =>
+                                prev ? { ...prev, name: e.target.value } : null
+                              )
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                saveOrMoveFolderHierarchy(
+                                  editingFolderModal.originalPath,
+                                  editingFolderModal.name,
+                                  editingFolderModal.parentPath,
+                                  editingFolderModal.color,
+                                  editingFolderModal.icon,
+                                  editingFolderModal.favorite
+                                );
+                                setEditingFolderModal(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingFolderModal(null);
+                              }
+                            }}
+                            placeholder="Πληκτρολόγησε όνομα φακέλου..."
+                            className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-[#1b2a4a] focus:outline-none focus:border-[#0066ff]"
+                          />
+                          <div>
+                            <span className="block text-[11px] font-semibold text-slate-400 mb-1.5">
+                              Έτοιμα Ονόματα (πάτα για γρήγορη επιλογή):
+                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {FOLDER_PRESET_NAMES.map((presetName) => {
+                                const isSelectedName =
+                                  editingFolderModal.name.trim() === presetName;
+                                return (
+                                  <button
+                                    key={presetName}
+                                    type="button"
+                                    onClick={() =>
+                                      setEditingFolderModal((prev) =>
+                                        prev ? { ...prev, name: presetName } : null
+                                      )
+                                    }
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer focus:outline-none ${
+                                      isSelectedName
+                                        ? 'bg-[#0066ff] text-white border-[#0066ff] shadow-2xs'
+                                        : 'bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] border-slate-200'
+                                    }`}
+                                  >
+                                    {presetName}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Folder Color (10 Colors) */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Χρώμα Φακέλου
+                          </label>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {FOLDER_PRESET_COLORS.map((col) => {
+                              const isSelectedColor =
+                                editingFolderModal.color.toLowerCase() === col.hex.toLowerCase();
+                              return (
+                                <button
+                                  key={col.hex}
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingFolderModal((prev) =>
+                                      prev ? { ...prev, color: col.hex } : null
+                                    )
+                                  }
+                                  style={{ backgroundColor: col.hex }}
+                                  className={`w-8 h-8 rounded-xl transition cursor-pointer flex items-center justify-center focus:outline-none ${
+                                    isSelectedColor
+                                      ? 'ring-3 ring-[#1b2a4a] scale-110 shadow-md'
+                                      : 'opacity-85 hover:opacity-100 hover:scale-105'
+                                  }`}
+                                  title={col.label}
+                                >
+                                  {isSelectedColor && (
+                                    <span className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* 3. Folder Icon (20 Ready-Made Icons) */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Εικονίδιο Φακέλου (20 Icons)
+                          </label>
+                          <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                            {FOLDER_PRESET_ICONS.map((ic) => {
+                              const isSelectedIcon = editingFolderModal.icon === ic.id;
+                              return (
+                                <button
+                                  key={ic.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingFolderModal((prev) =>
+                                      prev ? { ...prev, icon: ic.id } : null
+                                    )
+                                  }
+                                  className={`h-10 rounded-xl border flex items-center justify-center transition cursor-pointer focus:outline-none ${
+                                    isSelectedIcon
+                                      ? 'bg-sky-50 border-[#0066ff] ring-2 ring-[#0066ff]/25 scale-105 shadow-xs'
+                                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200/90'
+                                  }`}
+                                  title={ic.label}
+                                >
+                                  {renderFolderCustomIcon(
+                                    ic.id,
+                                    editingFolderModal.color,
+                                    'w-5 h-5'
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* 4. Parent Folder / Location (Move Folder inside another Folder or Root) */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Θέση / Γονικός Φάκελος
+                          </label>
+                          <div className="flex items-center gap-1.5 flex-wrap max-h-28 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200/80">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingFolderModal((prev) =>
+                                  prev ? { ...prev, parentPath: '' } : null
+                                )
+                              }
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer focus:outline-none ${
+                                editingFolderModal.parentPath === ''
+                                  ? 'bg-[#0066ff] text-white shadow-2xs'
+                                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                              }`}
+                            >
+                              🏠 Βιβλιοθήκη (Αρχικός)
+                            </button>
+                            {Array.from(folderMap.values())
+                              .filter(
+                                (f) =>
+                                  f.path !== editingFolderModal.originalPath &&
+                                  !f.path.startsWith(`${editingFolderModal.originalPath}/`)
+                              )
+                              .sort((a, b) => a.path.localeCompare(b.path, 'el'))
+                              .map((cand) => {
+                                const isSelParent = editingFolderModal.parentPath === cand.path;
+                                return (
+                                  <button
+                                    key={cand.path}
+                                    type="button"
+                                    onClick={() =>
+                                      setEditingFolderModal((prev) =>
+                                        prev ? { ...prev, parentPath: cand.path } : null
+                                      )
+                                    }
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer focus:outline-none ${
+                                      isSelParent
+                                        ? 'bg-[#0066ff] text-white shadow-2xs'
+                                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                                    }`}
+                                  >
+                                    <span>📁 {cand.path.replace(/\//g, ' › ')}</span>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="pt-2 grid grid-cols-2 gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingFolderModal(null)}
+                            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                          >
+                            Ακύρωση
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              saveOrMoveFolderHierarchy(
+                                editingFolderModal.originalPath,
+                                editingFolderModal.name,
+                                editingFolderModal.parentPath,
+                                editingFolderModal.color,
+                                editingFolderModal.icon,
+                                editingFolderModal.favorite
+                              );
+                              setEditingFolderModal(null);
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition cursor-pointer"
+                          >
+                            Αποθήκευση
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

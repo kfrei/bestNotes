@@ -410,11 +410,20 @@ export interface NotePage {
   activeAtomSimId?: string;
 }
 
+export interface CustomFolderMeta {
+  name: string;
+  updatedAt: string;
+  color?: string;
+  icon?: string;
+  favorite?: boolean;
+}
+
 export interface Notebook {
   id: string;
   title: string;
   folder: string;
   tags?: string[];
+  favorite?: boolean;
   coverColor: string;
   updatedAt: string;
   sourceFormat?: '.goodnotes' | '.bestnotes' | '.bestNotes';
