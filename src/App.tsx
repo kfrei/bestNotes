@@ -43699,12 +43699,6 @@ export default function App() {
                                     {nb.title}
                                   </p>
                                 )}
-                                {nb.folder && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-800 shrink-0">
-                                    <Folder className="w-3 h-3 fill-amber-400 text-amber-500" />
-                                    {nb.folder}
-                                  </span>
-                                )}
                               </div>
                               <p className="text-[11px] text-slate-500">
                                 {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • <span className="font-semibold text-sky-700">{nbSizeLabel}</span> • {formatLibraryTimestamp(nb.updatedAt, nb.id)}
