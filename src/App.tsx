@@ -1363,6 +1363,7 @@ export default function App() {
   const zoomRef = useRef<number>(initialZoom);
   const panRef = useRef<{ x: number; y: number }>({ x: 0, y: initialPanY });
   const paperTransformElRef = useRef<HTMLDivElement | null>(null);
+  const activeTextFloatingBarRef = useRef<HTMLDivElement | null>(null);
   const lastTextBarDirectTapTimeRef = useRef<number>(0);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const canvasRectRef = useRef<DOMRect | null>(null);
@@ -1411,6 +1412,7 @@ export default function App() {
     active: boolean;
     startClientX: number;
     startClientY: number;
+    lastClientX: number;
     lastClientY: number;
     lastMoveTime: number;
     velocityY: number;
@@ -4690,12 +4692,16 @@ export default function App() {
 
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
+        const target = e.target as HTMLElement | null;
+        if (workspaceRef.current && target && workspaceRef.current.contains(target)) {
+          // Handled by workspaceRef's onWheel listener with exact focal-point math
+          return;
+        }
         e.preventDefault();
         const nextZoom = Math.min(3.5, Math.max(0.2, zoomRef.current - e.deltaY * 0.008));
         zoomRef.current = nextZoom;
         if (paperTransformElRef.current) {
-          paperTransformElRef.current.style.transform = `translate3d(0px, ${panRef.current.y}px, 0) scale(${nextZoom})`;
-          paperTransformElRef.current.style.setProperty('--inv-zoom', String(1 / nextZoom));
+          paperTransformElRef.current.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0) scale(${nextZoom})`;
         }
         setZoom(nextZoom);
       }
@@ -6065,13 +6071,16 @@ export default function App() {
         if (txtDom) {
           const r = txtDom.getBoundingClientRect();
           if (
-            clientX >= r.left - 34 &&
-            clientX <= r.right + 34 &&
-            clientY >= r.top - 34 &&
-            clientY <= r.bottom + 34
+            clientX >= r.left - 24 &&
+            clientX <= r.right + 24 &&
+            clientY >= r.top - 24 &&
+            clientY <= r.bottom + 24
           ) {
             return true;
           }
+          // When a text box is active (dark floating toolbar open), any finger touch outside it
+          // is for 1-finger scrolling or 2-finger pinch-to-zoom — never hijack it to select background objects!
+          return false;
         }
       }
       const allTxtEls = document.querySelectorAll('[data-text-id]');
@@ -8481,17 +8490,54 @@ export default function App() {
 
   const debouncedTransformCommitRef = useRef<number | null>(null);
   const applyPaperTransformDirect = useCallback(
-    (nextZoom: number, _nextPanX: number, nextPanY: number, commitReactState = false) => {
+    (nextZoom: number, nextPanX: number, nextPanY: number, commitReactState = false) => {
       const clampedZoom = Math.min(3.5, Math.max(0.2, nextZoom));
+      const wsWidth = workspaceRef.current?.clientWidth || window.innerWidth || 980;
+      const scaledW = clampedZoom * pageWidth;
+      // Allow smooth horizontal focal-point pan when zoomed in wider than the viewport; keep centered (0) when fit-to-width
+      const maxPanX = scaledW > wsWidth ? (scaledW - wsWidth) / 2 + 64 : 0;
+      const clampedPanX = maxPanX > 0 ? Math.max(-maxPanX, Math.min(maxPanX, nextPanX)) : 0;
+
       const didScrollVertically = Math.abs(nextPanY - panRef.current.y) > 0.5;
       zoomRef.current = clampedZoom;
-      // Strictly lock X to 0 so the page is ALWAYS horizontally centered and only scrolls vertically (up/down)!
-      panRef.current = { x: 0, y: nextPanY };
+      panRef.current = { x: clampedPanX, y: nextPanY };
       if (paperTransformElRef.current) {
-        paperTransformElRef.current.style.transform = `translate3d(0px, ${nextPanY}px, 0) scale(${clampedZoom})`;
-        paperTransformElRef.current.style.setProperty('--inv-zoom', String(1 / clampedZoom));
+        paperTransformElRef.current.style.transform = `translate3d(${clampedPanX}px, ${nextPanY}px, 0) scale(${clampedZoom})`;
       }
-      if (didScrollVertically) {
+      // Update the active text floating toolbar's inverse-zoom scale & edge shift directly on its leaf DOM node
+      // (avoids mutating an inherited CSS variable on paperTransformElRef, preventing WebKit full-subtree style recalculations at 120Hz!)
+      const barEl = activeTextFloatingBarRef.current;
+      if (barEl) {
+        const invZ = 1 / Math.max(0.25, clampedZoom);
+        const txtX = Number(barEl.getAttribute('data-txt-x') || 0);
+        const boxW = Number(barEl.getAttribute('data-txt-w') || 180);
+        const pW = Number(barEl.getAttribute('data-page-w') || pageWidth || 920);
+        const placeBelow = barEl.getAttribute('data-place-below') === '1';
+        const estHalfBarW = 190 * invZ;
+        const boxCenterX = txtX + boxW / 2;
+        let shiftX = 0;
+        if (estHalfBarW * 2 < pW - 12) {
+          if (boxCenterX - estHalfBarW < 6) {
+            shiftX = 6 - (boxCenterX - estHalfBarW);
+          } else if (boxCenterX + estHalfBarW > pW - 6) {
+            shiftX = pW - 6 - (boxCenterX + estHalfBarW);
+          }
+        }
+        const gapPx = Math.max(2, Math.round(8 * invZ));
+        if (placeBelow) {
+          barEl.style.top = `calc(100% + ${gapPx}px)`;
+        } else {
+          barEl.style.bottom = `calc(100% + ${gapPx}px)`;
+        }
+        barEl.style.transform = `${
+          shiftX ? `translateX(calc(-50% + ${Math.round(shiftX)}px))` : 'translateX(-50%)'
+        } scale(${invZ})`;
+      }
+
+      const isTouchGestureActive = Boolean(
+        pinchStateRef.current?.active || outsidePanDragRef.current?.active
+      );
+      if (didScrollVertically && !isTouchGestureActive) {
         triggerPageControlsVisibility();
       }
       if (debouncedTransformCommitRef.current !== null) {
@@ -8500,16 +8546,16 @@ export default function App() {
       }
       if (commitReactState) {
         setZoom(clampedZoom);
-        setPan({ x: 0, y: nextPanY });
-      } else {
+        setPan({ x: clampedPanX, y: nextPanY });
+      } else if (!isTouchGestureActive) {
         debouncedTransformCommitRef.current = window.setTimeout(() => {
           debouncedTransformCommitRef.current = null;
           setZoom(zoomRef.current);
-          setPan({ x: 0, y: panRef.current.y });
+          setPan({ ...panRef.current });
         }, 120);
       }
     },
-    [triggerPageControlsVisibility]
+    [pageWidth, triggerPageControlsVisibility]
   );
 
   // Compute exact Fit-to-Width zoom so 100% of the page width (all 41 grid squares) is always visible
@@ -11209,6 +11255,10 @@ export default function App() {
 
   const applyTextDragMove = useCallback(
     (clientX: number, clientY: number) => {
+      if (pinchStateRef.current?.active) {
+        draggingTextRef.current = null;
+        return;
+      }
       const d = draggingTextRef.current;
       if (!d) return;
       if (
@@ -11228,6 +11278,10 @@ export default function App() {
       const dy = (clientY - d.startClientY) / zoomRef.current;
 
       if (d.resizeHandle) {
+        if (!d.moved && Math.hypot(clientX - d.startClientX, clientY - d.startClientY) > 3) {
+          d.moved = true;
+        }
+        if (!d.moved) return;
         const origW = d.origW || 180;
         const origH = d.origH || 48;
         let nextX = d.origX;
@@ -11400,6 +11454,10 @@ export default function App() {
 
   useEffect(() => {
     const onWinPointerMove = (ev: PointerEvent) => {
+      if (pinchStateRef.current?.active) {
+        draggingTextRef.current = null;
+        return;
+      }
       const d = draggingTextRef.current;
       if (!d) return;
       if (d.pointerId !== undefined && ev.pointerId !== d.pointerId) return;
@@ -11412,6 +11470,10 @@ export default function App() {
       finishTextDrag();
     };
     const onWinTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length >= 2 || pinchStateRef.current?.active) {
+        draggingTextRef.current = null;
+        return;
+      }
       if (!draggingTextRef.current || ev.touches.length === 0) return;
       if (ev.cancelable) ev.preventDefault();
       const t = ev.touches[0];
@@ -11469,14 +11531,68 @@ export default function App() {
       return 1.0 + Math.min(2.6, Math.pow((speedPxPerMs - 0.35) * 1.45, 1.15));
     };
 
+    const initPinchFromTouches = (t1: Touch, t2: Touch, touchCount: number) => {
+      outsidePanDragRef.current = null;
+      fingerEmptyTapTrackRef.current = null;
+      draggingTextRef.current = null;
+
+      // Cancel any accidental 1-finger 'touch' dot or drag that started milliseconds before the 2nd finger landed
+      if (holdTimerRef.current) {
+        window.clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      if (isDrawingRef.current && activePointerTypeRef.current !== 'pen') {
+        isDrawingRef.current = false;
+        activePointerIdRef.current = null;
+        activePointerTypeRef.current = null;
+        currentStrokePtsRef.current = [];
+        snappedCurrentStrokeRef.current = null;
+        lassoPolygonRef.current = [];
+        isDraggingSelectionRef.current = null;
+        selectionTransformRef.current = null;
+        const c = activeCanvasRef.current;
+        const ctx = activeCtxRef.current;
+        if (c && ctx) {
+          ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+          ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+        }
+      }
+
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+
+      const paperRect = paperTransformElRef.current?.getBoundingClientRect();
+      // Since paperTransformElRef uses transformOrigin: '50% 0', compute paperOffsetX relative to its horizontal center!
+      const originScreenX = paperRect
+        ? paperRect.left + paperRect.width / 2
+        : (workspaceRef.current?.clientWidth || window.innerWidth) / 2;
+      const originScreenY = paperRect ? paperRect.top : 0;
+      const paperOffsetX = (midX - originScreenX) / zoomRef.current;
+      const paperOffsetY = (midY - originScreenY) / zoomRef.current;
+      const now = performance.now();
+
+      pinchStateRef.current = {
+        active: true,
+        initialDist: Math.max(20, dist),
+        initialZoom: zoomRef.current,
+        initialPanX: panRef.current.x,
+        initialPanY: panRef.current.y,
+        startMidX: midX,
+        startMidY: midY,
+        lastMidY: midY,
+        lastMoveTime: now,
+        velocityY: 0,
+        paperOffsetX,
+        paperOffsetY,
+        startTime: now,
+        maxMoved: 0,
+        touchCount: Math.max(pinchStateRef.current?.touchCount || 0, touchCount),
+      };
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       cancelScrollMomentum();
-      if (draggingTextRef.current) {
-        if (e.cancelable) e.preventDefault();
-        outsidePanDragRef.current = null;
-        pinchStateRef.current = null;
-        return;
-      }
       const targetEl =
         e.target instanceof Element ? e.target : (e.target as Node | null)?.parentElement || null;
 
@@ -11501,6 +11617,22 @@ export default function App() {
       }
 
       const directTouches = getDirectFingerTouches(e.touches);
+
+      // Case B (PRIORITY #1): 2+ fingers anywhere (even over an active text box!) -> Pinch-to-Zoom & 2-Finger Pan
+      // Keeps selectedTextId & its dark floating toolbar active continuously, just like zooming on Mac Mini!
+      if (directTouches.length >= 2) {
+        if (e.cancelable) e.preventDefault();
+        initPinchFromTouches(directTouches[0], directTouches[1], directTouches.length);
+        return;
+      }
+
+      if (draggingTextRef.current) {
+        if (e.cancelable) e.preventDefault();
+        outsidePanDragRef.current = null;
+        pinchStateRef.current = null;
+        return;
+      }
+
       if (
         targetEl &&
         targetEl.closest('button, input, textarea, select, a, [data-ui-panel="true"], [data-text-box="true"]')
@@ -11517,32 +11649,9 @@ export default function App() {
       }
       const isOutsideCanvas = !(e.target instanceof HTMLCanvasElement);
 
-      // If 1 finger touches outside the active text box (either on empty paper or outside the paper, regardless of Pencil-Only Mode),
-      // immediately release/deselect the text box!
-      if (
-        directTouches.length === 1 &&
-        (selectedTextId !== null || editingTextId !== null) &&
-        performance.now() - lastPenActivityTimeRef.current > 140
-      ) {
-        const t = directTouches[0] as any;
-        const currentTxtId = selectedTextId || editingTextId;
-        const txtDom = currentTxtId
-          ? (document.querySelector(`[data-text-id="${currentTxtId}"]`) as HTMLElement | null)
-          : null;
-        const r = txtDom ? txtDom.getBoundingClientRect() : null;
-        const isOnActiveTextBox =
-          r !== null &&
-          t.clientX >= r.left - 34 &&
-          t.clientX <= r.right + 34 &&
-          t.clientY >= r.top - 34 &&
-          t.clientY <= r.bottom + 34;
-        if (!isOnActiveTextBox) {
-          releaseActiveTextBox();
-        }
-      }
-
       // Case A: 1 finger touching OUTSIDE the paper canvas OR 1 finger on paper when Pencil-Only Mode is ON -> Scroll pages like Word!
       // IMPORTANT:
+      // - Keep any selectedTextId (and its dark floating toolbar) active during finger scroll/zoom!
       // - When Laser ('laser') is active, 1 finger on the paper draws the red laser beam!
       // - In Pencil-Only Mode, if the 1 finger touches an active Lasso selection box/handle or Text Box,
       //   do NOT scroll — let handlePointerDown / text box handlers drag, resize, or rotate it!
@@ -11559,18 +11668,6 @@ export default function App() {
           fingerEmptyTapTrackRef.current = null;
           return;
         }
-        // Tapping/dragging with 1 finger on empty paper deselects any active Lasso/Nodes/Text selection while keeping the active tool
-        if (
-          selectedStrokeIds.length > 0 ||
-          selectedImageId !== null ||
-          activeNodeStrokeId !== null
-        ) {
-          setSelectedStrokeIds([]);
-          setSelectedImageId(null);
-          setActiveNodeStrokeId(null);
-          setDraggingNodeIdx(null);
-          setImageCropMode('none');
-        }
 
         fingerEmptyTapTrackRef.current = {
           active: true,
@@ -11584,6 +11681,7 @@ export default function App() {
           active: true,
           startClientX: t.clientX,
           startClientY: t.clientY,
+          lastClientX: t.clientX,
           lastClientY: t.clientY,
           lastMoveTime: performance.now(),
           velocityY: 0,
@@ -11591,64 +11689,6 @@ export default function App() {
           initialPanY: panRef.current.y,
         };
         return;
-      }
-
-      // Case B: 2+ fingers anywhere -> Pinch-to-Zoom & 2-Finger Pan across all Word-style pages + Pull-to-Add-Page
-      if (directTouches.length >= 2) {
-        if (e.cancelable) e.preventDefault();
-        outsidePanDragRef.current = null;
-        fingerEmptyTapTrackRef.current = null;
-
-        // Cancel any accidental 1-finger 'touch' dot that started milliseconds before the 2nd finger landed
-        if (holdTimerRef.current) {
-          window.clearTimeout(holdTimerRef.current);
-          holdTimerRef.current = null;
-        }
-        if (isDrawingRef.current && activePointerTypeRef.current !== 'pen') {
-          isDrawingRef.current = false;
-          activePointerIdRef.current = null;
-          activePointerTypeRef.current = null;
-          currentStrokePtsRef.current = [];
-          snappedCurrentStrokeRef.current = null;
-          lassoPolygonRef.current = [];
-          isDraggingSelectionRef.current = null;
-          selectionTransformRef.current = null;
-          const c = activeCanvasRef.current;
-          const ctx = activeCtxRef.current;
-          if (c && ctx) {
-            ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
-            ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
-          }
-        }
-
-        const t1 = directTouches[0];
-        const t2 = directTouches[1];
-        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        const midX = (t1.clientX + t2.clientX) / 2;
-        const midY = (t1.clientY + t2.clientY) / 2;
-
-        const paperRect = paperTransformElRef.current?.getBoundingClientRect();
-        const paperOffsetX = paperRect ? (midX - paperRect.left) / zoomRef.current : 460;
-        const paperOffsetY = paperRect ? (midY - paperRect.top) / zoomRef.current : 630;
-        const now = performance.now();
-
-        pinchStateRef.current = {
-          active: true,
-          initialDist: Math.max(20, dist),
-          initialZoom: zoomRef.current,
-          initialPanX: panRef.current.x,
-          initialPanY: panRef.current.y,
-          startMidX: midX,
-          startMidY: midY,
-          lastMidY: midY,
-          lastMoveTime: now,
-          velocityY: 0,
-          paperOffsetX,
-          paperOffsetY,
-          startTime: now,
-          maxMoved: 0,
-          touchCount: Math.max(pinchStateRef.current?.touchCount || 0, directTouches.length),
-        };
       }
     };
 
@@ -11675,6 +11715,54 @@ export default function App() {
         return;
       }
 
+      const directTouches = getDirectFingerTouches(e.touches);
+
+      // Case B (PRIORITY #1): 2-finger pinch & pan across Word-style pages (120Hz zero-drift closed-form GPU transform)
+      if (directTouches.length >= 2) {
+        if (e.cancelable) e.preventDefault();
+        if (!pinchStateRef.current?.active) {
+          initPinchFromTouches(directTouches[0], directTouches[1], directTouches.length);
+        }
+        const st = pinchStateRef.current;
+        if (!st) return;
+        draggingTextRef.current = null;
+        outsidePanDragRef.current = null;
+        st.touchCount = Math.max(st.touchCount, directTouches.length);
+
+        const t1 = directTouches[0];
+        const t2 = directTouches[1];
+        const currDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const currMidX = (t1.clientX + t2.clientX) / 2;
+        const currMidY = (t1.clientY + t2.clientY) / 2;
+
+        const moved =
+          Math.hypot(currMidX - st.startMidX, currMidY - st.startMidY) +
+          Math.abs(currDist - st.initialDist);
+        if (moved > st.maxMoved) st.maxMoved = moved;
+
+        const now = performance.now();
+        const dt = Math.max(4, Math.min(60, now - st.lastMoveTime));
+        const stepMidY = currMidY - st.lastMidY;
+        const instVy = stepMidY / dt;
+        st.velocityY = st.velocityY * 0.4 + instVy * 0.6;
+        st.lastMidY = currMidY;
+        st.lastMoveTime = now;
+
+        const newZoom = Math.min(3.5, Math.max(0.2, st.initialZoom * (currDist / st.initialDist)));
+        const nextPanX =
+          st.initialPanX + (currMidX - st.startMidX) - st.paperOffsetX * (newZoom - st.initialZoom);
+        const nextPanY =
+          st.initialPanY + (currMidY - st.startMidY) - st.paperOffsetY * (newZoom - st.initialZoom);
+
+        applyPaperTransformDirect(newZoom, nextPanX, nextPanY, false);
+        if (Math.abs(newZoom - st.initialZoom) < 0.04) {
+          checkPullToAddPageHold(nextPanY);
+        } else {
+          stopPullToAddPageHold();
+        }
+        return;
+      }
+
       // If 1-finger drag-and-drop (or resize/rotate) of a Lasso-selected shape/image, Node handle, or Text Box is active, prevent page scroll!
       if (
         (isDrawingRef.current &&
@@ -11698,8 +11786,6 @@ export default function App() {
         return;
       }
 
-      const directTouches = getDirectFingerTouches(e.touches);
-
       // Case A: 1-finger velocity-sensitive scroll through Word-style pages
       if (directTouches.length === 1) {
         const t = directTouches[0];
@@ -11720,56 +11806,22 @@ export default function App() {
           const drag = outsidePanDragRef.current;
           const now = performance.now();
           const dt = Math.max(4, Math.min(60, now - drag.lastMoveTime));
+          const stepDx = t.clientX - drag.lastClientX;
           const stepDy = t.clientY - drag.lastClientY;
           const instVy = stepDy / dt;
           const gain = computeFingerSpeedGain(Math.abs(instVy));
 
           drag.velocityY = drag.velocityY * 0.4 + instVy * gain * 0.6;
+          drag.lastClientX = t.clientX;
           drag.lastClientY = t.clientY;
           drag.lastMoveTime = now;
 
+          const nextPanX = panRef.current.x + stepDx;
           const nextPanY = panRef.current.y + stepDy * gain;
-          applyPaperTransformDirect(zoomRef.current, 0, nextPanY, false);
-          syncActivePageFromPanY(nextPanY);
+          applyPaperTransformDirect(zoomRef.current, nextPanX, nextPanY, false);
           checkPullToAddPageHold(nextPanY);
           return;
         }
-      }
-
-      // Case B: 2-finger pinch & velocity-sensitive vertical scroll across Word-style pages
-      if (!pinchStateRef.current?.active) return;
-      if (directTouches.length >= 2) {
-        if (e.cancelable) e.preventDefault();
-        const st = pinchStateRef.current;
-        st.touchCount = Math.max(st.touchCount, directTouches.length);
-
-        const t1 = directTouches[0];
-        const t2 = directTouches[1];
-        const currDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        const currMidX = (t1.clientX + t2.clientX) / 2;
-        const currMidY = (t1.clientY + t2.clientY) / 2;
-
-        const moved = Math.hypot(currMidX - st.startMidX, currMidY - st.startMidY) + Math.abs(currDist - st.initialDist);
-        if (moved > st.maxMoved) st.maxMoved = moved;
-
-        const now = performance.now();
-        const dt = Math.max(4, Math.min(60, now - st.lastMoveTime));
-        const stepMidY = currMidY - st.lastMidY;
-        const instVy = stepMidY / dt;
-        const isPrimarilyVerticalScroll = Math.abs(currDist - st.initialDist) < 32;
-        const gain = isPrimarilyVerticalScroll ? computeFingerSpeedGain(Math.abs(instVy)) : 1.0;
-
-        st.velocityY = st.velocityY * 0.4 + instVy * gain * 0.6;
-        st.lastMidY = currMidY;
-        st.lastMoveTime = now;
-
-        const oldZoom = zoomRef.current;
-        const newZoom = Math.min(3.5, Math.max(0.2, st.initialZoom * (currDist / st.initialDist)));
-        const nextPanY = panRef.current.y + stepMidY * gain - st.paperOffsetY * (newZoom - oldZoom);
-
-        applyPaperTransformDirect(newZoom, 0, nextPanY, false);
-        syncActivePageFromPanY(nextPanY);
-        checkPullToAddPageHold(nextPanY);
       }
     };
 
@@ -11842,6 +11894,7 @@ export default function App() {
       if (outsidePanDragRef.current?.active && directTouches.length === 0) {
         const drag = outsidePanDragRef.current;
         outsidePanDragRef.current = null;
+        triggerPageControlsVisibility();
         if (performance.now() - drag.lastMoveTime < 90 && Math.abs(drag.velocityY) > 0.16) {
           startScrollMomentum(drag.velocityY);
         } else {
@@ -11871,6 +11924,7 @@ export default function App() {
             showToast('↪️ 3-Finger Tap: Επανάληψη (Redo)');
           }
         } else {
+          triggerPageControlsVisibility();
           setZoom(zoomRef.current);
           if (
             performance.now() - st.lastMoveTime < 90 &&
@@ -11897,8 +11951,12 @@ export default function App() {
         const oldZoom = zoomRef.current;
         const factor = Math.exp(-e.deltaY * 0.0045);
         const newZoom = Math.min(3.5, Math.max(0.2, oldZoom * factor));
-        const offsetX = paperRect ? (e.clientX - paperRect.left) / oldZoom : 460;
-        const offsetY = paperRect ? (e.clientY - paperRect.top) / oldZoom : 630;
+        const originScreenX = paperRect
+          ? paperRect.left + paperRect.width / 2
+          : (workspaceRef.current?.clientWidth || window.innerWidth) / 2;
+        const originScreenY = paperRect ? paperRect.top : 0;
+        const offsetX = (e.clientX - originScreenX) / oldZoom;
+        const offsetY = (e.clientY - originScreenY) / oldZoom;
         const newPanX = panRef.current.x - offsetX * (newZoom - oldZoom);
         const newPanY = panRef.current.y - offsetY * (newZoom - oldZoom);
         applyPaperTransformDirect(newZoom, newPanX, newPanY, true);
@@ -26380,7 +26438,7 @@ export default function App() {
             pW: getPageLogicalWidth(targetPageForTxt),
             pH: getPageLogicalHeight(targetPageForTxt),
             resizeHandle: edgeHandle,
-            moved: true,
+            moved: false,
             wasAlreadySelected: true,
             startedOnTextarea: false,
           };
@@ -26414,17 +26472,17 @@ export default function App() {
       if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 140) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
-      // Tapping outside an active text box with a finger ALWAYS releases/deselects the text box!
-      const hadActiveTextOnTouch = Boolean(selectedTextId || editingTextId);
-      if (hadActiveTextOnTouch) {
-        releaseActiveTextBox();
-      }
-
       if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
+
+      const hadActiveTextOnTouch = Boolean(selectedTextId || editingTextId);
 
       // When Pencil-Only Mode is ON, 1 finger on a shape/image/Lasso-box selects & transforms it; 1 finger on empty paper scrolls the page
       // Exception: When Laser ('laser') is active, 1 finger ALSO draws the red laser beam without selecting objects!
       if (pencilOnlyMode && activeTool !== 'laser') {
+        // When a text box is selected (dark floating toolbar open), keep it active during 1-finger scroll / 2-finger pinch!
+        if (hadActiveTextOnTouch) {
+          return;
+        }
         if (isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget)) {
           outsidePanDragRef.current = null;
           cancelScrollMomentum();
@@ -26432,8 +26490,11 @@ export default function App() {
           return;
         }
       } else {
-        if (hadActiveTextOnTouch && activeTool === 'text') {
-          return;
+        if (hadActiveTextOnTouch) {
+          releaseActiveTextBox();
+          if (activeTool === 'text') {
+            return;
+          }
         }
         // When Finger Drawing is enabled (!pencilOnlyMode) or Laser is active, let the finger act like the pencil for the active tool
         outsidePanDragRef.current = null;
@@ -49325,8 +49386,7 @@ export default function App() {
               ref={paperTransformElRef}
               style={{
                 transformOrigin: '50% 0',
-                transform: `translate3d(0px, ${pan.y}px, 0) scale(${zoom})`,
-                ['--inv-zoom' as any]: 1 / Math.max(0.2, zoom),
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
                 willChange: 'transform',
                 gap: `${PAGE_GAP}px`,
               }}
@@ -49792,7 +49852,7 @@ export default function App() {
                               pW,
                               pH,
                               resizeHandle: resizeHandle || undefined,
-                              moved: Boolean(resizeHandle),
+                              moved: false,
                               wasAlreadySelected,
                               startedOnTextarea,
                             };
@@ -49832,7 +49892,6 @@ export default function App() {
                                 ? ev.target
                                 : (ev.target as Node | null)?.parentElement || null;
                             if (targetEl?.closest('button')) return;
-                            ev.stopPropagation();
                             outsidePanDragRef.current = null;
                             cancelScrollMomentum();
                             if (draggingTextRef.current?.id === txt.id) return;
@@ -49918,7 +49977,7 @@ export default function App() {
                               pW,
                               pH,
                               resizeHandle: resizeHandle || undefined,
-                              moved: Boolean(resizeHandle),
+                              moved: false,
                               wasAlreadySelected,
                               startedOnTextarea: false,
                             };
@@ -49934,6 +49993,10 @@ export default function App() {
                             setShowToolSubBar(true);
                           }}
                           onPointerMove={(ev) => {
+                            if (pinchStateRef.current?.active) {
+                              draggingTextRef.current = null;
+                              return;
+                            }
                             const d = draggingTextRef.current;
                             if (!d || d.id !== txt.id) return;
                             if (d.pointerId !== undefined && d.pointerId !== ev.pointerId) return;
@@ -50124,7 +50187,12 @@ export default function App() {
 
                               return (
                                 <div
+                                  ref={activeTextFloatingBarRef}
                                   data-text-drag="true"
+                                  data-txt-x={Math.round(txt.x)}
+                                  data-txt-w={Math.round(boxWForBar)}
+                                  data-page-w={Math.round(pW)}
+                                  data-place-below={placeBarBelow ? '1' : '0'}
                                   onMouseDown={(ev) => ev.preventDefault()}
                                   onPointerDownCapture={(ev) => {
                                     const btn = (
@@ -50158,7 +50226,7 @@ export default function App() {
                                       barShiftX
                                         ? `translateX(calc(-50% + ${Math.round(barShiftX)}px))`
                                         : 'translateX(-50%)'
-                                    } scale(var(--inv-zoom, ${invZoom}))`,
+                                    } scale(${invZoom})`,
                                     touchAction: 'none',
                                     WebkitUserSelect: 'none',
                                     userSelect: 'none',
