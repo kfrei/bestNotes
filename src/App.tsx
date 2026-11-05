@@ -81,6 +81,7 @@ import {
   syncNotebookPdfToGoogleDrive,
   exportNotebookToPdfBlob,
   exportNotebookToLivePdfHtml,
+  DEFAULT_DRIVE_BASE_PATH,
 } from './utils/googleDrivePdfSync';
 import {
   Notebook,
@@ -739,6 +740,61 @@ const FALLBACK_EMPTY_NOTEBOOK: Notebook = {
 const createDefaultBlankNotebooks = (): Notebook[] => [];
 
 const createDefaultFolders = (): { name: string; updatedAt: string }[] => [];
+
+function ensureGymnasioArnaiasSubfolders(
+  folders: { name: string; updatedAt: string }[]
+): { name: string; updatedAt: string }[] {
+  const hasGymnasio = folders.some(
+    (f) =>
+      f.name.trim() === 'Γυμνάσιο Αρναίας' ||
+      f.name.trim().startsWith('Γυμνάσιο Αρναίας/')
+  );
+  if (!hasGymnasio) return folders;
+  const nowIso = new Date().toISOString();
+  const classNames = ['Α1', 'Β1', 'Γ1', 'Γ2'];
+  // Convert any root-level Α1, Β1, Γ1, Γ2 into Γυμνάσιο Αρναίας/Α1 etc.
+  const migrated = folders.map((f) => {
+    const trimmed = f.name.trim();
+    if (classNames.includes(trimmed)) {
+      return { ...f, name: `Γυμνάσιο Αρναίας/${trimmed}` };
+    }
+    return f;
+  });
+  let seededAlready = false;
+  try {
+    seededAlready = localStorage.getItem('bestnotes_gymnasio_subfolders_seeded_v1') === '1';
+  } catch {
+    // ignore
+  }
+  const hasAnySubfolder = migrated.some((f) => f.name.trim().startsWith('Γυμνάσιο Αρναίας/'));
+  if (!seededAlready && !hasAnySubfolder) {
+    try {
+      localStorage.setItem('bestnotes_gymnasio_subfolders_seeded_v1', '1');
+    } catch {
+      // ignore
+    }
+    const existingSet = new Set(migrated.map((f) => f.name.trim()));
+    const added = [...migrated];
+    if (!existingSet.has('Γυμνάσιο Αρναίας')) {
+      added.push({ name: 'Γυμνάσιο Αρναίας', updatedAt: nowIso });
+    }
+    for (const cls of classNames) {
+      const subPath = `Γυμνάσιο Αρναίας/${cls}`;
+      if (!existingSet.has(subPath)) {
+        added.push({ name: subPath, updatedAt: nowIso });
+      }
+    }
+    return added;
+  }
+  // Deduplicate by trimmed name
+  const seen = new Set<string>();
+  return migrated.filter((f) => {
+    const k = f.name.trim();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
 const PRESET_COLORS = [
   '#111827',
   '#dc2626',
@@ -1308,7 +1364,7 @@ export default function App() {
             try {
               const parsedF = JSON.parse(savedFolders);
               if (Array.isArray(parsedF)) {
-                loadedFolders = parsedF;
+                loadedFolders = ensureGymnasioArnaiasSubfolders(parsedF);
               }
             } catch {
               // ignore
@@ -2358,8 +2414,8 @@ export default function App() {
   const [showUserDropdown, setShowUserDropdown] = useState<boolean>(false);
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
     try {
-      const savedToken = localStorage.getItem('bestnotes_drive_token_v1');
-      const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v1') || '0');
+      const savedToken = localStorage.getItem('bestnotes_drive_token_v2');
+      const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v2') || '0');
       if (savedToken && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
         return null;
       }
@@ -2375,8 +2431,42 @@ export default function App() {
       return null;
     }
   });
+  const [driveBasePath, setDriveBasePath] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('bestnotes_drive_base_path_v1');
+      if (saved && saved.trim() && saved.trim() !== 'BestNotes') {
+        return saved.trim();
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_DRIVE_BASE_PATH;
+  });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
   const [driveSyncingAll, setDriveSyncingAll] = useState<boolean>(false);
+
+  const saveDriveBasePath = useCallback(
+    (nextPath: string) => {
+      const cleaned = nextPath.trim() || DEFAULT_DRIVE_BASE_PATH;
+      setDriveBasePath(cleaned);
+      try {
+        localStorage.setItem('bestnotes_drive_base_path_v1', cleaned);
+      } catch {
+        // ignore
+      }
+      if (currentUser) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          {
+            driveBasePath: cleaned,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+    },
+    [currentUser]
+  );
 
   const saveDriveCredentials = useCallback(
     (token: string | null, email: string | null, issuedAt = Date.now()) => {
@@ -2384,10 +2474,10 @@ export default function App() {
       if (email) setDriveEmail(email);
       try {
         if (token) {
-          localStorage.setItem('bestnotes_drive_token_v1', token);
-          localStorage.setItem('bestnotes_drive_token_time_v1', String(issuedAt));
+          localStorage.setItem('bestnotes_drive_token_v2', token);
+          localStorage.setItem('bestnotes_drive_token_time_v2', String(issuedAt));
         } else {
-          localStorage.removeItem('bestnotes_drive_token_v1');
+          localStorage.removeItem('bestnotes_drive_token_v2');
         }
         if (email) {
           localStorage.setItem('bestnotes_drive_email_v1', email);
@@ -2400,7 +2490,7 @@ export default function App() {
           doc(db, 'users', currentUser.uid),
           {
             ...(email ? { driveEmail: email } : {}),
-            ...(token ? { driveAccessToken: token, driveTokenIssuedAt: issuedAt } : {}),
+            ...(token ? { driveAccessTokenV2: token, driveTokenIssuedAt: issuedAt } : {}),
             updatedAt: new Date().toISOString(),
           },
           { merge: true }
@@ -2477,7 +2567,7 @@ export default function App() {
         const raw = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${initialAuthUid}`);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed)) return ensureGymnasioArnaiasSubfolders(parsed);
         }
       } catch {
         // ignore
@@ -3695,20 +3785,36 @@ export default function App() {
           });
         }
         if (
-          typeof data.driveAccessToken === 'string' &&
-          data.driveAccessToken.length > 0 &&
+          typeof data.driveAccessTokenV2 === 'string' &&
+          data.driveAccessTokenV2.length > 0 &&
           typeof data.driveTokenIssuedAt === 'number' &&
           Date.now() - data.driveTokenIssuedAt < 52 * 60 * 1000
         ) {
           setDriveAccessToken((prev) => {
-            if (prev === data.driveAccessToken) return prev;
+            if (prev === data.driveAccessTokenV2) return prev;
             try {
-              localStorage.setItem('bestnotes_drive_token_v1', data.driveAccessToken);
-              localStorage.setItem('bestnotes_drive_token_time_v1', String(data.driveTokenIssuedAt));
+              localStorage.setItem('bestnotes_drive_token_v2', data.driveAccessTokenV2);
+              localStorage.setItem('bestnotes_drive_token_time_v2', String(data.driveTokenIssuedAt));
             } catch {
               // ignore
             }
-            return data.driveAccessToken;
+            return data.driveAccessTokenV2;
+          });
+        }
+        if (
+          typeof data.driveBasePath === 'string' &&
+          data.driveBasePath.trim().length > 0 &&
+          data.driveBasePath.trim() !== 'BestNotes'
+        ) {
+          const remoteBase = data.driveBasePath.trim();
+          setDriveBasePath((prev) => {
+            if (prev === remoteBase) return prev;
+            try {
+              localStorage.setItem('bestnotes_drive_base_path_v1', remoteBase);
+            } catch {
+              // ignore
+            }
+            return remoteBase;
           });
         }
 
@@ -3722,7 +3828,7 @@ export default function App() {
             const parsedF = JSON.parse(data.customFoldersJson);
             if (Array.isArray(parsedF)) {
               lastSyncedMetaRef.current.folders = data.customFoldersJson;
-              setCustomFolders(parsedF);
+              setCustomFolders(ensureGymnasioArnaiasSubfolders(parsedF));
             }
           } catch {
             // ignore
@@ -4011,7 +4117,7 @@ export default function App() {
         rulersByPageId,
       };
       try {
-        const res = await syncNotebookPdfToGoogleDrive(token, targetNb, pdfExportOpts);
+        const res = await syncNotebookPdfToGoogleDrive(token, targetNb, pdfExportOpts, driveBasePath);
         setSyncStatus('synced');
         setIsDirty(false);
         setSecondsToNextSync(20);
@@ -4022,7 +4128,7 @@ export default function App() {
         }
         if (showFeedback) {
           showToast(
-            `☁️ Google Drive (/BestNotes${targetNb.folder ? `/${targetNb.folder}` : ''}): Συγχρονίστηκε στο ίδιο όνομα «${res.pdfFileName}»!`
+            `☁️ Google Drive (${res.targetPathDisplay}): Αποθηκεύτηκε ως «${res.pdfFileName}»!`
           );
         }
       } catch (err: any) {
@@ -4030,7 +4136,7 @@ export default function App() {
           // Keep driveEmail connected so Google Drive never logs out visually!
           setDriveAccessToken(null);
           try {
-            localStorage.removeItem('bestnotes_drive_token_v1');
+            localStorage.removeItem('bestnotes_drive_token_v2');
           } catch {
             // ignore
           }
@@ -4045,7 +4151,8 @@ export default function App() {
               const retryRes = await syncNotebookPdfToGoogleDrive(
                 refreshed.accessToken,
                 targetNb,
-                pdfExportOpts
+                pdfExportOpts,
+                driveBasePath
               );
               setSyncStatus('synced');
               setIsDirty(false);
@@ -4054,7 +4161,7 @@ export default function App() {
               hasPendingDrivePdfSyncRef.current = false;
               if (retryRes.webViewLink) setLastDrivePdfLink(retryRes.webViewLink);
               showToast(
-                `☁️ Google Drive (/BestNotes${targetNb.folder ? `/${targetNb.folder}` : ''}): Συγχρονίστηκε στο ίδιο όνομα «${retryRes.pdfFileName}»!`
+                `☁️ Google Drive (${retryRes.targetPathDisplay}): Αποθηκεύτηκε ως «${retryRes.pdfFileName}»!`
               );
               return;
             } catch {
@@ -4076,6 +4183,7 @@ export default function App() {
       currentUser,
       driveAccessToken,
       driveEmail,
+      driveBasePath,
       activeNotebook,
       pushNotebookToCloudTracked,
       saveDriveCredentials,
@@ -4105,7 +4213,7 @@ export default function App() {
         for (const nb of notebooks) {
           let res;
           try {
-            res = await syncNotebookPdfToGoogleDrive(token, nb);
+            res = await syncNotebookPdfToGoogleDrive(token, nb, undefined, driveBasePath);
           } catch (innerErr: any) {
             if (
               innerErr?.message === 'DRIVE_TOKEN_EXPIRED' ||
@@ -4117,7 +4225,7 @@ export default function App() {
               );
               token = refreshed.accessToken;
               saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              res = await syncNotebookPdfToGoogleDrive(token, nb);
+              res = await syncNotebookPdfToGoogleDrive(token, nb, undefined, driveBasePath);
             } else {
               throw innerErr;
             }
@@ -4133,7 +4241,9 @@ export default function App() {
         setSecondsToNextSync(20);
         secondsToNextDrivePdfSyncRef.current = 120;
         hasPendingDrivePdfSyncRef.current = false;
-        showToast(`☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & φάκελοι σε PDF στον φάκελο /BestNotes του Google Drive!`);
+        showToast(
+          `☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & υποφάκελοι σε PDF στο Google Drive (${driveBasePath})!`
+        );
       } catch (err: any) {
         setSyncStatus('dirty');
         showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
@@ -4144,6 +4254,7 @@ export default function App() {
     [
       driveAccessToken,
       driveEmail,
+      driveBasePath,
       currentUser?.email,
       notebooks,
       activeNotebook.id,
@@ -40855,18 +40966,32 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 2. Google Drive Login & /BestNotes Same-Name PDF Sync */}
+                {/* 2. Google Drive Login & GoodNotes / Custom Folder Same-Name PDF Sync */}
                 <div className="pt-2.5 border-t border-slate-200 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-[#1b2a4a] flex items-center gap-1.5">
                       <Cloud className="w-3.5 h-3.5 text-[#0066ff]" />
-                      <span>Google Drive Sync (/BestNotes)</span>
+                      <span>Google Drive Sync (PDF)</span>
                     </span>
                     {(driveAccessToken || driveEmail) && (
                       <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold">
                         Συνδεδεμένο
                       </span>
                     )}
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 space-y-1">
+                    <div className="text-[10px] font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Φάκελος Προορισμού Google Drive:</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={driveBasePath}
+                      onChange={(e) => saveDriveBasePath(e.target.value)}
+                      placeholder="GoodNotes/x Σ Χ Ο Λ Ε Ι Α/2025-2026/Γυμνάσιο Αρναίας"
+                      className="w-full px-2 py-1 rounded-lg bg-white border border-slate-200 text-[10.5px] font-semibold text-[#1b2a4a] focus:outline-none focus:border-[#0066ff]"
+                      title="Διαδρομή φακέλου στο Google Drive (ή επικόλληση Link φακέλου Drive)"
+                    />
                   </div>
 
                   {driveAccessToken || driveEmail ? (
@@ -40876,8 +41001,15 @@ export default function App() {
                         <div className="font-semibold text-slate-800 truncate">
                           {driveEmail || currentUser?.email || 'Google Drive Account'}
                         </div>
-                        <div className="text-[10px] text-sky-700 font-medium mt-0.5 truncate">
-                          📁 BestNotes{activeNotebook.folder ? ` / ${activeNotebook.folder}` : ''} / {activeNotebook.title}.pdf
+                        <div className="text-[10px] text-sky-700 font-medium mt-0.5 break-words leading-tight">
+                          📁 {driveBasePath}
+                          {activeNotebook.folder &&
+                          !driveBasePath.endsWith(activeNotebook.folder.split('/')[0])
+                            ? ` / ${activeNotebook.folder}`
+                            : activeNotebook.folder && activeNotebook.folder.includes('/')
+                            ? ` / ${activeNotebook.folder.split('/').slice(1).join(' / ')}`
+                            : ''}{' '}
+                          / {activeNotebook.title}.pdf
                         </div>
                       </div>
 
@@ -40955,14 +41087,14 @@ export default function App() {
                   ) : (
                     <div className="space-y-2">
                       <p className="text-[11px] text-slate-500 leading-snug">
-                        Συνδέσου στο Google Drive για να δημιουργηθεί ο φάκελος <b>BestNotes</b> και να συγχρονίζονται αυτόματα οι σημειώσεις και οι φάκελοί σου σε <b>PDF</b> με το ίδιο όνομα.
+                        Συνδέσου στο Google Drive για να συγχρονίζονται αυτόματα οι σημειώσεις και οι υποφάκελοί σου (<b>Α1, Β1, Γ1, Γ2</b>) σε <b>PDF</b> μέσα στον φάκελο του GoodNotes σου, χωρίς να διαγράφεται τίποτα.
                       </p>
                       <button
                         onClick={async () => {
                           try {
                             const res = await signInToGoogleDrive(currentUser?.email || null, false);
                             saveDriveCredentials(res.accessToken, res.email || res.displayName);
-                            showToast(`✅ Συνδέθηκες στο Google Drive (${res.email})! Συγχρονισμός στο /BestNotes...`);
+                            showToast(`✅ Συνδέθηκες στο Google Drive (${res.email})! Συγχρονισμός στο ${driveBasePath}...`);
                             await performDrivePdfSync(true, res.accessToken);
                           } catch (err: any) {
                             showToast(`⚠️ Σφάλμα Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
@@ -41004,36 +41136,107 @@ export default function App() {
         >
           <div className="max-w-5xl mx-auto space-y-5">
             {(() => {
-              // Build unified folder map from customFolders + notebooks
-              const folderMap = new Map<string, { name: string; updatedAt: string; count: number; totalBytes: number }>();
+              const normalizeFolderPath = (rawPath: string) =>
+                rawPath
+                  .split('/')
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+                  .join('/');
+
+              const currentFolderPath = normalizeFolderPath(activeLibraryFolder || '');
+
+              // Build unified hierarchical folder map from customFolders + notebooks (supports folders inside folders!)
+              const folderMap = new Map<
+                string,
+                {
+                  path: string;
+                  name: string;
+                  parentPath: string;
+                  updatedAt: string;
+                  count: number;
+                  subfolderCount: number;
+                  totalBytes: number;
+                }
+              >();
+
+              const ensureFolderHierarchy = (rawPath: string, updatedAtIso?: string) => {
+                const norm = normalizeFolderPath(rawPath);
+                if (!norm) return;
+                const parts = norm.split('/');
+                let acc = '';
+                for (let i = 0; i < parts.length; i++) {
+                  const seg = parts[i];
+                  const parentPath = acc;
+                  acc = acc ? `${acc}/${seg}` : seg;
+                  const existing = folderMap.get(acc);
+                  const ts = updatedAtIso || new Date().toISOString();
+                  if (!existing) {
+                    folderMap.set(acc, {
+                      path: acc,
+                      name: seg,
+                      parentPath,
+                      updatedAt: ts,
+                      count: 0,
+                      subfolderCount: 0,
+                      totalBytes: 0,
+                    });
+                  } else if (ts > existing.updatedAt) {
+                    existing.updatedAt = ts;
+                  }
+                }
+              };
+
               for (const cf of customFolders) {
-                const trimmed = cf.name.trim();
-                if (trimmed) {
-                  folderMap.set(trimmed, { name: trimmed, updatedAt: cf.updatedAt || new Date().toISOString(), count: 0, totalBytes: 0 });
+                ensureFolderHierarchy(cf.name, cf.updatedAt);
+              }
+              // If user has "Γυμνάσιο Αρναίας" open or created, ensure Α1, Β1, Γ1, Γ2 appear inside it!
+              if (folderMap.has('Γυμνάσιο Αρναίας')) {
+                for (const subCls of ['Α1', 'Β1', 'Γ1', 'Γ2']) {
+                  ensureFolderHierarchy(`Γυμνάσιο Αρναίας/${subCls}`);
                 }
               }
               for (const nb of notebooks) {
-                const fName = (nb.folder || '').trim();
-                if (fName) {
+                const fPath = normalizeFolderPath(nb.folder || '');
+                if (fPath) {
+                  ensureFolderHierarchy(fPath, nb.updatedAt);
                   const nbBytes = getNotebookSizeBytes(nb);
-                  const existing = folderMap.get(fName);
-                  if (existing) {
-                    existing.count += 1;
-                    existing.totalBytes += nbBytes;
-                    if (nb.updatedAt > existing.updatedAt) existing.updatedAt = nb.updatedAt;
-                  } else {
-                    folderMap.set(fName, { name: fName, updatedAt: nb.updatedAt || new Date().toISOString(), count: 1, totalBytes: nbBytes });
+                  const parts = fPath.split('/');
+                  let acc = '';
+                  for (const seg of parts) {
+                    acc = acc ? `${acc}/${seg}` : seg;
+                    const existing = folderMap.get(acc);
+                    if (existing) {
+                      existing.count += 1;
+                      existing.totalBytes += nbBytes;
+                      if (nb.updatedAt && nb.updatedAt > existing.updatedAt) {
+                        existing.updatedAt = nb.updatedAt;
+                      }
+                    }
                   }
+                }
+              }
+
+              for (const fEntry of folderMap.values()) {
+                if (fEntry.parentPath) {
+                  const parentEntry = folderMap.get(fEntry.parentPath);
+                  if (parentEntry) parentEntry.subfolderCount += 1;
                 }
               }
 
               const query = librarySearchQuery.trim();
 
-              // Collect all unique tags across notebooks (filtered by active folder if inside one)
+              // Collect all unique tags across notebooks (filtered by active folder or its subfolders if inside one)
               const allLibraryTags = Array.from(
                 new Set(
                   notebooks
-                    .filter((nb) => activeLibraryFolder === null || (nb.folder || '').trim() === activeLibraryFolder)
+                    .filter((nb) => {
+                      const nbF = normalizeFolderPath(nb.folder || '');
+                      return (
+                        !currentFolderPath ||
+                        nbF === currentFolderPath ||
+                        nbF.startsWith(`${currentFolderPath}/`)
+                      );
+                    })
                     .flatMap((nb) => [
                       ...(nb.tags || []),
                       ...nb.pages.flatMap((p) => p.tags || []),
@@ -41043,17 +41246,22 @@ export default function App() {
                 )
               );
 
-              // Filter & Sort Folders (shown at root level or when searching)
-              const visibleFolders =
-                activeLibraryFolder === null
-                  ? Array.from(folderMap.values())
-                      .filter((f) => !query || matchesGreekSmartQuery(f.name, query))
-                      .sort((a, b) =>
-                        librarySortBy === 'alpha'
-                          ? a.name.localeCompare(b.name, 'el')
-                          : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-                      )
-                  : [];
+              // Filter & Sort Folders (shows direct child folders of currentFolderPath, or matching folders when searching)
+              const visibleFolders = Array.from(folderMap.values())
+                .filter((f) => {
+                  if (query) {
+                    return (
+                      (!currentFolderPath || f.path.startsWith(`${currentFolderPath}/`)) &&
+                      matchesGreekSmartQuery(f.name, query)
+                    );
+                  }
+                  return f.parentPath === currentFolderPath;
+                })
+                .sort((a, b) =>
+                  librarySortBy === 'alpha'
+                    ? a.name.localeCompare(b.name, 'el')
+                    : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+                );
 
               const searchMatchMap = new Map<
                 string,
@@ -41063,10 +41271,13 @@ export default function App() {
               // Filter & Sort Notes (Greek Smart Search: accent/case/inflection-insensitive across title, folder, #tags & page texts)
               const visibleNotebooks = notebooks
                 .filter((nb) => {
-                  if (activeLibraryFolder !== null && (nb.folder || '').trim() !== activeLibraryFolder) {
-                    return false;
+                  const nbF = normalizeFolderPath(nb.folder || '');
+                  if (currentFolderPath !== '' && nbF !== currentFolderPath) {
+                    if (!query || !nbF.startsWith(`${currentFolderPath}/`)) {
+                      return false;
+                    }
                   }
-                  if (activeLibraryFolder === null && !query && (nb.folder || '').trim() !== '') {
+                  if (currentFolderPath === '' && !query && nbF !== '') {
                     return false;
                   }
                   if (query) {
@@ -41215,30 +41426,69 @@ export default function App() {
                 showToast(`🗑️ Διαγράφηκε η σημείωση "${nb.title}".`);
               };
 
-              const deleteFolderByName = (folderName: string) => {
-                const nextCustom = customFolders.filter((f) => f.name.trim() !== folderName);
+              const deleteFolderByName = (folderPathToDelete: string) => {
+                const normTarget = normalizeFolderPath(folderPathToDelete);
+                const parentOfDeleted = normTarget.includes('/')
+                  ? normTarget.split('/').slice(0, -1).join('/')
+                  : '';
+                const nextCustom = customFolders.filter((f) => {
+                  const nf = normalizeFolderPath(f.name);
+                  return nf !== normTarget && !nf.startsWith(`${normTarget}/`);
+                });
                 setCustomFolders(nextCustom);
-                // Move any notebooks inside this folder to unassigned ('') so no user work is lost, or remove folder tag
+                // Move any notebooks inside this folder (or its subfolders) to its parent folder so no user work is lost
                 setNotebooks((prev) =>
-                  prev.map((nb) => ((nb.folder || '').trim() === folderName ? { ...nb, folder: '' } : nb))
+                  prev.map((nb) => {
+                    const nbF = normalizeFolderPath(nb.folder || '');
+                    return nbF === normTarget || nbF.startsWith(`${normTarget}/`)
+                      ? { ...nb, folder: parentOfDeleted }
+                      : nb;
+                  })
                 );
-                if (activeLibraryFolder === folderName) {
-                  setActiveLibraryFolder(null);
+                if (
+                  activeLibraryFolder &&
+                  (normalizeFolderPath(activeLibraryFolder) === normTarget ||
+                    normalizeFolderPath(activeLibraryFolder).startsWith(`${normTarget}/`))
+                ) {
+                  setActiveLibraryFolder(parentOfDeleted || null);
                 }
-                showToast(`🗑️ Διαγράφηκε ο φάκελος "${folderName}".`);
+                showToast(`🗑️ Διαγράφηκε ο φάκελος "${normTarget}".`);
               };
 
               const handleCreateNewFolder = () => {
-                const trimmed = newFolderNameInput.trim() || `Νέος Φάκελος ${customFolders.length + 1}`;
+                const rawInput =
+                  newFolderNameInput.trim().replace(/^\/+|\/+$/g, '') ||
+                  `Νέος Φάκελος ${customFolders.length + 1}`;
+                const subNames = rawInput
+                  .split(',')
+                  .map((s) => normalizeFolderPath(s))
+                  .filter(Boolean);
+                const namesToCreate = subNames.length > 0 ? subNames : [normalizeFolderPath(rawInput)];
+                const nowIso = new Date().toISOString();
+                const createdPaths = namesToCreate.map((n) =>
+                  currentFolderPath ? `${currentFolderPath}/${n}` : n
+                );
                 const nextCustom = [
-                  { name: trimmed, updatedAt: new Date().toISOString() },
-                  ...customFolders.filter((f) => f.name.trim() !== trimmed),
+                  ...createdPaths.map((p) => ({ name: p, updatedAt: nowIso })),
+                  ...customFolders.filter(
+                    (f) => !createdPaths.includes(normalizeFolderPath(f.name))
+                  ),
                 ];
                 setCustomFolders(nextCustom);
                 setNewFolderNameInput('');
                 setIsCreatingFolder(false);
-                showToast(`📁 Δημιουργήθηκε ο φάκελος "${trimmed}"!`);
+                showToast(
+                  createdPaths.length > 1
+                    ? `📁 Δημιουργήθηκαν οι υποφάκελοι: ${namesToCreate.join(', ')}!`
+                    : `📁 Δημιουργήθηκε ο φάκελος "${createdPaths[0]}"!`
+                );
               };
+
+              const activeBreadcrumbParts = currentFolderPath ? currentFolderPath.split('/') : [];
+              const parentFolderForBack =
+                activeBreadcrumbParts.length > 1
+                  ? activeBreadcrumbParts.slice(0, -1).join('/')
+                  : null;
 
               return (
                 <>
@@ -41271,33 +41521,71 @@ export default function App() {
                         >
                           Βιβλιοθήκη
                         </button>
+                        {activeBreadcrumbParts.map((seg, bIdx) => {
+                          const crumbPath = activeBreadcrumbParts.slice(0, bIdx + 1).join('/');
+                          const isLastCrumb = bIdx === activeBreadcrumbParts.length - 1;
+                          const isCrumbDropHover = dragOverFolderName === crumbPath;
+                          return (
+                            <React.Fragment key={crumbPath}>
+                              <ChevronRight className="w-5 h-5 text-slate-400" />
+                              <button
+                                type="button"
+                                data-library-folder-drop={!isLastCrumb ? crumbPath : undefined}
+                                onDragEnter={(e) => {
+                                  if (!isLastCrumb) handleFolderDragOver(e, crumbPath);
+                                }}
+                                onDragOver={(e) => {
+                                  if (!isLastCrumb) handleFolderDragOver(e, crumbPath);
+                                }}
+                                onDragLeave={(e) => {
+                                  if (!isLastCrumb) handleFolderDragLeave(e, crumbPath);
+                                }}
+                                onDrop={(e) => {
+                                  if (!isLastCrumb) handleFolderDrop(e, crumbPath);
+                                }}
+                                onClick={() => setActiveLibraryFolder(crumbPath)}
+                                className={`flex items-center gap-1.5 text-2xl font-bold rounded-xl px-1.5 py-0.5 transition cursor-pointer ${
+                                  isCrumbDropHover
+                                    ? 'bg-amber-100 text-[#0066ff] ring-2 ring-[#0066ff]'
+                                    : isLastCrumb
+                                    ? 'text-[#0066ff]'
+                                    : 'text-slate-600 hover:text-[#0066ff]'
+                                }`}
+                              >
+                                <Folder className="w-6 h-6 fill-amber-400 text-amber-500" />
+                                <span>{seg}</span>
+                              </button>
+                            </React.Fragment>
+                          );
+                        })}
                         {activeLibraryFolder && (
-                          <>
-                            <ChevronRight className="w-5 h-5 text-slate-400" />
-                            <span className="flex items-center gap-1.5 text-2xl font-bold text-[#0066ff]">
-                              <Folder className="w-6 h-6 fill-amber-400 text-amber-500" />
-                              <span>{activeLibraryFolder}</span>
-                            </span>
-                            <button
-                              data-library-folder-drop="__ROOT__"
-                              onDragEnter={(e) => handleFolderDragOver(e, '__ROOT__')}
-                              onDragOver={(e) => handleFolderDragOver(e, '__ROOT__')}
-                              onDragLeave={(e) => handleFolderDragLeave(e, '__ROOT__')}
-                              onDrop={(e) => handleFolderDrop(e, '__ROOT__')}
-                              onClick={() => setActiveLibraryFolder(null)}
-                              className={`ml-2 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                                dragOverFolderName === '__ROOT__'
-                                  ? 'bg-[#0066ff] text-white ring-4 ring-[#0066ff]/25 scale-105 shadow-md'
-                                  : draggingLibraryNbId
-                                  ? 'bg-sky-100 text-[#0066ff] border border-dashed border-[#0066ff]'
-                                  : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                              }`}
-                            >
-                              {dragOverFolderName === '__ROOT__'
-                                ? '📥 Άφησε για Εξαγωγή στη Βιβλιοθήκη'
-                                : '← Όλοι οι Φάκελοι'}
-                            </button>
-                          </>
+                          <button
+                            data-library-folder-drop={parentFolderForBack || '__ROOT__'}
+                            onDragEnter={(e) =>
+                              handleFolderDragOver(e, parentFolderForBack || '__ROOT__')
+                            }
+                            onDragOver={(e) =>
+                              handleFolderDragOver(e, parentFolderForBack || '__ROOT__')
+                            }
+                            onDragLeave={(e) =>
+                              handleFolderDragLeave(e, parentFolderForBack || '__ROOT__')
+                            }
+                            onDrop={(e) => handleFolderDrop(e, parentFolderForBack || '__ROOT__')}
+                            onClick={() => setActiveLibraryFolder(parentFolderForBack)}
+                            className={`ml-2 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                              dragOverFolderName === (parentFolderForBack || '__ROOT__')
+                                ? 'bg-[#0066ff] text-white ring-4 ring-[#0066ff]/25 scale-105 shadow-md'
+                                : draggingLibraryNbId
+                                ? 'bg-sky-100 text-[#0066ff] border border-dashed border-[#0066ff]'
+                                : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                            }`}
+                          >
+                            {dragOverFolderName === (parentFolderForBack || '__ROOT__')
+                              ? `📥 Άφησε για μετακίνηση σε ${parentFolderForBack || 'Βιβλιοθήκη'}`
+                              : parentFolderForBack
+                              ? `← Πίσω (${activeBreadcrumbParts[activeBreadcrumbParts.length - 2]})`
+                              : '← Όλοι οι Φάκελοι'}
+                          </button>
                         )}
                       </div>
                       <p className="text-sm text-slate-500 mt-0.5">
@@ -41522,7 +41810,11 @@ export default function App() {
                           if (e.key === 'Enter') handleCreateNewFolder();
                           if (e.key === 'Escape') setIsCreatingFolder(false);
                         }}
-                        placeholder="Όνομα νέου φακέλου (π.χ. Ηλεκτρομαγνητισμός, Άλγεβρα)..."
+                        placeholder={
+                          currentFolderPath
+                            ? `Νέος υποφάκελος μέσα σε «${currentFolderPath}» (π.χ. Α1, Β1, Γ1, Γ2)...`
+                            : 'Όνομα νέου φακέλου (π.χ. Γυμνάσιο Αρναίας, Άλγεβρα)...'
+                        }
                         className="flex-1 text-sm text-slate-800 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-[#0066ff]"
                       />
                       <button
@@ -41665,16 +41957,16 @@ export default function App() {
                           </h2>
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
                             {visibleFolders.map((folder) => {
-                              const isDropHover = dragOverFolderName === folder.name;
+                              const isDropHover = dragOverFolderName === folder.path;
                               return (
                                 <div
-                                  key={folder.name}
-                                  data-library-folder-drop={folder.name}
-                                  onDragEnter={(e) => handleFolderDragOver(e, folder.name)}
-                                  onDragOver={(e) => handleFolderDragOver(e, folder.name)}
-                                  onDragLeave={(e) => handleFolderDragLeave(e, folder.name)}
-                                  onDrop={(e) => handleFolderDrop(e, folder.name)}
-                                  onClick={() => setActiveLibraryFolder(folder.name)}
+                                  key={folder.path}
+                                  data-library-folder-drop={folder.path}
+                                  onDragEnter={(e) => handleFolderDragOver(e, folder.path)}
+                                  onDragOver={(e) => handleFolderDragOver(e, folder.path)}
+                                  onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
+                                  onDrop={(e) => handleFolderDrop(e, folder.path)}
+                                  onClick={() => setActiveLibraryFolder(folder.path)}
                                   className={`group relative rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between h-36 ${
                                     isDropHover
                                       ? 'bg-amber-50/95 border-2 border-[#0066ff] ring-4 ring-[#0066ff]/20 shadow-xl -translate-y-1 scale-[1.03]'
@@ -41704,7 +41996,7 @@ export default function App() {
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setActiveLibraryFolder(folder.name);
+                                            setActiveLibraryFolder(folder.path);
                                           }}
                                           className="p-1.5 rounded-lg bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
                                           title={`Άνοιγμα φακέλου "${folder.name}"`}
@@ -41714,7 +42006,7 @@ export default function App() {
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            deleteFolderByName(folder.name);
+                                            deleteFolderByName(folder.path);
                                           }}
                                           className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
                                           title={`Διαγραφή φακέλου "${folder.name}"`}
@@ -41727,8 +42019,15 @@ export default function App() {
 
                                   <div>
                                     <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
-                                    <p className="text-[11px] text-slate-500">
-                                      {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} ({formatNotebookSizeLabel(folder.totalBytes)}) • {formatLibraryTimestamp(folder.updatedAt)}
+                                    <p className="text-[11px] text-slate-500 truncate">
+                                      {folder.subfolderCount > 0
+                                        ? `${folder.subfolderCount} ${
+                                            folder.subfolderCount === 1 ? 'υποφάκελος' : 'υποφάκελοι'
+                                          } • `
+                                        : ''}
+                                      {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} (
+                                      {formatNotebookSizeLabel(folder.totalBytes)}) •{' '}
+                                      {formatLibraryTimestamp(folder.updatedAt)}
                                     </p>
                                   </div>
                                 </div>
@@ -42121,17 +42420,25 @@ export default function App() {
                                             prev === nb.id ? null : nb.id
                                           );
                                         }}
-                                        className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[84px] cursor-pointer hover:opacity-90"
+                                        className="text-[9px] tracking-wider px-2 py-0.5 rounded-md text-white font-bold shadow-2xs truncate max-w-[92px] cursor-pointer hover:opacity-90"
                                         style={{ backgroundColor: nb.coverColor }}
-                                        title="Πάτα για αλλαγή ή αφαίρεση Φακέλου"
+                                        title={
+                                          nb.folder
+                                            ? `Φάκελος: ${nb.folder} (Πάτα για αλλαγή)`
+                                            : 'Πάτα για μετακίνηση σε Φάκελο'
+                                        }
                                       >
-                                        {nb.folder || '.bestNotes'}
+                                        {nb.folder
+                                          ? nb.folder.includes('/')
+                                            ? nb.folder.split('/').slice(-1)[0]
+                                            : nb.folder
+                                          : '.bestNotes'}
                                       </button>
                                       {folderPickerNbId === nb.id && (
                                         <div
                                           data-popover-panel="lib-folder"
                                           onClick={(e) => e.stopPropagation()}
-                                          className="absolute left-0 bottom-full mb-1.5 w-40 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 space-y-1 text-left"
+                                          className="absolute left-0 bottom-full mb-1.5 w-48 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 space-y-1 text-left"
                                         >
                                           <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
                                             Μετακίνηση σε Φάκελο
@@ -42146,20 +42453,24 @@ export default function App() {
                                           >
                                             Χωρίς Φάκελο (.bestNotes)
                                           </button>
-                                          {Array.from(folderMap.keys()).map((fName) => (
-                                            <button
-                                              key={fName}
-                                              onClick={() => changeNotebookFolder(nb.id, fName)}
-                                              className={`w-full flex items-center gap-1.5 text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                                                nb.folder === fName
-                                                  ? 'bg-amber-50 text-amber-800'
-                                                  : 'text-slate-700 hover:bg-slate-100'
-                                              }`}
-                                            >
-                                              <Folder className="w-3 h-3 fill-amber-400 text-amber-500 shrink-0" />
-                                              <span className="truncate">{fName}</span>
-                                            </button>
-                                          ))}
+                                          {Array.from(folderMap.keys())
+                                            .sort((a, b) => a.localeCompare(b, 'el'))
+                                            .map((fPath) => (
+                                              <button
+                                                key={fPath}
+                                                onClick={() => changeNotebookFolder(nb.id, fPath)}
+                                                className={`w-full flex items-center gap-1.5 text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                                                  normalizeFolderPath(nb.folder || '') === fPath
+                                                    ? 'bg-amber-50 text-amber-800'
+                                                    : 'text-slate-700 hover:bg-slate-100'
+                                                }`}
+                                              >
+                                                <Folder className="w-3 h-3 fill-amber-400 text-amber-500 shrink-0" />
+                                                <span className="truncate">
+                                                  {fPath.replace(/\//g, ' › ')}
+                                                </span>
+                                              </button>
+                                            ))}
                                         </div>
                                       )}
                                     </div>
@@ -42376,16 +42687,16 @@ export default function App() {
                     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
                       {/* Folders in List Mode */}
                       {visibleFolders.map((folder) => {
-                        const isDropHover = dragOverFolderName === folder.name;
+                        const isDropHover = dragOverFolderName === folder.path;
                         return (
                           <div
-                            key={`list-folder-${folder.name}`}
-                            data-library-folder-drop={folder.name}
-                            onDragEnter={(e) => handleFolderDragOver(e, folder.name)}
-                            onDragOver={(e) => handleFolderDragOver(e, folder.name)}
-                            onDragLeave={(e) => handleFolderDragLeave(e, folder.name)}
-                            onDrop={(e) => handleFolderDrop(e, folder.name)}
-                            onClick={() => setActiveLibraryFolder(folder.name)}
+                            key={`list-folder-${folder.path}`}
+                            data-library-folder-drop={folder.path}
+                            onDragEnter={(e) => handleFolderDragOver(e, folder.path)}
+                            onDragOver={(e) => handleFolderDragOver(e, folder.path)}
+                            onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
+                            onDrop={(e) => handleFolderDrop(e, folder.path)}
+                            onClick={() => setActiveLibraryFolder(folder.path)}
                             className={`flex items-center justify-between px-4 py-3 transition cursor-pointer gap-3 ${
                               isDropHover
                                 ? 'bg-amber-100/80 ring-2 ring-inset ring-[#0066ff]'
@@ -42407,7 +42718,15 @@ export default function App() {
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
                                 <p className="text-[11px] text-slate-500">
-                                  Φάκελος • {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} ({formatNotebookSizeLabel(folder.totalBytes)}) • {formatLibraryTimestamp(folder.updatedAt)}
+                                  Φάκελος •{' '}
+                                  {folder.subfolderCount > 0
+                                    ? `${folder.subfolderCount} ${
+                                        folder.subfolderCount === 1 ? 'υποφάκελος' : 'υποφάκελοι'
+                                      } • `
+                                    : ''}
+                                  {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} (
+                                  {formatNotebookSizeLabel(folder.totalBytes)}) •{' '}
+                                  {formatLibraryTimestamp(folder.updatedAt)}
                                 </p>
                               </div>
                             </div>
@@ -42425,7 +42744,7 @@ export default function App() {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setActiveLibraryFolder(folder.name);
+                                      setActiveLibraryFolder(folder.path);
                                     }}
                                     className="p-2 rounded-xl bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white transition cursor-pointer"
                                     title={`Άνοιγμα φακέλου "${folder.name}"`}
@@ -42435,7 +42754,7 @@ export default function App() {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      deleteFolderByName(folder.name);
+                                      deleteFolderByName(folder.path);
                                     }}
                                     className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/80 transition cursor-pointer"
                                     title={`Διαγραφή φακέλου "${folder.name}"`}

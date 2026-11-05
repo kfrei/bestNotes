@@ -2347,17 +2347,46 @@ async function throwDriveError(res: Response, contextLabel: string): Promise<nev
   throw new Error(`${contextLabel} (${res.status})${detail}`);
 }
 
+export const DEFAULT_DRIVE_BASE_PATH = 'GoodNotes/x Σ Χ Ο Λ Ε Ι Α/2025-2026/Γυμνάσιο Αρναίας';
+
+function normalizeDriveFolderMatchKey(raw: string): string {
+  const homoglyphMap: Record<string, string> = {
+    α: 'a',
+    β: 'b',
+    ε: 'e',
+    ζ: 'z',
+    η: 'h',
+    ι: 'i',
+    κ: 'k',
+    μ: 'm',
+    ν: 'n',
+    ο: 'o',
+    ρ: 'p',
+    τ: 't',
+    υ: 'y',
+    χ: 'x',
+  };
+  return raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .split('')
+    .map((ch) => homoglyphMap[ch] || ch)
+    .join('');
+}
+
 async function ensureDriveFolder(
   accessToken: string,
   folderName: string,
   parentId = 'root'
-): Promise<string> {
-  const escaped = folderName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const q = `mimeType='application/vnd.google-apps.folder' and name='${escaped}' and '${parentId}' in parents and trashed=false`;
+): Promise<{ id: string; name: string }> {
+  const trimmedTarget = folderName.trim();
+  const q = `mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
       q
-    )}&fields=files(id,name)&spaces=drive`,
+    )}&pageSize=100&fields=files(id,name)&spaces=drive`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
@@ -2366,10 +2395,24 @@ async function ensureDriveFolder(
     await throwDriveError(searchRes, 'Drive API error');
   }
   const data = await searchRes.json();
-  if (Array.isArray(data.files) && data.files.length > 0) {
-    return data.files[0].id as string;
+  const files: { id: string; name: string }[] = Array.isArray(data.files) ? data.files : [];
+
+  // 1. Exact trimmed match
+  const exact = files.find((f) => (f.name || '').trim() === trimmedTarget);
+  if (exact) {
+    return { id: exact.id, name: exact.name };
   }
 
+  // 2. Normalized match (case/accent/homoglyph/space-insensitive so 'Α1' === 'A1' and 'x Σ Χ Ο Λ Ε Ι Α' matches existing folder)
+  const targetKey = normalizeDriveFolderMatchKey(trimmedTarget);
+  if (targetKey) {
+    const fuzzy = files.find((f) => normalizeDriveFolderMatchKey(f.name || '') === targetKey);
+    if (fuzzy) {
+      return { id: fuzzy.id, name: fuzzy.name };
+    }
+  }
+
+  // 3. Create subfolder only if it doesn't exist yet inside parentId
   const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
     method: 'POST',
     headers: {
@@ -2377,16 +2420,85 @@ async function ensureDriveFolder(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: folderName,
+      name: trimmedTarget,
       mimeType: 'application/vnd.google-apps.folder',
       parents: [parentId],
     }),
   });
   if (!createRes.ok) {
-    await throwDriveError(createRes, `Αποτυχία δημιουργίας φακέλου ${folderName}`);
+    await throwDriveError(createRes, `Αποτυχία δημιουργίας φακέλου ${trimmedTarget}`);
   }
   const created = await createRes.json();
-  return created.id as string;
+  return { id: created.id as string, name: (created.name as string) || trimmedTarget };
+}
+
+async function resolveDriveTargetFolder(
+  accessToken: string,
+  basePathInput?: string,
+  notebookFolder?: string
+): Promise<{ folderId: string; resolvedPathDisplay: string }> {
+  const rawBase = (basePathInput || DEFAULT_DRIVE_BASE_PATH).trim();
+  const nbSegments = (notebookFolder || '')
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Support direct Google Drive folder URL (e.g. https://drive.google.com/drive/folders/1AbC...)
+  const urlMatch = rawBase.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+  if (urlMatch) {
+    let currentId = urlMatch[1];
+    const resolvedNames: string[] = ['Drive Folder'];
+    for (const seg of nbSegments) {
+      const next = await ensureDriveFolder(accessToken, seg, currentId);
+      currentId = next.id;
+      resolvedNames.push(next.name);
+    }
+    return {
+      folderId: currentId,
+      resolvedPathDisplay: resolvedNames.join(' / '),
+    };
+  }
+
+  const baseSegments = rawBase
+    .replace(/>>/g, '/')
+    .replace(/>/g, '/')
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Deduplicate overlapping segments between baseSegments and nbSegments:
+  // e.g. if baseSegments ends with "Γυμνάσιο Αρναίας" and nbSegments is ["Γυμνάσιο Αρναίας", "Α1"],
+  // avoid creating "Γυμνάσιο Αρναίας/Γυμνάσιο Αρναίας/Α1"!
+  const combinedSegments = [...baseSegments];
+  if (nbSegments.length > 0) {
+    const firstNbKey = normalizeDriveFolderMatchKey(nbSegments[0]);
+    const matchIdx = combinedSegments.findIndex(
+      (bSeg) => normalizeDriveFolderMatchKey(bSeg) === firstNbKey
+    );
+    if (matchIdx !== -1) {
+      // Truncate combinedSegments up to matchIdx and append nbSegments from there
+      combinedSegments.splice(matchIdx, combinedSegments.length - matchIdx, ...nbSegments);
+    } else {
+      combinedSegments.push(...nbSegments);
+    }
+  }
+
+  if (combinedSegments.length === 0) {
+    combinedSegments.push('BestNotes');
+  }
+
+  let currentParentId = 'root';
+  const resolvedNames: string[] = [];
+  for (const seg of combinedSegments) {
+    const folder = await ensureDriveFolder(accessToken, seg, currentParentId);
+    currentParentId = folder.id;
+    resolvedNames.push(folder.name);
+  }
+
+  return {
+    folderId: currentParentId,
+    resolvedPathDisplay: resolvedNames.join(' / '),
+  };
 }
 
 async function uploadOrUpdateDriveFile(
@@ -2442,62 +2554,49 @@ async function uploadOrUpdateDriveFile(
 }
 
 /**
- * Syncs a Notebook to Google Drive inside `/BestNotes` (and `/BestNotes/<folder>` if folder is set),
- * converting it to `<NoteTitle>.pdf` and overwriting the exact same PDF filename on every update!
+ * Syncs a Notebook to Google Drive inside the configured Drive folder hierarchy
+ * (default: `GoodNotes / x Σ Χ Ο Λ Ε Ι Α / 2025-2026 / Γυμνάσιο Αρναίας` + subfolder e.g. `Α1`, `Β1`, `Γ1`, `Γ2`),
+ * sending ONLY the `<NoteTitle>.pdf` file and NEVER deleting any existing files or folders in Google Drive!
  */
 export async function syncNotebookPdfToGoogleDrive(
   accessToken: string,
   notebook: Notebook,
-  options?: PdfExportOptions
+  options?: PdfExportOptions,
+  customBasePath?: string
 ): Promise<{
   folderId: string;
+  targetPathDisplay: string;
   pdfFileId: string;
   pdfFileName: string;
   webViewLink?: string;
 }> {
-  // 1. Ensure root '/BestNotes' folder exists in Google Drive
-  const rootBestNotesId = await ensureDriveFolder(accessToken, 'BestNotes', 'root');
+  // 1. Resolve the exact target folder in Google Drive (matching existing GoodNotes folders without creating duplicates)
+  const { folderId: targetFolderId, resolvedPathDisplay } = await resolveDriveTargetFolder(
+    accessToken,
+    customBasePath,
+    notebook.folder
+  );
 
-  // 2. If notebook has a folder name, ensure '/BestNotes/<folder>' exists as well,
-  //    and sync the PDF inside '/BestNotes' (plus inside the subfolder if custom)
-  let targetFolderId = rootBestNotesId;
-  if (notebook.folder && notebook.folder.trim() !== '') {
-    targetFolderId = await ensureDriveFolder(
-      accessToken,
-      notebook.folder.trim(),
-      rootBestNotesId
-    );
-  }
-
-  // 3. Export notebook pages to a real multi-page PDF Blob
+  // 2. Export notebook pages to a real multi-page PDF Blob
   const pdfBlob = await exportNotebookToPdfBlob(notebook, options);
   const safeTitle = (notebook.title || 'Σημείωση').trim().replace(/[/\\?%*:|"<>]/g, '-');
   const pdfFileName = safeTitle.toLowerCase().endsWith('.pdf') ? safeTitle : `${safeTitle}.pdf`;
 
-  // 4. Upload or overwrite the exact same `<safeTitle>.pdf` inside `/BestNotes` (and subfolder if applicable)
-  const rootUploaded = await uploadOrUpdateDriveFile(
+  // 3. Upload or update ONLY `<safeTitle>.pdf` inside targetFolderId (never deletes anything in Google Drive)
+  const uploaded = await uploadOrUpdateDriveFile(
     accessToken,
-    rootBestNotesId,
+    targetFolderId,
     pdfFileName,
     'application/pdf',
     pdfBlob
   );
 
-  if (targetFolderId !== rootBestNotesId) {
-    await uploadOrUpdateDriveFile(
-      accessToken,
-      targetFolderId,
-      pdfFileName,
-      'application/pdf',
-      pdfBlob
-    );
-  }
-
   return {
-    folderId: rootBestNotesId,
-    pdfFileId: rootUploaded.id,
+    folderId: targetFolderId,
+    targetPathDisplay: resolvedPathDisplay,
+    pdfFileId: uploaded.id,
     pdfFileName,
-    webViewLink: rootUploaded.webViewLink,
+    webViewLink: uploaded.webViewLink,
   };
 }
 

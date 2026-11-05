@@ -38,10 +38,12 @@ export const auth = getAuth(firebaseApp);
 export const driveAuth = getAuth(driveFirebaseApp);
 export const db = getFirestore(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/drive');
 googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const googleDriveProvider = new GoogleAuthProvider();
+googleDriveProvider.addScope('https://www.googleapis.com/auth/drive');
 googleDriveProvider.addScope('https://www.googleapis.com/auth/drive.file');
 
 export async function signInToGoogleDrive(
