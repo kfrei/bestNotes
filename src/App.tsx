@@ -44058,46 +44058,28 @@ export default function App() {
                                 isLastSibling: boolean;
                                 color?: string;
                                 icon?: string;
-                                favorite?: boolean;
-                                isSelf: boolean;
-                                isDescendantOfSelf: boolean;
                               };
-                              const allFoldersList = Array.from(folderMap.values());
-                              const childrenByParent = new Map<string, typeof allFoldersList>();
-                              for (const f of allFoldersList) {
-                                const isEditedSelf = f.path === editingFolderModal.originalPath;
-                                // Use live parentPath / name / color / icon for the edited folder so the tree updates live!
-                                const effectiveParent = isEditedSelf
-                                  ? editingFolderModal.parentPath || ''
-                                  : f.parentPath || '';
-                                const effectiveNode = isEditedSelf
-                                  ? {
-                                      ...f,
-                                      name: editingFolderModal.name.trim() || f.name,
-                                      parentPath: effectiveParent,
-                                      color: editingFolderModal.color,
-                                      icon: editingFolderModal.icon,
-                                      favorite: editingFolderModal.favorite,
-                                    }
-                                  : f;
-                                const arr = childrenByParent.get(effectiveParent) || [];
-                                arr.push(effectiveNode);
-                                childrenByParent.set(effectiveParent, arr);
+                              // Only include external folders where the edited folder can actually be placed
+                              // (exclude the edited folder itself and its inner subfolders)
+                              const externalFolders = Array.from(folderMap.values()).filter(
+                                (f) =>
+                                  f.path !== editingFolderModal.originalPath &&
+                                  !f.path.startsWith(`${editingFolderModal.originalPath}/`)
+                              );
+                              const childrenByParent = new Map<string, typeof externalFolders>();
+                              for (const f of externalFolders) {
+                                const pKey = f.parentPath || '';
+                                const arr = childrenByParent.get(pKey) || [];
+                                arr.push(f);
+                                childrenByParent.set(pKey, arr);
                               }
                               for (const arr of childrenByParent.values()) {
                                 arr.sort((a, b) => a.name.localeCompare(b.name, 'el'));
                               }
                               const treeRows: TreeItem[] = [];
-                              const visitedPaths = new Set<string>();
                               const buildTreeDfs = (parentKey: string, depth: number) => {
                                 const kids = childrenByParent.get(parentKey) || [];
                                 kids.forEach((kid, idx) => {
-                                  if (visitedPaths.has(kid.path)) return;
-                                  visitedPaths.add(kid.path);
-                                  const isSelf = kid.path === editingFolderModal.originalPath;
-                                  const isDescendantOfSelf = kid.path.startsWith(
-                                    `${editingFolderModal.originalPath}/`
-                                  );
                                   treeRows.push({
                                     path: kid.path,
                                     name: kid.name,
@@ -44106,58 +44088,18 @@ export default function App() {
                                     isLastSibling: idx === kids.length - 1,
                                     color: kid.color,
                                     icon: kid.icon,
-                                    favorite: kid.favorite,
-                                    isSelf,
-                                    isDescendantOfSelf,
                                   });
                                   buildTreeDfs(kid.path, depth + 1);
                                 });
                               };
                               buildTreeDfs('', 0);
 
-                              const origFolderMeta = folderMap.get(editingFolderModal.originalPath);
-                              const origParentPath = origFolderMeta?.parentPath || '';
-                              const hasMovedParent =
-                                (editingFolderModal.parentPath || '') !== origParentPath;
                               const isRootSelected = editingFolderModal.parentPath === '';
                               return (
-                                <div className="max-h-60 overflow-y-auto p-2 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-1">
-                                  <div className="px-2 py-1 text-[10px] font-semibold text-slate-500 flex items-center justify-between">
-                                    <span>
-                                      Πάτα σε φάκελο για μετακίνηση του «{editingFolderModal.name}» ή σύρε φακέλους μεταξύ τους
-                                    </span>
-                                  </div>
+                                <div className="max-h-56 overflow-y-auto p-2 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-1">
                                   {/* Root Node: Βιβλιοθήκη */}
                                   <button
                                     type="button"
-                                    onDragOver={(e) => {
-                                      e.preventDefault();
-                                      e.dataTransfer.dropEffect = 'move';
-                                    }}
-                                    onDrop={(e) => {
-                                      e.preventDefault();
-                                      const draggedPath = e.dataTransfer.getData(
-                                        'text/bestnotes-tree-folder'
-                                      );
-                                      if (!draggedPath) return;
-                                      if (draggedPath === editingFolderModal.originalPath) {
-                                        setEditingFolderModal((prev) =>
-                                          prev ? { ...prev, parentPath: '' } : null
-                                        );
-                                      } else {
-                                        const meta = folderMap.get(draggedPath);
-                                        const leaf =
-                                          draggedPath.split('/').slice(-1)[0] || draggedPath;
-                                        saveOrMoveFolderHierarchy(
-                                          draggedPath,
-                                          leaf,
-                                          '',
-                                          meta?.color,
-                                          meta?.icon,
-                                          meta?.favorite
-                                        );
-                                      }
-                                    }}
                                     onClick={() =>
                                       setEditingFolderModal((prev) =>
                                         prev ? { ...prev, parentPath: '' } : null
@@ -44179,7 +44121,7 @@ export default function App() {
                                     </span>
                                     {isRootSelected ? (
                                       <span className="text-[10px] font-semibold bg-white/20 px-1.5 py-0.5 rounded-md">
-                                        Επιλεγμένος Γονέας
+                                        Επιλεγμένο
                                       </span>
                                     ) : (
                                       <span className="text-[10px] font-semibold text-[#0066ff] opacity-80">
@@ -44188,95 +44130,15 @@ export default function App() {
                                     )}
                                   </button>
 
-                                  {/* Hierarchical Folder Tree Nodes */}
+                                  {/* External Hierarchical Folder Tree Nodes */}
                                   {treeRows.map((node) => {
                                     const isSelectedParent =
                                       editingFolderModal.parentPath === node.path;
                                     return (
-                                      <div
+                                      <button
                                         key={node.path}
-                                        draggable
-                                        onDragStart={(e) => {
-                                          e.stopPropagation();
-                                          e.dataTransfer.setData(
-                                            'text/bestnotes-tree-folder',
-                                            node.path
-                                          );
-                                          e.dataTransfer.effectAllowed = 'move';
-                                        }}
-                                        onDragOver={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          e.dataTransfer.dropEffect = 'move';
-                                        }}
-                                        onDrop={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const draggedPath = e.dataTransfer.getData(
-                                            'text/bestnotes-tree-folder'
-                                          );
-                                          if (
-                                            !draggedPath ||
-                                            draggedPath === node.path ||
-                                            node.path.startsWith(`${draggedPath}/`)
-                                          ) {
-                                            return;
-                                          }
-                                          if (draggedPath === editingFolderModal.originalPath) {
-                                            setEditingFolderModal((prev) =>
-                                              prev ? { ...prev, parentPath: node.path } : null
-                                            );
-                                          } else {
-                                            const meta = folderMap.get(draggedPath);
-                                            const leaf =
-                                              draggedPath.split('/').slice(-1)[0] || draggedPath;
-                                            saveOrMoveFolderHierarchy(
-                                              draggedPath,
-                                              leaf,
-                                              node.path,
-                                              meta?.color,
-                                              meta?.icon,
-                                              meta?.favorite
-                                            );
-                                          }
-                                        }}
-                                        onClick={() => {
-                                          if (node.isSelf) return;
-                                          if (node.isDescendantOfSelf) {
-                                            // Switch modal to edit/move this subfolder directly!
-                                            const realOrigParent = origFolderMeta?.parentPath || '';
-                                            if (
-                                              editingFolderModal.name !== origFolderMeta?.name ||
-                                              editingFolderModal.parentPath !== realOrigParent ||
-                                              editingFolderModal.color !== origFolderMeta?.color ||
-                                              editingFolderModal.icon !== origFolderMeta?.icon
-                                            ) {
-                                              saveOrMoveFolderHierarchy(
-                                                editingFolderModal.originalPath,
-                                                editingFolderModal.name,
-                                                editingFolderModal.parentPath,
-                                                editingFolderModal.color,
-                                                editingFolderModal.icon,
-                                                editingFolderModal.favorite
-                                              );
-                                            }
-                                            const rawParent = node.path.includes('/')
-                                              ? node.path.split('/').slice(0, -1).join('/')
-                                              : '';
-                                            setEditingFolderModal({
-                                              originalPath: node.path,
-                                              name: node.name,
-                                              parentPath: rawParent,
-                                              color: node.color || '#f59e0b',
-                                              icon: node.icon || 'folder',
-                                              favorite: Boolean(node.favorite),
-                                              showMoveTree: true,
-                                            });
-                                            showToast(
-                                              `📌 Επιλέχθηκε ο υποφάκελος «${node.name}» — διάλεξε πού θέλεις να μετακινηθεί!`
-                                            );
-                                            return;
-                                          }
+                                        type="button"
+                                        onClick={() =>
                                           setEditingFolderModal((prev) =>
                                             prev
                                               ? {
@@ -44284,25 +44146,19 @@ export default function App() {
                                                   parentPath: node.path,
                                                 }
                                               : null
-                                          );
-                                        }}
+                                          )
+                                        }
                                         style={{ paddingLeft: `${(node.depth + 1) * 18 + 8}px` }}
-                                        className={`w-full flex items-center justify-between pr-2.5 py-1.5 rounded-xl text-xs font-semibold transition select-none ${
-                                          node.isSelf
-                                            ? 'bg-sky-50/95 border-2 border-[#0066ff] text-[#0066ff] shadow-2xs cursor-grab'
-                                            : isSelectedParent
-                                            ? 'bg-[#0066ff] text-white shadow-2xs cursor-pointer'
-                                            : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200/70 cursor-pointer'
+                                        className={`w-full flex items-center justify-between pr-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer focus:outline-none ${
+                                          isSelectedParent
+                                            ? 'bg-[#0066ff] text-white shadow-2xs'
+                                            : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200/70'
                                         }`}
                                       >
                                         <span className="flex items-center gap-1.5 min-w-0 truncate">
                                           <span
                                             className={`font-mono text-[11px] select-none ${
-                                              isSelectedParent
-                                                ? 'text-white/75'
-                                                : node.isSelf
-                                                ? 'text-[#0066ff]'
-                                                : 'text-slate-300'
+                                              isSelectedParent ? 'text-white/75' : 'text-slate-300'
                                             }`}
                                           >
                                             {node.isLastSibling ? '└─' : '├─'}
@@ -44318,24 +44174,16 @@ export default function App() {
                                           </span>
                                           <span className="truncate font-bold">{node.name}</span>
                                         </span>
-                                        {node.isSelf ? (
-                                          <span className="text-[10px] font-bold bg-[#0066ff]/12 text-[#0066ff] px-1.5 py-0.5 rounded-md shrink-0 ml-2">
-                                            {hasMovedParent ? '✨ Νέα θέση' : '📍 Τρέχων φάκελος'}
-                                          </span>
-                                        ) : isSelectedParent ? (
+                                        {isSelectedParent ? (
                                           <span className="text-[10px] font-semibold bg-white/20 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
-                                            Επιλεγμένος Γονέας
-                                          </span>
-                                        ) : node.isDescendantOfSelf ? (
-                                          <span className="text-[10px] font-semibold text-slate-500 hover:text-[#0066ff] bg-slate-100 hover:bg-sky-100 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
-                                            Επιλογή «{node.name}»
+                                            Επιλεγμένο
                                           </span>
                                         ) : (
                                           <span className="text-[10px] font-semibold text-[#0066ff] opacity-80 shrink-0 ml-2">
                                             Μετακίνηση εδώ
                                           </span>
                                         )}
-                                      </div>
+                                      </button>
                                     );
                                   })}
                                 </div>
