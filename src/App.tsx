@@ -43516,18 +43516,52 @@ export default function App() {
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
+                              {/* Mini Two-Tone Classic Folder Silhouette with Custom Icon */}
                               <div
-                                style={{
-                                  backgroundColor: isDropHover ? undefined : `${folderColor}1f`,
-                                  borderColor: isDropHover ? undefined : `${folderColor}55`,
-                                }}
-                                className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition ${
-                                  isDropHover
-                                    ? 'bg-amber-200 border-[#0066ff] scale-110'
-                                    : ''
+                                className={`relative w-11 h-9 flex items-center justify-center shrink-0 transition ${
+                                  isDropHover ? 'scale-110' : ''
                                 }`}
                               >
-                                {renderFolderCustomIcon(folder.icon, folderColor, 'w-5 h-5')}
+                                <svg
+                                  viewBox="0 0 240 160"
+                                  preserveAspectRatio="none"
+                                  className="absolute inset-0 w-full h-full pointer-events-none"
+                                >
+                                  <path
+                                    d="M 0,44 L 0,14 Q 0,0 14,0 L 72,0 C 90,0 94,22 112,22 L 226,22 Q 240,22 240,36 L 240,146 Q 240,160 226,160 L 14,160 Q 0,160 0,146 Z"
+                                    fill="#ffffff"
+                                  />
+                                  <path
+                                    d="M 0,44 L 0,14 Q 0,0 14,0 L 72,0 C 90,0 94,22 112,22 L 226,22 Q 240,22 240,36 L 240,146 Q 240,160 226,160 L 14,160 Q 0,160 0,146 Z"
+                                    fill={folderColor}
+                                    fillOpacity="0.58"
+                                  />
+                                  <rect
+                                    x="0"
+                                    y="32"
+                                    width="240"
+                                    height="128"
+                                    rx="14"
+                                    ry="14"
+                                    fill="#ffffff"
+                                  />
+                                  <rect
+                                    x="0"
+                                    y="32"
+                                    width="240"
+                                    height="128"
+                                    rx="14"
+                                    ry="14"
+                                    fill={folderColor}
+                                    fillOpacity="0.28"
+                                    stroke={isDropHover ? '#0066ff' : folderColor}
+                                    strokeOpacity={isDropHover ? '0.95' : '0.48'}
+                                    strokeWidth={isDropHover ? '6' : '3'}
+                                  />
+                                </svg>
+                                <div className="relative z-10 mt-1 flex items-center justify-center">
+                                  {renderFolderCustomIcon(folder.icon, folderColor, 'w-4.5 h-4.5')}
+                                </div>
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-bold text-[#1b2a4a] truncate">{folder.name}</p>
@@ -43671,50 +43705,6 @@ export default function App() {
                                     {nb.folder}
                                   </span>
                                 )}
-                                {(nb.tags || []).map((tag) => {
-                                  const isMatched = searchMatchMap
-                                    .get(nb.id)
-                                    ?.matchedTags.includes(tag);
-                                  return (
-                                    <span
-                                      key={tag}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setLibrarySearchQuery(tag);
-                                      }}
-                                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold transition cursor-pointer ${
-                                        isMatched
-                                          ? 'bg-emerald-500 text-white shadow-2xs'
-                                          : 'bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200/80'
-                                      }`}
-                                    >
-                                      <span>{tag}</span>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          removeTagFromNotebook(nb.id, tag);
-                                        }}
-                                        className="ml-0.5 text-sky-400 hover:text-rose-600 cursor-pointer"
-                                      >
-                                        ×
-                                      </button>
-                                    </span>
-                                  );
-                                })}
-                                <button
-                                  data-popover-trigger="lib-tags"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setLibraryTagEditorNbId((prev) =>
-                                      prev === nb.id ? null : nb.id
-                                    );
-                                    setLibraryTagInputDraft('');
-                                  }}
-                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-[#0066ff] text-slate-600 hover:text-white text-[10px] font-semibold transition cursor-pointer"
-                                >
-                                  <Tag className="w-2.5 h-2.5" />
-                                  <span>+Tag</span>
-                                </button>
                               </div>
                               <p className="text-[11px] text-slate-500">
                                 {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • <span className="font-semibold text-sky-700">{nbSizeLabel}</span> • {formatLibraryTimestamp(nb.updatedAt, nb.id)}
@@ -43729,6 +43719,26 @@ export default function App() {
                             <span className="text-[11px] text-slate-400 hidden sm:inline">
                               {formatLibraryTimestamp(nb.updatedAt, nb.id)}
                             </span>
+                            <button
+                              type="button"
+                              data-popover-trigger="share-menu"
+                              onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
+                              className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200/80 transition cursor-pointer"
+                              title={`Λήψη PDF ή .bestnotes («${nb.title}»)`}
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleShareNotebookPdf(nb);
+                              }}
+                              className="p-2 rounded-xl bg-sky-50 hover:bg-sky-600 text-sky-600 hover:text-white border border-sky-200/80 transition cursor-pointer"
+                              title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
+                            >
+                              <Share2 className="w-4 h-4" />
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -43751,26 +43761,6 @@ export default function App() {
                                   nb.favorite ? 'fill-amber-400 text-amber-500' : ''
                                 }`}
                               />
-                            </button>
-                            <button
-                              type="button"
-                              data-popover-trigger="share-menu"
-                              onClick={(e) => toggleDownloadMenuForButton(e, nb.id)}
-                              className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200/80 transition cursor-pointer"
-                              title={`Λήψη PDF ή .bestnotes («${nb.title}»)`}
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleShareNotebookPdf(nb);
-                              }}
-                              className="p-2 rounded-xl bg-sky-50 hover:bg-sky-600 text-sky-600 hover:text-white border border-sky-200/80 transition cursor-pointer"
-                              title={`Share PDF "${nb.title}.pdf" (AirDrop, Viber, Messenger, Goodnotes)`}
-                            >
-                              <Share2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={(e) => {
