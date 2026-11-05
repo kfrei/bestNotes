@@ -3953,7 +3953,7 @@ export default function App() {
           });
         }
 
-        if (data.deviceId === deviceIdRef.current) return;
+        if (data.deviceId === deviceIdRef.current && lastSyncedMetaRef.current.folders !== '') return;
 
         if (
           typeof data.customFoldersJson === 'string' &&
@@ -4111,6 +4111,7 @@ export default function App() {
     } catch {
       // ignore quota
     }
+    if (!hasCompletedInitialCloudLoadRef.current) return;
     if (
       foldersStr === lastSyncedMetaRef.current.folders &&
       shapeLibStr === lastSyncedMetaRef.current.shapeLib
@@ -11010,6 +11011,211 @@ export default function App() {
           paintOrder: 'stroke fill',
         };
     }
+  };
+
+  // Native SVG <text>/<tspan> renderer for Library & Page Thumbnails.
+  // Scales 100% accurately inside <svg viewBox="0 0 943 1334"> on both iPadOS WebKit/PWA and macOS
+  // (unlike <foreignObject>, which iPadOS Safari renders in unscaled screen pixels),
+  // while using real 2D Canvas ctx.measureText() word-wrapping so lines match tx.boxWidth without overlapping.
+  const renderSvgPageTextsPreview = (texts: TextObject[] | undefined, pW: number, pH: number) => {
+    if (!texts || texts.length === 0) return null;
+    if (!textMeasureCtxRef.current && typeof document !== 'undefined') {
+      const c = document.createElement('canvas');
+      textMeasureCtxRef.current = c.getContext('2d');
+    }
+    const ctx = textMeasureCtxRef.current;
+    const tokenRegex =
+      /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,+-]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,+-]+))/g;
+
+    const stripSubSupSyntax = (s: string) =>
+      s.replace(tokenRegex, (m) => {
+        let inner = m.slice(1);
+        if (
+          (inner.startsWith('(') && inner.endsWith(')')) ||
+          (inner.startsWith('{') && inner.endsWith('}'))
+        ) {
+          inner = inner.slice(1, -1);
+        }
+        return inner;
+      });
+
+    return texts.map((tx) => {
+      const fontCss = getTextFontCss(tx.fontFamily, tx.bold);
+      const fSize = tx.fontSize || 20;
+      const lineStep = fSize * 1.18;
+      const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
+        .replace(/\u200B/g, '')
+        .replace(/\\(?:Left|Right|left|right)(?![A-Za-z])/g, '')
+        .replace(/\\(?:text|mathrm|mathbf|mathit)\{([^}]*)\}/g, '$1')
+        .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)')
+        .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+        .replace(/\\(?:Rightarrow|implies)(?![A-Za-z])/g, '⇒')
+        .replace(/\\(?:Leftrightarrow|iff)(?![A-Za-z])/g, '⇔')
+        .replace(/\\(?:rightarrow|to)(?![A-Za-z])/g, '→')
+        .replace(/\\leftarrow(?![A-Za-z])/g, '←')
+        .replace(/\\(?:geq|ge)(?![A-Za-z])/g, '≥')
+        .replace(/\\(?:leq|le)(?![A-Za-z])/g, '≤')
+        .replace(/\\(?:neq|ne)(?![A-Za-z])/g, '≠')
+        .replace(/\\approx(?![A-Za-z])/g, '≈')
+        .replace(/\\pm(?![A-Za-z])/g, '±')
+        .replace(/\\infty(?![A-Za-z])/g, '∞')
+        .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
+        .replace(/\\lambda(?![A-Za-z])/g, 'λ')
+        .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
+        .replace(/\\delta(?![A-Za-z])/g, 'δ')
+        .replace(/\\omega(?![A-Za-z])/g, 'ω')
+        .replace(/\\pi(?![A-Za-z])/g, 'π')
+        .replace(/\\alpha(?![A-Za-z])/g, 'α')
+        .replace(/\\beta(?![A-Za-z])/g, 'β')
+        .replace(/\\gamma(?![A-Za-z])/g, 'γ')
+        .replace(/\\theta(?![A-Za-z])/g, 'θ')
+        .replace(/\\mu(?![A-Za-z])/g, 'μ')
+        .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·');
+
+      const maxBoxW =
+        !tx.isMath && tx.boxWidth
+          ? Math.min(tx.boxWidth, Math.max(48, pW - tx.x))
+          : Math.max(48, pW - tx.x);
+      const availW = Math.max(24, maxBoxW - 12);
+
+      const isBoldActive =
+        Boolean(tx.bold) || fontCss.fontWeight === 700 || fontCss.fontWeight === 800;
+      const rawStyle = String(fontCss.fontStyle || 'normal');
+      const svgFontStyle = rawStyle.startsWith('oblique') ? 'italic' : rawStyle;
+      const svgFontFamily = String(fontCss.fontFamily || 'sans-serif');
+
+      let measureWordWidth = (w: string): number => stripSubSupSyntax(w).length * (fSize * 0.54);
+      let spaceW = fSize * 0.28;
+      if (ctx) {
+        const safeCanvasStyle = svgFontStyle !== 'normal' ? `${svgFontStyle} ` : '';
+        const weightStr = isBoldActive ? '700 ' : '500 ';
+        ctx.font = `${safeCanvasStyle}${weightStr}${fSize}px ${svgFontFamily}`;
+        const safetyMul = isBoldActive ? 1.045 : 1.025;
+        spaceW = ctx.measureText(' ').width * safetyMul;
+        measureWordWidth = (w: string) => {
+          const cleanW = tx.isMath ? w.replace(/[{}]/g, '') : stripSubSupSyntax(w);
+          return ctx.measureText(cleanW).width * safetyMul;
+        };
+      }
+
+      const wrappedLines: string[] = [];
+      for (const rawLine of rawTxt.split(/\r?\n/)) {
+        const trimmed = rawLine.trim();
+        if (!trimmed) {
+          wrappedLines.push('');
+          continue;
+        }
+        if (tx.isMath && !tx.boxWidth) {
+          wrappedLines.push(trimmed);
+          continue;
+        }
+        const words = trimmed.split(/\s+/);
+        let curLine = words[0];
+        let curW = measureWordWidth(words[0]);
+        for (let wIdx = 1; wIdx < words.length; wIdx++) {
+          const word = words[wIdx];
+          const wordW = measureWordWidth(word);
+          if (curW + spaceW + wordW <= availW) {
+            curLine += ' ' + word;
+            curW += spaceW + wordW;
+          } else {
+            wrappedLines.push(curLine);
+            curLine = word;
+            curW = wordW;
+          }
+        }
+        wrappedLines.push(curLine);
+      }
+
+      const textAnchor =
+        tx.textAlign === 'center' && tx.boxWidth
+          ? 'middle'
+          : tx.textAlign === 'right' && tx.boxWidth
+          ? 'end'
+          : 'start';
+      const anchorX =
+        tx.textAlign === 'center' && tx.boxWidth
+          ? tx.x + tx.boxWidth / 2
+          : tx.textAlign === 'right' && tx.boxWidth
+          ? tx.x + tx.boxWidth - 6
+          : tx.x + 6;
+
+      return (
+        <text
+          key={tx.id}
+          x={anchorX}
+          y={tx.y + 2 + fSize * 0.92}
+          fill={tx.color}
+          fontSize={fSize}
+          fontFamily={svgFontFamily}
+          fontStyle={svgFontStyle}
+          fontWeight={isBoldActive ? 700 : 500}
+          stroke={isBoldActive ? tx.color : undefined}
+          strokeWidth={isBoldActive ? 0.45 : undefined}
+          paintOrder="stroke fill"
+          textAnchor={textAnchor}
+        >
+          {wrappedLines.slice(0, 42).map((line, lIdx) => {
+            const lineY = tx.y + 2 + fSize * 0.92 + lIdx * lineStep;
+            if (lineY - fSize > pH) return null;
+            const parts = tx.isMath ? [line.replace(/[{}]/g, '')] : line.split(tokenRegex);
+            let isFirstSeg = true;
+            return (
+              <React.Fragment key={lIdx}>
+                {parts.map((part, pIdx) => {
+                  if (!part) return null;
+                  const xAttr = isFirstSeg ? anchorX : undefined;
+                  isFirstSeg = false;
+                  if (!tx.isMath && part.startsWith('^') && part.length > 1) {
+                    let inner = part.slice(1);
+                    if (
+                      (inner.startsWith('(') && inner.endsWith(')')) ||
+                      (inner.startsWith('{') && inner.endsWith('}'))
+                    ) {
+                      inner = inner.slice(1, -1);
+                    }
+                    return (
+                      <tspan
+                        key={pIdx}
+                        x={xAttr}
+                        y={lineY - fSize * 0.34}
+                        fontSize={fSize * 0.72}
+                      >
+                        {inner}
+                      </tspan>
+                    );
+                  }
+                  if (!tx.isMath && part.startsWith('_') && part.length > 1) {
+                    let inner = part.slice(1);
+                    if (
+                      (inner.startsWith('(') && inner.endsWith(')')) ||
+                      (inner.startsWith('{') && inner.endsWith('}'))
+                    ) {
+                      inner = inner.slice(1, -1);
+                    }
+                    return (
+                      <tspan
+                        key={pIdx}
+                        x={xAttr}
+                        y={lineY + fSize * 0.22}
+                        fontSize={fSize * 0.72}
+                      >
+                        {inner}
+                      </tspan>
+                    );
+                  }
+                  return (
+                    <tspan key={pIdx} x={xAttr} y={lineY}>
+                      {part}
+                    </tspan>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </text>
+      );
+    });
   };
 
   useEffect(() => {
@@ -40696,6 +40902,29 @@ export default function App() {
             <span className="text-xs font-semibold hidden sm:inline">Βιβλιοθήκη</span>
           </button>
 
+          {/* 1-Tap Safe Refresh Button for iPad Home-Screen Web App (PWA) & Desktop */}
+          <button
+            onClick={async () => {
+              showToast('🔄 Ανανέωση εφαρμογής & συγχρονισμός Cloud...');
+              if (currentUser && userEditedInSessionRef.current.size > 0) {
+                try {
+                  saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
+                  if (performCloudFirestoreSyncNow()) {
+                    await new Promise((r) => window.setTimeout(r, 650));
+                  }
+                } catch {
+                  // ignore
+                }
+              }
+              window.location.reload();
+            }}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white/85 hover:text-white transition cursor-pointer"
+            title="Ανανέωση εφαρμογής & λήψη τελευταίων αλλαγών από το Cloud (ιδανικό για iPad Web App)"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-sky-300" />
+            <span className="text-[11px] font-semibold hidden lg:inline">Ανανέωση</span>
+          </button>
+
           {/* Goodnotes 4-Squares Page Thumbnails Grid View Button */}
           {viewMode === 'editor' && notebooks.length > 0 && (
             <button
@@ -42691,108 +42920,7 @@ export default function App() {
                                         />
                                       );
                                     })}
-                                    {(p0.texts && p0.texts.length > 0) && (
-                                      <foreignObject x={0} y={0} width={pW} height={pH}>
-                                        <div
-                                          style={{
-                                            position: 'relative',
-                                            width: `${pW}px`,
-                                            height: `${pH}px`,
-                                            overflow: 'hidden',
-                                            pointerEvents: 'none',
-                                          }}
-                                        >
-                                          {(p0.texts || []).map((tx) => {
-                                            const fontCss = getTextFontCss(tx.fontFamily, tx.bold);
-                                            const fSize = tx.fontSize || 20;
-                                            const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
-                                              .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
-                                              .replace(/\\lambda(?![A-Za-z])/g, 'λ')
-                                              .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
-                                              .replace(/\\delta(?![A-Za-z])/g, 'δ')
-                                              .replace(/\\omega(?![A-Za-z])/g, 'ω')
-                                              .replace(/\\pi(?![A-Za-z])/g, 'π')
-                                              .replace(/\\alpha(?![A-Za-z])/g, 'α')
-                                              .replace(/\\beta(?![A-Za-z])/g, 'β')
-                                              .replace(/\\gamma(?![A-Za-z])/g, 'γ')
-                                              .replace(/\\theta(?![A-Za-z])/g, 'θ')
-                                              .replace(/\\mu(?![A-Za-z])/g, 'μ')
-                                              .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·');
-                                            const tokenRegex =
-                                              /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
-                                            const hasSubSup =
-                                              !tx.isMath && (rawTxt.includes('_') || rawTxt.includes('^'));
-                                            return (
-                                              <div
-                                                key={tx.id}
-                                                style={{
-                                                  position: 'absolute',
-                                                  left: `${tx.x}px`,
-                                                  top: `${tx.y}px`,
-                                                  width: tx.isMath ? 'max-content' : 'fit-content',
-                                                  maxWidth:
-                                                    !tx.isMath && tx.boxWidth
-                                                      ? `${tx.boxWidth}px`
-                                                      : `${Math.max(40, pW - tx.x)}px`,
-                                                  padding: '2px 6px',
-                                                  boxSizing: 'border-box',
-                                                  color: tx.color,
-                                                  fontSize: `${fSize}px`,
-                                                  fontWeight: tx.bold ? 700 : 500,
-                                                  lineHeight: 1.18,
-                                                  overflow: tx.boxWidth ? 'hidden' : undefined,
-                                                  overflowWrap: 'break-word',
-                                                  whiteSpace: 'pre-wrap',
-                                                  textAlign: tx.textAlign || 'left',
-                                                  ...fontCss,
-                                                }}
-                                              >
-                                                {hasSubSup
-                                                  ? rawTxt.split(tokenRegex).map((part, pIdx) => {
-                                                      if (!part) return null;
-                                                      if (part.startsWith('^') && part.length > 1) {
-                                                        let inner = part.slice(1);
-                                                        if (
-                                                          (inner.startsWith('(') && inner.endsWith(')')) ||
-                                                          (inner.startsWith('{') && inner.endsWith('}'))
-                                                        ) {
-                                                          inner = inner.slice(1, -1);
-                                                        }
-                                                        return (
-                                                          <sup
-                                                            key={pIdx}
-                                                            style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'super' }}
-                                                          >
-                                                            {inner}
-                                                          </sup>
-                                                        );
-                                                      }
-                                                      if (part.startsWith('_') && part.length > 1) {
-                                                        let inner = part.slice(1);
-                                                        if (
-                                                          (inner.startsWith('(') && inner.endsWith(')')) ||
-                                                          (inner.startsWith('{') && inner.endsWith('}'))
-                                                        ) {
-                                                          inner = inner.slice(1, -1);
-                                                        }
-                                                        return (
-                                                          <sub
-                                                            key={pIdx}
-                                                            style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'sub' }}
-                                                          >
-                                                            {inner}
-                                                          </sub>
-                                                        );
-                                                      }
-                                                      return <React.Fragment key={pIdx}>{part}</React.Fragment>;
-                                                    })
-                                                  : rawTxt.replace(/[{}]/g, '')}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </foreignObject>
-                                    )}
+                                    {renderSvgPageTextsPreview(p0.texts, pW, pH)}
                                   </svg>
                                 )}
                               </>
@@ -53549,108 +53677,7 @@ export default function App() {
                               />
                             );
                           })}
-                          {(pObj.texts && pObj.texts.length > 0) && (
-                            <foreignObject x={0} y={0} width={pW} height={pH}>
-                              <div
-                                style={{
-                                  position: 'relative',
-                                  width: `${pW}px`,
-                                  height: `${pH}px`,
-                                  overflow: 'hidden',
-                                  pointerEvents: 'none',
-                                }}
-                              >
-                                {(pObj.texts || []).map((tx) => {
-                                  const fontCss = getTextFontCss(tx.fontFamily, tx.bold);
-                                  const fSize = tx.fontSize || 20;
-                                  const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
-                                    .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
-                                    .replace(/\\lambda(?![A-Za-z])/g, 'λ')
-                                    .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
-                                    .replace(/\\delta(?![A-Za-z])/g, 'δ')
-                                    .replace(/\\omega(?![A-Za-z])/g, 'ω')
-                                    .replace(/\\pi(?![A-Za-z])/g, 'π')
-                                    .replace(/\\alpha(?![A-Za-z])/g, 'α')
-                                    .replace(/\\beta(?![A-Za-z])/g, 'β')
-                                    .replace(/\\gamma(?![A-Za-z])/g, 'γ')
-                                    .replace(/\\theta(?![A-Za-z])/g, 'θ')
-                                    .replace(/\\mu(?![A-Za-z])/g, 'μ')
-                                    .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·');
-                                  const tokenRegex =
-                                    /(\^(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+)|_(?:\([^)]+\)|\{[^}]+\}|[+-]?[A-Za-zΑ-Ωα-ω0-9.,]+))/g;
-                                  const hasSubSup =
-                                    !tx.isMath && (rawTxt.includes('_') || rawTxt.includes('^'));
-                                  return (
-                                    <div
-                                      key={tx.id}
-                                      style={{
-                                        position: 'absolute',
-                                        left: `${tx.x}px`,
-                                        top: `${tx.y}px`,
-                                        width: tx.isMath ? 'max-content' : 'fit-content',
-                                        maxWidth:
-                                          !tx.isMath && tx.boxWidth
-                                            ? `${tx.boxWidth}px`
-                                            : `${Math.max(40, pW - tx.x)}px`,
-                                        padding: '2px 6px',
-                                        boxSizing: 'border-box',
-                                        color: tx.color,
-                                        fontSize: `${fSize}px`,
-                                        fontWeight: tx.bold ? 700 : 500,
-                                        lineHeight: 1.18,
-                                        overflow: tx.boxWidth ? 'hidden' : undefined,
-                                        overflowWrap: 'break-word',
-                                        whiteSpace: 'pre-wrap',
-                                        textAlign: tx.textAlign || 'left',
-                                        ...fontCss,
-                                      }}
-                                    >
-                                      {hasSubSup
-                                        ? rawTxt.split(tokenRegex).map((part, pIdx) => {
-                                            if (!part) return null;
-                                            if (part.startsWith('^') && part.length > 1) {
-                                              let inner = part.slice(1);
-                                              if (
-                                                (inner.startsWith('(') && inner.endsWith(')')) ||
-                                                (inner.startsWith('{') && inner.endsWith('}'))
-                                              ) {
-                                                inner = inner.slice(1, -1);
-                                              }
-                                              return (
-                                                <sup
-                                                  key={pIdx}
-                                                  style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'super' }}
-                                                >
-                                                  {inner}
-                                                </sup>
-                                              );
-                                            }
-                                            if (part.startsWith('_') && part.length > 1) {
-                                              let inner = part.slice(1);
-                                              if (
-                                                (inner.startsWith('(') && inner.endsWith(')')) ||
-                                                (inner.startsWith('{') && inner.endsWith('}'))
-                                              ) {
-                                                inner = inner.slice(1, -1);
-                                              }
-                                              return (
-                                                <sub
-                                                  key={pIdx}
-                                                  style={{ fontSize: '0.72em', lineHeight: 1, verticalAlign: 'sub' }}
-                                                >
-                                                  {inner}
-                                                </sub>
-                                              );
-                                            }
-                                            return <React.Fragment key={pIdx}>{part}</React.Fragment>;
-                                          })
-                                        : rawTxt.replace(/[{}]/g, '')}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </foreignObject>
-                          )}
+                          {renderSvgPageTextsPreview(pObj.texts, pW, pH)}
                         </svg>
                       </div>
                     </div>
