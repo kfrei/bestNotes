@@ -40363,7 +40363,19 @@ export default function App() {
          ========================================================================= */}
       <header
         data-sticky-app-nav="true"
-        style={{ touchAction: 'manipulation' }}
+        style={{
+          touchAction: 'manipulation',
+          ...(typeof window !== 'undefined' &&
+          ((window.navigator as any)?.standalone === true ||
+            window.matchMedia?.('(display-mode: standalone)')?.matches ||
+            window.matchMedia?.('(display-mode: fullscreen)')?.matches ||
+            window.matchMedia?.('(display-mode: minimal-ui)')?.matches ||
+            ((/iPad|iPhone|iPod/i.test(navigator.userAgent || '') ||
+              (/Macintosh/i.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1)) &&
+              !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent || '')))
+            ? { paddingTop: 'max(env(safe-area-inset-top, 0px), 36px)' }
+            : {}),
+        }}
         className={`${
           isCleanProjectorMode && viewMode === 'editor' ? 'hidden' : 'sticky top-0 z-40 flex'
         } items-center justify-between px-3 pt-1.5 bg-[#1b2a4a] text-white shrink-0 select-none bn-safe-top-header`}
@@ -40411,7 +40423,12 @@ export default function App() {
 
         {/* Center: Authentic Goodnotes 6 / Chrome-Style Elastic Document Tabs */}
         <div className="flex-1 min-w-0 flex items-end gap-1.5 overflow-x-auto px-3">
-          {openNotebookIds.map((nbId) => {
+          {(openNotebookIds.length > 0
+            ? openNotebookIds
+            : viewMode === 'editor' && activeNotebook
+            ? [activeNotebook.id]
+            : []
+          ).map((nbId) => {
             const nb = notebooks.find((n) => n.id === nbId);
             if (!nb) return null;
             const isActive = nb.id === activeNotebook.id && viewMode === 'editor';

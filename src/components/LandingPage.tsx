@@ -1533,6 +1533,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           1. TOP STICKY NAVIGATION BAR (Logo + Προσομοιώσεις + Σημειώσεις + Auth)
          ===================================================================== */}
       <header
+        style={
+          typeof window !== 'undefined' &&
+          ((window.navigator as any)?.standalone === true ||
+            window.matchMedia?.('(display-mode: standalone)')?.matches ||
+            window.matchMedia?.('(display-mode: fullscreen)')?.matches ||
+            window.matchMedia?.('(display-mode: minimal-ui)')?.matches ||
+            ((/iPad|iPhone|iPod/i.test(navigator.userAgent || '') ||
+              (/Macintosh/i.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1)) &&
+              !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent || '')))
+            ? { paddingTop: 'max(env(safe-area-inset-top, 0px), 36px)' }
+            : undefined
+        }
         className={`sticky top-0 z-50 border-b transition-all duration-200 bn-safe-top-header ${
           isScrolled
             ? 'bg-white/75 backdrop-blur-md border-slate-200/85 shadow-[0_6px_22px_-4px_rgba(15,23,42,0.11)]'

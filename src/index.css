@@ -74,3 +74,15 @@ dialog::backdrop {
   animation-timing-function: ease-out;
   animation-fill-mode: both;
 }
+
+.bn-safe-top-header {
+  padding-top: max(env(safe-area-inset-top, 0px), 6px);
+}
+@media all and (display-mode: standalone), all and (display-mode: fullscreen), all and (display-mode: minimal-ui) {
+  .bn-safe-top-header {
+    padding-top: max(env(safe-area-inset-top, 0px), 36px) !important;
+  }
+}
+html[data-standalone-app='true'] .bn-safe-top-header {
+  padding-top: max(env(safe-area-inset-top, 0px), 36px) !important;
+}
