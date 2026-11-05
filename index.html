@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="BestNotes" />
     <meta name="theme-color" content="#1b2a4a" />
     <title>BestNotes — Σημειώσεις, Γραφιστικά & Μαθηματικά</title>
@@ -80,11 +80,13 @@
       }
       @media all and (display-mode: standalone), all and (display-mode: fullscreen), all and (display-mode: minimal-ui) {
         .bn-safe-top-header {
-          padding-top: max(env(safe-area-inset-top, 0px), 36px) !important;
+          padding-top: max(env(safe-area-inset-top, 0px), 46px) !important;
+          padding-bottom: 4px !important;
         }
       }
       html[data-standalone-app='true'] .bn-safe-top-header {
-        padding-top: max(env(safe-area-inset-top, 0px), 36px) !important;
+        padding-top: max(env(safe-area-inset-top, 0px), 46px) !important;
+        padding-bottom: 4px !important;
       }
     </style>
   </head>

@@ -40980,7 +40980,7 @@ export default function App() {
             ((/iPad|iPhone|iPod/i.test(navigator.userAgent || '') ||
               (/Macintosh/i.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1)) &&
               !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent || '')))
-            ? { paddingTop: 'max(env(safe-area-inset-top, 0px), 36px)' }
+            ? { paddingTop: 'max(env(safe-area-inset-top, 0px), 46px)', paddingBottom: '4px' }
             : {}),
         }}
         className={`${
