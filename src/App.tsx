@@ -42823,9 +42823,8 @@ export default function App() {
                                             folder.subfolderCount === 1 ? 'υποφάκελος' : 'υποφάκελοι'
                                           } • `
                                         : ''}
-                                      {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} (
-                                      {formatNotebookSizeLabel(folder.totalBytes)}) •{' '}
-                                      {formatLibraryTimestamp(folder.updatedAt)}
+                                      {folder.count} {folder.count === 1 ? 'αρχείο' : 'αρχεία'} (
+                                      {formatNotebookSizeLabel(folder.totalBytes)})
                                     </p>
                                   </div>
                                 </div>
@@ -43454,9 +43453,8 @@ export default function App() {
                                         folder.subfolderCount === 1 ? 'υποφάκελος' : 'υποφάκελοι'
                                       } • `
                                     : ''}
-                                  {folder.count} {folder.count === 1 ? 'σημείωση' : 'σημειώσεις'} (
-                                  {formatNotebookSizeLabel(folder.totalBytes)}) •{' '}
-                                  {formatLibraryTimestamp(folder.updatedAt)}
+                                  {folder.count} {folder.count === 1 ? 'αρχείο' : 'αρχεία'} (
+                                  {formatNotebookSizeLabel(folder.totalBytes)})
                                 </p>
                               </div>
                             </div>
@@ -43468,9 +43466,6 @@ export default function App() {
                                 </span>
                               ) : (
                                 <>
-                                  <span className="text-[11px] text-slate-400 hidden sm:inline">
-                                    {formatLibraryTimestamp(folder.updatedAt)}
-                                  </span>
                                   <button
                                     type="button"
                                     onClick={(e) => {
