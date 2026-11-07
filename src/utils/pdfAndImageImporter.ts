@@ -7,72 +7,339 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
+const IDB_NAME = 'bestnotes_idb_v1';
+const IDB_STORE = 'notebooks_by_uid';
+
+const pdfDocProxyCache = new Map<string, pdfjsLib.PDFDocumentProxy>();
+const pdfDocLoadingCache = new Map<string, Promise<pdfjsLib.PDFDocumentProxy | null>>();
+const renderedPdfPageCache = new Map<string, string>();
+const inFlightPageRenders = new Map<string, Promise<string | null>>();
+
+function openBestNotesIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveRawPdfToIndexedDB(notebookId: string, buffer: ArrayBuffer): Promise<void> {
+  if (!notebookId || typeof indexedDB === 'undefined') return;
+  try {
+    const db = await openBestNotesIdb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(buffer, `pdf_raw_${notebookId}`);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+export async function loadRawPdfFromIndexedDB(notebookId: string): Promise<ArrayBuffer | null> {
+  if (!notebookId || typeof indexedDB === 'undefined') return null;
+  try {
+    const db = await openBestNotesIdb();
+    return await new Promise<ArrayBuffer | null>((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(`pdf_raw_${notebookId}`);
+      req.onsuccess = () => {
+        const res = req.result;
+        if (res instanceof ArrayBuffer) {
+          resolve(res);
+        } else if (res && ArrayBuffer.isView(res)) {
+          resolve(res.buffer.slice(res.byteOffset, res.byteOffset + res.byteLength));
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function getOrLoadPdfDocProxy(notebookId: string): Promise<pdfjsLib.PDFDocumentProxy | null> {
+  const existing = pdfDocProxyCache.get(notebookId);
+  if (existing) return existing;
+  const pending = pdfDocLoadingCache.get(notebookId);
+  if (pending) return pending;
+
+  const loadPromise = (async () => {
+    try {
+      const rawBuffer = await loadRawPdfFromIndexedDB(notebookId);
+      if (!rawBuffer) return null;
+      const loadingTask = pdfjsLib.getDocument({ data: rawBuffer.slice(0) });
+      const pdfDoc = await loadingTask.promise;
+      pdfDocProxyCache.set(notebookId, pdfDoc);
+      return pdfDoc;
+    } catch {
+      return null;
+    } finally {
+      pdfDocLoadingCache.delete(notebookId);
+    }
+  })();
+
+  pdfDocLoadingCache.set(notebookId, loadPromise);
+  return loadPromise;
+}
+
+function setCachedPageDataUrl(cacheKey: string, dataUrl: string, isThumb: boolean) {
+  if (renderedPdfPageCache.has(cacheKey)) {
+    renderedPdfPageCache.delete(cacheKey);
+  }
+  renderedPdfPageCache.set(cacheKey, dataUrl);
+  const maxEntries = isThumb ? 240 : 60;
+  if (renderedPdfPageCache.size > maxEntries + 60) {
+    let removed = 0;
+    for (const k of renderedPdfPageCache.keys()) {
+      renderedPdfPageCache.delete(k);
+      removed++;
+      if (removed >= 20) break;
+    }
+  }
+}
+
+export function getCachedPdfPageDataUrl(
+  notebookId: string,
+  pageNumber: number,
+  qualityMode: 'full' | 'thumb' = 'full'
+): string | undefined {
+  const exactKey = `${notebookId}__p${pageNumber}__${qualityMode}`;
+  const exact = renderedPdfPageCache.get(exactKey);
+  if (exact) return exact;
+  if (qualityMode === 'thumb') {
+    const full = renderedPdfPageCache.get(`${notebookId}__p${pageNumber}__full`);
+    if (full) return full;
+  }
+  return undefined;
+}
+
+export function ensurePdfPageDataUrl(
+  notebookId: string,
+  pageNumber: number,
+  qualityMode: 'full' | 'thumb' = 'full'
+): Promise<string | null> {
+  const existing = getCachedPdfPageDataUrl(notebookId, pageNumber, qualityMode);
+  if (existing) return Promise.resolve(existing);
+
+  const cacheKey = `${notebookId}__p${pageNumber}__${qualityMode}`;
+  const inFlight = inFlightPageRenders.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const renderPromise = (async () => {
+    try {
+      const pdfDoc = await getOrLoadPdfDocProxy(notebookId);
+      if (!pdfDoc || pageNumber < 1 || pageNumber > pdfDoc.numPages) return null;
+
+      const pdfPage = await pdfDoc.getPage(pageNumber);
+      const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+      const aspect = Math.max(
+        0.25,
+        Math.min(4, unscaledViewport.width / Math.max(1, unscaledViewport.height))
+      );
+      const isLandscape = aspect > 1.05;
+      const customWidth = isLandscape
+        ? A4_LONG_PX
+        : Math.max(320, Math.round(A4_LONG_PX * aspect));
+      const customHeight = isLandscape
+        ? Math.max(320, Math.round(A4_LONG_PX / aspect))
+        : A4_LONG_PX;
+
+      const targetScale = qualityMode === 'thumb' ? 0.42 : 1.45;
+      const jpegQuality = qualityMode === 'thumb' ? 0.68 : 0.84;
+
+      const scale = Math.min(
+        (customWidth * targetScale) / Math.max(1, unscaledViewport.width),
+        (customHeight * targetScale) / Math.max(1, unscaledViewport.height)
+      );
+      const viewport = pdfPage.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(viewport.width));
+      canvas.height = Math.max(1, Math.round(viewport.height));
+      const ctx = canvas.getContext('2d', { alpha: false })!;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      await pdfPage.render({
+        canvasContext: ctx,
+        viewport,
+      }).promise;
+
+      const dataUrl = canvas.toDataURL('image/jpeg', jpegQuality);
+      canvas.width = 1;
+      canvas.height = 1;
+      try {
+        pdfPage.cleanup();
+      } catch {
+        // ignore
+      }
+
+      setCachedPageDataUrl(cacheKey, dataUrl, qualityMode === 'thumb');
+      return dataUrl;
+    } catch {
+      return null;
+    } finally {
+      inFlightPageRenders.delete(cacheKey);
+    }
+  })();
+
+  inFlightPageRenders.set(cacheKey, renderPromise);
+  return renderPromise;
+}
+
 /**
- * Renders every page of a PDF file into high-resolution BestNotes pages
- * so the user can scroll through 30+ pages like Word and write/highlight on top of them.
+ * Imports a PDF file natively without bloating the Notebook JSON to 10x its size.
+ * Stores the raw PDF binary in IndexedDB and renders pages on-demand as the user scrolls.
  */
 export async function renderPdfFileToPages(
   file: File,
   _defaultTemplate: PaperTemplateType = 'blank',
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  notebookId?: string
 ): Promise<NotePage[]> {
   const arrayBuffer = await file.arrayBuffer();
-  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  if (notebookId) {
+    await saveRawPdfToIndexedDB(notebookId, arrayBuffer.slice(0));
+  }
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) });
   const pdfDoc = await loadingTask.promise;
+  if (notebookId) {
+    pdfDocProxyCache.set(notebookId, pdfDoc);
+  }
   const numPages = pdfDoc.numPages;
   const pages: NotePage[] = [];
 
-  for (let i = 1; i <= numPages; i++) {
-    if (onProgress) onProgress(i, numPages);
-    const pdfPage = await pdfDoc.getPage(i);
-    const unscaledViewport = pdfPage.getViewport({ scale: 1 });
-    const aspect = Math.max(0.25, Math.min(4, unscaledViewport.width / Math.max(1, unscaledViewport.height)));
-    const isLandscape = aspect > 1.05;
-    const customWidth = isLandscape
+  const sharedCanvas = document.createElement('canvas');
+  const sharedCtx = sharedCanvas.getContext('2d', { alpha: false })!;
+  const baseTitle = file.name.replace(/\.pdf$/i, '');
+  const nowTs = Date.now();
+
+  try {
+    // Render Page 1 immediately (for the Library card cover thumbnail and initial view)
+    const firstPage = await pdfDoc.getPage(1);
+    const firstUnscaled = firstPage.getViewport({ scale: 1 });
+    const firstAspect = Math.max(
+      0.25,
+      Math.min(4, firstUnscaled.width / Math.max(1, firstUnscaled.height))
+    );
+    const defaultIsLandscape = firstAspect > 1.05;
+    const defaultCustomWidth = defaultIsLandscape
       ? A4_LONG_PX
-      : Math.max(320, Math.round(A4_LONG_PX * aspect));
-    const customHeight = isLandscape
-      ? Math.max(320, Math.round(A4_LONG_PX / aspect))
+      : Math.max(320, Math.round(A4_LONG_PX * firstAspect));
+    const defaultCustomHeight = defaultIsLandscape
+      ? Math.max(320, Math.round(A4_LONG_PX / firstAspect))
       : A4_LONG_PX;
 
-    // Render at ~1.75x Retina resolution for crisp text without exhausting localStorage/RAM on 30+ page PDFs
-    const scale = Math.min(
-      (customWidth * 1.75) / Math.max(1, unscaledViewport.width),
-      (customHeight * 1.75) / Math.max(1, unscaledViewport.height)
-    );
-    const viewport = pdfPage.getViewport({ scale });
+    // Render Page 1 cover at crisp scale, and pre-warm pages 2..3 in memory cache
+    const prewarmCount = notebookId ? Math.min(numPages, 3) : numPages;
+    for (let i = 1; i <= numPages; i++) {
+      if (onProgress && (i === 1 || i === numPages || i % 10 === 0)) {
+        onProgress(i, numPages);
+      }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(viewport.width);
-    canvas.height = Math.round(viewport.height);
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (i <= prewarmCount) {
+        const pdfPage = i === 1 ? firstPage : await pdfDoc.getPage(i);
+        const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+        const aspect = Math.max(
+          0.25,
+          Math.min(4, unscaledViewport.width / Math.max(1, unscaledViewport.height))
+        );
+        const isLandscape = aspect > 1.05;
+        const customWidth = isLandscape
+          ? A4_LONG_PX
+          : Math.max(320, Math.round(A4_LONG_PX * aspect));
+        const customHeight = isLandscape
+          ? Math.max(320, Math.round(A4_LONG_PX / aspect))
+          : A4_LONG_PX;
 
-    await pdfPage.render({
-      canvasContext: ctx,
-      viewport,
-    }).promise;
+        const targetScale = i === 1 ? 1.25 : 1.4;
+        const scale = Math.min(
+          (customWidth * targetScale) / Math.max(1, unscaledViewport.width),
+          (customHeight * targetScale) / Math.max(1, unscaledViewport.height)
+        );
+        const viewport = pdfPage.getViewport({ scale });
 
-    const backgroundDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        sharedCanvas.width = Math.max(1, Math.round(viewport.width));
+        sharedCanvas.height = Math.max(1, Math.round(viewport.height));
+        sharedCtx.fillStyle = '#ffffff';
+        sharedCtx.fillRect(0, 0, sharedCanvas.width, sharedCanvas.height);
 
-    pages.push({
-      id: `page-pdf-${Date.now()}-${i}`,
-      title: `${file.name.replace(/\.pdf$/i, '')} - Σελ. ${i}`,
-      template: 'blank',
-      orientation: isLandscape ? 'landscape' : 'portrait',
-      customWidth,
-      customHeight,
-      backgroundDataUrl,
-      layers: [
-        { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
-        { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
-      ],
-      strokes: [],
-      texts: [],
-      images: [],
-      tapes: [],
-    });
+        await pdfPage.render({
+          canvasContext: sharedCtx,
+          viewport,
+        }).promise;
+
+        const renderedUrl = sharedCanvas.toDataURL('image/jpeg', i === 1 ? 0.78 : 0.82);
+        if (notebookId) {
+          setCachedPageDataUrl(`${notebookId}__p${i}__full`, renderedUrl, false);
+        }
+        try {
+          pdfPage.cleanup();
+        } catch {
+          // ignore
+        }
+
+        pages.push({
+          id: `page-pdf-${nowTs}-${i}`,
+          title: `${baseTitle} - Σελ. ${i}`,
+          template: 'blank',
+          orientation: isLandscape ? 'landscape' : 'portrait',
+          customWidth,
+          customHeight,
+          pdfPageNumber: i,
+          // Keep backgroundDataUrl ONLY on Page 1 (for Library cover preview) when notebookId is used!
+          backgroundDataUrl: !notebookId || i === 1 ? renderedUrl : undefined,
+          layers: [
+            { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
+            { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
+          ],
+          strokes: [],
+          texts: [],
+          images: [],
+          tapes: [],
+        });
+      } else {
+        // Lightweight on-demand PDF page reference (zero base64 bloat!)
+        pages.push({
+          id: `page-pdf-${nowTs}-${i}`,
+          title: `${baseTitle} - Σελ. ${i}`,
+          template: 'blank',
+          orientation: defaultIsLandscape ? 'landscape' : 'portrait',
+          customWidth: defaultCustomWidth,
+          customHeight: defaultCustomHeight,
+          pdfPageNumber: i,
+          layers: [
+            { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
+            { id: 'layer-2', name: 'Λύσεις / Προσθήκες', visible: true, locked: false, opacity: 1 },
+          ],
+          strokes: [],
+          texts: [],
+          images: [],
+          tapes: [],
+        });
+      }
+    }
+  } finally {
+    sharedCanvas.width = 1;
+    sharedCanvas.height = 1;
+    if (!notebookId) {
+      try {
+        await pdfDoc.destroy();
+      } catch {
+        // ignore
+      }
+    }
   }
 
   return pages;

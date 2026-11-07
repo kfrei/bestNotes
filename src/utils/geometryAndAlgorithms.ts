@@ -257,6 +257,78 @@ export function recognizeAndSnapShape(
     };
   };
 
+  // 0. Parenthesis '(' / ')' Recognizer (before Straight Line & Closed Shape tests so a parenthesis never turns into a straight line or ellipse!)
+  const rawW = maxX - minX;
+  const rawH = maxY - minY;
+  const endDy = Math.abs(lineEnd.y - start.y);
+  const endDx = Math.abs(lineEnd.x - start.x);
+  if (
+    rawH >= 16 &&
+    endDy >= Math.max(14, rawH * 0.66) &&
+    endDy >= endDx * 1.2 &&
+    rawH >= rawW * 1.12 &&
+    directDist >= totalLen * 0.45 &&
+    lineDist > 14
+  ) {
+    const ux = (lineEnd.x - start.x) / lineDist;
+    const uy = (lineEnd.y - start.y) / lineDist;
+    // Measure signed horizontal/perpendicular bow relative to the chord (start -> lineEnd)
+    let maxNegBow = 0; // x smaller than chord (left parenthesis '(')
+    let maxPosBow = 0; // x larger than chord (right parenthesis ')')
+    let apexT = 0.5;
+    let maxAbsBow = 0;
+
+    for (let i = 1; i < rawPoints.length - 1; i++) {
+      const p = rawPoints[i];
+      const vx = p.x - start.x;
+      const vy = p.y - start.y;
+      const tChord = (vx * ux + vy * uy) / lineDist;
+      if (tChord < 0.08 || tChord > 0.92) continue;
+      // Horizontal offset of point from the chord at the same Y fraction
+      const chordXAtY =
+        start.x + ((p.y - start.y) / (lineEnd.y - start.y || 1)) * (lineEnd.x - start.x);
+      const dxBow = p.x - chordXAtY;
+      if (dxBow < 0 && -dxBow > maxNegBow) {
+        maxNegBow = -dxBow;
+      } else if (dxBow > 0 && dxBow > maxPosBow) {
+        maxPosBow = dxBow;
+      }
+      if (Math.abs(dxBow) > maxAbsBow) {
+        maxAbsBow = Math.abs(dxBow);
+        apexT = tChord;
+      }
+    }
+
+    const dominantBow = Math.max(maxNegBow, maxPosBow);
+    const oppositeBow = Math.min(maxNegBow, maxPosBow);
+    const isOneSidedArch =
+      dominantBow >= Math.max(4.0, endDy * 0.075) &&
+      dominantBow <= endDy * 0.62 &&
+      oppositeBow <= Math.max(2.6, dominantBow * 0.22) &&
+      apexT >= 0.18 &&
+      apexT <= 0.82;
+
+    if (isOneSidedArch) {
+      const bowSign = maxNegBow >= maxPosBow ? -1 : 1;
+      const xTips = (start.x + lineEnd.x) / 2;
+      const y0 = start.y;
+      const y2 = lineEnd.y;
+      const yMid = (y0 + y2) / 2;
+      const parenDepth = Math.max(
+        Math.max(5.5, endDy * 0.14),
+        Math.min(endDy * 0.34, dominantBow)
+      );
+      return {
+        shapeType: 'arc',
+        points: [
+          { x: xTips, y: y0, pressure: 0.7 },
+          { x: xTips + bowSign * parenDepth, y: yMid, pressure: 0.7 },
+          { x: xTips, y: y2, pressure: 0.7 },
+        ],
+      };
+    }
+  }
+
   // 1. Straight Line Test (snaps horizontal, vertical, or any diagonal line reliably even with slight hand arc or end-hold hook!)
   const isStraightLine =
     lineDist >= 8 &&
@@ -272,7 +344,8 @@ export function recognizeAndSnapShape(
   const w = Math.max(16, maxX - minX);
   const h = Math.max(16, maxY - minY);
   const diag = Math.hypot(w, h);
-  const isClosed = directDist < totalLen * 0.35 || directDist < Math.max(52, diag * 0.32);
+  const isClosed =
+    directDist < totalLen * 0.35 || (diag > 55 && directDist < Math.min(52, diag * 0.34));
 
   if (isClosed && diag > 22) {
     const cx = (minX + maxX) / 2;
@@ -1305,7 +1378,8 @@ export function createPhysicsStencilStrokes(
   color: string,
   layerId: string,
   guideColor = '#2563eb',
-  switchClosed = true
+  switchClosed = true,
+  baseWidth = 2.0
 ): StrokeObject[] {
   const groupId =
     preset === 'wave-axes'
@@ -1333,7 +1407,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-1`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: leftCx, y: y, pressure: 0.7 },
@@ -1347,7 +1421,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-2`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: leftCx, y: y + h, pressure: 0.7 },
@@ -1362,7 +1436,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-3`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: makeEllipseBezier(leftCx, cy, rx, ry),
       layerId,
@@ -1375,7 +1449,7 @@ export function createPhysicsStencilStrokes(
       color,
       fillColor: '#fef08a',
       fillStyle: 'solid',
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: makeEllipseBezier(midCx, cy, rx, ry),
       layerId,
@@ -1386,7 +1460,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-5`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: makeEllipseBezier(rightCx, cy, rx, ry),
       layerId,
@@ -1399,7 +1473,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-ax1`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       arrowEnd: true,
       points: [
@@ -1415,7 +1489,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-ax2`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       arrowEnd: true,
       points: [
@@ -1444,7 +1518,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-way`,
       tool: 'pen',
       color: axisColor,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       arrowEnd: true,
       points: [
@@ -1462,7 +1536,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-wax`,
       tool: 'pen',
       color: axisColor,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       arrowEnd: true,
       points: [
@@ -1480,7 +1554,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-wgt`,
       tool: 'pen',
       color: guideColor,
-      width: 2.2,
+      width: baseWidth,
       opacity: 1,
       lineStyle: 'dashed',
       points: [
@@ -1498,7 +1572,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-wgb`,
       tool: 'pen',
       color: guideColor,
-      width: 2.2,
+      width: baseWidth,
       opacity: 1,
       lineStyle: 'dashed',
       points: [
@@ -1521,7 +1595,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${Date.now()}-res`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: corners,
       layerId,
@@ -1658,7 +1732,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-bulb-body`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: domePts,
       layerId,
@@ -1680,7 +1754,7 @@ export function createPhysicsStencilStrokes(
         id: `st-${uid}-bulb-th-${idx}`,
         tool: 'pen',
         color,
-        width: 2.3,
+        width: baseWidth,
         opacity: 1,
         points: [
           { x: xL, y: yL, pressure: 0.7 },
@@ -1723,7 +1797,8 @@ export function createPhysicsStencilStrokes(
       color: darkTermColor,
       fillColor: darkTermColor,
       fillStyle: 'solid',
-      width: 2.2,
+      fillTransparency: 0,
+      width: baseWidth,
       opacity: 1,
       points: makePolygonBezier(botCapRawPts),
       layerId,
@@ -1732,26 +1807,11 @@ export function createPhysicsStencilStrokes(
       shapeType: 'bulb',
     });
 
-    // 2. Solid dark side screw-thread terminal pad (Πλαϊνός σκούρος πόλος στο σπείρωμα)
+    // 2. Side screw-thread terminal pad coordinates (Πλαϊνός πόλος στο σπείρωμα)
     const sideTermFrac = 0.42;
-    const sideTermY = neckY + (baseBotY - neckY) * sideTermFrac;
+    const sideTermY = Math.round(neckY + (baseBotY - neckY) * sideTermFrac);
     const sideTermX = cx - baseRx * 0.96;
     const sideTermRx = Math.max(3.5, baseRx * 0.24);
-    const sideTermRy = Math.max(3.8, (baseBotY - neckY) * 0.14);
-    out.push({
-      id: `st-${uid}-bulb-term-side`,
-      tool: 'pen',
-      color: darkTermColor,
-      fillColor: darkTermColor,
-      fillStyle: 'solid',
-      width: 2.0,
-      opacity: 1,
-      points: makeEllipseBezier(sideTermX, sideTermY, sideTermRx, sideTermRy),
-      layerId,
-      groupId,
-      isShape: true,
-      shapeType: 'bulb',
-    });
 
     // 3. Internal coiled filament (7-point 3-peak zigzag inside the glass dome)
     const filY = domeCy - domeRy * 0.02;
@@ -1783,12 +1843,13 @@ export function createPhysicsStencilStrokes(
         pressure: 0.7,
       };
     });
+    const filamentGreyColor = '#334155';
     out.push({
       id: `st-${uid}-bulb-coil`,
       tool: 'pen',
-      color,
-      width: 2.2,
-      opacity: 1,
+      color: filamentGreyColor,
+      width: baseWidth,
+      opacity: 0.9,
       points: coilBezierPts,
       layerId,
       groupId,
@@ -1802,9 +1863,9 @@ export function createPhysicsStencilStrokes(
     out.push({
       id: `st-${uid}-bulb-lead-l`,
       tool: 'pen',
-      color,
-      width: 2.1,
-      opacity: 1,
+      color: filamentGreyColor,
+      width: baseWidth,
+      opacity: 0.9,
       lineStyle: 'dashed',
       points: [
         { x: filLeftX, y: filY, pressure: 0.7 },
@@ -1835,9 +1896,9 @@ export function createPhysicsStencilStrokes(
     out.push({
       id: `st-${uid}-bulb-lead-r`,
       tool: 'pen',
-      color,
-      width: 2.1,
-      opacity: 1,
+      color: filamentGreyColor,
+      width: baseWidth,
+      opacity: 0.9,
       lineStyle: 'dashed',
       points: [
         { x: filRightX, y: filY, pressure: 0.7 },
@@ -1864,13 +1925,13 @@ export function createPhysicsStencilStrokes(
 
     // 5. Stepped horizontal external circuit leads with height difference (υψομετρική διαφορά):
     // Left horizontal wire connects to the higher side screw-thread pole (sideTermY)
-    const leftLeadEndX = sideTermX - sideTermRx * 0.85;
+    const leftLeadEndX = sideTermX;
     if (leftLeadEndX - x >= 4) {
       out.push({
         id: `st-${uid}-bulb-wl`,
         tool: 'pen',
         color,
-        width: 2.8,
+        width: baseWidth,
         opacity: 1,
         points: [
           { x, y: sideTermY, pressure: 0.7 },
@@ -1890,14 +1951,14 @@ export function createPhysicsStencilStrokes(
     }
 
     // Right horizontal wire connects to the lower bottom foot pole (rightTermY)
-    const rightTermY = baseBotY + (tipBotY - baseBotY) * 0.45;
+    const rightTermY = Math.round(baseBotY + (tipBotY - baseBotY) * 0.45);
     const rightLeadStartX = cx + baseRx * 0.68;
     if (x + w - rightLeadStartX >= 4) {
       out.push({
         id: `st-${uid}-bulb-wr`,
         tool: 'pen',
         color,
-        width: 2.8,
+        width: baseWidth,
         opacity: 1,
         points: [
           { x: rightLeadStartX, y: rightTermY, pressure: 0.7 },
@@ -1950,7 +2011,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-bat-body`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: batteryOutline,
       layerId,
@@ -1964,7 +2025,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-bat-plus-h`,
       tool: 'pen',
       color,
-      width: 2.5,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: plusCx - signSize / 2, y: signCy, pressure: 0.7 },
@@ -1979,7 +2040,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-bat-plus-v`,
       tool: 'pen',
       color,
-      width: 2.5,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: plusCx, y: signCy - signSize / 2, pressure: 0.7 },
@@ -1996,7 +2057,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-bat-minus-h`,
       tool: 'pen',
       color,
-      width: 2.5,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: minusCx - signSize / 2, y: signCy, pressure: 0.7 },
@@ -2028,7 +2089,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-vs-wl`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x, y: cy, pressure: 0.7 },
@@ -2045,7 +2106,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-vs-wr`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: minusPlateX, y: cy, pressure: 0.7 },
@@ -2062,7 +2123,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-vs-ptall`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: plusPlateX, y: tallTopY, pressure: 0.7 },
@@ -2079,7 +2140,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-vs-pshort`,
       tool: 'pen',
       color,
-      width: 3.8,
+      width: Math.max(2.6, baseWidth * 1.35),
       opacity: 1,
       points: [
         { x: minusPlateX, y: shortTopY, pressure: 0.7 },
@@ -2102,7 +2163,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-vs-plus-h`,
       tool: 'pen',
       color,
-      width: 2.4,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: plusSignCx - signSize / 2, y: signY, pressure: 0.7 },
@@ -2117,7 +2178,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-vs-plus-v`,
       tool: 'pen',
       color,
-      width: 2.4,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: plusSignCx, y: signY - signSize / 2, pressure: 0.7 },
@@ -2132,7 +2193,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${uid}-vs-minus-h`,
       tool: 'pen',
       color,
-      width: 2.4,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: minusSignCx - signSize / 2, y: signY, pressure: 0.7 },
@@ -2158,7 +2219,7 @@ export function createPhysicsStencilStrokes(
       color: color || '#111827',
       fillColor: 'rgba(148, 163, 184, 0.18)',
       fillStyle: 'solid',
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: wedgePts,
       layerId,
@@ -2175,7 +2236,7 @@ export function createPhysicsStencilStrokes(
       color: blockStrokeColor,
       fillColor: 'rgba(59, 130, 246, 0.16)',
       fillStyle: 'solid',
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: blockPts,
       layerId,
@@ -2187,14 +2248,14 @@ export function createPhysicsStencilStrokes(
     const cy = y + h * 0.68;
     const leftPivotX = x + w * 0.26;
     const rightPivotX = x + w * 0.74;
-    const pivotR = Math.max(4, Math.min(7.5, Math.min(w, h) * 0.1));
+    const pivotR = Math.max(3.2, Math.min(5.2, Math.min(w, h) * 0.075));
     const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
 
     out.push({
       id: `st-${ts}-sw-wl`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x, y: cy, pressure: 0.7 },
@@ -2211,7 +2272,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${ts}-sw-wr`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: rightPivotX + pivotR, y: cy, pressure: 0.7 },
@@ -2230,7 +2291,7 @@ export function createPhysicsStencilStrokes(
       color: '#334155',
       fillColor: '#94a3b8',
       fillStyle: 'solid',
-      width: 2.2,
+      width: baseWidth,
       opacity: 1,
       points: makeEllipseBezier(leftPivotX, cy, pivotR, pivotR),
       layerId,
@@ -2245,7 +2306,7 @@ export function createPhysicsStencilStrokes(
       color: '#334155',
       fillColor: '#94a3b8',
       fillStyle: 'solid',
-      width: 2.2,
+      width: baseWidth,
       opacity: 1,
       points: makeEllipseBezier(rightPivotX, cy, pivotR, pivotR),
       layerId,
@@ -2262,7 +2323,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${ts}-sw-blade`,
       tool: 'pen',
       color: '#1e293b',
-      width: 3.4,
+      width: Math.max(2.2, baseWidth * 1.1),
       opacity: 1,
       points: [
         { x: leftPivotX, y: cy, pressure: 0.7 },
@@ -2281,16 +2342,18 @@ export function createPhysicsStencilStrokes(
       switchClosed,
     });
 
-    const knobCx = (leftPivotX + bladeEndX) / 2;
-    const knobCy = switchClosed ? cy - pivotR * 1.4 : (cy + bladeEndY) / 2;
-    const knobR = Math.max(6.5, Math.min(11, Math.min(w, h) * 0.16));
+    const knobCx = switchClosed
+      ? (leftPivotX + bladeEndX) / 2
+      : leftPivotX + (bladeEndX - leftPivotX) * 0.78;
+    const knobCy = switchClosed ? cy - pivotR * 1.4 : cy + (bladeEndY - cy) * 0.78;
+    const knobR = Math.max(4.8, Math.min(7.8, Math.min(w, h) * 0.115));
     out.push({
       id: `st-${ts}-sw-knob`,
       tool: 'pen',
       color: switchClosed ? '#16a34a' : '#dc2626',
       fillColor: switchClosed ? '#22c55e' : '#ef4444',
       fillStyle: 'solid',
-      width: 2.2,
+      width: baseWidth,
       opacity: 1,
       points: makeEllipseBezier(knobCx, knobCy, knobR, knobR),
       layerId,
@@ -2329,7 +2392,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${ts}-fan-wl`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x, y: cy, pressure: 0.7 },
@@ -2344,7 +2407,7 @@ export function createPhysicsStencilStrokes(
       id: `st-${ts}-fan-wr`,
       tool: 'pen',
       color,
-      width: 2.8,
+      width: baseWidth,
       opacity: 1,
       points: [
         { x: cx + rOuter, y: cy, pressure: 0.7 },
@@ -2364,7 +2427,7 @@ export function createPhysicsStencilStrokes(
       fillColor: '#cbd5e1',
       fillStyle: 'solid',
       fillTransparency: 20,
-      width: 2.4,
+      width: baseWidth,
       opacity: 1,
       points: makeSmoothCirclePts(cx, cy, rOuter, 44),
       layerId,
@@ -2406,7 +2469,7 @@ export function createPhysicsStencilStrokes(
         fillColor: '#0284c7',
         fillStyle: 'solid',
         fillTransparency: 0,
-        width: 2.0,
+        width: baseWidth,
         opacity: 1,
         points: makePolygonBezier(bladePts),
         layerId,
@@ -2424,7 +2487,7 @@ export function createPhysicsStencilStrokes(
       fillColor: '#0ea5e9',
       fillStyle: 'solid',
       fillTransparency: 0,
-      width: 2.2,
+      width: baseWidth,
       opacity: 1,
       points: makeSmoothCirclePts(cx, cy, rHub, 24),
       layerId,
@@ -5567,11 +5630,7 @@ export function getCircuitComponentsWithTerminals(
       }
     }
 
-    const key =
-      isDedicatedCompGroup &&
-      !clusters.some((cl) => cl.key === seedGrp)
-        ? seedGrp!
-        : `comp-${seed.kind}-${seed.stroke.id}`;
+    const key = `comp-${seed.kind}-${seed.stroke.id}`;
     clusters.push({ key, kind: seed.kind, strokes: clusterStrokes });
   }
 
@@ -5802,21 +5861,37 @@ export function splitWiresUnderCircuitComponent(
           const newP1 = { ...pEnd };
           if (dStartL <= SNAP_R && dStartL <= dStartR && newP1.x < comp.leftTerm.x) {
             newP0.x = comp.leftTerm.x;
-            if (Math.abs(newP1.y - comp.leftTerm.y) < 18) newP0.y = newP1.y;
-            else newP0.y = comp.leftTerm.y;
+            if (comp.kind === 'bulb' || Math.abs(newP1.y - comp.leftTerm.y) <= 28) {
+              newP0.y = comp.leftTerm.y;
+              newP1.y = comp.leftTerm.y;
+            } else {
+              newP0.y = comp.leftTerm.y;
+            }
           } else if (dStartR <= SNAP_R && newP1.x > comp.rightTerm.x) {
             newP0.x = comp.rightTerm.x;
-            if (Math.abs(newP1.y - comp.rightTerm.y) < 18) newP0.y = newP1.y;
-            else newP0.y = comp.rightTerm.y;
+            if (comp.kind === 'bulb' || Math.abs(newP1.y - comp.rightTerm.y) <= 28) {
+              newP0.y = comp.rightTerm.y;
+              newP1.y = comp.rightTerm.y;
+            } else {
+              newP0.y = comp.rightTerm.y;
+            }
           }
           if (dEndL <= SNAP_R && dEndL <= dEndR && newP0.x < comp.leftTerm.x) {
             newP1.x = comp.leftTerm.x;
-            if (Math.abs(newP0.y - comp.leftTerm.y) < 18) newP1.y = newP0.y;
-            else newP1.y = comp.leftTerm.y;
+            if (comp.kind === 'bulb' || Math.abs(newP0.y - comp.leftTerm.y) <= 28) {
+              newP1.y = comp.leftTerm.y;
+              newP0.y = comp.leftTerm.y;
+            } else {
+              newP1.y = comp.leftTerm.y;
+            }
           } else if (dEndR <= SNAP_R && newP0.x > comp.rightTerm.x) {
             newP1.x = comp.rightTerm.x;
-            if (Math.abs(newP0.y - comp.rightTerm.y) < 18) newP1.y = newP0.y;
-            else newP1.y = comp.rightTerm.y;
+            if (comp.kind === 'bulb' || Math.abs(newP0.y - comp.rightTerm.y) <= 28) {
+              newP1.y = comp.rightTerm.y;
+              newP0.y = comp.rightTerm.y;
+            } else {
+              newP1.y = comp.rightTerm.y;
+            }
           }
           newP1.cx = (newP0.x + newP1.x) / 2;
           newP1.cy = (newP0.y + newP1.y) / 2;
@@ -5956,7 +6031,7 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
         id: `st-${Date.now()}-res-${Math.random().toString(36).slice(2, 6)}`,
         tool: 'pen',
         color: comp.color,
-        width: 2.8,
+        width: 2.0,
         opacity: 1,
         points: makePolygonBezier([
           { x: rx, y: ry },
@@ -6079,9 +6154,9 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
   currentStrokes.forEach((s, idx) => {
     if (compStrokeSet.has(s.id)) return;
     if (s.tool === 'highlighter' || s.points.length < 2) return;
-    if (s.shapeType && s.shapeType !== 'line') return;
+    if (!s.isShape || s.shapeType !== 'line') return;
+    if (s.arrowStart || s.arrowEnd) return;
     if (s.points[0]?.twist === 999) return;
-    if (!s.isShape && s.points.length > 2) return;
     for (let k = 0; k < s.points.length - 1; k++) {
       const p0 = s.points[k];
       const p1 = s.points[k + 1];
@@ -6108,18 +6183,29 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
 
   if (wireRefs.length === 0) return currentStrokes;
 
-  // 2. Cluster horizontal rows (within 36px) & vertical columns (within 36px)
+  // 2. Cluster horizontal rows (within 36px, normalizing stepped right-of-bulb wires to leftTerm.y) & vertical columns (within 36px)
   const hRows: { yValues: number[]; yRow: number; wireIndices: number[] }[] = [];
   for (let i = 0; i < wireRefs.length; i++) {
     const w = wireRefs[i];
     if (w.orientation !== 'h') continue;
-    const row = hRows.find((r) => Math.abs(r.yRow - w.avgY) <= 36);
+    let wEffY = w.avgY;
+    for (const ic of initialComps) {
+      if (ic.kind === 'bulb' && w.avgX > ic.cx) {
+        const dRight = Math.abs(w.avgY - ic.rightTerm.y);
+        const dLeft = Math.abs(w.avgY - ic.leftTerm.y);
+        if (dRight <= 36 && dRight < dLeft) {
+          wEffY = w.avgY - (ic.rightTerm.y - ic.leftTerm.y);
+          break;
+        }
+      }
+    }
+    const row = hRows.find((r) => Math.abs(r.yRow - wEffY) <= 36);
     if (row) {
-      row.yValues.push(w.avgY);
+      row.yValues.push(wEffY);
       row.yRow = row.yValues.reduce((a, b) => a + b, 0) / row.yValues.length;
       row.wireIndices.push(i);
     } else {
-      hRows.push({ yValues: [w.avgY], yRow: w.avgY, wireIndices: [i] });
+      hRows.push({ yValues: [wEffY], yRow: wEffY, wireIndices: [i] });
     }
   }
 
@@ -6139,11 +6225,6 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
 
   for (const row of hRows) {
     row.yRow = Math.round(row.yRow);
-    for (const wi of row.wireIndices) {
-      wireRefs[wi].y1 = row.yRow;
-      wireRefs[wi].y2 = row.yRow;
-      wireRefs[wi].avgY = row.yRow;
-    }
   }
   for (const col of vCols) {
     col.xCol = Math.round(col.xCol);
@@ -6161,14 +6242,48 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     let bestRow: (typeof hRows)[number] | null = null;
     let bestDist = maxRowAlignDist;
     for (const row of hRows) {
-      const d = Math.abs(row.yRow - termY);
+      const d =
+        comp.kind === 'bulb'
+          ? Math.min(Math.abs(row.yRow - comp.leftTerm.y), Math.abs(row.yRow - comp.rightTerm.y))
+          : Math.abs(row.yRow - termY);
       if (d <= bestDist) {
         bestDist = d;
         bestRow = row;
       }
     }
     if (bestRow) {
-      const dy = bestRow.yRow - termY;
+      let dy = bestRow.yRow - termY;
+      if (comp.kind === 'bulb') {
+        const leftWires = bestRow.wireIndices
+          .map((wi) => wireRefs[wi])
+          .filter((w) => w.avgX < comp.cx - 4);
+        const rightWires = bestRow.wireIndices
+          .map((wi) => wireRefs[wi])
+          .filter((w) => w.avgX > comp.cx + 4);
+        if (leftWires.length > 0 && rightWires.length > 0) {
+          const avgLeftY =
+            leftWires.reduce((acc, w) => acc + w.avgY, 0) / leftWires.length;
+          const avgRightY =
+            rightWires.reduce((acc, w) => acc + w.avgY, 0) / rightWires.length;
+          // If the left wire is already near leftTerm.y and the right wire is near rightTerm.y (stepped bulb wires),
+          // align strictly to the left wire so the bulb never shifts down by (rightTerm.y - leftTerm.y)/2!
+          dy = avgLeftY - comp.leftTerm.y;
+          if (
+            Math.abs(avgLeftY - comp.leftTerm.y) <= 4 &&
+            Math.abs(avgRightY - comp.rightTerm.y) <= 4
+          ) {
+            dy = 0;
+          }
+        } else if (leftWires.length > 0) {
+          const avgLeftY =
+            leftWires.reduce((acc, w) => acc + w.avgY, 0) / leftWires.length;
+          dy = avgLeftY - comp.leftTerm.y;
+        } else if (rightWires.length > 0) {
+          const avgRightY =
+            rightWires.reduce((acc, w) => acc + w.avgY, 0) / rightWires.length;
+          dy = avgRightY - comp.rightTerm.y;
+        }
+      }
       if (Math.abs(dy) >= 0.5) {
         const idSet = new Set(comp.strokeIds);
         currentStrokes = currentStrokes.map((s) => {
@@ -6186,6 +6301,14 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
           };
         });
       }
+    }
+  }
+
+  for (const row of hRows) {
+    for (const wi of row.wireIndices) {
+      wireRefs[wi].y1 = row.yRow;
+      wireRefs[wi].y2 = row.yRow;
+      wireRefs[wi].avgY = row.yRow;
     }
   }
 
@@ -6759,7 +6882,7 @@ export function convertCircuitComponents(
         groupId: sharedMacroGroupId,
         tool: 'pen',
         color: comp.color,
-        width: 2.8,
+        width: 2.0,
         opacity: 1,
         points: makePolygonBezier([
           { x: rx, y: ry },
@@ -6849,6 +6972,7 @@ export function convertCircuitComponents(
     }
 
     newIds.push(...replacement.map((s) => s.id));
+    const newCompInfo = getCircuitComponentsWithTerminals(replacement)[0];
     const removeSet = new Set(comp.strokeIds);
     const updated: StrokeObject[] = [];
     let inserted = false;
@@ -6859,6 +6983,64 @@ export function convertCircuitComponents(
           inserted = true;
         }
         continue;
+      }
+      // Adjust adjacent horizontal wire endpoints on the same row when converting between stepped Bulb and flat Resistor (or Battery <-> Voltage Source)
+      if (
+        newCompInfo &&
+        classifyCircuitStrokeKind(s) === null &&
+        s.points.length === 2 &&
+        s.tool !== 'highlighter' &&
+        (!s.shapeType || s.shapeType === 'line')
+      ) {
+        const p0 = s.points[0];
+        const p1 = s.points[1];
+        const dx = Math.abs(p1.x - p0.x);
+        const dy = Math.abs(p1.y - p0.y);
+        if (dx >= 10 && dy <= Math.max(18, dx * 0.28)) {
+          const avgX = (p0.x + p1.x) / 2;
+          const avgY = (p0.y + p1.y) / 2;
+          const leftIdx = p0.x <= p1.x ? 0 : 1;
+          const rightIdx = leftIdx === 0 ? 1 : 0;
+          const wLeft = s.points[leftIdx];
+          const wRight = s.points[rightIdx];
+
+          if (
+            avgX > comp.cx &&
+            Math.abs(avgY - comp.rightTerm.y) <= 34 &&
+            Math.abs(wLeft.x - comp.rightTerm.x) <= 68 &&
+            wRight.x > newCompInfo.rightTerm.x + 6
+          ) {
+            const np0 = { ...p0 };
+            const np1 = { ...p1 };
+            const nLeft = leftIdx === 0 ? np0 : np1;
+            const nRight = leftIdx === 0 ? np1 : np0;
+            nLeft.x = Math.round(newCompInfo.rightTerm.x);
+            nLeft.y = Math.round(newCompInfo.rightTerm.y);
+            nRight.y = Math.round(newCompInfo.rightTerm.y);
+            np1.cx = (np0.x + np1.x) / 2;
+            np1.cy = (np0.y + np1.y) / 2;
+            updated.push({ ...s, points: [np0, np1] });
+            continue;
+          }
+          if (
+            avgX < comp.cx &&
+            Math.abs(avgY - comp.leftTerm.y) <= 34 &&
+            Math.abs(wRight.x - comp.leftTerm.x) <= 68 &&
+            wLeft.x < newCompInfo.leftTerm.x - 6
+          ) {
+            const np0 = { ...p0 };
+            const np1 = { ...p1 };
+            const nLeft = leftIdx === 0 ? np0 : np1;
+            const nRight = leftIdx === 0 ? np1 : np0;
+            nRight.x = Math.round(newCompInfo.leftTerm.x);
+            nRight.y = Math.round(newCompInfo.leftTerm.y);
+            nLeft.y = Math.round(newCompInfo.leftTerm.y);
+            np1.cx = (np0.x + np1.x) / 2;
+            np1.cy = (np0.y + np1.y) / 2;
+            updated.push({ ...s, points: [np0, np1] });
+            continue;
+          }
+        }
       }
       updated.push(s);
     }
@@ -7013,30 +7195,15 @@ export function analyzeCircuitForSimulation(
     if (s.tool === 'highlighter' || s.points.length < 2) continue;
     if (s.fillStyle && s.fillStyle !== 'none') continue;
     if (s.points[0]?.twist === 999) continue;
-    if (s.shapeType && s.shapeType !== 'line') {
-      continue;
-    }
+    if (!s.isShape || s.shapeType !== 'line') continue;
+    if (s.arrowStart || s.arrowEnd) continue;
 
-    if (s.shapeType === 'line' || s.points.length <= 6) {
-      for (let i = 0; i < s.points.length - 1; i++) {
-        const a = s.points[i];
-        const b = s.points[i + 1];
-        const len = Math.hypot(b.x - a.x, b.y - a.y);
-        if (len >= 6) {
-          rawWires.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, length: len });
-        }
-      }
-    } else {
-      let lastPt = s.points[0];
-      for (let i = 1; i < s.points.length; i++) {
-        const pt = s.points[i];
-        const len = Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y);
-        if (len >= 18 || i === s.points.length - 1) {
-          if (len >= 4) {
-            rawWires.push({ x1: lastPt.x, y1: lastPt.y, x2: pt.x, y2: pt.y, length: len });
-          }
-          lastPt = pt;
-        }
+    for (let i = 0; i < s.points.length - 1; i++) {
+      const a = s.points[i];
+      const b = s.points[i + 1];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len >= 6) {
+        rawWires.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, length: len });
       }
     }
   }
@@ -7365,7 +7532,7 @@ export function analyzeCircuitForSimulation(
     V[primarySourceNode.v] = 0.0;
     isFixed[primarySourceNode.v] = 1;
 
-    for (let iter = 0; iter < 120; iter++) {
+    for (let iter = 0; iter < 240; iter++) {
       for (let u = 0; u < nodeCenters.length; u++) {
         if (isFixed[u] || !nodeInLoop[u]) continue;
         let sumGV = 0;
@@ -7389,9 +7556,13 @@ export function analyzeCircuitForSimulation(
     for (const wn of wireNodes) {
       if (!wireInLoop[wn.idx] || wn.u === wn.v) continue;
       const dV = V[wn.u] - V[wn.v];
-      // Normalize wire speed smoothly while preserving exact sign of (V[u] - V[v])
+      // Physical branch current I = dV / R_wire (R_wire = 0.25 -> g = 4.0) so series wires & loads share identical current!
+      const physCurrent = dV / 0.25;
       const sign = dV >= 0 ? 1 : -1;
-      const mag = Math.abs(dV) > 1e-5 ? Math.max(0.75, Math.min(1.6, Math.abs(dV) * 18 * voltageBoost)) : 0.75;
+      const mag =
+        Math.abs(physCurrent) > 1e-5
+          ? Math.max(0.75, Math.min(1.6, Math.abs(physCurrent) * 2.2 * voltageBoost))
+          : 0.75;
       wireFlowSum[wn.idx] = sign * mag;
       wireHighEnergy[wn.idx] = (V[wn.u] + V[wn.v]) / 2 >= 0.5;
     }
@@ -7399,9 +7570,15 @@ export function analyzeCircuitForSimulation(
     for (const cn of compNodes) {
       if (!compInLoop.has(cn.comp.key)) continue;
       const dV = V[cn.u] - V[cn.v];
+      const rComp = cn.comp.kind === 'switch' ? 0.02 : 1.0;
+      const physCurrent = dV / rComp;
+      const flowMag =
+        Math.abs(physCurrent) > 1e-5
+          ? Math.max(0.75, Math.min(1.6, Math.abs(physCurrent) * 2.2 * voltageBoost))
+          : 0.75;
       const pwr = Math.max(0.5, Math.min(1.8, Math.abs(dV) * 1.15 * voltageBoost));
       compPowerMap.set(cn.comp.key, pwr);
-      compSignedFlowMap.set(cn.comp.key, (dV >= 0 ? 1 : -1) * Math.max(0.75, pwr));
+      compSignedFlowMap.set(cn.comp.key, (dV >= 0 ? 1 : -1) * flowMag);
     }
   }
 
@@ -7503,11 +7680,52 @@ export function analyzeCircuitForSimulation(
           const domeRx = Math.max(14, Math.min(c.w * 0.27, c.h * 0.34));
           const baseRx = Math.max(8, domeRx * 0.52);
           const sideTermX = c.cx - baseRx * 0.96;
-          const botRightX = c.cx + baseRx * 0.55;
-          if (wn.u === cn.u && wx1 < sideTermX && wx2 < wx1) wx1 = sideTermX;
-          else if (wn.v === cn.u && wx2 < sideTermX && wx1 < wx2) wx2 = sideTermX;
-          if (wn.u === cn.v && wx1 > botRightX && wx2 > wx1) wx1 = botRightX;
-          else if (wn.v === cn.v && wx2 > botRightX && wx1 > wx2) wx2 = botRightX;
+          const botRightX = c.cx + baseRx * 0.42;
+          if (
+            (wn.u === cn.u || wn.v === cn.u) &&
+            Math.max(wx1, wx2) <= c.cx &&
+            Math.abs(wy1 - c.leftTerm.y) <= 22 &&
+            Math.abs(wy2 - c.leftTerm.y) <= 22
+          ) {
+            wy1 = c.leftTerm.y;
+            wy2 = c.leftTerm.y;
+            if (wn.u === cn.u && wx1 < sideTermX && wx2 < wx1) wx1 = sideTermX;
+            else if (wn.v === cn.u && wx2 < sideTermX && wx1 < wx2) wx2 = sideTermX;
+          }
+          if (
+            (wn.u === cn.v || wn.v === cn.v) &&
+            Math.min(wx1, wx2) >= c.cx &&
+            Math.abs(wy1 - c.rightTerm.y) <= 22 &&
+            Math.abs(wy2 - c.rightTerm.y) <= 22
+          ) {
+            wy1 = c.rightTerm.y;
+            wy2 = c.rightTerm.y;
+            if (wn.u === cn.v && wx1 > botRightX && wx2 > wx1) wx1 = botRightX;
+            else if (wn.v === cn.v && wx2 > botRightX && wx1 > wx2) wx2 = botRightX;
+          }
+        } else if (c.kind === 'resistor') {
+          if (
+            (wn.u === cn.u || wn.v === cn.u) &&
+            Math.max(wx1, wx2) <= c.cx &&
+            Math.abs(wy1 - c.cy) <= 22 &&
+            Math.abs(wy2 - c.cy) <= 22
+          ) {
+            wy1 = c.cy;
+            wy2 = c.cy;
+            if (wn.u === cn.u && wx2 < wx1) wx1 = c.minX;
+            else if (wn.v === cn.u && wx1 < wx2) wx2 = c.minX;
+          }
+          if (
+            (wn.u === cn.v || wn.v === cn.v) &&
+            Math.min(wx1, wx2) >= c.cx &&
+            Math.abs(wy1 - c.cy) <= 22 &&
+            Math.abs(wy2 - c.cy) <= 22
+          ) {
+            wy1 = c.cy;
+            wy2 = c.cy;
+            if (wn.u === cn.v && wx2 > wx1) wx1 = c.maxX;
+            else if (wn.v === cn.v && wx1 > wx2) wx2 = c.maxX;
+          }
         }
       }
     }
@@ -7543,6 +7761,43 @@ export function analyzeCircuitForSimulation(
   // Also add the built-in horizontal lead wires of active Fan, Voltage-Source, Resistor, Battery, and Switch components
   // so electrons flow all the way across Resistors, next to the Fan circle, and next to the Voltage Source plates with zero gaps!
   if (anyClosedLoop) {
+    // First ensure any horizontal wire segment on the left or right of an active bulb aligns strictly to leftTerm.y / rightTerm.y
+    // BEFORE adding component lead segments and merging contiguous horizontal segments!
+    const activeBulbs = comps.filter((c) => c.kind === 'bulb' && compInLoop.has(c.key));
+    if (activeBulbs.length > 0) {
+      for (const sw of simulatedWires) {
+        if (!sw.inClosedLoop || sw.pathPoints) continue;
+        const dx = sw.x2 - sw.x1;
+        const dy = sw.y2 - sw.y1;
+        if (Math.abs(dy) > Math.abs(dx) * 0.35 || Math.abs(dx) < 4) continue;
+        const avgY = (sw.y1 + sw.y2) / 2;
+        const minX = Math.min(sw.x1, sw.x2);
+        const maxX = Math.max(sw.x1, sw.x2);
+        for (const b of activeBulbs) {
+          const domeRx = Math.max(14, Math.min(b.w * 0.27, b.h * 0.34));
+          const baseRx = Math.max(8, domeRx * 0.52);
+          const sideTermX = b.cx - baseRx * 0.96;
+          const botTargetX = b.cx + baseRx * 0.42;
+          const nearBulbRow =
+            Math.abs(avgY - b.leftTerm.y) <= 32 || Math.abs(avgY - b.rightTerm.y) <= 32;
+          if (!nearBulbRow) continue;
+          if (maxX <= b.cx + 6) {
+            sw.y1 = b.leftTerm.y;
+            sw.y2 = b.leftTerm.y;
+            if (sw.x1 > sideTermX && sw.x2 < sw.x1) sw.x1 = sideTermX;
+            if (sw.x2 > sideTermX && sw.x1 < sw.x2) sw.x2 = sideTermX;
+            sw.length = Math.max(1, Math.hypot(sw.x2 - sw.x1, sw.y2 - sw.y1));
+          } else if (minX >= b.cx - 6) {
+            sw.y1 = b.rightTerm.y;
+            sw.y2 = b.rightTerm.y;
+            if (sw.x1 < botTargetX && sw.x2 > sw.x1) sw.x1 = botTargetX;
+            if (sw.x2 < botTargetX && sw.x1 > sw.x2) sw.x2 = botTargetX;
+            sw.length = Math.max(1, Math.hypot(sw.x2 - sw.x1, sw.y2 - sw.y1));
+          }
+        }
+      }
+    }
+
     const addComponentLeadSegment = (
       lx1: number,
       ly1: number,
@@ -7590,33 +7845,96 @@ export function analyzeCircuitForSimulation(
       }
     };
 
-    for (const cn of compNodes) {
+      const activeLoopSpeeds = simulatedWires
+        .filter((sw) => sw.inClosedLoop && sw.currentSpeed > 0.01)
+        .map((sw) => sw.currentSpeed);
+      const defaultLoopSpeed =
+        activeLoopSpeeds.length > 0
+          ? activeLoopSpeeds.reduce((a, b) => a + b, 0) / activeLoopSpeeds.length
+          : 0.95;
+
+      for (const cn of compNodes) {
       const c = cn.comp;
       if (c.kind === 'resistor' && compInLoop.has(c.key)) {
-        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
-        addComponentLeadSegment(c.minX, c.cy, c.maxX, c.cy, flow);
+        const flow = compSignedFlowMap.get(c.key) ?? defaultLoopSpeed;
+        const resStroke = strokes.find(
+          (s) => c.strokeIds.includes(s.id) && s.shapeType === 'resistor'
+        );
+        let zigPts: { x: number; y: number }[];
+        if (resStroke && resStroke.points.length >= 4) {
+          zigPts = computeResistorOrSpringPoints('resistor', resStroke.points).map((p) => ({
+            x: p.x,
+            y: p.y,
+          }));
+        } else {
+          const uStart = 0.12;
+          const uEnd = 0.88;
+          const numPeaks = 10;
+          zigPts = [
+            { x: c.minX, y: c.cy },
+            { x: c.minX + uStart * c.w, y: c.cy },
+          ];
+          for (let k = 0; k < numPeaks; k++) {
+            const u = uStart + ((k + 0.5) / numPeaks) * (uEnd - uStart);
+            const vy = k % 2 === 0 ? c.minY + 0.04 * c.h : c.minY + 0.96 * c.h;
+            zigPts.push({ x: c.minX + u * c.w, y: vy });
+          }
+          zigPts.push({ x: c.minX + uEnd * c.w, y: c.cy });
+          zigPts.push({ x: c.maxX, y: c.cy });
+        }
+        if (zigPts.length >= 4) {
+          if (zigPts[0].x > zigPts[zigPts.length - 1].x) {
+            zigPts.reverse();
+          }
+          zigPts[0].y = c.cy;
+          zigPts[1].y = c.cy;
+          zigPts[zigPts.length - 2].y = c.cy;
+          zigPts[zigPts.length - 1].y = c.cy;
+        }
+        const orderedZigPts = flow >= 0 ? zigPts : [...zigPts].reverse();
+        let totalZigLen = 0;
+        for (let k = 0; k < orderedZigPts.length - 1; k++) {
+          totalZigLen += Math.hypot(
+            orderedZigPts[k + 1].x - orderedZigPts[k].x,
+            orderedZigPts[k + 1].y - orderedZigPts[k].y
+          );
+        }
+        const active = circuitSwitchClosed;
+        const speed = Math.min(2.2, Math.max(0.4, Math.abs(flow)));
+        simulatedWires.push({
+          x1: orderedZigPts[0].x,
+          y1: orderedZigPts[0].y,
+          x2: orderedZigPts[orderedZigPts.length - 1].x,
+          y2: orderedZigPts[orderedZigPts.length - 1].y,
+          length: Math.max(12, totalZigLen),
+          inClosedLoop: true,
+          active,
+          currentSpeed: active ? speed : 0,
+          highEnergy: true,
+          pathPoints: orderedZigPts,
+        });
       } else if (c.kind === 'fan' && compInLoop.has(c.key)) {
         const rOuter = Math.max(20, Math.min(c.w * 0.36, c.h * 0.45));
-        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
+        const flow = compSignedFlowMap.get(c.key) ?? defaultLoopSpeed;
         addComponentLeadSegment(c.minX, c.cy, c.cx - rOuter, c.cy, flow);
         addComponentLeadSegment(c.cx + rOuter, c.cy, c.maxX, c.cy, flow);
       } else if (c.kind === 'voltage-source') {
         const plateGap = Math.max(10, Math.min(26, c.w * 0.11));
         // Conventional current leaves (+) on the left (cx - plateGap/2 -> minX) and enters (-) on the right (maxX -> cx + plateGap/2)
-        addComponentLeadSegment(c.cx - plateGap / 2, c.cy, c.minX, c.cy, 0.85);
-        addComponentLeadSegment(c.maxX, c.cy, c.cx + plateGap / 2, c.cy, 0.85);
+        addComponentLeadSegment(c.cx - plateGap / 2, c.cy, c.minX, c.cy, defaultLoopSpeed);
+        addComponentLeadSegment(c.maxX, c.cy, c.cx + plateGap / 2, c.cy, defaultLoopSpeed);
       } else if (c.kind === 'battery') {
         const batCapLeftX = c.minX + c.w * 0.16;
         const batBodyRightX = c.maxX - c.w * 0.16;
-        addComponentLeadSegment(batCapLeftX, c.cy, c.minX, c.cy, 0.85);
-        addComponentLeadSegment(c.maxX, c.cy, batBodyRightX, c.cy, 0.85);
+        addComponentLeadSegment(batCapLeftX, c.cy, c.minX, c.cy, defaultLoopSpeed);
+        addComponentLeadSegment(c.maxX, c.cy, batBodyRightX, c.cy, defaultLoopSpeed);
       } else if (c.kind === 'switch' && compInLoop.has(c.key)) {
         const wireY = c.minY + c.h * 0.68;
-        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
+        const flow = compSignedFlowMap.get(c.key) ?? defaultLoopSpeed;
         addComponentLeadSegment(c.minX, wireY, c.minX + c.w * 0.26, wireY, flow);
         addComponentLeadSegment(c.minX + c.w * 0.74, wireY, c.maxX, wireY, flow);
       } else if (c.kind === 'bulb' && compInLoop.has(c.key)) {
-        const flow = compSignedFlowMap.get(c.key) ?? 0.85;
+        const flow = compSignedFlowMap.get(c.key) ?? defaultLoopSpeed;
         const domeRx = Math.max(14, Math.min(c.w * 0.27, c.h * 0.34));
         const domeRy = Math.max(14, c.h * 0.33);
         const domeCy = c.minY + domeRy + c.h * 0.02;
@@ -7634,7 +7952,7 @@ export function analyzeCircuitForSimulation(
 
         // Internal path through the 2 terminals & filament (up left lead -> across filament -> down right lead)
         const rawBulbPath = [
-          { x: sideTermX + 2, y: c.leftTerm.y },
+          { x: sideTermX, y: c.leftTerm.y },
           { x: filLeftX, y: filY },
           { x: filRightX, y: filY },
           { x: botTargetX, y: c.rightTerm.y },
@@ -7665,7 +7983,8 @@ export function analyzeCircuitForSimulation(
     }
 
     // Merge contiguous collinear horizontal segments that touch/overlap along the same row and flow in the same direction
-    // so electrons march at a 100% uniform 32px spacing across wires, fan leads, resistors, and source leads!
+    // so electrons march at a 100% uniform 32px spacing across wires, fan leads, and source leads!
+    const activeResistors = comps.filter((c) => c.kind === 'resistor' && compInLoop.has(c.key));
     let mergedAny = true;
     while (mergedAny) {
       mergedAny = false;
@@ -7693,6 +8012,20 @@ export function analyzeCircuitForSimulation(
 
           const minBx = Math.min(b.x1, b.x2);
           const maxBx = Math.max(b.x1, b.x2);
+          const crossesBulb = activeBulbs.some(
+            (bulb) =>
+              Math.min(minAx, minBx) < bulb.cx - 4 &&
+              Math.max(maxAx, maxBx) > bulb.cx + 4 &&
+              (Math.abs(yA - bulb.leftTerm.y) <= 26 || Math.abs(yA - bulb.rightTerm.y) <= 26)
+          );
+          if (crossesBulb) continue;
+          const crossesResistor = activeResistors.some(
+            (res) =>
+              Math.min(minAx, minBx) < res.cx - 4 &&
+              Math.max(maxAx, maxBx) > res.cx + 4 &&
+              Math.abs(yA - res.cy) <= 24
+          );
+          if (crossesResistor) continue;
           const gap = Math.max(minAx, minBx) - Math.min(maxAx, maxBx);
           if (gap <= 14) {
             const newMinX = Math.min(minAx, minBx);
@@ -7717,103 +8050,6 @@ export function analyzeCircuitForSimulation(
           }
         }
         if (mergedAny) break;
-      }
-    }
-
-    // Splice exact zig-zag polyline vertices of active Resistors into the merged horizontal wire segments
-    // so electrons climb up and down every peak and valley of the resistor zig-zag seamlessly!
-    const activeResistors = comps.filter((c) => c.kind === 'resistor' && compInLoop.has(c.key));
-    if (activeResistors.length > 0) {
-      for (let i = 0; i < simulatedWires.length; i++) {
-        const sw = simulatedWires[i];
-        if (!sw.inClosedLoop) continue;
-        const dx = sw.x2 - sw.x1;
-        const dy = sw.y2 - sw.y1;
-        if (Math.abs(dy) > Math.abs(dx) * 0.25 || Math.abs(dx) < 8) continue;
-        const dir = dx >= 0 ? 1 : -1;
-        const yRow = (sw.y1 + sw.y2) / 2;
-        const segMinX = Math.min(sw.x1, sw.x2);
-        const segMaxX = Math.max(sw.x1, sw.x2);
-
-        const rowResistors = activeResistors
-          .filter(
-            (r) =>
-              Math.abs(r.cy - yRow) <= 14 &&
-              r.maxX > segMinX + 4 &&
-              r.minX < segMaxX - 4
-          )
-          .sort((a, b) => (dir > 0 ? a.cx - b.cx : b.cx - a.cx));
-
-        if (rowResistors.length === 0) continue;
-
-        const pathPts: { x: number; y: number }[] = [{ x: sw.x1, y: yRow }];
-        for (const r of rowResistors) {
-          const resStroke = strokes.find(
-            (s) => r.strokeIds.includes(s.id) && s.shapeType === 'resistor'
-          );
-          let zigPts: { x: number; y: number }[];
-          if (resStroke && resStroke.points.length >= 4) {
-            zigPts = computeResistorOrSpringPoints('resistor', resStroke.points).map((p) => ({
-              x: p.x,
-              y: p.y,
-            }));
-          } else {
-            const uStart = 0.12;
-            const uEnd = 0.88;
-            const numPeaks = 10;
-            zigPts = [
-              { x: r.minX, y: yRow },
-              { x: r.minX + uStart * r.w, y: yRow },
-            ];
-            for (let k = 0; k < numPeaks; k++) {
-              const u = uStart + ((k + 0.5) / numPeaks) * (uEnd - uStart);
-              const vy = k % 2 === 0 ? r.minY + 0.04 * r.h : r.minY + 0.96 * r.h;
-              zigPts.push({ x: r.minX + u * r.w, y: vy });
-            }
-            zigPts.push({ x: r.minX + uEnd * r.w, y: yRow });
-            zigPts.push({ x: r.maxX, y: yRow });
-          }
-
-          if (zigPts.length >= 4) {
-            if (zigPts[0].x > zigPts[zigPts.length - 1].x) {
-              zigPts.reverse();
-            }
-            zigPts[0].y = yRow;
-            zigPts[1].y = yRow;
-            zigPts[zigPts.length - 2].y = yRow;
-            zigPts[zigPts.length - 1].y = yRow;
-
-            const oriented = dir > 0 ? zigPts : zigPts.slice().reverse();
-            for (const pt of oriented) {
-              const prev = pathPts[pathPts.length - 1];
-              if (Math.hypot(pt.x - prev.x, pt.y - prev.y) >= 1.5) {
-                pathPts.push(pt);
-              }
-            }
-          }
-        }
-
-        const endPt = { x: sw.x2, y: yRow };
-        const lastPt = pathPts[pathPts.length - 1];
-        if (Math.hypot(endPt.x - lastPt.x, endPt.y - lastPt.y) >= 1.5) {
-          pathPts.push(endPt);
-        }
-
-        let effectiveLen = 0;
-        for (let k = 0; k < pathPts.length - 1; k++) {
-          const sdx = pathPts[k + 1].x - pathPts[k].x;
-          const sdy = pathPts[k + 1].y - pathPts[k].y;
-          const isDiagonalTooth = Math.abs(sdx) > 0.5 && Math.abs(sdy) > 2;
-          effectiveLen += isDiagonalTooth
-            ? Math.hypot(sdx, sdy * 0.35)
-            : Math.hypot(sdx, sdy);
-        }
-
-        simulatedWires[i] = {
-          ...sw,
-          length: Math.max(8, effectiveLen),
-          pathPoints: pathPts,
-        };
       }
     }
   }

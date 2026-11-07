@@ -41,6 +41,7 @@ import {
 interface LandingPageProps {
   currentUser: User | null;
   onEnterApp: () => void;
+  onEnterLiveTvMode?: () => void;
   onOpenAuthModal: (initialMode: 'signin' | 'signup') => void;
   showAuthModal: boolean;
   setShowAuthModal: (v: boolean) => void;
@@ -1356,6 +1357,7 @@ export const AuthModal: React.FC<{
 export const LandingPage: React.FC<LandingPageProps> = ({
   currentUser,
   onEnterApp,
+  onEnterLiveTvMode,
   onOpenAuthModal,
   showAuthModal,
   setShowAuthModal,
@@ -1632,6 +1634,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Εγγραφή
                 </button>
               </div>
+            )}
+
+            {onEnterLiveTvMode && (
+              <button
+                type="button"
+                onClick={onEnterLiveTvMode}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer"
+                title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (Χωρίς Login & Χωρίς Μπάρες Chrome)"
+              >
+                <span>📺 Live 16:9</span>
+              </button>
             )}
 
             <button

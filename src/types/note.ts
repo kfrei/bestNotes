@@ -394,6 +394,7 @@ export interface NotePage {
   customHeight?: number; // Exact page height for standalone imported PDFs/images (no letterbox border)
   rotation?: number; // 0, 90, 180, 270
   backgroundDataUrl?: string; // Full-page PDF page or imported JPG/PNG background to write on top of
+  pdfPageNumber?: number; // 1-based PDF page number rendered on-demand from native PDF binary in IndexedDB
   layers: LayerItem[];
   strokes: StrokeObject[];
   shapes?: StrokeObject[];
@@ -408,6 +409,14 @@ export interface NotePage {
   activeForceSimId?: string;
   atomSims?: AtomSimConfig[];
   activeAtomSimId?: string;
+  ruler?: {
+    visible: boolean;
+    x: number;
+    y: number;
+    angle: number;
+    showMm?: boolean;
+    lengthPx?: number;
+  };
 }
 
 export interface CustomFolderMeta {
@@ -416,17 +425,23 @@ export interface CustomFolderMeta {
   color?: string;
   icon?: string;
   favorite?: boolean;
+  deleted?: boolean;
 }
 
 export interface Notebook {
   id: string;
   title: string;
   folder: string;
+  folderStyles?: Record<
+    string,
+    { color?: string; icon?: string; favorite?: boolean; updatedAt?: string }
+  >;
   tags?: string[];
   favorite?: boolean;
   coverColor: string;
   updatedAt: string;
-  sourceFormat?: '.goodnotes' | '.bestnotes' | '.bestNotes';
+  sourceFormat?: '.goodnotes' | '.bestnotes' | '.bestNotes' | '.pdf' | '.image';
+  nativeFileSizeBytes?: number; // Exact original file size in bytes (e.g. 13.1 MB PDF stays 13.1 MB)
   pages: NotePage[];
 }
 

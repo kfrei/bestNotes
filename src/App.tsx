@@ -95,6 +95,7 @@ import {
   type User,
 } from './firebase';
 import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/LandingPage';
+import { LiveTvSenderEngine, LiveTvReceiverEngine } from './utils/liveTvSync';
 import {
   syncNotebookPdfToGoogleDrive,
   exportNotebookToPdfBlob,
@@ -155,7 +156,12 @@ import {
   WEIGHT_NOTEBOOK_ID,
   WATER_PHASES_NOTEBOOK_ID,
 } from './utils/weightAndWaterPhasesSeed';
-import { renderPdfFileToPages, renderImageFileToPage } from './utils/pdfAndImageImporter';
+import {
+  renderPdfFileToPages,
+  renderImageFileToPage,
+  getCachedPdfPageDataUrl,
+  ensurePdfPageDataUrl,
+} from './utils/pdfAndImageImporter';
 import {
   distance,
   smoothStrokeToBezier,
@@ -523,28 +529,74 @@ function getNotebookContentScore(nb: Notebook): number {
   );
 }
 
+const cleanedNotebookStorageCache = new WeakMap<Notebook, Notebook>();
+
 function cleanNotebookForStorage(nb: Notebook): Notebook {
+  const cached = cleanedNotebookStorageCache.get(nb);
+  if (cached) return cached;
   // Strip duplicate base64 originalDataUrl when image is already cropped to a data: URL
   // (keeps external https:// or /mind_maps/ originalDataUrl since it is only ~75 bytes)
-  return {
+  const cleaned: Notebook = {
     ...nb,
-    pages: (nb.pages || []).map((p) => ({
-      ...p,
-      images: (p.images || []).map((im) => ({
-        ...im,
-        originalDataUrl:
+    pages: (nb.pages || []).map((p) => {
+      const imgs = p.images || [];
+      let anyImgChanged = false;
+      for (let i = 0; i < imgs.length; i++) {
+        const im = imgs[i];
+        if (
           im.originalDataUrl &&
           im.originalDataUrl.startsWith('data:') &&
           im.originalDataUrl !== im.dataUrl
-            ? undefined
-            : im.originalDataUrl,
-      })),
-    })),
+        ) {
+          anyImgChanged = true;
+          break;
+        }
+      }
+      if (!anyImgChanged) return p;
+      return {
+        ...p,
+        images: imgs.map((im) => ({
+          ...im,
+          originalDataUrl:
+            im.originalDataUrl &&
+            im.originalDataUrl.startsWith('data:') &&
+            im.originalDataUrl !== im.dataUrl
+              ? undefined
+              : im.originalDataUrl,
+        })),
+      };
+    }),
   };
+  cleanedNotebookStorageCache.set(nb, cleaned);
+  return cleaned;
 }
 
+const serializedFirestoreCache = new WeakMap<Notebook, string>();
+
 function serializeNotebookForFirestore(nb: Notebook): string {
-  return JSON.stringify(cleanNotebookForStorage(nb));
+  const cached = serializedFirestoreCache.get(nb);
+  if (cached !== undefined) return cached;
+  const cleaned = cleanNotebookForStorage(nb);
+  const pages = cleaned.pages || [];
+  let totalBgChars = 0;
+  for (let i = 0; i < pages.length; i++) {
+    totalBgChars += pages[i].backgroundDataUrl?.length || 0;
+  }
+  // For massive multi-page PDF books (> 25 pages & > 10 MB of base64 page backgrounds),
+  // keep page 0's cover background + 100% of strokes/texts/images/layers in Firestore while
+  // keeping the heavy PDF page bitmaps in fast local IndexedDB so JSON.stringify & Firestore sync never freeze!
+  const forFirestore: Notebook =
+    pages.length > 25 && totalBgChars > 10_000_000
+      ? {
+          ...cleaned,
+          pages: pages.map((p, idx) =>
+            idx === 0 || !p.backgroundDataUrl ? p : { ...p, backgroundDataUrl: undefined }
+          ),
+        }
+      : cleaned;
+  const json = JSON.stringify(forFirestore);
+  serializedFirestoreCache.set(nb, json);
+  return json;
 }
 
 // IndexedDB High-Capacity Local Storage (supports 50MB+ notebooks where localStorage 5MB quota fails on Refresh)
@@ -604,12 +656,87 @@ async function loadNotebooksFromIndexedDB(uid: string): Promise<Notebook[] | nul
   }
 }
 
+async function saveCustomFoldersToIndexedDB(uid: string, folders: CustomFolderMeta[]): Promise<void> {
+  try {
+    const idb = await openBestNotesIdb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(folders, `${uid}__custom_folders`);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function loadCustomFoldersFromIndexedDB(uid: string): Promise<CustomFolderMeta[] | null> {
+  try {
+    const idb = await openBestNotesIdb();
+    return await new Promise<CustomFolderMeta[] | null>((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(`${uid}__custom_folders`);
+      req.onsuccess = () => {
+        if (Array.isArray(req.result)) {
+          resolve(req.result as CustomFolderMeta[]);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function saveCustomFoldersToLocalAndIdb(uid: string, folders: CustomFolderMeta[], tsIso?: string): void {
+  void saveCustomFoldersToIndexedDB(uid, folders);
+  const foldersStr = JSON.stringify(folders);
+  const writeToLocal = () => {
+    localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, foldersStr);
+    if (tsIso) {
+      localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, tsIso);
+    }
+  };
+  try {
+    writeToLocal();
+  } catch {
+    // Free up localStorage space by removing the heavy notebooks mirror (which is safely stored in IndexedDB!)
+    try {
+      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
+      writeToLocal();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
   void saveNotebooksToIndexedDB(uid, nbs);
   try {
-    localStorage.setItem(`${STORAGE_KEY}_${uid}`, JSON.stringify(nbs.map(cleanNotebookForStorage)));
+    // Fast pre-check: never run synchronous JSON.stringify on 30-50MB PDF books for localStorage
+    // (IndexedDB already stores all notebooks natively without JSON.stringify!)
+    let estimatedChars = 0;
+    for (let i = 0; i < nbs.length; i++) {
+      const pages = nbs[i].pages || [];
+      for (let j = 0; j < pages.length; j++) {
+        estimatedChars += (pages[j].backgroundDataUrl?.length || 0) + 256;
+        if (estimatedChars > 1_500_000) break;
+      }
+      if (estimatedChars > 1_500_000) break;
+    }
+    if (estimatedChars > 1_500_000) {
+      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
+      return;
+    }
+    const serialized = JSON.stringify(nbs.map(cleanNotebookForStorage));
+    if (serialized.length <= 1500000) {
+      localStorage.setItem(`${STORAGE_KEY}_${uid}`, serialized);
+    } else {
+      localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
+    }
   } catch {
-    // If localStorage 5MB quota is exceeded, remove the stale localStorage snapshot so it can NEVER overwrite IndexedDB on reload!
     try {
       localStorage.removeItem(`${STORAGE_KEY}_${uid}`);
     } catch {
@@ -673,26 +800,29 @@ async function saveNotebookToFirestoreChunked(
     chunks.push(dataJson.slice(i, i + FIRESTORE_CHUNK_SIZE));
   }
 
-  // 1. Write all chunk documents (0..N-1) first with matching updatedAt version
-  const chunkPromises: Promise<void>[] = [];
-  for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
-    const chunkDocId = `${nb.id}__chunk_${cIdx}`;
-    chunkPromises.push(
-      setDoc(
-        doc(db, 'users', uid, 'notebooks', chunkDocId),
-        {
-          id: chunkDocId,
-          title: '__CHUNK__',
-          updatedAt,
-          dataJson: chunks[cIdx],
-          deleted: false,
-          deviceId,
-        },
-        { merge: true }
-      )
-    );
+  // 1. Write chunk documents (0..N-1) in small batches of 6 so Firestore's WebChannel never floods
+  for (let batchStart = 0; batchStart < chunks.length; batchStart += 6) {
+    const batchPromises: Promise<void>[] = [];
+    const batchEnd = Math.min(chunks.length, batchStart + 6);
+    for (let cIdx = batchStart; cIdx < batchEnd; cIdx++) {
+      const chunkDocId = `${nb.id}__chunk_${cIdx}`;
+      batchPromises.push(
+        setDoc(
+          doc(db, 'users', uid, 'notebooks', chunkDocId),
+          {
+            id: chunkDocId,
+            title: '__CHUNK__',
+            updatedAt,
+            dataJson: chunks[cIdx],
+            deleted: false,
+            deviceId,
+          },
+          { merge: true }
+        )
+      );
+    }
+    await Promise.all(batchPromises);
   }
-  await Promise.all(chunkPromises);
 
   // 2. Write primary document with tiny (<150 byte) chunk manifest
   const manifestJson = JSON.stringify({
@@ -758,7 +888,60 @@ const FALLBACK_EMPTY_NOTEBOOK: Notebook = {
 // New users and guests start completely empty: 0 notebooks and 0 folders
 const createDefaultBlankNotebooks = (): Notebook[] => [];
 
-const createDefaultFolders = (): CustomFolderMeta[] => [];
+const RESTORED_USER_FOLDERS_PRESET: CustomFolderMeta[] = [
+  {
+    name: 'Γενικά',
+    color: '#6366f1',
+    icon: 'flask',
+    favorite: false,
+    updatedAt: '2026-11-06T22:55:00.000Z',
+  },
+  {
+    name: 'Γυμνάσιο Αρναίας',
+    color: '#475569',
+    icon: 'book',
+    favorite: true,
+    updatedAt: '2026-11-06T22:55:00.000Z',
+  },
+  {
+    name: 'Γυμνάσιο Αρναίας/Α1',
+    color: '#f59e0b',
+    icon: 'leaf',
+    favorite: false,
+    updatedAt: '2026-11-06T22:55:00.000Z',
+  },
+  {
+    name: 'Γυμνάσιο Αρναίας/Β1',
+    color: '#0066ff',
+    icon: 'rocket',
+    favorite: false,
+    updatedAt: '2026-11-06T22:55:00.000Z',
+  },
+  {
+    name: 'Γυμνάσιο Αρναίας/Β2',
+    color: '#0066ff',
+    icon: 'rocket',
+    favorite: false,
+    updatedAt: '2026-11-06T22:55:00.000Z',
+  },
+  {
+    name: 'Γυμνάσιο Αρναίας/Γ1',
+    color: '#10b981',
+    icon: 'zap',
+    favorite: false,
+    updatedAt: '2026-11-06T22:55:00.000Z',
+  },
+  {
+    name: 'Γυμνάσιο Αρναίας/Γ2',
+    color: '#10b981',
+    icon: 'zap',
+    favorite: false,
+    updatedAt: '2026-11-06T22:55:00.000Z',
+  },
+];
+
+const createDefaultFolders = (): CustomFolderMeta[] =>
+  RESTORED_USER_FOLDERS_PRESET.map((f) => ({ ...f }));
 
 const FOLDER_PRESET_COLORS: { hex: string; label: string }[] = [
   { hex: '#f59e0b', label: 'Κεχριμπάρι' },
@@ -855,14 +1038,61 @@ function renderFolderCustomIcon(
 function ensureGymnasioArnaiasSubfolders(
   folders: CustomFolderMeta[]
 ): CustomFolderMeta[] {
-  // Strictly preserve user folders as-is across refreshes (only deduplicate empty/duplicate names)
-  const seen = new Set<string>();
-  return folders.filter((f) => {
-    const k = (f.name || '').trim();
-    if (!k || seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  const byKey = new Map<string, CustomFolderMeta>();
+  const classNames = ['Α1', 'Β1', 'Β2', 'Γ1', 'Γ2'];
+
+  for (const f of folders) {
+    let k = (f.name || '')
+      .split('/')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join('/');
+    if (!k) continue;
+    if (classNames.includes(k)) {
+      k = `Γυμνάσιο Αρναίας/${k}`;
+    }
+    const existing = byKey.get(k);
+    if (!existing) {
+      byKey.set(k, { ...f, name: k });
+    } else {
+      byKey.set(k, mergeSingleFolderEntry(k, { ...f, name: k }, existing, true));
+    }
+  }
+
+  // Ensure the core user folders (Γενικά, Γυμνάσιο Αρναίας, Α1, Β1, Β2, Γ1, Γ2) and their styling are never lost
+  // even if an older unrefreshed device overwrote customFoldersJson with [] or unstyled entries!
+  for (const preset of RESTORED_USER_FOLDERS_PRESET) {
+    const cur = byKey.get(preset.name);
+    if (!cur) {
+      byKey.set(preset.name, { ...preset });
+    } else if (!cur.deleted) {
+      const wasUnstyledReset =
+        (!cur.color || cur.color.toLowerCase() === '#f59e0b') &&
+        (!cur.icon || cur.icon === 'folder');
+      const nextColor =
+        cur.color && cur.color.toLowerCase() !== '#f59e0b' ? cur.color : preset.color;
+      const nextIcon = cur.icon && cur.icon !== 'folder' ? cur.icon : preset.icon;
+      const nextFav = wasUnstyledReset
+        ? preset.favorite
+        : cur.favorite !== undefined
+        ? cur.favorite
+        : preset.favorite;
+      const nextTs =
+        cur.updatedAt && cur.updatedAt > (preset.updatedAt || '')
+          ? cur.updatedAt
+          : preset.updatedAt;
+      byKey.set(preset.name, {
+        ...cur,
+        name: preset.name,
+        color: nextColor,
+        icon: nextIcon,
+        favorite: nextFav,
+        updatedAt: nextTs,
+      });
+    }
+  }
+
+  return Array.from(byKey.values());
 }
 
 function normalizeFolderKeyForMerge(raw: string): string {
@@ -873,40 +1103,100 @@ function normalizeFolderKeyForMerge(raw: string): string {
     .join('/');
 }
 
+function mergeSingleFolderEntry(
+  k: string,
+  p: CustomFolderMeta,
+  s: CustomFolderMeta,
+  preferPrimaryOnTie: boolean,
+  allowSecondaryWhenNewer = true
+): CustomFolderMeta {
+  const pTime = p.updatedAt || '';
+  const sTime = s.updatedAt || '';
+  const sIsNewer =
+    allowSecondaryWhenNewer && (sTime > pTime || (sTime === pTime && !preferPrimaryOnTie));
+  const newer = sIsNewer ? s : p;
+  const older = sIsNewer ? p : s;
+
+  const isCustomColor = (c?: string) => Boolean(c && c.toLowerCase() !== '#f59e0b');
+  const isCustomIcon = (ic?: string) => Boolean(ic && ic !== 'folder');
+
+  // Preserve custom color/icon if the newer entry only has undefined/default (e.g. from implicit folder creation or path move)
+  const resolvedColor = isCustomColor(newer.color)
+    ? newer.color
+    : isCustomColor(older.color)
+    ? older.color
+    : newer.color ?? older.color;
+
+  const resolvedIcon = isCustomIcon(newer.icon)
+    ? newer.icon
+    : isCustomIcon(older.icon)
+    ? older.icon
+    : newer.icon ?? older.icon;
+
+  const resolvedFavorite =
+    newer.favorite !== undefined ? newer.favorite : older.favorite;
+
+  return {
+    name: k,
+    updatedAt: sIsNewer ? sTime : pTime || sTime,
+    color: resolvedColor,
+    icon: resolvedIcon,
+    favorite: resolvedFavorite,
+    deleted: Boolean(newer.deleted),
+  };
+}
+
 function mergeCustomFoldersNewest(
   primaryList: CustomFolderMeta[],
   secondaryList: CustomFolderMeta[],
-  allowSecondaryStylingOverrideWhenNewer: boolean
+  allowSecondaryStylingOverrideWhenNewer = true
 ): CustomFolderMeta[] {
+  const primaryMap = new Map<string, CustomFolderMeta>();
+  for (const item of primaryList) {
+    const k = normalizeFolderKeyForMerge(item.name);
+    if (!k) continue;
+    const prev = primaryMap.get(k);
+    primaryMap.set(
+      k,
+      prev ? mergeSingleFolderEntry(k, { ...item, name: k }, prev, true, true) : { ...item, name: k }
+    );
+  }
+
   const secondaryMap = new Map<string, CustomFolderMeta>();
   for (const item of secondaryList) {
     const k = normalizeFolderKeyForMerge(item.name);
-    if (k && !secondaryMap.has(k)) {
-      secondaryMap.set(k, { ...item, name: k });
-    }
+    if (!k) continue;
+    const prev = secondaryMap.get(k);
+    secondaryMap.set(
+      k,
+      prev ? mergeSingleFolderEntry(k, { ...item, name: k }, prev, true, true) : { ...item, name: k }
+    );
   }
+
   const seen = new Set<string>();
   const result: CustomFolderMeta[] = [];
-  for (const p of primaryList) {
-    const k = normalizeFolderKeyForMerge(p.name);
-    if (!k || seen.has(k)) continue;
+
+  // 1. Process all folders in primaryList (merged with secondaryList where present)
+  for (const [k, p] of primaryMap.entries()) {
     seen.add(k);
     const s = secondaryMap.get(k);
     if (!s) {
-      result.push({ ...p, name: k });
-      continue;
+      result.push(p);
+    } else {
+      result.push(
+        mergeSingleFolderEntry(k, p, s, true, allowSecondaryStylingOverrideWhenNewer)
+      );
     }
-    const pTime = p.updatedAt || '';
-    const sTime = s.updatedAt || '';
-    const sIsNewer = Boolean(allowSecondaryStylingOverrideWhenNewer && sTime && sTime > pTime);
-    result.push({
-      name: k,
-      updatedAt: sTime > pTime ? sTime : pTime || sTime,
-      color: sIsNewer ? s.color ?? p.color : p.color ?? s.color,
-      icon: sIsNewer ? s.icon ?? p.icon : p.icon ?? s.icon,
-      favorite: sIsNewer ? s.favorite ?? p.favorite : p.favorite ?? s.favorite,
-    });
   }
+
+  // 2. CRITICAL: Also include all folders from secondaryList that were missing in primaryList!
+  // Never drop styled folders that exist on one device just because the other device's customFolders array only had a subset!
+  for (const [k, s] of secondaryMap.entries()) {
+    if (seen.has(k)) continue;
+    seen.add(k);
+    result.push(s);
+  }
+
   return result;
 }
 const PRESET_COLORS = [
@@ -1082,10 +1372,31 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
     return pageModified ? { ...p, id: pid, strokes: nextStrokes } : p;
   });
 
+  const isMultiPagePdfDoc =
+    nb.pages.length > 10 && nb.pages.some((p) => Boolean(p.backgroundDataUrl || p.pdfPageNumber));
+  const nextSourceFormat =
+    nb.sourceFormat === '.pdf' || nb.sourceFormat === '.image'
+      ? nb.sourceFormat
+      : isMultiPagePdfDoc
+      ? '.pdf'
+      : nb.sourceFormat;
+  const nextNativeBytes =
+    typeof nb.nativeFileSizeBytes === 'number' && nb.nativeFileSizeBytes > 0
+      ? nb.nativeFileSizeBytes
+      : isMultiPagePdfDoc
+      ? Math.round(nb.pages.length * 77100)
+      : nb.nativeFileSizeBytes;
+
+  if (nextSourceFormat !== nb.sourceFormat || nextNativeBytes !== nb.nativeFileSizeBytes) {
+    repaired = true;
+  }
+
   if (!repaired) return { nb, repaired: false };
   return {
     nb: {
       ...nb,
+      sourceFormat: nextSourceFormat,
+      nativeFileSizeBytes: nextNativeBytes,
       updatedAt: nb.updatedAt || '2026-11-04T18:00:00.000Z',
       pages: nextPages,
     },
@@ -1197,6 +1508,14 @@ export default function App() {
   })();
 
   const [viewMode, setViewMode] = useState<'landing' | 'editor' | 'library'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tv') || params.get('projector') === '1' || params.get('hdmi') === '1') {
+        return 'editor';
+      }
+    } catch {
+      // ignore
+    }
     if (initialSession?.viewMode === 'editor' || initialSession?.viewMode === 'library') {
       return initialSession.viewMode;
     }
@@ -1215,6 +1534,7 @@ export default function App() {
   const userEditedInSessionRef = useRef<Set<string>>(new Set());
   const userEditedFoldersInSessionRef = useRef<boolean>(false);
   const hasLoadedUserDocRef = useRef<boolean>(false);
+  const hasReceivedCloudFoldersRef = useRef<boolean>(false);
   const [cloudInitialLoaded, setCloudInitialLoaded] = useState<boolean>(false);
 
   const [openNotebookIds, setOpenNotebookIds] = useState<string[]>(() => {
@@ -1238,7 +1558,7 @@ export default function App() {
       : 1;
   const initialPanY = (() => {
     if (typeof initialSession?.panY === 'number' && Number.isFinite(initialSession.panY)) {
-      return initialSession.panY;
+      return Math.min(0, initialSession.panY);
     }
     const targetPageIdx =
       typeof initialSession?.activePageIndex === 'number' ? Math.max(0, initialSession.activePageIndex) : 0;
@@ -1259,10 +1579,21 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      if (isTvReceiverModeRef.current) return;
       try {
         if (user) {
-          localStorage.setItem(AUTH_FLAG_STORAGE_KEY, 'true');
-          localStorage.setItem(AUTH_UID_STORAGE_KEY, user.uid);
+          try {
+            localStorage.setItem(AUTH_FLAG_STORAGE_KEY, 'true');
+            localStorage.setItem(AUTH_UID_STORAGE_KEY, user.uid);
+          } catch {
+            try {
+              localStorage.removeItem(`${STORAGE_KEY}_${user.uid}`);
+              localStorage.setItem(AUTH_FLAG_STORAGE_KEY, 'true');
+              localStorage.setItem(AUTH_UID_STORAGE_KEY, user.uid);
+            } catch {
+              // ignore
+            }
+          }
 
           // Load this user's saved notebooks (or start completely empty if newly registered!)
           const savedNbs = localStorage.getItem(`${STORAGE_KEY}_${user.uid}`);
@@ -1283,7 +1614,7 @@ export default function App() {
           setNotebooks(finalNbs);
 
           // Preserve exact viewMode, activeLibraryFolder, openNotebookIds, activeNotebookId & page across Refresh
-          let restoredActiveId = finalNbs[0]?.id || '';
+          let restoredActiveId = '';
           let restoredOpenIds: string[] = [];
           let restoredPageIdx = 0;
           let restoredViewMode: 'library' | 'editor' | null = null;
@@ -1331,6 +1662,12 @@ export default function App() {
             }
           } catch {
             // ignore
+          }
+          if (!restoredActiveId && restoredOpenIds.length > 0) {
+            restoredActiveId = restoredOpenIds[0];
+          }
+          if (restoredOpenIds.length === 0 && !restoredActiveId && restoredViewMode === 'editor') {
+            restoredViewMode = 'library';
           }
           setOpenNotebookIds(restoredOpenIds);
           setActiveNotebookId(restoredActiveId);
@@ -1385,9 +1722,22 @@ export default function App() {
               hasLoadedIndexedDbRef.current = true;
             });
 
-          // Load this user's saved folders (or start with 0 folders if newly registered!)
+          void loadNotebooksFromIndexedDB(`${user.uid}__recycle_bin`).then((idbBin) => {
+            if (!idbBin || idbBin.length === 0) return;
+            localDeletedNotebooksRef.current = idbBin;
+            setDeletedCloudNotebooks((prev) => {
+              const map = new Map<string, Notebook>();
+              for (const d of prev) map.set(d.id, d);
+              for (const b of idbBin) {
+                if (!map.has(b.id)) map.set(b.id, b);
+              }
+              return Array.from(map.values());
+            });
+          });
+
+          // Load this user's saved folders from localStorage + IndexedDB (merging with any Cloud folders already loaded)
           const savedFolders = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${user.uid}`);
-          let loadedFolders: { name: string; updatedAt: string }[] | null = null;
+          let loadedFolders: CustomFolderMeta[] | null = null;
           if (savedFolders) {
             try {
               const parsedF = JSON.parse(savedFolders);
@@ -1398,7 +1748,28 @@ export default function App() {
               // ignore
             }
           }
-          setCustomFolders(loadedFolders || createDefaultFolders());
+          if (loadedFolders && loadedFolders.length > 0 && !hasReceivedCloudFoldersRef.current) {
+            const merged = ensureGymnasioArnaiasSubfolders(
+              mergeCustomFoldersNewest(customFoldersRef.current, loadedFolders, false)
+            );
+            customFoldersRef.current = merged;
+            setCustomFolders(merged);
+          } else if (customFoldersRef.current.length === 0) {
+            setCustomFolders(createDefaultFolders());
+          }
+          void loadCustomFoldersFromIndexedDB(user.uid).then((idbFolders) => {
+            if (!idbFolders || idbFolders.length === 0) return;
+            // CRITICAL: If Cloud Firestore has ALREADY delivered folders before IndexedDB finished reading,
+            // never allow local IndexedDB cache to overwrite the authoritative Cloud folders!
+            if (hasReceivedCloudFoldersRef.current) return;
+            const merged = ensureGymnasioArnaiasSubfolders(
+              mergeCustomFoldersNewest(customFoldersRef.current, idbFolders, false)
+            );
+            if (JSON.stringify(merged) !== JSON.stringify(customFoldersRef.current)) {
+              customFoldersRef.current = merged;
+              setCustomFolders(merged);
+            }
+          });
 
           // Load this user's saved shape library
           const savedLib = localStorage.getItem(`${SHAPE_LIBRARY_STORAGE_KEY}_${user.uid}`);
@@ -1415,6 +1786,7 @@ export default function App() {
         } else {
           hasLoadedIndexedDbRef.current = true;
           hasCompletedInitialCloudLoadRef.current = false;
+          hasReceivedCloudFoldersRef.current = false;
           allRemotePrimaryIdsRef.current.clear();
           setCloudInitialLoaded(false);
           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
@@ -1447,11 +1819,13 @@ export default function App() {
   const pinchStateRef = useRef<{
     active: boolean;
     initialDist: number;
+    lastDist: number;
     initialZoom: number;
     initialPanX: number;
     initialPanY: number;
     startMidX: number;
     startMidY: number;
+    lastMidX: number;
     lastMidY: number;
     lastMoveTime: number;
     velocityY: number;
@@ -1483,7 +1857,7 @@ export default function App() {
       pageControlsVisibleRef.current = false;
       setPageControlsVisible(false);
       pageControlsTimerRef.current = null;
-    }, 7000);
+    }, 3200);
   }, []);
   const outsidePanDragRef = useRef<{
     active: boolean;
@@ -2010,6 +2384,8 @@ export default function App() {
     xRight: number;
     yTop: number;
     yBot: number;
+    topRightYOffset?: number;
+    botRightYOffset?: number;
     initialYTop: number;
     initialYBot: number;
     minCompLeftX: number;
@@ -2022,6 +2398,7 @@ export default function App() {
       kind: 'h-top' | 'h-bot' | 'v-left' | 'v-right';
       fixedX1?: number;
       fixedX2?: number;
+      yOffset?: number;
       existingStrokeId?: string;
     }[];
     layerId: string;
@@ -2051,16 +2428,55 @@ export default function App() {
     origX: number;
     origY: number;
   } | null>(null);
-  const [isCleanProjectorMode] = useState<boolean>(() => {
+  const [isTvReceiverMode, setIsTvReceiverMode] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('projector') === '1' || params.get('hdmi') === '1') return true;
+      return Boolean(params.get('tv'));
+    } catch {
+      return false;
+    }
+  });
+  const isTvReceiverModeRef = useRef<boolean>(isTvReceiverMode);
+  isTvReceiverModeRef.current = isTvReceiverMode;
+
+  const [isCleanProjectorMode, setIsCleanProjectorMode] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('projector') === '1' || params.get('hdmi') === '1' || params.get('tv')) return true;
       if ((navigator as any).presentation?.receiver) return true;
     } catch {
       // ignore
     }
     return false;
   });
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(false);
+  const liveTvSenderRef = useRef<LiveTvSenderEngine | null>(null);
+  const liveTvReceiverRef = useRef<LiveTvReceiverEngine | null>(null);
+  const [isLiveTvBroadcasting, setIsLiveTvBroadcasting] = useState<boolean>(() => {
+    try {
+      return window.sessionStorage.getItem('bn-live-tv-broadcasting') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [showLiveTvMenu, setShowLiveTvMenu] = useState<boolean>(false);
+  const [liveTvStatus, setLiveTvStatus] = useState<{
+    connected: boolean;
+    mode: 'webrtc' | 'cloud' | 'waiting';
+    latencyMs: number | null;
+  }>({ connected: false, mode: 'waiting', latencyMs: null });
+  const [liveTvRxMode, setLiveTvRxMode] = useState<'webrtc' | 'cloud' | 'connecting'>('connecting');
+  const tvHasReceivedViewportRef = useRef<boolean>(false);
+  const tvLastVpPacketRef = useRef<{
+    z: number;
+    baseZ: number;
+    px: number;
+    py: number;
+    pW: number;
+  } | null>(null);
+  const tvTargetTransformRef = useRef<{ z: number; px: number; py: number } | null>(null);
+  const tvTransformRafRef = useRef<number | null>(null);
+  const lastWetInkBroadcastMsRef = useRef<number>(0);
   const [isLivePdfMode, setIsLivePdfMode] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -2319,12 +2735,29 @@ export default function App() {
     start: number;
     end: number;
   } | null>(null);
+  const [editingCaretRange, setEditingCaretRange] = useState<{
+    textId: string;
+    start: number;
+    end: number;
+  } | null>(null);
   const activeTextRangeRef = useRef<{
     textId: string;
     start: number;
     end: number;
   } | null>(null);
   const lastTextCreatedTimeRef = useRef<number>(0);
+  const pendingCaretSelectionRef = useRef<{
+    textId: string;
+    start: number;
+    end: number;
+  } | null>(null);
+  const lastProgrammaticSelectionTimeRef = useRef<number>(0);
+  const lastTextTapRef = useRef<{
+    textId: string;
+    time: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
   const textMeasureCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const draggingTextRef = useRef<{
     id: string;
@@ -2346,7 +2779,9 @@ export default function App() {
     resizeHandle?: 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
     moved: boolean;
     wasAlreadySelected: boolean;
+    wasAlreadyEditing?: boolean;
     startedOnTextarea?: boolean;
+    startedOnDragBar?: boolean;
   } | null>(null);
 
   // Image Cropping (Freehand & Magnetic Lasso)
@@ -2354,13 +2789,14 @@ export default function App() {
   const [cropPolygonPts, setCropPolygonPts] = useState<{ x: number; y: number }[]>([]);
   const edgeMapRef = useRef<{ id: string; map: Float32Array; w: number; h: number } | null>(null);
 
-  // Per-Page Ruler State (each page remembers its own ruler visibility, position, angle, and mm toggle)
+  // Per-Page Ruler State (each page remembers its own ruler visibility, position, angle, mm toggle, and custom length)
   type PageRulerState = {
     visible: boolean;
     x: number;
     y: number;
     angle: number;
     showMm?: boolean;
+    lengthPx?: number;
   };
   const DEFAULT_PAGE_RULER_STATE: PageRulerState = {
     visible: false,
@@ -2384,11 +2820,16 @@ export default function App() {
     return {};
   });
   const activeNotebookForRuler =
-    notebooks.find((n) => n.id === activeNotebookId) || notebooks[0] || FALLBACK_EMPTY_NOTEBOOK;
-  const currentActivePageIdForRuler =
-    activeNotebookForRuler.pages[activePageIndex]?.id || activeNotebookForRuler.pages[0]?.id || '';
+    notebooks.find((n) => n.id === activeNotebookId) ||
+    notebooks.find((n) => openNotebookIds.includes(n.id)) ||
+    FALLBACK_EMPTY_NOTEBOOK;
+  const activePageObjForRuler =
+    activeNotebookForRuler.pages[activePageIndex] || activeNotebookForRuler.pages[0];
+  const currentActivePageIdForRuler = activePageObjForRuler?.id || '';
   const rulerState: PageRulerState =
-    rulersByPageId[currentActivePageIdForRuler] || DEFAULT_PAGE_RULER_STATE;
+    rulersByPageId[currentActivePageIdForRuler] ||
+    activePageObjForRuler?.ruler ||
+    DEFAULT_PAGE_RULER_STATE;
   const setRulerState = useCallback(
     (
       updater: PageRulerState | ((prev: PageRulerState) => PageRulerState),
@@ -2396,9 +2837,12 @@ export default function App() {
     ) => {
       const pid = targetPageId || currentActivePageIdForRuler;
       if (!pid) return;
+      let computedNext: PageRulerState | null = null;
       setRulersByPageId((prevMap) => {
-        const cur = prevMap[pid] || DEFAULT_PAGE_RULER_STATE;
+        const pageFallback = activeNotebookForRuler.pages.find((pg) => pg.id === pid)?.ruler;
+        const cur = prevMap[pid] || pageFallback || DEFAULT_PAGE_RULER_STATE;
         const next = typeof updater === 'function' ? updater(cur) : updater;
+        computedNext = next;
         const nextMap = { ...prevMap, [pid]: next };
         try {
           localStorage.setItem('bestnotes_rulers_by_page_v1', JSON.stringify(nextMap));
@@ -2407,12 +2851,30 @@ export default function App() {
         }
         return nextMap;
       });
+      setNotebooks((prevNotebooks) =>
+        prevNotebooks.map((nb) => {
+          if (!nb.pages.some((pg) => pg.id === pid)) return nb;
+          return {
+            ...nb,
+            updatedAt: new Date().toISOString(),
+            pages: nb.pages.map((pg) => {
+              if (pg.id !== pid) return pg;
+              const cur = pg.ruler || DEFAULT_PAGE_RULER_STATE;
+              const nextRuler =
+                computedNext || (typeof updater === 'function' ? updater(cur) : updater);
+              return { ...pg, ruler: { ...nextRuler } };
+            }),
+          };
+        })
+      );
+      setIsDirty(true);
+      setSyncStatus('dirty');
     },
-    [currentActivePageIdForRuler]
+    [currentActivePageIdForRuler, activeNotebookForRuler.pages]
   );
   const rulerDragRef = useRef<{
     pageId: string;
-    mode: 'move' | 'rotate';
+    mode: 'move' | 'rotate' | 'resize';
     pointerId: number;
     startClientX: number;
     startClientY: number;
@@ -2422,6 +2884,9 @@ export default function App() {
     startPointerAngleDeg: number;
     centerClientX: number;
     centerClientY: number;
+    originX?: number;
+    originY?: number;
+    initialLength?: number;
   } | null>(null);
 
   // Undo / Redo Stacks
@@ -2465,6 +2930,24 @@ export default function App() {
   });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
   const [driveSyncingAll, setDriveSyncingAll] = useState<boolean>(false);
+  const [driveAutoSyncIntervalMin, setDriveAutoSyncIntervalMin] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem('bestnotes_drive_autosync_min_v1') || '120');
+      if ([30, 60, 120, 240].includes(saved)) return saved;
+    } catch {
+      // ignore
+    }
+    return 120; // Default: every 2 hours (120 minutes)
+  });
+  const [lastDriveAutoSyncAt, setLastDriveAutoSyncAt] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem('bestnotes_drive_last_autosync_at_v1') || '0');
+    } catch {
+      return 0;
+    }
+  });
+  const [showHdmiProjectorPopover, setShowHdmiProjectorPopover] = useState<boolean>(false);
+  const [isFullBleedWidth, setIsFullBleedWidth] = useState<boolean>(true);
 
   const saveDriveBasePath = useCallback(
     (nextPath: string) => {
@@ -2626,6 +3109,7 @@ export default function App() {
   const [draggingLibraryNbId, setDraggingLibraryNbId] = useState<string | null>(null);
   const [dragOverFolderName, setDragOverFolderName] = useState<string | null>(null);
   const [deletedCloudNotebooks, setDeletedCloudNotebooks] = useState<Notebook[]>([]);
+  const localDeletedNotebooksRef = useRef<Notebook[]>([]);
   const [showRecycleBinBar, setShowRecycleBinBar] = useState<boolean>(false);
   const [libraryTouchDrag, setLibraryTouchDrag] = useState<{
     nbId: string;
@@ -2652,6 +3136,7 @@ export default function App() {
 
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
+  const [thumbModalScrollTop, setThumbModalScrollTop] = useState<number>(0);
   const [showMathModal, setShowMathModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [thumbnailCols, setThumbnailCols] = useState<3 | 4>(3);
@@ -2678,6 +3163,17 @@ export default function App() {
   const [squeezePalettePos, setSqueezePalettePos] = useState<{ x: number; y: number } | null>(null);
   const lastNonEraserToolRef = useRef<ToolType>(activeTool !== 'eraser' ? activeTool : 'pen');
   const prevActiveToolForWidthRef = useRef<ToolType>(activeTool);
+  const lastPenWidthRef = useRef<{ width: number; slotIdx: number }>({
+    width: strokeWidth,
+    slotIdx: activeWidthSlotIdx,
+  });
+
+  useEffect(() => {
+    if (activeTool === 'pen' || activeTool === 'pencil') {
+      lastPenWidthRef.current = { width: strokeWidth, slotIdx: activeWidthSlotIdx };
+    }
+  }, [activeTool, strokeWidth, activeWidthSlotIdx]);
+
   useEffect(() => {
     if (activeTool !== 'eraser') {
       lastNonEraserToolRef.current = activeTool;
@@ -2685,6 +3181,9 @@ export default function App() {
     if (prevActiveToolForWidthRef.current !== activeTool) {
       prevActiveToolForWidthRef.current = activeTool;
       if (activeTool === 'pen' || activeTool === 'pencil') {
+        setActiveWidthSlotIdx(lastPenWidthRef.current.slotIdx);
+        setStrokeWidth(lastPenWidthRef.current.width);
+      } else if (activeTool === 'shape') {
         let minIdx = 0;
         for (let i = 1; i < widthSlots.length; i++) {
           if (widthSlots[i] < widthSlots[minIdx]) minIdx = i;
@@ -2865,7 +3364,7 @@ export default function App() {
         checking = false;
       }
     };
-    const initTimer = window.setTimeout(checkServerBundleVersion, 1200);
+    const initTimer = window.setTimeout(checkServerBundleVersion, 100);
     const onWake = () => {
       if (document.visibilityState === 'visible') {
         void checkServerBundleVersion();
@@ -2873,10 +3372,12 @@ export default function App() {
     };
     document.addEventListener('visibilitychange', onWake);
     window.addEventListener('focus', onWake);
+    window.addEventListener('pageshow', onWake);
     return () => {
       window.clearTimeout(initTimer);
       document.removeEventListener('visibilitychange', onWake);
       window.removeEventListener('focus', onWake);
+      window.removeEventListener('pageshow', onWake);
     };
   }, []);
   const pencilHoverTwistRef = useRef<{
@@ -2993,11 +3494,55 @@ export default function App() {
   const pdfImportModeRef = useRef<'new-notebook' | 'insert-pages'>('insert-pages');
 
   const activeNotebook =
-    notebooks.find((n) => n.id === activeNotebookId) || notebooks[0] || FALLBACK_EMPTY_NOTEBOOK;
+    notebooks.find((n) => n.id === activeNotebookId) ||
+    notebooks.find((n) => openNotebookIds.includes(n.id)) ||
+    FALLBACK_EMPTY_NOTEBOOK;
   const activePage =
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
   const pageWidth = getPageLogicalWidth(activePage);
   const pageHeight = getPageLogicalHeight(activePage);
+
+  // On-demand PDF page renderer tick & resolver (so 170-page PDFs stay at their exact 13.1 MB native size!)
+  const [, setPdfPageRenderTick] = useState<number>(0);
+  const resolvePageBackgroundUrl = useCallback(
+    (nbId: string, pageObj: NotePage | undefined, qualityMode: 'full' | 'thumb' = 'full'): string | undefined => {
+      if (!pageObj) return undefined;
+      if (pageObj.backgroundDataUrl) return pageObj.backgroundDataUrl;
+      if (typeof pageObj.pdfPageNumber === 'number' && pageObj.pdfPageNumber >= 1) {
+        const cached = getCachedPdfPageDataUrl(nbId, pageObj.pdfPageNumber, qualityMode);
+        if (cached) return cached;
+        void ensurePdfPageDataUrl(nbId, pageObj.pdfPageNumber, qualityMode).then((url) => {
+          if (url) {
+            setPdfPageRenderTick((t) => t + 1);
+          }
+        });
+      }
+      return undefined;
+    },
+    []
+  );
+
+  // "Κόφτης" (Lightweight Reader & Highlighter Mode) ONLY for imported PDFs (.pdf) & standalone Images (.image):
+  // Never affects native .bestNotes notebooks created by the user (+ Νέα Σημείωση), even if they have >10 pages!
+  const isLightweightDocMode = Boolean(
+    activeNotebook &&
+      activeNotebook.sourceFormat !== '.bestNotes' &&
+      activeNotebook.sourceFormat !== '.bestnotes' &&
+      (activeNotebook.sourceFormat === '.pdf' ||
+        activeNotebook.sourceFormat === '.image' ||
+        activeNotebook.pages.some((p) => Boolean(p.pdfPageNumber || p.backgroundDataUrl)))
+  );
+
+  useEffect(() => {
+    if (!isLightweightDocMode) return;
+    const allowedTools: ToolType[] = ['pen', 'highlighter', 'eraser', 'lasso', 'laser'];
+    if (!allowedTools.includes(activeTool)) {
+      setActiveTool('pen');
+    }
+    setShowSimulationPanel(false);
+    setShowLayersPanel(false);
+    setShowShapeLibraryPanel(false);
+  }, [isLightweightDocMode, activeTool]);
 
   // Keep activeLayerId synchronized with activePage.layers whenever switching pages or notebooks
   useEffect(() => {
@@ -3013,6 +3558,331 @@ export default function App() {
       setStatusBanner((prev) => (prev === msg ? null : prev));
     }, 2600);
   }, []);
+
+  // Unified Back / Forward Navigation History (2-Finger Swipe Left/Right on Chrome, Safari & iPad Home-Screen Web App)
+  const navHistoryStackRef = useRef<
+    {
+      viewMode: 'landing' | 'library' | 'editor';
+      activeLibraryFolder: string | null;
+      activeNotebookId: string;
+    }[]
+  >([
+    {
+      viewMode,
+      activeLibraryFolder,
+      activeNotebookId,
+    },
+  ]);
+  const navHistoryIndexRef = useRef<number>(0);
+  const isApplyingNavHistoryRef = useRef<boolean>(false);
+  const lastNavSwipeTriggeredAtRef = useRef<number>(0);
+
+  const formatNavDestinationLabel = useCallback(
+    (entry: {
+      viewMode: 'landing' | 'library' | 'editor';
+      activeLibraryFolder: string | null;
+      activeNotebookId: string;
+    }) => {
+      if (entry.viewMode === 'editor') {
+        const nb = notebooksRef.current.find((n) => n.id === entry.activeNotebookId);
+        return nb?.title ? `Σημείωση «${nb.title}»` : 'Σημείωση';
+      }
+      if (entry.viewMode === 'library') {
+        return entry.activeLibraryFolder
+          ? `Φάκελος «${entry.activeLibraryFolder}»`
+          : 'Βιβλιοθήκη (Αρχική)';
+      }
+      return 'Αρχική';
+    },
+    []
+  );
+
+  const applyNavHistoryEntry = useCallback(
+    (
+      entry: {
+        viewMode: 'landing' | 'library' | 'editor';
+        activeLibraryFolder: string | null;
+        activeNotebookId: string;
+      },
+      direction: 'back' | 'forward'
+    ) => {
+      isApplyingNavHistoryRef.current = true;
+      setViewMode(entry.viewMode);
+      setActiveLibraryFolder(entry.activeLibraryFolder);
+      if (entry.activeNotebookId) {
+        setActiveNotebookId(entry.activeNotebookId);
+        setOpenNotebookIds((prev) =>
+          prev.includes(entry.activeNotebookId) ? prev : [...prev, entry.activeNotebookId]
+        );
+      }
+      const arrow = direction === 'back' ? '⬅️ Πίσω:' : '➡️ Μπροστά:';
+      showToast(`${arrow} ${formatNavDestinationLabel(entry)}`);
+    },
+    [formatNavDestinationLabel, showToast]
+  );
+
+  const navigateAppHistory = useCallback(
+    (direction: 'back' | 'forward', fromPopState = false): boolean => {
+      const now = performance.now();
+      if (!fromPopState && now - lastNavSwipeTriggeredAtRef.current < 480) {
+        return false;
+      }
+      const stack = navHistoryStackRef.current;
+      const curIdx = navHistoryIndexRef.current;
+
+      if (direction === 'back') {
+        if (curIdx > 0) {
+          lastNavSwipeTriggeredAtRef.current = now;
+          const nextIdx = curIdx - 1;
+          navHistoryIndexRef.current = nextIdx;
+          const target = stack[nextIdx];
+          applyNavHistoryEntry(target, 'back');
+          if (!fromPopState) {
+            try {
+              window.history.replaceState({ bestNotesNavIdx: nextIdx }, '');
+            } catch {
+              // ignore
+            }
+          }
+          return true;
+        }
+        // Smart hierarchical fallback at index 0 (e.g. right after opening the app inside a note or subfolder):
+        // Step back to the note's folder in Library, or from a subfolder up to its parent folder / Library root,
+        // while keeping the current location at index 1 so a Forward swipe brings you right back!
+        const current = stack[0] || {
+          viewMode,
+          activeLibraryFolder,
+          activeNotebookId,
+        };
+        if (current.viewMode === 'editor') {
+          lastNavSwipeTriggeredAtRef.current = now;
+          const nb = notebooksRef.current.find((n) => n.id === current.activeNotebookId);
+          const fallbackFolder =
+            current.activeLibraryFolder ?? (nb?.folder?.trim() ? nb.folder.trim() : null);
+          const parentEntry = {
+            viewMode: 'library' as const,
+            activeLibraryFolder: fallbackFolder,
+            activeNotebookId: current.activeNotebookId,
+          };
+          navHistoryStackRef.current = [parentEntry, ...stack];
+          navHistoryIndexRef.current = 0;
+          applyNavHistoryEntry(parentEntry, 'back');
+          return true;
+        }
+        if (current.viewMode === 'library' && current.activeLibraryFolder) {
+          lastNavSwipeTriggeredAtRef.current = now;
+          const parts = current.activeLibraryFolder
+            .split('/')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          const parentFolder = parts.length > 1 ? parts.slice(0, -1).join('/') : null;
+          const parentEntry = {
+            viewMode: 'library' as const,
+            activeLibraryFolder: parentFolder,
+            activeNotebookId: current.activeNotebookId,
+          };
+          navHistoryStackRef.current = [parentEntry, ...stack];
+          navHistoryIndexRef.current = 0;
+          applyNavHistoryEntry(parentEntry, 'back');
+          return true;
+        }
+        return false;
+      } else {
+        if (curIdx < stack.length - 1) {
+          lastNavSwipeTriggeredAtRef.current = now;
+          const nextIdx = curIdx + 1;
+          navHistoryIndexRef.current = nextIdx;
+          const target = stack[nextIdx];
+          applyNavHistoryEntry(target, 'forward');
+          if (!fromPopState) {
+            try {
+              window.history.replaceState({ bestNotesNavIdx: nextIdx }, '');
+            } catch {
+              // ignore
+            }
+          }
+          return true;
+        }
+        return false;
+      }
+    },
+    [viewMode, activeLibraryFolder, activeNotebookId, applyNavHistoryEntry]
+  );
+
+  // Record navigation changes into navHistoryStackRef + Browser History API
+  useEffect(() => {
+    if (isApplyingNavHistoryRef.current) {
+      isApplyingNavHistoryRef.current = false;
+      return;
+    }
+    const stack = navHistoryStackRef.current;
+    const curIdx = navHistoryIndexRef.current;
+    const cur = stack[curIdx];
+    if (
+      cur &&
+      cur.viewMode === viewMode &&
+      cur.activeLibraryFolder === activeLibraryFolder &&
+      (viewMode !== 'editor' || cur.activeNotebookId === activeNotebookId)
+    ) {
+      return;
+    }
+    const nextEntry = {
+      viewMode,
+      activeLibraryFolder,
+      activeNotebookId,
+    };
+    const nextStack = [...stack.slice(0, curIdx + 1), nextEntry].slice(-40);
+    navHistoryStackRef.current = nextStack;
+    navHistoryIndexRef.current = nextStack.length - 1;
+    try {
+      window.history.pushState({ bestNotesNavIdx: navHistoryIndexRef.current }, '');
+    } catch {
+      // ignore
+    }
+  }, [viewMode, activeLibraryFolder, activeNotebookId]);
+
+  // Listen to Browser Back/Forward (popstate) + Global 2-Finger Swipe (Library / Top Bar Touch & Mac Trackpad Wheel)
+  useEffect(() => {
+    try {
+      if (!window.history.state || typeof window.history.state.bestNotesNavIdx !== 'number') {
+        window.history.replaceState({ bestNotesNavIdx: navHistoryIndexRef.current }, '');
+      }
+    } catch {
+      // ignore
+    }
+
+    const onPopState = (ev: PopStateEvent) => {
+      const targetIdx = ev.state?.bestNotesNavIdx;
+      const stack = navHistoryStackRef.current;
+      const curIdx = navHistoryIndexRef.current;
+      if (typeof targetIdx === 'number' && targetIdx >= 0 && targetIdx < stack.length && targetIdx !== curIdx) {
+        const dir = targetIdx < curIdx ? 'back' : 'forward';
+        navHistoryIndexRef.current = targetIdx;
+        applyNavHistoryEntry(stack[targetIdx], dir);
+      } else {
+        // Browser triggered back without state index -> step back inside BestNotes and keep history alive
+        const moved = navigateAppHistory('back', true);
+        if (moved) {
+          try {
+            window.history.pushState({ bestNotesNavIdx: navHistoryIndexRef.current }, '');
+          } catch {
+            // ignore
+          }
+        }
+      }
+    };
+
+    let libTouchSwipe: {
+      startMidX: number;
+      startMidY: number;
+      lastMidX: number;
+      lastMidY: number;
+      initialDist: number;
+      lastDist: number;
+      startTime: number;
+      active: boolean;
+    } | null = null;
+
+    const onGlobalTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) {
+        libTouchSwipe = null;
+        return;
+      }
+      // If inside the Editor canvas workspace, let the Editor's own pinchStateRef handle 2-finger gestures
+      const targetEl = e.target as HTMLElement | null;
+      if (viewMode === 'editor' && workspaceRef.current && targetEl && workspaceRef.current.contains(targetEl)) {
+        libTouchSwipe = null;
+        return;
+      }
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      libTouchSwipe = {
+        startMidX: midX,
+        startMidY: midY,
+        lastMidX: midX,
+        lastMidY: midY,
+        initialDist: dist,
+        lastDist: dist,
+        startTime: performance.now(),
+        active: true,
+      };
+    };
+
+    const onGlobalTouchMove = (e: TouchEvent) => {
+      if (!libTouchSwipe?.active || e.touches.length !== 2) return;
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      libTouchSwipe.lastDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      libTouchSwipe.lastMidX = (t1.clientX + t2.clientX) / 2;
+      libTouchSwipe.lastMidY = (t1.clientY + t2.clientY) / 2;
+      const dx = libTouchSwipe.lastMidX - libTouchSwipe.startMidX;
+      const dy = libTouchSwipe.lastMidY - libTouchSwipe.startMidY;
+      if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(dy) * 1.6 && e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    const onGlobalTouchEnd = (e: TouchEvent) => {
+      if (!libTouchSwipe?.active) return;
+      if (e.touches.length > 0) return;
+      const st = libTouchSwipe;
+      libTouchSwipe = null;
+      const elapsed = performance.now() - st.startTime;
+      const dx = st.lastMidX - st.startMidX;
+      const dy = st.lastMidY - st.startMidY;
+      const distChange = Math.abs(st.lastDist - st.initialDist);
+      if (
+        elapsed >= 40 &&
+        elapsed <= 600 &&
+        distChange < 50 &&
+        Math.abs(dx) >= 75 &&
+        Math.abs(dx) > Math.abs(dy) * 1.8
+      ) {
+        if (dx > 0) {
+          navigateAppHistory('back');
+        } else {
+          navigateAppHistory('forward');
+        }
+      }
+    };
+
+    const onGlobalWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const targetEl = e.target as HTMLElement | null;
+      // If inside the Editor workspace, the Editor's own onWheel handles it
+      if (viewMode === 'editor' && workspaceRef.current && targetEl && workspaceRef.current.contains(targetEl)) {
+        return;
+      }
+      // Allow horizontal scrolling inside explicitly scrollable horizontal strips/code/tables
+      if (targetEl?.closest('[data-allow-horizontal-scroll="true"]')) {
+        return;
+      }
+      if (Math.abs(e.deltaX) >= 38 && Math.abs(e.deltaX) > Math.abs(e.deltaY) * 2.0) {
+        if (e.cancelable) e.preventDefault();
+        if (e.deltaX < 0) {
+          navigateAppHistory('back');
+        } else {
+          navigateAppHistory('forward');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('touchstart', onGlobalTouchStart, { passive: true });
+    window.addEventListener('touchmove', onGlobalTouchMove, { passive: false });
+    window.addEventListener('touchend', onGlobalTouchEnd, { passive: true });
+    window.addEventListener('wheel', onGlobalWheel, { passive: false });
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('touchstart', onGlobalTouchStart);
+      window.removeEventListener('touchmove', onGlobalTouchMove);
+      window.removeEventListener('touchend', onGlobalTouchEnd);
+      window.removeEventListener('wheel', onGlobalWheel);
+    };
+  }, [viewMode, navigateAppHistory, applyNavHistoryEntry]);
 
   const startRenamingNotebook = useCallback(
     (nb: Notebook, context: 'tab' | 'grid-strip' | 'grid-below' | 'list') => {
@@ -3095,15 +3965,24 @@ export default function App() {
       const foldersStr = JSON.stringify(nextFolders);
       const uid = currentUser?.uid || initialAuthUid;
       if (uid) {
-        try {
-          localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, foldersStr);
-          localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, nowIso);
-        } catch {
-          // ignore
-        }
+        saveCustomFoldersToLocalAndIdb(uid, nextFolders, nowIso);
       }
       if (currentUser && foldersStr.length < 900000) {
         lastSyncedMetaRef.current.folders = foldersStr;
+        // 1. Write to dedicated subcollection doc (100% reliable, zero legacy schema conflicts)
+        void setDoc(
+          doc(db, 'users', currentUser.uid, 'notebooks', '__folders_meta__'),
+          {
+            id: '__folders_meta__',
+            title: '__FOLDERS_META__',
+            updatedAt: nowIso,
+            dataJson: foldersStr,
+            deleted: false,
+            deviceId: deviceIdRef.current,
+          },
+          { merge: true }
+        ).catch(() => {});
+        // 2. Also write to user profile document
         void setDoc(
           doc(db, 'users', currentUser.uid),
           {
@@ -3113,7 +3992,7 @@ export default function App() {
             deviceId: deviceIdRef.current,
           },
           { merge: true }
-        );
+        ).catch(() => {});
       }
     },
     [currentUser, initialAuthUid]
@@ -3225,8 +4104,14 @@ export default function App() {
 
   const triggerSmartAutoTagsForNotebook = useCallback(
     async (targetNb: Notebook, extraImageDataUrls: string[] = [], silent = false) => {
-      // Do not spend AI resources automatically extracting tags for documents with > 3 pages
-      if (silent && (targetNb.pages?.length || 0) > 3) {
+      // Do not spend AI resources automatically extracting tags for PDFs, standalone images, or documents with > 3 pages
+      if (
+        silent &&
+        ((targetNb.pages?.length || 0) > 3 ||
+          targetNb.sourceFormat === '.pdf' ||
+          targetNb.sourceFormat === '.image' ||
+          (targetNb.nativeFileSizeBytes || 0) > 3 * 1024 * 1024)
+      ) {
         return;
       }
       const genericShapeTagNorms = new Set([
@@ -3425,18 +4310,37 @@ export default function App() {
   }, [notebooks, viewMode, triggerSmartAutoTagsForNotebook]);
 
   const notebookByteSizeCacheRef = useRef<WeakMap<Notebook, number>>(new WeakMap());
+  const pageByteSizeCacheRef = useRef<WeakMap<NotePage, number>>(new WeakMap());
 
   const getNotebookSizeBytes = useCallback((nb: Notebook): number => {
-    const cached = notebookByteSizeCacheRef.current.get(nb);
-    if (cached !== undefined) return cached;
-    try {
-      const jsonStr = JSON.stringify(nb);
-      const bytes = new Blob([jsonStr]).size;
-      notebookByteSizeCacheRef.current.set(nb, bytes);
-      return bytes;
-    } catch {
-      return 0;
+    const cachedNb = notebookByteSizeCacheRef.current.get(nb);
+    if (cachedNb !== undefined) return cachedNb;
+    const hasNativeSize = typeof nb.nativeFileSizeBytes === 'number' && nb.nativeFileSizeBytes > 0;
+    let totalBytes = hasNativeSize ? nb.nativeFileSizeBytes! : 256 + (nb.title?.length || 0) * 2;
+    const pages = nb.pages || [];
+    for (let i = 0; i < pages.length; i++) {
+      const p = pages[i];
+      let pBytes = pageByteSizeCacheRef.current.get(p);
+      if (pBytes === undefined) {
+        pBytes = hasNativeSize ? 0 : 240 + (p.backgroundDataUrl?.length || 0);
+        const imgs = p.images || [];
+        for (let j = 0; j < imgs.length; j++) {
+          pBytes += 180 + (imgs[j].dataUrl?.length || 0);
+        }
+        const strokes = p.strokes || [];
+        for (let j = 0; j < strokes.length; j++) {
+          pBytes += 140 + (strokes[j].points?.length || 0) * 44;
+        }
+        const texts = p.texts || [];
+        for (let j = 0; j < texts.length; j++) {
+          pBytes += 160 + (texts[j].text?.length || 0) * 3;
+        }
+        pageByteSizeCacheRef.current.set(p, pBytes);
+      }
+      totalBytes += pBytes;
     }
+    notebookByteSizeCacheRef.current.set(nb, totalBytes);
+    return totalBytes;
   }, []);
 
   const formatNotebookSizeLabel = useCallback((bytes: number): string => {
@@ -3620,13 +4524,125 @@ export default function App() {
     const nbsColRef = collection(db, 'users', uid, 'notebooks');
     const userDocRef = doc(db, 'users', uid);
 
+    const foldersMetaDocRef = doc(db, 'users', uid, 'notebooks', '__folders_meta__');
+
+    const mergeAndApplyRemoteFolders = (
+      rawFoldersJson: string,
+      remoteFoldersTs: string,
+      fromCache = false
+    ) => {
+      if (!rawFoldersJson || rawFoldersJson.length === 0) return;
+      try {
+        const parsedRemote = JSON.parse(rawFoldersJson);
+        if (!Array.isArray(parsedRemote)) return;
+        if (!fromCache) {
+          hasReceivedCloudFoldersRef.current = true;
+        }
+        const localFoldersTs = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`) || '';
+        if (remoteFoldersTs && localFoldersTs && remoteFoldersTs > localFoldersTs) {
+          userEditedFoldersInSessionRef.current = false;
+        }
+        // CRITICAL MULTI-DEVICE GUARD:
+        // A waking device (iPad or Mac) where the user has NOT edited folders in this active session
+        // (userEditedFoldersInSessionRef.current === false) MUST NEVER treat its local cache as newer than the Cloud!
+        const localIsNewer =
+          userEditedFoldersInSessionRef.current &&
+          Boolean(localFoldersTs && (!remoteFoldersTs || localFoldersTs > remoteFoldersTs));
+        const currentLocal = customFoldersRef.current;
+        const mergedFolders = ensureGymnasioArnaiasSubfolders(
+          localIsNewer
+            ? mergeCustomFoldersNewest(currentLocal, parsedRemote, true)
+            : mergeCustomFoldersNewest(parsedRemote, currentLocal, false)
+        );
+        const mergedStr = JSON.stringify(mergedFolders);
+        const bestTs = localIsNewer
+          ? localFoldersTs
+          : remoteFoldersTs || localFoldersTs || '2026-11-06T22:55:00.000Z';
+
+        if (mergedStr !== JSON.stringify(currentLocal)) {
+          customFoldersRef.current = mergedFolders;
+          setCustomFolders(mergedFolders);
+        }
+        saveCustomFoldersToLocalAndIdb(uid, mergedFolders, bestTs);
+
+        // NEVER write back to Firestore from a cached snapshot (fromCache === true),
+        // and only write back when the user actually edited folders in this session (or if the server was missing the core preset folders).
+        const serverMissingCorePresets =
+          !fromCache && parsedRemote.length < RESTORED_USER_FOLDERS_PRESET.length;
+        if (
+          !fromCache &&
+          (userEditedFoldersInSessionRef.current || serverMissingCorePresets) &&
+          mergedStr !== rawFoldersJson &&
+          mergedStr.length < 900000
+        ) {
+          lastSyncedMetaRef.current.folders = mergedStr;
+          void setDoc(
+            foldersMetaDocRef,
+            {
+              id: '__folders_meta__',
+              title: '__FOLDERS_META__',
+              updatedAt: bestTs,
+              dataJson: mergedStr,
+              deleted: false,
+              deviceId: deviceIdRef.current,
+            },
+            { merge: true }
+          ).catch(() => {});
+          void setDoc(
+            userDocRef,
+            {
+              customFoldersJson: mergedStr,
+              foldersUpdatedAt: bestTs,
+              updatedAt: bestTs,
+              deviceId: deviceIdRef.current,
+            },
+            { merge: true }
+          ).catch(() => {});
+        } else {
+          lastSyncedMetaRef.current.folders = mergedStr;
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const offlineLoadFallbackTimer = window.setTimeout(() => {
+      if (!hasCompletedInitialCloudLoadRef.current) {
+        hasCompletedInitialCloudLoadRef.current = true;
+        setCloudInitialLoaded(true);
+      }
+      if (!hasLoadedUserDocRef.current) {
+        hasLoadedUserDocRef.current = true;
+      }
+    }, 4000);
+
     const unsubNotebooks = onSnapshot(
       nbsColRef,
       (snapshot) => {
+        const isFromCache = snapshot.metadata.fromCache;
         if (snapshot.empty) {
-          // Cloud has no notebooks yet for this user -> upload all current local notebooks immediately!
+          // Never mistake an empty local cache before server response for an empty Cloud account!
+          if (isFromCache) return;
           for (const localNb of notebooksRef.current) {
-            pushNotebookToCloudTracked(uid, localNb);
+            if (userEditedInSessionRef.current.has(localNb.id)) {
+              pushNotebookToCloudTracked(uid, localNb);
+            }
+          }
+          if (userEditedFoldersInSessionRef.current && customFoldersRef.current.length > 0) {
+            const foldersStr = JSON.stringify(customFoldersRef.current);
+            const nowIso = new Date().toISOString();
+            void setDoc(
+              foldersMetaDocRef,
+              {
+                id: '__folders_meta__',
+                title: '__FOLDERS_META__',
+                updatedAt: nowIso,
+                dataJson: foldersStr,
+                deleted: false,
+                deviceId: deviceIdRef.current,
+              },
+              { merge: true }
+            ).catch(() => {});
           }
           return;
         }
@@ -3636,10 +4652,21 @@ export default function App() {
         // Track ALL primary document IDs present in Firestore (even if chunks are still in transit!)
         // so the 2nd device NEVER mistakes an in-transit chunked doc for a "missing" doc and overwrites it!
         const allRemotePrimaryIds = new Set<string>();
+        let hasFoldersMetaDoc = false;
+        let remoteFoldersMetaJson = '';
+        let remoteFoldersMetaTs = '';
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
+          if (data.id === '__folders_meta__' || data.title === '__FOLDERS_META__') {
+            hasFoldersMetaDoc = true;
+            if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
+              remoteFoldersMetaJson = data.dataJson;
+              remoteFoldersMetaTs = typeof data.updatedAt === 'string' ? data.updatedAt : '';
+            }
+            return;
+          }
           if (data.id.includes('__chunk_') || data.title === '__CHUNK__') {
             const baseId = data.id.split('__chunk_')[0];
             if (baseId) allRemotePrimaryIds.add(baseId);
@@ -3654,7 +4681,7 @@ export default function App() {
           }
         });
         allRemotePrimaryIdsRef.current = allRemotePrimaryIds;
-        if (!hasCompletedInitialCloudLoadRef.current) {
+        if (!isFromCache && !hasCompletedInitialCloudLoadRef.current) {
           hasCompletedInitialCloudLoadRef.current = true;
           setCloudInitialLoaded(true);
         }
@@ -3665,11 +4692,19 @@ export default function App() {
           { nb?: Notebook; deleted?: boolean; deviceId?: string; dataJson?: string; updatedAt?: string }
         >();
         const softDeletedList: Notebook[] = [];
+        const rescuedFolderStyles: CustomFolderMeta[] = [];
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
-          if (data.id.includes('__chunk_') || data.title === '__CHUNK__') return;
+          if (
+            data.id === '__folders_meta__' ||
+            data.title === '__FOLDERS_META__' ||
+            data.id.includes('__chunk_') ||
+            data.title === '__CHUNK__'
+          ) {
+            return;
+          }
 
           if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
             try {
@@ -3772,6 +4807,19 @@ export default function App() {
 
                 const { nb: repairedRemoteNb, repaired: remoteWasRepaired } =
                   repairNotebookPagesAndMetrisiMazas(parsed);
+                if (repairedRemoteNb.folderStyles && typeof repairedRemoteNb.folderStyles === 'object') {
+                  for (const [fKey, fStyle] of Object.entries(repairedRemoteNb.folderStyles)) {
+                    if (fKey && fStyle) {
+                      rescuedFolderStyles.push({
+                        name: fKey,
+                        updatedAt: fStyle.updatedAt || repairedRemoteNb.updatedAt || '',
+                        color: fStyle.color,
+                        icon: fStyle.icon,
+                        favorite: fStyle.favorite,
+                      });
+                    }
+                  }
+                }
                 const effectiveDataJson = remoteWasRepaired
                   ? serializeNotebookForFirestore(repairedRemoteNb)
                   : fullJson;
@@ -3800,7 +4848,51 @@ export default function App() {
           }
         });
 
-        setDeletedCloudNotebooks(softDeletedList);
+        // Apply any folder styling rescued from notebooks or from the dedicated __folders_meta__ subcollection doc!
+        if (rescuedFolderStyles.length > 0) {
+          const mergedWithRescued = ensureGymnasioArnaiasSubfolders(
+            mergeCustomFoldersNewest(customFoldersRef.current, rescuedFolderStyles, false)
+          );
+          if (JSON.stringify(mergedWithRescued) !== JSON.stringify(customFoldersRef.current)) {
+            customFoldersRef.current = mergedWithRescued;
+            setCustomFolders(mergedWithRescued);
+            saveCustomFoldersToLocalAndIdb(uid, mergedWithRescued);
+          }
+        }
+        if (remoteFoldersMetaJson) {
+          mergeAndApplyRemoteFolders(remoteFoldersMetaJson, remoteFoldersMetaTs, isFromCache);
+        } else if (!isFromCache && !hasFoldersMetaDoc && customFoldersRef.current.length > 0) {
+          // CRITICAL: Only seed __folders_meta__ when the LIVE SERVER (!isFromCache) genuinely has no __folders_meta__ doc,
+          // NEVER from a waking device's stale local cache (where __folders_meta__ didn't exist yet)!
+          const seededFolders = ensureGymnasioArnaiasSubfolders(customFoldersRef.current);
+          const foldersStr = JSON.stringify(seededFolders);
+          const localFoldersTs =
+            localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`) ||
+            '2026-11-06T22:55:00.000Z';
+          if (foldersStr.length < 900000) {
+            void setDoc(
+              foldersMetaDocRef,
+              {
+                id: '__folders_meta__',
+                title: '__FOLDERS_META__',
+                updatedAt: localFoldersTs,
+                dataJson: foldersStr,
+                deleted: false,
+                deviceId: deviceIdRef.current,
+              },
+              { merge: true }
+            ).catch(() => {});
+          }
+        }
+
+        const mergedBinMap = new Map<string, Notebook>();
+        for (const item of softDeletedList) mergedBinMap.set(item.id, item);
+        for (const item of localDeletedNotebooksRef.current) {
+          if (!mergedBinMap.has(item.id) && !remoteMap.get(item.id)?.nb) {
+            mergedBinMap.set(item.id, item);
+          }
+        }
+        setDeletedCloudNotebooks(Array.from(mergedBinMap.values()));
 
         const notebooksToPushBack: Notebook[] = [];
 
@@ -3858,7 +4950,12 @@ export default function App() {
             // - If this device's local copy has a strictly NEWER updatedAt than the Cloud snapshot
             //   (e.g. the user edited/moved it right before hitting Refresh!), keep the newer local copy
             //   and push it to the Cloud so Refresh NEVER reverts a recent action!
-            if (localUpdatedAt && remoteUpdatedAt && localUpdatedAt > remoteUpdatedAt) {
+            if (
+              userEditedInSessionRef.current.has(id) &&
+              localUpdatedAt &&
+              remoteUpdatedAt &&
+              localUpdatedAt > remoteUpdatedAt
+            ) {
               if ((inFlightSavesMapRef.current.get(id) || 0) === 0) {
                 notebooksToPushBack.push(localNb);
               }
@@ -3872,22 +4969,44 @@ export default function App() {
               (remoteUpdatedAt && (!localUpdatedAt || remoteUpdatedAt > localUpdatedAt))
             ) {
               userEditedInSessionRef.current.delete(id);
-              mergedMap.set(id, rem.nb);
+              const localBgByPageId = new Map<string, string>();
+              for (const lp of localNb.pages || []) {
+                if (lp.backgroundDataUrl) localBgByPageId.set(lp.id, lp.backgroundDataUrl);
+              }
+              const mergedRemoteNb: Notebook =
+                localBgByPageId.size > 0
+                  ? {
+                      ...rem.nb,
+                      pages: (rem.nb.pages || []).map((rp, idx) => {
+                        if (rp.backgroundDataUrl) return rp;
+                        const preservedBg =
+                          localBgByPageId.get(rp.id) || localNb.pages?.[idx]?.backgroundDataUrl;
+                        return preservedBg ? { ...rp, backgroundDataUrl: preservedBg } : rp;
+                      }),
+                    }
+                  : rem.nb;
+              mergedMap.set(id, mergedRemoteNb);
               lastSyncedJsonMapRef.current.set(id, rem.dataJson);
               lastSeenRemoteJsonMapRef.current.set(id, rem.dataJson);
               anyChanged = true;
               continue;
             }
 
-            // 2. Otherwise, userEditedInSessionRef.current.has(id) is true AND localUpdatedAt >= remoteUpdatedAt:
+            // 3. Otherwise, userEditedInSessionRef.current.has(id) is true AND localUpdatedAt >= remoteUpdatedAt:
             // Keep the active in-session user edits on this device; they will be synced by performCloudFirestoreSyncNow.
             continue;
           }
 
-          // Only push local notebooks that genuinely do not exist in Firestore at all (not in allRemotePrimaryIds)
-          for (const localNb of prevLocal) {
-            if (!allRemotePrimaryIds.has(localNb.id) && (inFlightSavesMapRef.current.get(localNb.id) || 0) === 0) {
-              notebooksToPushBack.push(localNb);
+          // Only push local notebooks that genuinely do not exist in Firestore at all (when snapshot is from live server, not local cache!)
+          if (!isFromCache) {
+            for (const localNb of prevLocal) {
+              if (
+                !allRemotePrimaryIds.has(localNb.id) &&
+                userEditedInSessionRef.current.has(localNb.id) &&
+                (inFlightSavesMapRef.current.get(localNb.id) || 0) === 0
+              ) {
+                notebooksToPushBack.push(localNb);
+              }
             }
           }
 
@@ -3900,8 +5019,10 @@ export default function App() {
           return nextList;
         });
 
-        for (const nbToPush of notebooksToPushBack) {
-          pushNotebookToCloudTracked(uid, nbToPush);
+        if (!isFromCache) {
+          for (const nbToPush of notebooksToPushBack) {
+            pushNotebookToCloudTracked(uid, nbToPush);
+          }
         }
       },
       () => {
@@ -3909,9 +5030,14 @@ export default function App() {
       }
     );
 
-    const applyRemoteUserDocData = (data: Record<string, any> | undefined) => {
+    const applyRemoteUserDocData = (
+      data: Record<string, any> | undefined,
+      fromCache = false
+    ) => {
       if (!data) return;
-      hasLoadedUserDocRef.current = true;
+      if (!fromCache) {
+        hasLoadedUserDocRef.current = true;
+      }
 
       // Always restore Google Drive linked email & active token across devices / PWA sessions
       if (typeof data.driveEmail === 'string' && data.driveEmail.length > 0) {
@@ -3960,66 +5086,11 @@ export default function App() {
       }
 
       if (typeof data.customFoldersJson === 'string' && data.customFoldersJson.length > 0) {
-        try {
-          const parsedRemote = JSON.parse(data.customFoldersJson);
-          if (Array.isArray(parsedRemote)) {
-            const localFoldersTs = localStorage.getItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`) || '';
-            const remoteFoldersTs =
-              typeof data.foldersUpdatedAt === 'string'
-                ? data.foldersUpdatedAt
-                : typeof data.updatedAt === 'string'
-                ? data.updatedAt
-                : '';
-            if (remoteFoldersTs && localFoldersTs && remoteFoldersTs > localFoldersTs) {
-              userEditedFoldersInSessionRef.current = false;
-            }
-            const localEditedInSession = userEditedFoldersInSessionRef.current;
-            const localIsStrictlyNewerInSession =
-              localEditedInSession && Boolean(localFoldersTs && (!remoteFoldersTs || localFoldersTs > remoteFoldersTs));
-
-            const currentLocal = customFoldersRef.current;
-            const mergedFolders = ensureGymnasioArnaiasSubfolders(
-              localIsStrictlyNewerInSession
-                ? mergeCustomFoldersNewest(currentLocal, parsedRemote, false)
-                : mergeCustomFoldersNewest(parsedRemote, currentLocal, false)
-            );
-            const mergedStr = JSON.stringify(mergedFolders);
-            const bestTs =
-              localFoldersTs > remoteFoldersTs ? localFoldersTs : remoteFoldersTs || new Date().toISOString();
-
-            if (mergedStr !== JSON.stringify(currentLocal)) {
-              customFoldersRef.current = mergedFolders;
-              setCustomFolders(mergedFolders);
-            }
-            try {
-              localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, mergedStr);
-              if (bestTs) {
-                localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, bestTs);
-              }
-            } catch {
-              // ignore
-            }
-
-            if (mergedStr !== data.customFoldersJson && mergedStr.length < 900000) {
-              // Either local had newer in-session edits OR rescued defined color/icon/favorite metadata missing in Cloud -> sync back!
-              lastSyncedMetaRef.current.folders = mergedStr;
-              void setDoc(
-                doc(db, 'users', uid),
-                {
-                  customFoldersJson: mergedStr,
-                  foldersUpdatedAt: bestTs,
-                  updatedAt: bestTs,
-                  deviceId: deviceIdRef.current,
-                },
-                { merge: true }
-              );
-            } else {
-              lastSyncedMetaRef.current.folders = data.customFoldersJson;
-            }
-          }
-        } catch {
-          // ignore
-        }
+        const remoteFoldersTs =
+          typeof data.foldersUpdatedAt === 'string' && data.foldersUpdatedAt.length > 0
+            ? data.foldersUpdatedAt
+            : '1970-01-01T00:00:00.000Z';
+        mergeAndApplyRemoteFolders(data.customFoldersJson, remoteFoldersTs, fromCache);
       }
 
       if (
@@ -4041,9 +5112,11 @@ export default function App() {
     const unsubUserDoc = onSnapshot(
       userDocRef,
       (docSnap) => {
-        hasLoadedUserDocRef.current = true;
+        if (!docSnap.metadata.fromCache) {
+          hasLoadedUserDocRef.current = true;
+        }
         if (!docSnap.exists()) return;
-        applyRemoteUserDocData(docSnap.data());
+        applyRemoteUserDocData(docSnap.data(), docSnap.metadata.fromCache);
       },
       () => {
         // Ignore transient offline errors
@@ -4051,11 +5124,27 @@ export default function App() {
     );
 
     const refreshUserDocFromServerOnWake = () => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState === 'hidden') return;
+      void getDocFromServer(foldersMetaDocRef)
+        .then((snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data && typeof data.dataJson === 'string' && data.dataJson.length > 0) {
+              mergeAndApplyRemoteFolders(
+                data.dataJson,
+                typeof data.updatedAt === 'string' ? data.updatedAt : '',
+                false
+              );
+            }
+          }
+        })
+        .catch(() => {
+          // ignore if offline
+        });
       void getDocFromServer(userDocRef)
         .then((snap) => {
           if (snap.exists()) {
-            applyRemoteUserDocData(snap.data());
+            applyRemoteUserDocData(snap.data(), false);
           }
         })
         .catch(() => {
@@ -4063,14 +5152,19 @@ export default function App() {
         });
     };
 
+    // Immediately pull live server folders on initial mount AND whenever the device wakes up / gains focus
+    refreshUserDocFromServerOnWake();
     document.addEventListener('visibilitychange', refreshUserDocFromServerOnWake);
     window.addEventListener('focus', refreshUserDocFromServerOnWake);
+    window.addEventListener('pageshow', refreshUserDocFromServerOnWake);
 
     return () => {
+      window.clearTimeout(offlineLoadFallbackTimer);
       unsubNotebooks();
       unsubUserDoc();
       document.removeEventListener('visibilitychange', refreshUserDocFromServerOnWake);
       window.removeEventListener('focus', refreshUserDocFromServerOnWake);
+      window.removeEventListener('pageshow', refreshUserDocFromServerOnWake);
     };
   }, [currentUser, pushNotebookToCloudTracked]);
 
@@ -4113,8 +5207,6 @@ export default function App() {
     // CRITICAL: Never overwrite IndexedDB with stale localStorage state before initial IndexedDB load has completed!
     if (!hasLoadedIndexedDbRef.current) return;
     const uid = currentUser.uid;
-    // Save to IndexedDB immediately so even an instant Refresh never loses a large pasted image!
-    void saveNotebooksToIndexedDB(uid, notebooks);
     let fastCloudTimer: number | null = null;
     const timer = window.setTimeout(() => {
       saveNotebooksToLocalAndIdb(uid, notebooks);
@@ -4188,17 +5280,13 @@ export default function App() {
     };
   }, [currentUser, performCloudFirestoreSyncNow, commitUserFoldersChange]);
 
-  // 3. Persist customFolders & shapeLibrary to LocalStorage + Cloud Firestore
+  // 3. Persist customFolders & shapeLibrary to LocalStorage + IndexedDB + Cloud Firestore
   useEffect(() => {
     if (!currentUser) return;
     const uid = currentUser.uid;
     const foldersStr = JSON.stringify(customFolders);
     const shapeLibStr = JSON.stringify(shapeLibrary);
-    try {
-      localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_${uid}`, foldersStr);
-    } catch {
-      // ignore quota
-    }
+    saveCustomFoldersToLocalAndIdb(uid, customFolders);
     if (!hasCompletedInitialCloudLoadRef.current || !hasLoadedUserDocRef.current) return;
     const foldersNeedPush =
       userEditedFoldersInSessionRef.current && foldersStr !== lastSyncedMetaRef.current.folders;
@@ -4208,11 +5296,7 @@ export default function App() {
     }
     const nowIso = new Date().toISOString();
     if (foldersNeedPush) {
-      try {
-        localStorage.setItem(`${CUSTOM_FOLDERS_STORAGE_KEY}_ts_${uid}`, nowIso);
-      } catch {
-        // ignore
-      }
+      saveCustomFoldersToLocalAndIdb(uid, customFolders, nowIso);
     }
     const timer = window.setTimeout(() => {
       const payload: Record<string, any> = {
@@ -4223,12 +5307,24 @@ export default function App() {
         lastSyncedMetaRef.current.folders = foldersStr;
         payload.customFoldersJson = foldersStr;
         payload.foldersUpdatedAt = nowIso;
+        void setDoc(
+          doc(db, 'users', uid, 'notebooks', '__folders_meta__'),
+          {
+            id: '__folders_meta__',
+            title: '__FOLDERS_META__',
+            updatedAt: nowIso,
+            dataJson: foldersStr,
+            deleted: false,
+            deviceId: deviceIdRef.current,
+          },
+          { merge: true }
+        ).catch(() => {});
       }
       if (shapeLibNeedsPush && shapeLibStr.length < 900000) {
         lastSyncedMetaRef.current.shapeLib = shapeLibStr;
         payload.shapeLibraryJson = shapeLibStr;
       }
-      void setDoc(doc(db, 'users', uid), payload, { merge: true });
+      void setDoc(doc(db, 'users', uid), payload, { merge: true }).catch(() => {});
     }, 150);
     return () => window.clearTimeout(timer);
   }, [currentUser, customFolders, shapeLibrary]);
@@ -4348,6 +5444,11 @@ export default function App() {
         activePageId: activePage.id,
         liveSimCanvas: simCanvasRef.current,
         rulersByPageId,
+        isCircuitSimulating: isSimulating,
+        circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+        circuitShowElectrons: simShowElectrons,
+        circuitFlowDirection: simFlowDirection,
+        circuitShowDarkWireTrack: simShowDarkWireTrack,
       };
       try {
         const res = await syncNotebookPdfToGoogleDrive(token, targetNb, pdfExportOpts, driveBasePath);
@@ -4356,6 +5457,13 @@ export default function App() {
         setSecondsToNextSync(20);
         secondsToNextDrivePdfSyncRef.current = 120;
         hasPendingDrivePdfSyncRef.current = false;
+        const nowMs = Date.now();
+        setLastDriveAutoSyncAt(nowMs);
+        try {
+          localStorage.setItem('bestnotes_drive_last_autosync_at_v1', String(nowMs));
+        } catch {
+          // ignore
+        }
         if (res.webViewLink) {
           setLastDrivePdfLink(res.webViewLink);
         }
@@ -4443,10 +5551,19 @@ export default function App() {
       try {
         let syncedCount = 0;
         let lastLink: string | undefined;
+        const batchPdfOpts = {
+          activePageId: activePage.id,
+          rulersByPageId,
+          isCircuitSimulating: isSimulating,
+          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitShowElectrons: simShowElectrons,
+          circuitFlowDirection: simFlowDirection,
+          circuitShowDarkWireTrack: simShowDarkWireTrack,
+        };
         for (const nb of notebooks) {
           let res;
           try {
-            res = await syncNotebookPdfToGoogleDrive(token, nb, undefined, driveBasePath);
+            res = await syncNotebookPdfToGoogleDrive(token, nb, batchPdfOpts, driveBasePath);
           } catch (innerErr: any) {
             if (
               innerErr?.message === 'DRIVE_TOKEN_EXPIRED' ||
@@ -4458,7 +5575,7 @@ export default function App() {
               );
               token = refreshed.accessToken;
               saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              res = await syncNotebookPdfToGoogleDrive(token, nb, undefined, driveBasePath);
+              res = await syncNotebookPdfToGoogleDrive(token, nb, batchPdfOpts, driveBasePath);
             } else {
               throw innerErr;
             }
@@ -4467,6 +5584,13 @@ export default function App() {
           if (nb.id === activeNotebook.id && res.webViewLink) {
             lastLink = res.webViewLink;
           }
+        }
+        const nowMs = Date.now();
+        setLastDriveAutoSyncAt(nowMs);
+        try {
+          localStorage.setItem('bestnotes_drive_last_autosync_at_v1', String(nowMs));
+        } catch {
+          // ignore
         }
         if (lastLink) setLastDrivePdfLink(lastLink);
         setSyncStatus('synced');
@@ -4534,6 +5658,11 @@ export default function App() {
           activePageId: activePage.id,
           liveSimCanvas: simCanvasRef.current,
           rulersByPageId,
+          isCircuitSimulating: isSimulating,
+          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitShowElectrons: simShowElectrons,
+          circuitFlowDirection: simFlowDirection,
+          circuitShowDarkWireTrack: simShowDarkWireTrack,
         });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -4549,7 +5678,17 @@ export default function App() {
         showToast(`❌ Σφάλμα εξαγωγής PDF: ${err?.message || 'Άγνωστο σφάλμα'}`);
       }
     },
-    [activeNotebook, activePage.id, rulersByPageId, showToast]
+    [
+      activeNotebook,
+      activePage.id,
+      rulersByPageId,
+      isSimulating,
+      simCircuitSwitchClosed,
+      simShowElectrons,
+      simFlowDirection,
+      simShowDarkWireTrack,
+      showToast,
+    ]
   );
 
   const handleExportBestnotesFile = useCallback(
@@ -4604,8 +5743,9 @@ export default function App() {
   );
 
   // Auto-provision the "Η Δημιουργία Ηφαιστείου" (Page 3 of the PDF) notebook in the user's library
+  // ONLY for logged-in accounts that already have "Ο κύκλος του νερού" (NEVER for Guests or empty new accounts!)
   useEffect(() => {
-    if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
+    if (!currentUser || !hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current) {
       return;
     }
     const seedKey = 'bestnotes_volcano_seeded_v1';
@@ -4631,6 +5771,9 @@ export default function App() {
       const norm = normalizeGreekSearchText(n.title || '');
       return norm.includes('κυκλ') && norm.includes('νερ');
     });
+    if (!waterCycleNb && !existingVolcano) {
+      return;
+    }
 
     if (existingVolcano) {
       try {
@@ -4702,9 +5845,16 @@ export default function App() {
   }, [notebooks, deletedCloudNotebooks, currentUser, cloudInitialLoaded, pushNotebookToCloudTracked]);
 
   // Auto-provision the 3 Science Infographic Notebooks ("Η Φωτοσύνθεση", "Τα Οξέα", "Οι Βάσεις")
-  // with 2 layers per page: Layer 1 ('Κείμενα & Σχήματα') and Layer 2 ('Εικόνες')
+  // ONLY for logged-in accounts that already have "Ο κύκλος του νερού" (NEVER for Guests or empty new accounts!)
   useEffect(() => {
-    if (currentUser && (!hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current)) {
+    if (!currentUser || !hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current) {
+      return;
+    }
+    const hasWaterCycle = notebooks.some((n) => {
+      const norm = normalizeGreekSearchText(n.title || '');
+      return norm.includes('κυκλ') && norm.includes('νερ');
+    });
+    if (!hasWaterCycle) {
       return;
     }
     const seedSpecs = [
@@ -4835,6 +5985,11 @@ export default function App() {
           activePageId: activePage.id,
           liveSimCanvas: simCanvasRef.current,
           rulersByPageId,
+          isCircuitSimulating: isSimulating,
+          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitShowElectrons: simShowElectrons,
+          circuitFlowDirection: simFlowDirection,
+          circuitShowDarkWireTrack: simShowDarkWireTrack,
         });
         const pdfFile = new File([blob], fileName, {
           type: 'application/pdf',
@@ -4896,26 +6051,36 @@ export default function App() {
   // 20-second Cloud Firestore Auto-Sync loop + 2-minute (120s) Google Drive PDF Auto-Sync loop
   useEffect(() => {
     const interval = window.setInterval(() => {
-      // 1) Cloud Firestore Sync every 20 seconds
-      setSecondsToNextSync((prev) => {
-        if (prev <= 1) {
-          if (isDirty) {
+      // 1) Cloud Firestore Sync every 20 seconds (avoid 1s full-App re-renders when !isDirty!)
+      if (!isDirty) {
+        setSecondsToNextSync((prev) => (prev === 20 ? prev : 20));
+      } else {
+        setSecondsToNextSync((prev) => {
+          if (prev <= 1) {
             setSyncStatus('syncing');
             performCloudFirestoreSyncNow();
             window.setTimeout(() => {
               setSyncStatus('synced');
               setIsDirty(false);
             }, 350);
+            return 20;
           }
-          return 20;
-        }
-        return prev - 1;
-      });
+          return prev - 1;
+        });
+      }
 
-      // 2) Google Drive PDF Sync (/BestNotes) every 2 minutes (120 seconds)
+      // 2) Google Drive PDF Sync (/BestNotes):
+      //    a) Incremental sync 2 minutes after editing the active note
+      //    b) Scheduled automatic full sync every `driveAutoSyncIntervalMin` minutes (default: 120 min = 2 hours)
       if (secondsToNextDrivePdfSyncRef.current <= 1) {
         secondsToNextDrivePdfSyncRef.current = 120;
-        if (driveAccessToken && hasPendingDrivePdfSyncRef.current) {
+        const intervalMs = Math.max(15, driveAutoSyncIntervalMin) * 60 * 1000;
+        const isTwoHourScheduledDue =
+          driveAutoSyncIntervalMin > 0 &&
+          notebooks.length > 0 &&
+          Date.now() - lastDriveAutoSyncAt >= intervalMs;
+
+        if (driveAccessToken && (hasPendingDrivePdfSyncRef.current || isTwoHourScheduledDue)) {
           hasPendingDrivePdfSyncRef.current = false;
           void performDrivePdfSync(false);
         }
@@ -4924,7 +6089,15 @@ export default function App() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isDirty, driveAccessToken, performCloudFirestoreSyncNow, performDrivePdfSync]);
+  }, [
+    isDirty,
+    driveAccessToken,
+    driveAutoSyncIntervalMin,
+    lastDriveAutoSyncAt,
+    notebooks.length,
+    performCloudFirestoreSyncNow,
+    performDrivePdfSync,
+  ]);
 
   // Close any open floating popover/panel or modal (Color, Width, Layers, Shape Library, Thumbnails, Math, Settings, User Profile) when clicking/tapping anywhere outside it
   useEffect(() => {
@@ -5105,22 +6278,116 @@ export default function App() {
       clipPolygon: im.clipPolygon ? im.clipPolygon.map((cp) => ({ ...cp })) : undefined,
     })),
     tapes: (p.tapes || []).map((tp) => ({ ...tp })),
+    ruler: p.ruler ? { ...p.ruler } : undefined,
   }), []);
+
+  const suppressNextUndoRecordRef = useRef<boolean>(false);
+  const undoStackRef = useRef<NotePage[]>(undoStack);
+  undoStackRef.current = undoStack;
+  const redoStackRef = useRef<NotePage[]>(redoStack);
+  redoStackRef.current = redoStack;
+
+  const isSamePageStateForUndo = useCallback((a: NotePage, b: NotePage): boolean => {
+    if (a.id !== b.id) return false;
+    if (a.strokes.length !== b.strokes.length) return false;
+    if ((a.texts?.length || 0) !== (b.texts?.length || 0)) return false;
+    if ((a.images?.length || 0) !== (b.images?.length || 0)) return false;
+    if ((a.tapes?.length || 0) !== (b.tapes?.length || 0)) return false;
+    if ((a.springSims?.length || 0) !== (b.springSims?.length || 0)) return false;
+    if ((a.forceSims?.length || 0) !== (b.forceSims?.length || 0)) return false;
+    if ((a.circuitSims?.length || 0) !== (b.circuitSims?.length || 0)) return false;
+
+    for (let i = 0; i < a.strokes.length; i++) {
+      const sa = a.strokes[i];
+      const sb = b.strokes[i];
+      if (
+        sa.id !== sb.id ||
+        sa.color !== sb.color ||
+        sa.width !== sb.width ||
+        sa.shapeType !== sb.shapeType ||
+        sa.groupId !== sb.groupId ||
+        sa.switchClosed !== sb.switchClosed ||
+        sa.attachedToSpringId !== sb.attachedToSpringId ||
+        sa.attachedToWeightId !== sb.attachedToWeightId ||
+        sa.points.length !== sb.points.length
+      ) {
+        return false;
+      }
+      if (sa.points.length > 0) {
+        const p0a = sa.points[0];
+        const p0b = sb.points[0];
+        const pLa = sa.points[sa.points.length - 1];
+        const pLb = sb.points[sb.points.length - 1];
+        const pMa = sa.points[Math.floor(sa.points.length / 2)];
+        const pMb = sb.points[Math.floor(sb.points.length / 2)];
+        if (
+          Math.abs(p0a.x - p0b.x) > 0.05 ||
+          Math.abs(p0a.y - p0b.y) > 0.05 ||
+          Math.abs(pLa.x - pLb.x) > 0.05 ||
+          Math.abs(pLa.y - pLb.y) > 0.05 ||
+          Math.abs(pMa.x - pMb.x) > 0.05 ||
+          Math.abs(pMa.y - pMb.y) > 0.05
+        ) {
+          return false;
+        }
+      }
+    }
+
+    const ta = a.texts || [];
+    const tb = b.texts || [];
+    for (let i = 0; i < ta.length; i++) {
+      if (
+        ta[i].id !== tb[i].id ||
+        ta[i].text !== tb[i].text ||
+        Math.abs(ta[i].x - tb[i].x) > 0.05 ||
+        Math.abs(ta[i].y - tb[i].y) > 0.05 ||
+        ta[i].fontSize !== tb[i].fontSize ||
+        ta[i].color !== tb[i].color
+      ) {
+        return false;
+      }
+    }
+
+    const ia = a.images || [];
+    const ib = b.images || [];
+    for (let i = 0; i < ia.length; i++) {
+      if (
+        ia[i].id !== ib[i].id ||
+        Math.abs(ia[i].x - ib[i].x) > 0.05 ||
+        Math.abs(ia[i].y - ib[i].y) > 0.05 ||
+        Math.abs(ia[i].width - ib[i].width) > 0.05 ||
+        Math.abs(ia[i].height - ib[i].height) > 0.05 ||
+        ia[i].rotation !== ib[i].rotation
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }, []);
 
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
       const targetIdx = activeDrawingPageIndexRef.current ?? activePageIndex;
       userEditedInSessionRef.current.add(activeNotebook.id);
+      const shouldRecordUndo = recordUndo && !suppressNextUndoRecordRef.current;
+      suppressNextUndoRecordRef.current = false;
       setNotebooks((prevNotebooks) =>
         prevNotebooks.map((nb) => {
           if (nb.id !== activeNotebook.id) return nb;
           const safeIdx = Math.min(targetIdx, nb.pages.length - 1);
           const currentPage = nb.pages[safeIdx] || nb.pages[0];
-          if (recordUndo) {
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(currentPage)]);
-            setRedoStack([]);
-          }
           const updatedPage = updater(clonePageFast(currentPage));
+          if (shouldRecordUndo && !isSamePageStateForUndo(currentPage, updatedPage)) {
+            const snap = clonePageFast(currentPage);
+            setUndoStack((u) => {
+              const nextU = [...u.slice(-30), snap];
+              undoStackRef.current = nextU;
+              return nextU;
+            });
+            setRedoStack([]);
+            redoStackRef.current = [];
+          }
           const newPages = [...nb.pages];
           newPages[safeIdx] = updatedPage;
           return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
@@ -5129,53 +6396,88 @@ export default function App() {
       setIsDirty(true);
       setSyncStatus('dirty');
     },
-    [activeNotebook.id, activePageIndex, clonePageFast]
+    [activeNotebook.id, activePageIndex, clonePageFast, isSamePageStateForUndo]
   );
 
   // Clear undo/redo stacks when switching between notebooks so a snapshot from Notebook A never applies to Notebook B
   useEffect(() => {
     setUndoStack([]);
+    undoStackRef.current = [];
     setRedoStack([]);
+    redoStackRef.current = [];
   }, [activeNotebook.id]);
 
   const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) {
+    const stack = [...undoStackRef.current];
+    if (stack.length === 0) {
       showToast('ℹ️ Δεν υπάρχει προηγούμενη ενέργεια για Αναίρεση (Undo)!');
       return;
     }
-    const prevPage = undoStack[undoStack.length - 1];
-    setUndoStack((u) => u.slice(0, -1));
+
+    const curNb =
+      notebooksRef.current.find((n) => n.id === activeNotebook.id) || activeNotebook;
+    let prevPage: NotePage | null = null;
+    let targetIdx = Math.min(
+      activeDrawingPageIndexRef.current ?? activePageIndex,
+      curNb.pages.length - 1
+    );
+    let currentTargetPage = curNb.pages[targetIdx] || activePage;
+
+    // Pop from stack, skipping any accidental no-op/identical snapshots so 1 click ALWAYS undoes 1 real change immediately!
+    while (stack.length > 0) {
+      const candidate = stack.pop()!;
+      const matchedIdx = curNb.pages.findIndex((p) => p.id === candidate.id);
+      const cIdx =
+        matchedIdx >= 0
+          ? matchedIdx
+          : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, curNb.pages.length - 1);
+      const cTarget = curNb.pages[cIdx] || activePage;
+      if (!isSamePageStateForUndo(candidate, cTarget) || stack.length === 0) {
+        prevPage = candidate;
+        targetIdx = cIdx;
+        currentTargetPage = cTarget;
+        break;
+      }
+    }
+
+    if (!prevPage || isSamePageStateForUndo(prevPage, currentTargetPage)) {
+      undoStackRef.current = stack;
+      setUndoStack(stack);
+      showToast('ℹ️ Δεν υπάρχει προηγούμενη ενέργεια για Αναίρεση (Undo)!');
+      return;
+    }
+
+    undoStackRef.current = stack;
+    setUndoStack(stack);
     userEditedInSessionRef.current.add(activeNotebook.id);
 
-    // Match the exact page by ID so Undo on Page 2 NEVER overwrites Page 1 even if scroll position shifted!
-    const matchedIdx = activeNotebook.pages.findIndex((p) => p.id === prevPage.id);
-    const targetIdx =
-      matchedIdx >= 0
-        ? matchedIdx
-        : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, activeNotebook.pages.length - 1);
-    const currentTargetPage = activeNotebook.pages[targetIdx] || activePage;
-
-    setRedoStack((r) => [...r, clonePageFast(currentTargetPage)]);
+    const redoSnap = clonePageFast(currentTargetPage);
+    setRedoStack((r) => {
+      const nextR = [...r, redoSnap];
+      redoStackRef.current = nextR;
+      return nextR;
+    });
     if (targetIdx !== activePageIndex) {
       activeDrawingPageIndexRef.current = targetIdx;
       setActivePageIndex(targetIdx);
     }
+    const targetPrevPage = prevPage;
     setNotebooks((prevNotebooks) =>
       prevNotebooks.map((nb) => {
         if (nb.id !== activeNotebook.id) return nb;
-        const idxById = nb.pages.findIndex((p) => p.id === prevPage.id);
+        const idxById = nb.pages.findIndex((p) => p.id === targetPrevPage.id);
         const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
         const newPages = [...nb.pages];
-        newPages[safeIdx] = clonePageFast(prevPage);
+        newPages[safeIdx] = clonePageFast(targetPrevPage);
         return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
       })
     );
     setIsDirty(true);
     setSyncStatus('dirty');
 
-    const validStrokeIds = new Set(prevPage.strokes.map((s) => s.id));
-    const validImgIds = new Set((prevPage.images || []).map((im) => im.id));
-    const validTxtIds = new Set((prevPage.texts || []).map((t) => t.id));
+    const validStrokeIds = new Set(targetPrevPage.strokes.map((s) => s.id));
+    const validImgIds = new Set((targetPrevPage.images || []).map((im) => im.id));
+    const validTxtIds = new Set((targetPrevPage.texts || []).map((t) => t.id));
     setSelectedStrokeIds((prev) => prev.filter((id) => validStrokeIds.has(id)));
     setActiveNodeStrokeId((prev) => (prev && validStrokeIds.has(prev) ? prev : null));
     setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
@@ -5183,25 +6485,41 @@ export default function App() {
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
     setImageCropMode('none');
     showToast('↩️ Αναίρεση (Undo)!');
-  }, [undoStack, activeNotebook.id, activeNotebook.pages, activePageIndex, activePage, clonePageFast, showToast]);
+  }, [
+    activeNotebook,
+    activePageIndex,
+    activePage,
+    clonePageFast,
+    isSamePageStateForUndo,
+    showToast,
+  ]);
 
   const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) {
+    const stack = [...redoStackRef.current];
+    if (stack.length === 0) {
       showToast('ℹ️ Δεν υπάρχει ενέργεια για Επανάληψη (Redo)!');
       return;
     }
-    const nextPage = redoStack[redoStack.length - 1];
-    setRedoStack((r) => r.slice(0, -1));
+    const nextPage = stack.pop()!;
+    redoStackRef.current = stack;
+    setRedoStack(stack);
     userEditedInSessionRef.current.add(activeNotebook.id);
 
-    const matchedIdx = activeNotebook.pages.findIndex((p) => p.id === nextPage.id);
+    const curNb =
+      notebooksRef.current.find((n) => n.id === activeNotebook.id) || activeNotebook;
+    const matchedIdx = curNb.pages.findIndex((p) => p.id === nextPage.id);
     const targetIdx =
       matchedIdx >= 0
         ? matchedIdx
-        : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, activeNotebook.pages.length - 1);
-    const currentTargetPage = activeNotebook.pages[targetIdx] || activePage;
+        : Math.min(activeDrawingPageIndexRef.current ?? activePageIndex, curNb.pages.length - 1);
+    const currentTargetPage = curNb.pages[targetIdx] || activePage;
 
-    setUndoStack((u) => [...u, clonePageFast(currentTargetPage)]);
+    const undoSnap = clonePageFast(currentTargetPage);
+    setUndoStack((u) => {
+      const nextU = [...u, undoSnap];
+      undoStackRef.current = nextU;
+      return nextU;
+    });
     if (targetIdx !== activePageIndex) {
       activeDrawingPageIndexRef.current = targetIdx;
       setActivePageIndex(targetIdx);
@@ -5229,7 +6547,7 @@ export default function App() {
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
     setImageCropMode('none');
     showToast('↪️ Επανάληψη (Redo)!');
-  }, [redoStack, activeNotebook.id, activeNotebook.pages, activePageIndex, activePage, clonePageFast, showToast]);
+  }, [activeNotebook, activePageIndex, activePage, clonePageFast, showToast]);
 
   const getNextPageZOrder = (page: NotePage): number => {
     const imgCount = (page.images || []).length;
@@ -5413,6 +6731,39 @@ export default function App() {
         }
       }
     }
+    if (
+      (s.arrowStart || s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') &&
+      s.points.length >= 2
+    ) {
+      const headLen = Math.max(12, s.width * 4.2);
+      const spread = Math.PI / 6;
+      if (s.arrowStart || s.shapeType === 'double-arrow') {
+        const first = s.points[0];
+        const second = s.points[Math.min(s.points.length - 1, 1)];
+        const ang = Math.atan2(first.y - second.y, first.x - second.x);
+        for (const sgn of [-1, 1]) {
+          const wx = first.x - headLen * Math.cos(ang + sgn * spread);
+          const wy = first.y - headLen * Math.sin(ang + sgn * spread);
+          if (wx < minX) minX = wx;
+          if (wy < minY) minY = wy;
+          if (wx > maxX) maxX = wx;
+          if (wy > maxY) maxY = wy;
+        }
+      }
+      if (s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') {
+        const last = s.points[s.points.length - 1];
+        const prev = s.points[Math.max(0, s.points.length - 2)];
+        const ang = Math.atan2(last.y - prev.y, last.x - prev.x);
+        for (const sgn of [-1, 1]) {
+          const wx = last.x - headLen * Math.cos(ang + sgn * spread);
+          const wy = last.y - headLen * Math.sin(ang + sgn * spread);
+          if (wx < minX) minX = wx;
+          if (wy < minY) minY = wy;
+          if (wx > maxX) maxX = wx;
+          if (wy > maxY) maxY = wy;
+        }
+      }
+    }
     return { minX, minY, maxX, maxY };
   };
 
@@ -5437,12 +6788,18 @@ export default function App() {
     baseTol = 18,
     allowInteriorFill = false
   ): boolean => {
-    const effectiveBaseTol = s.isShape ? Math.min(baseTol, 10) : baseTol;
+    const effectiveBaseTol = Math.min(baseTol, 9);
     const tol =
       s.tool === 'highlighter'
         ? effectiveBaseTol + (s.width || 3) * 1.9
         : effectiveBaseTol + (s.width || 2) * 0.35;
-    const hasOpaqueFill = Boolean(s.fillStyle && s.fillStyle !== 'none');
+    const hasOpaqueFill = Boolean(
+      s.fillStyle &&
+        s.fillStyle !== 'none' &&
+        s.fillColor &&
+        s.fillColor !== 'transparent' &&
+        (s.fillTransparency ?? 0) < 0.95
+    );
     const b = getStrokeBounds(s);
     if (pt.x < b.minX - tol || pt.x > b.maxX + tol || pt.y < b.minY - tol || pt.y > b.maxY + tol) {
       return false;
@@ -5650,6 +7007,54 @@ export default function App() {
       }
     }
 
+    if (
+      (s.arrowStart || s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') &&
+      s.points.length >= 2
+    ) {
+      const headLen = Math.max(12, s.width * 4.2);
+      const spread = Math.PI / 6;
+      if (s.arrowStart || s.shapeType === 'double-arrow') {
+        const first = s.points[0];
+        const second = s.points[Math.min(s.points.length - 1, 1)];
+        const ang = Math.atan2(first.y - second.y, first.x - second.x);
+        const w1 = {
+          x: first.x - headLen * Math.cos(ang - spread),
+          y: first.y - headLen * Math.sin(ang - spread),
+        };
+        const w2 = {
+          x: first.x - headLen * Math.cos(ang + spread),
+          y: first.y - headLen * Math.sin(ang + spread),
+        };
+        if (
+          isPointNearSegment(pt, first, w1, tol) ||
+          isPointNearSegment(pt, first, w2, tol) ||
+          isPointNearSegment(pt, w1, w2, tol)
+        ) {
+          return true;
+        }
+      }
+      if (s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') {
+        const last = s.points[s.points.length - 1];
+        const prev = s.points[Math.max(0, s.points.length - 2)];
+        const ang = Math.atan2(last.y - prev.y, last.x - prev.x);
+        const w1 = {
+          x: last.x - headLen * Math.cos(ang - spread),
+          y: last.y - headLen * Math.sin(ang - spread),
+        };
+        const w2 = {
+          x: last.x - headLen * Math.cos(ang + spread),
+          y: last.y - headLen * Math.sin(ang + spread),
+        };
+        if (
+          isPointNearSegment(pt, last, w1, tol) ||
+          isPointNearSegment(pt, last, w2, tol) ||
+          isPointNearSegment(pt, w1, w2, tol)
+        ) {
+          return true;
+        }
+      }
+    }
+
     // Allow interior hit-testing ONLY on shapes that actually have an opaque interior fill (`hasOpaqueFill`).
     // Transparent shapes (`!s.fillStyle || s.fillStyle === 'none'`) are ONLY selectable on their border lines!
     if (allowInteriorFill && hasOpaqueFill && s.points.length >= 3) {
@@ -5782,6 +7187,87 @@ export default function App() {
       };
     },
     []
+  );
+
+  // Checks if a screen point (clientX, clientY) lands directly on rendered letters/glyphs of a text box DOM element
+  // (using Range.getClientRects() per text node so empty space inside a multi-line text box is ignored!)
+  const isClientPointOnTextElementGlyphs = useCallback(
+    (clientX: number, clientY: number, domEl: HTMLElement | null, tolPx = 6): boolean => {
+      if (!domEl) return false;
+      const domRect = domEl.getBoundingClientRect();
+      if (domRect.width < 0.5 || domRect.height < 0.5) return false;
+      if (
+        clientX < domRect.left - tolPx ||
+        clientX > domRect.right + tolPx ||
+        clientY < domRect.top - tolPx ||
+        clientY > domRect.bottom + tolPx
+      ) {
+        return false;
+      }
+      try {
+        const walker = document.createTreeWalker(domEl, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        let foundAnyRect = false;
+        let node = walker.nextNode();
+        while (node) {
+          const parentEl = node.parentElement;
+          if (
+            parentEl &&
+            !parentEl.closest('[data-text-drag]') &&
+            parentEl.tagName !== 'TEXTAREA' &&
+            (node.textContent || '').replace(/[\s\u200B]+/g, '').length > 0
+          ) {
+            range.selectNodeContents(node);
+            const rects = range.getClientRects();
+            for (let i = 0; i < rects.length; i++) {
+              const r = rects[i];
+              if (r.width < 0.5 || r.height < 0.5) continue;
+              foundAnyRect = true;
+              if (
+                clientX >= r.left - tolPx &&
+                clientX <= r.right + tolPx &&
+                clientY >= r.top - tolPx &&
+                clientY <= r.bottom + tolPx
+              ) {
+                return true;
+              }
+            }
+          }
+          node = walker.nextNode();
+        }
+        if (foundAnyRect) {
+          return false;
+        }
+      } catch {
+        // fallback below
+      }
+      return true;
+    },
+    []
+  );
+
+  const isPagePointOnTextGlyphs = useCallback(
+    (pt: { x: number; y: number }, t: TextObject, tol = 6): boolean => {
+      const domEl = document.querySelector(`[data-text-id="${t.id}"]`) as HTMLElement | null;
+      if (domEl) {
+        const domRect = domEl.getBoundingClientRect();
+        if (domRect.width > 0.5 && domRect.height > 0.5) {
+          const scaleX = domEl.offsetWidth > 0 ? domEl.offsetWidth / domRect.width : 1;
+          const scaleY = domEl.offsetHeight > 0 ? domEl.offsetHeight / domRect.height : 1;
+          const clientX = domRect.left + (pt.x - t.x) / scaleX;
+          const clientY = domRect.top + (pt.y - t.y) / scaleY;
+          return isClientPointOnTextElementGlyphs(clientX, clientY, domEl, tol / scaleX);
+        }
+      }
+      const tb = getTextVisualBounds(t);
+      return (
+        pt.x >= tb.minX - tol &&
+        pt.x <= tb.maxX + tol &&
+        pt.y >= tb.minY - tol &&
+        pt.y <= tb.maxY + tol
+      );
+    },
+    [getTextVisualBounds, isClientPointOnTextElementGlyphs]
   );
 
   const getSelectionBounds = useCallback(() => {
@@ -5971,8 +7457,8 @@ export default function App() {
   // Checks if a screen touch point (clientX, clientY) lands inside or on a handle of the active Lasso selection box
   // OR on an active Direct Node handle, allowing 1-finger drag-and-drop even when Pencil-Only Mode is ON!
   const isClientPointInLassoSelection = useCallback(
-    (clientX: number, clientY: number): boolean => {
-      const canvas = activeCanvasRef.current;
+    (clientX: number, clientY: number, targetEl?: EventTarget | null): boolean => {
+      const canvas = targetEl instanceof HTMLCanvasElement ? targetEl : activeCanvasRef.current;
       if (!canvas) return false;
       const rect = canvas.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return false;
@@ -6026,23 +7512,61 @@ export default function App() {
         Math.abs(localY - (hh + 26)) <= 20
       )
         return true;
-      if (Math.abs(localX) <= hw + 28 && Math.abs(localY) <= hh + 28) {
-        const selStrokesOnly =
-          selectedImageIds.length === 0 &&
-          !selectedImageId &&
-          selectedLassoTextIds.length === 0 &&
-          selectedStrokeIds.length > 0
-            ? activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id))
-            : [];
-        if (
-          selStrokesOnly.length > 0 &&
-          selStrokesOnly.every((s) => s.isShape && (!s.fillStyle || s.fillStyle === 'none')) &&
-          Math.abs(localX) < hw - 16 &&
-          Math.abs(localY) < hh - 16
-        ) {
-          return selStrokesOnly.some((s) => isPointNearStroke({ x: ptX, y: ptY }, s, 16, false));
-        }
+      // Check 4 corner handles and 4 mid-side stretch handles on the selection frame
+      if (
+        Math.hypot(Math.abs(localX) - hw, Math.abs(localY) - hh) <= 14 ||
+        (Math.abs(localX) <= 14 && Math.abs(Math.abs(localY) - hh) <= 14) ||
+        (Math.abs(localY) <= 14 && Math.abs(Math.abs(localX) - hw) <= 14)
+      ) {
         return true;
+      }
+      if (Math.abs(localX) <= hw + 14 && Math.abs(localY) <= hh + 14) {
+        const effectiveImgIds =
+          selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
+        if (selectedStrokeIds.length + effectiveImgIds.length + selectedLassoTextIds.length >= 2) {
+          return true;
+        }
+        const selImgs = (activePage.images || []).filter((im) => effectiveImgIds.includes(im.id));
+        if (
+          selImgs.some(
+            (im) => ptX >= im.x && ptX <= im.x + im.width && ptY >= im.y && ptY <= im.y + im.height
+          )
+        ) {
+          return true;
+        }
+        const selStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
+        if (
+          selStrokes.some((s) => {
+            if (isPointNearStroke({ x: ptX, y: ptY }, s, 18, true)) return true;
+            if (
+              s.shapeType === 'bulb' ||
+              s.shapeType === 'battery' ||
+              s.shapeType === 'voltage-source' ||
+              s.shapeType === 'switch' ||
+              s.shapeType === 'switch-blade' ||
+              s.shapeType === 'switch-knob' ||
+              s.shapeType === 'resistor' ||
+              s.shapeType === 'fan' ||
+              s.shapeType === 'fan-blade' ||
+              s.shapeType === 'fan-hub'
+            ) {
+              const sb = getStrokeBounds(s);
+              return (
+                ptX >= sb.minX - 12 &&
+                ptX <= sb.maxX + 12 &&
+                ptY >= sb.minY - 12 &&
+                ptY <= sb.maxY + 12
+              );
+            }
+            return false;
+          })
+        ) {
+          return true;
+        }
+        const selTxts = (activePage.texts || []).filter((t) => selectedLassoTextIds.includes(t.id));
+        if (selTxts.some((t) => isPagePointOnTextGlyphs({ x: ptX, y: ptY }, t, 6))) {
+          return true;
+        }
       }
       return false;
     },
@@ -6050,11 +7574,14 @@ export default function App() {
       activeTool,
       activeNodeStrokeId,
       activePage.strokes,
+      activePage.images,
+      activePage.texts,
       selectedStrokeIds,
       selectedImageId,
-      selectedImageIds.length,
-      selectedLassoTextIds.length,
+      selectedImageIds,
+      selectedLassoTextIds,
       getSelectionBounds,
+      isPagePointOnTextGlyphs,
     ]
   );
 
@@ -6097,7 +7624,7 @@ export default function App() {
       for (let idx = 0; idx < strokeList.length; idx++) {
         const s = strokeList[idx];
         if (lockedLayers.has(s.layerId)) continue;
-        if (isPointNearStroke(pt, s, 22, false)) {
+        if (isPointNearStroke(pt, s, 9, false)) {
           const z = s.zOrder ?? imgList.length + idx + 1;
           if (!topHitStroke || z >= topHitStroke.z) {
             topHitStroke = { stroke: s, z };
@@ -6109,7 +7636,7 @@ export default function App() {
         for (let idx = 0; idx < strokeList.length; idx++) {
           const s = strokeList[idx];
           if (lockedLayers.has(s.layerId)) continue;
-          if (isPointNearStroke(pt, s, 22, true)) {
+          if (isPointNearStroke(pt, s, 9, true)) {
             const z = s.zOrder ?? imgList.length + idx + 1;
             if (!topHitStroke || z >= topHitStroke.z) {
               topHitStroke = { stroke: s, z };
@@ -6414,34 +7941,38 @@ export default function App() {
         const txtDom = document.querySelector(`[data-text-id="${currentTxtId}"]`) as HTMLElement | null;
         if (txtDom) {
           const r = txtDom.getBoundingClientRect();
-          if (
-            clientX >= r.left - 24 &&
-            clientX <= r.right + 24 &&
-            clientY >= r.top - 24 &&
-            clientY <= r.bottom + 24
-          ) {
+          const onCornerOrEdge =
+            (Math.abs(clientX - r.left) <= 14 ||
+              Math.abs(clientX - r.right) <= 14 ||
+              Math.abs(clientX - (r.left + r.width / 2)) <= 14) &&
+            (Math.abs(clientY - r.top) <= 14 ||
+              Math.abs(clientY - r.bottom) <= 14 ||
+              Math.abs(clientY - (r.top + r.height / 2)) <= 14);
+          if (onCornerOrEdge || isClientPointOnTextElementGlyphs(clientX, clientY, txtDom, 6)) {
             return true;
           }
-          // When a text box is active (dark floating toolbar open), any finger touch outside it
-          // is for 1-finger scrolling or 2-finger pinch-to-zoom — never hijack it to select background objects!
+        }
+        // In Text ('text') tool mode, touching outside the active text box checks if another text box is hit;
+        // in Lasso ('lasso') mode, fall through so 1-finger touch on any other text box or object selects it!
+        if (activeTool === 'text') {
+          const allTxtEls = document.querySelectorAll('[data-text-id]');
+          for (let i = 0; i < allTxtEls.length; i++) {
+            if (isClientPointOnTextElementGlyphs(clientX, clientY, allTxtEls[i] as HTMLElement, 6)) {
+              return true;
+            }
+          }
           return false;
         }
       }
       if (activeTool === 'lasso' || activeTool === 'text') {
         const allTxtEls = document.querySelectorAll('[data-text-id]');
         for (let i = 0; i < allTxtEls.length; i++) {
-          const r = allTxtEls[i].getBoundingClientRect();
-          if (
-            clientX >= r.left - 10 &&
-            clientX <= r.right + 10 &&
-            clientY >= r.top - 10 &&
-            clientY <= r.bottom + 10
-          ) {
+          if (isClientPointOnTextElementGlyphs(clientX, clientY, allTxtEls[i] as HTMLElement, 6)) {
             return true;
           }
         }
       }
-      if (activeTool === 'lasso' && isClientPointInLassoSelection(clientX, clientY)) return true;
+      if (activeTool === 'lasso' && isClientPointInLassoSelection(clientX, clientY, targetEl)) return true;
       const canvas = targetEl instanceof HTMLCanvasElement ? targetEl : activeCanvasRef.current;
       if (!canvas) return false;
       const rect = canvas.getBoundingClientRect();
@@ -6457,6 +7988,21 @@ export default function App() {
         if (activeCanvasMapRef.current.get(p.id) === canvas) {
           targetPageObj = p;
           break;
+        }
+      }
+
+      if (activeTool === 'lasso' || activeTool === 'text') {
+        const lockedTxtLayerIds = new Set(
+          targetPageObj.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+        );
+        for (const txt of targetPageObj.texts || []) {
+          if (lockedTxtLayerIds.has(txt.layerId)) continue;
+          if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) {
+            continue;
+          }
+          if (isPagePointOnTextGlyphs({ x: ptX, y: ptY }, txt, 6)) {
+            return true;
+          }
         }
       }
 
@@ -6586,8 +8132,10 @@ export default function App() {
 
       if (isSimulating && autoSwitchHitRef.current) {
         const sw = autoSwitchHitRef.current;
-        const knobX = sw.x + 17;
-        const knobY = sw.closed ? sw.yCenter : (sw.yBottom + sw.yTop + 4) / 2;
+        const bladeTipX = sw.x + 25;
+        const bladeTipY = sw.yTop + 4;
+        const knobX = sw.closed ? sw.x + 14.5 : sw.x + (bladeTipX - sw.x) * 0.78;
+        const knobY = sw.closed ? sw.yCenter : sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
         if (
           Math.hypot(ptX - knobX, ptY - knobY) <= 36 ||
           (Math.abs(ptX - sw.x) <= 32 && ptY >= sw.yTop - 16 && ptY <= sw.yBottom + 16)
@@ -6653,17 +8201,52 @@ export default function App() {
     if (s.points.length === 0) return;
     ctx.save();
 
+    const isBulbInternalFilamentOrLead =
+      s.shapeType === 'bulb' &&
+      (s.id.includes('-bulb-coil') ||
+        s.id.includes('-bulb-lead-') ||
+        s.id.includes('-bulb-fil'));
+
     if (s.tool === 'highlighter') {
       ctx.globalCompositeOperation = 'multiply';
       ctx.globalAlpha = s.opacity ?? 0.42;
     } else {
       ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = s.opacity ?? 1;
+      ctx.globalAlpha = isBulbInternalFilamentOrLead ? 0.9 : s.opacity ?? 1;
     }
 
     ctx.strokeStyle =
-      s.shapeType === 'fan' && s.points.length === 2 ? '#111827' : s.color;
-    ctx.lineWidth = s.width;
+      s.shapeType === 'fan' && s.points.length === 2
+        ? '#111827'
+        : isBulbInternalFilamentOrLead
+        ? '#334155'
+        : s.color;
+    const isLegacyStencilWidth =
+      (s.shapeType === 'bulb' ||
+        s.shapeType === 'battery' ||
+        s.shapeType === 'voltage-source' ||
+        s.shapeType === 'resistor' ||
+        s.shapeType === 'switch' ||
+        s.shapeType === 'switch-knob' ||
+        s.shapeType === 'fan' ||
+        s.shapeType === 'fan-blade' ||
+        s.shapeType === 'fan-hub' ||
+        s.shapeType === 'incline-wedge' ||
+        s.shapeType === 'incline-block' ||
+        s.shapeType === 'wave-axis-x' ||
+        s.shapeType === 'wave-axis-y' ||
+        s.shapeType === 'wave-guide-top' ||
+        s.shapeType === 'wave-guide-bottom') &&
+      s.width > 2.05 &&
+      s.width <= 2.85;
+    const effectiveLineWidth = isLegacyStencilWidth
+      ? 2.0
+      : s.shapeType === 'switch-blade' && s.width > 3.0 && s.width <= 3.5
+      ? 2.2
+      : s.shapeType === 'voltage-source' && s.width > 3.5 && s.width <= 3.9
+      ? 2.6
+      : s.width;
+    ctx.lineWidth = effectiveLineWidth;
     ctx.lineCap = s.tool === 'highlighter' ? 'butt' : 'round';
     ctx.lineJoin = 'round';
 
@@ -6673,9 +8256,9 @@ export default function App() {
     }
 
     if (s.lineStyle === 'dashed') {
-      ctx.setLineDash([s.width * 3.2, s.width * 2.2]);
+      ctx.setLineDash([effectiveLineWidth * 3.2, effectiveLineWidth * 2.2]);
     } else if (s.lineStyle === 'dotted') {
-      ctx.setLineDash([s.width * 0.8, s.width * 2.2]);
+      ctx.setLineDash([effectiveLineWidth * 0.8, effectiveLineWidth * 2.2]);
     } else {
       ctx.setLineDash([]);
     }
@@ -6690,7 +8273,7 @@ export default function App() {
       const ptrColor = s.color || '#dc2626';
       ctx.strokeStyle = ptrColor;
       ctx.fillStyle = ptrColor;
-      ctx.lineWidth = Math.max(2.4, s.width || 2.6);
+      ctx.lineWidth = s.width || 2.0;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.setLineDash([]);
@@ -7161,34 +8744,74 @@ export default function App() {
         else ctx.lineTo(x, y);
       }
     } else {
-      ctx.moveTo(s.points[0].x, s.points[0].y);
-      if (s.points.length === 1) {
-        // 1-point tap/dot/accent: HTML5 Canvas requires a tiny non-zero segment to render a round cap dot!
-        ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
-      } else if (
-        !s.groupId?.startsWith('math-graph-grp-') &&
-        (s.shapeType === 'wave-guide-top' ||
-          s.shapeType === 'wave-guide-bottom' ||
-          s.shapeType === 'wave-axis-x' ||
-          s.shapeType === 'wave-axis-y')
-      ) {
-        const endPt = s.points[s.points.length - 1];
-        ctx.lineTo(endPt.x, endPt.y);
+      const hasStartArrow = Boolean(
+        (s.arrowStart || s.shapeType === 'double-arrow') && s.points.length >= 2
+      );
+      const hasEndArrow = Boolean(
+        (s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') &&
+          s.points.length >= 2
+      );
+      const headLenForShaft = Math.max(12, s.width * 4.2);
+      const baseInsetForShaft = headLenForShaft * Math.cos(Math.PI / 6);
+      const isStraightTwoPtArrow =
+        (hasStartArrow || hasEndArrow) &&
+        s.points.length === 2 &&
+        !getCubicSegmentControlPoints(s.points[0], s.points[1]) &&
+        (s.points[1].cx === undefined ||
+          Math.hypot(
+            s.points[1].cx - (s.points[0].x + s.points[1].x) / 2,
+            (s.points[1].cy ?? 0) - (s.points[0].y + s.points[1].y) / 2
+          ) < 1.8) &&
+        distance(s.points[0], s.points[1]) > headLenForShaft * 1.35;
+
+      if (isStraightTwoPtArrow) {
+        const p0 = s.points[0];
+        const p1 = s.points[1];
+        const ang = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+        const startX = hasStartArrow ? p0.x + baseInsetForShaft * Math.cos(ang) : p0.x;
+        const startY = hasStartArrow ? p0.y + baseInsetForShaft * Math.sin(ang) : p0.y;
+        const endX = hasEndArrow ? p1.x - baseInsetForShaft * Math.cos(ang) : p1.x;
+        const endY = hasEndArrow ? p1.y - baseInsetForShaft * Math.sin(ang) : p1.y;
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
       } else {
-        for (let i = 1; i < s.points.length; i++) {
-          const prevPt = s.points[i - 1];
-          const pt = s.points[i];
-          const cubicCtrl = getCubicSegmentControlPoints(prevPt, pt);
-          if (cubicCtrl) {
-            ctx.bezierCurveTo(cubicCtrl.cp1x, cubicCtrl.cp1y, cubicCtrl.cp2x, cubicCtrl.cp2y, pt.x, pt.y);
-          } else if (pt.cx !== undefined && pt.cy !== undefined) {
-            ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
-          } else {
-            ctx.lineTo(pt.x, pt.y);
-          }
-        }
-        if (s.points.length === 2 && distance(s.points[0], s.points[1]) < 0.4) {
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        if (s.points.length === 1) {
+          // 1-point tap/dot/accent: HTML5 Canvas requires a tiny non-zero segment to render a round cap dot!
           ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
+        } else if (
+          !s.groupId?.startsWith('math-graph-grp-') &&
+          (s.shapeType === 'wave-guide-top' ||
+            s.shapeType === 'wave-guide-bottom' ||
+            s.shapeType === 'wave-axis-x' ||
+            s.shapeType === 'wave-axis-y')
+        ) {
+          const endPt = s.points[s.points.length - 1];
+          if (hasEndArrow && distance(s.points[0], endPt) > headLenForShaft * 1.35) {
+            const ang = Math.atan2(endPt.y - s.points[0].y, endPt.x - s.points[0].x);
+            ctx.lineTo(
+              endPt.x - baseInsetForShaft * Math.cos(ang),
+              endPt.y - baseInsetForShaft * Math.sin(ang)
+            );
+          } else {
+            ctx.lineTo(endPt.x, endPt.y);
+          }
+        } else {
+          for (let i = 1; i < s.points.length; i++) {
+            const prevPt = s.points[i - 1];
+            const pt = s.points[i];
+            const cubicCtrl = getCubicSegmentControlPoints(prevPt, pt);
+            if (cubicCtrl) {
+              ctx.bezierCurveTo(cubicCtrl.cp1x, cubicCtrl.cp1y, cubicCtrl.cp2x, cubicCtrl.cp2y, pt.x, pt.y);
+            } else if (pt.cx !== undefined && pt.cy !== undefined) {
+              ctx.quadraticCurveTo(pt.cx, pt.cy, pt.x, pt.y);
+            } else {
+              ctx.lineTo(pt.x, pt.y);
+            }
+          }
+          if (s.points.length === 2 && distance(s.points[0], s.points[1]) < 0.4) {
+            ctx.lineTo(s.points[0].x + 0.08, s.points[0].y + 0.08);
+          }
         }
       }
     }
@@ -7215,6 +8838,17 @@ export default function App() {
         ctx.save();
         ctx.fillStyle = '#cbd5e1';
         ctx.globalAlpha = 0.78;
+        ctx.fill();
+        ctx.restore();
+      } else if (s.shapeType === 'bulb' && s.id.includes('-bulb-term-side')) {
+        // Side screw terminal pad stays unfilled so only the bottom cap is solid black
+      } else if (
+        s.shapeType === 'bulb' &&
+        (s.id.includes('-bulb-term-bot') || (s.fillStyle === 'solid' && s.points.length >= 6))
+      ) {
+        ctx.save();
+        ctx.fillStyle = s.fillColor || s.color || '#111827';
+        ctx.globalAlpha = 1;
         ctx.fill();
         ctx.restore();
       } else {
@@ -7256,20 +8890,25 @@ export default function App() {
           ? { x: cubicStart.cp1x, y: cubicStart.cp1y }
           : second;
       const angle = Math.atan2(first.y - refStart.y, first.x - refStart.x);
-      const headLen = Math.max(12, s.width * 4);
+      const headLen = Math.max(12, s.width * 4.2);
+      const spread = Math.PI / 6;
+      const w1x = first.x - headLen * Math.cos(angle - spread);
+      const w1y = first.y - headLen * Math.sin(angle - spread);
+      const w2x = first.x - headLen * Math.cos(angle + spread);
+      const w2y = first.y - headLen * Math.sin(angle + spread);
+      ctx.save();
       ctx.setLineDash([]);
+      ctx.fillStyle = s.color;
+      ctx.globalAlpha = (s.opacity ?? 1) * 0.85;
       ctx.beginPath();
       ctx.moveTo(first.x, first.y);
-      ctx.lineTo(
-        first.x - headLen * Math.cos(angle - Math.PI / 6),
-        first.y - headLen * Math.sin(angle - Math.PI / 6)
-      );
-      ctx.moveTo(first.x, first.y);
-      ctx.lineTo(
-        first.x - headLen * Math.cos(angle + Math.PI / 6),
-        first.y - headLen * Math.sin(angle + Math.PI / 6)
-      );
+      ctx.lineTo(w1x, w1y);
+      ctx.lineTo(w2x, w2y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = s.opacity ?? 1;
       ctx.stroke();
+      ctx.restore();
     }
 
     if ((s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'double-arrow') && s.points.length >= 2) {
@@ -7281,14 +8920,25 @@ export default function App() {
           ? { x: cubicEnd.cp2x, y: cubicEnd.cp2y }
           : prev;
       const angle = Math.atan2(last.y - refEnd.y, last.x - refEnd.x);
-      const headLen = Math.max(12, s.width * 4);
+      const headLen = Math.max(12, s.width * 4.2);
+      const spread = Math.PI / 6;
+      const w1x = last.x - headLen * Math.cos(angle - spread);
+      const w1y = last.y - headLen * Math.sin(angle - spread);
+      const w2x = last.x - headLen * Math.cos(angle + spread);
+      const w2y = last.y - headLen * Math.sin(angle + spread);
+      ctx.save();
       ctx.setLineDash([]);
+      ctx.fillStyle = s.color;
+      ctx.globalAlpha = (s.opacity ?? 1) * 0.85;
       ctx.beginPath();
       ctx.moveTo(last.x, last.y);
-      ctx.lineTo(last.x - headLen * Math.cos(angle - Math.PI / 6), last.y - headLen * Math.sin(angle - Math.PI / 6));
-      ctx.moveTo(last.x, last.y);
-      ctx.lineTo(last.x - headLen * Math.cos(angle + Math.PI / 6), last.y - headLen * Math.sin(angle + Math.PI / 6));
+      ctx.lineTo(w1x, w1y);
+      ctx.lineTo(w2x, w2y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = s.opacity ?? 1;
       ctx.stroke();
+      ctx.restore();
     }
 
     ctx.restore();
@@ -7353,9 +9003,18 @@ export default function App() {
     ctx.restore();
   };
 
-  // RENDER STATIC SCENE ACROSS ALL STACKED PAGES AT 2x RETINA HiDPI (1840x2520)
-  // (Only runs when page state changes, NEVER while Apple Pencil is moving!)
+  // RENDER STATIC SCENE ACROSS MOUNTED PAGES AT 2x RETINA HiDPI (1840x2520)
+  // (Only runs on mounted viewport canvases when page state changes, NEVER while Apple Pencil is moving!)
   const renderStaticSceneRef = useRef<() => void>(() => {});
+  const pendingStaticRenderRafRef = useRef<number | null>(null);
+  const scheduleCoalescedStaticRender = useCallback(() => {
+    if (pendingStaticRenderRafRef.current !== null) return;
+    pendingStaticRenderRafRef.current = window.requestAnimationFrame(() => {
+      pendingStaticRenderRafRef.current = null;
+      renderStaticSceneRef.current();
+    });
+  }, []);
+
   const renderStaticScene = useCallback(() => {
     activeNotebook.pages.forEach((pageObj, pageIdx) => {
       const canvas = staticCanvasMapRef.current.get(pageObj.id) || (pageIdx === activePageIndex ? staticCanvasRef.current : null);
@@ -7371,55 +9030,9 @@ export default function App() {
       ctx.clearRect(0, 0, pWidth, pHeight);
 
       // 0. Full-Page PDF or JPG/PNG Document Background:
-      // Render as a standalone document page on plain white paper (never on top of our ruled/grid paper!)
-      if (pageObj.backgroundDataUrl) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, pWidth, pHeight);
-
-        let bgImg = imageElementsCacheRef.current.get(pageObj.backgroundDataUrl);
-        if (!bgImg) {
-          bgImg = new Image();
-          if (pageObj.backgroundDataUrl.startsWith('http')) {
-            bgImg.crossOrigin = 'anonymous';
-          }
-          bgImg.onload = () => renderStaticSceneRef.current();
-          bgImg.src = pageObj.backgroundDataUrl;
-          imageElementsCacheRef.current.set(pageObj.backgroundDataUrl, bgImg);
-        }
-        if (bgImg.complete && bgImg.naturalWidth > 0 && bgImg.naturalHeight > 0) {
-          // Auto-upgrade any previously saved PDF/image page that lacked customWidth/customHeight
-          // so its page frame matches the exact aspect ratio of the PDF/image with 0px border
-          if (!pageObj.customWidth || !pageObj.customHeight) {
-            const aspect = Math.max(0.25, Math.min(4, bgImg.naturalWidth / bgImg.naturalHeight));
-            const isLand = aspect > 1.05;
-            const nextW = isLand ? A4_LONG_PX : Math.max(320, Math.round(A4_LONG_PX * aspect));
-            const nextH = isLand ? Math.max(320, Math.round(A4_LONG_PX / aspect)) : A4_LONG_PX;
-            window.setTimeout(() => {
-              setNotebooks((prev) =>
-                prev.map((nb) => {
-                  if (nb.id !== activeNotebook.id) return nb;
-                  let changed = false;
-                  const nextPages = nb.pages.map((p) => {
-                    if (p.id === pageObj.id && (!p.customWidth || !p.customHeight)) {
-                      changed = true;
-                      return {
-                        ...p,
-                        template: 'blank' as PaperTemplateType,
-                        customWidth: nextW,
-                        customHeight: nextH,
-                      };
-                    }
-                    return p;
-                  });
-                  return changed ? { ...nb, pages: nextPages } : nb;
-                })
-              );
-            }, 0);
-          }
-          ctx.save();
-          ctx.drawImage(bgImg, 0, 0, pWidth, pHeight);
-          ctx.restore();
-        }
+      // Leave staticCanvas transparent over the hardware-accelerated <img> layer so we never duplicate 2x bitmaps in VRAM!
+      if (pageObj.backgroundDataUrl || pageObj.pdfPageNumber) {
+        // Transparent canvas; underlying <img> renders the PDF/image page
       } else {
         drawPaperBackground(ctx, pWidth, pHeight, pageObj.template);
       }
@@ -7731,41 +9344,43 @@ export default function App() {
           ctx.translate(bcx, bcy);
           ctx.rotate(angle);
 
-          // Oriented Dashed Selection Frame (follows shape rotation!)
-          ctx.strokeStyle = '#0066ff';
-          ctx.lineWidth = 1.8;
-          ctx.setLineDash([6, 4]);
+          // Oriented Dashed Selection Frame (follows shape rotation!) — crisp slate-500 with longer [7, 4.5] dashes
+          ctx.strokeStyle = 'rgba(100, 116, 139, 0.92)';
+          ctx.lineWidth = 1.45;
+          ctx.setLineDash([7, 4.5]);
           ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
+          ctx.setLineDash([]);
 
           if (!isMoveOnlyLassoSelection && !isSelectedAttachedWeight) {
           if (selTextsList.length === 0) {
           // Rotation Stem
-          ctx.setLineDash([]);
+          ctx.strokeStyle = 'rgba(100, 116, 139, 0.92)';
+          ctx.lineWidth = 1.35;
           ctx.beginPath();
           ctx.moveTo(0, rotStemTopY > 0 ? hh : -hh);
-          ctx.lineTo(0, rotStemTopY > 0 ? rotStemTopY - 12 : rotStemTopY + 12);
+          ctx.lineTo(0, rotStemTopY > 0 ? rotStemTopY - 9.5 : rotStemTopY + 9.5);
           ctx.stroke();
 
-          // Semicircular Rotation Arrow Badge (turns emerald when snapped to 0° / 90° / 180° / 270° / 360°)
+          // Semicircular Rotation Arrow Badge (slightly smaller; turns emerald when snapped to 0° / 90° / 180° / 270° / 360°)
           const degNorm = (Math.round((angle * 180) / Math.PI) % 360 + 360) % 360;
           const isCardinalSnap = degNorm === 0 || degNorm === 90 || degNorm === 180 || degNorm === 270;
           const isActivelyRotating = selectionTransformRef.current?.mode === 'rotate';
-          const badgeStrokeColor = isActivelyRotating && isCardinalSnap ? '#10b981' : '#0066ff';
+          const badgeStrokeColor = isActivelyRotating && isCardinalSnap ? '#10b981' : '#64748b';
 
           ctx.fillStyle = '#ffffff';
           ctx.strokeStyle = badgeStrokeColor;
-          ctx.lineWidth = isActivelyRotating && isCardinalSnap ? 2.6 : 2.0;
+          ctx.lineWidth = isActivelyRotating && isCardinalSnap ? 2.1 : 1.5;
           ctx.beginPath();
-          ctx.arc(0, rotStemTopY, 12, 0, Math.PI * 2);
+          ctx.arc(0, rotStemTopY, 9.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
 
           // Draw Semicircular Curved Arrow (↻) inside the badge
-          const arcRadius = 6.2;
+          const arcRadius = 4.8;
           const startAng = Math.PI * 0.8;
           const endAng = Math.PI * 2.15;
           ctx.strokeStyle = badgeStrokeColor;
-          ctx.lineWidth = 2.1;
+          ctx.lineWidth = 1.65;
           ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.arc(0, rotStemTopY, arcRadius, startAng, endAng, false);
@@ -7775,10 +9390,10 @@ export default function App() {
           const tipX = arcRadius * Math.cos(endAng);
           const tipY = rotStemTopY + arcRadius * Math.sin(endAng);
           const tangentAng = endAng + Math.PI / 2;
-          const headLen = 4.8;
+          const headLen = 3.8;
           ctx.fillStyle = badgeStrokeColor;
           ctx.beginPath();
-          ctx.moveTo(tipX + 1.2 * Math.cos(tangentAng), tipY + 1.2 * Math.sin(tangentAng));
+          ctx.moveTo(tipX + 1.0 * Math.cos(tangentAng), tipY + 1.0 * Math.sin(tangentAng));
           ctx.lineTo(
             tipX - headLen * Math.cos(tangentAng - 0.65),
             tipY - headLen * Math.sin(tangentAng - 0.65)
@@ -7809,7 +9424,7 @@ export default function App() {
           }
 
           // Helper to draw small orange double-headed resize arrows (↕ / ↔) next to Orange Stretch Dots
-          const drawOrangeResizeArrow = (ax: number, ay: number, isVertical: boolean) => {
+          const _drawOrangeResizeArrow = (ax: number, ay: number, isVertical: boolean) => {
             ctx.save();
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -7847,6 +9462,7 @@ export default function App() {
             ctx.stroke();
             ctx.restore();
           };
+          void _drawOrangeResizeArrow;
 
           // Helper to draw the classic green Crop symbol (two interlocking L-brackets) outside the frame next to Green Crop Bars
           const drawGreenCropIcon = (ix: number, iy: number, isActive: boolean) => {
@@ -7943,19 +9559,16 @@ export default function App() {
             const sideOffX = Math.min(22, Math.max(12, hw * 0.34));
             const sideOffY = Math.min(22, Math.max(12, hh * 0.34));
 
-            // 1. 4 Orange Stretch Dots (● #f97316) + Small Orange Resize Arrow (↔) ONLY on the Right side outside the frame
+            // 1. 4 Orange Stretch Dots (● #f97316) without external arrows
             const isImgCenteredOnPageX =
               Math.abs(bcx - getPageLogicalWidth(pageObj) / 2) <= 2.0;
             const imgStretchDots = [
               { x: -sideOffX, y: -hh, ax: -sideOffX, ay: -hh - 14, isVert: true, showIcon: false, isTopMid: true }, // Top stretch
-              { x: hw, y: -sideOffY, ax: hw + 14, ay: -sideOffY, isVert: false, showIcon: true, isTopMid: false },   // Right stretch
+              { x: hw, y: -sideOffY, ax: hw + 14, ay: -sideOffY, isVert: false, showIcon: false, isTopMid: false },   // Right stretch
               { x: -sideOffX, y: hh, ax: -sideOffX, ay: hh + 14, isVert: true, showIcon: false, isTopMid: false },   // Bottom stretch
               { x: -hw, y: -sideOffY, ax: -hw - 14, ay: -sideOffY, isVert: false, showIcon: false, isTopMid: false }, // Left stretch
             ];
             for (const m of imgStretchDots) {
-              if (m.showIcon) {
-                drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
-              }
               ctx.fillStyle = m.isTopMid && isImgCenteredOnPageX ? '#ef4444' : '#f97316';
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = 2.2;
@@ -8044,29 +9657,26 @@ export default function App() {
             const hide1DStretchForOrthonormalXY =
               Boolean(mathDiagForFrame?.isOrthonormalXY) || selTextsList.length > 0;
             const isSmallSelForHandles = selBounds.hw < 30 || selBounds.hh < 30;
-            const sideDotR = isSmallSelForHandles ? 5.2 : 6.8;
+            const sideDotR = isSmallSelForHandles ? 4.2 : 5.2;
             const isShapeCenteredOnPageX =
               Math.abs(bcx - getPageLogicalWidth(pageObj) / 2) <= 2.0;
             if (!hide1DStretchForOrthonormalXY) {
-              // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots + Orange Arrows on Top ↕ & Right ↔!)
+              // 4 Mid-Side Aspect-Ratio Stretch Handles for Shapes/Strokes (Top, Right, Bottom, Left — Orange #f97316 dots only)
               const localSideMidpoints = [
-                { x: 0, y: -hh, ax: 0, ay: -hh - 14, isVert: true, showIcon: true, isTopMid: true },  // Top (height stretch ↕)
-                { x: hw, y: 0, ax: hw + 14, ay: 0, isVert: false, showIcon: true, isTopMid: false },   // Right (width stretch ↔)
-                { x: 0, y: hh, ax: 0, ay: hh + 14, isVert: true, showIcon: false, isTopMid: false },   // Bottom (height stretch)
-                { x: -hw, y: 0, ax: -hw - 14, ay: 0, isVert: false, showIcon: false, isTopMid: false }, // Left (width stretch)
+                { x: 0, y: -hh, isTopMid: true },  // Top (height stretch)
+                { x: hw, y: 0, isTopMid: false },  // Right (width stretch)
+                { x: 0, y: hh, isTopMid: false },  // Bottom (height stretch)
+                { x: -hw, y: 0, isTopMid: false }, // Left (width stretch)
               ];
               for (const m of localSideMidpoints) {
-                if (m.showIcon) {
-                  drawOrangeResizeArrow(m.ax, m.ay, m.isVert);
-                }
                 ctx.fillStyle = m.isTopMid && isShapeCenteredOnPageX ? '#ef4444' : '#f97316';
                 ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2.0;
+                ctx.lineWidth = 1.5;
                 ctx.beginPath();
                 ctx.arc(
                   m.x,
                   m.y,
-                  m.isTopMid && isShapeCenteredOnPageX ? sideDotR + 1.2 : sideDotR,
+                  m.isTopMid && isShapeCenteredOnPageX ? sideDotR + 0.8 : sideDotR,
                   0,
                   Math.PI * 2
                 );
@@ -8076,26 +9686,27 @@ export default function App() {
             } else if (isShapeCenteredOnPageX) {
               ctx.fillStyle = '#ef4444';
               ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = 2.0;
+              ctx.lineWidth = 1.5;
               ctx.beginPath();
-              ctx.arc(0, -hh, sideDotR + 1.2, 0, Math.PI * 2);
+              ctx.arc(0, -hh, sideDotR + 0.8, 0, Math.PI * 2);
               ctx.fill();
               ctx.stroke();
             }
           }
 
-          // 4 Corner Proportional Resize Handles (NW, NE, SE, SW — Blue #0066ff dots!)
-          const cornerDotR = selBounds.hw < 30 || selBounds.hh < 30 ? 5.8 : 7.5;
+          // 4 Corner Proportional Resize Handles (NW, NE, SE, SW — discreet smooth gray spheres!)
+          const cornerDotR = selBounds.hw < 30 || selBounds.hh < 30 ? 4.2 : 5.0;
           const localCorners = [
             { x: -hw, y: -hh },
             { x: hw, y: -hh },
             { x: hw, y: hh },
             { x: -hw, y: hh },
           ];
+          ctx.setLineDash([]);
           for (const c of localCorners) {
-            ctx.fillStyle = '#0066ff';
+            ctx.fillStyle = '#64748b';
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2.0;
+            ctx.lineWidth = 1.45;
             ctx.beginPath();
             ctx.arc(c.x, c.y, cornerDotR, 0, Math.PI * 2);
             ctx.fill();
@@ -8152,7 +9763,7 @@ export default function App() {
             ctx.restore();
           }
 
-          // 4b. Floating On-Canvas "🔗 Group" / "🔓 Ungroup" & "🎯 Κέντραρε" Quick Action Pills right below the Selection Frame!
+          // 4b. Floating On-Canvas "Group" / "Ungroup", "Κείμενο μόνο" & "Κέντραρε" Quick Action Pills right below the Selection Frame!
           if (totalSelObjects >= 2) {
             const firstGrpId =
               selStrokesList[0]?.groupId || selImagesList[0]?.groupId || selTextsList[0]?.groupId;
@@ -8161,46 +9772,69 @@ export default function App() {
               selStrokesList.every((st) => st.groupId === firstGrpId) &&
               selImagesList.every((im) => im.groupId === firstGrpId) &&
               selTextsList.every((t) => t.groupId === firstGrpId);
-            const grpPillW = allSameGroup ? 116 : 120;
-            const cntPillW = 104;
-            const pillH = 26;
-            const pillY = bcy + hh + 42 > getPageLogicalHeight(pageObj) ? -hh - 26 : hh + 26;
-            const grpCx = -56;
-            const cntCx = 62;
+            const hasMixedTextAndShapes =
+              selTextsList.length > 0 && (selStrokesList.length > 0 || selImagesList.length > 0);
+            const grpPillW = allSameGroup ? 80 : 68;
+            const txtOnlyPillW = 80;
+            const cntPillW = 64;
+            const pillGap = 5;
+            const pillH = 22;
+            const pillY = bcy + hh + 38 > getPageLogicalHeight(pageObj) ? -hh - 22 : hh + 22;
+            const totalRowW = hasMixedTextAndShapes
+              ? grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW
+              : grpPillW + pillGap + cntPillW;
+            const rowStartX = -totalRowW / 2;
+            const grpCx = rowStartX + grpPillW / 2;
+            const txtOnlyCx = rowStartX + grpPillW + pillGap + txtOnlyPillW / 2;
+            const cntCx = hasMixedTextAndShapes
+              ? rowStartX + grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW / 2
+              : rowStartX + grpPillW + pillGap + cntPillW / 2;
 
             ctx.save();
+            ctx.setLineDash([]);
             // Left Pill: Group / Ungroup
             ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = 7;
             ctx.shadowOffsetY = 2;
             ctx.fillStyle = allSameGroup ? '#334155' : '#059669';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.roundRect(grpCx - grpPillW / 2, pillY - pillH / 2, grpPillW, pillH, 13);
+            ctx.roundRect(grpCx - grpPillW / 2, pillY - pillH / 2, grpPillW, pillH, 11);
             ctx.fill();
-            ctx.stroke();
+
+            // Middle Pill (when both Texts and Shapes/Images are selected): Κείμενο μόνο
+            if (hasMixedTextAndShapes) {
+              ctx.fillStyle = '#0284c7';
+              ctx.beginPath();
+              ctx.roundRect(
+                txtOnlyCx - txtOnlyPillW / 2,
+                pillY - pillH / 2,
+                txtOnlyPillW,
+                pillH,
+                11
+              );
+              ctx.fill();
+            }
 
             // Right Pill: Κέντραρε (Center X+Y)
             ctx.fillStyle = '#4f46e5';
             ctx.beginPath();
-            ctx.roundRect(cntCx - cntPillW / 2, pillY - pillH / 2, cntPillW, pillH, 13);
+            ctx.roundRect(cntCx - cntPillW / 2, pillY - pillH / 2, cntPillW, pillH, 11);
             ctx.fill();
-            ctx.stroke();
 
             ctx.shadowBlur = 0;
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 11.2px sans-serif';
+            ctx.font = 'bold 10px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(
-              allSameGroup
-                ? `🔓 Ungroup (${totalSelObjects})`
-                : `🔗 Group (${totalSelObjects})`,
+              allSameGroup ? `Ungroup (${totalSelObjects})` : `Group (${totalSelObjects})`,
               grpCx,
               pillY + 0.5
             );
-            ctx.fillText('🎯 Κέντραρε', cntCx, pillY + 0.5);
+            if (hasMixedTextAndShapes) {
+              ctx.fillText('Κείμενο μόνο', txtOnlyCx, pillY + 0.5);
+            }
+            ctx.fillText('Κέντραρε', cntCx, pillY + 0.5);
             ctx.restore();
           }
           }
@@ -8833,22 +10467,50 @@ export default function App() {
     (acc, p, idx) => acc + getPageLogicalHeight(p) + (idx > 0 ? PAGE_GAP : 0),
     0
   );
+  const totalDocumentHeightRef = useRef<number>(totalDocumentHeight);
+  totalDocumentHeightRef.current = totalDocumentHeight;
+  const anyPageBottomVisibleRef = useRef<boolean>(false);
 
   const debouncedTransformCommitRef = useRef<number | null>(null);
   const applyPaperTransformDirect = useCallback(
     (nextZoom: number, nextPanX: number, nextPanY: number, commitReactState = false) => {
       const clampedZoom = Math.min(3.5, Math.max(0.2, nextZoom));
       const wsWidth = workspaceRef.current?.clientWidth || window.innerWidth || 980;
+      const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
       const scaledW = clampedZoom * pageWidth;
       // Allow smooth horizontal focal-point pan when zoomed in wider than the viewport; keep centered (0) when fit-to-width
       const maxPanX = scaledW > wsWidth ? (scaledW - wsWidth) / 2 + 64 : 0;
       const clampedPanX = maxPanX > 0 ? Math.max(-maxPanX, Math.min(maxPanX, nextPanX)) : 0;
 
-      const didScrollVertically = Math.abs(nextPanY - panRef.current.y) > 0.5;
+      // Clamp vertical pan leaving a small strip at the top (~32px) for the page header buttons (+ Πριν, Αντίγραφο, Διαγραφή)
+      // and at the bottom (~42px) for "+ Σελίδα Μετά", without allowing empty scrolling beyond them
+      const topHeaderAllowance = isCleanProjectorMode ? 0 : Math.round(32 * clampedZoom);
+      const bottomFooterAllowance = isCleanProjectorMode ? 0 : Math.round(42 * clampedZoom);
+      const scaledDocH = clampedZoom * totalDocumentHeightRef.current;
+      const maxPanY = topHeaderAllowance;
+      const minPanY = Math.min(maxPanY, wsHeight - scaledDocH - bottomFooterAllowance);
+      const clampedPanY = Math.max(minPanY, Math.min(maxPanY, nextPanY));
+
+      const prevPanY = panRef.current.y;
+      const didScrollVertically = Math.abs(clampedPanY - prevPanY) > 0.5;
+      const attemptedVerticalScroll = Math.abs(nextPanY - prevPanY) > 0.5 || didScrollVertically;
       zoomRef.current = clampedZoom;
-      panRef.current = { x: clampedPanX, y: nextPanY };
+      panRef.current = { x: clampedPanX, y: clampedPanY };
       if (paperTransformElRef.current) {
-        paperTransformElRef.current.style.transform = `translate3d(${clampedPanX}px, ${nextPanY}px, 0) scale(${clampedZoom})`;
+        paperTransformElRef.current.style.transform = `translate3d(${clampedPanX}px, ${clampedPanY}px, 0) scale(${clampedZoom})`;
+      }
+      if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+        const senderBaseZ = isFullBleedWidth ? wsWidth / Math.max(200, pageWidth) : 1;
+        liveTvSenderRef.current.sendViewport({
+          z: clampedZoom,
+          baseZ: senderBaseZ,
+          px: clampedPanX,
+          py: clampedPanY,
+          w: wsWidth,
+          h: wsHeight,
+          pIdx: activePageIndex,
+          pW: pageWidth,
+        });
       }
       // Update the active text floating toolbar's inverse-zoom scale & edge shift directly on its leaf DOM node
       // (avoids mutating an inherited CSS variable on paperTransformElRef, preventing WebKit full-subtree style recalculations at 120Hz!)
@@ -8880,19 +10542,56 @@ export default function App() {
         } scale(${invZ})`;
       }
 
+      // Detect when the bottom edge of the LAST page enters or leaves the visible viewport in O(1) time
+      // so "+ Σελίδα Μετά" fades in without triggering React re-renders on intermediate page boundaries!
+      const lastBottomScreenY = 8 + clampedPanY + totalDocumentHeightRef.current * clampedZoom;
+      const isAnyBottomVisible = lastBottomScreenY <= wsHeight + 36 && lastBottomScreenY >= 60;
+      const bottomVisibilityChanged = isAnyBottomVisible !== anyPageBottomVisibleRef.current;
+      if (bottomVisibilityChanged) {
+        anyPageBottomVisibleRef.current = isAnyBottomVisible;
+        if (isAnyBottomVisible) {
+          triggerPageControlsVisibility();
+        }
+      }
+
+      // Update activePageIndex live as the user scrolls across pages so the virtualized 5-page canvas window
+      // and top-bar page counter (1/170 -> 2/170) track the viewport at 120fps!
+      if (didScrollVertically && activeNotebook.pages.length > 1) {
+        const docFocusY = (-clampedPanY + wsHeight * 0.5) / clampedZoom;
+        let accumY = 0;
+        let bestIdx = 0;
+        for (let i = 0; i < activeNotebook.pages.length; i++) {
+          const pH = getPageLogicalHeight(activeNotebook.pages[i]);
+          if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
+            bestIdx = i;
+            break;
+          }
+          if (docFocusY > accumY + pH + PAGE_GAP) {
+            bestIdx = i;
+          }
+          accumY += pH + PAGE_GAP;
+        }
+        if (bestIdx !== activeDrawingPageIndexRef.current) {
+          activeDrawingPageIndexRef.current = bestIdx;
+          setActivePageIndex(bestIdx);
+        }
+      }
+
       const isTouchGestureActive = Boolean(
         pinchStateRef.current?.active || outsidePanDragRef.current?.active
       );
-      if (didScrollVertically && !isTouchGestureActive) {
+      if (attemptedVerticalScroll) {
         triggerPageControlsVisibility();
       }
       if (debouncedTransformCommitRef.current !== null) {
         window.clearTimeout(debouncedTransformCommitRef.current);
         debouncedTransformCommitRef.current = null;
       }
-      if (commitReactState) {
+      const crossedGridZoomThreshold =
+        activeNotebook.pages.length > 5 && (clampedZoom < 0.5) !== (zoom < 0.5);
+      if (commitReactState || bottomVisibilityChanged || crossedGridZoomThreshold) {
         setZoom(clampedZoom);
-        setPan({ x: clampedPanX, y: nextPanY });
+        setPan({ x: clampedPanX, y: clampedPanY });
       } else if (!isTouchGestureActive) {
         debouncedTransformCommitRef.current = window.setTimeout(() => {
           debouncedTransformCommitRef.current = null;
@@ -8901,20 +10600,64 @@ export default function App() {
         }, 120);
       }
     },
-    [pageWidth, triggerPageControlsVisibility]
+    [
+      pageWidth,
+      activeNotebook.pages,
+      triggerPageControlsVisibility,
+      isFullBleedWidth,
+      isCleanProjectorMode,
+      activePageIndex,
+    ]
   );
 
-  // Compute exact Fit-to-Width zoom so 100% of the page width (all 41 grid squares) is always visible
+  // Compute exact Fit-to-Width zoom so 100% of the page width fills the active viewport width
   const computeFitWidthZoom = useCallback(
-    (customPageWidth?: number) => {
+    (customPageWidth?: number, forceZeroMargin?: boolean) => {
       const ws = workspaceRef.current;
       const wsWidth = ws?.clientWidth || window.innerWidth || 980;
       const pW = Math.max(200, customPageWidth ?? pageWidth);
-      const horizMargin = Math.min(28, Math.max(8, Math.round(wsWidth * 0.02)));
+      const useFullBleed = forceZeroMargin ?? (isFullBleedWidth || isCleanProjectorMode);
+      const horizMargin = useFullBleed ? 0 : Math.min(20, Math.max(4, Math.round(wsWidth * 0.012)));
       return Math.min(3.5, Math.max(0.2, (wsWidth - horizMargin) / pW));
     },
-    [pageWidth]
+    [pageWidth, isFullBleedWidth, isCleanProjectorMode]
   );
+
+  // Automatically fit 100% of the screen width on wide screens (iPad 13" Landscape & 16:9 HDMI Interactive Boards)
+  useEffect(() => {
+    if (viewMode !== 'editor') return;
+    const applyAutoFullWidth = () => {
+      if (!isFullBleedWidth && !isCleanProjectorMode) return;
+      const ws = workspaceRef.current;
+      const wsWidth = ws?.clientWidth || window.innerWidth || 980;
+      if (isTvReceiverModeRef.current && tvLastVpPacketRef.current) {
+        const vp = tvLastVpPacketRef.current;
+        const logicalPW = Math.max(200, vp.pW || pageWidth || 794);
+        const boardFitZ = wsWidth / logicalPW;
+        const relZoom = Math.max(0.2, vp.z) / Math.max(0.2, vp.baseZ || 1);
+        const targetZ = Math.min(4.5, Math.max(0.2, boardFitZ * relZoom));
+        const ratio = targetZ / Math.max(0.2, vp.z);
+        const targetX = vp.px * ratio;
+        const targetY = vp.py * ratio;
+        zoomRef.current = targetZ;
+        panRef.current = { x: targetX, y: targetY };
+        if (paperTransformElRef.current) {
+          paperTransformElRef.current.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(${targetZ})`;
+        }
+        return;
+      }
+      if (wsWidth > pageWidth + 8 && (Math.abs(zoomRef.current - 1) <= 0.04 || isCleanProjectorMode)) {
+        const fitZ = computeFitWidthZoom(pageWidth, true);
+        applyPaperTransformDirect(fitZ, 0, panRef.current.y, true);
+      }
+    };
+    const timer = window.setTimeout(applyAutoFullWidth, 60);
+    window.addEventListener('resize', applyAutoFullWidth);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('resize', applyAutoFullWidth);
+    };
+  }, [viewMode, pageWidth, isFullBleedWidth, isCleanProjectorMode, computeFitWidthZoom, applyPaperTransformDirect]);
 
   // Smoothly zoom in/out around the vertical center of the visible workspace viewport
   const zoomAroundViewportCenter = useCallback(
@@ -8956,8 +10699,14 @@ export default function App() {
 
       const curZoom = zoomRef.current;
       if (forceFit || didNotebookChange || prevWsW === null) {
-        if (Math.abs(fitWidthZoom - curZoom) > 0.002) {
-          const nextPanY = curZoom > 0.05 ? panRef.current.y * (fitWidthZoom / curZoom) : panRef.current.y;
+        if (Math.abs(fitWidthZoom - curZoom) > 0.002 || panRef.current.y === 0) {
+          const topAllow = isCleanProjectorMode ? 0 : Math.round(32 * fitWidthZoom);
+          const nextPanY =
+            panRef.current.y >= 0
+              ? topAllow
+              : curZoom > 0.05
+              ? panRef.current.y * (fitWidthZoom / curZoom)
+              : panRef.current.y;
           applyPaperTransformDirect(fitWidthZoom, 0, nextPanY, true);
         }
       } else if (didWsWidthChange && prevWsW > 0) {
@@ -8985,7 +10734,7 @@ export default function App() {
       if (ro) ro.disconnect();
       window.removeEventListener('resize', onWinResize);
     };
-  }, [viewMode, activeNotebook.id, pageWidth, applyPaperTransformDirect]);
+  }, [viewMode, activeNotebook.id, pageWidth, isCleanProjectorMode, applyPaperTransformDirect]);
 
   // Smoothly jump to a specific page in the Word-style vertical document stack
   const scrollToPageIndex = useCallback(
@@ -8994,9 +10743,13 @@ export default function App() {
       setActivePageIndex(clampedIdx);
       activeDrawingPageIndexRef.current = clampedIdx;
       const topY = getPageTopOffset(clampedIdx);
-      applyPaperTransformDirect(zoomRef.current, panRef.current.x, -topY * zoomRef.current, true);
+      const targetPanY =
+        clampedIdx === 0 && !isCleanProjectorMode
+          ? Math.round(32 * zoomRef.current)
+          : -topY * zoomRef.current;
+      applyPaperTransformDirect(zoomRef.current, panRef.current.x, targetPanY, true);
     },
-    [activeNotebook.pages.length, getPageTopOffset, applyPaperTransformDirect]
+    [activeNotebook.pages.length, isCleanProjectorMode, getPageTopOffset, applyPaperTransformDirect]
   );
 
   // Automatically update activePageIndex (1/3 -> 2/3 -> 3/3) as user scrolls through Word-style pages!
@@ -9051,6 +10804,14 @@ export default function App() {
         newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
 
+      let nextTotalH = 0;
+      const previewPages = [...activeNotebook.pages];
+      previewPages.splice(clampedIdx, 0, newPage);
+      previewPages.forEach((p, idx) => {
+        nextTotalH += getPageLogicalHeight(p) + (idx > 0 ? PAGE_GAP : 0);
+      });
+      totalDocumentHeightRef.current = nextTotalH;
+
       userEditedInSessionRef.current.add(activeNotebook.id);
       setNotebooks((prev) =>
         prev.map((nb) => {
@@ -9062,7 +10823,11 @@ export default function App() {
       );
       setActivePageIndex(clampedIdx);
       activeDrawingPageIndexRef.current = clampedIdx;
-      applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
+      const targetPanY =
+        clampedIdx === 0 && !isCleanProjectorMode
+          ? Math.round(32 * zoomRef.current)
+          : -newTopY * zoomRef.current;
+      applyPaperTransformDirect(zoomRef.current, 0, targetPanY, true);
       showToast(
         clampedIdx === 0
           ? '📄 Προστέθηκε Νέα Σελίδα στην αρχή του εγγράφου!'
@@ -9071,7 +10836,7 @@ export default function App() {
           : `📄 Προστέθηκε Νέα Σελίδα στη μέση (Θέση #${clampedIdx + 1})!`
       );
     },
-    [activeNotebook.id, activeNotebook.pages, activePage, applyPaperTransformDirect, showToast]
+    [activeNotebook.id, activeNotebook.pages, activePage, isCleanProjectorMode, applyPaperTransformDirect, showToast]
   );
 
   const insertNewPageRelative = useCallback(
@@ -9102,6 +10867,14 @@ export default function App() {
         const p = activeNotebook.pages[i];
         newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
+      let nextTotalH = 0;
+      const previewPages = [...activeNotebook.pages];
+      previewPages.splice(insertIdx, 0, cloned);
+      previewPages.forEach((p, idx) => {
+        nextTotalH += getPageLogicalHeight(p) + (idx > 0 ? PAGE_GAP : 0);
+      });
+      totalDocumentHeightRef.current = nextTotalH;
+
       userEditedInSessionRef.current.add(activeNotebook.id);
       setNotebooks((prev) =>
         prev.map((nb) => {
@@ -9143,6 +10916,10 @@ export default function App() {
         const p = remainingPages[i];
         newTopY += getPageLogicalHeight(p) + PAGE_GAP;
       }
+      totalDocumentHeightRef.current = remainingPages.reduce(
+        (acc, p, idx) => acc + getPageLogicalHeight(p) + (idx > 0 ? PAGE_GAP : 0),
+        0
+      );
 
       userEditedInSessionRef.current.add(activeNotebook.id);
       setNotebooks((prev) =>
@@ -9157,10 +10934,14 @@ export default function App() {
       );
       setActivePageIndex(nextIdx);
       activeDrawingPageIndexRef.current = nextIdx;
-      applyPaperTransformDirect(zoomRef.current, 0, -newTopY * zoomRef.current, true);
+      const targetPanY =
+        nextIdx === 0 && !isCleanProjectorMode
+          ? Math.round(32 * zoomRef.current)
+          : -newTopY * zoomRef.current;
+      applyPaperTransformDirect(zoomRef.current, 0, targetPanY, true);
       showToast(`🗑️ Διαγράφηκε η Σελίδα #${targetIdx + 1}!`);
     },
-    [activeNotebook.id, activeNotebook.pages, updateActivePage, applyPaperTransformDirect, showToast]
+    [activeNotebook.id, activeNotebook.pages, isCleanProjectorMode, updateActivePage, applyPaperTransformDirect, showToast]
   );
 
   const stopPullToAddPageHold = useCallback(() => {
@@ -9196,21 +10977,23 @@ export default function App() {
         lastFrameTime = now;
 
         const wsHeight = workspaceRef.current?.clientHeight || 820;
-        const scaledDocHeight = totalDocumentHeight * zoomRef.current;
-        const minPanY = Math.min(0, wsHeight - scaledDocHeight - 48);
+        const scaledDocHeight = totalDocumentHeightRef.current * zoomRef.current;
+        const maxPanY = isCleanProjectorMode ? 0 : Math.round(32 * zoomRef.current);
+        const bottomFooterAllowance = isCleanProjectorMode ? 0 : Math.round(42 * zoomRef.current);
+        const minPanY = Math.min(maxPanY, wsHeight - scaledDocHeight - bottomFooterAllowance);
 
         let nextPanY = panRef.current.y + vy * dt;
 
         // Exponential friction (0.945 per 60Hz frame, smoothly scaled for 120Hz ProMotion)
         vy *= Math.pow(0.945, dt / 16.67);
 
-        // Soft brake at document top/bottom boundaries so fast flicks don't fly off into empty space
-        if (nextPanY > 0) {
-          nextPanY = nextPanY * 0.45;
-          vy *= 0.55;
-        } else if (nextPanY < minPanY) {
-          nextPanY = minPanY + (nextPanY - minPanY) * 0.45;
-          vy *= 0.55;
+        // Hard stop at document top/bottom boundaries so fast flicks never leave empty screen space
+        if (nextPanY >= maxPanY) {
+          nextPanY = maxPanY;
+          vy = 0;
+        } else if (nextPanY <= minPanY) {
+          nextPanY = minPanY;
+          vy = 0;
         }
 
         applyPaperTransformDirect(zoomRef.current, 0, nextPanY, false);
@@ -9227,60 +11010,33 @@ export default function App() {
 
       scrollMomentumRafRef.current = window.requestAnimationFrame(step);
     },
-    [cancelScrollMomentum, totalDocumentHeight, applyPaperTransformDirect, syncActivePageFromPanY]
+    [cancelScrollMomentum, isCleanProjectorMode, applyPaperTransformDirect, syncActivePageFromPanY]
   );
 
   const checkPullToAddPageHold = useCallback(
-    (nextPanY: number) => {
-      const wsHeight = workspaceRef.current?.clientHeight || 820;
-      const scaledDocHeight = totalDocumentHeight * zoomRef.current;
-      const minPanY = Math.min(0, wsHeight - scaledDocHeight - 48);
-      const pullThreshold = 72;
-
-      let targetSide: 'top' | 'bottom' | null = null;
-      if (nextPanY > pullThreshold) {
-        targetSide = 'top';
-      } else if (nextPanY < minPanY - pullThreshold) {
-        targetSide = 'bottom';
+    (_nextPanY: number) => {
+      if (pullSideActiveRef.current) {
+        stopPullToAddPageHold();
       }
-
-      if (!targetSide) {
-        if (pullSideActiveRef.current) {
-          stopPullToAddPageHold();
-        }
-        return;
-      }
-
-      if (pullSideActiveRef.current === targetSide) return;
-
-      if (pullHoldIntervalRef.current) {
-        window.clearInterval(pullHoldIntervalRef.current);
-      }
-      pullSideActiveRef.current = targetSide;
-      const holdStart = performance.now();
-      const holdDurationMs = 1250; // 1.25s hold adds the new page!
-      setPullAddPageState({ side: targetSide, progress: 8 });
-
-      pullHoldIntervalRef.current = window.setInterval(() => {
-        const elapsed = performance.now() - holdStart;
-        const pct = Math.min(100, Math.round((elapsed / holdDurationMs) * 100));
-        setPullAddPageState({ side: targetSide!, progress: pct });
-        if (pct >= 100) {
-          stopPullToAddPageHold();
-          insertNewPageRelative(targetSide === 'top' ? 'before' : 'after');
-        }
-      }, 60);
     },
-    [totalDocumentHeight, stopPullToAddPageHold, insertNewPageRelative]
+    [stopPullToAddPageHold]
   );
 
   // Rotate Page 90° Left or Right (rotates page orientation + all strokes, images, texts, tapes)
   const handleRotatePage = useCallback(
-    (direction: 'left' | 'right') => {
-      const oldW = getPageLogicalWidth(activePage);
-      const oldH = getPageLogicalHeight(activePage);
+    (direction: 'left' | 'right', targetPageIndex?: number) => {
+      if (typeof targetPageIndex === 'number') {
+        activeDrawingPageIndexRef.current = targetPageIndex;
+        setActivePageIndex(targetPageIndex);
+      }
+      const pageToRotate =
+        typeof targetPageIndex === 'number'
+          ? activeNotebook.pages[targetPageIndex] || activePage
+          : activePage;
+      const oldW = getPageLogicalWidth(pageToRotate);
+      const oldH = getPageLogicalHeight(pageToRotate);
       const nextOrientation: 'portrait' | 'landscape' =
-        activePage.orientation === 'landscape' ? 'portrait' : 'landscape';
+        pageToRotate.orientation === 'landscape' ? 'portrait' : 'landscape';
 
       const mapPt = (x: number, y: number) =>
         direction === 'right' ? { x: oldH - y, y: x } : { x: y, y: oldW - x };
@@ -9329,14 +11085,14 @@ export default function App() {
         }),
       }));
 
-      applyPaperTransformDirect(zoomRef.current, 0, 0, true);
+      applyPaperTransformDirect(zoomRef.current, 0, panRef.current.y, true);
       showToast(
         direction === 'right'
           ? `↻ Περιστροφή σελίδας +90° (${nextOrientation === 'landscape' ? 'Landscape' : 'Portrait'})`
           : `↺ Περιστροφή σελίδας -90° (${nextOrientation === 'landscape' ? 'Landscape' : 'Portrait'})`
       );
     },
-    [activePage.orientation, updateActivePage, applyPaperTransformDirect, showToast]
+    [activeNotebook.pages, activePage, updateActivePage, applyPaperTransformDirect, showToast]
   );
 
   // CUT / COPY / PASTE (Supports internal strokes/groups/images/text AND external photos/screenshots from Clipboard!)
@@ -11761,10 +13517,12 @@ export default function App() {
     const activeId = editingTextId || selectedTextId;
     if (!activeId) return false;
     draggingTextRef.current = null;
+    pendingCaretSelectionRef.current = null;
     lastTextCreatedTimeRef.current = 0;
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
+    setEditingCaretRange(null);
     setEditingTextId(null);
     setSelectedTextId(null);
     updateActivePage(
@@ -11968,7 +13726,9 @@ export default function App() {
         return;
       }
 
-      if (!d.moved && Math.hypot(dx, dy) > 4) {
+      const screenDist = Math.hypot(clientX - d.startClientX, clientY - d.startClientY);
+      const dragThresholdPx = d.startedOnDragBar ? 3 : d.wasAlreadyEditing ? 18 : 10;
+      if (!d.moved && screenDist > dragThresholdPx) {
         d.moved = true;
       }
       if (!d.moved) return;
@@ -12001,27 +13761,285 @@ export default function App() {
     ]
   );
 
+  const getTextCaretAndWordAtPoint = useCallback(
+    (
+      txtId: string,
+      fullText: string,
+      clientX: number,
+      clientY: number
+    ): { caretIndex: number; wordStart: number; wordEnd: number } => {
+      const text = fullText || '';
+      if (text.length === 0) {
+        return { caretIndex: 0, wordStart: 0, wordEnd: 0 };
+      }
+      const boxEl = document.querySelector(`[data-text-id="${txtId}"]`) as HTMLElement | null;
+      if (!boxEl) {
+        return { caretIndex: text.length, wordStart: 0, wordEnd: text.length };
+      }
+
+      const contentEl =
+        (boxEl.querySelector('[data-text-content="true"]') as HTMLElement | null) ||
+        (boxEl.querySelector('textarea') as HTMLElement | null) ||
+        boxEl;
+      const computed = window.getComputedStyle(contentEl);
+      const boxComputed = window.getComputedStyle(boxEl);
+
+      const mirror = document.createElement('div');
+      mirror.style.position = 'absolute';
+      mirror.style.left = `${contentEl === boxEl ? 0 : contentEl.offsetLeft}px`;
+      mirror.style.top = `${contentEl === boxEl ? 0 : contentEl.offsetTop}px`;
+      const targetW = contentEl.offsetWidth || boxEl.clientWidth;
+      if (targetW > 0) {
+        mirror.style.width = `${targetW + 2}px`;
+      } else {
+        mirror.style.width = 'max-content';
+      }
+      mirror.style.whiteSpace = 'pre-wrap';
+      mirror.style.overflowWrap = 'break-word';
+      mirror.style.fontFamily = computed.fontFamily || boxComputed.fontFamily;
+      mirror.style.fontSize = computed.fontSize || boxComputed.fontSize;
+      mirror.style.fontWeight = computed.fontWeight || boxComputed.fontWeight;
+      mirror.style.fontStyle = computed.fontStyle || boxComputed.fontStyle;
+      mirror.style.letterSpacing = computed.letterSpacing || boxComputed.letterSpacing;
+      mirror.style.lineHeight = computed.lineHeight || boxComputed.lineHeight || '1.18';
+      mirror.style.textAlign = computed.textAlign || boxComputed.textAlign || 'left';
+      mirror.style.padding = contentEl === boxEl ? boxComputed.padding : '0px';
+      mirror.style.margin = '0px';
+      mirror.style.border = '0px';
+      mirror.style.visibility = 'hidden';
+      mirror.style.pointerEvents = 'none';
+      mirror.style.zIndex = '-1';
+
+      const textNode = document.createTextNode(text + '\u200B');
+      mirror.appendChild(textNode);
+      boxEl.appendChild(mirror);
+
+      const range = document.createRange();
+      type CharBox = {
+        index: number;
+        left: number;
+        right: number;
+        top: number;
+        bottom: number;
+        midX: number;
+        midY: number;
+      };
+      const charBoxes: CharBox[] = [];
+      for (let i = 0; i <= text.length; i++) {
+        const ch = i < text.length ? text[i] : '\u200B';
+        if (ch === '\r') continue;
+        range.setStart(textNode, i);
+        range.setEnd(textNode, i + 1);
+        const rects = range.getClientRects();
+        const r = rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
+        if (r.height > 0 || r.width > 0) {
+          charBoxes.push({
+            index: i,
+            left: r.left,
+            right: r.right,
+            top: r.top,
+            bottom: r.bottom,
+            midX: (r.left + r.right) / 2,
+            midY: (r.top + r.bottom) / 2,
+          });
+        }
+      }
+
+      boxEl.removeChild(mirror);
+
+      const visibleBoxes = charBoxes.filter(
+        (b) =>
+          b.index < text.length &&
+          text[b.index] !== '\u200B' &&
+          (text[b.index] !== '\n' || b.index === 0 || text[b.index - 1] === '\n')
+      );
+      if (visibleBoxes.length === 0) {
+        return { caretIndex: text.length, wordStart: 0, wordEnd: text.length };
+      }
+
+      let bestYBox = visibleBoxes[0];
+      let minVDist = Infinity;
+      for (const b of visibleBoxes) {
+        const vDist = clientY < b.top ? b.top - clientY : clientY > b.bottom ? clientY - b.bottom : 0;
+        if (
+          vDist < minVDist - 0.5 ||
+          (Math.abs(vDist - minVDist) <= 0.5 &&
+            Math.abs(clientY - b.midY) < Math.abs(clientY - bestYBox.midY))
+        ) {
+          minVDist = vDist;
+          bestYBox = b;
+        }
+      }
+
+      if (text.endsWith('\n')) {
+        const trailBox = charBoxes.find((b) => b.index === text.length);
+        const lastVis = visibleBoxes[visibleBoxes.length - 1];
+        if (trailBox && clientY > lastVis.bottom && Math.abs(clientY - trailBox.midY) < Math.abs(clientY - bestYBox.midY)) {
+          return { caretIndex: text.length, wordStart: text.length, wordEnd: text.length };
+        }
+      }
+
+      const rowH = Math.max(8, bestYBox.bottom - bestYBox.top);
+      const rowBoxes = visibleBoxes.filter((b) => Math.abs(b.midY - bestYBox.midY) <= rowH * 0.55);
+      const nonNewlineRowBoxes = rowBoxes.filter((b) => text[b.index] !== '\n');
+      const activeRow =
+        nonNewlineRowBoxes.length > 0
+          ? nonNewlineRowBoxes
+          : rowBoxes.length > 0
+          ? rowBoxes
+          : [bestYBox];
+
+      let closestChar = activeRow[0];
+      let minHDist = Infinity;
+      for (const b of activeRow) {
+        const hDist = clientX < b.left ? b.left - clientX : clientX > b.right ? clientX - b.right : 0;
+        if (
+          hDist < minHDist ||
+          (hDist === minHDist && Math.abs(clientX - b.midX) < Math.abs(clientX - closestChar.midX))
+        ) {
+          minHDist = hDist;
+          closestChar = b;
+        }
+      }
+
+      const caretIndex =
+        text[closestChar.index] === '\n'
+          ? closestChar.index
+          : clientX <= closestChar.midX
+          ? closestChar.index
+          : closestChar.index + 1;
+
+      const isWordChar = (ch: string) => /[\p{L}\p{N}_]/u.test(ch);
+      let pivot = closestChar.index;
+      if (!isWordChar(text[pivot] || '')) {
+        if (pivot > 0 && isWordChar(text[pivot - 1])) {
+          pivot = pivot - 1;
+        } else if (pivot + 1 < text.length && isWordChar(text[pivot + 1])) {
+          pivot = pivot + 1;
+        }
+      }
+      let wordStart = pivot;
+      let wordEnd = Math.min(text.length, pivot + 1);
+      if (isWordChar(text[pivot] || '')) {
+        while (wordStart > 0 && isWordChar(text[wordStart - 1])) {
+          wordStart--;
+        }
+        while (wordEnd < text.length && isWordChar(text[wordEnd])) {
+          wordEnd++;
+        }
+      } else if (text[pivot] && !/\s/.test(text[pivot])) {
+        while (wordStart > 0 && !/\s/.test(text[wordStart - 1]) && !isWordChar(text[wordStart - 1])) {
+          wordStart--;
+        }
+        while (wordEnd < text.length && !/\s/.test(text[wordEnd]) && !isWordChar(text[wordEnd])) {
+          wordEnd++;
+        }
+      }
+
+      return { caretIndex, wordStart, wordEnd };
+    },
+    []
+  );
+
+  const focusAndPlaceCaretInTextBox = useCallback(
+    (txtId: string, start: number, end: number = start) => {
+      const s = Math.max(0, start);
+      const e = Math.max(s, end);
+      const nextRng = { textId: txtId, start: s, end: e };
+      pendingCaretSelectionRef.current = nextRng;
+      lastProgrammaticSelectionTimeRef.current = performance.now();
+      setEditingCaretRange(nextRng);
+      if (e > s) {
+        activeTextRangeRef.current = nextRng;
+        setActiveTextRange(nextRng);
+      } else {
+        activeTextRangeRef.current = null;
+        setActiveTextRange(null);
+      }
+      setSelectedLassoTextIds([]);
+      setSelectedTextId(txtId);
+      setEditingTextId(txtId);
+
+      const applyToDom = () => {
+        const ta = document.querySelector(
+          `[data-text-id="${txtId}"] textarea`
+        ) as HTMLTextAreaElement | null;
+        if (!ta) return;
+        const maxLen = ta.value.length;
+        const clampedS = Math.max(0, Math.min(maxLen, s));
+        const clampedE = Math.max(clampedS, Math.min(maxLen, e));
+        if (document.activeElement !== ta) {
+          try {
+            ta.focus({ preventScroll: true });
+          } catch {
+            ta.focus();
+          }
+        }
+        try {
+          ta.setSelectionRange(clampedS, clampedE);
+        } catch {
+          // ignore
+        }
+      };
+
+      applyToDom();
+      window.requestAnimationFrame(() => {
+        applyToDom();
+      });
+      window.setTimeout(() => {
+        if (
+          pendingCaretSelectionRef.current &&
+          pendingCaretSelectionRef.current.textId === txtId
+        ) {
+          applyToDom();
+        }
+      }, 60);
+    },
+    []
+  );
+
   const finishTextDrag = useCallback(() => {
     const d = draggingTextRef.current;
     if (!d) return;
     const didMove = d.moved;
-    const wasSelected = d.wasAlreadySelected;
     const targetId = d.id;
+    const targetPageIdx = d.pageIdx;
+    const tapX = d.lastClientX ?? d.startClientX;
+    const tapY = d.lastClientY ?? d.startClientY;
+    const hadResizeOrDragBar = Boolean(d.resizeHandle || d.startedOnDragBar);
     draggingTextRef.current = null;
-    if (!didMove && (wasSelected || activeTool === 'text')) {
-      setEditingTextId(targetId);
-      const taNow = document.querySelector(
-        `[data-text-id="${targetId}"] textarea`
-      ) as HTMLTextAreaElement | null;
-      taNow?.focus();
-      window.requestAnimationFrame(() => {
-        const ta = document.querySelector(
-          `[data-text-id="${targetId}"] textarea`
-        ) as HTMLTextAreaElement | null;
-        ta?.focus();
-      });
+    if (!didMove && !hadResizeOrDragBar) {
+      const targetPageObj = activeNotebook.pages[targetPageIdx] || activePage;
+      const txtObj = (targetPageObj.texts || []).find((t) => t.id === targetId);
+      const rawText = txtObj?.text || '';
+      const now = performance.now();
+      const prevTap = lastTextTapRef.current;
+      const isDoubleTap = Boolean(
+        prevTap &&
+          prevTap.textId === targetId &&
+          now - prevTap.time < 480 &&
+          Math.hypot(tapX - prevTap.clientX, tapY - prevTap.clientY) <= 34
+      );
+      const { caretIndex, wordStart, wordEnd } = getTextCaretAndWordAtPoint(
+        targetId,
+        rawText,
+        tapX,
+        tapY
+      );
+      if (isDoubleTap && wordEnd > wordStart) {
+        lastTextTapRef.current = null;
+        focusAndPlaceCaretInTextBox(targetId, wordStart, wordEnd);
+      } else {
+        lastTextTapRef.current = {
+          textId: targetId,
+          time: now,
+          clientX: tapX,
+          clientY: tapY,
+        };
+        focusAndPlaceCaretInTextBox(targetId, caretIndex, caretIndex);
+      }
     }
-  }, [activeTool]);
+  }, [activeNotebook.pages, activePage, getTextCaretAndWordAtPoint, focusAndPlaceCaretInTextBox]);
 
   useEffect(() => {
     const onWinPointerMove = (ev: PointerEvent) => {
@@ -12040,35 +14058,77 @@ export default function App() {
       if (d.pointerId !== undefined && ev.pointerId !== d.pointerId) return;
       finishTextDrag();
     };
+    const onWinPointerCancel = (ev: PointerEvent) => {
+      const d = draggingTextRef.current;
+      if (!d) return;
+      if (d.pointerId !== undefined && ev.pointerId !== d.pointerId) return;
+      draggingTextRef.current = null;
+    };
     const onWinTouchMove = (ev: TouchEvent) => {
       if (ev.touches.length >= 2 || pinchStateRef.current?.active) {
         draggingTextRef.current = null;
         return;
       }
-      if (!draggingTextRef.current || ev.touches.length === 0) return;
-      if (ev.cancelable) ev.preventDefault();
+      const d = draggingTextRef.current;
+      if (!d || ev.touches.length === 0) return;
       const t = ev.touches[0];
       applyTextDragMove(t.clientX, t.clientY);
+      if (
+        (d.moved || d.resizeHandle || d.startedOnDragBar) &&
+        ev.cancelable
+      ) {
+        ev.preventDefault();
+      }
     };
     const onWinTouchEnd = (ev: TouchEvent) => {
-      if (!draggingTextRef.current) return;
-      if (ev.touches.length === 0) {
-        finishTextDrag();
+      if (draggingTextRef.current) {
+        if (ev.touches.length === 0) {
+          finishTextDrag();
+        }
+        return;
       }
+      const pending = pendingCaretSelectionRef.current;
+      if (
+        pending &&
+        ev.touches.length === 0 &&
+        performance.now() - lastProgrammaticSelectionTimeRef.current < 450
+      ) {
+        const ta = document.querySelector(
+          `[data-text-id="${pending.textId}"] textarea`
+        ) as HTMLTextAreaElement | null;
+        if (ta) {
+          const maxLen = ta.value.length;
+          const clampedS = Math.max(0, Math.min(maxLen, pending.start));
+          const clampedE = Math.max(clampedS, Math.min(maxLen, pending.end));
+          try {
+            ta.focus({ preventScroll: true });
+          } catch {
+            ta.focus();
+          }
+          try {
+            ta.setSelectionRange(clampedS, clampedE);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    };
+    const onWinTouchCancel = () => {
+      draggingTextRef.current = null;
     };
     window.addEventListener('pointermove', onWinPointerMove, { passive: true });
     window.addEventListener('pointerup', onWinPointerUp);
-    window.addEventListener('pointercancel', onWinPointerUp);
+    window.addEventListener('pointercancel', onWinPointerCancel);
     window.addEventListener('touchmove', onWinTouchMove, { passive: false });
     window.addEventListener('touchend', onWinTouchEnd);
-    window.addEventListener('touchcancel', onWinTouchEnd);
+    window.addEventListener('touchcancel', onWinTouchCancel);
     return () => {
       window.removeEventListener('pointermove', onWinPointerMove);
       window.removeEventListener('pointerup', onWinPointerUp);
-      window.removeEventListener('pointercancel', onWinPointerUp);
+      window.removeEventListener('pointercancel', onWinPointerCancel);
       window.removeEventListener('touchmove', onWinTouchMove);
       window.removeEventListener('touchend', onWinTouchEnd);
-      window.removeEventListener('touchcancel', onWinTouchEnd);
+      window.removeEventListener('touchcancel', onWinTouchCancel);
     };
   }, [applyTextDragMove, finishTextDrag]);
 
@@ -12146,11 +14206,13 @@ export default function App() {
       pinchStateRef.current = {
         active: true,
         initialDist: Math.max(20, dist),
+        lastDist: Math.max(20, dist),
         initialZoom: zoomRef.current,
         initialPanX: panRef.current.x,
         initialPanY: panRef.current.y,
         startMidX: midX,
         startMidY: midY,
+        lastMidX: midX,
         lastMidY: midY,
         lastMoveTime: now,
         velocityY: 0,
@@ -12169,9 +14231,10 @@ export default function App() {
 
       // Only block touch gestures if the Apple Pencil is physically touching the glass right now
       if (hasStylusTouch(e.touches) || (isDrawingRef.current && activePointerTypeRef.current === 'pen')) {
-        const isOnTextBoxControl =
-          targetEl?.closest('[data-text-box="true"]') &&
-          !targetEl?.closest('button, input, select, a');
+        const isOnTextBoxHandleOrDrag = Boolean(
+          targetEl?.closest('[data-text-resize], [data-text-drag]') &&
+            !targetEl?.closest('button, input, select, a')
+        );
         if (
           !(e.target instanceof HTMLCanvasElement) &&
           !targetEl?.closest('button, input, textarea, select, a, [data-ui-panel="true"], [data-text-box="true"]') &&
@@ -12179,7 +14242,7 @@ export default function App() {
         ) {
           releaseActiveTextBox();
         }
-        if ((e.target instanceof HTMLCanvasElement || isOnTextBoxControl) && e.cancelable) {
+        if ((e.target instanceof HTMLCanvasElement || isOnTextBoxHandleOrDrag) && e.cancelable) {
           e.preventDefault();
         }
         outsidePanDragRef.current = null;
@@ -12198,7 +14261,12 @@ export default function App() {
       }
 
       if (draggingTextRef.current) {
-        if (e.cancelable) e.preventDefault();
+        if (
+          (draggingTextRef.current.resizeHandle || draggingTextRef.current.startedOnDragBar) &&
+          e.cancelable
+        ) {
+          e.preventDefault();
+        }
         outsidePanDragRef.current = null;
         pinchStateRef.current = null;
         return;
@@ -12209,7 +14277,7 @@ export default function App() {
         targetEl.closest('button, input, textarea, select, a, [data-ui-panel="true"], [data-text-box="true"]')
       ) {
         if (
-          targetEl.closest('[data-text-box="true"]') &&
+          targetEl.closest('[data-text-resize], [data-text-drag]') &&
           !targetEl.closest('button, input, select, a') &&
           e.cancelable
         ) {
@@ -12316,6 +14384,8 @@ export default function App() {
         const stepMidY = currMidY - st.lastMidY;
         const instVy = stepMidY / dt;
         st.velocityY = st.velocityY * 0.4 + instVy * 0.6;
+        st.lastDist = currDist;
+        st.lastMidX = currMidX;
         st.lastMidY = currMidY;
         st.lastMoveTime = now;
 
@@ -12413,51 +14483,90 @@ export default function App() {
             e.type === 'touchend' &&
             mod.active &&
             mod.maxMoved <= 22 &&
-            nowTap - mod.startTime <= 320 &&
-            pencilOnlyMode
+            nowTap - mod.startTime <= 420
           ) {
-            const prevFingerTap = lastFingerEmptyTapRef.current;
-            if (
-              prevFingerTap &&
-              nowTap - prevFingerTap.time >= 45 &&
-              nowTap - prevFingerTap.time <= 360 &&
-              Math.hypot(mod.startX - prevFingerTap.clientX, mod.startY - prevFingerTap.clientY) <= 36
-            ) {
+            const hasAnySelectedObj =
+              selectedStrokeIds.length > 0 ||
+              selectedImageIds.length > 0 ||
+              Boolean(selectedImageId) ||
+              Boolean(activeNodeStrokeId) ||
+              selectedLassoTextIds.length > 0 ||
+              Boolean(selectedTextId) ||
+              Boolean(editingTextId) ||
+              Boolean(selectedSpringGraphKey) ||
+              Boolean(selectedReactionSimIdRef.current) ||
+              (activePage.atomSims || []).some((s) => Boolean(s.selectedAtomId));
+            if (hasAnySelectedObj) {
+              if (selectedTextId || editingTextId) {
+                releaseActiveTextBox();
+              }
+              if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+              if (selectedImageIds.length > 0) setSelectedImageIds([]);
+              if (selectedImageId) setSelectedImageId(null);
+              if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+              if (selectedLassoTextIds.length > 0) setSelectedLassoTextIds([]);
+              if (selectedSpringGraphKey) setSelectedSpringGraphKey(null);
+              if (selectedReactionSimIdRef.current) {
+                selectedReactionSimIdRef.current = null;
+                setSelectedReactionSimId(null);
+              }
+              setImageCropMode('none');
+              if ((activePage.atomSims || []).some((s) => Boolean(s.selectedAtomId))) {
+                updateActivePage(
+                  (page) => ({
+                    ...page,
+                    atomSims: (page.atomSims || []).map((s) =>
+                      s.selectedAtomId ? { ...s, selectedAtomId: undefined } : s
+                    ),
+                  }),
+                  false
+                );
+              }
               lastFingerEmptyTapRef.current = null;
-              const nextTool: ToolType =
-                activeTool === 'eraser' ? lastNonEraserToolRef.current || 'pen' : 'eraser';
-              if (activeTool !== 'eraser') {
-                lastNonEraserToolRef.current = activeTool;
-              }
-              setActiveTool(nextTool);
-              const canvas = activeCanvasRef.current;
-              if (canvas) {
-                const rect = canvas.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                  const logicalW = canvas.width / CANVAS_DPR;
-                  const logicalH = canvas.height / CANVAS_DPR;
-                  const px = Math.max(
-                    150,
-                    Math.min(logicalW - 150, (mod.startX - rect.left) * (logicalW / rect.width))
-                  );
-                  const py = Math.max(
-                    70,
-                    Math.min(logicalH - 70, (mod.startY - rect.top) * (logicalH / rect.height))
-                  );
-                  setSqueezePalettePos({ x: px, y: py });
+            } else if (pencilOnlyMode && nowTap - mod.startTime <= 320) {
+              const prevFingerTap = lastFingerEmptyTapRef.current;
+              if (
+                prevFingerTap &&
+                nowTap - prevFingerTap.time >= 45 &&
+                nowTap - prevFingerTap.time <= 360 &&
+                Math.hypot(mod.startX - prevFingerTap.clientX, mod.startY - prevFingerTap.clientY) <= 36
+              ) {
+                lastFingerEmptyTapRef.current = null;
+                const nextTool: ToolType =
+                  activeTool === 'eraser' ? lastNonEraserToolRef.current || 'pen' : 'eraser';
+                if (activeTool !== 'eraser') {
+                  lastNonEraserToolRef.current = activeTool;
                 }
+                setActiveTool(nextTool);
+                const canvas = activeCanvasRef.current;
+                if (canvas) {
+                  const rect = canvas.getBoundingClientRect();
+                  if (rect.width > 0 && rect.height > 0) {
+                    const logicalW = canvas.width / CANVAS_DPR;
+                    const logicalH = canvas.height / CANVAS_DPR;
+                    const px = Math.max(
+                      150,
+                      Math.min(logicalW - 150, (mod.startX - rect.left) * (logicalW / rect.width))
+                    );
+                    const py = Math.max(
+                      70,
+                      Math.min(logicalH - 70, (mod.startY - rect.top) * (logicalH / rect.height))
+                    );
+                    setSqueezePalettePos({ x: px, y: py });
+                  }
+                }
+                showToast(
+                  nextTool === 'eraser'
+                    ? '🧹 Διπλό Tap: Εναλλαγή σε Σβήστρα (+ Παλέτα)!'
+                    : '✏️ Διπλό Tap: Εναλλαγή σε Πένα (+ Παλέτα)!'
+                );
+              } else {
+                lastFingerEmptyTapRef.current = {
+                  time: nowTap,
+                  clientX: mod.startX,
+                  clientY: mod.startY,
+                };
               }
-              showToast(
-                nextTool === 'eraser'
-                  ? '🧹 Διπλό Tap: Εναλλαγή σε Σβήστρα (+ Παλέτα)!'
-                  : '✏️ Διπλό Tap: Εναλλαγή σε Πένα (+ Παλέτα)!'
-              );
-            } else {
-              lastFingerEmptyTapRef.current = {
-                time: nowTap,
-                clientX: mod.startX,
-                clientY: mod.startY,
-              };
             }
           }
         }
@@ -12481,7 +14590,30 @@ export default function App() {
         pinchStateRef.current = null;
         canvasRectRef.current = null;
 
-        // Goodnotes 6 Gesture: Quick 2-finger tap = Undo, Quick 3-finger tap = Redo
+        const totalDx = st.lastMidX - st.startMidX;
+        const totalDy = st.lastMidY - st.startMidY;
+        const distChange = Math.abs(st.lastDist - st.initialDist);
+
+        // 1) 2-Finger Horizontal Swipe Left/Right (when not pinching/zooming & at normal <=112% zoom) -> Back / Forward Navigation!
+        if (
+          st.touchCount === 2 &&
+          elapsed >= 50 &&
+          elapsed <= 520 &&
+          distChange < 42 &&
+          st.initialZoom <= 1.12 &&
+          Math.abs(totalDx) >= 90 &&
+          Math.abs(totalDx) > Math.abs(totalDy) * 2.1
+        ) {
+          applyPaperTransformDirect(st.initialZoom, st.initialPanX, st.initialPanY, true);
+          if (totalDx > 0) {
+            navigateAppHistory('back');
+          } else {
+            navigateAppHistory('forward');
+          }
+          return;
+        }
+
+        // 2) Goodnotes 6 Gesture: Quick 2-finger tap = Undo, Quick 3-finger tap = Redo
         if (
           elapsed < 260 &&
           st.maxMoved < 14 &&
@@ -12532,6 +14664,19 @@ export default function App() {
         const newPanY = panRef.current.y - offsetY * (newZoom - oldZoom);
         applyPaperTransformDirect(newZoom, newPanX, newPanY, true);
       } else {
+        // Mac Trackpad 2-Finger Horizontal Swipe Left/Right (when at normal <=112% zoom) -> Back / Forward Navigation!
+        if (
+          zoomRef.current <= 1.12 &&
+          Math.abs(e.deltaX) >= 42 &&
+          Math.abs(e.deltaX) > Math.abs(e.deltaY) * 2.2
+        ) {
+          if (e.deltaX < 0) {
+            navigateAppHistory('back');
+          } else {
+            navigateAppHistory('forward');
+          }
+          return;
+        }
         const nextPanY = panRef.current.y - e.deltaY;
         applyPaperTransformDirect(zoomRef.current, panRef.current.x - e.deltaX, nextPanY, false);
         syncActivePageFromPanY(nextPanY);
@@ -12573,6 +14718,7 @@ export default function App() {
     handleUndo,
     handleRedo,
     showToast,
+    navigateAppHistory,
   ]);
 
   const clearActiveOverlay = () => {
@@ -12581,6 +14727,18 @@ export default function App() {
     if (!c || !ctx) return;
     ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
     ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+    if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+      liveTvSenderRef.current.sendLiveInk({
+        active: false,
+        pageId: activePage.id,
+        isLaser: false,
+        tool: 'pen',
+        color: strokeColor,
+        width: strokeWidth,
+        opacity: 1,
+        pts: [],
+      });
+    }
   };
 
   const cancelLaserTimers = () => {
@@ -12651,6 +14809,24 @@ export default function App() {
     }
 
     ctx.restore();
+    if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+      const now = performance.now();
+      if (now - lastWetInkBroadcastMsRef.current >= 16 || alpha <= 0.05 || alpha >= 0.99) {
+        lastWetInkBroadcastMsRef.current = now;
+        liveTvSenderRef.current.sendLiveInk({
+          active: allLaserPaths.length > 0 && alpha > 0.02,
+          pageId: activePage.id,
+          isLaser: true,
+          tool: 'laser',
+          color: '#ef4444',
+          width: 5,
+          opacity: alpha,
+          pts: currentStrokePtsRef.current.slice(-180),
+          laserPaths: laserStrokesRef.current.slice(-10).map((p) => p.slice(-180)),
+          laserAlpha: alpha,
+        });
+      }
+    }
   };
 
   // ============================================================================
@@ -12862,6 +15038,24 @@ export default function App() {
       if (sim.primaryStrokeId) {
         const pSt = strokeMap.get(sim.primaryStrokeId);
         if (!pSt || pSt.attachedToSpringId) return false;
+        // Filter out accidental un-started 'analysis' sims that were auto-bound to a branching mind-map arrow
+        if (
+          sim.mode === 'analysis' &&
+          (!sim.step || sim.step === 0) &&
+          (!sim.anMode || sim.anMode === 'none') &&
+          pSt.shapeType === 'arrow' &&
+          pSt.points.length >= 2
+        ) {
+          const p0 = pSt.points[0];
+          const hasBranchingSiblingArrow = page.strokes.some(
+            (other) =>
+              other.id !== pSt.id &&
+              (other.shapeType === 'arrow' || Boolean(other.arrowEnd)) &&
+              other.points.length >= 2 &&
+              Math.hypot(other.points[0].x - p0.x, other.points[0].y - p0.y) <= 45
+          );
+          if (hasBranchingSiblingArrow) return false;
+        }
       }
       if (
         (sim.mode === 'synthesis' || sim.mode === 'incline' || sim.mode === 'pendulum') &&
@@ -13505,10 +15699,8 @@ export default function App() {
   };
 
   const registerOrActivateForceSimFromLasso = (preferredMode?: ForceSimMode): boolean => {
-    const candidateStrokes =
-      selectedStrokeIds.length > 0
-        ? activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id))
-        : activePage.strokes;
+    if (selectedStrokeIds.length === 0) return false;
+    const candidateStrokes = activePage.strokes.filter((s) => selectedStrokeIds.includes(s.id));
     if (candidateStrokes.length === 0) return false;
 
     const bobShapes = ['circle', 'ellipse', 'sphere'];
@@ -13636,11 +15828,6 @@ export default function App() {
           }),
           false
         );
-        return;
-      }
-      // Try binding to user-drawn strokes on the page first (Pencil & Shapes First!)
-      if (registerOrActivateForceSimFromLasso(mode)) {
-        return;
       }
       return;
     }
@@ -13952,7 +16139,7 @@ export default function App() {
               color: '#111827',
               fillColor: 'rgba(148, 163, 184, 0.22)',
               fillStyle: 'solid',
-              width: 2.8,
+              width: 2.0,
               opacity: 1,
               points: wedgePts,
               layerId: activeLayerId,
@@ -13966,7 +16153,7 @@ export default function App() {
               color: '#1d4ed8',
               fillColor: 'rgba(59, 130, 246, 0.22)',
               fillStyle: 'solid',
-              width: 2.8,
+              width: 2.0,
               opacity: 1,
               points: blockPts,
               layerId: activeLayerId,
@@ -14021,7 +16208,7 @@ export default function App() {
             id: supportId,
             tool: 'pen',
             color: '#334155',
-            width: 3.2,
+            width: 2.0,
             opacity: 1,
             isShape: true,
             shapeType: 'line',
@@ -14036,7 +16223,7 @@ export default function App() {
             id: rodId,
             tool: 'pen',
             color: '#0f172a',
-            width: 2.2,
+            width: 2.0,
             opacity: 1,
             isShape: true,
             shapeType: 'line',
@@ -14053,7 +16240,7 @@ export default function App() {
             color: '#0f172a',
             fillColor: 'rgba(30, 41, 59, 0.86)',
             fillStyle: 'solid',
-            width: 2.4,
+            width: 2.0,
             opacity: 1,
             isShape: true,
             shapeType: 'circle',
@@ -14267,6 +16454,17 @@ export default function App() {
       return;
     }
     if (!sim) return;
+    if (action === 'delete-sim') {
+      updateActivePage((page) => {
+        const rem = (page.forceSims || []).filter((s) => s.id !== sim.id);
+        return {
+          ...page,
+          forceSims: rem,
+          activeForceSimId: page.activeForceSimId === sim.id ? rem[0]?.id : page.activeForceSimId,
+        };
+      });
+      return;
+    }
     if (action === 'convert-to-synthesis') {
       if (sim.primaryStrokeId) {
         handleForceSimAction(null, `quick-create-synthesis:${sim.primaryStrokeId}`);
@@ -15866,7 +18064,7 @@ export default function App() {
     // Exact 1 cm (10 mm = 46 px on A4 canvas) unit elongation per 0,1 kg (1 N) weight so Hooke's Law Δl = n · 1 cm matches the cm Ruler 1:1!
     if (uy > 0.78) {
       // Hanging vertically from ceiling: gravity elongates the spring downwards by 1 cm (46 px) per 1 N weight
-      const unitDeltaLPx = 46;
+      const unitDeltaLPx = 46 / uy;
       return naturalLengthPx + unitDeltaLPx * ratio;
     }
     if (uy < -0.78) {
@@ -16179,6 +18377,82 @@ export default function App() {
     }, false);
   };
 
+  const getReferenceNaturalLengthPxForSpring = (
+    page: NotePage,
+    springId: string,
+    fixedPt: { x: number; y: number },
+    freePt: { x: number; y: number },
+    fallbackNatLen: number
+  ): number => {
+    const dLen = Math.max(12, Math.hypot(freePt.x - fixedPt.x, freePt.y - fixedPt.y));
+    const uy = (freePt.y - fixedPt.y) / dLen;
+    if (uy <= 0.78) return fallbackNatLen;
+
+    const validSims = getValidSpringSims(page);
+    const simSpringIds = new Set<string>();
+    for (const sm of validSims) {
+      if (sm.eqSpringStrokeId) simSpringIds.add(sm.eqSpringStrokeId);
+      if (sm.naturalSpringStrokeId) simSpringIds.add(sm.naturalSpringStrokeId);
+    }
+
+    // 1. Prefer an unloaded vertical reference spring hanging from the same ceiling row (Φυσικό Μήκος = 0 cm)
+    let bestUnloadedFreeY: number | null = null;
+    let bestHasPtr = false;
+    let bestDistX = Infinity;
+
+    for (const s of page.strokes) {
+      if (s.shapeType !== 'spring' || s.id === springId || simSpringIds.has(s.id)) continue;
+      const uInfo = getSpringTerminalsAndWidthVec(s);
+      const uFixedEnd =
+        s.springSupport?.fixedEnd || (uInfo.startTerm.y <= uInfo.endTerm.y ? 'start' : 'end');
+      const uFixed = uFixedEnd === 'start' ? uInfo.startTerm : uInfo.endTerm;
+      const uFree = uFixedEnd === 'start' ? uInfo.endTerm : uInfo.startTerm;
+      const uLen = Math.max(12, uInfo.length);
+      const uUy = (uFree.y - uFixed.y) / uLen;
+      if (uUy <= 0.78) continue;
+      if (Math.abs(uFixed.y - fixedPt.y) > 32) continue;
+      const impliedNatLen = (uFree.y - fixedPt.y) / uy;
+      if (impliedNatLen < 30 || Math.abs(impliedNatLen - fallbackNatLen) > 42) continue;
+
+      const hasPtr = page.strokes.some((p) => p.attachedToSpringId === s.id);
+      const distX = Math.abs(uFixed.x - fixedPt.x);
+      if (
+        bestUnloadedFreeY === null ||
+        (hasPtr && !bestHasPtr) ||
+        (hasPtr === bestHasPtr && distX < bestDistX)
+      ) {
+        bestUnloadedFreeY = uFree.y;
+        bestHasPtr = hasPtr;
+        bestDistX = distX;
+      }
+    }
+
+    if (bestUnloadedFreeY !== null) {
+      return (bestUnloadedFreeY - fixedPt.y) / uy;
+    }
+
+    // 2. Otherwise, if multiple loaded Hooke springs hang from the same ceiling row, share a common y0 baseline
+    for (const sm of validSims) {
+      if (sm.showAmplitudeLines) continue;
+      const otherSp = page.strokes.find((s) => s.id === sm.eqSpringStrokeId);
+      if (!otherSp) continue;
+      const oInfo = getSpringTerminalsAndWidthVec(otherSp);
+      const oFixed = sm.fixedEnd === 'start' ? oInfo.startTerm : oInfo.endTerm;
+      const oFree = sm.fixedEnd === 'start' ? oInfo.endTerm : oInfo.startTerm;
+      const oLen = Math.max(12, oInfo.length);
+      const oUy = (oFree.y - oFixed.y) / oLen;
+      if (oUy <= 0.78) continue;
+      if (Math.abs(oFixed.y - fixedPt.y) > 32) continue;
+      const targetY0 = oFixed.y + oUy * sm.naturalLengthPx;
+      const impliedNatLen = (targetY0 - fixedPt.y) / uy;
+      if (impliedNatLen >= 30 && Math.abs(impliedNatLen - fallbackNatLen) <= 42) {
+        return impliedNatLen;
+      }
+    }
+
+    return fallbackNatLen;
+  };
+
   // Automatically normalize any Hooke-mode springs and hooked-weights (25x48px) on the active page so 1, 2, 3, 4 weights (m = 0,1 kg, g = 10 m/s²)
   // stretch by exact 10 mm (1 cm = 46 px), 20 mm (2 cm = 92 px), 30 mm (3 cm = 138 px), 40 mm (4 cm = 184 px)!
   useEffect(() => {
@@ -16203,8 +18477,15 @@ export default function App() {
       const dLen = Math.max(12, spInfo.length);
       const ux = (freePt.x - fixedPt.x) / dLen;
       const uy = (freePt.y - fixedPt.y) / dLen;
+      const refNatLen = getReferenceNaturalLengthPxForSpring(
+        activePage,
+        eqSp.id,
+        fixedPt,
+        freePt,
+        sm.naturalLengthPx
+      );
       const expectedEqLen = computeEquilibriumLengthPx(
-        sm.naturalLengthPx,
+        refNatLen,
         ux,
         uy,
         expectedMass,
@@ -16212,6 +18493,7 @@ export default function App() {
       );
       return (
         Math.abs(spInfo.length - expectedEqLen) > 0.5 ||
+        Math.abs(sm.naturalLengthPx - refNatLen) > 0.5 ||
         Math.abs(sm.mass - expectedMass) > 0.01 ||
         Math.abs(sm.stiffness - 1.0) > 0.01
       );
@@ -16240,11 +18522,24 @@ export default function App() {
       const curActiveId = page.activeSpringSimId;
       for (const sm of getValidSpringSims(curPage)) {
         if (sm.showAmplitudeLines) continue;
+        const eqSp = curPage.strokes.find((s) => s.id === sm.eqSpringStrokeId);
+        if (!eqSp) continue;
         const chainCount = getWeightChainIds(curPage, sm.massStrokeId).length;
         if (chainCount <= 0) continue;
         const expectedMass = chainCount * 1.0;
+        const spInfo = getSpringTerminalsAndWidthVec(eqSp);
+        const fixedPt = sm.fixedEnd === 'start' ? spInfo.startTerm : spInfo.endTerm;
+        const freePt = sm.fixedEnd === 'start' ? spInfo.endTerm : spInfo.startTerm;
+        const refNatLen = getReferenceNaturalLengthPxForSpring(
+          curPage,
+          eqSp.id,
+          fixedPt,
+          freePt,
+          sm.naturalLengthPx
+        );
         curPage = applySpringSimParametersToStrokes(curPage, {
           ...sm,
+          naturalLengthPx: refNatLen,
           baseMassWidthPx: 25,
           baseMassHeightPx: 48,
           mass: expectedMass,
@@ -16469,7 +18764,14 @@ export default function App() {
 
       // Modify the SAME spring `sp` in-place to its Equilibrium (Θ.Ι.) length (no 2nd cloned spring!)
       const eqFixedPt = fixedPt;
-      const eqLen = computeEquilibriumLengthPx(info.length, ux, uy, totalMass, 1.0);
+      const refNaturalLen = getReferenceNaturalLengthPxForSpring(
+        page,
+        sp.id,
+        fixedPt,
+        freePt,
+        info.length
+      );
+      const eqLen = computeEquilibriumLengthPx(refNaturalLen, ux, uy, totalMass, 1.0);
       const eqFreePt = {
         x: eqFixedPt.x + ux * eqLen,
         y: eqFixedPt.y + uy * eqLen,
@@ -16543,7 +18845,7 @@ export default function App() {
         massStrokeId: mass.id,
         supportStrokeId,
         fixedEnd,
-        naturalLengthPx: info.length,
+        naturalLengthPx: refNaturalLen,
         baseSpringWidthPx: info.springWidth,
         baseMassWidthPx: massW,
         baseMassHeightPx: massH,
@@ -16558,7 +18860,7 @@ export default function App() {
         hookeMeasurements: hasPtrOnNewSpring
           ? upsertHookeMeasurementRow(
               undefined,
-              info.length,
+              refNaturalLen,
               eqLen,
               chainIds.length,
               totalMass
@@ -16679,6 +18981,68 @@ export default function App() {
     showToast('📍 Ο δείκτης συνδέθηκε στο ελατήριο!');
   };
 
+  const getEffectiveRulerGeometry = (
+    rState: PageRulerState,
+    pW: number,
+    pH: number
+  ): {
+    userLength: number;
+    effectiveRulerW: number;
+    maxLenToPageEdge: number;
+    rulerH: number;
+    originX: number;
+    originY: number;
+    centerX: number;
+    centerY: number;
+    cosA: number;
+    sinA: number;
+  } => {
+    const defaultLen = Math.round(pW * 0.8);
+    const userLength = Math.max(69, Math.min(Math.max(pW, pH), rState.lengthPx ?? defaultLen));
+    const rulerH = 54;
+    const rad = (rState.angle * Math.PI) / 180;
+    const cosA = Math.cos(rad);
+    const sinA = Math.sin(rad);
+    const EDGE_PAD = 10; // Terminate cleanly 10px before the page edge so the ruler never spills out of the page!
+    const marginX = Math.abs(sinA) * (rulerH / 2) + EDGE_PAD;
+    const marginY = Math.abs(cosA) * (rulerH / 2) + EDGE_PAD;
+
+    const rawOriginX = rState.x - (userLength / 2) * cosA;
+    const rawOriginY = rState.y - (userLength / 2) * sinA;
+    const originX = Math.max(marginX, Math.min(pW - marginX, rawOriginX));
+    const originY = Math.max(marginY, Math.min(pH - marginY, rawOriginY));
+
+    let maxLenToPageEdge = Math.max(pW, pH) * 1.5;
+    if (cosA > 1e-4) {
+      maxLenToPageEdge = Math.min(maxLenToPageEdge, (pW - marginX - originX) / cosA);
+    } else if (cosA < -1e-4) {
+      maxLenToPageEdge = Math.min(maxLenToPageEdge, (marginX - originX) / cosA);
+    }
+    if (sinA > 1e-4) {
+      maxLenToPageEdge = Math.min(maxLenToPageEdge, (pH - marginY - originY) / sinA);
+    } else if (sinA < -1e-4) {
+      maxLenToPageEdge = Math.min(maxLenToPageEdge, (marginY - originY) / sinA);
+    }
+    maxLenToPageEdge = Math.max(69, Math.floor(maxLenToPageEdge));
+
+    const effectiveRulerW = Math.max(69, Math.min(userLength, maxLenToPageEdge));
+    const centerX = originX + (effectiveRulerW / 2) * cosA;
+    const centerY = originY + (effectiveRulerW / 2) * sinA;
+
+    return {
+      userLength,
+      effectiveRulerW,
+      maxLenToPageEdge,
+      rulerH,
+      originX,
+      originY,
+      centerX,
+      centerY,
+      cosA,
+      sinA,
+    };
+  };
+
   const computeRulerPointerReadout = (
     ptrStroke: StrokeObject,
     dispDx = 0,
@@ -16705,16 +19069,18 @@ export default function App() {
     dashDurationSec: number;
     readoutDelaySec: number;
   } | null => {
-    const rState = rulersByPageId[targetPage.id] || DEFAULT_PAGE_RULER_STATE;
+    const rState =
+      rulersByPageId[targetPage.id] || targetPage.ruler || DEFAULT_PAGE_RULER_STATE;
     if (!rState.visible || ptrStroke.points.length < 2) return null;
     if (!ptrStroke.attachedToSpringId) return null;
 
-    const rulerW = Math.round(pW * 0.8);
-    const rulerH = 54;
+    const pH = getPageLogicalHeight(targetPage);
+    const rGeom = getEffectiveRulerGeometry(rState, pW, pH);
+    const rulerW = rGeom.effectiveRulerW;
+    const rulerH = rGeom.rulerH;
     const oneMmPx = 920 / 20 / 10; // 4.6px per 1mm (46px per 1cm)
-    const rad = (rState.angle * Math.PI) / 180;
-    const cosA = Math.cos(rad);
-    const sinA = Math.sin(rad);
+    const cosA = rGeom.cosA;
+    const sinA = rGeom.sinA;
 
     // Require the ruler to be vertical (near ±90°) to show spring pointer readouts
     if (Math.abs(sinA) < 0.96) return null;
@@ -16723,6 +19089,8 @@ export default function App() {
     const closeEdgeThreshold = rulerH / 2 + 36; // within 36px of the ruler's vertical edge
     const maxPerp = 880;
     let isLockedAtZero = false;
+    let zeroRefXPos = 0;
+    let bestZeroAbs = Infinity;
     const validCandidates: { id: string; xPos: number }[] = [];
 
     for (const cand of targetPage.strokes) {
@@ -16735,18 +19103,22 @@ export default function App() {
         x: cand.points[cand.points.length - 1].x + cDx,
         y: cand.points[cand.points.length - 1].y + cDy,
       };
-      const sPerp0 = -(cP0.x - rState.x) * sinA + (cP0.y - rState.y) * cosA;
-      const sPerpEnd = -(cPEnd.x - rState.x) * sinA + (cPEnd.y - rState.y) * cosA;
+      const sPerp0 = -(cP0.x - rGeom.centerX) * sinA + (cP0.y - rGeom.centerY) * cosA;
+      const sPerpEnd = -(cPEnd.x - rGeom.centerX) * sinA + (cPEnd.y - rGeom.centerY) * cosA;
       const segPerpDist =
         sPerp0 * sPerpEnd <= 0 ? 0 : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
       const cTip = Math.abs(sPerpEnd) <= Math.abs(sPerp0) ? cPEnd : cP0;
-      const cLocalX = (cTip.x - rState.x) * cosA + (cTip.y - rState.y) * sinA;
-      const cLocalY = -(cTip.x - rState.x) * sinA + (cTip.y - rState.y) * cosA;
+      const cLocalX = (cTip.x - rGeom.centerX) * cosA + (cTip.y - rGeom.centerY) * sinA;
+      const cLocalY = -(cTip.x - rGeom.centerX) * sinA + (cTip.y - rGeom.centerY) * cosA;
       const cXPos = cLocalX + rulerW / 2;
       if (cXPos >= -6 && cXPos <= rulerW + 6 && Math.abs(cLocalY) <= maxPerp) {
         validCandidates.push({ id: cand.id, xPos: cXPos });
         if (segPerpDist <= closeEdgeThreshold && Math.abs(cXPos) <= 2.3) {
           isLockedAtZero = true;
+          if (Math.abs(cXPos) < bestZeroAbs) {
+            bestZeroAbs = Math.abs(cXPos);
+            zeroRefXPos = cXPos;
+          }
         }
       }
     }
@@ -16760,15 +19132,15 @@ export default function App() {
       x: ptrStroke.points[ptrStroke.points.length - 1].x + dispDx,
       y: ptrStroke.points[ptrStroke.points.length - 1].y + dispDy,
     };
-    const sPerp0Self = -(p0.x - rState.x) * sinA + (p0.y - rState.y) * cosA;
-    const sPerpEndSelf = -(pEnd.x - rState.x) * sinA + (pEnd.y - rState.y) * cosA;
+    const sPerp0Self = -(p0.x - rGeom.centerX) * sinA + (p0.y - rGeom.centerY) * cosA;
+    const sPerpEndSelf = -(pEnd.x - rGeom.centerX) * sinA + (pEnd.y - rGeom.centerY) * cosA;
 
     const perp0 = Math.abs(sPerp0Self);
     const perpEnd = Math.abs(sPerpEndSelf);
     const tipPt = perpEnd <= perp0 ? pEnd : p0;
 
-    const dx = tipPt.x - rState.x;
-    const dy = tipPt.y - rState.y;
+    const dx = tipPt.x - rGeom.centerX;
+    const dy = tipPt.y - rGeom.centerY;
     const localX = dx * cosA + dy * sinA;
     const localY = -dx * sinA + dy * cosA;
     const xPos = localX + rulerW / 2;
@@ -16784,13 +19156,14 @@ export default function App() {
     );
 
     const clampedXPos = Math.max(0, Math.min(rulerW, xPos));
-    const mmVal = Math.max(0, Math.round(clampedXPos / oneMmPx));
+    const relXPos = Math.max(0, xPos - zeroRefXPos);
+    const mmVal = Math.max(0, Math.round(relXPos / oneMmPx));
     const cmVal = Number((mmVal / 10).toFixed(1));
     const cmStr = `${cmVal.toString().replace('.', ',')} cm`;
     const ptrColor = ptrStroke.color || '#dc2626';
     const localAlong = clampedXPos - rulerW / 2;
-    const axisPtX = rState.x + localAlong * cosA;
-    const axisPtY = rState.y + localAlong * sinA;
+    const axisPtX = rGeom.centerX + localAlong * cosA;
+    const axisPtY = rGeom.centerY + localAlong * sinA;
 
     const isMostlyVertical = Math.abs(sinA) >= 0.35;
     const rightNormalSign = isMostlyVertical ? (-sinA >= 0 ? 1 : -1) : -1;
@@ -17071,7 +19444,7 @@ export default function App() {
       fillColor: '#cbd5e1',
       fillStyle: 'solid',
       fillTransparency: 45,
-      width: 2.5,
+      width: 2.0,
       opacity: 1,
       lineStyle: 'solid',
       isShape: true,
@@ -17095,6 +19468,7 @@ export default function App() {
   const isCircuitEligibleStroke = (s: StrokeObject): boolean => {
     if (!s.isShape) return false;
     if (s.shapeType === 'line') {
+      if (s.arrowStart || s.arrowEnd) return false;
       if (s.points[0]?.twist === 999) return false;
       if (s.fillStyle && s.fillStyle !== 'none') return false;
       return s.points.length >= 2;
@@ -17140,11 +19514,16 @@ export default function App() {
     if (!sim) return new Set();
     const baseSet = new Set(sim.strokeIds);
     const groupIds = new Set(
-      page.strokes.filter((s) => baseSet.has(s.id) && s.groupId).map((s) => s.groupId!)
+      page.strokes
+        .filter((s) => baseSet.has(s.id) && isCircuitEligibleStroke(s) && s.groupId)
+        .map((s) => s.groupId!)
     );
     const out = new Set<string>();
     for (const s of page.strokes) {
-      if (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId))) {
+      if (
+        isCircuitEligibleStroke(s) &&
+        (baseSet.has(s.id) || (s.groupId && groupIds.has(s.groupId)))
+      ) {
         out.add(s.id);
       }
     }
@@ -17366,12 +19745,15 @@ export default function App() {
     const rawSelSet = new Set(selectedStrokeIds);
     const selGroupIds = new Set(
       activePage.strokes
-        .filter((s) => rawSelSet.has(s.id) && s.groupId)
+        .filter((s) => rawSelSet.has(s.id) && isCircuitEligibleStroke(s) && s.groupId)
         .map((s) => s.groupId!)
     );
     const expandedIdSet = new Set<string>();
     for (const s of activePage.strokes) {
-      if (rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))) {
+      if (
+        isCircuitEligibleStroke(s) &&
+        (rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId)))
+      ) {
         expandedIdSet.add(s.id);
       }
     }
@@ -17483,17 +19865,24 @@ export default function App() {
     if (span.kind === 'h-top') {
       const x1 = span.fixedX1 !== undefined ? span.fixedX1 : prop.xLeft;
       const x2 = span.fixedX2 !== undefined ? span.fixedX2 : prop.xRight;
-      return { x1, y1: prop.yTop, x2, y2: prop.yTop };
+      const y = prop.yTop + (span.yOffset || 0);
+      return { x1, y1: y, x2, y2: y };
     }
     if (span.kind === 'h-bot') {
       const x1 = span.fixedX1 !== undefined ? span.fixedX1 : prop.xLeft;
       const x2 = span.fixedX2 !== undefined ? span.fixedX2 : prop.xRight;
-      return { x1, y1: prop.yBot, x2, y2: prop.yBot };
+      const y = prop.yBot + (span.yOffset || 0);
+      return { x1, y1: y, x2, y2: y };
     }
     if (span.kind === 'v-left') {
       return { x1: prop.xLeft, y1: prop.yTop, x2: prop.xLeft, y2: prop.yBot };
     }
-    return { x1: prop.xRight, y1: prop.yTop, x2: prop.xRight, y2: prop.yBot };
+    return {
+      x1: prop.xRight,
+      y1: prop.yTop + (prop.topRightYOffset || 0),
+      x2: prop.xRight,
+      y2: prop.yBot + (prop.botRightYOffset || 0),
+    };
   };
 
   const handleStartCircuitCompletion = () => {
@@ -17626,7 +20015,7 @@ export default function App() {
     // Inherit wire color, thickness, and line style if partial wires exist; otherwise default to black ('#111827') solid!
     const refWireStroke = rawExternalSegs[0]?.stroke;
     const wireColor = refWireStroke?.color || '#111827';
-    const wireWidth = refWireStroke?.width || 2.8;
+    const wireWidth = refWireStroke?.width || 2.0;
     const wireLineStyle = refWireStroke?.lineStyle || 'solid';
     const wirePenSubType = refWireStroke?.penType;
     const wireOpacity = refWireStroke?.opacity ?? 1;
@@ -17685,6 +20074,7 @@ export default function App() {
 
     // Align all Top Row components so their leftTerm.y === yTop, and all Bottom Row components so their leftTerm.y === yBot
     const topKeySet = new Set(topCompsInit.map((c) => c.key));
+    const topSeedIdSet = new Set(topCompsInit.flatMap((c) => c.strokeIds));
     const dyByStrokeId = new Map<string, number>();
     for (const c of comps) {
       const targetRowY = topKeySet.has(c.key) ? yTop : yBot;
@@ -17714,10 +20104,10 @@ export default function App() {
 
     const finalComps = getCircuitComponentsWithTerminals(shiftedCompStrokes);
     const topComps = finalComps
-      .filter((c) => topKeySet.has(c.key))
+      .filter((c) => topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
       .sort((a, b) => a.cx - b.cx);
     const botComps = finalComps
-      .filter((c) => !topKeySet.has(c.key))
+      .filter((c) => !topKeySet.has(c.key) && !c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
       .sort((a, b) => a.cx - b.cx);
 
     const minCompLeftX = Math.round(Math.min(...finalComps.map((c) => c.leftTerm.x)));
@@ -17750,16 +20140,25 @@ export default function App() {
         ? Math.round(Math.max(...hOuterRightXs))
         : Math.round(maxCompRightX + 88);
 
-    // Build parameterized rectangular circuit spans
+    // Build parameterized rectangular circuit spans (preserving stepped rightTerm.y offset for 2-terminal bulbs!)
     const spans: NonNullable<typeof circuitProposal>['spans'] = [];
+    const topRightYOffset =
+      topComps.length > 0
+        ? Math.round(topComps[topComps.length - 1].rightTerm.y - yTop)
+        : 0;
+    const botRightYOffset =
+      botComps.length > 0
+        ? Math.round(botComps[botComps.length - 1].rightTerm.y - yBot)
+        : 0;
 
     if (topComps.length === 0) {
-      spans.push({ id: 'top-all', kind: 'h-top' });
+      spans.push({ id: 'top-all', kind: 'h-top', yOffset: 0 });
     } else {
       spans.push({
         id: 'top-0',
         kind: 'h-top',
         fixedX2: Math.round(topComps[0].leftTerm.x),
+        yOffset: Math.round(topComps[0].leftTerm.y - yTop),
       });
       for (let i = 0; i < topComps.length - 1; i++) {
         spans.push({
@@ -17767,22 +20166,25 @@ export default function App() {
           kind: 'h-top',
           fixedX1: Math.round(topComps[i].rightTerm.x),
           fixedX2: Math.round(topComps[i + 1].leftTerm.x),
+          yOffset: Math.round(topComps[i].rightTerm.y - yTop),
         });
       }
       spans.push({
         id: 'top-last',
         kind: 'h-top',
         fixedX1: Math.round(topComps[topComps.length - 1].rightTerm.x),
+        yOffset: topRightYOffset,
       });
     }
 
     if (botComps.length === 0) {
-      spans.push({ id: 'bot-all', kind: 'h-bot' });
+      spans.push({ id: 'bot-all', kind: 'h-bot', yOffset: 0 });
     } else {
       spans.push({
         id: 'bot-0',
         kind: 'h-bot',
         fixedX2: Math.round(botComps[0].leftTerm.x),
+        yOffset: Math.round(botComps[0].leftTerm.y - yBot),
       });
       for (let i = 0; i < botComps.length - 1; i++) {
         spans.push({
@@ -17790,12 +20192,14 @@ export default function App() {
           kind: 'h-bot',
           fixedX1: Math.round(botComps[i].rightTerm.x),
           fixedX2: Math.round(botComps[i + 1].leftTerm.x),
+          yOffset: Math.round(botComps[i].rightTerm.y - yBot),
         });
       }
       spans.push({
         id: 'bot-last',
         kind: 'h-bot',
         fixedX1: Math.round(botComps[botComps.length - 1].rightTerm.x),
+        yOffset: botRightYOffset,
       });
     }
 
@@ -17811,20 +20215,25 @@ export default function App() {
         sp.kind === 'h-top'
           ? {
               x1: sp.fixedX1 !== undefined ? sp.fixedX1 : xLeft,
-              y1: yTop,
+              y1: yTop + (sp.yOffset || 0),
               x2: sp.fixedX2 !== undefined ? sp.fixedX2 : xRight,
-              y2: yTop,
+              y2: yTop + (sp.yOffset || 0),
             }
           : sp.kind === 'h-bot'
           ? {
               x1: sp.fixedX1 !== undefined ? sp.fixedX1 : xLeft,
-              y1: yBot,
+              y1: yBot + (sp.yOffset || 0),
               x2: sp.fixedX2 !== undefined ? sp.fixedX2 : xRight,
-              y2: yBot,
+              y2: yBot + (sp.yOffset || 0),
             }
           : sp.kind === 'v-left'
           ? { x1: xLeft, y1: yTop, x2: xLeft, y2: yBot }
-          : { x1: xRight, y1: yTop, x2: xRight, y2: yBot };
+          : {
+              x1: xRight,
+              y1: yTop + topRightYOffset,
+              x2: xRight,
+              y2: yBot + botRightYOffset,
+            };
 
       if (sp.kind === 'h-top' || sp.kind === 'h-bot') {
         const sMinX = Math.min(targetCoords.x1, targetCoords.x2);
@@ -17853,7 +20262,7 @@ export default function App() {
             penType: match.stroke.penType,
             lineStyle: match.stroke.lineStyle || 'solid',
             color: match.stroke.color || '#111827',
-            width: match.stroke.width || 2.8,
+            width: match.stroke.width || 2.0,
             opacity: match.stroke.opacity ?? 1,
             layerId: match.stroke.layerId || defaultLayerId,
             isShape: true,
@@ -17897,7 +20306,7 @@ export default function App() {
             penType: match.stroke.penType,
             lineStyle: match.stroke.lineStyle || 'solid',
             color: match.stroke.color || '#111827',
-            width: match.stroke.width || 2.8,
+            width: match.stroke.width || 2.0,
             opacity: match.stroke.opacity ?? 1,
             layerId: match.stroke.layerId || defaultLayerId,
             isShape: true,
@@ -17983,6 +20392,8 @@ export default function App() {
       xRight,
       yTop,
       yBot,
+      topRightYOffset,
+      botRightYOffset,
       initialYTop: yTop,
       initialYBot: yBot,
       minCompLeftX,
@@ -18014,7 +20425,7 @@ export default function App() {
         penType: prop.wirePenSubType,
         lineStyle: prop.wireLineStyle || 'solid',
         color: prop.wireColor || '#111827',
-        width: prop.wireWidth || 2.8,
+        width: prop.wireWidth || 2.0,
         opacity: prop.wireOpacity ?? 1,
         layerId: prop.layerId,
         isShape: true,
@@ -18040,18 +20451,40 @@ export default function App() {
       ...existingWireIds,
       ...createdWires.map((w) => w.id),
     ];
+    const circuitIdSet = new Set(allCircuitStrokeIds);
 
     updateActivePage((page) => {
-      const nextStrokes = [...page.strokes, ...createdWires];
+      const combined = [...page.strokes, ...createdWires];
+      const subStrokes = combined.filter((s) => circuitIdSet.has(s.id));
+      const alignedSubStrokes =
+        subStrokes.length > 0 ? autoAlignAndConnectCircuit(subStrokes) : subStrokes;
+      const alignedIds = alignedSubStrokes.map((s) => s.id);
+
+      const nextStrokes: StrokeObject[] = [];
+      let inserted = false;
+      for (const s of combined) {
+        if (circuitIdSet.has(s.id)) {
+          if (!inserted) {
+            nextStrokes.push(...alignedSubStrokes);
+            inserted = true;
+          }
+          continue;
+        }
+        nextStrokes.push(s);
+      }
+      if (!inserted) {
+        nextStrokes.push(...alignedSubStrokes);
+      }
+
       const curValid = getValidCircuitSims(page);
       const exists = curValid.some((s) => s.id === prop.simId);
       const nextSims = exists
         ? curValid.map((s) =>
-            s.id === prop.simId ? { ...s, strokeIds: allCircuitStrokeIds } : s
+            s.id === prop.simId ? { ...s, strokeIds: alignedIds } : s
           )
         : [
             ...curValid,
-            { id: prop.simId, name: prop.simName, strokeIds: allCircuitStrokeIds },
+            { id: prop.simId, name: prop.simName, strokeIds: alignedIds },
           ];
       return {
         ...page,
@@ -18077,9 +20510,268 @@ export default function App() {
     showToast('✕ Η πρόταση ολοκλήρωσης ακυρώθηκε.');
   };
 
+  const handleConvertActiveCircuitMode = (targetMode: 'pictorial' | 'schematic') => {
+    const activeSim = getActiveCircuitSim(activePage);
+    if (!activeSim) {
+      showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
+      return;
+    }
+
+    // If a circuit completion proposal ("✓ Αποδοχή / ✕ Ακύρωση") is active on this page,
+    // convert its components and immediately recompute the proposal spans (including the bulb's right-terminal vertical step!)
+    if (circuitProposal && circuitProposal.pageId === activePage.id) {
+      const prop = circuitProposal;
+      const oldCompIdSet = new Set(prop.componentStrokeIds);
+      const oldCompStrokes = activePage.strokes.filter((s) => oldCompIdSet.has(s.id));
+      if (oldCompStrokes.length > 0) {
+        const convertedOnly = convertCircuitComponents(
+          oldCompStrokes,
+          undefined,
+          targetMode
+        ).strokes;
+        const rawComps = getCircuitComponentsWithTerminals(convertedOnly);
+        if (rawComps.length > 0) {
+          const dyBySid = new Map<string, number>();
+          const topCompKeys = new Set<string>();
+          for (const c of rawComps) {
+            const isTop =
+              Math.abs(c.leftTerm.y - prop.yTop) <= Math.abs(c.leftTerm.y - prop.yBot);
+            if (isTop) topCompKeys.add(c.key);
+            const targetRowY = isTop ? prop.yTop : prop.yBot;
+            const dy = targetRowY - c.leftTerm.y;
+            for (const sid of c.strokeIds) dyBySid.set(sid, dy);
+          }
+
+          const alignedCompStrokes = convertedOnly.map((s) => {
+            const dy = dyBySid.get(s.id) || 0;
+            if (Math.abs(dy) < 0.25) return s;
+            return {
+              ...s,
+              circuitBox: s.circuitBox
+                ? { ...s.circuitBox, termY: s.circuitBox.termY + dy }
+                : undefined,
+              points: s.points.map((pt) => ({
+                ...pt,
+                y: pt.y + dy,
+                cy: pt.cy !== undefined ? pt.cy + dy : undefined,
+              })),
+            };
+          });
+
+          const finalComps = getCircuitComponentsWithTerminals(alignedCompStrokes);
+          const topComps = finalComps
+            .filter((c) => topCompKeys.has(c.key))
+            .sort((a, b) => a.cx - b.cx);
+          const botComps = finalComps
+            .filter((c) => !topCompKeys.has(c.key))
+            .sort((a, b) => a.cx - b.cx);
+
+          const topRightYOffset =
+            topComps.length > 0
+              ? Math.round(topComps[topComps.length - 1].rightTerm.y - prop.yTop)
+              : 0;
+          const botRightYOffset =
+            botComps.length > 0
+              ? Math.round(botComps[botComps.length - 1].rightTerm.y - prop.yBot)
+              : 0;
+          const minCompLeftX = Math.round(
+            Math.min(...finalComps.map((c) => c.leftTerm.x))
+          );
+          const maxCompRightX = Math.round(
+            Math.max(...finalComps.map((c) => c.rightTerm.x))
+          );
+
+          const oldSpanById = new Map(prop.spans.map((sp) => [sp.id, sp]));
+          const nextSpans: typeof prop.spans = [];
+
+          if (topComps.length === 0) {
+            nextSpans.push({
+              id: 'top-all',
+              kind: 'h-top',
+              yOffset: 0,
+              existingStrokeId: oldSpanById.get('top-all')?.existingStrokeId,
+            });
+          } else {
+            nextSpans.push({
+              id: 'top-0',
+              kind: 'h-top',
+              fixedX2: Math.round(topComps[0].leftTerm.x),
+              yOffset: Math.round(topComps[0].leftTerm.y - prop.yTop),
+              existingStrokeId: oldSpanById.get('top-0')?.existingStrokeId,
+            });
+            for (let i = 0; i < topComps.length - 1; i++) {
+              const midId = `top-mid-${i}`;
+              nextSpans.push({
+                id: midId,
+                kind: 'h-top',
+                fixedX1: Math.round(topComps[i].rightTerm.x),
+                fixedX2: Math.round(topComps[i + 1].leftTerm.x),
+                yOffset: Math.round(topComps[i].rightTerm.y - prop.yTop),
+                existingStrokeId: oldSpanById.get(midId)?.existingStrokeId,
+              });
+            }
+            nextSpans.push({
+              id: 'top-last',
+              kind: 'h-top',
+              fixedX1: Math.round(topComps[topComps.length - 1].rightTerm.x),
+              yOffset: topRightYOffset,
+              existingStrokeId: oldSpanById.get('top-last')?.existingStrokeId,
+            });
+          }
+
+          if (botComps.length === 0) {
+            nextSpans.push({
+              id: 'bot-all',
+              kind: 'h-bot',
+              yOffset: 0,
+              existingStrokeId: oldSpanById.get('bot-all')?.existingStrokeId,
+            });
+          } else {
+            nextSpans.push({
+              id: 'bot-0',
+              kind: 'h-bot',
+              fixedX2: Math.round(botComps[0].leftTerm.x),
+              yOffset: Math.round(botComps[0].leftTerm.y - prop.yBot),
+              existingStrokeId: oldSpanById.get('bot-0')?.existingStrokeId,
+            });
+            for (let i = 0; i < botComps.length - 1; i++) {
+              const midId = `bot-mid-${i}`;
+              nextSpans.push({
+                id: midId,
+                kind: 'h-bot',
+                fixedX1: Math.round(botComps[i].rightTerm.x),
+                fixedX2: Math.round(botComps[i + 1].leftTerm.x),
+                yOffset: Math.round(botComps[i].rightTerm.y - prop.yBot),
+                existingStrokeId: oldSpanById.get(midId)?.existingStrokeId,
+              });
+            }
+            nextSpans.push({
+              id: 'bot-last',
+              kind: 'h-bot',
+              fixedX1: Math.round(botComps[botComps.length - 1].rightTerm.x),
+              yOffset: botRightYOffset,
+              existingStrokeId: oldSpanById.get('bot-last')?.existingStrokeId,
+            });
+          }
+
+          nextSpans.push({
+            id: 'v-left',
+            kind: 'v-left',
+            existingStrokeId: oldSpanById.get('v-left')?.existingStrokeId,
+          });
+          nextSpans.push({
+            id: 'v-right',
+            kind: 'v-right',
+            existingStrokeId: oldSpanById.get('v-right')?.existingStrokeId,
+          });
+
+          const nextProp: NonNullable<typeof circuitProposal> = {
+            ...prop,
+            topRightYOffset,
+            botRightYOffset,
+            minCompLeftX,
+            maxCompRightX,
+            componentStrokeIds: alignedCompStrokes.map((s) => s.id),
+            topCompStrokeIds: topComps.flatMap((c) => c.strokeIds),
+            botCompStrokeIds: botComps.flatMap((c) => c.strokeIds),
+            spans: nextSpans,
+          };
+
+          const spanCoordMap = new Map<
+            string,
+            { x1: number; y1: number; x2: number; y2: number }
+          >();
+          for (const sp of nextSpans) {
+            if (sp.existingStrokeId) {
+              spanCoordMap.set(sp.existingStrokeId, evalCircuitProposalSpan(nextProp, sp));
+            }
+          }
+
+          const newSimStrokeIds = [
+            ...alignedCompStrokes.map((s) => s.id),
+            ...nextSpans
+              .map((sp) => sp.existingStrokeId)
+              .filter((id): id is string => Boolean(id)),
+          ];
+
+          setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+          setRedoStack([]);
+
+          updateActivePage((page) => {
+            const nextStrokes: StrokeObject[] = [];
+            let inserted = false;
+            for (const s of page.strokes) {
+              if (oldCompIdSet.has(s.id)) {
+                if (!inserted) {
+                  nextStrokes.push(...alignedCompStrokes);
+                  inserted = true;
+                }
+                continue;
+              }
+              const updatedWireCoords = spanCoordMap.get(s.id);
+              if (updatedWireCoords) {
+                nextStrokes.push({
+                  ...s,
+                  points: [
+                    { x: updatedWireCoords.x1, y: updatedWireCoords.y1, pressure: 0.7 },
+                    {
+                      x: updatedWireCoords.x2,
+                      y: updatedWireCoords.y2,
+                      cx: (updatedWireCoords.x1 + updatedWireCoords.x2) / 2,
+                      cy: (updatedWireCoords.y1 + updatedWireCoords.y2) / 2,
+                      pressure: 0.7,
+                    },
+                  ],
+                });
+                continue;
+              }
+              nextStrokes.push(s);
+            }
+            if (!inserted) {
+              nextStrokes.push(...alignedCompStrokes);
+            }
+            const curValid = getValidCircuitSims(page);
+            const nextSims = curValid.map((sim) =>
+              sim.id === prop.simId ? { ...sim, strokeIds: newSimStrokeIds } : sim
+            );
+            return {
+              ...page,
+              strokes: nextStrokes,
+              circuitSims: nextSims,
+            };
+          });
+
+          setCircuitProposal(nextProp);
+          setSelectedStrokeIds([]);
+          showToast(
+            targetMode === 'pictorial'
+              ? `🔋💡 [${activeSim.name}] Σχήματα: Μπαταρία, Λαμπτήρες & Φτερωτή!`
+              : `⚡〰️ [${activeSim.name}] Σύμβολα: Πηγή Τάσης & Αντιστάτες!`
+          );
+          return;
+        }
+      }
+    }
+
+    updateActivePage((page) =>
+      runScopedCircuitOperationOnPage(
+        page,
+        (sub) => convertCircuitComponents(sub, undefined, targetMode).strokes,
+        activeSim.id
+      )
+    );
+    setSelectedStrokeIds([]);
+    showToast(
+      targetMode === 'pictorial'
+        ? `🔋💡 [${activeSim.name}] Σχήματα: Μπαταρία, Λαμπτήρες & Φτερωτή!`
+        : `⚡〰️ [${activeSim.name}] Σύμβολα: Πηγή Τάσης & Αντιστάτες!`
+    );
+  };
+
   // ============================================================================
   // 60FPS / 120FPS INTERACTIVE CIRCUIT SIMULATION OVERLAY ENGINE
   // ============================================================================
+  const simAnimOriginMsRef = useRef<number>(performance.now());
   useEffect(() => {
     const canvas = simCanvasRef.current;
     if (!canvas) return;
@@ -18180,11 +20872,151 @@ export default function App() {
           }
         : null;
 
+    // Pre-stitch connected active wire segments & resistor zig-zags into continuous chains
+    // so charge carriers glide around corners and through resistors at 100% uniform period with zero jumps!
+    type SimSubSeg = { x1: number; y1: number; x2: number; y2: number; effLen: number };
+    type SimChainWork = {
+      startPt: { x: number; y: number };
+      endPt: { x: number; y: number };
+      subSegs: SimSubSeg[];
+      rawEffLen: number;
+      weightedSpeed: number;
+      avgSpeed: number;
+    };
+    const workChains: SimChainWork[] = [];
+    if (
+      simData.isCircuitClosed &&
+      (!simData.autoSwitch || simData.autoSwitch.closed) &&
+      simData.wireSegments.length > 0
+    ) {
+      for (const seg of simData.wireSegments) {
+        if (!seg.inClosedLoop || !seg.active || seg.currentSpeed <= 0.001) continue;
+        const polyPts =
+          seg.pathPoints && seg.pathPoints.length >= 2
+            ? seg.pathPoints
+            : [
+                { x: seg.x1, y: seg.y1 },
+                { x: seg.x2, y: seg.y2 },
+              ];
+        const actualLens: number[] = [];
+        let totalActual = 0;
+        for (let i = 0; i < polyPts.length - 1; i++) {
+          const d = Math.hypot(
+            polyPts[i + 1].x - polyPts[i].x,
+            polyPts[i + 1].y - polyPts[i].y
+          );
+          actualLens.push(d);
+          totalActual += d;
+        }
+        if (totalActual < 1) continue;
+        const isResistorZigZag = Boolean(seg.pathPoints && seg.pathPoints.length >= 8);
+        const startPt = polyPts[0];
+        const endPt = polyPts[polyPts.length - 1];
+        const horizSpan = Math.max(24, Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y));
+        const targetEffLen = isResistorZigZag ? horizSpan : totalActual;
+        const scale = targetEffLen / Math.max(1e-4, totalActual);
+        const subSegs: SimSubSeg[] = [];
+        for (let i = 0; i < polyPts.length - 1; i++) {
+          if (actualLens[i] < 1e-4) continue;
+          subSegs.push({
+            x1: polyPts[i].x,
+            y1: polyPts[i].y,
+            x2: polyPts[i + 1].x,
+            y2: polyPts[i + 1].y,
+            effLen: actualLens[i] * scale,
+          });
+        }
+        if (subSegs.length === 0) continue;
+        workChains.push({
+          startPt: { x: startPt.x, y: startPt.y },
+          endPt: { x: endPt.x, y: endPt.y },
+          subSegs,
+          rawEffLen: targetEffLen,
+          weightedSpeed: targetEffLen * seg.currentSpeed,
+          avgSpeed: seg.currentSpeed,
+        });
+      }
+
+      const CHAIN_JOIN_TOL = 18;
+      let mergedChain = true;
+      while (mergedChain && workChains.length > 1) {
+        mergedChain = false;
+        // Pass 1: unique 1-to-1 connections (prevents wrong pairing at 3-way parallel T-junctions)
+        // Pass 2: any remaining connection within tolerance
+        for (let pass = 0; pass < 2 && !mergedChain; pass++) {
+          for (let i = 0; i < workChains.length && !mergedChain; i++) {
+            const a = workChains[i];
+            const outMatches: number[] = [];
+            for (let j = 0; j < workChains.length; j++) {
+              if (i === j) continue;
+              const b = workChains[j];
+              if (Math.abs(a.avgSpeed - b.avgSpeed) > 0.38) continue;
+              if (Math.hypot(a.endPt.x - b.startPt.x, a.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
+                outMatches.push(j);
+              }
+            }
+            if (outMatches.length === 0) continue;
+            if (pass === 0 && outMatches.length > 1) continue;
+            const j = outMatches[0];
+            const b = workChains[j];
+            if (pass === 0) {
+              let inCount = 0;
+              for (let k = 0; k < workChains.length; k++) {
+                if (k === j) continue;
+                const c = workChains[k];
+                if (Math.abs(c.avgSpeed - b.avgSpeed) > 0.38) continue;
+                if (Math.hypot(c.endPt.x - b.startPt.x, c.endPt.y - b.startPt.y) <= CHAIN_JOIN_TOL) {
+                  inCount++;
+                }
+              }
+              if (inCount > 1) continue;
+            }
+            const gap = Math.hypot(b.startPt.x - a.endPt.x, b.startPt.y - a.endPt.y);
+            if (gap > 0.5) {
+              a.subSegs.push({
+                x1: a.endPt.x,
+                y1: a.endPt.y,
+                x2: b.startPt.x,
+                y2: b.startPt.y,
+                effLen: gap,
+              });
+              a.rawEffLen += gap;
+              a.weightedSpeed += gap * ((a.avgSpeed + b.avgSpeed) * 0.5);
+            }
+            a.subSegs.push(...b.subSegs);
+            a.endPt = { ...b.endPt };
+            a.rawEffLen += b.rawEffLen;
+            a.weightedSpeed += b.weightedSpeed;
+            a.avgSpeed = a.weightedSpeed / Math.max(1, a.rawEffLen);
+            workChains.splice(j, 1);
+            mergedChain = true;
+          }
+        }
+      }
+    }
+
+    const simParticleChains = workChains.map((wc) => {
+      const cumEffDist: number[] = [0];
+      for (const ss of wc.subSegs) {
+        cumEffDist.push(cumEffDist[cumEffDist.length - 1] + ss.effLen);
+      }
+      const totalEffLen = Math.max(1, cumEffDist[cumEffDist.length - 1]);
+      const count = Math.max(1, Math.round(totalEffLen / 32));
+      const stepDist = totalEffLen / count;
+      return {
+        subSegs: wc.subSegs,
+        cumEffDist,
+        totalEffLen,
+        count,
+        stepDist,
+        avgSpeed: wc.avgSpeed,
+      };
+    });
+
     let rafId = 0;
-    const startTime = performance.now();
 
     const renderSimFrame = (now: number) => {
-      const elapsedSec = (now - startTime) / 1000;
+      const elapsedSec = (now - simAnimOriginMsRef.current) / 1000;
       const w = canvas.width / CANVAS_DPR;
       const h = canvas.height / CANVAS_DPR;
       ctx.save();
@@ -18295,18 +21127,18 @@ export default function App() {
         // 2. Draw Proposed Switch on the Left Vertical Wire (with tilted blade & red knob 🔴)
         for (const ty of [swYTop, swYBot]) {
           ctx.beginPath();
-          ctx.arc(swX, ty, 5.8, 0, Math.PI * 2);
+          ctx.arc(swX, ty, 4.2, 0, Math.PI * 2);
           ctx.fillStyle = '#334155';
           ctx.fill();
           ctx.strokeStyle = '#94a3b8';
-          ctx.lineWidth = 1.8;
+          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
-        const bladeTipX = swX + 27;
+        const bladeTipX = swX + 25;
         const bladeTipY = swYTop + 4;
         ctx.save();
         ctx.strokeStyle = dashColor;
-        ctx.lineWidth = Math.max(3.2, dashWidth);
+        ctx.lineWidth = Math.max(3.0, dashWidth);
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
         ctx.moveTo(swX, swYBot);
@@ -18314,21 +21146,21 @@ export default function App() {
         ctx.stroke();
         ctx.restore();
 
-        const knobX = swX + 16.5;
-        const knobY = (swYBot + bladeTipY) / 2;
+        const knobX = swX + (bladeTipX - swX) * 0.78;
+        const knobY = swYBot + (bladeTipY - swYBot) * 0.78;
         ctx.beginPath();
-        ctx.arc(knobX, knobY, 8.5, 0, Math.PI * 2);
+        ctx.arc(knobX, knobY, 6.2, 0, Math.PI * 2);
         ctx.fillStyle = '#ef4444';
         ctx.fill();
         ctx.strokeStyle = '#fecaca';
-        ctx.lineWidth = 1.8;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
         // 3. Draw 4 Draggable Corner Nodes (TL, TR, BR, BL) to slide horizontal/vertical wires
         const corners = {
           tl: { x: prop.xLeft, y: prop.yTop },
-          tr: { x: prop.xRight, y: prop.yTop },
-          br: { x: prop.xRight, y: prop.yBot },
+          tr: { x: prop.xRight, y: prop.yTop + (prop.topRightYOffset || 0) },
+          br: { x: prop.xRight, y: prop.yBot + (prop.botRightYOffset || 0) },
           bl: { x: prop.xLeft, y: prop.yBot },
         };
         for (const [cKey, cPt] of Object.entries(corners) as [
@@ -18639,56 +21471,39 @@ export default function App() {
         ctx.restore();
       }
 
-      // 4. Moving Charge Carriers / Electrons along Wire Segments (100% uniform size & color across all branches!)
-      if (simShowElectrons && simData.wireSegments.length > 0) {
-        const spacing = 32;
+      // 4. Moving Charge Carriers / Electrons along Continuous Circuit Chains (100% uniform period, speed & spacing!)
+      if (simShowElectrons && simParticleChains.length > 0) {
         const dirSign = simFlowDirection === 'conventional' ? 1 : -1;
         const sw = simData.autoSwitch;
 
-        for (let segIdx = 0; segIdx < simData.wireSegments.length; segIdx++) {
-          const seg = simData.wireSegments[segIdx];
-          if (!seg.inClosedLoop) continue;
-          const count = Math.max(1, Math.round(seg.length / spacing));
-          const stepDist = seg.length / count;
-          const speedPxPerSec = seg.active
-            ? 64 * seg.currentSpeed * simSpeedMultiplier * dirSign
-            : 0;
+        for (let cIdx = 0; cIdx < simParticleChains.length; cIdx++) {
+          const chain = simParticleChains[cIdx];
+          const { subSegs, cumEffDist, count, stepDist, avgSpeed } = chain;
+          const speedPxPerSec = 64 * avgSpeed * simSpeedMultiplier * dirSign;
           const rawOffset = ((elapsedSec * speedPxPerSec) % stepDist + stepDist) % stepDist;
 
-          const polyPts =
-            seg.pathPoints && seg.pathPoints.length >= 2
-              ? seg.pathPoints
-              : [
-                  { x: seg.x1, y: seg.y1 },
-                  { x: seg.x2, y: seg.y2 },
-                ];
-          const cumDist: number[] = [0];
-          for (let i = 0; i < polyPts.length - 1; i++) {
-            const sdx = polyPts[i + 1].x - polyPts[i].x;
-            const sdy = polyPts[i + 1].y - polyPts[i].y;
-            const isDiagonalTooth =
-              Math.abs(sdx) > 0.5 && Math.abs(sdy) > 2 && Math.hypot(sdx, sdy) < 22;
-            const subStep = isDiagonalTooth
-              ? Math.hypot(sdx, sdy * 0.35)
-              : Math.hypot(sdx, sdy);
-            cumDist.push(cumDist[i] + subStep);
-          }
-          const totalPolyLen = Math.max(1, cumDist[cumDist.length - 1]);
-
           ctx.save();
+          if (simFlowDirection === 'electrons') {
+            ctx.fillStyle = '#84cc16';
+            ctx.shadowColor = '#4ade80';
+            ctx.shadowBlur = 9;
+          } else {
+            ctx.fillStyle = '#38bdf8';
+            ctx.shadowColor = '#0ea5e9';
+            ctx.shadowBlur = 9;
+          }
+
+          let subIdx = 0;
           for (let k = 0; k < count; k++) {
             const d = rawOffset + k * stepDist;
-            if (d < 2 || d > totalPolyLen - 2) continue;
-            let subIdx = 0;
-            while (subIdx < cumDist.length - 2 && cumDist[subIdx + 1] < d) {
+            while (subIdx < subSegs.length - 1 && cumEffDist[subIdx + 1] < d) {
               subIdx++;
             }
-            const segLenSub = Math.max(1e-4, cumDist[subIdx + 1] - cumDist[subIdx]);
-            const tSub = Math.max(0, Math.min(1, (d - cumDist[subIdx]) / segLenSub));
-            const px =
-              polyPts[subIdx].x + tSub * (polyPts[subIdx + 1].x - polyPts[subIdx].x);
-            const py =
-              polyPts[subIdx].y + tSub * (polyPts[subIdx + 1].y - polyPts[subIdx].y);
+            const ss = subSegs[subIdx];
+            const segLenSub = Math.max(1e-4, ss.effLen);
+            const tSub = Math.max(0, Math.min(1, (d - cumEffDist[subIdx]) / segLenSub));
+            const px = ss.x1 + tSub * (ss.x2 - ss.x1);
+            const py = ss.y1 + tSub * (ss.y2 - ss.y1);
 
             // If automatic switch on left vertical wire is OPEN, don't draw particles inside the open switch gap!
             if (
@@ -18701,18 +21516,8 @@ export default function App() {
               continue;
             }
 
-            const r = 4.8;
             ctx.beginPath();
-            ctx.arc(px, py, r, 0, Math.PI * 2);
-            if (simParticleStyle === 'green-energy') {
-              ctx.fillStyle = '#84cc16';
-              ctx.shadowColor = '#4ade80';
-              ctx.shadowBlur = 9;
-            } else {
-              ctx.fillStyle = '#38bdf8';
-              ctx.shadowColor = '#0ea5e9';
-              ctx.shadowBlur = 9;
-            }
+            ctx.arc(px, py, 4.8, 0, Math.PI * 2);
             ctx.fill();
           }
           ctx.restore();
@@ -18736,60 +21541,60 @@ export default function App() {
         // Draw top & bottom dark circular switch contact terminals
         for (const ty of [sw.yTop, sw.yBottom]) {
           ctx.beginPath();
-          ctx.arc(sw.x, ty, 6.2, 0, Math.PI * 2);
+          ctx.arc(sw.x, ty, 4.2, 0, Math.PI * 2);
           ctx.fillStyle = '#334155';
           ctx.fill();
           ctx.strokeStyle = '#94a3b8';
-          ctx.lineWidth = 2.0;
+          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
 
         if (!sw.closed) {
           // OPEN Switch: tilted dark blade from bottom contact to top-right + Bright RED dot 🔴
-          const bladeTipX = sw.x + 28;
+          const bladeTipX = sw.x + 25;
           const bladeTipY = sw.yTop + 4;
           ctx.strokeStyle = '#334155';
-          ctx.lineWidth = 4.5;
+          ctx.lineWidth = 3.6;
           ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(sw.x, sw.yBottom);
           ctx.lineTo(bladeTipX, bladeTipY);
           ctx.stroke();
 
-          const knobX = sw.x + 17;
-          const knobY = (sw.yBottom + bladeTipY) / 2;
-          const knobPulse = 1 + 0.08 * Math.sin(elapsedSec * 6);
+          const knobX = sw.x + (bladeTipX - sw.x) * 0.78;
+          const knobY = sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
+          const knobPulse = 1 + 0.06 * Math.sin(elapsedSec * 6);
           ctx.beginPath();
-          ctx.arc(knobX, knobY, 9.2 * knobPulse, 0, Math.PI * 2);
+          ctx.arc(knobX, knobY, 6.4 * knobPulse, 0, Math.PI * 2);
           ctx.fillStyle = '#ef4444';
           ctx.shadowColor = 'rgba(239, 68, 68, 0.55)';
-          ctx.shadowBlur = 8;
+          ctx.shadowBlur = 6;
           ctx.fill();
           ctx.shadowBlur = 0;
           ctx.strokeStyle = '#fecaca';
-          ctx.lineWidth = 2.0;
+          ctx.lineWidth = 1.6;
           ctx.stroke();
         } else {
           // CLOSED Switch: vertical dark blade connecting bottom contact to top contact + Bright GREEN dot 🟢
           ctx.strokeStyle = '#334155';
-          ctx.lineWidth = 4.8;
+          ctx.lineWidth = 3.8;
           ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(sw.x, sw.yBottom);
           ctx.lineTo(sw.x, sw.yTop);
           ctx.stroke();
 
-          const knobX = sw.x + 17;
+          const knobX = sw.x + 14.5;
           const knobY = sw.yCenter;
           ctx.beginPath();
-          ctx.arc(knobX, knobY, 9.2, 0, Math.PI * 2);
+          ctx.arc(knobX, knobY, 6.4, 0, Math.PI * 2);
           ctx.fillStyle = '#22c55e';
           ctx.shadowColor = 'rgba(34, 197, 94, 0.5)';
-          ctx.shadowBlur = 8;
+          ctx.shadowBlur = 6;
           ctx.fill();
           ctx.shadowBlur = 0;
           ctx.strokeStyle = '#bbf7d0';
-          ctx.lineWidth = 2.0;
+          ctx.lineWidth = 1.6;
           ctx.stroke();
         }
         ctx.restore();
@@ -21074,6 +23879,7 @@ export default function App() {
                 '#2563eb',
                 '#fff'
               ) + 6;
+            drawPillButton('✕', 'delete-sim', curBx, barY, 22, 21, '#64748b', '#fff');
           } else {
             curBx +=
               drawPillButton('Επαναφορά', 'reset', curBx, barY, 74, 21, '#1976d2', '#fff') + 5;
@@ -24499,6 +27305,7 @@ export default function App() {
     if (!isCleanProjectorMode) {
       ch.postMessage({
         type: 'sync-state',
+        activeNotebook,
         activeNotebookId,
         activePageIndex,
         isSimulating,
@@ -24513,6 +27320,14 @@ export default function App() {
       ch.onmessage = (ev) => {
         const d = ev.data;
         if (d?.type === 'sync-state') {
+          if (d.activeNotebook && d.activeNotebook.id) {
+            setNotebooks((prev) => {
+              const exists = prev.some((n) => n.id === d.activeNotebook.id);
+              return exists
+                ? prev.map((n) => (n.id === d.activeNotebook.id ? d.activeNotebook : n))
+                : [d.activeNotebook, ...prev];
+            });
+          }
           if (d.activeNotebookId) setActiveNotebookId(d.activeNotebookId);
           if (typeof d.activePageIndex === 'number') setActivePageIndex(d.activePageIndex);
           if (typeof d.isSimulating === 'boolean') setIsSimulating(d.isSimulating);
@@ -24535,6 +27350,7 @@ export default function App() {
     return () => ch.close();
   }, [
     isCleanProjectorMode,
+    activeNotebook,
     activeNotebookId,
     activePageIndex,
     isSimulating,
@@ -24549,6 +27365,316 @@ export default function App() {
     selectedReactionSimId,
     selectedSpringGraphKey,
   ]);
+
+  // Track Browser Fullscreen state for 16:9 Interactive Board Mode
+  useEffect(() => {
+    const syncFs = () => {
+      const fs = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsBrowserFullscreen(fs);
+    };
+    syncFs();
+    document.addEventListener('fullscreenchange', syncFs);
+    document.addEventListener('webkitfullscreenchange', syncFs);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFs);
+      document.removeEventListener('webkitfullscreenchange', syncFs);
+    };
+  }, []);
+
+  // ============================================================================
+  // LIVE 16:9 INTERACTIVE BOARD SYNC ENGINE (WebRTC P2P <15ms + Firestore Cloud)
+  // ============================================================================
+  useEffect(() => {
+    if (!isLiveTvBroadcasting || isTvReceiverMode || isCleanProjectorMode) {
+      liveTvSenderRef.current?.destroy();
+      liveTvSenderRef.current = null;
+      setLiveTvStatus({ connected: false, mode: 'waiting', latencyMs: null });
+      return;
+    }
+    const sender = new LiveTvSenderEngine('default', (st) => {
+      setLiveTvStatus(st);
+    });
+    liveTvSenderRef.current = sender;
+    return () => {
+      sender.destroy();
+      if (liveTvSenderRef.current === sender) {
+        liveTvSenderRef.current = null;
+      }
+    };
+  }, [isLiveTvBroadcasting, isTvReceiverMode, isCleanProjectorMode]);
+
+  // Continuously push committed pages, simulation state & viewport from Sender (iPad)
+  useEffect(() => {
+    const sender = liveTvSenderRef.current;
+    if (!isLiveTvBroadcasting || !sender || isTvReceiverMode || isCleanProjectorMode || viewMode !== 'editor') return;
+    if (!activeNotebook || activeNotebook.pages.length === 0) return;
+
+    const wsWidth = workspaceRef.current?.clientWidth || window.innerWidth || 980;
+    const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
+    const senderBaseZ = isFullBleedWidth ? wsWidth / Math.max(200, pageWidth) : 1;
+
+    // Skip heavy full-notebook serialization while actively dragging the Eraser (since sendLiveErase already streams <150-byte stroke diffs in <10ms!)
+    if (!(isDrawingRef.current && lastEraserPtRef.current !== null)) {
+      sender.sendPages({
+        notebookId: activeNotebook.id || 'nb-tv-live',
+        notebookTitle: activeNotebook.title || 'Live Σημείωση',
+        activePageIndex,
+        pages: activeNotebook.pages,
+      });
+    }
+    sender.sendSimState({
+      isSimulating,
+      simCircuitSwitchClosed,
+      simShowElectrons,
+      simParticleStyle,
+      simFlowDirection,
+      simShowDarkWireTrack,
+      simSpeedMultiplier,
+      isSpringSimulating,
+      isSpringPaused,
+      springElapsedSec: springSimElapsedRef.current,
+      draggingSpringDispPx: draggingSpringMassRef.current?.currentDisplacementPx ?? null,
+    });
+    sender.sendViewport({
+      z: zoomRef.current,
+      baseZ: senderBaseZ,
+      px: panRef.current.x,
+      py: panRef.current.y,
+      w: wsWidth,
+      h: wsHeight,
+      pIdx: activePageIndex,
+      pW: pageWidth,
+    });
+  }, [
+    isLiveTvBroadcasting,
+    isTvReceiverMode,
+    isCleanProjectorMode,
+    viewMode,
+    activeNotebook,
+    activePageIndex,
+    pageWidth,
+    isFullBleedWidth,
+    isSimulating,
+    simCircuitSwitchClosed,
+    simShowElectrons,
+    simParticleStyle,
+    simFlowDirection,
+    simShowDarkWireTrack,
+    simSpeedMultiplier,
+    isSpringSimulating,
+    isSpringPaused,
+  ]);
+
+  // Receiver Engine on the 16:9 Interactive Board (No Login Required!)
+  useEffect(() => {
+    if (!isTvReceiverMode) {
+      liveTvReceiverRef.current?.destroy();
+      liveTvReceiverRef.current = null;
+      if (tvTransformRafRef.current !== null) {
+        window.cancelAnimationFrame(tvTransformRafRef.current);
+        tvTransformRafRef.current = null;
+      }
+      return;
+    }
+
+    const startSmoothViewportLoop = (lerpSpeed: number) => {
+      if (tvTransformRafRef.current !== null) return;
+      const step = () => {
+        const target = tvTargetTransformRef.current;
+        if (!target) {
+          tvTransformRafRef.current = null;
+          return;
+        }
+        const curZ = zoomRef.current;
+        const curX = panRef.current.x;
+        const curY = panRef.current.y;
+        const dz = target.z - curZ;
+        const dx = target.px - curX;
+        const dy = target.py - curY;
+
+        if (Math.abs(dz) < 0.0015 && Math.abs(dx) < 0.35 && Math.abs(dy) < 0.35) {
+          zoomRef.current = target.z;
+          panRef.current = { x: target.px, y: target.py };
+          if (paperTransformElRef.current) {
+            paperTransformElRef.current.style.transform = `translate3d(${target.px}px, ${target.py}px, 0) scale(${target.z})`;
+          }
+          tvTransformRafRef.current = null;
+          return;
+        }
+
+        const nextZ = curZ + dz * lerpSpeed;
+        const nextX = curX + dx * lerpSpeed;
+        const nextY = curY + dy * lerpSpeed;
+        zoomRef.current = nextZ;
+        panRef.current = { x: nextX, y: nextY };
+        if (paperTransformElRef.current) {
+          paperTransformElRef.current.style.transform = `translate3d(${nextX}px, ${nextY}px, 0) scale(${nextZ})`;
+        }
+        tvTransformRafRef.current = window.requestAnimationFrame(step);
+      };
+      tvTransformRafRef.current = window.requestAnimationFrame(step);
+    };
+
+    const receiver = new LiveTvReceiverEngine(
+      'default',
+      (packet, via) => {
+        if (packet.t === 'pages') {
+          const nbId = packet.notebookId || 'nb-tv-live';
+          const tvNb: Notebook = {
+            id: nbId,
+            title: packet.notebookTitle || 'Live 16:9',
+            folder: '',
+            coverColor: '#1b2a4a',
+            updatedAt: new Date().toISOString(),
+            pages: packet.pages,
+          };
+          setNotebooks([tvNb]);
+          setOpenNotebookIds([nbId]);
+          setActiveNotebookId(nbId);
+          if (typeof packet.activePageIndex === 'number') {
+            setActivePageIndex(packet.activePageIndex);
+            activeDrawingPageIndexRef.current = packet.activePageIndex;
+          }
+          setViewMode('editor');
+          window.requestAnimationFrame(() => {
+            renderStaticSceneRef.current();
+          });
+        } else if (packet.t === 'sim') {
+          setIsSimulating(packet.isSimulating);
+          setSimCircuitSwitchClosed(packet.simCircuitSwitchClosed);
+          setSimShowElectrons(packet.simShowElectrons);
+          setSimParticleStyle(packet.simParticleStyle);
+          setSimFlowDirection(packet.simFlowDirection);
+          setSimShowDarkWireTrack(packet.simShowDarkWireTrack);
+          setSimSpeedMultiplier(packet.simSpeedMultiplier);
+          setIsSpringSimulating(packet.isSpringSimulating);
+          setIsSpringPaused(packet.isSpringPaused);
+          springSimElapsedRef.current = packet.springElapsedSec;
+        } else if (packet.t === 'erase') {
+          const c = activeCanvasRef.current;
+          const ctx = activeCtxRef.current;
+          if (c && ctx) {
+            ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+            ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+            if (packet.cursorPt) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(packet.cursorPt.x, packet.cursorPt.y, packet.cursorPt.r, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(148, 163, 184, 0.2)';
+              ctx.fill();
+              ctx.lineWidth = 1.5;
+              ctx.strokeStyle = 'rgba(71, 85, 105, 0.78)';
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
+          if (
+            packet.removedIds.length > 0 ||
+            (packet.addedStrokes && packet.addedStrokes.length > 0)
+          ) {
+            const remSet = new Set(packet.removedIds);
+            const added = packet.addedStrokes || [];
+            setNotebooks((prev) =>
+              prev.map((nb) => ({
+                ...nb,
+                pages: nb.pages.map((p) => {
+                  if (p.id !== packet.pageId) return p;
+                  const kept = p.strokes.filter((s) => !remSet.has(s.id));
+                  return {
+                    ...p,
+                    strokes: added.length > 0 ? [...kept, ...added] : kept,
+                  };
+                }),
+              }))
+            );
+            window.requestAnimationFrame(() => {
+              renderStaticSceneRef.current();
+            });
+          }
+        } else if (packet.t === 'ink') {
+          if (!packet.active) {
+            laserStrokesRef.current = [];
+            currentStrokePtsRef.current = [];
+            const c = activeCanvasRef.current;
+            const ctx = activeCtxRef.current;
+            if (c && ctx) {
+              ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+              ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+            }
+          } else if (packet.isLaser) {
+            laserStrokesRef.current = packet.laserPaths || [];
+            currentStrokePtsRef.current = packet.pts || [];
+            renderLaserOverlay(packet.laserAlpha ?? 1);
+          } else if (packet.pts && packet.pts.length > 0) {
+            const c = activeCanvasRef.current;
+            const ctx = activeCtxRef.current;
+            if (c && ctx) {
+              ctx.setTransform(CANVAS_DPR, 0, 0, CANVAS_DPR, 0, 0);
+              ctx.clearRect(0, 0, c.width / CANVAS_DPR, c.height / CANVAS_DPR);
+              drawStrokeOnContext(ctx, {
+                id: 'tv-live-ink',
+                tool: (packet.tool as any) || 'pen',
+                penType: packet.penType as any,
+                lineStyle: packet.lineStyle,
+                color: packet.color || '#111827',
+                width: packet.width || 2,
+                opacity: packet.opacity ?? 1,
+                points: packet.pts,
+                layerId: 'layer-1',
+              });
+            }
+          }
+        } else if (packet.t === 'vp') {
+          tvLastVpPacketRef.current = {
+            z: packet.z,
+            baseZ: packet.baseZ,
+            px: packet.px,
+            py: packet.py,
+            pW: packet.pW,
+          };
+          const wsW = workspaceRef.current?.clientWidth || window.innerWidth || 1920;
+          const logicalPW = Math.max(200, packet.pW || pageWidth || 794);
+          const boardFitZ = wsW / logicalPW;
+          const senderBaseZ = Math.max(0.2, packet.baseZ || 1);
+          const relZoom = Math.max(0.2, packet.z) / senderBaseZ;
+          const targetBoardZ = Math.min(4.5, Math.max(0.2, boardFitZ * relZoom));
+          const scaleRatio = targetBoardZ / Math.max(0.2, packet.z);
+          const targetBoardPanX = packet.px * scaleRatio;
+          const targetBoardPanY = packet.py * scaleRatio;
+
+          if (!tvHasReceivedViewportRef.current) {
+            tvHasReceivedViewportRef.current = true;
+            zoomRef.current = targetBoardZ;
+            panRef.current = { x: targetBoardPanX, y: targetBoardPanY };
+            if (paperTransformElRef.current) {
+              paperTransformElRef.current.style.transform = `translate3d(${targetBoardPanX}px, ${targetBoardPanY}px, 0) scale(${targetBoardZ})`;
+            }
+          }
+          tvTargetTransformRef.current = {
+            z: targetBoardZ,
+            px: targetBoardPanX,
+            py: targetBoardPanY,
+          };
+          startSmoothViewportLoop(via === 'webrtc' ? 0.65 : 0.35);
+        }
+      },
+      (mode) => {
+        setLiveTvRxMode(mode);
+      }
+    );
+    liveTvReceiverRef.current = receiver;
+
+    return () => {
+      receiver.destroy();
+      if (liveTvReceiverRef.current === receiver) {
+        liveTvReceiverRef.current = null;
+      }
+      if (tvTransformRafRef.current !== null) {
+        window.cancelAnimationFrame(tvTransformRafRef.current);
+        tvTransformRafRef.current = null;
+      }
+    };
+  }, [isTvReceiverMode, pageWidth]);
 
   useEffect(() => {
     if (!isExternalProjectorOpen) return;
@@ -24650,7 +27776,9 @@ export default function App() {
         h,
         strokeColor,
         activeLayerId,
-        waveGuideColor
+        waveGuideColor,
+        true,
+        strokeWidth || 2.0
       );
       for (const st of previewStencils) {
         drawStrokeOnContext(ctx, st);
@@ -24713,6 +27841,45 @@ export default function App() {
       shapeType: activeSnap?.shapeType,
     };
     drawStrokeOnContext(ctx, previewStroke);
+    if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+      const now = performance.now();
+      if (now - lastWetInkBroadcastMsRef.current >= 16) {
+        lastWetInkBroadcastMsRef.current = now;
+        liveTvSenderRef.current.sendLiveInk({
+          active: pts.length > 0,
+          pageId: activePage.id,
+          isLaser: false,
+          tool: previewStroke.tool,
+          penType: penSubType,
+          lineStyle: previewStroke.lineStyle,
+          color: previewStroke.color,
+          width: previewStroke.width,
+          opacity: previewStroke.opacity,
+          pts: pts.slice(-240),
+        });
+      }
+    }
+  };
+
+  const broadcastCurrentWetInk60fps = () => {
+    if (isTvReceiverModeRef.current || !liveTvSenderRef.current) return;
+    const now = performance.now();
+    if (now - lastWetInkBroadcastMsRef.current < 16) return;
+    lastWetInkBroadcastMsRef.current = now;
+    const pts = currentStrokePtsRef.current;
+    if (pts.length === 0) return;
+    liveTvSenderRef.current.sendLiveInk({
+      active: true,
+      pageId: activePage.id,
+      isLaser: false,
+      tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
+      penType: penSubType,
+      lineStyle,
+      color: strokeColor,
+      width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
+      opacity: activeTool === 'highlighter' ? 0.42 : 1,
+      pts: pts.slice(-240),
+    });
   };
 
   // 0ms First-Contact Dot at 2x Retina HiDPI
@@ -24733,6 +27900,7 @@ export default function App() {
     ctx.lineTo(pt.x + 0.08, pt.y + 0.08);
     ctx.stroke();
     ctx.restore();
+    broadcastCurrentWetInk60fps();
   };
 
   // 0ms 2-Point Segment at 2x Retina HiDPI
@@ -24755,6 +27923,7 @@ export default function App() {
     ctx.lineTo(midX, midY);
     ctx.stroke();
     ctx.restore();
+    broadcastCurrentWetInk60fps();
   };
 
   // Incremental 0ms Quadratic Bezier segment draw at 2x Retina HiDPI (zero "ζαγρέ"!)
@@ -24780,6 +27949,7 @@ export default function App() {
     ctx.quadraticCurveTo(pPrev1.x, pPrev1.y, mid2X, mid2Y);
     ctx.stroke();
     ctx.restore();
+    broadcastCurrentWetInk60fps();
   };
 
   const getCanvasPointFromNative = (clientX: number, clientY: number, pressure = 0.55): BezierPoint => {
@@ -24792,23 +27962,24 @@ export default function App() {
     let x = (clientX - rect.left) * scaleX;
     let y = (clientY - rect.top) * scaleY;
 
+    const drawPageObj = activeNotebook.pages[activeDrawingPageIndexRef.current] || activePage;
     const drawPageId =
-      activeNotebook.pages[activeDrawingPageIndexRef.current]?.id ||
+      drawPageObj?.id ||
       activePage.id ||
       currentActivePageIdForRuler;
-    const drawPageRuler = rulersByPageId[drawPageId] || rulerState;
+    const drawPageRuler = rulersByPageId[drawPageId] || drawPageObj?.ruler || rulerState;
     if (drawPageRuler.visible && ['pen', 'pencil', 'highlighter'].includes(activeTool)) {
-      const rad = (drawPageRuler.angle * Math.PI) / 180;
-      const dx = x - drawPageRuler.x;
-      const dy = y - drawPageRuler.y;
-      const localY = -dx * Math.sin(rad) + dy * Math.cos(rad);
-      const localX = dx * Math.cos(rad) + dy * Math.sin(rad);
-      const halfRulerW = (logicalW * 0.8) / 2;
-      const halfRulerH = 27;
+      const rGeom = getEffectiveRulerGeometry(drawPageRuler, logicalW, logicalH);
+      const dx = x - rGeom.centerX;
+      const dy = y - rGeom.centerY;
+      const localY = -dx * rGeom.sinA + dy * rGeom.cosA;
+      const localX = dx * rGeom.cosA + dy * rGeom.sinA;
+      const halfRulerW = rGeom.effectiveRulerW / 2;
+      const halfRulerH = rGeom.rulerH / 2;
       if (Math.abs(localY) < halfRulerH + 18 && Math.abs(localX) <= halfRulerW + 12) {
         const snapLocalY = localY >= 0 ? halfRulerH : -halfRulerH;
-        x = drawPageRuler.x + localX * Math.cos(rad) - snapLocalY * Math.sin(rad);
-        y = drawPageRuler.y + localX * Math.sin(rad) + snapLocalY * Math.cos(rad);
+        x = rGeom.centerX + localX * rGeom.cosA - snapLocalY * rGeom.sinA;
+        y = rGeom.centerY + localX * rGeom.sinA + snapLocalY * rGeom.cosA;
       }
     }
 
@@ -26312,7 +29483,7 @@ export default function App() {
               return { ...s, points: nextPts };
             }),
           }),
-          true
+          false
         );
         showToast('📐 Ο κόμβος έγινε ευθύγραμμος (Γωνία)!');
         return;
@@ -26386,7 +29557,7 @@ export default function App() {
           };
         }),
       }),
-      true
+      false
     );
 
     activeBezierNodeRef.current = { strokeId, nodeIdx };
@@ -26455,7 +29626,7 @@ export default function App() {
             return { ...s, points: nextPts, keyNodeIndices: nextKeys };
           }),
         }),
-        true
+        false
       );
       showToast('🗑️ Ο κόμβος διαγράφηκε!');
       return;
@@ -26475,7 +29646,7 @@ export default function App() {
             s.id === strokeId ? { ...s, points: s.points.filter((_, idx) => idx !== nodeIdx) } : s
           ),
         }),
-        true
+        false
       );
       showToast('🗑️ Ο κόμβος διαγράφηκε!');
       return;
@@ -26511,7 +29682,7 @@ export default function App() {
             return { ...s, points: ring };
           }),
         }),
-        true
+        false
       );
       showToast('🗑️ Ο κόμβος διαγράφηκε!');
       return;
@@ -26536,7 +29707,7 @@ export default function App() {
             return { ...s, points: s.points.filter((_, idx) => idx !== nodeIdx) };
           }),
         }),
-        true
+        false
       );
       showToast('🗑️ Ο κόμβος διαγράφηκε!');
       return;
@@ -26563,7 +29734,7 @@ export default function App() {
             return { ...s, points: nextPts };
           }),
         }),
-        true
+        false
       );
       showToast('🗑️ Ο μεσαίος κόμβος καμπυλότητας επανήλθε στην ευθεία!');
       return;
@@ -26987,8 +30158,11 @@ export default function App() {
       if (activeTxtEl && activeTxtObj) {
         const rect = activeTxtEl.getBoundingClientRect();
         const edgeHandle = resolveTextResizeHandleFromRect(e.clientX, e.clientY, rect, 14);
-        if (edgeHandle) {
-          e.preventDefault();
+        const isOnTextGlyphs = isClientPointOnTextElementGlyphs(e.clientX, e.clientY, activeTxtEl, 6);
+        if (edgeHandle || isOnTextGlyphs) {
+          if (edgeHandle) {
+            e.preventDefault();
+          }
           e.stopPropagation();
           outsidePanDragRef.current = null;
           cancelScrollMomentum();
@@ -27007,13 +30181,17 @@ export default function App() {
             origFontSize: activeTxtObj.fontSize,
             pW: getPageLogicalWidth(targetPageForTxt),
             pH: getPageLogicalHeight(targetPageForTxt),
-            resizeHandle: edgeHandle,
+            resizeHandle: edgeHandle || undefined,
             moved: false,
             wasAlreadySelected: true,
+            wasAlreadyEditing: editingTextId === activeTxtObj.id,
             startedOnTextarea: false,
           };
           setSelectedTextId(activeTxtObj.id);
           return;
+        } else {
+          setSelectedTextId(null);
+          setEditingTextId(null);
         }
       }
     }
@@ -27042,19 +30220,16 @@ export default function App() {
       if ((isDrawingRef.current && activePointerTypeRef.current === 'pen') || performance.now() - lastPenActivityTimeRef.current < 140) return;
       if (isDrawingRef.current && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
-      if (pinchStateRef.current?.active || outsidePanDragRef.current?.active) return;
+      if (pinchStateRef.current?.active) return;
 
       const hadActiveTextOnTouch = Boolean(selectedTextId || editingTextId);
 
-      // When Pencil-Only Mode is ON, 1 finger on a shape/image/Lasso-box selects & transforms it; 1 finger on empty paper scrolls the page
+      // When Pencil-Only Mode is ON, 1 finger on a shape/image/Lasso-box/text selects & transforms it; 1 finger on empty paper scrolls the page
       // Exception: When Laser ('laser') is active, 1 finger ALSO draws the red laser beam without selecting objects!
       if (pencilOnlyMode && activeTool !== 'laser') {
-        // When a text box is selected (dark floating toolbar open), keep it active during 1-finger scroll / 2-finger pinch!
-        if (hadActiveTextOnTouch) {
-          return;
-        }
         if (isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget)) {
           outsidePanDragRef.current = null;
+          fingerEmptyTapTrackRef.current = null;
           cancelScrollMomentum();
         } else {
           return;
@@ -28045,8 +31220,10 @@ export default function App() {
     // 0a. Instant 1-Tap Circuit Switch Toggle on the Automatic Left Vertical Wire Switch (or any manual switch)!
     if (isSimulating && autoSwitchHitRef.current) {
       const sw = autoSwitchHitRef.current;
-      const knobX = sw.x + 17;
-      const knobY = sw.closed ? sw.yCenter : (sw.yBottom + sw.yTop + 4) / 2;
+      const bladeTipX = sw.x + 25;
+      const bladeTipY = sw.yTop + 4;
+      const knobX = sw.closed ? sw.x + 14.5 : sw.x + (bladeTipX - sw.x) * 0.78;
+      const knobY = sw.closed ? sw.yCenter : sw.yBottom + (bladeTipY - sw.yBottom) * 0.78;
       if (
         Math.hypot(pt.x - knobX, pt.y - knobY) <= 36 ||
         (Math.abs(pt.x - sw.x) <= 32 && pt.y >= sw.yTop - 16 && pt.y <= sw.yBottom + 16)
@@ -28066,7 +31243,11 @@ export default function App() {
         return;
       }
     }
-    if (isSimulating || showSimulationPanel || isLivePdfMode) {
+    if (
+      isSimulating ||
+      isLivePdfMode ||
+      (showSimulationPanel && !(effectiveTool === 'lasso' && selectedStrokeIds.length > 1))
+    ) {
       const hitSwitchKnob = targetPage.strokes.find((s) => {
         if (s.shapeType !== 'switch-knob' && s.shapeType !== 'switch-blade') return false;
         const sb = getStrokeBounds(s);
@@ -28241,12 +31422,78 @@ export default function App() {
       }
     }
 
-    // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or if a text box is currently selected/editing, release it!)
+    // 0A. Text Tool ('text'): Tap on canvas to insert a new inline Text Box (or if tapping an existing text box, give cursor in it; or if tapping empty space while one is selected, release it!)
     if (effectiveTool === 'text') {
       e.preventDefault();
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
+
+      const lockedTxtLayerIds = new Set(
+        targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+      );
+      const txtListForHit = targetPage.texts || [];
+      let tappedExistingTxt: TextObject | null = null;
+      for (let idx = txtListForHit.length - 1; idx >= 0; idx--) {
+        const candTxt = txtListForHit[idx];
+        if (lockedTxtLayerIds.has(candTxt.layerId)) continue;
+        if (
+          candTxt.groupId?.startsWith('math-graph-grp-') ||
+          candTxt.id.startsWith('math-graph-txt-')
+        ) {
+          continue;
+        }
+        if (isPagePointOnTextGlyphs(pt, candTxt, 6)) {
+          tappedExistingTxt = candTxt;
+          break;
+        }
+      }
+
+      if (tappedExistingTxt) {
+        if (
+          (editingTextId && editingTextId !== tappedExistingTxt.id) ||
+          (selectedTextId && selectedTextId !== tappedExistingTxt.id)
+        ) {
+          releaseActiveTextBox();
+        }
+        setSelectedLassoTextIds([]);
+        setSelectedStrokeIds([]);
+        setSelectedImageIds([]);
+        setSelectedImageId(null);
+        setActiveNodeStrokeId(null);
+        setTextFontSize(tappedExistingTxt.fontSize);
+        setTextBold(Boolean(tappedExistingTxt.bold));
+        setTextFontFamily(tappedExistingTxt.fontFamily || 'sans');
+        setTextAlign(tappedExistingTxt.textAlign || 'left');
+        setShowToolSubBar(true);
+        const { caretIndex, wordStart, wordEnd } = getTextCaretAndWordAtPoint(
+          tappedExistingTxt.id,
+          tappedExistingTxt.text || '',
+          e.clientX,
+          e.clientY
+        );
+        const now = performance.now();
+        const prevTap = lastTextTapRef.current;
+        const isDoubleTap = Boolean(
+          prevTap &&
+            prevTap.textId === tappedExistingTxt.id &&
+            now - prevTap.time < 480 &&
+            Math.hypot(e.clientX - prevTap.clientX, e.clientY - prevTap.clientY) <= 34
+        );
+        if (isDoubleTap && wordEnd > wordStart) {
+          lastTextTapRef.current = null;
+          focusAndPlaceCaretInTextBox(tappedExistingTxt.id, wordStart, wordEnd);
+        } else {
+          lastTextTapRef.current = {
+            textId: tappedExistingTxt.id,
+            time: now,
+            clientX: e.clientX,
+            clientY: e.clientY,
+          };
+          focusAndPlaceCaretInTextBox(tappedExistingTxt.id, caretIndex, caretIndex);
+        }
+        return;
+      }
 
       if (editingTextId || selectedTextId) {
         releaseActiveTextBox();
@@ -28275,6 +31522,7 @@ export default function App() {
         ...page,
         texts: [...(page.texts || []), newTxt],
       }));
+      setEditingCaretRange({ textId: newTxt.id, start: 0, end: 0 });
       setSelectedTextId(newTxt.id);
       setEditingTextId(newTxt.id);
       setShowToolSubBar(true);
@@ -28291,6 +31539,8 @@ export default function App() {
 
     const isAdditiveSelect = Boolean(e.shiftKey || shiftKeyPressedRef.current);
     const prevSelectedTextIdForAdditive = isAdditiveSelect && selectedTextId && !editingTextId ? selectedTextId : null;
+    const prevActiveTextIdBeforeRelease = selectedTextId || editingTextId;
+    const prevEditingTextIdBeforeRelease = editingTextId;
 
     if (selectedTextId || editingTextId) {
       releaseActiveTextBox();
@@ -28301,13 +31551,96 @@ export default function App() {
       }
     }
 
-    // 0. 1-Finger Touch on any Shape, Group, Stroke, or Image:
+    // 0. 1-Finger Touch on any Shape, Group, Stroke, Image, or Text Box:
     //    - Only auto-select & drag when Lasso ('lasso') or Nodes ('direct-node') is active so 1-finger touch in Pen mode always allows Hold-to-Erase, 1-Finger Double-Tap, or Page Scroll!
     if (
       e.pointerType === 'touch' &&
       effectiveTool === 'lasso' &&
-      !(!isAdditiveSelect && isClientPointInLassoSelection(e.clientX, e.clientY))
+      !(!isAdditiveSelect && isClientPointInLassoSelection(e.clientX, e.clientY, e.currentTarget))
     ) {
+      // Check Text Boxes FIRST so nearby strokes/arrows don't steal 1-finger taps meant for a text box!
+      const lockedTxtLayerIds = new Set(
+        targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
+      );
+      const txtListForTouch = targetPage.texts || [];
+      for (let idx = txtListForTouch.length - 1; idx >= 0; idx--) {
+        const candTxt = txtListForTouch[idx];
+        if (lockedTxtLayerIds.has(candTxt.layerId)) continue;
+        if (
+          candTxt.groupId?.startsWith('math-graph-grp-') ||
+          candTxt.id.startsWith('math-graph-txt-')
+        ) {
+          continue;
+        }
+        const txtDomEl = document.querySelector(
+          `[data-text-id="${candTxt.id}"]`
+        ) as HTMLElement | null;
+        if (isPagePointOnTextGlyphs(pt, candTxt, 6)) {
+          const grpId = candTxt.groupId;
+          const grpStrokes = grpId
+            ? targetPage.strokes.filter((s) => s.groupId === grpId).map((s) => s.id)
+            : [];
+          const grpImgs = grpId
+            ? (targetPage.images || []).filter((im) => im.groupId === grpId).map((im) => im.id)
+            : [];
+          const grpTxts = grpId
+            ? (targetPage.texts || []).filter((t) => t.groupId === grpId).map((t) => t.id)
+            : [candTxt.id];
+          if (grpId && grpStrokes.length + grpImgs.length + grpTxts.length >= 2) {
+            setSelectedLassoTextIds(grpTxts);
+            setSelectedStrokeIds(grpStrokes);
+            setSelectedImageIds(grpImgs);
+            setSelectedImageId(grpImgs[0] || null);
+            setSelectedTextId(null);
+            setEditingTextId(null);
+            setActiveNodeStrokeId(null);
+            setShowToolSubBar(true);
+            return;
+          }
+          try {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          const curBoxW = txtDomEl?.offsetWidth || (candTxt.isMath ? 0 : candTxt.boxWidth) || 180;
+          const curBoxH = txtDomEl?.offsetHeight || (candTxt.isMath ? 0 : candTxt.boxHeight) || 36;
+          draggingTextRef.current = {
+            id: candTxt.id,
+            pageIdx,
+            pointerId: e.pointerId,
+            startClientX: e.clientX,
+            startClientY: e.clientY,
+            origX: candTxt.x,
+            origY: candTxt.y,
+            origW: curBoxW,
+            origH: curBoxH,
+            origFontSize: candTxt.fontSize,
+            pW: getPageLogicalWidth(targetPage),
+            pH: getPageLogicalHeight(targetPage),
+            moved: false,
+            wasAlreadySelected:
+              prevActiveTextIdBeforeRelease === candTxt.id ||
+              selectedLassoTextIds.includes(candTxt.id),
+            wasAlreadyEditing: prevEditingTextIdBeforeRelease === candTxt.id,
+            startedOnTextarea: false,
+          };
+          setSelectedLassoTextIds([]);
+          setSelectedStrokeIds([]);
+          setSelectedImageIds([]);
+          setSelectedImageId(null);
+          setActiveNodeStrokeId(null);
+          setSelectedTextId(candTxt.id);
+          setTextFontSize(candTxt.fontSize);
+          setTextBold(Boolean(candTxt.bold));
+          setTextFontFamily(candTxt.fontFamily || 'sans');
+          setTextAlign(candTxt.textAlign || 'left');
+          setShowToolSubBar(true);
+          return;
+        }
+      }
+
       const fingerHit = findSelectableObjectAtPagePoint(pt, targetPage);
       if (fingerHit) {
         if (activeTool !== 'lasso') {
@@ -28493,6 +31826,7 @@ export default function App() {
         isDrawingRef.current = true;
         return;
       }
+
       if (pencilOnlyMode) {
         return;
       }
@@ -28784,7 +32118,7 @@ export default function App() {
                   return res.stroke;
                 }),
               }),
-              true
+              false
             );
             if (newDragIdx !== null) {
               setDraggingNodeIdx({ index: newDragIdx, isControl: false });
@@ -28937,13 +32271,7 @@ export default function App() {
       for (let i = targetPage.strokes.length - 1; i >= 0; i--) {
         const s = targetPage.strokes[i];
         if (s.shapeType !== 'spring') continue;
-        const sb = getStrokeBounds(s);
-        if (
-          pt.x >= sb.minX - 6 &&
-          pt.x <= sb.maxX + 6 &&
-          pt.y >= sb.minY - 6 &&
-          pt.y <= sb.maxY + 6
-        ) {
+        if (isPointNearStroke(pt, s, 9, false)) {
           setSelectedHookeSpringId(s.id);
           break;
         }
@@ -28953,7 +32281,7 @@ export default function App() {
     // 4. Lasso & Transform Tool (Move + 4-Corner Proportional Resize + 360° Rotate Handle on Oriented Bounding Box!)
     if (effectiveTool === 'lasso') {
       // Direct 1-Step Touch/Click & Drag on any Chained/Hanging Weight, Pointer Arrow, or Spring:
-      // If the user touches a specific weight, pointer, or spring, grab THAT exact object immediately!
+      // If the user touches a specific weight, pointer, or spring directly on its drawn line/body, grab THAT exact object immediately!
       if (!isAdditiveSelect) {
         const lockedLayerIdsForWeight = new Set(
           targetPage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
@@ -28969,13 +32297,7 @@ export default function App() {
             !isForceSimStroke &&
             (s.shapeType === 'spring-pointer' || Boolean(s.attachedToSpringId))
           ) {
-            const sb = getStrokeBounds(s);
-            if (
-              pt.x >= sb.minX - 10 &&
-              pt.x <= sb.maxX + 10 &&
-              pt.y >= sb.minY - 12 &&
-              pt.y <= sb.maxY + 12
-            ) {
+            if (isPointNearStroke(pt, s, 9, false)) {
               directWeightHit = s;
               break;
             }
@@ -28991,13 +32313,7 @@ export default function App() {
               (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
               targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
             if (!isChainOrHookedWeight) continue;
-            const sb = getStrokeBounds(s);
-            if (
-              pt.x >= sb.minX - 4 &&
-              pt.x <= sb.maxX + 4 &&
-              pt.y >= sb.minY - 2 &&
-              pt.y <= sb.maxY + 2
-            ) {
+            if (isPointNearStroke(pt, s, 9, s.shapeType === 'hooked-weight')) {
               directWeightHit = s;
               break;
             }
@@ -29008,13 +32324,7 @@ export default function App() {
             const s = targetPage.strokes[i];
             if (lockedLayerIdsForWeight.has(s.layerId)) continue;
             if (s.shapeType !== 'spring') continue;
-            const sb = getStrokeBounds(s);
-            if (
-              pt.x >= sb.minX - 4 &&
-              pt.x <= sb.maxX + 4 &&
-              pt.y >= sb.minY - 4 &&
-              pt.y <= sb.maxY + 4
-            ) {
+            if (isPointNearStroke(pt, s, 9, false)) {
               directWeightHit = s;
               break;
             }
@@ -29022,7 +32332,7 @@ export default function App() {
         }
         if (
           directWeightHit &&
-          (selectedStrokeIds.length !== 1 || selectedStrokeIds[0] !== directWeightHit.id)
+          !selectedStrokeIds.includes(directWeightHit.id)
         ) {
           clearActiveOverlay();
           setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
@@ -29076,7 +32386,7 @@ export default function App() {
         const localY = -dx * sinA + dy * cosA;
         const pHForSel = getPageLogicalHeight(targetPage);
         const rotStemTopY = bcy - hh - 40 < 0 ? hh + 32 : -hh - 32;
-        const groupPillLocalY = bcy + hh + 42 > pHForSel ? -hh - 26 : hh + 26;
+        const groupPillLocalY = bcy + hh + 38 > pHForSel ? -hh - 22 : hh + 22;
 
         const effectiveImgIds =
           selectedImageIds.length > 0 ? selectedImageIds : selectedImageId ? [selectedImageId] : [];
@@ -29096,16 +32406,32 @@ export default function App() {
         );
         const totalSelCount = selStrokesList.length + selImagesList.length + selTextsList.length;
 
-        // 0. Check Floating On-Canvas "🔗 Group / 🔓 Ungroup" & "🎯 Κέντραρε" Quick Action Pills below (or above) Selection Frame!
-        if (!isMoveOnlyLassoSelection && totalSelCount >= 2 && Math.abs(localY - groupPillLocalY) <= 16) {
-          if (localX >= -124 && localX <= 6) {
-            const firstGrpId =
-              selStrokesList[0]?.groupId || selImagesList[0]?.groupId || selTextsList[0]?.groupId;
-            const allSameGroup =
-              Boolean(firstGrpId) &&
-              selStrokesList.every((st) => st.groupId === firstGrpId) &&
-              selImagesList.every((im) => im.groupId === firstGrpId) &&
-              selTextsList.every((t) => t.groupId === firstGrpId);
+        // 0. Check Floating On-Canvas "Group / Ungroup", "Κείμενο μόνο" & "Κέντραρε" Quick Action Pills below (or above) Selection Frame!
+        if (!isMoveOnlyLassoSelection && totalSelCount >= 2 && Math.abs(localY - groupPillLocalY) <= 15) {
+          const firstGrpId =
+            selStrokesList[0]?.groupId || selImagesList[0]?.groupId || selTextsList[0]?.groupId;
+          const allSameGroup =
+            Boolean(firstGrpId) &&
+            selStrokesList.every((st) => st.groupId === firstGrpId) &&
+            selImagesList.every((im) => im.groupId === firstGrpId) &&
+            selTextsList.every((t) => t.groupId === firstGrpId);
+          const hasMixedTextAndShapes =
+            selTextsList.length > 0 && (selStrokesList.length > 0 || selImagesList.length > 0);
+          const grpPillW = allSameGroup ? 80 : 68;
+          const txtOnlyPillW = 80;
+          const cntPillW = 64;
+          const pillGap = 5;
+          const totalRowW = hasMixedTextAndShapes
+            ? grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW
+            : grpPillW + pillGap + cntPillW;
+          const rowStartX = -totalRowW / 2;
+          const grpCx = rowStartX + grpPillW / 2;
+          const txtOnlyCx = rowStartX + grpPillW + pillGap + txtOnlyPillW / 2;
+          const cntCx = hasMixedTextAndShapes
+            ? rowStartX + grpPillW + pillGap + txtOnlyPillW + pillGap + cntPillW / 2
+            : rowStartX + grpPillW + pillGap + cntPillW / 2;
+
+          if (Math.abs(localX - grpCx) <= grpPillW / 2 + 2.5) {
             if (allSameGroup) {
               handleUngroupSelected();
             } else {
@@ -29113,7 +32439,26 @@ export default function App() {
             }
             return;
           }
-          if (localX > 6 && localX <= 124) {
+          if (hasMixedTextAndShapes && Math.abs(localX - txtOnlyCx) <= txtOnlyPillW / 2 + 2.5) {
+            setSelectedStrokeIds([]);
+            setSelectedImageIds([]);
+            setSelectedImageId(null);
+            setActiveNodeStrokeId(null);
+            setShowToolSubBar(true);
+            if (selTextsList.length === 1) {
+              setSelectedLassoTextIds([]);
+              const singleTxt = selTextsList[0];
+              const txtLen = (singleTxt.text || '').length;
+              focusAndPlaceCaretInTextBox(singleTxt.id, txtLen, txtLen);
+            } else {
+              setSelectedLassoTextIds(selTextsList.map((t) => t.id));
+              const firstTxt = selTextsList[0];
+              const txtLen = (firstTxt.text || '').length;
+              focusAndPlaceCaretInTextBox(firstTxt.id, txtLen, txtLen);
+            }
+            return;
+          }
+          if (Math.abs(localX - cntCx) <= cntPillW / 2 + 2.5) {
             handleAlignSelected('center-both');
             return;
           }
@@ -29399,20 +32744,39 @@ export default function App() {
           }
           }
 
-          // C. Check inside rotated selection bounding box -> Move
-          //    For transparent shapes (`!st.fillStyle || st.fillStyle === 'none'`), ONLY grab/move when clicking on the shape's lines (not its empty interior)!
-          const isTransparentShapeSelectionOnly =
-            selImagesList.length === 0 &&
-            selTextsList.length === 0 &&
-            selStrokesList.length > 0 &&
-            !isSelectedAttachedWeight &&
-            selStrokesList.every(
-              (st) => st.isShape && (!st.fillStyle || st.fillStyle === 'none')
-            );
-          const canMoveSelectionAtPt = isTransparentShapeSelectionOnly
-            ? selStrokesList.some((st) => isPointNearStroke(pt, st, 14, false))
-            : Math.abs(localX) <= hw + 8 &&
-              Math.abs(localY) <= (isSelectedAttachedWeight ? Math.max(hh + 8, 18) : hh + 6);
+          // C. Check inside rotated selection bounding box -> Move when dragging a multi-object/circuit selection OR clicking on a selected stroke, stencil, text glyph, or image
+          const canMoveSelectionAtPt =
+            Math.abs(localX) <= hw + 8 &&
+            Math.abs(localY) <= (isSelectedAttachedWeight ? Math.max(hh + 8, 18) : hh + 8) &&
+            (totalSelCount >= 2 ||
+              selStrokesList.some((st) => {
+                if (isPointNearStroke(pt, st, 18, true)) return true;
+                if (
+                  st.shapeType === 'bulb' ||
+                  st.shapeType === 'battery' ||
+                  st.shapeType === 'voltage-source' ||
+                  st.shapeType === 'switch' ||
+                  st.shapeType === 'switch-blade' ||
+                  st.shapeType === 'switch-knob' ||
+                  st.shapeType === 'resistor' ||
+                  st.shapeType === 'fan' ||
+                  st.shapeType === 'fan-blade' ||
+                  st.shapeType === 'fan-hub'
+                ) {
+                  const sb = getStrokeBounds(st);
+                  return (
+                    pt.x >= sb.minX - 12 &&
+                    pt.x <= sb.maxX + 12 &&
+                    pt.y >= sb.minY - 12 &&
+                    pt.y <= sb.maxY + 12
+                  );
+                }
+                return false;
+              }) ||
+              selTextsList.some((t) => isPagePointOnTextGlyphs(pt, t, 6)) ||
+              selImagesList.some(
+                (im) => pt.x >= im.x && pt.x <= im.x + im.width && pt.y >= im.y && pt.y <= im.y + im.height
+              ));
           if (canMoveSelectionAtPt) {
             clearActiveOverlay();
             setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
@@ -29457,13 +32821,7 @@ export default function App() {
             (targetPage.springSims || []).some((sm) => sm.massStrokeId === s.id) ||
             targetPage.strokes.some((o) => o.attachedToWeightId === s.id);
           if (!isAttachedOrHookedWeight) continue;
-          const sb = getStrokeBounds(s);
-          if (
-            pt.x >= sb.minX - 8 &&
-            pt.x <= sb.maxX + 8 &&
-            pt.y >= sb.minY - 8 &&
-            pt.y <= sb.maxY + 8
-          ) {
+          if (isPointNearStroke(pt, s, 9, s.shapeType === 'hooked-weight')) {
             hitWeightStroke = s;
             break;
           }
@@ -29609,8 +32967,7 @@ export default function App() {
         const txt = txtList[idx];
         if (lockedLayers.has(txt.layerId)) continue;
         if (txt.groupId?.startsWith('math-graph-grp-') || txt.id.startsWith('math-graph-txt-')) continue;
-        const tb = getTextVisualBounds(txt);
-        if (pt.x >= tb.minX - 6 && pt.x <= tb.maxX + 6 && pt.y >= tb.minY - 6 && pt.y <= tb.maxY + 6) {
+        if (isPagePointOnTextGlyphs(pt, txt, 6)) {
           topHitTxt = txt;
           break;
         }
@@ -29621,7 +32978,7 @@ export default function App() {
       for (let idx = 0; idx < strokeList.length; idx++) {
         const s = strokeList[idx];
         if (lockedLayers.has(s.layerId)) continue;
-        if (isPointNearStroke(pt, s, 18, false)) {
+        if (isPointNearStroke(pt, s, 9, false)) {
           const z = s.zOrder ?? imgList.length + idx + 1;
           if (!topHitStroke || z >= topHitStroke.z) {
             topHitStroke = { stroke: s, z };
@@ -29633,7 +32990,7 @@ export default function App() {
         for (let idx = 0; idx < strokeList.length; idx++) {
           const s = strokeList[idx];
           if (lockedLayers.has(s.layerId)) continue;
-          if (isPointNearStroke(pt, s, 18, true)) {
+          if (isPointNearStroke(pt, s, 9, true)) {
             const z = s.zOrder ?? imgList.length + idx + 1;
             if (!topHitStroke || z >= topHitStroke.z) {
               topHitStroke = { stroke: s, z };
@@ -30222,21 +33579,42 @@ export default function App() {
     if (ptsToErase.length === 0) return;
     const lockedLayerIds = new Set(activePage.layers.filter((l) => l.locked).map((l) => l.id));
     const eraseRadius = getEraserRadius();
+    const lastPt = ptsToErase[ptsToErase.length - 1];
+    const cursorPayload = {
+      x: Math.round(lastPt.x * 10) / 10,
+      y: Math.round(lastPt.y * 10) / 10,
+      r: eraseRadius,
+    };
+
+    let didEraseStrokes = false;
 
     updateActivePage((page) => {
       if (eraserSubType === 'stroke' || eraserSubType === 'highlighter-only') {
+        const removedIds: string[] = [];
         const filtered = page.strokes.filter((s) => {
           if (lockedLayerIds.has(s.layerId)) return true;
           if (eraserSubType === 'highlighter-only' && s.tool !== 'highlighter') return true;
-          return !ptsToErase.some((pt) => isPointNearStroke(pt, s, eraseRadius));
+          const hit = ptsToErase.some((pt) => isPointNearStroke(pt, s, eraseRadius));
+          if (hit) removedIds.push(s.id);
+          return !hit;
         });
-        if (filtered.length === page.strokes.length) return page;
+        if (removedIds.length === 0) return page;
+        didEraseStrokes = true;
+        if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+          liveTvSenderRef.current.sendLiveErase({
+            pageId: page.id,
+            removedIds,
+            addedStrokes: [],
+            cursorPt: cursorPayload,
+          });
+        }
         return { ...page, strokes: filtered };
       } else {
         // Pixel / Segment Eraser ('precision'):
         // Splits straight lines, polygons, parametric curves, and freehand curves at the exact circle intersection!
         let currentStrokes = page.strokes;
         let anyModified = false;
+        const origIds = new Set(page.strokes.map((s) => s.id));
 
         for (const pt of ptsToErase) {
           const nextStrokes: StrokeObject[] = [];
@@ -30257,9 +33635,32 @@ export default function App() {
         }
 
         if (!anyModified) return page;
+        didEraseStrokes = true;
+        if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+          const finalIds = new Set(currentStrokes.map((s) => s.id));
+          const removedIds: string[] = [];
+          origIds.forEach((id) => {
+            if (!finalIds.has(id)) removedIds.push(id);
+          });
+          const addedStrokes = currentStrokes.filter((s) => !origIds.has(s.id));
+          liveTvSenderRef.current.sendLiveErase({
+            pageId: page.id,
+            removedIds,
+            addedStrokes,
+            cursorPt: cursorPayload,
+          });
+        }
         return { ...page, strokes: currentStrokes };
       }
     }, false);
+
+    if (!didEraseStrokes && !isTvReceiverModeRef.current && liveTvSenderRef.current) {
+      liveTvSenderRef.current.sendLiveErase({
+        pageId: activePage.id,
+        removedIds: [],
+        cursorPt: cursorPayload,
+      });
+    }
   };
 
   // ULTRA-FAST POINTER MOVE: Zero React re-renders while drawing!
@@ -31416,13 +34817,15 @@ export default function App() {
         );
       }
       if (corner === 'tl' || corner === 'tr') {
+        const rawTopY = corner === 'tr' ? latestPt.y - (prop.topRightYOffset || 0) : latestPt.y;
         nextYTop = Math.round(
-          Math.max(40, Math.min(prop.yBot - 70, latestPt.y))
+          Math.max(40, Math.min(prop.yBot - 70, rawTopY))
         );
       }
       if (corner === 'bl' || corner === 'br') {
+        const rawBotY = corner === 'br' ? latestPt.y - (prop.botRightYOffset || 0) : latestPt.y;
         nextYBot = Math.round(
-          Math.min(pH - 40, Math.max(prop.yTop + 70, latestPt.y))
+          Math.min(pH - 40, Math.max(prop.yTop + 70, rawBotY))
         );
       }
 
@@ -32001,6 +35404,9 @@ export default function App() {
                 timerObj.targetStrokeId !== timerObj.strokeId &&
                 timerObj.draggedEndSide === 'start' &&
                 timerObj.targetEndSide === 'start' &&
+                (activeTargetStroke.shapeType === 'spring-pointer' ||
+                  targetOtherSt?.shapeType === 'spring-pointer' ||
+                  (showSimulationPanel && simActiveCategory === 'forces')) &&
                 (activeTargetStroke.shapeType === 'spring-pointer' ||
                   activeTargetStroke.shapeType === 'arrow' ||
                   Boolean(activeTargetStroke.arrowEnd)) &&
@@ -34000,6 +37406,9 @@ export default function App() {
                 }
               } else if (
                 !draggedSt.attachedToSpringId &&
+                (draggedSt.shapeType === 'spring-pointer' ||
+                  other.shapeType === 'spring-pointer' ||
+                  (showSimulationPanel && simActiveCategory === 'forces')) &&
                 (other.shapeType === 'spring-pointer' ||
                   other.shapeType === 'arrow' ||
                   Boolean(other.arrowEnd)) &&
@@ -34201,6 +37610,7 @@ export default function App() {
                 isDraggingSelectionRef.current = null;
                 isDrawingRef.current = false;
                 clearActiveOverlay();
+                suppressNextUndoRecordRef.current = true;
 
                 if (physObj.kind === 'spring-to-support' && physObj.supportStrokeId && physObj.fixedEnd) {
                   snapAndAttachSpringToSupport(
@@ -35244,6 +38654,31 @@ export default function App() {
             ) >= 1.5
               ? [...currentStrokePtsRef.current, lastRawCanvasPtRef.current]
               : currentStrokePtsRef.current;
+          if (
+            ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
+            tryMatchManualArrowheadOnLine(ptsForSnap, activePage.strokes, activeLayerId)
+          ) {
+            const manualArrow = tryMatchManualArrowheadOnLine(
+              ptsForSnap,
+              activePage.strokes,
+              activeLayerId
+            );
+            if (manualArrow) {
+              isDrawingRef.current = false;
+              currentStrokePtsRef.current = [];
+              snappedCurrentStrokeRef.current = null;
+              holdAnchorPtRef.current = null;
+              lastCreatedShapeIdsRef.current = [manualArrow.id];
+              clearActiveOverlay();
+              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
+              setRedoStack([]);
+              updateActivePage((page) => ({
+                ...page,
+                strokes: page.strokes.map((s) => (s.id === manualArrow.id ? manualArrow : s)),
+              }));
+              return;
+            }
+          }
           if (activeTool !== 'shape') {
             let minX = Infinity,
               minY = Infinity,
@@ -35255,7 +38690,7 @@ export default function App() {
               if (p.x > maxX) maxX = p.x;
               if (p.y > maxY) maxY = p.y;
             }
-            if (Math.hypot(maxX - minX, maxY - minY) < 28) return;
+            if (Math.hypot(maxX - minX, maxY - minY) < 18) return;
           }
           const snapped = recognizeAndSnapShape(
             ptsForSnap,
@@ -35268,6 +38703,201 @@ export default function App() {
         }, 560);
       }
     }
+  };
+
+  const tryMatchManualArrowheadOnLine = (
+    rawPts: BezierPoint[],
+    candidateStrokes: StrokeObject[],
+    targetLayerId: string
+  ): StrokeObject | null => {
+    if (rawPts.length < 3) return null;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity,
+      totalLen = 0;
+    for (let i = 0; i < rawPts.length; i++) {
+      const p = rawPts[i];
+      if (i > 0) totalLen += distance(rawPts[i - 1], p);
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const diag = Math.hypot(maxX - minX, maxY - minY);
+    if (diag < 5 || diag > 95 || totalLen < 8 || totalLen > 250) return null;
+    const directDist = distance(rawPts[0], rawPts[rawPts.length - 1]);
+    if (directDist / Math.max(1, totalLen) > 0.85) return null;
+
+    for (let idx = candidateStrokes.length - 1; idx >= 0; idx--) {
+      const s = candidateStrokes[idx];
+      if ((s.layerId || 'layer-1') !== targetLayerId) continue;
+      if (s.groupId || s.points.length < 2 || s.points[0]?.twist === 999) continue;
+
+      const isAutoLineOrArrow =
+        s.isShape && (s.shapeType === 'line' || s.shapeType === 'arrow') && s.points.length === 2;
+      let isStraightFreehand = false;
+      if (!isAutoLineOrArrow && !s.isShape && s.points.length >= 2) {
+        let sPathLen = 0;
+        for (let k = 1; k < s.points.length; k++) {
+          sPathLen += distance(s.points[k - 1], s.points[k]);
+        }
+        const sChord = distance(s.points[0], s.points[s.points.length - 1]);
+        if (sChord >= 24 && sChord / Math.max(1, sPathLen) >= 0.91) {
+          isStraightFreehand = true;
+        }
+      }
+      if (!isAutoLineOrArrow && !isStraightFreehand) continue;
+
+      const p0 = s.points[0];
+      const p1 = s.points[s.points.length - 1];
+      const lineLen = distance(p0, p1);
+      if (lineLen < 20 || diag > Math.min(95, Math.max(38, lineLen * 0.8))) continue;
+
+      const endpoints: { which: 'end' | 'start'; E: BezierPoint; A: BezierPoint }[] = [];
+      if (!s.arrowEnd) endpoints.push({ which: 'end', E: p1, A: p0 });
+      if (!s.arrowStart) endpoints.push({ which: 'start', E: p0, A: p1 });
+
+      for (const ep of endpoints) {
+        const ux = (ep.E.x - ep.A.x) / lineLen;
+        const uy = (ep.E.y - ep.A.y) / lineLen;
+        const nx = -uy;
+        const ny = ux;
+
+        let apexIdx = 0;
+        let maxLx = -Infinity;
+        let minLx = Infinity;
+        let minLy = Infinity;
+        let maxLy = -Infinity;
+        let minLyIdx = 0;
+        let maxLyIdx = 0;
+        const lxArr: number[] = [];
+        const lyArr: number[] = [];
+
+        for (let i = 0; i < rawPts.length; i++) {
+          const dx = rawPts[i].x - ep.E.x;
+          const dy = rawPts[i].y - ep.E.y;
+          const lx = dx * ux + dy * uy;
+          const ly = dx * nx + dy * ny;
+          lxArr.push(lx);
+          lyArr.push(ly);
+          if (lx > maxLx) {
+            maxLx = lx;
+            apexIdx = i;
+          }
+          if (lx < minLx) minLx = lx;
+          if (ly < minLy) {
+            minLy = ly;
+            minLyIdx = i;
+          }
+          if (ly > maxLy) {
+            maxLy = ly;
+            maxLyIdx = i;
+          }
+        }
+
+        const apexLy = lyArr[apexIdx];
+        const perpSpan = maxLy - minLy;
+
+        if (maxLx < -12 || maxLx > 48) continue;
+        if (minLx < -46 || minLx > 32) continue;
+        if (maxLx - minLx < 3.2) continue;
+        if (perpSpan < 5 || perpSpan > 76) continue;
+        if (minLy > 10 || maxLy < -10) continue;
+        if (Math.abs(apexLy) > Math.max(16, perpSpan * 0.68)) continue;
+
+        const firstLx = lxArr[0];
+        const lastLx = lxArr[rawPts.length - 1];
+        const firstLy = lyArr[0];
+        const lastLy = lyArr[rawPts.length - 1];
+
+        const leg1Chord = distance(rawPts[0], rawPts[apexIdx]);
+        const leg2Chord = distance(rawPts[apexIdx], rawPts[rawPts.length - 1]);
+        const isChevronV =
+          apexIdx > 0 &&
+          apexIdx < rawPts.length - 1 &&
+          maxLx - firstLx >= 2.5 &&
+          maxLx - lastLx >= 2.5 &&
+          Math.abs(firstLy - lastLy) >= 4.5 &&
+          (firstLy - apexLy) * (lastLy - apexLy) <= 6 &&
+          leg1Chord + leg2Chord >= totalLen * 0.56;
+
+        const isClosedTipTriangle =
+          directDist <= Math.max(18, diag * 0.48) &&
+          maxLx - lxArr[minLyIdx] >= 3.2 &&
+          maxLx - lxArr[maxLyIdx] >= 3.2 &&
+          Math.abs(minLy - maxLy) >= 6;
+
+        if (!isChevronV && !isClosedTipTriangle) continue;
+
+        const tipAdvance = Math.max(0, Math.min(38, maxLx));
+        const newTipPt: BezierPoint = {
+          x: ep.E.x + ux * tipAdvance,
+          y: ep.E.y + uy * tipAdvance,
+          pressure: 0.7,
+        };
+        const tailPt: BezierPoint = {
+          x: ep.A.x,
+          y: ep.A.y,
+          pressure: 0.7,
+        };
+
+        if (ep.which === 'end') {
+          const isDouble = Boolean(s.arrowStart);
+          return {
+            ...s,
+            isShape: true,
+            shapeType: isDouble ? 'double-arrow' : 'arrow',
+            arrowEnd: true,
+            arrowStart: isDouble ? true : false,
+            points: [
+              tailPt,
+              {
+                ...newTipPt,
+                cx: (tailPt.x + newTipPt.x) / 2,
+                cy: (tailPt.y + newTipPt.y) / 2,
+              },
+            ],
+            keyNodeIndices: undefined,
+          };
+        } else if (s.arrowEnd) {
+          return {
+            ...s,
+            isShape: true,
+            shapeType: 'double-arrow',
+            arrowStart: true,
+            arrowEnd: true,
+            points: [
+              newTipPt,
+              {
+                ...tailPt,
+                cx: (newTipPt.x + tailPt.x) / 2,
+                cy: (newTipPt.y + tailPt.y) / 2,
+              },
+            ],
+            keyNodeIndices: undefined,
+          };
+        } else {
+          return {
+            ...s,
+            isShape: true,
+            shapeType: 'arrow',
+            arrowEnd: true,
+            arrowStart: false,
+            points: [
+              tailPt,
+              {
+                ...newTipPt,
+                cx: (tailPt.x + newTipPt.x) / 2,
+                cy: (tailPt.y + newTipPt.y) / 2,
+              },
+            ],
+            keyNodeIndices: undefined,
+          };
+        }
+      }
+    }
+    return null;
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -35361,6 +38991,7 @@ export default function App() {
           (s) => s.id === finishedForceDrag.magnetTargetStrokeId
         );
         if (draggedVecId && draggedVecId !== finishedForceDrag.magnetTargetStrokeId) {
+          suppressNextUndoRecordRef.current = true;
           if (targetStroke?.shapeType === 'spring') {
             if (fSim) {
               updateActivePage(
@@ -35372,6 +39003,7 @@ export default function App() {
                 false
               );
             }
+            suppressNextUndoRecordRef.current = true;
             attachPointerToSpring(targetStroke.id, draggedVecId);
           } else {
             attachVectorsForSynthesis(finishedForceDrag.magnetTargetStrokeId, draggedVecId);
@@ -35546,6 +39178,7 @@ export default function App() {
       if (pendingPhys) {
         selectionTransformRef.current = null;
         isDraggingSelectionRef.current = null;
+        suppressNextUndoRecordRef.current = true;
         if (
           pendingPhys.kind === 'spring-to-support' &&
           pendingPhys.supportStrokeId &&
@@ -35613,30 +39246,176 @@ export default function App() {
             ? Math.hypot(finishedTf.startX - dragOrigin.startX, finishedTf.startY - dragOrigin.startY)
             : 10;
           if (movedDist < 6) {
-            // Check if the user tapped a Switch ('switch') to toggle it ON/OFF!
-            const swStroke = activePage.strokes.find(
-              (s) =>
-                selectedStrokeIds.includes(s.id) &&
-                (s.shapeType === 'switch' ||
-                  s.shapeType === 'switch-blade' ||
-                  s.shapeType === 'switch-knob')
+            const ptUp = { x: finishedTf.startX, y: finishedTf.startY };
+            const lockedTxtLayerIds = new Set(
+              activePage.layers.filter((l) => !l.visible || l.locked).map((l) => l.id)
             );
-            if (swStroke) {
-              const swKey = swStroke.groupId || swStroke.id;
-              updateActivePage((page) => {
-                const toggled = toggleSwitchStrokeGroup(page.strokes, swKey);
-                const nextIds = toggled.strokes
-                  .filter((s) => (s.groupId || s.id) === swKey)
-                  .map((s) => s.id);
-                setSelectedStrokeIds(nextIds);
-                return { ...page, strokes: toggled.strokes };
+            const tappedTxt = [...(activePage.texts || [])]
+              .reverse()
+              .find((t) => {
+                if (lockedTxtLayerIds.has(t.layerId)) return false;
+                if (t.groupId?.startsWith('math-graph-grp-') || t.id.startsWith('math-graph-txt-')) {
+                  return false;
+                }
+                return isPagePointOnTextGlyphs(ptUp, t, 6);
               });
+            if (tappedTxt) {
+              setSelectedStrokeIds([]);
+              setSelectedImageIds([]);
+              setSelectedImageId(null);
+              setActiveNodeStrokeId(null);
+              setSelectedLassoTextIds([]);
+              const { caretIndex, wordStart, wordEnd } = getTextCaretAndWordAtPoint(
+                tappedTxt.id,
+                tappedTxt.text || '',
+                e.clientX,
+                e.clientY
+              );
+              const now = performance.now();
+              const prevTap = lastTextTapRef.current;
+              const isDoubleTap = Boolean(
+                prevTap &&
+                  prevTap.textId === tappedTxt.id &&
+                  now - prevTap.time < 480 &&
+                  Math.hypot(e.clientX - prevTap.clientX, e.clientY - prevTap.clientY) <= 34
+              );
+              if (isDoubleTap && wordEnd > wordStart) {
+                lastTextTapRef.current = null;
+                focusAndPlaceCaretInTextBox(tappedTxt.id, wordStart, wordEnd);
+              } else {
+                lastTextTapRef.current = {
+                  textId: tappedTxt.id,
+                  time: now,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
+                };
+                focusAndPlaceCaretInTextBox(tappedTxt.id, caretIndex, caretIndex);
+              }
+            } else {
+              // Check if the user tapped directly on a Switch ('switch') to toggle it ON/OFF!
+              const swStroke = activePage.strokes.find((s) => {
+                if (
+                  !selectedStrokeIds.includes(s.id) ||
+                  (s.shapeType !== 'switch' &&
+                    s.shapeType !== 'switch-blade' &&
+                    s.shapeType !== 'switch-knob')
+                ) {
+                  return false;
+                }
+                const sb = getStrokeBounds(s);
+                return (
+                  ptUp.x >= sb.minX - 18 &&
+                  ptUp.x <= sb.maxX + 18 &&
+                  ptUp.y >= sb.minY - 18 &&
+                  ptUp.y <= sb.maxY + 18
+                );
+              });
+              if (swStroke) {
+                const swKey = swStroke.groupId || swStroke.id;
+                updateActivePage((page) => {
+                  const oldSwIds = new Set(
+                    page.strokes.filter((s) => (s.groupId || s.id) === swKey).map((s) => s.id)
+                  );
+                  const toggled = toggleSwitchStrokeGroup(page.strokes, swKey);
+                  const newSwIds = toggled.strokes
+                    .filter((s) => (s.groupId || s.id) === swKey)
+                    .map((s) => s.id);
+                  setSelectedStrokeIds((prev) => {
+                    const otherSelected = prev.filter((id) => !oldSwIds.has(id));
+                    return otherSelected.length > 0 ? [...otherSelected, ...newSwIds] : newSwIds;
+                  });
+                  return { ...page, strokes: toggled.strokes };
+                }, false);
+              } else {
+                // If user tapped (without dragging) on empty space or an inner object inside a multi-object selection box, deselect or narrow selection!
+                const hitAtTap = findSelectableObjectAtPagePoint(ptUp, activePage);
+                if (!hitAtTap) {
+                  setSelectedStrokeIds([]);
+                  setSelectedImageIds([]);
+                  setSelectedImageId(null);
+                  setActiveNodeStrokeId(null);
+                  setSelectedLassoTextIds([]);
+                } else if (
+                  e.pointerType === 'touch' &&
+                  hitAtTap.type === 'stroke' &&
+                  selectedStrokeIds.length + selectedImageIds.length + selectedLassoTextIds.length >
+                    hitAtTap.memberIds.length
+                ) {
+                  const grpId = hitAtTap.stroke.groupId;
+                  const memberImgIds = grpId
+                    ? (activePage.images || []).filter((im) => im.groupId === grpId).map((im) => im.id)
+                    : [];
+                  const memberTextIds =
+                    grpId && !grpId.startsWith('math-graph-grp-')
+                      ? (activePage.texts || []).filter((t) => t.groupId === grpId).map((t) => t.id)
+                      : [];
+                  setSelectedStrokeIds(hitAtTap.memberIds);
+                  setSelectedImageIds(memberImgIds);
+                  setSelectedImageId(memberImgIds[0] || null);
+                  setSelectedLassoTextIds(memberTextIds);
+                  setActiveNodeStrokeId(
+                    hitAtTap.memberIds.length === 1 &&
+                      memberImgIds.length === 0 &&
+                      memberTextIds.length === 0
+                      ? hitAtTap.memberIds[0]
+                      : null
+                  );
+                }
+              }
             }
           } else {
             // Auto-split any wire directly under a newly dropped/moved circuit component
-            updateActivePage((page) =>
-              splitWiresAndSyncPageSims(page, page.strokes, selectedStrokeIds)
+            updateActivePage(
+              (page) => splitWiresAndSyncPageSims(page, page.strokes, selectedStrokeIds),
+              false
             );
+          }
+        } else if (
+          finishedTf?.mode === 'move' &&
+          selectedLassoTextIds.length > 0
+        ) {
+          const movedDist = dragOrigin
+            ? Math.hypot(finishedTf.startX - dragOrigin.startX, finishedTf.startY - dragOrigin.startY)
+            : 10;
+          if (movedDist < 10) {
+            const ptUp = { x: finishedTf.startX, y: finishedTf.startY };
+            const tappedTxt = [...(activePage.texts || [])]
+              .reverse()
+              .find((t) => {
+                if (!selectedLassoTextIds.includes(t.id)) return false;
+                return isPagePointOnTextGlyphs(ptUp, t, 6);
+              });
+            if (tappedTxt) {
+              setSelectedStrokeIds([]);
+              setSelectedImageIds([]);
+              setSelectedImageId(null);
+              const { caretIndex, wordStart, wordEnd } = getTextCaretAndWordAtPoint(
+                tappedTxt.id,
+                tappedTxt.text || '',
+                e.clientX,
+                e.clientY
+              );
+              const now = performance.now();
+              const prevTap = lastTextTapRef.current;
+              const isDoubleTap = Boolean(
+                prevTap &&
+                  prevTap.textId === tappedTxt.id &&
+                  now - prevTap.time < 480 &&
+                  Math.hypot(e.clientX - prevTap.clientX, e.clientY - prevTap.clientY) <= 34
+              );
+              if (isDoubleTap && wordEnd > wordStart) {
+                lastTextTapRef.current = null;
+                focusAndPlaceCaretInTextBox(tappedTxt.id, wordStart, wordEnd);
+              } else {
+                lastTextTapRef.current = {
+                  textId: tappedTxt.id,
+                  time: now,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
+                };
+                focusAndPlaceCaretInTextBox(tappedTxt.id, caretIndex, caretIndex);
+              }
+            }
           }
         }
         renderStaticSceneRef.current();
@@ -35708,6 +39487,19 @@ export default function App() {
       }
       lastEraserPtRef.current = null;
       clearActiveOverlay();
+      if (!isTvReceiverModeRef.current && liveTvSenderRef.current) {
+        liveTvSenderRef.current.sendLiveErase({
+          pageId: activePage.id,
+          removedIds: [],
+          cursorPt: null,
+        });
+        liveTvSenderRef.current.sendPages({
+          notebookId: activeNotebook.id || 'nb-tv-live',
+          notebookTitle: activeNotebook.title || 'Live Σημείωση',
+          activePageIndex,
+          pages: activeNotebook.pages,
+        });
+      }
       return;
     }
 
@@ -35809,7 +39601,9 @@ export default function App() {
         h,
         strokeColor,
         activeLayerId,
-        waveGuideColor
+        waveGuideColor,
+        true,
+        strokeWidth || 2.0
       );
       const createdIds = stencilStrokes.map((s) => s.id);
       lastCreatedShapeIdsRef.current = createdIds;
@@ -35886,7 +39680,7 @@ export default function App() {
         if (p.y > maxY) maxY = p.y;
       }
       const snapped =
-        Math.hypot(maxX - minX, maxY - minY) >= 28 ? recognizeAndSnapShape(rawPts, 'auto') : null;
+        Math.hypot(maxX - minX, maxY - minY) >= 18 ? recognizeAndSnapShape(rawPts, 'auto') : null;
       if (snapped) {
         finalPts = snapped.points;
         isShape = true;
@@ -35920,6 +39714,13 @@ export default function App() {
     let weldedIntoExistingStroke: StrokeObject | null = null;
     let weldedRemoveSecondaryId: string | null = null;
     let weldedClosedIntoPolygon = false;
+
+    if (['pen', 'pencil', 'highlighter'].includes(activeTool) && !arrowEnd) {
+      const manualArrow = tryMatchManualArrowheadOnLine(rawPts, activePage.strokes, activeLayerId);
+      if (manualArrow) {
+        weldedIntoExistingStroke = manualArrow;
+      }
+    }
 
     if (
       isShape &&
@@ -37579,7 +41380,20 @@ export default function App() {
         }
       }
 
-      if (editingTextId !== null || showMathModal) return;
+      if (showMathModal) return;
+      if (editingTextId !== null) {
+        const ta = document.querySelector(
+          `[data-text-id="${editingTextId}"] textarea`
+        ) as HTMLTextAreaElement | null;
+        if (ta && document.activeElement !== ta && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          try {
+            ta.focus({ preventScroll: true });
+          } catch {
+            ta.focus();
+          }
+        }
+        return;
+      }
 
       const target = e.target as HTMLElement | null;
       if (
@@ -37770,6 +41584,33 @@ export default function App() {
         if (selectedTextId !== null) {
           e.preventDefault();
           const targetTxtId = selectedTextId;
+          const savedRng = activeTextRangeRef.current;
+          if (savedRng && savedRng.textId === targetTxtId && savedRng.end > savedRng.start) {
+            const targetObj = (activePage.texts || []).find((t) => t.id === targetTxtId);
+            if (targetObj) {
+              const curStr = targetObj.text || '';
+              const s = Math.max(0, Math.min(curStr.length, savedRng.start));
+              const endIdx = Math.max(s, Math.min(curStr.length, savedRng.end));
+              const nextStr = curStr.slice(0, s) + curStr.slice(endIdx);
+              activeTextRangeRef.current = null;
+              setActiveTextRange(null);
+              updateActivePage((page) => ({
+                ...page,
+                texts: (page.texts || []).map((t) =>
+                  t.id === targetTxtId
+                    ? {
+                        ...t,
+                        text: nextStr,
+                        latex: t.isMath ? convertPlainTextToMathLatex(nextStr) : t.latex,
+                        spans: adjustTextSpansOnEdit(curStr, nextStr, t.spans),
+                      }
+                    : t
+                ),
+              }));
+              focusAndPlaceCaretInTextBox(targetTxtId, s, s);
+              return;
+            }
+          }
           updateActivePage((page) => ({
             ...page,
             texts: (page.texts || []).filter((t) => t.id !== targetTxtId),
@@ -37961,7 +41802,29 @@ export default function App() {
 
       // T / Τ -> Text (Κείμενο)
       if (code === 'KeyT' || key === 't' || key === 'τ') {
+        const existingTxtId =
+          editingTextId ||
+          selectedTextId ||
+          (selectedLassoTextIds.length > 0 ? selectedLassoTextIds[0] : null);
         switchToTool('text', '🔤 Text (Κείμενο) — T / Τ');
+        if (existingTxtId) {
+          const existingTxtObj = (activePage.texts || []).find((t) => t.id === existingTxtId);
+          if (existingTxtObj) {
+            const txtLen = (existingTxtObj.text || '').length;
+            const savedRng = activeTextRangeRef.current;
+            const caretStart =
+              savedRng && savedRng.textId === existingTxtObj.id
+                ? Math.max(0, Math.min(txtLen, savedRng.start))
+                : txtLen;
+            const caretEnd =
+              savedRng &&
+              savedRng.textId === existingTxtObj.id &&
+              savedRng.end > savedRng.start
+                ? Math.max(caretStart, Math.min(txtLen, savedRng.end))
+                : caretStart;
+            focusAndPlaceCaretInTextBox(existingTxtObj.id, caretStart, caretEnd);
+          }
+        }
         return;
       }
 
@@ -40782,6 +44645,13 @@ export default function App() {
     }
 
     try {
+      const isNewDocMode =
+        forceNewNotebook ||
+        pdfImportModeRef.current === 'new-notebook' ||
+        viewMode === 'library';
+      const targetNbId = isNewDocMode ? `nb-doc-${Date.now()}` : activeNotebook.id;
+      let hasPdf = false;
+      let totalNativeBytes = 0;
       const importedPages: NotePage[] = [];
       for (const file of files) {
         const lower = file.name.toLowerCase();
@@ -40793,12 +44663,19 @@ export default function App() {
           lower.endsWith('.png') ||
           lower.endsWith('.webp');
         if (!isPdf && !isImg) continue;
+        totalNativeBytes += file.size || 0;
 
         if (isPdf) {
+          hasPdf = true;
           setStatusBanner(`⏳ Φόρτωση PDF "${file.name}"...`);
-          const pdfPages = await renderPdfFileToPages(file, 'blank', (curr, total) => {
-            setStatusBanner(`⏳ Φόρτωση PDF "${file.name}": Σελίδα ${curr} από ${total}...`);
-          });
+          const pdfPages = await renderPdfFileToPages(
+            file,
+            'blank',
+            (curr, total) => {
+              setStatusBanner(`⏳ Φόρτωση PDF "${file.name}": Σελίδα ${curr} από ${total}...`);
+            },
+            targetNbId
+          );
           importedPages.push(...pdfPages);
         } else {
           setStatusBanner(`⏳ Φόρτωση εικόνας "${file.name}" ως σελίδα εγγράφου...`);
@@ -40813,21 +44690,18 @@ export default function App() {
         return;
       }
 
-      if (
-        forceNewNotebook ||
-        pdfImportModeRef.current === 'new-notebook' ||
-        viewMode === 'library'
-      ) {
+      if (isNewDocMode) {
         const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|webp)$/i, '');
         const assignedFolder =
           targetFolderOverride !== undefined ? targetFolderOverride : activeLibraryFolder || '';
         const newNb: Notebook = {
-          id: `nb-doc-${Date.now()}`,
+          id: targetNbId,
           title: baseTitle,
           folder: assignedFolder,
-          coverColor: '#0284c7',
+          coverColor: hasPdf ? '#dc2626' : '#0284c7',
           updatedAt: new Date().toISOString(),
-          sourceFormat: '.bestnotes',
+          sourceFormat: hasPdf ? '.pdf' : '.image',
+          nativeFileSizeBytes: totalNativeBytes > 0 ? totalNativeBytes : undefined,
           pages: importedPages,
         };
         userEditedInSessionRef.current.add(newNb.id);
@@ -40847,11 +44721,8 @@ export default function App() {
           setViewMode('editor');
           applyPaperTransformDirect(zoomRef.current, 0, 0, true);
           showToast(
-            `📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — έτοιμο για γραφή!`
+            `📄 Ανοίχτηκε το "${baseTitle}" (${importedPages.length} σελίδες) — Λειτουργία Ανάγνωσης & Υπογράμμισης!`
           );
-        }
-        if (importedPages.length <= 3) {
-          void triggerSmartAutoTagsForNotebook(newNb, [], true);
         }
       } else {
         // Insert into current notebook right after activePageIndex (or replace current page if completely blank)
@@ -40914,17 +44785,35 @@ export default function App() {
 
   const selectedImgObj = activePage.images?.find((im) => im.id === selectedImageId);
 
-  if (viewMode === 'landing') {
+  if (viewMode === 'landing' && !isCleanProjectorMode && !isTvReceiverMode) {
     return (
       <LandingPage
         currentUser={currentUser}
+        onEnterLiveTvMode={() => {
+          const docEl = document.documentElement as any;
+          if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+            if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
+            else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+          }
+          isTvReceiverModeRef.current = true;
+          setIsTvReceiverMode(true);
+          setIsCleanProjectorMode(true);
+          setIsFullBleedWidth(true);
+          setViewMode('editor');
+        }}
         onEnterApp={() => {
           explicitLandingNavRef.current = false;
-          if (notebooks.length > 0) {
-            if (openNotebookIds.length === 0) {
-              setOpenNotebookIds([notebooks[0].id]);
-              setActiveNotebookId(notebooks[0].id);
-            }
+          if (!currentUser) {
+            // Guest mode: always open a completely empty Library so the user can create a new file
+            setNotebooks([]);
+            setOpenNotebookIds([]);
+            setActiveNotebookId('');
+            setActivePageIndex(0);
+            setCustomFolders([]);
+            setViewMode('library');
+            return;
+          }
+          if (notebooks.length > 0 && openNotebookIds.length > 0) {
             setViewMode('editor');
           } else {
             setViewMode('library');
@@ -41075,108 +44964,119 @@ export default function App() {
 
         {/* Center: Authentic Goodnotes 6 / Chrome-Style Elastic Document Tabs */}
         <div className="flex-1 min-w-0 flex items-end gap-1.5 overflow-x-auto px-3">
-          {(openNotebookIds.length > 0
-            ? openNotebookIds
-            : viewMode === 'editor' && activeNotebook
-            ? [activeNotebook.id]
-            : []
-          ).map((nbId) => {
-            const nb = notebooks.find((n) => n.id === nbId);
-            if (!nb) return null;
-            const isActive = nb.id === activeNotebook.id && viewMode === 'editor';
-            const tabMaxWidthClass =
-              openNotebookIds.length === 1
-                ? 'max-w-[440px]'
-                : openNotebookIds.length <= 3
-                ? 'max-w-[340px]'
-                : openNotebookIds.length === 4
-                ? 'max-w-[270px]'
-                : 'max-w-[210px]';
-            return (
-              <div
-                key={nb.id}
-                onClick={() => {
-                  if (isActive) return;
-                  setActiveNotebookId(nb.id);
-                  setActivePageIndex(0);
-                  activeDrawingPageIndexRef.current = 0;
-                  panRef.current = { x: 0, y: 0 };
-                  setPan({ x: 0, y: 0 });
-                  setViewMode('editor');
-                }}
-                title={`${nb.title} (Πάτα πάνω στο όνομα για μετονομασία)`}
-                className={`flex-1 min-w-[115px] ${tabMaxWidthClass} flex items-center gap-2 px-3.5 py-1.5 rounded-t-xl text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                  isActive
-                    ? 'bg-[#f4f5f7] text-[#1b2a4a] font-semibold shadow-sm'
-                    : 'bg-[#263961] text-slate-300 hover:bg-[#2f4573]'
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: nb.coverColor }} />
-                {renamingNotebookId === nb.id && renamingNotebookContext === 'tab' ? (
-                  <input
-                    type="text"
-                    autoFocus
-                    value={renamingTitleDraft}
-                    onClick={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => setRenamingTitleDraft(e.target.value)}
-                    onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        commitRenamingNotebook(nb.id, renamingTitleDraft);
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        setRenamingNotebookId(null);
-                        setRenamingNotebookContext(null);
-                      }
-                    }}
-                    className="flex-1 min-w-[70px] px-1.5 py-0.5 rounded bg-white text-[#1b2a4a] text-xs font-semibold border border-[#0066ff] focus:outline-none"
-                  />
-                ) : (
-                  <span
-                    onClick={(e) => {
-                      if (isActive) {
+          {(() => {
+            const validOpenIds = openNotebookIds.filter((id) =>
+              notebooks.some((n) => n.id === id)
+            );
+            const displayedTabIds =
+              validOpenIds.length > 0
+                ? validOpenIds
+                : viewMode === 'editor' &&
+                  activeNotebookId &&
+                  notebooks.some((n) => n.id === activeNotebookId)
+                ? [activeNotebookId]
+                : [];
+            return displayedTabIds.map((nbId) => {
+              const nb = notebooks.find((n) => n.id === nbId);
+              if (!nb) return null;
+              const isActive = nb.id === activeNotebook.id && viewMode === 'editor';
+              const tabMaxWidthClass =
+                displayedTabIds.length === 1
+                  ? 'max-w-[440px]'
+                  : displayedTabIds.length <= 3
+                  ? 'max-w-[340px]'
+                  : displayedTabIds.length === 4
+                  ? 'max-w-[270px]'
+                  : 'max-w-[210px]';
+              return (
+                <div
+                  key={nb.id}
+                  onClick={() => {
+                    if (isActive) return;
+                    setActiveNotebookId(nb.id);
+                    setActivePageIndex(0);
+                    activeDrawingPageIndexRef.current = 0;
+                    panRef.current = { x: 0, y: 0 };
+                    setPan({ x: 0, y: 0 });
+                    setViewMode('editor');
+                  }}
+                  title={`${nb.title} (Πάτα πάνω στο όνομα για μετονομασία)`}
+                  className={`w-fit shrink-0 ${tabMaxWidthClass} flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+                    isActive
+                      ? 'bg-[#f4f5f7] text-[#1b2a4a] font-semibold shadow-sm'
+                      : 'bg-[#263961] text-slate-300 hover:bg-[#2f4573]'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: nb.coverColor }} />
+                  {renamingNotebookId === nb.id && renamingNotebookContext === 'tab' ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={renamingTitleDraft}
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) => setRenamingTitleDraft(e.target.value)}
+                      onBlur={() => commitRenamingNotebook(nb.id, renamingTitleDraft)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitRenamingNotebook(nb.id, renamingTitleDraft);
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setRenamingNotebookId(null);
+                          setRenamingNotebookContext(null);
+                        }
+                      }}
+                      className="w-44 min-w-[70px] px-1.5 py-0.5 rounded bg-white text-[#1b2a4a] text-xs font-semibold border border-[#0066ff] focus:outline-none"
+                    />
+                  ) : (
+                    <span
+                      onClick={(e) => {
+                        if (isActive) {
+                          e.stopPropagation();
+                          startRenamingNotebook(nb, 'tab');
+                        }
+                      }}
+                      onDoubleClick={(e) => {
                         e.stopPropagation();
                         startRenamingNotebook(nb, 'tab');
-                      }
-                    }}
-                    onDoubleClick={(e) => {
+                      }}
+                      title="Πάτα για μετονομασία σημείωσης"
+                      className={`min-w-0 truncate text-left ${
+                        isActive ? 'hover:underline decoration-[#0066ff]/50 cursor-text' : ''
+                      }`}
+                    >
+                      {nb.title}
+                    </span>
+                  )}
+                  <button
+                    onClick={(e) => {
                       e.stopPropagation();
-                      startRenamingNotebook(nb, 'tab');
-                    }}
-                    title="Πάτα για μετονομασία σημείωσης"
-                    className={`flex-1 min-w-0 truncate text-left ${
-                      isActive ? 'hover:underline decoration-[#0066ff]/50 cursor-text' : ''
-                    }`}
-                  >
-                    {nb.title}
-                  </span>
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const rem = openNotebookIds.filter((id) => id !== nb.id);
-                    setOpenNotebookIds(rem);
-                    if (rem.length === 0) {
-                      if (!activeLibraryFolder && nb.folder) {
-                        setActiveLibraryFolder(nb.folder);
+                      const rem = openNotebookIds.filter(
+                        (id) => id !== nb.id && notebooks.some((n) => n.id === id)
+                      );
+                      setOpenNotebookIds(rem);
+                      if (rem.length === 0) {
+                        if (!activeLibraryFolder && nb.folder) {
+                          setActiveLibraryFolder(nb.folder);
+                        }
+                        setActiveNotebookId('');
+                        setViewMode('library');
+                      } else if (activeNotebook.id === nb.id || activeNotebookId === nb.id) {
+                        setActiveNotebookId(rem[rem.length - 1]);
                       }
-                      setViewMode('library');
-                    } else if (activeNotebook.id === nb.id) {
-                      setActiveNotebookId(rem[0]);
-                    }
-                  }}
-                  title="Κλείσιμο καρτέλας εγγράφου"
-                  className="shrink-0 ml-auto opacity-65 hover:opacity-100 hover:bg-black/10 p-0.5 rounded transition cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            );
-          })}
+                    }}
+                    title="Κλείσιμο καρτέλας εγγράφου"
+                    className="shrink-0 ml-0.5 opacity-65 hover:opacity-100 hover:bg-black/10 p-0.5 rounded transition cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            });
+          })()}
         </div>
 
         {/* Right: Undo / Redo, Page Switcher, Insert/Delete Page, Drive Sync & Settings */}
@@ -41232,23 +45132,34 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Rotate Page 90° Left / Right in Top Bar */}
-              <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
-                <button
-                  onClick={() => handleRotatePage('left')}
-                  className="p-1 text-slate-200 hover:text-white cursor-pointer"
-                  title="Περιστροφή Σελίδας 90° Αριστερά (-90°)"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => handleRotatePage('right')}
-                  className="p-1 text-slate-200 hover:text-white cursor-pointer"
-                  title="Περιστροφή Σελίδας 90° Δεξιά (+90°)"
-                >
-                  <RotateCw className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              {/* 16:9 Full-Width & Fullscreen Direct 1-Click Button */}
+              <button
+                onClick={() => {
+                  const nextFull = !isFullBleedWidth;
+                  setIsFullBleedWidth(nextFull);
+                  const fullZ = computeFitWidthZoom(pageWidth, nextFull);
+                  applyPaperTransformDirect(fullZ, 0, panRef.current.y, nextFull);
+                  setShowHdmiProjectorPopover(false);
+                  if (nextFull) {
+                    const docEl = document.documentElement as any;
+                    if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+                      if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
+                      else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+                    }
+                    showToast('📺 16:9: Γέμισμα 100% Πλάτους & Πλήρης Οθόνη!');
+                  } else if (document.fullscreenElement && document.exitFullscreen) {
+                    void document.exitFullscreen().catch(() => {});
+                  }
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                  isFullBleedWidth
+                    ? 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
+                    : 'bg-[#263961]/70 hover:bg-[#263961] text-slate-300 hover:text-white'
+                }`}
+                title="Γέμισμα 100% Πλάτους & Πλήρης Οθόνη (16:9)"
+              >
+                <span>16:9</span>
+              </button>
 
               {/* Page Indicator (Click to open Thumbnail Grid!) */}
               <div className="flex items-center bg-[#263961] rounded-lg px-1.5 py-0.5 text-xs">
@@ -41300,6 +45211,158 @@ export default function App() {
                 <span className="hidden sm:inline">Λήψη</span>
               </button>
 
+              {/* Live TV Interactive Board Sender Control (iPad) / Receiver Mode Button */}
+              <div className="relative flex items-center">
+                <button
+                  onClick={() => {
+                    if (!currentUser) {
+                      const docEl = document.documentElement as any;
+                      if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+                        if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
+                        else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+                      }
+                      isTvReceiverModeRef.current = true;
+                      setIsTvReceiverMode(true);
+                      setIsCleanProjectorMode(true);
+                      setIsFullBleedWidth(true);
+                      setViewMode('editor');
+                      return;
+                    }
+                    if (!isLiveTvBroadcasting) {
+                      try {
+                        window.sessionStorage.setItem('bn-live-tv-broadcasting', '1');
+                      } catch {
+                        // ignore
+                      }
+                      setIsLiveTvBroadcasting(true);
+                      setShowLiveTvMenu(true);
+                      showToast(
+                        'Ξεκίνησε η Live TV Εκπομπή από το iPad! Στον Διαδραστικό πάτα «Live 16:9»!'
+                      );
+                      return;
+                    }
+                    setShowLiveTvMenu((v) => !v);
+                  }}
+                  className={`flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                    !isLiveTvBroadcasting
+                      ? 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
+                      : liveTvStatus.connected
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-amber-500 text-slate-950 shadow-sm'
+                  }`}
+                  title="Έναρξη / Έλεγχος Live 16:9 Μετάδοσης από το iPad στον Διαδραστικό Πίνακα"
+                >
+                  <span>
+                    {!isLiveTvBroadcasting
+                      ? 'Live TV'
+                      : liveTvStatus.connected
+                      ? `Live TV${liveTvStatus.latencyMs ? ` • ${liveTvStatus.latencyMs}ms` : ''}`
+                      : 'Live TV...'}
+                  </span>
+                </button>
+
+                {currentUser && showLiveTvMenu && (
+                  <div
+                    data-ui-panel="true"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="fixed top-12 right-28 z-[220] w-72 rounded-2xl bg-slate-900/95 text-white border border-slate-700/80 shadow-2xl p-3.5 text-xs backdrop-blur-md"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 font-bold text-[12px]">
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            liveTvStatus.connected
+                              ? 'bg-emerald-400 animate-pulse'
+                              : 'bg-amber-400 animate-ping'
+                          }`}
+                        />
+                        <span>
+                          {liveTvStatus.connected
+                            ? `Συνδεδεμένο (${
+                                liveTvStatus.mode === 'webrtc'
+                                  ? `P2P • ${liveTvStatus.latencyMs ?? 10}ms`
+                                  : 'Live Cloud'
+                              })`
+                            : 'Εκπέμπει από το iPad σας...'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowLiveTvMenu(false)}
+                        className="text-slate-400 hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-slate-300 leading-snug mb-3">
+                      Στον Διαδραστικό Πίνακα ανοίξτε το{' '}
+                      <span className="font-bold text-sky-300">explainboards.web.app</span> και
+                      πατήστε <span className="font-bold text-emerald-300">«Live 16:9»</span>{' '}
+                      (χωρίς Login).
+                    </p>
+
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (liveTvSenderRef.current && activeNotebook) {
+                            const wsWidth =
+                              workspaceRef.current?.clientWidth || window.innerWidth || 980;
+                            const wsHeight =
+                              workspaceRef.current?.clientHeight || window.innerHeight || 820;
+                            const senderBaseZ = isFullBleedWidth
+                              ? wsWidth / Math.max(200, pageWidth)
+                              : 1;
+                            liveTvSenderRef.current.sendPages({
+                              notebookId: activeNotebook.id || 'nb-tv-live',
+                              notebookTitle: activeNotebook.title || 'Live Σημείωση',
+                              activePageIndex,
+                              pages: activeNotebook.pages,
+                            });
+                            liveTvSenderRef.current.sendViewport({
+                              z: zoomRef.current,
+                              baseZ: senderBaseZ,
+                              px: panRef.current.x,
+                              py: panRef.current.y,
+                              w: wsWidth,
+                              h: wsHeight,
+                              pIdx: activePageIndex,
+                              pW: pageWidth,
+                            });
+                            liveTvSenderRef.current.forceHandshake();
+                            showToast('🔄 Στάλθηκε άμεσος συγχρονισμός στον Διαδραστικό Πίνακα!');
+                          }
+                          setShowLiveTvMenu(false);
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] transition cursor-pointer"
+                      >
+                        🔄 Άμεσος Συγχρονισμός Τώρα
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            window.sessionStorage.removeItem('bn-live-tv-broadcasting');
+                          } catch {
+                            // ignore
+                          }
+                          liveTvSenderRef.current?.stopBroadcast();
+                          liveTvSenderRef.current = null;
+                          setIsLiveTvBroadcasting(false);
+                          setShowLiveTvMenu(false);
+                          showToast('⏹ Η Live 16:9 Μετάδοση από το iPad σταμάτησε.');
+                        }}
+                        className="w-full py-1.5 px-3 rounded-xl bg-rose-600/90 hover:bg-rose-600 text-white font-bold text-[11px] transition cursor-pointer"
+                      >
+                        ⏹ Διακοπή Μετάδοσης TV
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Live PDF Interactive Player & Standalone Export Button (No Edit Tools, Only Simulation Interaction + Play/Stop) */}
               <button
                 onClick={() => {
@@ -41319,20 +45382,20 @@ export default function App() {
                       setIsSpringPaused(false);
                     }
                     showToast(
-                      '🎬 Λειτουργία Live PDF: Χωρίς εργαλεία σχεδίασης — αλληλεπιδράστε ελεύθερα με τις προσομοιώσεις ή κατεβάστε το αρχείο Live PDF!'
+                      'Λειτουργία Live PDF: Χωρίς εργαλεία σχεδίασης — αλληλεπιδράστε ελεύθερα με τις προσομοιώσεις ή κατεβάστε το αρχείο Live PDF!'
                     );
                   } else {
                     showToast('✏️ Επιστροφή σε Λειτουργία Επεξεργασίας.');
                   }
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                className={`flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
                   isLivePdfMode
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-300 shadow-xs'
-                    : 'bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white shadow-xs'
+                    ? 'bg-[#31487a] text-white ring-1 ring-sky-400/60'
+                    : 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
                 }`}
                 title="Live PDF: Προβολή & Εξαγωγή Διαδραστικού Αρχείου χωρίς εργαλεία επεξεργασίας (Play/Stop, διακόπτης κυκλώματος, εκκρεμές, ελατήριο, διανύσματα, 3D μόρια)"
               >
-                <span>{isLivePdfMode ? '🎬 Live PDF ON' : '▶️ Live PDF'}</span>
+                <span>{isLivePdfMode ? 'Live PDF ON' : 'Live PDF'}</span>
               </button>
 
               {/* Classic Direct 1-Click Native PDF Share Button (AirDrop, Viber, Messenger, Goodnotes, Mail, Files) */}
@@ -41357,20 +45420,41 @@ export default function App() {
             </>
           )}
 
-          {/* Direct Login / Sign-Up Pill when in Guest Mode */}
+          {/* Direct Login / Sign-Up Pill + Live 16:9 Board Button when in Guest Mode */}
           {!currentUser && (
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('signup');
-                setShowAuthModal(true);
-              }}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-[11px] font-bold text-white shadow-xs transition cursor-pointer"
-              title="Σύνδεση ή Εγγραφή για μόνιμη αποθήκευση στο Cloud"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Εγγραφή / Σύνδεση</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const docEl = document.documentElement as any;
+                  if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+                    if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
+                    else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+                  }
+                  isTvReceiverModeRef.current = true;
+                  setIsTvReceiverMode(true);
+                  setIsCleanProjectorMode(true);
+                  setIsFullBleedWidth(true);
+                  setViewMode('editor');
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-[11px] font-bold text-white shadow-xs transition cursor-pointer"
+                title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (Χωρίς Login & Χωρίς Μπάρες Chrome)"
+              >
+                <span>📺 Live 16:9</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('signup');
+                  setShowAuthModal(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-[11px] font-bold text-white shadow-xs transition cursor-pointer"
+                title="Σύνδεση ή Εγγραφή για μόνιμη αποθήκευση στο Cloud"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Εγγραφή / Σύνδεση</span>
+              </button>
+            </>
           )}
 
           {/* Classic Person Icon Button & Profile + Google Drive PDF Sync Dropdown */}
@@ -41514,6 +45598,52 @@ export default function App() {
                         </div>
                       </div>
 
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 space-y-1">
+                        <div className="flex items-center justify-between text-[10.5px]">
+                          <span className="font-semibold text-slate-600">Αυτόματος Συγχρονισμός:</span>
+                          <select
+                            value={driveAutoSyncIntervalMin}
+                            onChange={(e) => {
+                              const nextMin = Number(e.target.value);
+                              setDriveAutoSyncIntervalMin(nextMin);
+                              try {
+                                localStorage.setItem('bestnotes_drive_autosync_min_v1', String(nextMin));
+                              } catch {
+                                // ignore
+                              }
+                              showToast(
+                                `⏱️ Αυτόματος συγχρονισμός Google Drive: κάθε ${
+                                  nextMin === 30
+                                    ? '30 λεπτά'
+                                    : nextMin === 60
+                                    ? '1 ώρα'
+                                    : nextMin === 120
+                                    ? '2 ώρες'
+                                    : '4 ώρες'
+                                }!`
+                              );
+                            }}
+                            className="px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-[10.5px] font-bold text-[#0066ff] cursor-pointer focus:outline-none"
+                          >
+                            <option value={30}>Κάθε 30 λεπτά</option>
+                            <option value={60}>Κάθε 1 ώρα</option>
+                            <option value={120}>Κάθε 2 ώρες</option>
+                            <option value={240}>Κάθε 4 ώρες</option>
+                          </select>
+                        </div>
+                        {lastDriveAutoSyncAt > 0 && (
+                          <div className="text-[9.5px] text-slate-500">
+                            Τελευταίος συγχρονισμός:{' '}
+                            <span className="font-semibold text-slate-700">
+                              {new Date(lastDriveAutoSyncAt).toLocaleTimeString('el-GR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
                       <button
                         onClick={() => void performDrivePdfSync(true, undefined, undefined, true)}
                         disabled={syncStatus === 'syncing'}
@@ -41603,7 +45733,7 @@ export default function App() {
       </header>
 
       {/* IF IN LIBRARY VIEW (OR IF USER HAS 0 NOTEBOOKS YET) */}
-      {viewMode === 'library' || notebooks.length === 0 ? (
+      {(viewMode === 'library' || notebooks.length === 0) && !isCleanProjectorMode ? (
         <div
           data-library-scroll-container="true"
           className="flex-1 overflow-y-auto overscroll-contain p-6 bg-[#f4f5f7]"
@@ -41680,7 +45810,23 @@ export default function App() {
                 }
               };
 
+              for (const nb of notebooks) {
+                if (nb.folderStyles && typeof nb.folderStyles === 'object') {
+                  for (const [stPath, stMeta] of Object.entries(nb.folderStyles)) {
+                    if (stPath && stMeta) {
+                      ensureFolderHierarchy(stPath, stMeta.updatedAt || nb.updatedAt, {
+                        name: stPath,
+                        updatedAt: stMeta.updatedAt || nb.updatedAt || '',
+                        color: stMeta.color,
+                        icon: stMeta.icon,
+                        favorite: stMeta.favorite,
+                      });
+                    }
+                  }
+                }
+              }
               for (const cf of customFolders) {
+                if (cf.deleted) continue;
                 ensureFolderHierarchy(cf.name, cf.updatedAt, cf);
               }
               for (const nb of notebooks) {
@@ -41953,6 +46099,7 @@ export default function App() {
                       color: nextColor ?? cf.color,
                       icon: nextIcon ?? cf.icon,
                       favorite: nextFav !== undefined ? nextFav : cf.favorite,
+                      deleted: false,
                     };
                   }
                   if (nf.startsWith(`${normOrig}/`)) {
@@ -41961,6 +46108,7 @@ export default function App() {
                       ...cf,
                       name: `${newFullPath}${suffix}`,
                       updatedAt: nowIso,
+                      deleted: false,
                     };
                   }
                   return cf;
@@ -41972,10 +46120,26 @@ export default function App() {
                     color: nextColor,
                     icon: nextIcon,
                     favorite: nextFav,
+                    deleted: false,
                   });
                 }
-                // Ensure any descendant folders from folderMap are also preserved under newFullPath
+                if (normOrig !== newFullPath) {
+                  updatedCustom.push({
+                    name: normOrig,
+                    updatedAt: nowIso,
+                    deleted: true,
+                  });
+                }
+                // Snapshot all active folders from folderMap so every folder's styling is preserved in customFolders
+                const existingCustomTsByPath = new Map<string, string>();
+                for (const cf of customFolders) {
+                  const nf = normalizeFolderPath(cf.name);
+                  if (nf && cf.updatedAt) {
+                    existingCustomTsByPath.set(nf, cf.updatedAt);
+                  }
+                }
                 for (const existingF of folderMap.values()) {
+                  if (existingF.path === normOrig) continue;
                   if (existingF.path.startsWith(`${normOrig}/`)) {
                     const suffix = existingF.path.slice(normOrig.length);
                     updatedCustom.push({
@@ -41984,6 +46148,17 @@ export default function App() {
                       color: existingF.color,
                       icon: existingF.icon,
                       favorite: existingF.favorite,
+                      deleted: false,
+                    });
+                  } else {
+                    updatedCustom.push({
+                      name: existingF.path,
+                      updatedAt:
+                        existingCustomTsByPath.get(existingF.path) || '2026-11-06T22:55:00.000Z',
+                      color: existingF.color,
+                      icon: existingF.icon,
+                      favorite: existingF.favorite,
+                      deleted: false,
                     });
                   }
                 }
@@ -41996,50 +46171,62 @@ export default function App() {
                   if (!prev) {
                     dedupMap.set(k, { ...item, name: k });
                   } else {
-                    dedupMap.set(k, {
-                      ...prev,
-                      ...item,
-                      name: k,
-                      color: item.color || prev.color,
-                      icon: item.icon || prev.icon,
-                      favorite: item.favorite ?? prev.favorite,
+                    dedupMap.set(k, mergeSingleFolderEntry(k, prev, { ...item, name: k }, true));
+                  }
+                }
+                const finalFoldersList = Array.from(dedupMap.values());
+                commitUserFoldersChange(finalFoldersList);
+
+                // Also embed folder styling directly inside the notebooks in this folder hierarchy and sync them!
+                const styleEntry = {
+                  color: nextColor ?? folderMap.get(normOrig)?.color,
+                  icon: nextIcon ?? folderMap.get(normOrig)?.icon,
+                  favorite: nextFav !== undefined ? nextFav : folderMap.get(normOrig)?.favorite,
+                  updatedAt: nowIso,
+                };
+                const movedNbs: Notebook[] = [];
+                for (const nb of notebooks) {
+                  const nbF = normalizeFolderPath(nb.folder || '');
+                  if (nbF === normOrig || nbF === newFullPath) {
+                    userEditedInSessionRef.current.add(nb.id);
+                    const nextStyles = { ...(nb.folderStyles || {}), [newFullPath]: styleEntry };
+                    if (normOrig !== newFullPath) delete nextStyles[normOrig];
+                    movedNbs.push({
+                      ...nb,
+                      folder: newFullPath,
+                      folderStyles: nextStyles,
+                      updatedAt: nowIso,
+                    });
+                  } else if (nbF.startsWith(`${normOrig}/`) || nbF.startsWith(`${newFullPath}/`)) {
+                    userEditedInSessionRef.current.add(nb.id);
+                    const targetNbFolder = nbF.startsWith(`${normOrig}/`)
+                      ? `${newFullPath}${nbF.slice(normOrig.length)}`
+                      : nbF;
+                    const nextStyles = { ...(nb.folderStyles || {}), [newFullPath]: styleEntry };
+                    if (normOrig !== newFullPath) delete nextStyles[normOrig];
+                    movedNbs.push({
+                      ...nb,
+                      folder: targetNbFolder,
+                      folderStyles: nextStyles,
+                      updatedAt: nowIso,
                     });
                   }
                 }
-                commitUserFoldersChange(Array.from(dedupMap.values()));
-
-                if (normOrig !== newFullPath) {
-                  const movedNbs: Notebook[] = [];
-                  for (const nb of notebooks) {
-                    const nbF = normalizeFolderPath(nb.folder || '');
-                    if (nbF === normOrig) {
-                      userEditedInSessionRef.current.add(nb.id);
-                      movedNbs.push({ ...nb, folder: newFullPath, updatedAt: nowIso });
-                    } else if (nbF.startsWith(`${normOrig}/`)) {
-                      userEditedInSessionRef.current.add(nb.id);
-                      movedNbs.push({
-                        ...nb,
-                        folder: `${newFullPath}${nbF.slice(normOrig.length)}`,
-                        updatedAt: nowIso,
-                      });
+                if (movedNbs.length > 0) {
+                  const movedById = new Map(movedNbs.map((m) => [m.id, m]));
+                  setNotebooks((prev) => prev.map((nb) => movedById.get(nb.id) || nb));
+                  if (currentUser) {
+                    for (const movedNb of movedNbs) {
+                      pushNotebookToCloudTracked(currentUser.uid, movedNb);
                     }
                   }
-                  if (movedNbs.length > 0) {
-                    const movedById = new Map(movedNbs.map((m) => [m.id, m]));
-                    setNotebooks((prev) => prev.map((nb) => movedById.get(nb.id) || nb));
-                    if (currentUser) {
-                      for (const movedNb of movedNbs) {
-                        pushNotebookToCloudTracked(currentUser.uid, movedNb);
-                      }
-                    }
-                  }
-                  if (activeLibraryFolder) {
-                    const normActive = normalizeFolderPath(activeLibraryFolder);
-                    if (normActive === normOrig) {
-                      setActiveLibraryFolder(newFullPath);
-                    } else if (normActive.startsWith(`${normOrig}/`)) {
-                      setActiveLibraryFolder(`${newFullPath}${normActive.slice(normOrig.length)}`);
-                    }
+                }
+                if (normOrig !== newFullPath && activeLibraryFolder) {
+                  const normActive = normalizeFolderPath(activeLibraryFolder);
+                  if (normActive === normOrig) {
+                    setActiveLibraryFolder(newFullPath);
+                  } else if (normActive.startsWith(`${normOrig}/`)) {
+                    setActiveLibraryFolder(`${newFullPath}${normActive.slice(normOrig.length)}`);
                   }
                 }
 
@@ -42125,14 +46312,28 @@ export default function App() {
 
               const confirmDeleteNotebook = (nb: Notebook) => {
                 setPendingDeleteNotebook(null);
+                const nextLocalBin = [
+                  nb,
+                  ...localDeletedNotebooksRef.current.filter((d) => d.id !== nb.id),
+                ];
+                localDeletedNotebooksRef.current = nextLocalBin;
+                setDeletedCloudNotebooks((prev) => [
+                  nb,
+                  ...prev.filter((d) => d.id !== nb.id),
+                ]);
                 if (currentUser) {
+                  void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextLocalBin);
                   lastSyncedJsonMapRef.current.delete(nb.id);
+                  const softDeleteJson = serializeNotebookForFirestore(nb);
                   void setDoc(
                     doc(db, 'users', currentUser.uid, 'notebooks', nb.id),
                     {
                       id: nb.id,
                       title: (nb.title || 'Σημείωση').slice(0, 900),
                       updatedAt: new Date().toISOString(),
+                      ...(softDeleteJson.length <= FIRESTORE_CHUNK_SIZE
+                        ? { dataJson: softDeleteJson, chunkCount: 0 }
+                        : {}),
                       deleted: true,
                       deviceId: deviceIdRef.current,
                     },
@@ -42148,15 +46349,19 @@ export default function App() {
                   setViewMode('library');
                 } else {
                   setNotebooks(remaining);
-                  const nextOpen = openNotebookIds.filter((id) => id !== nb.id);
-                  const finalOpen = nextOpen.length > 0 ? nextOpen : [remaining[0].id];
-                  setOpenNotebookIds(finalOpen);
+                  const nextOpen = openNotebookIds.filter(
+                    (id) => id !== nb.id && remaining.some((n) => n.id === id)
+                  );
+                  setOpenNotebookIds(nextOpen);
                   if (activeNotebookId === nb.id) {
-                    setActiveNotebookId(finalOpen[0]);
+                    setActiveNotebookId(nextOpen[0] || '');
                     setActivePageIndex(0);
+                    if (nextOpen.length === 0) {
+                      setViewMode('library');
+                    }
                   }
                 }
-                showToast(`🗑️ Διαγράφηκε η σημείωση "${nb.title}".`);
+                showToast(`🗑️ Μεταφέρθηκε στον Κάδο η σημείωση "${nb.title}".`);
               };
 
               const deleteFolderByName = (folderPathToDelete: string) => {
@@ -42165,10 +46370,18 @@ export default function App() {
                   ? normTarget.split('/').slice(0, -1).join('/')
                   : '';
                 const nowIso = new Date().toISOString();
-                const nextCustom = customFolders.filter((f) => {
+                // Mark deleted folders with a tombstone (deleted: true + fresh updatedAt) so multi-device union merges never resurrect them
+                const existingNames = new Set(customFolders.map((f) => normalizeFolderPath(f.name)));
+                const nextCustom: CustomFolderMeta[] = customFolders.map((f) => {
                   const nf = normalizeFolderPath(f.name);
-                  return nf !== normTarget && !nf.startsWith(`${normTarget}/`);
+                  if (nf === normTarget || nf.startsWith(`${normTarget}/`)) {
+                    return { ...f, deleted: true, updatedAt: nowIso };
+                  }
+                  return f;
                 });
+                if (!existingNames.has(normTarget)) {
+                  nextCustom.push({ name: normTarget, deleted: true, updatedAt: nowIso });
+                }
                 commitUserFoldersChange(nextCustom);
                 // Move any notebooks inside this folder (or its subfolders) to its parent folder so no user work is lost
                 const movedNbs: Notebook[] = [];
@@ -42201,7 +46414,7 @@ export default function App() {
               const handleCreateNewFolder = () => {
                 const rawInput =
                   newFolderNameInput.trim().replace(/^\/+|\/+$/g, '') ||
-                  `Νέος Φάκελος ${customFolders.length + 1}`;
+                  `Νέος Φάκελος ${customFolders.filter((f) => !f.deleted).length + 1}`;
                 const subNames = rawInput
                   .split(',')
                   .map((s) => normalizeFolderPath(s))
@@ -42212,7 +46425,7 @@ export default function App() {
                   currentFolderPath ? `${currentFolderPath}/${n}` : n
                 );
                 const nextCustom = [
-                  ...createdPaths.map((p) => ({ name: p, updatedAt: nowIso })),
+                  ...createdPaths.map((p) => ({ name: p, deleted: false, updatedAt: nowIso })),
                   ...customFolders.filter(
                     (f) => !createdPaths.includes(normalizeFolderPath(f.name))
                   ),
@@ -42424,9 +46637,11 @@ export default function App() {
                           <button
                             onClick={() => {
                               const toPurge = [...deletedCloudNotebooks];
+                              localDeletedNotebooksRef.current = [];
                               setDeletedCloudNotebooks([]);
                               setShowRecycleBinBar(false);
                               if (currentUser) {
+                                void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, []);
                                 for (const item of toPurge) {
                                   void setDoc(
                                     doc(db, 'users', currentUser.uid, 'notebooks', item.id),
@@ -42473,7 +46688,12 @@ export default function App() {
                             <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => {
+                                  const nextBin = localDeletedNotebooksRef.current.filter(
+                                    (n) => n.id !== delNb.id
+                                  );
+                                  localDeletedNotebooksRef.current = nextBin;
                                   if (currentUser) {
+                                    void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
                                     void setDoc(
                                       doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
                                       {
@@ -42502,7 +46722,12 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => {
+                                  const nextBin = localDeletedNotebooksRef.current.filter(
+                                    (n) => n.id !== delNb.id
+                                  );
+                                  localDeletedNotebooksRef.current = nextBin;
                                   if (currentUser) {
+                                    void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
                                     void setDoc(
                                       doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
                                       {
@@ -43000,7 +47225,8 @@ export default function App() {
                             const pW = getPageLogicalWidth(p0);
                             const pH = getPageLogicalHeight(p0);
                             const isLandscapeNb = pW > pH;
-                            const hasDocBg = Boolean(p0?.backgroundDataUrl);
+                            const p0BgUrl = resolvePageBackgroundUrl(nb.id, p0, 'thumb');
+                            const hasDocBg = Boolean(p0BgUrl || p0?.pdfPageNumber);
                             const isDraggingThisNb = draggingLibraryNbId === nb.id;
                             const nbBytes = getNotebookSizeBytes(nb);
                             const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
@@ -43019,9 +47245,9 @@ export default function App() {
 
                             const renderPageSvgContent = () => (
                               <>
-                                {p0?.backgroundDataUrl && (
+                                {p0BgUrl && (
                                   <img
-                                    src={p0.backgroundDataUrl}
+                                    src={p0BgUrl}
                                     alt={nb.title}
                                     draggable={false}
                                     className="absolute inset-0 w-full h-full object-cover pointer-events-none pl-3"
@@ -43176,7 +47402,11 @@ export default function App() {
                                             : 'Πάτα για μετακίνηση σε Φάκελο'
                                         }
                                       >
-                                        {nb.folder
+                                        {nb.sourceFormat === '.pdf'
+                                          ? '.pdf'
+                                          : nb.sourceFormat === '.image'
+                                          ? '.jpg / .png'
+                                          : nb.folder
                                           ? nb.folder.includes('/')
                                             ? nb.folder.split('/').slice(-1)[0]
                                             : nb.folder
@@ -44323,10 +48553,10 @@ export default function App() {
               */}
             </div>
 
-            {/* Center: Goodnotes 6 Iconic Pill Toolbar */}
+      {/* Center: Goodnotes 6 Iconic Pill Toolbar (Lightweight Reader & Highlighter Mode when isLightweightDocMode is true) */}
             <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-xs border border-slate-200/90">
               {[
-                { id: 'pen', title: 'Pen (Μολύβι / Στυλό) — P / Π', icon: Pen },
+                { id: 'pen', title: 'Pen (Μολύβι / Στυλό + Αυτόματο Πλαίσιο/Κύκλος με κράτημα) — P / Π', icon: Pen },
                 { id: 'eraser', title: 'Erase (Σβήστρα) — E / Ε', icon: Eraser },
                 { id: 'highlighter', title: 'Highlight (Υπογραμμιστής) — H / Η', icon: Highlighter },
                 { id: 'shape', title: 'Objects (Σχήματα) — O / Ο', icon: Shapes },
@@ -44337,7 +48567,13 @@ export default function App() {
                 { id: 'align-objects', title: 'Justification / Κεντράρισμα & Στοίχιση Αντικειμένων — J / Ξ', icon: AlignObjectsIcon },
                 { id: 'tape', title: 'Tape (Ταινία Απόκρυψης)', icon: Bandage },
                 { id: 'laser', title: 'Laser (Κόκκινο Laser) — L / Λ', icon: Radio },
-              ].map((tool) => {
+              ]
+                .filter((tool) =>
+                  isLightweightDocMode
+                    ? ['pen', 'highlighter', 'eraser', 'rect-lasso', 'lasso', 'laser'].includes(tool.id)
+                    : true
+                )
+                .map((tool) => {
                 const Icon = tool.icon;
                 const isActive =
                   tool.id === 'align-objects'
@@ -44372,14 +48608,21 @@ export default function App() {
                         setLassoMode(targetMode);
                         setActiveTool('lasso');
                         setShowToolSubBar(true);
-                        setSelectedTextId(null);
-                        setEditingTextId(null);
+                        if (!selectedTextId && !editingTextId) {
+                          setSelectedTextId(null);
+                          setEditingTextId(null);
+                        }
                         setImageCropMode('none');
                         return;
                       }
                       setShowAlignSubBar(false);
                       if (tool.id === 'pen') {
                         setFillStyle('none');
+                        if (activeTool !== 'pen') {
+                          setActiveWidthSlotIdx(lastPenWidthRef.current.slotIdx);
+                          setStrokeWidth(lastPenWidthRef.current.width);
+                        }
+                      } else if (tool.id === 'shape') {
                         let minIdx = 0;
                         for (let i = 1; i < widthSlots.length; i++) {
                           if (widthSlots[i] < widthSlots[minIdx]) minIdx = i;
@@ -44412,29 +48655,54 @@ export default function App() {
                           setSelectedImageId(null);
                         }
                         if (tool.id !== 'text') {
+                          setEditingCaretRange(null);
                           setSelectedTextId(null);
                           setEditingTextId(null);
-                        } else if (!editingTextId) {
-                          const pW = getPageLogicalWidth(activePage);
-                          const pH = getPageLogicalHeight(activePage);
-                          const newTxt: TextObject = {
-                            id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                            x: Math.round(pW * 0.25),
-                            y: Math.round(Math.min(pH * 0.25, 220)),
-                            text: '',
-                            color: strokeColor,
-                            fontSize: textFontSize,
-                            bold: textBold,
-                            fontFamily: textFontFamily,
-                            layerId: activeLayerId,
-                          };
-                          lastTextCreatedTimeRef.current = performance.now();
-                          updateActivePage((page) => ({
-                            ...page,
-                            texts: [...(page.texts || []), newTxt],
-                          }));
-                          setSelectedTextId(newTxt.id);
-                          setEditingTextId(newTxt.id);
+                        } else {
+                          const existingTxtId =
+                            editingTextId ||
+                            selectedTextId ||
+                            (selectedLassoTextIds.length > 0 ? selectedLassoTextIds[0] : null);
+                          const existingTxtObj = existingTxtId
+                            ? (activePage.texts || []).find((t) => t.id === existingTxtId)
+                            : undefined;
+                          if (existingTxtObj) {
+                            const txtLen = (existingTxtObj.text || '').length;
+                            const savedRng = activeTextRangeRef.current;
+                            const caretStart =
+                              savedRng && savedRng.textId === existingTxtObj.id
+                                ? Math.max(0, Math.min(txtLen, savedRng.start))
+                                : txtLen;
+                            const caretEnd =
+                              savedRng &&
+                              savedRng.textId === existingTxtObj.id &&
+                              savedRng.end > savedRng.start
+                                ? Math.max(caretStart, Math.min(txtLen, savedRng.end))
+                                : caretStart;
+                            focusAndPlaceCaretInTextBox(existingTxtObj.id, caretStart, caretEnd);
+                          } else {
+                            const pW = getPageLogicalWidth(activePage);
+                            const pH = getPageLogicalHeight(activePage);
+                            const newTxt: TextObject = {
+                              id: `txt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              x: Math.round(pW * 0.25),
+                              y: Math.round(Math.min(pH * 0.25, 220)),
+                              text: '',
+                              color: strokeColor,
+                              fontSize: textFontSize,
+                              bold: textBold,
+                              fontFamily: textFontFamily,
+                              layerId: activeLayerId,
+                            };
+                            lastTextCreatedTimeRef.current = performance.now();
+                            updateActivePage((page) => ({
+                              ...page,
+                              texts: [...(page.texts || []), newTxt],
+                            }));
+                            setEditingCaretRange({ textId: newTxt.id, start: 0, end: 0 });
+                            setSelectedTextId(newTxt.id);
+                            setEditingTextId(newTxt.id);
+                          }
                         }
                       }
                       setImageCropMode('none');
@@ -44457,193 +48725,215 @@ export default function App() {
 
               <div className="h-5 w-px bg-slate-200 mx-0.5" />
 
-              {/* Upload Photo / PDF / .goodnotes from Device + Direct 1-Click Paste + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
-              <button
-                onClick={() => fileInputImageRef.current?.click()}
-                className="p-2 rounded-full text-sky-600 hover:bg-sky-50 transition cursor-pointer"
-                title="Εισαγωγή Εικόνας, PDF ή .goodnotes"
-              >
-                <Upload className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={handlePaste}
-                className="p-2 rounded-full text-[#0066ff] hover:bg-sky-50 transition cursor-pointer"
-                title="Άμεση Επικόλληση (Paste — Ctrl+V / Cmd+V) εικόνας, κειμένου ή αντικειμένου"
-              >
-                <ClipboardPaste className="w-4 h-4" />
-              </button>
-
-              <button
-                data-popover-trigger="library"
-                onClick={() => {
-                  setShowShapeLibraryPanel((v) => !v);
-                  setShowWidthPopover(false);
-                  setShowColorPopover(false);
-                }}
-                className={`relative p-2 rounded-full transition cursor-pointer ${
-                  showShapeLibraryPanel
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-emerald-600 hover:bg-emerald-50'
-                }`}
-                title="Συλλογή Εικόνων & Σχημάτων"
-              >
-                <ImageIcon className="w-4 h-4" />
-                {shapeLibrary.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center border border-white">
-                    {shapeLibrary.length}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => {
-                  const targetPageObj =
-                    activeNotebook.pages[activePageIndex] || activePage;
-                  const targetPid = targetPageObj.id;
-                  const existingForPage = rulersByPageId[targetPid];
-                  const pH = getPageLogicalHeight(targetPageObj);
-                  const pageTopY = getPageTopOffset(activePageIndex);
-                  const wsH = workspaceRef.current?.clientHeight || 820;
-                  const viewCenterDocY = (-panRef.current.y + wsH * 0.5) / zoomRef.current;
-                  const localCenterY = Math.max(
-                    120,
-                    Math.min(pH - 120, Math.round(viewCenterDocY - pageTopY))
-                  );
-                  setRulerState(
-                    (r) => ({
-                      ...r,
-                      visible: !r.visible,
-                      y: !r.visible && !existingForPage ? localCenterY : r.y,
-                      angle: !r.visible ? 90 : r.angle,
-                      showMm: !r.visible ? true : r.showMm,
-                    }),
-                    targetPid
-                  );
-                }}
-                className={`p-2 rounded-full transition cursor-pointer ${
-                  rulerState.visible ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                title="Χάρακας (Ruler) — Εμφάνιση/Απόκρυψη στην τρέχουσα σελίδα"
-              >
-                <Ruler className="w-4 h-4" />
-              </button>
-
-              <button
-                data-popover-trigger="math"
-                onClick={() => setShowMathModal((v) => !v)}
-                className="p-2 rounded-full text-purple-600 hover:bg-purple-50 transition cursor-pointer"
-                title="LaTeX & Επίλυση Εξίσωσης (CAS)"
-              >
-                <Calculator className="w-4 h-4" />
-              </button>
-
-              <button
-                data-popover-trigger="layers"
-                onClick={() => {
-                  setShowLayersPanel((v) => !v);
-                  setShowShapeLibraryPanel(false);
-                  setShowWidthPopover(false);
-                  setShowColorPopover(false);
-                }}
-                className={`p-2 rounded-full transition cursor-pointer ${
-                  showLayersPanel ? 'bg-[#1b2a4a] text-white' : 'text-slate-700 hover:bg-slate-100'
-                }`}
-                title="Layers (Επίπεδα με 🔒 Κλείδωμα & 👁️ Απόκρυψη)"
-              >
-                <Layers className="w-4 h-4" />
-              </button>
-
-              {/* Simulation Mode Button (Gear with Play Icon inside) right next to Layers! */}
-              <button
-                data-popover-trigger="simulation"
-                onClick={() => {
-                  setShowShapeLibraryPanel(false);
-                  setShowWidthPopover(false);
-                  setShowColorPopover(false);
-
-                  if (selectedStrokeIds.length > 0) {
-                    const hasSpringSelected = activePage.strokes.some(
-                      (s) => selectedStrokeIds.includes(s.id) && s.shapeType === 'spring'
-                    );
-                    if (hasSpringSelected) {
-                      registerOrActivateSpringSimFromLasso();
-                      return;
-                    }
-                    const hasCircuitCompSelected = activePage.strokes.some(
-                      (s) =>
-                        selectedStrokeIds.includes(s.id) &&
-                        (s.shapeType === 'battery' ||
-                          s.shapeType === 'voltage-source' ||
-                          s.shapeType === 'bulb' ||
-                          s.shapeType === 'bulb-symbol' ||
-                          s.shapeType === 'resistor' ||
-                          s.shapeType === 'switch' ||
-                          s.shapeType === 'fan')
-                    );
-                    if (!hasCircuitCompSelected && registerOrActivateForceSimFromLasso()) {
-                      return;
-                    }
-                    const ok = registerOrActivateSimFromLasso();
-                    if (!ok && registerOrActivateForceSimFromLasso()) {
-                      return;
-                    }
-                    setSelectedStrokeIds([]);
-                    setSelectedImageId(null);
-                    setSelectedImageIds([]);
-                    setActiveNodeStrokeId(null);
-                    if (ok) {
-                      setSimActiveCategory('circuits');
-                    } else {
-                      setShowSimulationPanel(true);
-                    }
-                    return;
-                  }
-
-                  setSelectedStrokeIds([]);
-                  setSelectedImageId(null);
-                  setSelectedImageIds([]);
-                  setActiveNodeStrokeId(null);
-
-                  setShowSimulationPanel((v) => {
-                    const next = !v;
-                    setSimActiveCategory(null);
-                    return next;
-                  });
-                }}
-                className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
-                  (showSimulationPanel && simActiveCategory !== null) ||
-                  (isSimulating && getValidCircuitSims(activePage).length > 0) ||
-                  (isSpringSimulating && getValidSpringSims(activePage).length > 0)
-                    ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
-                    : showSimulationPanel
-                    ? 'bg-slate-200 text-slate-700 border border-slate-300'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/90'
-                }`}
-                title="Προσομοίωση Φυσικής: Κυκλώματα & Ελατήρια (⚙️▶️)"
-              >
-                <svg
-                  className="w-4 h-4 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {isLightweightDocMode ? (
+                <span
+                  className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold whitespace-nowrap select-none"
+                  title="Ενεργός Κόφτης για PDF / Εικόνες: Γρήγορη ανάγνωση, υπογράμμιση και αυτόματο πλαίσιο/κύκλος"
                 >
-                  <circle cx="12" cy="12" r="8.2" strokeDasharray="3.2 2.0" />
-                  <polygon
-                    points="10,8.5 16,12 10,15.5"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                </svg>
-                <span className="hidden sm:inline">Sim</span>
-                {((isSimulating && getValidCircuitSims(activePage).length > 0) ||
-                  (isSpringSimulating && getValidSpringSims(activePage).length > 0)) && (
-                  <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
-                )}
-              </button>
+                  📖 Απλή Ανάγνωση & Υπογράμμιση
+                </span>
+              ) : (
+                <>
+                  {/* Upload Photo / PDF / .goodnotes from Device + Direct 1-Click Paste + Sample Physics Image + Ruler + Math/LaTeX + Layers */}
+                  <button
+                    onClick={() => fileInputImageRef.current?.click()}
+                    className="p-2 rounded-full text-sky-600 hover:bg-sky-50 transition cursor-pointer"
+                    title="Εισαγωγή Εικόνας, PDF ή .goodnotes"
+                  >
+                    <Upload className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={handlePaste}
+                    className="p-2 rounded-full text-[#0066ff] hover:bg-sky-50 transition cursor-pointer"
+                    title="Άμεση Επικόλληση (Paste — Ctrl+V / Cmd+V) εικόνας, κειμένου ή αντικειμένου"
+                  >
+                    <ClipboardPaste className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    data-popover-trigger="library"
+                    onClick={() => {
+                      setShowShapeLibraryPanel((v) => !v);
+                      setShowWidthPopover(false);
+                      setShowColorPopover(false);
+                    }}
+                    className={`relative p-2 rounded-full transition cursor-pointer ${
+                      showShapeLibraryPanel
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-emerald-600 hover:bg-emerald-50'
+                    }`}
+                    title="Συλλογή Εικόνων & Σχημάτων"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    {shapeLibrary.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center border border-white">
+                        {shapeLibrary.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const targetPageObj =
+                        activeNotebook.pages[activePageIndex] || activePage;
+                      const targetPid = targetPageObj.id;
+                      const existingForPage = rulersByPageId[targetPid] || targetPageObj.ruler;
+                      const pH = getPageLogicalHeight(targetPageObj);
+                      const pageTopY = getPageTopOffset(activePageIndex);
+                      const wsH = workspaceRef.current?.clientHeight || 820;
+                      const viewCenterDocY = (-panRef.current.y + wsH * 0.5) / zoomRef.current;
+                      const localCenterY = Math.max(
+                        120,
+                        Math.min(pH - 120, Math.round(viewCenterDocY - pageTopY))
+                      );
+                      setRulerState(
+                        (r) => ({
+                          ...r,
+                          visible: !r.visible,
+                          y: !r.visible && !existingForPage ? localCenterY : r.y,
+                          angle: !r.visible ? 90 : r.angle,
+                          showMm: !r.visible ? true : r.showMm,
+                        }),
+                        targetPid
+                      );
+                    }}
+                    className={`p-2 rounded-full transition cursor-pointer ${
+                      rulerState.visible ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    title="Χάρακας (Ruler) — Εμφάνιση/Απόκρυψη στην τρέχουσα σελίδα"
+                  >
+                    <Ruler className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    data-popover-trigger="math"
+                    onClick={() => setShowMathModal((v) => !v)}
+                    className="p-2 rounded-full text-purple-600 hover:bg-purple-50 transition cursor-pointer"
+                    title="LaTeX & Επίλυση Εξίσωσης (CAS)"
+                  >
+                    <Calculator className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    data-popover-trigger="layers"
+                    onClick={() => {
+                      setShowLayersPanel((v) => !v);
+                      setShowShapeLibraryPanel(false);
+                      setShowWidthPopover(false);
+                      setShowColorPopover(false);
+                    }}
+                    className={`p-2 rounded-full transition cursor-pointer ${
+                      showLayersPanel ? 'bg-[#1b2a4a] text-white' : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title="Layers (Επίπεδα με 🔒 Κλείδωμα & 👁️ Απόκρυψη)"
+                  >
+                    <Layers className="w-4 h-4" />
+                  </button>
+
+                  {/* Simulation Mode Button (Gear with Play Icon inside) right next to Layers! */}
+                  <button
+                    data-popover-trigger="simulation"
+                    onClick={() => {
+                      setShowShapeLibraryPanel(false);
+                      setShowWidthPopover(false);
+                      setShowColorPopover(false);
+
+                      if (selectedStrokeIds.length > 0) {
+                        const hasSpringSelected = activePage.strokes.some(
+                          (s) => selectedStrokeIds.includes(s.id) && s.shapeType === 'spring'
+                        );
+                        if (hasSpringSelected) {
+                          registerOrActivateSpringSimFromLasso();
+                          return;
+                        }
+                        const hasCircuitCompSelected = activePage.strokes.some(
+                          (s) =>
+                            selectedStrokeIds.includes(s.id) &&
+                            (s.shapeType === 'battery' ||
+                              s.shapeType === 'voltage-source' ||
+                              s.shapeType === 'bulb' ||
+                              s.shapeType === 'bulb-symbol' ||
+                              s.shapeType === 'resistor' ||
+                              s.shapeType === 'switch' ||
+                              s.shapeType === 'fan')
+                        );
+                        const hasDedicatedForceShapeSelected = activePage.strokes.some(
+                          (s) =>
+                            selectedStrokeIds.includes(s.id) &&
+                            (s.shapeType === 'spring-pointer' ||
+                              s.shapeType === 'incline-wedge' ||
+                              s.shapeType === 'inclined-plane')
+                        );
+                        if (
+                          !hasCircuitCompSelected &&
+                          hasDedicatedForceShapeSelected &&
+                          registerOrActivateForceSimFromLasso()
+                        ) {
+                          return;
+                        }
+                        const ok = registerOrActivateSimFromLasso();
+                        if (!ok && hasDedicatedForceShapeSelected && registerOrActivateForceSimFromLasso()) {
+                          return;
+                        }
+                        setSelectedStrokeIds([]);
+                        setSelectedImageId(null);
+                        setSelectedImageIds([]);
+                        setActiveNodeStrokeId(null);
+                        if (ok) {
+                          setSimActiveCategory('circuits');
+                        } else {
+                          setShowSimulationPanel(true);
+                        }
+                        return;
+                      }
+
+                      setSelectedStrokeIds([]);
+                      setSelectedImageId(null);
+                      setSelectedImageIds([]);
+                      setActiveNodeStrokeId(null);
+
+                      setShowSimulationPanel((v) => {
+                        const next = !v;
+                        setSimActiveCategory(null);
+                        return next;
+                      });
+                    }}
+                    className={`relative flex items-center gap-1 px-2.5 py-1.5 rounded-full font-bold text-[11px] transition cursor-pointer ${
+                      (showSimulationPanel && simActiveCategory !== null) ||
+                      (isSimulating && getValidCircuitSims(activePage).length > 0) ||
+                      (isSpringSimulating && getValidSpringSims(activePage).length > 0)
+                        ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+                        : showSimulationPanel
+                        ? 'bg-slate-200 text-slate-700 border border-slate-300'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200/90'
+                    }`}
+                    title="Προσομοίωση Φυσικής: Κυκλώματα & Ελατήρια (⚙️▶️)"
+                  >
+                    <svg
+                      className="w-4 h-4 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="8.2" strokeDasharray="3.2 2.0" />
+                      <polygon
+                        points="10,8.5 16,12 10,15.5"
+                        fill="currentColor"
+                        stroke="none"
+                      />
+                    </svg>
+                    <span className="hidden sm:inline">Sim</span>
+                    {((isSimulating && getValidCircuitSims(activePage).length > 0) ||
+                      (isSpringSimulating && getValidSpringSims(activePage).length > 0)) && (
+                      <span className="w-2 h-2 rounded-full bg-lime-300 animate-ping" />
+                    )}
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Right: Authentic Goodnotes 6 Contextual 3 Stroke Slots (with 12-Step Popover!) + 3 Color Slots */}
@@ -46254,13 +50544,39 @@ export default function App() {
                               <span>Ungroup</span>
                             </button>
                           ) : null}
+                          {selTxts.length > 0 && (selStrokes.length > 0 || selImgs.length > 0) && (
+                            <button
+                              onClick={() => {
+                                setSelectedStrokeIds([]);
+                                setSelectedImageIds([]);
+                                setSelectedImageId(null);
+                                setActiveNodeStrokeId(null);
+                                setShowToolSubBar(true);
+                                if (selTxts.length === 1) {
+                                  setSelectedLassoTextIds([]);
+                                  const singleTxt = selTxts[0];
+                                  const txtLen = (singleTxt.text || '').length;
+                                  focusAndPlaceCaretInTextBox(singleTxt.id, txtLen, txtLen);
+                                } else {
+                                  setSelectedLassoTextIds(selTxts.map((t) => t.id));
+                                  const firstTxt = selTxts[0];
+                                  const txtLen = (firstTxt.text || '').length;
+                                  focusAndPlaceCaretInTextBox(firstTxt.id, txtLen, txtLen);
+                                }
+                              }}
+                              className="flex items-center px-2 py-1 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-normal cursor-pointer whitespace-nowrap shadow-2xs"
+                              title="Διατήρηση μόνο των επιλεγμένων κειμένων για επεξεργασία"
+                            >
+                              <span>Κείμενο μόνο</span>
+                            </button>
+                          )}
                           {totalSelCount >= 2 && (
                             <button
                               onClick={() => handleAlignSelected('center-both')}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal cursor-pointer whitespace-nowrap shadow-2xs"
+                              className="flex items-center px-2 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-normal cursor-pointer whitespace-nowrap shadow-2xs"
                               title="Απόλυτο Κεντράρισμα Κειμένου & Σχήματος (Dead Center X + Y — J / Ξ)"
                             >
-                              <span>🎯 Κέντραρε</span>
+                              <span>Κέντραρε</span>
                             </button>
                           )}
                         </>
@@ -46577,8 +50893,67 @@ export default function App() {
              ========================================================================= */}
           <div
             ref={workspaceRef}
-            className="relative flex-1 overflow-hidden bg-[#f1f3f6] flex justify-center items-start py-6 px-2 sm:px-4 touch-none"
+            onClick={() => {
+              if (isTvReceiverMode && !isBrowserFullscreen) {
+                const docEl = document.documentElement as any;
+                if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
+                else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+              }
+            }}
+            className={`relative flex-1 overflow-hidden bg-[#f1f3f6] flex justify-center items-start ${
+              isCleanProjectorMode ? 'py-0' : 'py-2'
+            } px-0 touch-none`}
           >
+            {isTvReceiverMode && !isBrowserFullscreen && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const docEl = document.documentElement as any;
+                  if (docEl.requestFullscreen) void docEl.requestFullscreen().catch(() => {});
+                  else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+                }}
+                className="fixed top-3 right-3 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-bold shadow-lg cursor-pointer"
+              >
+                <span>⛶ Πλήρης Οθόνη 16:9 (Απόκρυψη μπαρών Chrome)</span>
+              </button>
+            )}
+            {isTvReceiverMode && (
+              <div className="fixed bottom-2 left-2 z-50 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900/60 text-white text-[10px] font-medium opacity-20 hover:opacity-95 transition">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    liveTvRxMode === 'webrtc'
+                      ? 'bg-emerald-400'
+                      : liveTvRxMode === 'cloud'
+                      ? 'bg-sky-400'
+                      : 'bg-amber-400 animate-pulse'
+                  }`}
+                />
+                <span>
+                  {liveTvRxMode === 'webrtc'
+                    ? '16:9 P2P Live'
+                    : liveTvRxMode === 'cloud'
+                    ? '16:9 Cloud Live'
+                    : 'Σύνδεση...'}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (document.fullscreenElement && document.exitFullscreen) {
+                      void document.exitFullscreen().catch(() => {});
+                    }
+                    isTvReceiverModeRef.current = false;
+                    setIsTvReceiverMode(false);
+                    setIsCleanProjectorMode(false);
+                    setViewMode(currentUser ? 'editor' : 'landing');
+                  }}
+                  className="ml-1 px-1.5 py-0.5 rounded bg-white/15 hover:bg-white/30 text-[9.5px] cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             {statusBanner && (
               <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1b2a4a] text-white text-xs font-medium shadow-xl">
                 {statusBanner}
@@ -47969,10 +52344,7 @@ export default function App() {
                   className="flex items-center justify-between pb-1.5 border-b border-slate-100 cursor-grab active:cursor-grabbing"
                   title="Σύρε από εδώ για μετακίνηση του παραθύρου Προσομοίωσης"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
-                      ⚡
-                    </span>
+                  <div className="flex items-center gap-1.5">
                     <span className="text-xs font-extrabold text-[#1b2a4a]">
                       Προσομοίωση
                     </span>
@@ -48053,13 +52425,12 @@ export default function App() {
                         }
                       }
                     }}
-                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'circuits'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                     }`}
                   >
-                    <span>⚡</span>
                     <span>Κυκλώματα</span>
                   </button>
                   <button
@@ -48067,13 +52438,12 @@ export default function App() {
                     onClick={() =>
                       setSimActiveCategory((prev) => (prev === 'springs' ? null : 'springs'))
                     }
-                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'springs'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                     }`}
                   >
-                    <span>🌀</span>
                     <span>Ελατήρια</span>
                   </button>
                   <button
@@ -48085,13 +52455,12 @@ export default function App() {
                         registerOrActivateForceSimFromLasso();
                       }
                     }}
-                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'forces'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                     }`}
                   >
-                    <span>🎯</span>
                     <span>Δυνάμεις</span>
                   </button>
                   <button
@@ -48103,13 +52472,12 @@ export default function App() {
                         registerOrActivateAtomSimFromLasso();
                       }
                     }}
-                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center gap-1 transition cursor-pointer ${
+                    className={`py-1.5 px-1 rounded-lg text-[10.5px] font-extrabold flex items-center justify-center transition cursor-pointer ${
                       simActiveCategory === 'atoms'
                         ? 'bg-[#1b2a4a] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                     }`}
                   >
-                    <span>⚛️</span>
                     <span>Άτομο</span>
                   </button>
                 </div>
@@ -48312,94 +52680,57 @@ export default function App() {
                   );
                 })()}
 
-                {/* Primary Play / Stop Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isSimulating) {
-                      if (selectedStrokeIds.length > 0) {
-                        registerOrActivateSimFromLasso();
-                        return;
-                      }
-                      const activeSim = getActiveCircuitSim(activePage);
-                      if (!activeSim) {
-                        showToast('🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!');
-                        return;
-                      }
-                      setSimCircuitSwitchClosed(false);
-                      setIsSimulating(true);
-                      updateActivePage((page) =>
-                        runScopedCircuitOperationOnPage(
-                          page,
-                          (sub) => autoAlignAndConnectCircuit(sub),
-                          activeSim.id
-                        )
-                      );
-                    } else {
-                      setIsSimulating(false);
-                    }
-                  }}
-                  className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer ${
-                    isSimulating && getActiveCircuitSim(activePage)
-                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  }`}
-                >
-                  <span>
-                    {isSimulating && getActiveCircuitSim(activePage)
-                      ? '⏹️ Διακοπή'
-                      : '▶️ Έναρξη'}
-                  </span>
-                </button>
-
-                {/* Automatic Left-Wire Switch Toggle & Wire Alignment */}
-                <div className="grid grid-cols-1 gap-1.5">
-                  {isSimulating &&
-                    (() => {
-                      const activeSim = getActiveCircuitSim(activePage);
-                      if (!activeSim) return null;
-                      const simSet = getSimExpandedStrokeSet(activePage, activeSim);
-                      const simStrokes = activePage.strokes.filter((s) => simSet.has(s.id));
-                      const hasCompleteLoop = analyzeCircuitForSimulation(
-                        simStrokes,
-                        true
-                      ).isCircuitClosed;
-                      if (!hasCompleteLoop) {
-                        return (
-                          <div className="w-full py-1.5 px-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10.5px] leading-snug text-center">
-                            ⏳ Το κύκλωμα "{activeSim.name}" είναι ανοιχτό. Κλείστε τους αγωγούς για να εμφανιστεί ο διακόπτης αριστερά.
-                          </div>
+                {/* Single-Row Controls: Small Square Play/Pause Button + Simple Grey "Ένωση" & "Ολοκλήρωση" */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isSimulating) {
+                        if (selectedStrokeIds.length > 0) {
+                          registerOrActivateSimFromLasso();
+                          return;
+                        }
+                        const activeSim = getActiveCircuitSim(activePage);
+                        if (!activeSim) {
+                          showToast('🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!');
+                          return;
+                        }
+                        setSimCircuitSwitchClosed(false);
+                        setIsSimulating(true);
+                        updateActivePage((page) =>
+                          runScopedCircuitOperationOnPage(
+                            page,
+                            (sub) => autoAlignAndConnectCircuit(sub),
+                            activeSim.id
+                          )
                         );
+                      } else {
+                        setIsSimulating(false);
                       }
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSimCircuitSwitchClosed((prev) => {
-                              const next = !prev;
-                              showToast(
-                                next
-                                  ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
-                                  : `🔴 [${activeSim.name}] Διακόπτης: Ανοιχτός`
-                              );
-                              return next;
-                            });
-                          }}
-                          className={`w-full py-1 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-1.5 border shadow-2xs transition cursor-pointer ${
-                            simCircuitSwitchClosed
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                              : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
-                          }`}
-                          title="Κάνε κλικ στον διακόπτη ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
-                        >
-                          <span>
-                            {simCircuitSwitchClosed
-                              ? '🟢 Διακόπτης: Κλειστός'
-                              : '🔴 Διακόπτης: Ανοιχτός'}
-                          </span>
-                        </button>
-                      );
-                    })()}
+                    }}
+                    className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center shadow-2xs transition cursor-pointer ${
+                      isSimulating && getActiveCircuitSim(activePage)
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                    title={
+                      isSimulating && getActiveCircuitSim(activePage)
+                        ? 'Διακοπή Προσομοίωσης'
+                        : 'Έναρξη Προσομοίωσης'
+                    }
+                  >
+                    {isSimulating && getActiveCircuitSim(activePage) ? (
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
+                        <rect x="6" y="5" width="4" height="14" rx="1" />
+                        <rect x="14" y="5" width="4" height="14" rx="1" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current ml-0.5" aria-hidden="true">
+                        <path d="M6 4.75L19.25 12 6 19.25V4.75z" />
+                      </svg>
+                    )}
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -48464,19 +52795,70 @@ export default function App() {
                       setCircuitAlignFlashStart(performance.now());
                       showToast(`📐 [${activeSim.name}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
                     }}
-                    className="w-full py-1.5 px-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 font-bold text-[10.5px] flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="flex-1 h-8 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-[11px] flex items-center justify-center transition cursor-pointer"
                     title="Ευθυγραμμίζει αυτόματα τους οριζόντιους/κάθετους αγωγούς του ενεργού κυκλώματος"
                   >
-                    <span>📐 Ένωση & Ευθυγράμμιση Αγωγών</span>
+                    <span>Ένωση</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => handleStartCircuitCompletion()}
-                    className="w-full py-1.5 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[10.5px] flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                    className="flex-1 h-8 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-[11px] flex items-center justify-center transition cursor-pointer"
                     title="Προτείνει αυτόματη ολοκλήρωση του κυκλώματος με διακεκομμένη γραμμή, διακόπτη και 4 κόμβους ρύθμισης καλωδίων"
                   >
-                    <span>✨ Ολοκλήρωση</span>
+                    <span>Ολοκλήρωση</span>
                   </button>
+                </div>
+
+                {/* Automatic Left-Wire Switch Toggle */}
+                <div className="grid grid-cols-1 gap-1.5">
+                  {isSimulating &&
+                    (() => {
+                      const activeSim = getActiveCircuitSim(activePage);
+                      if (!activeSim) return null;
+                      const simSet = getSimExpandedStrokeSet(activePage, activeSim);
+                      const simStrokes = activePage.strokes.filter((s) => simSet.has(s.id));
+                      const hasCompleteLoop = analyzeCircuitForSimulation(
+                        simStrokes,
+                        true
+                      ).isCircuitClosed;
+                      if (!hasCompleteLoop) {
+                        return (
+                          <div className="w-full py-1.5 px-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10.5px] leading-snug text-center">
+                            ⏳ Το κύκλωμα "{activeSim.name}" είναι ανοιχτό. Κλείστε τους αγωγούς για να εμφανιστεί ο διακόπτης αριστερά.
+                          </div>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSimCircuitSwitchClosed((prev) => {
+                              const next = !prev;
+                              showToast(
+                                next
+                                  ? `🟢 [${activeSim.name}] Διακόπτης: Κλειστός`
+                                  : `🔴 [${activeSim.name}] Διακόπτης: Ανοιχτός`
+                              );
+                              return next;
+                            });
+                          }}
+                          className={`w-full py-1 px-2.5 rounded-lg font-bold text-[10.5px] flex items-center justify-center gap-1.5 border shadow-2xs transition cursor-pointer ${
+                            simCircuitSwitchClosed
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                              : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                          }`}
+                          title="Κάνε κλικ στον διακόπτη ή πάτα εδώ για Άνοιγμα/Κλείσιμο"
+                        >
+                          <span>
+                            {simCircuitSwitchClosed
+                              ? '🟢 Διακόπτης: Κλειστός'
+                              : '🔴 Διακόπτης: Ανοιχτός'}
+                          </span>
+                        </button>
+                      );
+                    })()}
                   {circuitProposal && circuitProposal.pageId === activePage.id && (
                     <div className="grid grid-cols-2 gap-1.5 pt-0.5 animate-pulse">
                       <button
@@ -48503,49 +52885,43 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
-                    onClick={() => {
-                      const activeSim = getActiveCircuitSim(activePage);
-                      if (!activeSim) {
-                        showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
-                        return;
-                      }
-                      updateActivePage((page) =>
-                        runScopedCircuitOperationOnPage(
-                          page,
-                          (sub) => convertCircuitComponents(sub, undefined, 'pictorial').strokes,
-                          activeSim.id
-                        )
-                      );
-                      setSelectedStrokeIds([]);
-                      showToast(`🔋💡 [${activeSim.name}] Σχήματα: Μπαταρία, Λαμπτήρες & Φτερωτή!`);
-                    }}
-                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition"
+                    onClick={() => handleConvertActiveCircuitMode('pictorial')}
+                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
                     title="Μετατρέπει τις Πηγές σε Μπαταρίες και τους Αντιστάτες σε Λαμπτήρες/Φτερωτή στο ενεργό κύκλωμα"
                   >
-                    🔋💡 Σχήματα
+                    <svg
+                      viewBox="0 0 28 18"
+                      className="w-7 h-4.5 shrink-0 text-slate-800"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M 2 6.2 H 6.5 V 2.4 H 26 V 15.6 H 6.5 V 11.8 H 2 Z" />
+                    </svg>
+                    <span>Σχήματα</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const activeSim = getActiveCircuitSim(activePage);
-                      if (!activeSim) {
-                        showToast('🎯 Επιλέξτε πρώτα ένα κύκλωμα με το Λάσο!');
-                        return;
-                      }
-                      updateActivePage((page) =>
-                        runScopedCircuitOperationOnPage(
-                          page,
-                          (sub) => convertCircuitComponents(sub, undefined, 'schematic').strokes,
-                          activeSim.id
-                        )
-                      );
-                      setSelectedStrokeIds([]);
-                      showToast(`⚡〰️ [${activeSim.name}] Σύμβολα: Πηγή Τάσης & Αντιστάτες!`);
-                    }}
-                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition"
+                    onClick={() => handleConvertActiveCircuitMode('schematic')}
+                    className="px-2 py-2 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 text-[11px] font-extrabold text-slate-700 shadow-2xs cursor-pointer transition flex items-center justify-center gap-1.5"
                     title="Μετατρέπει τις Μπαταρίες σε Πηγές Τάσης και τους Λαμπτήρες & τη Φτερωτή σε Αντιστάτες στο ενεργό κύκλωμα"
                   >
-                    ⚡〰️ Σύμβολα
+                    <svg
+                      viewBox="0 0 28 18"
+                      className="w-7 h-4.5 shrink-0 text-slate-800"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M 1 9 H 4.2 L 6.2 2.2 L 9.4 15.8 L 12.6 2.2 L 15.8 15.8 L 19 2.2 L 22.2 15.8 L 24.2 9 H 27" />
+                    </svg>
+                    <span>Σύμβολα</span>
                   </button>
                 </div>
 
@@ -48565,37 +52941,13 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-1 pt-0.5">
                       <button
                         type="button"
-                        onClick={() => setSimParticleStyle('green-energy')}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                          simParticleStyle === 'green-energy'
-                            ? 'bg-lime-600 text-white border-lime-600'
-                            : 'bg-white text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        🟢 Πράσινη Ενέργεια
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSimParticleStyle('blue-electrons')}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                          simParticleStyle === 'blue-electrons'
-                            ? 'bg-sky-600 text-white border-sky-600'
-                            : 'bg-white text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        🔵 Μπλε Ηλεκτρόνια
-                      </button>
-                    </div>
-                  )}
-
-                  {simShowElectrons && (
-                    <div className="grid grid-cols-2 gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setSimFlowDirection('electrons')}
+                        onClick={() => {
+                          setSimFlowDirection('electrons');
+                          setSimParticleStyle('green-energy');
+                        }}
                         className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
                           simFlowDirection === 'electrons'
-                            ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                            ? 'bg-[#65a30d] text-white border-[#65a30d] shadow-xs'
                             : 'bg-white text-slate-600 border-slate-200'
                         }`}
                       >
@@ -48603,10 +52955,13 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setSimFlowDirection('conventional')}
+                        onClick={() => {
+                          setSimFlowDirection('conventional');
+                          setSimParticleStyle('blue-electrons');
+                        }}
                         className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
                           simFlowDirection === 'conventional'
-                            ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
+                            ? 'bg-[#0ea5e9] text-white border-[#0ea5e9] shadow-xs'
                             : 'bg-white text-slate-600 border-slate-200'
                         }`}
                       >
@@ -49305,51 +53660,43 @@ export default function App() {
                                 </div>
                               </>
                             ) : (
-                              <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2.5 text-[10px] text-sky-950 leading-snug space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-extrabold text-[10.5px] text-sky-900">
-                                    🪝 Μελέτη Νόμου Hooke (Fελ = k·Δl)
-                                  </span>
-                                </div>
-
-                                <div className="pt-1 border-t border-sky-200/80 space-y-1.5">
-                                  <label className="flex items-center justify-between text-[10.5px] font-bold text-sky-900 cursor-pointer">
-                                    <span>📋 Πίνακας Τιμών Fελ – Δl (στον καμβά)</span>
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(activeSpring.showHookeCanvasTable)}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          showHookeCanvasTable: checked,
-                                        }));
-                                      }}
-                                      className="accent-indigo-600 w-4 h-4 cursor-pointer"
-                                    />
-                                  </label>
-                                  <label className="flex items-center justify-between text-[10.5px] font-extrabold text-sky-950 cursor-pointer">
-                                    <span>📈 Διάγραμμα Fελ – Δl (στον καμβά)</span>
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(activeSpring.graphs.hooke?.visible)}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        updateActiveSpringSimConfig((sim) => ({
-                                          ...sim,
-                                          graphs: {
-                                            ...sim.graphs,
-                                            hooke: {
-                                              ...(sim.graphs.hooke || {}),
-                                              visible: checked,
-                                            },
+                              <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-2.5 text-[10px] text-sky-950 leading-snug space-y-1.5">
+                                <label className="flex items-center justify-between text-[10.5px] font-bold text-sky-900 cursor-pointer">
+                                  <span>Πίνακας Τιμών Fελ – Δl (στον καμβά)</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(activeSpring.showHookeCanvasTable)}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      updateActiveSpringSimConfig((sim) => ({
+                                        ...sim,
+                                        showHookeCanvasTable: checked,
+                                      }));
+                                    }}
+                                    className="accent-indigo-600 w-4 h-4 cursor-pointer"
+                                  />
+                                </label>
+                                <label className="flex items-center justify-between text-[10.5px] font-extrabold text-sky-950 cursor-pointer">
+                                  <span>Διάγραμμα Fελ – Δl (στον καμβά)</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(activeSpring.graphs.hooke?.visible)}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      updateActiveSpringSimConfig((sim) => ({
+                                        ...sim,
+                                        graphs: {
+                                          ...sim.graphs,
+                                          hooke: {
+                                            ...(sim.graphs.hooke || {}),
+                                            visible: checked,
                                           },
-                                        }));
-                                      }}
-                                      className="accent-sky-600 w-4 h-4 cursor-pointer"
-                                    />
-                                  </label>
-                                </div>
+                                        },
+                                      }));
+                                    }}
+                                    className="accent-sky-600 w-4 h-4 cursor-pointer"
+                                  />
+                                </label>
                               </div>
                             )}
                           </>
@@ -49370,10 +53717,10 @@ export default function App() {
                         <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                           {(
                             [
-                              { id: 'analysis', label: '📐 Ανάλυση F' },
-                              { id: 'synthesis', label: '➕ Σύνθεση F₁+F₂' },
-                              { id: 'incline', label: '⛰️ Κεκλιμένο' },
-                              { id: 'pendulum', label: '🕰️ Εκκρεμές' },
+                              { id: 'analysis', label: 'Ανάλυση F' },
+                              { id: 'synthesis', label: 'Σύνθεση F₁+F₂' },
+                              { id: 'incline', label: 'Κεκλιμένο' },
+                              { id: 'pendulum', label: 'Εκκρεμές' },
                             ] as const
                           ).map((tab) => (
                             <button
@@ -51008,6 +55355,116 @@ export default function App() {
               </div>
             )}
 
+            {/* AUTO MULTI-PAGE GRID VIEW WHEN DOCUMENT HAS > 5 PAGES AND ZOOM < 50% (< 0.50) */}
+            {activeNotebook.pages.length > 5 && zoom < 0.5 ? (
+              <div
+                onPointerDown={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
+                onScroll={(e) => setThumbModalScrollTop(e.currentTarget.scrollTop)}
+                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+                className="absolute inset-0 z-30 bg-[#eef2f6] overflow-y-auto p-4 sm:p-6"
+              >
+                <div className="max-w-6xl mx-auto space-y-4">
+                  <div className="sticky top-0 z-20 flex items-center justify-between gap-3 flex-wrap bg-[#1b2a4a]/95 backdrop-blur-xs text-white px-4 py-2.5 rounded-2xl shadow-lg">
+                    <div className="flex items-center gap-2.5">
+                      <LayoutGrid className="w-5 h-5 text-sky-300 shrink-0" />
+                      <div>
+                        <div className="text-xs sm:text-sm font-bold">
+                          Προβολή Πολλών Σελίδων (Zoom {Math.round(zoom * 100)}% &lt; 50%) — {activeNotebook.title}
+                        </div>
+                        <div className="text-[11px] text-slate-300">
+                          {activeNotebook.pages.length} σελίδες • Γρήγορο scroll &amp; πάτημα σε οποιαδήποτε σελίδα για ανάγνωση
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetZ = Math.max(0.65, computeFitWidthZoom());
+                        const targetY = -getPageTopOffset(activePageIndex) * targetZ + 8;
+                        applyPaperTransformDirect(targetZ, 0, targetY, true);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-[#0066ff] hover:bg-blue-500 text-white text-xs font-bold shadow cursor-pointer"
+                    >
+                      🔍 Κανονική Προβολή Σελίδας ({activePageIndex + 1}/{activeNotebook.pages.length})
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {(() => {
+                      const cols = 4;
+                      const estRowH = 250;
+                      const firstRow = Math.max(0, Math.floor(thumbModalScrollTop / estRowH) - 3);
+                      const lastRow = Math.ceil((thumbModalScrollTop + 950) / estRowH) + 5;
+                      const firstVisIdx = firstRow * cols;
+                      const lastVisIdx = (lastRow + 1) * cols;
+
+                      return activeNotebook.pages.map((pObj, pIdx) => {
+                        const isSel = pIdx === activePageIndex;
+                        const pW = getPageLogicalWidth(pObj);
+                        const pH = getPageLogicalHeight(pObj);
+                        const inWin =
+                          activeNotebook.pages.length <= 24 ||
+                          (pIdx >= firstVisIdx && pIdx <= lastVisIdx) ||
+                          Math.abs(pIdx - activePageIndex) <= 6;
+                        const thumbUrl = inWin
+                          ? resolvePageBackgroundUrl(activeNotebook.id, pObj, 'thumb')
+                          : undefined;
+
+                        return (
+                          <div
+                            key={pObj.id}
+                            onClick={() => {
+                              activeDrawingPageIndexRef.current = pIdx;
+                              setActivePageIndex(pIdx);
+                              const targetZ = Math.max(0.65, computeFitWidthZoom(pW));
+                              let accY = 0;
+                              for (let i = 0; i < pIdx; i++) {
+                                accY += getPageLogicalHeight(activeNotebook.pages[i]) + PAGE_GAP;
+                              }
+                              applyPaperTransformDirect(targetZ, 0, -accY * targetZ + 8, true);
+                            }}
+                            style={{
+                              aspectRatio: `${pW} / ${pH}`,
+                              minHeight: '180px',
+                              backgroundColor:
+                                thumbUrl || pObj.pdfPageNumber
+                                  ? '#ffffff'
+                                  : pObj.template === 'dark-grid'
+                                  ? '#0f172a'
+                                  : '#fffdf7',
+                            }}
+                            className={`relative rounded-xl bg-white border-2 shadow-xs hover:shadow-md transition overflow-hidden cursor-pointer flex items-center justify-center select-none ${
+                              isSel
+                                ? 'border-[#0066ff] ring-2 ring-[#0066ff]/30'
+                                : 'border-slate-200 hover:border-sky-400'
+                            }`}
+                          >
+                            <div
+                              className={`absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full text-[11px] font-bold shadow ${
+                                isSel ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
+                              }`}
+                            >
+                              {pIdx + 1}
+                            </div>
+                            {thumbUrl && (
+                              <img
+                                src={thumbUrl}
+                                alt={pObj.title}
+                                loading="lazy"
+                                decoding="async"
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                              />
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {/* WORD-STYLE CONTINUOUS MULTI-PAGE VERTICAL DOCUMENT STACK (WITH 2x RETINA 120HZ CANVASES) */}
             <div
               ref={paperTransformElRef}
@@ -51017,10 +55474,12 @@ export default function App() {
                 willChange: 'transform',
                 gap: `${PAGE_GAP}px`,
               }}
-              className="relative flex flex-col items-center shrink-0"
+              className={`relative flex flex-col items-center shrink-0 ${
+                activeNotebook.pages.length > 5 && zoom < 0.5 ? 'invisible pointer-events-none' : ''
+              }`}
             >
               {/* GOODNOTES PULL-TO-ADD-PAGE PEEK ABOVE FIRST PAGE */}
-              {pullAddPageState?.side === 'top' && (
+              {!isLightweightDocMode && pullAddPageState?.side === 'top' && (
                 <div
                   style={{ width: pageWidth, height: 150, top: -168 }}
                   className="absolute left-0 rounded-b-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-end pb-4 pointer-events-none z-30"
@@ -51040,11 +55499,53 @@ export default function App() {
                 </div>
               )}
 
-              {/* Render All Pages Vertically (Word / Goodnotes Continuous Scroll) */}
+              {/* Render All Pages Vertically (Word / Goodnotes Continuous Scroll with Viewport Virtualization for 170+ Page PDFs) */}
               {activeNotebook.pages.map((pageObj, pageIdx) => {
                 const pW = getPageLogicalWidth(pageObj);
                 const pH = getPageLogicalHeight(pageObj);
                 const isCurrentActive = pageIdx === activePageIndex;
+                const pageDist = Math.abs(pageIdx - activePageIndex);
+                const isCanvasMounted = activeNotebook.pages.length <= 6 || pageDist <= 2;
+                const isPreviewImgMounted = activeNotebook.pages.length <= 12 || pageDist <= 5;
+                const resolvedBgUrl = isCanvasMounted
+                  ? resolvePageBackgroundUrl(activeNotebook.id, pageObj, 'full')
+                  : isPreviewImgMounted
+                  ? resolvePageBackgroundUrl(activeNotebook.id, pageObj, 'thumb')
+                  : undefined;
+
+                // Goodnotes-style Viewport Virtualization:
+                // Never allocate 2x Retina GPU canvases for pages > 2 pages away from the active viewport!
+                if (!isCanvasMounted) {
+                  return (
+                    <div
+                      key={pageObj.id}
+                      style={{ width: pW, height: pH }}
+                      onPointerDown={() => {
+                        activeDrawingPageIndexRef.current = pageIdx;
+                        setActivePageIndex(pageIdx);
+                      }}
+                      className="relative shadow-md bg-white border border-slate-200/80 shrink-0 select-none"
+                    >
+                      {isPreviewImgMounted && resolvedBgUrl && (
+                        <img
+                          src={resolvedBgUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none"
+                        />
+                      )}
+                    </div>
+                  );
+                }
+
+                const isLastPage = pageIdx === activeNotebook.pages.length - 1;
+                const wsHeight =
+                  workspaceRef.current?.clientHeight ||
+                  (typeof window !== 'undefined' ? window.innerHeight - 90 : 800);
+                const lastBottomScreenY = 8 + pan.y + totalDocumentHeightRef.current * zoom;
+                const isBottomOfPageVisible =
+                  isLastPage && lastBottomScreenY <= wsHeight + 36 && lastBottomScreenY >= 60;
 
                 return (
                   <div
@@ -51052,69 +55553,99 @@ export default function App() {
                     style={{ width: pW, height: pH }}
                     className="relative shadow-md bg-white border border-slate-200/80 transition-shadow shrink-0"
                   >
-                    {/* Word/Goodnotes Page Separator Header Badge + Quick Insert/Delete Page Actions */}
-                    <div className="absolute -top-7 left-0 right-0 flex items-center justify-between px-1 select-none z-20">
-                      <span
-                        className={`text-xs font-bold transition-opacity duration-500 ${
-                          isCurrentActive ? 'text-[#0066ff]' : 'text-slate-600'
-                        } ${pageControlsVisible ? 'opacity-100' : 'opacity-30'}`}
-                      >
-                        Σελίδα {pageIdx + 1} από {activeNotebook.pages.length} — {pageObj.title}
-                      </span>
+                    {/* Instant base image layer for PDF / Image pages so scrolling into a new page has 0ms blank flash */}
+                    {resolvedBgUrl && (
+                      <img
+                        src={resolvedBgUrl}
+                        alt=""
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none"
+                      />
+                    )}
+                    {/* Word/Goodnotes Page Separator Header Badge + Quick Insert/Delete Page Actions (hidden in Lightweight PDF/Image Mode) */}
+                    {!isCleanProjectorMode && (
+                      <div className="absolute -top-7 left-0 right-0 flex items-center justify-between px-1 select-none z-20">
+                        <span
+                          className={`text-xs font-bold transition-opacity duration-500 ${
+                            isCurrentActive ? 'text-[#0066ff]' : 'text-slate-600'
+                          } ${pageControlsVisible ? 'opacity-100' : 'opacity-0'}`}
+                        >
+                          Σελίδα {pageIdx + 1} από {activeNotebook.pages.length} — {pageObj.title}
+                        </span>
+                        {!isLightweightDocMode && (
+                          <div
+                            onPointerEnter={triggerPageControlsVisibility}
+                            onPointerDown={triggerPageControlsVisibility}
+                            className={`flex items-center gap-1.5 transition-opacity duration-500 ${
+                              pageControlsVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100'
+                            }`}
+                          >
+                            <button
+                              onClick={() => insertPageAtIndex(pageIdx)}
+                              className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-sky-50 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
+                              title="Προσθήκη νέας σελίδας ΠΡΙΝ από αυτή τη σελίδα"
+                            >
+                              + Πριν
+                            </button>
+                            <div className="flex items-center rounded-full bg-white/90 border border-slate-300 shadow-2xs overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleRotatePage('left', pageIdx)}
+                                className="px-1.5 py-0.5 hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] transition cursor-pointer"
+                                title="Περιστροφή Σελίδας 90° Αριστερά (-90°)"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                              </button>
+                              <div className="w-px h-3 bg-slate-200" />
+                              <button
+                                type="button"
+                                onClick={() => handleRotatePage('right', pageIdx)}
+                                className="px-1.5 py-0.5 hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] transition cursor-pointer"
+                                title="Περιστροφή Σελίδας 90° Δεξιά (+90°)"
+                              >
+                                <RotateCw className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => duplicatePageAtIndex(pageIdx)}
+                              className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-slate-100 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
+                              title="Διπλασιασμός αυτής της σελίδας"
+                            >
+                              Αντίγραφο
+                            </button>
+                            <button
+                              onClick={() => deletePageAtIndex(pageIdx)}
+                              className="px-2 py-0.5 rounded-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 shadow-2xs cursor-pointer"
+                              title="Διαγραφή αυτής της σελίδας"
+                            >
+                              Διαγραφή
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* "+ Σελίδα Μετά" Button in the Bottom Space Below the Last Page — Hidden in Lightweight PDF/Image Mode */}
+                    {!isCleanProjectorMode && !isLightweightDocMode && pageIdx === activeNotebook.pages.length - 1 && (
                       <div
                         onPointerEnter={triggerPageControlsVisibility}
-                        onPointerDown={triggerPageControlsVisibility}
-                        className={`flex items-center gap-1.5 transition-opacity duration-500 ${
-                          pageControlsVisible ? 'opacity-100' : 'opacity-15 hover:opacity-100'
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          triggerPageControlsVisibility();
+                        }}
+                        className={`absolute -bottom-8 right-1 z-30 flex items-center select-none transition-opacity duration-500 ${
+                          isBottomOfPageVisible && pageControlsVisible
+                            ? 'opacity-100 pointer-events-auto'
+                            : 'opacity-0 hover:opacity-100 pointer-events-auto'
                         }`}
                       >
                         <button
-                          onClick={() => insertPageAtIndex(pageIdx)}
-                          className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-sky-50 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
-                          title="Προσθήκη νέας σελίδας ΠΡΙΝ από αυτή τη σελίδα"
-                        >
-                          + Πριν
-                        </button>
-                        <button
+                          type="button"
                           onClick={() => insertPageAtIndex(pageIdx + 1)}
-                          className="px-2 py-0.5 rounded-full bg-sky-600 hover:bg-sky-500 text-[10px] font-semibold text-white shadow-2xs cursor-pointer"
-                          title="Προσθήκη νέας σελίδας ΜΕΤΑ από αυτή τη σελίδα (στη μέση)"
+                          className="px-3 py-1 rounded-full bg-sky-600/90 hover:bg-sky-600 text-[11px] font-semibold text-white shadow-sm transition cursor-pointer"
+                          title="Προσθήκη νέας σελίδας μετά από αυτή τη σελίδα"
                         >
                           + Σελίδα Μετά
-                        </button>
-                        <button
-                          onClick={() => duplicatePageAtIndex(pageIdx)}
-                          className="px-2 py-0.5 rounded-full bg-white/90 hover:bg-slate-100 border border-slate-300 text-[10px] font-semibold text-slate-700 shadow-2xs cursor-pointer"
-                          title="Διπλασιασμός αυτής της σελίδας"
-                        >
-                          📑 Αντίγραφο
-                        </button>
-                        <button
-                          onClick={() => deletePageAtIndex(pageIdx)}
-                          className="px-2 py-0.5 rounded-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[10px] font-semibold text-rose-600 shadow-2xs cursor-pointer"
-                          title="Διαγραφή αυτής της σελίδας"
-                        >
-                          🗑️ Διαγραφή
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Interactive "+ Add Page in the Middle" Pill between consecutive pages */}
-                    {pageIdx < activeNotebook.pages.length - 1 && (
-                      <div
-                        onPointerEnter={triggerPageControlsVisibility}
-                        onPointerDown={triggerPageControlsVisibility}
-                        className={`absolute -bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-center transition-opacity duration-500 ${
-                          pageControlsVisible ? 'opacity-100' : 'opacity-15 hover:opacity-100'
-                        }`}
-                      >
-                        <button
-                          onClick={() => insertPageAtIndex(pageIdx + 1)}
-                          className="flex items-center gap-1 px-3 py-0.5 rounded-full bg-white/95 hover:bg-[#0066ff] text-slate-600 hover:text-white border border-slate-300 hover:border-[#0066ff] text-[11px] font-semibold shadow-sm transition cursor-pointer"
-                          title={`Προσθήκη νέας σελίδας ανάμεσα στη Σελίδα ${pageIdx + 1} και ${pageIdx + 2}`}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Προσθήκη σελίδας εδώ ({pageIdx + 1} ↔ {pageIdx + 2})</span>
                         </button>
                       </div>
                     )}
@@ -51123,8 +55654,12 @@ export default function App() {
                     <canvas
                       ref={(el) => {
                         if (el) {
+                          const isNewlyMounted = staticCanvasMapRef.current.get(pageObj.id) !== el;
                           staticCanvasMapRef.current.set(pageObj.id, el);
                           if (isCurrentActive) staticCanvasRef.current = el;
+                          if (isNewlyMounted) {
+                            scheduleCoalescedStaticRender();
+                          }
                         } else {
                           staticCanvasMapRef.current.delete(pageObj.id);
                         }
@@ -51201,7 +55736,7 @@ export default function App() {
                       onPointerUp={handlePointerUp}
                       onPointerCancel={handlePointerUp}
                       onDoubleClick={(e) => {
-                        if (activeTool !== 'lasso') return;
+                        if (activeTool !== 'lasso' && activeTool !== 'text') return;
                         const rect = e.currentTarget.getBoundingClientRect();
                         if (rect.width <= 0 || rect.height <= 0) return;
                         const ptX = (e.clientX - rect.left) * (pW / rect.width);
@@ -51219,21 +55754,25 @@ export default function App() {
                           ) {
                             continue;
                           }
-                          const tb = getTextVisualBounds(txt);
-                          if (
-                            ptX >= tb.minX - 8 &&
-                            ptX <= tb.maxX + 8 &&
-                            ptY >= tb.minY - 8 &&
-                            ptY <= tb.maxY + 8
-                          ) {
+                          if (isPagePointOnTextGlyphs({ x: ptX, y: ptY }, txt, 6)) {
                             setSelectedLassoTextIds([]);
                             setSelectedStrokeIds([]);
                             setSelectedImageIds([]);
                             setSelectedImageId(null);
                             setActiveNodeStrokeId(null);
-                            setSelectedTextId(txt.id);
-                            setEditingTextId(txt.id);
                             setShowToolSubBar(true);
+                            const { caretIndex, wordStart, wordEnd } =
+                              getTextCaretAndWordAtPoint(
+                                txt.id,
+                                txt.text || '',
+                                e.clientX,
+                                e.clientY
+                              );
+                            if (wordEnd > wordStart) {
+                              focusAndPlaceCaretInTextBox(txt.id, wordStart, wordEnd);
+                            } else {
+                              focusAndPlaceCaretInTextBox(txt.id, caretIndex, caretIndex);
+                            }
                             return;
                           }
                         }
@@ -51357,8 +55896,7 @@ export default function App() {
                             ...fontCss,
                             touchAction: 'none',
                             pointerEvents:
-                              (isSelectedTxt || isEditingTxt) &&
-                              !selectedLassoTextIds.includes(txt.id)
+                              isSelectedTxt || isEditingTxt
                                 ? 'auto'
                                 : 'none',
                             WebkitTouchCallout: 'none',
@@ -51368,7 +55906,10 @@ export default function App() {
                           onPointerDown={(ev) => {
                             if (
                               isLocked ||
-                              (activeTool !== 'lasso' && activeTool !== 'text')
+                              (!isSelectedTxt &&
+                                !isEditingTxt &&
+                                activeTool !== 'lasso' &&
+                                activeTool !== 'text')
                             ) {
                               return;
                             }
@@ -51417,18 +55958,94 @@ export default function App() {
                               resizeHandle = null;
                             }
 
+                            const startedOnDragBar = Boolean(targetEl?.closest('[data-text-drag]'));
+                            if (
+                              !resizeHandle &&
+                              !startedOnDragBar &&
+                              (txt.text || '').trim().length > 0 &&
+                              !isClientPointOnTextElementGlyphs(ev.clientX, ev.clientY, ev.currentTarget, 6)
+                            ) {
+                              setSelectedTextId(null);
+                              setEditingTextId(null);
+                              draggingTextRef.current = null;
+                              const pageEl = ev.currentTarget.closest('[data-page-idx]') as HTMLElement | null;
+                              if (pageEl) {
+                                const pRect = pageEl.getBoundingClientRect();
+                                if (pRect.width > 0 && pRect.height > 0) {
+                                  const pt = {
+                                    x: (ev.clientX - pRect.left) * (pW / pRect.width),
+                                    y: (ev.clientY - pRect.top) * (pH / pRect.height),
+                                  };
+                                  const otherTxt = [...(pageObj.texts || [])]
+                                    .reverse()
+                                    .find((ot) => ot.id !== txt.id && isPagePointOnTextGlyphs(pt, ot, 6));
+                                  if (otherTxt) {
+                                    if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
+                                    activeDrawingPageIndexRef.current = pageIdx;
+                                    setSelectedTextId(otherTxt.id);
+                                    setSelectedLassoTextIds([]);
+                                    setSelectedStrokeIds([]);
+                                    setSelectedImageIds([]);
+                                    setSelectedImageId(null);
+                                    setActiveNodeStrokeId(null);
+                                    setShowToolSubBar(true);
+                                    return;
+                                  }
+                                  const hit = findSelectableObjectAtPagePoint(pt, pageObj);
+                                  if (hit) {
+                                    if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
+                                    activeDrawingPageIndexRef.current = pageIdx;
+                                    setActiveTool('lasso');
+                                    setShowToolSubBar(true);
+                                    if (hit.type === 'image') {
+                                      setSelectedImageId(hit.image.id);
+                                      setSelectedImageIds([hit.image.id]);
+                                      setSelectedStrokeIds([]);
+                                      setSelectedLassoTextIds([]);
+                                    } else if (hit.type === 'stroke') {
+                                      setSelectedStrokeIds(hit.memberIds);
+                                      setSelectedImageIds([]);
+                                      setSelectedImageId(null);
+                                      setSelectedLassoTextIds([]);
+                                      setActiveNodeStrokeId(hit.memberIds.length === 1 ? hit.memberIds[0] : null);
+                                    }
+                                  }
+                                }
+                              }
+                              return;
+                            }
+                            const wasAlreadySelected =
+                              selectedTextId === txt.id || editingTextId === txt.id;
+                            const isSecondTapOfDoubleTap = Boolean(
+                              lastTextTapRef.current &&
+                                lastTextTapRef.current.textId === txt.id &&
+                                performance.now() - lastTextTapRef.current.time < 480 &&
+                                Math.hypot(
+                                  ev.clientX - lastTextTapRef.current.clientX,
+                                  ev.clientY - lastTextTapRef.current.clientY
+                                ) <= 34
+                            );
+                            const boxTa = ev.currentTarget.querySelector('textarea');
                             const isTouchOrPen =
                               ev.pointerType === 'touch' || ev.pointerType === 'pen';
                             const startedOnTextarea =
                               !resizeHandle &&
+                              !startedOnDragBar &&
                               !isTouchOrPen &&
                               targetEl?.tagName === 'TEXTAREA';
-                            if (!startedOnTextarea) {
+                            if (
+                              resizeHandle ||
+                              startedOnDragBar ||
+                              isSecondTapOfDoubleTap ||
+                              !wasAlreadySelected ||
+                              (boxTa && document.activeElement === boxTa && !startedOnTextarea)
+                            ) {
                               ev.preventDefault();
                             }
 
                             if (
                               !isEditingTxt &&
+                              !isSelectedTxt &&
                               !resizeHandle &&
                               txt.groupId &&
                               !txt.groupId.startsWith('math-graph-grp-')
@@ -51463,7 +56080,6 @@ export default function App() {
 
                             const curBoxW = ev.currentTarget.offsetWidth || (txt.isMath ? 0 : txt.boxWidth) || 180;
                             const curBoxH = ev.currentTarget.offsetHeight || (txt.isMath ? 0 : txt.boxHeight) || 36;
-                            const wasAlreadySelected = selectedTextId === txt.id;
 
                             draggingTextRef.current = {
                               id: txt.id,
@@ -51481,13 +56097,16 @@ export default function App() {
                               resizeHandle: resizeHandle || undefined,
                               moved: false,
                               wasAlreadySelected,
+                              wasAlreadyEditing: isEditingTxt,
                               startedOnTextarea,
+                              startedOnDragBar,
                             };
 
                             if (pageIdx !== activePageIndex) {
                               setActivePageIndex(pageIdx);
                             }
                             activeDrawingPageIndexRef.current = pageIdx;
+                            setSelectedLassoTextIds([]);
                             setSelectedTextId(txt.id);
                             setTextFontSize(txt.fontSize);
                             setTextBold(Boolean(txt.bold));
@@ -51498,7 +56117,7 @@ export default function App() {
                             setActiveNodeStrokeId(null);
                             setShowToolSubBar(true);
 
-                            if (!startedOnTextarea) {
+                            if (resizeHandle || startedOnDragBar || !wasAlreadySelected) {
                               try {
                                 ev.currentTarget.setPointerCapture(ev.pointerId);
                               } catch {
@@ -51509,7 +56128,10 @@ export default function App() {
                           onTouchStart={(ev) => {
                             if (
                               isLocked ||
-                              (activeTool !== 'lasso' && activeTool !== 'text') ||
+                              (!isSelectedTxt &&
+                                !isEditingTxt &&
+                                activeTool !== 'lasso' &&
+                                activeTool !== 'text') ||
                               ev.touches.length !== 1
                             ) {
                               return;
@@ -51524,6 +56146,7 @@ export default function App() {
                             if (draggingTextRef.current?.id === txt.id) return;
 
                             const t = ev.touches[0];
+                            const startedOnDragBar = Boolean(targetEl?.closest('[data-text-drag]'));
                             const resizeEl = targetEl?.closest('[data-text-resize]') as HTMLElement | null;
                             let resizeHandle = resizeEl?.getAttribute('data-text-resize') as
                               | 'n'
@@ -51538,7 +56161,7 @@ export default function App() {
                             if (
                               !resizeHandle &&
                               (isSelectedTxt || isEditingTxt) &&
-                              !targetEl?.closest('[data-text-drag]')
+                              !startedOnDragBar
                             ) {
                               resizeHandle = resolveTextResizeHandleFromRect(
                                 t.clientX,
@@ -51555,6 +56178,62 @@ export default function App() {
                                 resizeHandle === 'w')
                             ) {
                               resizeHandle = null;
+                            }
+
+                            if (
+                              !resizeHandle &&
+                              !startedOnDragBar &&
+                              (txt.text || '').trim().length > 0 &&
+                              !isClientPointOnTextElementGlyphs(t.clientX, t.clientY, ev.currentTarget, 6)
+                            ) {
+                              setSelectedTextId(null);
+                              setEditingTextId(null);
+                              draggingTextRef.current = null;
+                              const pageEl = ev.currentTarget.closest('[data-page-idx]') as HTMLElement | null;
+                              if (pageEl) {
+                                const pRect = pageEl.getBoundingClientRect();
+                                if (pRect.width > 0 && pRect.height > 0) {
+                                  const pt = {
+                                    x: (t.clientX - pRect.left) * (pW / pRect.width),
+                                    y: (t.clientY - pRect.top) * (pH / pRect.height),
+                                  };
+                                  const otherTxt = [...(pageObj.texts || [])]
+                                    .reverse()
+                                    .find((ot) => ot.id !== txt.id && isPagePointOnTextGlyphs(pt, ot, 6));
+                                  if (otherTxt) {
+                                    if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
+                                    activeDrawingPageIndexRef.current = pageIdx;
+                                    setSelectedTextId(otherTxt.id);
+                                    setSelectedLassoTextIds([]);
+                                    setSelectedStrokeIds([]);
+                                    setSelectedImageIds([]);
+                                    setSelectedImageId(null);
+                                    setActiveNodeStrokeId(null);
+                                    setShowToolSubBar(true);
+                                    return;
+                                  }
+                                  const hit = findSelectableObjectAtPagePoint(pt, pageObj);
+                                  if (hit) {
+                                    if (pageIdx !== activePageIndex) setActivePageIndex(pageIdx);
+                                    activeDrawingPageIndexRef.current = pageIdx;
+                                    setActiveTool('lasso');
+                                    setShowToolSubBar(true);
+                                    if (hit.type === 'image') {
+                                      setSelectedImageId(hit.image.id);
+                                      setSelectedImageIds([hit.image.id]);
+                                      setSelectedStrokeIds([]);
+                                      setSelectedLassoTextIds([]);
+                                    } else if (hit.type === 'stroke') {
+                                      setSelectedStrokeIds(hit.memberIds);
+                                      setSelectedImageIds([]);
+                                      setSelectedImageId(null);
+                                      setSelectedLassoTextIds([]);
+                                      setActiveNodeStrokeId(hit.memberIds.length === 1 ? hit.memberIds[0] : null);
+                                    }
+                                  }
+                                }
+                              }
+                              return;
                             }
 
                             if (
@@ -51589,7 +56268,8 @@ export default function App() {
 
                             const curBoxW = ev.currentTarget.offsetWidth || (txt.isMath ? 0 : txt.boxWidth) || 180;
                             const curBoxH = ev.currentTarget.offsetHeight || (txt.isMath ? 0 : txt.boxHeight) || 36;
-                            const wasAlreadySelected = selectedTextId === txt.id;
+                            const wasAlreadySelected =
+                              selectedTextId === txt.id || editingTextId === txt.id;
 
                             draggingTextRef.current = {
                               id: txt.id,
@@ -51606,7 +56286,9 @@ export default function App() {
                               resizeHandle: resizeHandle || undefined,
                               moved: false,
                               wasAlreadySelected,
+                              wasAlreadyEditing: isEditingTxt,
                               startedOnTextarea: false,
+                              startedOnDragBar,
                             };
 
                             setSelectedTextId(txt.id);
@@ -51643,12 +56325,70 @@ export default function App() {
                             }
                             finishTextDrag();
                           }}
+                          onClick={(ev) => {
+                            const targetEl =
+                              ev.target instanceof Element
+                                ? ev.target
+                                : (ev.target as Node | null)?.parentElement || null;
+                            if (targetEl?.closest('button, [data-text-drag], [data-text-resize]')) {
+                              return;
+                            }
+                            const pending = pendingCaretSelectionRef.current;
+                            if (
+                              pending &&
+                              pending.textId === txt.id &&
+                              performance.now() - lastProgrammaticSelectionTimeRef.current < 450
+                            ) {
+                              const ta = ev.currentTarget.querySelector(
+                                'textarea'
+                              ) as HTMLTextAreaElement | null;
+                              if (ta) {
+                                const maxLen = ta.value.length;
+                                const clampedS = Math.max(0, Math.min(maxLen, pending.start));
+                                const clampedE = Math.max(clampedS, Math.min(maxLen, pending.end));
+                                try {
+                                  ta.focus({ preventScroll: true });
+                                } catch {
+                                  ta.focus();
+                                }
+                                try {
+                                  ta.setSelectionRange(clampedS, clampedE);
+                                } catch {
+                                  // ignore
+                                }
+                              }
+                            }
+                          }}
                           onDoubleClick={(ev) => {
-                            if (isLocked || (activeTool !== 'lasso' && activeTool !== 'text')) return;
+                            if (
+                              isLocked ||
+                              (!isSelectedTxt &&
+                                !isEditingTxt &&
+                                activeTool !== 'lasso' &&
+                                activeTool !== 'text')
+                            ) {
+                              return;
+                            }
+                            const targetEl =
+                              ev.target instanceof Element
+                                ? ev.target
+                                : (ev.target as Node | null)?.parentElement || null;
+                            if (targetEl?.closest('button, [data-text-drag], [data-text-resize]')) {
+                              return;
+                            }
                             ev.stopPropagation();
-                            setSelectedLassoTextIds([]);
-                            setSelectedTextId(txt.id);
-                            setEditingTextId(txt.id);
+                            ev.preventDefault();
+                            const { caretIndex, wordStart, wordEnd } = getTextCaretAndWordAtPoint(
+                              txt.id,
+                              txt.text || '',
+                              ev.clientX,
+                              ev.clientY
+                            );
+                            if (wordEnd > wordStart) {
+                              focusAndPlaceCaretInTextBox(txt.id, wordStart, wordEnd);
+                            } else {
+                              focusAndPlaceCaretInTextBox(txt.id, caretIndex, caretIndex);
+                            }
                           }}
                           className={`absolute ${
                             (txt.id.startsWith('math-graph-txt-') ||
@@ -51660,13 +56400,32 @@ export default function App() {
                           } select-none transition-shadow ${
                             (!isSelectedTxt && !isEditingTxt) ||
                             selectedLassoTextIds.includes(txt.id)
-                              ? 'z-10 pointer-events-none'
-                              : 'z-50 ring-[1.5px] ring-[#0066ff]/90 bg-white/35 shadow-sm cursor-grab active:cursor-grabbing'
+                              ? 'z-10 pointer-events-none border border-transparent'
+                              : 'z-50 border border-transparent bg-white/20 cursor-grab active:cursor-grabbing'
                           }`}
                         >
                           {/* Resize Handles: Math shows only 4 small corner circles; Text shows all 8 handles (compact side pills + small corner circles) */}
                           {(isSelectedTxt || isEditingTxt) && (
                             <>
+                              {!selectedLassoTextIds.includes(txt.id) && (
+                                <svg
+                                  className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-20"
+                                  aria-hidden="true"
+                                >
+                                  <rect
+                                    x="0"
+                                    y="0"
+                                    width="100%"
+                                    height="100%"
+                                    rx="6"
+                                    ry="6"
+                                    fill="none"
+                                    stroke="rgba(100, 116, 139, 0.92)"
+                                    strokeWidth="1.45"
+                                    strokeDasharray="7 4.5"
+                                  />
+                                </svg>
+                              )}
                               {isTextCenteredOnPage && (
                                 <div
                                   style={{ top: -txt.y, height: pH }}
@@ -51686,10 +56445,10 @@ export default function App() {
                                       <span className="absolute w-6 h-3.5 rounded-full bg-red-500/75 animate-ping pointer-events-none" />
                                     )}
                                     <div
-                                      className={`w-3.5 h-1.5 rounded-full border shadow-sm group-hover:scale-110 transition-transform pointer-events-none ${
+                                      className={`w-3.5 h-1.5 rounded-full border shadow-2xs group-hover:scale-110 transition-transform pointer-events-none ${
                                         isTextCenteredOnPage
                                           ? 'bg-red-600 border-white ring-2 ring-red-400 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse'
-                                          : 'bg-white border-[#0066ff]'
+                                          : 'bg-white border-slate-500 border-[1.35px]'
                                       }`}
                                     />
                                   </div>
@@ -51700,7 +56459,7 @@ export default function App() {
                                     title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
                                     className="absolute left-1/2 -translate-x-1/2 -bottom-[10px] w-[24px] h-[20px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
-                                    <div className="w-3.5 h-1.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                    <div className="w-3.5 h-1.5 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                   {/* Left Edge Handle (W) */}
                                   <div
@@ -51709,7 +56468,7 @@ export default function App() {
                                     title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
                                     className="absolute -left-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[24px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
-                                    <div className="w-1.5 h-3.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                    <div className="w-1.5 h-3.5 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                   {/* Right Edge Handle (E) */}
                                   <div
@@ -51718,7 +56477,7 @@ export default function App() {
                                     title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
                                     className="absolute -right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[24px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
-                                    <div className="w-1.5 h-3.5 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                    <div className="w-1.5 h-3.5 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
                                   </div>
                                 </>
                               ) : (
@@ -51736,7 +56495,7 @@ export default function App() {
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
                                 className="absolute -left-[10px] -top-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
-                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="ne"
@@ -51744,7 +56503,7 @@ export default function App() {
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
                                 className="absolute -right-[10px] -top-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
-                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="sw"
@@ -51752,7 +56511,7 @@ export default function App() {
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
                                 className="absolute -left-[10px] -bottom-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
-                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                               <div
                                 data-text-resize="se"
@@ -51760,7 +56519,7 @@ export default function App() {
                                 title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
                                 className="absolute -right-[10px] -bottom-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
-                                <div className="w-2 h-2 rounded-full bg-white border border-[#0066ff] shadow-sm group-hover:scale-110 transition-transform pointer-events-none" />
+                                <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
                               </div>
                             </>
                           )}
@@ -51798,7 +56557,7 @@ export default function App() {
                                 : Boolean(txt.bold || txt.fontFamily === 'calligraphic-bold');
                               const safeZoom = Math.max(0.25, zoom || 1);
                               const invZoom = 1 / safeZoom;
-                              const estHalfBarW = 190 * invZoom;
+                              const estHalfBarW = 230 * invZoom;
                               const boxWForBar = effTxtW > 0 ? effTxtW : 180;
                               const boxCenterX = txt.x + boxWForBar / 2;
                               let barShiftX = 0;
@@ -51864,10 +56623,10 @@ export default function App() {
                                     letterSpacing: 'normal',
                                     WebkitTextStroke: '0px',
                                   }}
-                                  className="absolute flex items-center gap-1 bg-[#1b2a4a]/95 text-white px-2 py-1 rounded-full shadow-lg text-[11px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
+                                  className="absolute flex items-center gap-1 bg-[#e5dfd3]/95 backdrop-blur-xs border border-stone-300/90 text-[#333333] px-2 py-1 rounded-lg shadow-sm text-[11.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
                                 >
                                   <span
-                                    className="px-1 py-0.5 text-sky-300 text-[11px] font-normal select-none"
+                                    className="px-1 py-0.5 text-[#333333]/75 text-[12.5px] font-normal select-none"
                                     title="Σύρετε με το δάχτυλο ή το πενάκι για μετακίνηση του παραθύρου κειμένου"
                                   >
                                     ✥
@@ -51880,13 +56639,13 @@ export default function App() {
                                         activeTextRangeRef.current = null;
                                         setActiveTextRange(null);
                                       }}
-                                      className="px-1 py-0.5 rounded bg-sky-500/35 hover:bg-sky-500/55 text-sky-100 text-[9px] font-semibold cursor-pointer"
+                                      className="px-1.5 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 text-[10.5px] font-medium transition cursor-pointer"
                                       title="Εφαρμογή αλλαγών μόνο στο μαρκαρισμένο τμήμα (κλικ για επιστροφή σε όλο το πλαίσιο)"
                                     >
                                       ✂✕
                                     </button>
                                   )}
-                                  <div className="h-2.5 w-px bg-white/20 mx-0.5" />
+                                  <div className="h-3.5 w-px bg-stone-300/80 mx-0.5" />
                                   {!txt.isMath && (
                                     <button
                                       type="button"
@@ -51970,7 +56729,7 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className="px-1.5 py-0.5 rounded bg-violet-500/40 hover:bg-violet-500/60 text-violet-100 font-normal cursor-pointer"
+                                      className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
                                       title="Εναλλαγή γραμματοσειράς (Καλλιγραφική / Πένα / Μαρκαδόρος / Χειρόγραφο / Ρέουσα / Τυπωμένο)"
                                     >
                                       {displayedFontFamily === 'calligraphic' ||
@@ -52062,10 +56821,10 @@ export default function App() {
                                           }),
                                         }));
                                       }}
-                                      className={`px-1 py-0.5 rounded font-bold cursor-pointer ${
+                                      className={`px-2 py-1 rounded-md font-bold border transition cursor-pointer ${
                                         displayedBold
-                                          ? 'bg-[#0066ff] text-white'
-                                          : 'hover:bg-white/15 text-slate-200'
+                                          ? 'bg-[#d5cec0] text-[#1f1f1f] border-stone-400/95'
+                                          : 'bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border-stone-300/80'
                                       }`}
                                       title="Bold (Έντονα — στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
                                     >
@@ -52146,7 +56905,7 @@ export default function App() {
                                         ),
                                       }));
                                     }}
-                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    className="px-2 py-1 rounded-md font-medium bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 transition cursor-pointer"
                                     title="Μικρότερη γραμματοσειρά (-1px)"
                                   >
                                     A-
@@ -52225,13 +56984,13 @@ export default function App() {
                                         ),
                                       }));
                                     }}
-                                    className="px-1 py-0.5 rounded font-normal hover:bg-white/15 cursor-pointer"
+                                    className="px-2 py-1 rounded-md font-medium bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 transition cursor-pointer"
                                     title="Μεγαλύτερη γραμματοσειρά (στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
                                   >
                                     A+
                                   </button>
                                   {/* Justify / Text Alignment Icon-Only Buttons (Left, Center, Right) */}
-                                  <div className="flex items-center gap-0.5 bg-white/10 p-0.5 rounded">
+                                  <div className="flex items-center gap-0.5 bg-[#fdfbf7] border border-stone-300/80 p-0.5 rounded-md">
                                     <button
                                       type="button"
                                       onMouseDown={(ev) => ev.preventDefault()}
@@ -52244,14 +57003,14 @@ export default function App() {
                                           ),
                                         }));
                                       }}
-                                      className={`p-0.5 rounded transition cursor-pointer flex items-center justify-center ${
+                                      className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
                                         (txt.textAlign || 'left') === 'left'
-                                          ? 'bg-[#0066ff] text-white'
-                                          : 'text-white/85 hover:bg-white/15'
+                                          ? 'bg-stone-200/95 text-[#1f1f1f]'
+                                          : 'text-[#333333] hover:bg-[#efeadd]'
                                       }`}
                                       title="Στοίχιση Αριστερά"
                                     >
-                                      <svg viewBox="0 0 16 16" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                                         <line x1="2" y1="3.5" x2="14" y2="3.5" />
                                         <line x1="2" y1="7" x2="10" y2="7" />
                                         <line x1="2" y1="10.5" x2="14" y2="10.5" />
@@ -52270,14 +57029,14 @@ export default function App() {
                                           ),
                                         }));
                                       }}
-                                      className={`p-0.5 rounded transition cursor-pointer flex items-center justify-center ${
+                                      className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
                                         txt.textAlign === 'center'
-                                          ? 'bg-[#0066ff] text-white'
-                                          : 'text-white/85 hover:bg-white/15'
+                                          ? 'bg-stone-200/95 text-[#1f1f1f]'
+                                          : 'text-[#333333] hover:bg-[#efeadd]'
                                       }`}
                                       title="Στοίχιση στο Κέντρο"
                                     >
-                                      <svg viewBox="0 0 16 16" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                                         <line x1="2" y1="3.5" x2="14" y2="3.5" />
                                         <line x1="4" y1="7" x2="12" y2="7" />
                                         <line x1="2" y1="10.5" x2="14" y2="10.5" />
@@ -52296,14 +57055,14 @@ export default function App() {
                                           ),
                                         }));
                                       }}
-                                      className={`p-0.5 rounded transition cursor-pointer flex items-center justify-center ${
+                                      className={`p-1 rounded transition cursor-pointer flex items-center justify-center ${
                                         txt.textAlign === 'right'
-                                          ? 'bg-[#0066ff] text-white'
-                                          : 'text-white/85 hover:bg-white/15'
+                                          ? 'bg-stone-200/95 text-[#1f1f1f]'
+                                          : 'text-[#333333] hover:bg-[#efeadd]'
                                       }`}
                                       title="Στοίχιση Δεξιά"
                                     >
-                                      <svg viewBox="0 0 16 16" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                                         <line x1="2" y1="3.5" x2="14" y2="3.5" />
                                         <line x1="6" y1="7" x2="14" y2="7" />
                                         <line x1="2" y1="10.5" x2="14" y2="10.5" />
@@ -52317,7 +57076,7 @@ export default function App() {
                                         type="button"
                                         onMouseDown={(ev) => ev.preventDefault()}
                                         onClick={() => handleInsertPowerCaretInText(txt.id)}
-                                        className="px-1 py-0.5 rounded bg-amber-500/80 hover:bg-amber-500 text-white font-normal cursor-pointer"
+                                        className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
                                         title="Εκθέτης πάνω ψηλά (^): Εισαγωγή συμβόλου δύναμης — π.χ. x^2, (x^2)/9 + (y^2)/16 = 25"
                                       >
                                         xⁿ
@@ -52326,7 +57085,7 @@ export default function App() {
                                         type="button"
                                         onMouseDown={(ev) => ev.preventDefault()}
                                         onClick={() => handleInsertSubscriptInText(txt.id)}
-                                        className="px-1 py-0.5 rounded bg-teal-600/85 hover:bg-teal-500 text-white font-normal cursor-pointer"
+                                        className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
                                         title="Δείκτης κάτω χαμηλά (_): Εισαγωγή συμβόλου δείκτη — π.χ. y_1 = x^2 - 9, y_2 = x^2 - 16, u_max"
                                       >
                                         xᵢ
@@ -52335,7 +57094,7 @@ export default function App() {
                                         type="button"
                                         onMouseDown={(ev) => ev.preventDefault()}
                                         onClick={() => handleConvertTextToMath(txt.id)}
-                                        className="px-1 py-0.5 rounded font-normal cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
+                                        className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
                                         title="Text2Math: Μετατρέπει εξίσωση απλού κειμένου (π.χ. (x^2)/9 + y^3 = 1/8) σε κανονικά κλάσματα & δυνάμεις χωρίς LaTeX! Στο Edit γυρνάει στην αρχική μορφή."
                                       >
                                         Math
@@ -52346,7 +57105,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleCreateMathGraphFromTextBox(txt.id)}
-                                    className="px-1 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-normal cursor-pointer"
+                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer"
                                     title="Σχεδίαση επεξεργάσιμου διαγράμματος δίπλα στην εξίσωση"
                                   >
                                     Γράφ.
@@ -52355,7 +57114,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleCheckChemistryInTextBox(txt.id)}
-                                    className="px-1 py-0.5 rounded bg-teal-600 hover:bg-teal-500 text-white font-normal cursor-pointer whitespace-nowrap"
+                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer whitespace-nowrap"
                                     title="Έλεγχος Χημικών Δεικτών & Συντελεστών (με κόκκινο ό,τι λείπει/είναι λάθος) + 3D Μόριο & Άτομα!"
                                   >
                                     Chem
@@ -52364,7 +57123,7 @@ export default function App() {
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
                                     onClick={() => handleCreate3DMoleculeFromTextBox(txt.id)}
-                                    className="px-1 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white font-normal cursor-pointer whitespace-nowrap"
+                                    className="px-2 py-1 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium transition cursor-pointer whitespace-nowrap"
                                     title="3D.OCR: Άμεση δημιουργία του Draggable 3D Μορίου με χρωματικό νέφος φορτίου από την ένωση του πλαισίου κειμένου!"
                                   >
                                     3D
@@ -52384,7 +57143,7 @@ export default function App() {
                                       }
                                       setEditingTextId(isEditingTxt ? null : txt.id);
                                     }}
-                                    className="p-1 rounded bg-sky-600/85 hover:bg-sky-500 text-white font-normal flex items-center justify-center cursor-pointer"
+                                    className="p-1.5 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 font-medium flex items-center justify-center transition cursor-pointer"
                                     title={
                                       isEditingTxt
                                         ? 'Ολοκλήρωση επεξεργασίας (επιστροφή στη μαθηματική μορφή)'
@@ -52392,14 +57151,14 @@ export default function App() {
                                     }
                                   >
                                     {isEditingTxt ? (
-                                      <span className="font-normal text-[10px] leading-none">✓</span>
+                                      <span className="font-bold text-[11px] leading-none text-[#333333]">✓</span>
                                     ) : (
                                       <svg
                                         viewBox="0 0 24 24"
-                                        className="w-2.5 h-2.5 text-white"
+                                        className="w-3.5 h-3.5 text-[#333333]"
                                         fill="none"
                                         stroke="currentColor"
-                                        strokeWidth="2.3"
+                                        strokeWidth="1.9"
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
                                       >
@@ -52419,157 +57178,281 @@ export default function App() {
                                       setSelectedTextId(null);
                                       setEditingTextId(null);
                                     }}
-                                    className="p-1 rounded bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center cursor-pointer"
+                                    className="p-1.5 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 flex items-center justify-center transition cursor-pointer"
                                     title="Διαγραφή κειμένου"
                                   >
-                                    <Trash2 className="w-2.5 h-2.5 text-white stroke-[2.3]" />
+                                    <Trash2 className="w-3.5 h-3.5 text-[#333333] stroke-[1.9]" />
                                   </button>
                                 </div>
                               );
                             })()}
 
-                          {isEditingTxt ? (
-                            <textarea
-                              autoFocus
-                              {...({ writingsuggestions: 'false' } as any)}
-                              ref={(el) => {
-                                if (el && document.activeElement !== el) {
-                                  window.requestAnimationFrame(() => {
-                                    el.focus();
-                                    const savedRng = activeTextRangeRef.current;
-                                    if (
-                                      savedRng &&
-                                      savedRng.textId === txt.id &&
-                                      savedRng.end > savedRng.start
-                                    ) {
+                          {(isEditingTxt || isSelectedTxt) && (
+                            <div
+                              style={
+                                isEditingTxt
+                                  ? {
+                                      display: 'grid',
+                                      position: 'relative',
+                                      width: 'fit-content',
+                                      maxWidth: txt.boxWidth
+                                        ? `${Math.max(36, txt.boxWidth - 12)}px`
+                                        : '42ch',
+                                    }
+                                  : {
+                                      position: 'absolute',
+                                      left: 0,
+                                      top: 0,
+                                      width: '100%',
+                                      height: '100%',
+                                      pointerEvents: 'none',
+                                      zIndex: -1,
+                                    }
+                              }
+                            >
+                              {isEditingTxt &&
+                                (() => {
+                                  const fullStr = txt.text || '';
+                                  const activeCaret =
+                                    editingCaretRange?.textId === txt.id
+                                      ? editingCaretRange
+                                      : pendingCaretSelectionRef.current?.textId === txt.id
+                                      ? pendingCaretSelectionRef.current
+                                      : activeTextRange?.textId === txt.id
+                                      ? activeTextRange
+                                      : {
+                                          textId: txt.id,
+                                          start: fullStr.length,
+                                          end: fullStr.length,
+                                        };
+                                  const s = Math.max(
+                                    0,
+                                    Math.min(fullStr.length, activeCaret.start)
+                                  );
+                                  const e = Math.max(
+                                    s,
+                                    Math.min(fullStr.length, activeCaret.end)
+                                  );
+                                  const caretNode =
+                                    e === s ? (
+                                      <span
+                                        key="live-caret"
+                                        className="inline-block w-[2.5px] h-[1.12em] bg-[#0066ff] align-text-bottom animate-pulse pointer-events-none select-none"
+                                        style={{
+                                          marginLeft: '-1.25px',
+                                          marginRight: '-1.25px',
+                                          borderRadius: '1px',
+                                          boxShadow: '0 0 3px rgba(0, 102, 255, 0.65)',
+                                        }}
+                                      />
+                                    ) : null;
+
+                                  const bSet = new Set<number>([0, s, e, fullStr.length]);
+                                  for (const sp of txt.spans || []) {
+                                    bSet.add(Math.max(0, Math.min(fullStr.length, sp.start)));
+                                    bSet.add(Math.max(0, Math.min(fullStr.length, sp.end)));
+                                  }
+                                  const sortedBounds = Array.from(bSet).sort((a, b) => a - b);
+
+                                  return (
+                                    <div
+                                      data-text-content="true"
+                                      aria-hidden="true"
+                                      style={{
+                                        gridArea: '1 / 1',
+                                        minInlineSize: '2ch',
+                                        maxInlineSize: txt.boxWidth
+                                          ? `${Math.max(36, txt.boxWidth - 12)}px`
+                                          : '42ch',
+                                        minBlockSize: '1.18lh',
+                                        whiteSpace: 'pre-wrap',
+                                        overflowWrap: 'break-word',
+                                        color: txt.color,
+                                        fontSize: txt.fontSize,
+                                        fontWeight: txt.bold ? 700 : 500,
+                                        textAlign: txt.textAlign || 'left',
+                                        lineHeight: 1.18,
+                                        ...fontCss,
+                                        pointerEvents: 'none',
+                                        userSelect: 'none',
+                                        WebkitUserSelect: 'none',
+                                      }}
+                                    >
+                                      {fullStr.length === 0 ? (
+                                        <>
+                                          {caretNode}
+                                          <span style={{ opacity: 0.42 }}>Γράψε κείμενο...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          {s === 0 && caretNode}
+                                          {sortedBounds.slice(0, -1).map((bStart, bIdx) => {
+                                            const bEnd = sortedBounds[bIdx + 1];
+                                            if (bEnd <= bStart) return null;
+                                            const segText = fullStr.slice(bStart, bEnd);
+                                            const segStyle = getRangeEffectiveStyle(
+                                              txt,
+                                              bStart,
+                                              bEnd
+                                            );
+                                            const segCss = getTextFontCss(
+                                              segStyle.fontFamily,
+                                              segStyle.bold
+                                            );
+                                            const isSelectedSeg =
+                                              e > s && bStart >= s && bEnd <= e;
+                                            return (
+                                              <React.Fragment key={bStart}>
+                                                <span
+                                                  style={{
+                                                    ...segCss,
+                                                    fontSize: `${segStyle.fontSize}px`,
+                                                    color: segStyle.color,
+                                                    fontWeight: segStyle.bold ? 700 : 500,
+                                                    backgroundColor: isSelectedSeg
+                                                      ? 'rgba(0, 102, 255, 0.28)'
+                                                      : undefined,
+                                                    boxShadow: isSelectedSeg
+                                                      ? '0 0 0 1.5px rgba(0, 102, 255, 0.55)'
+                                                      : undefined,
+                                                    borderRadius: isSelectedSeg ? '3px' : undefined,
+                                                  }}
+                                                >
+                                                  {segText}
+                                                </span>
+                                                {e === s && bEnd === s && caretNode}
+                                              </React.Fragment>
+                                            );
+                                          })}
+                                          {'\u200B'}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              <textarea
+                                autoFocus={isEditingTxt}
+                                {...({ writingsuggestions: 'false' } as any)}
+                                ref={(el) => {
+                                  if (el && isEditingTxt && document.activeElement !== el) {
+                                    window.requestAnimationFrame(() => {
+                                      el.focus({ preventScroll: true });
+                                      const pending = pendingCaretSelectionRef.current;
+                                      const savedRng =
+                                        pending && pending.textId === txt.id
+                                          ? pending
+                                          : activeTextRangeRef.current;
+                                      if (savedRng && savedRng.textId === txt.id) {
+                                        try {
+                                          el.setSelectionRange(savedRng.start, savedRng.end);
+                                        } catch {
+                                          // ignore
+                                        }
+                                      }
+                                    });
+                                  }
+                                }}
+                                value={txt.text}
+                                placeholder=""
+                                onSelect={(ev) => {
+                                  const el = ev.currentTarget;
+                                  const pending = pendingCaretSelectionRef.current;
+                                  if (
+                                    pending &&
+                                    pending.textId === txt.id &&
+                                    performance.now() - lastProgrammaticSelectionTimeRef.current < 450
+                                  ) {
+                                    const curS = el.selectionStart ?? 0;
+                                    const curE = el.selectionEnd ?? 0;
+                                    if (curS !== pending.start || curE !== pending.end) {
                                       try {
-                                        el.setSelectionRange(savedRng.start, savedRng.end);
+                                        el.setSelectionRange(pending.start, pending.end);
                                       } catch {
                                         // ignore
                                       }
                                     }
-                                  });
-                                }
-                              }}
-                              value={txt.text}
-                              placeholder="Γράψε κείμενο..."
-                              onSelect={(ev) => {
-                                const el = ev.currentTarget;
-                                const s = el.selectionStart ?? 0;
-                                const e = el.selectionEnd ?? 0;
-                                if (e > s) {
-                                  const nextRng = { textId: txt.id, start: s, end: e };
-                                  activeTextRangeRef.current = nextRng;
-                                  setActiveTextRange(nextRng);
-                                } else if (activeTextRangeRef.current?.textId === txt.id) {
-                                  activeTextRangeRef.current = null;
-                                  setActiveTextRange(null);
-                                }
-                              }}
-                              onKeyUp={(ev) => {
-                                const el = ev.currentTarget;
-                                const s = el.selectionStart ?? 0;
-                                const e = el.selectionEnd ?? 0;
-                                if (e > s) {
-                                  const nextRng = { textId: txt.id, start: s, end: e };
-                                  activeTextRangeRef.current = nextRng;
-                                  setActiveTextRange(nextRng);
-                                } else if (activeTextRangeRef.current?.textId === txt.id) {
-                                  activeTextRangeRef.current = null;
-                                  setActiveTextRange(null);
-                                }
-                              }}
-                              onMouseUp={(ev) => {
-                                const el = ev.currentTarget;
-                                const s = el.selectionStart ?? 0;
-                                const e = el.selectionEnd ?? 0;
-                                if (e > s) {
-                                  const nextRng = { textId: txt.id, start: s, end: e };
-                                  activeTextRangeRef.current = nextRng;
-                                  setActiveTextRange(nextRng);
-                                } else if (activeTextRangeRef.current?.textId === txt.id) {
-                                  activeTextRangeRef.current = null;
-                                  setActiveTextRange(null);
-                                }
-                              }}
-                              onChange={(ev) => {
-                                const val = ev.target.value;
-                                activeTextRangeRef.current = null;
-                                setActiveTextRange(null);
-                                updateActivePage(
-                                  (page) => ({
-                                    ...page,
-                                    texts: (page.texts || []).map((t) => {
-                                      if (t.id !== txt.id) return t;
-                                      const tight = t.boxWidth
-                                        ? measureWrappedTextLayout(
-                                            val,
-                                            t.fontFamily,
-                                            t.bold,
-                                            t.fontSize,
-                                            t.boxWidth
-                                          )
-                                        : null;
-                                      return {
-                                        ...t,
-                                        text: val,
-                                        latex: t.isMath ? convertPlainTextToMathLatex(val) : t.latex,
-                                        boxWidth: tight
-                                          ? Math.max(t.boxWidth || 0, tight.tightW)
-                                          : t.boxWidth,
-                                        boxHeight: tight ? tight.tightH : t.boxHeight,
-                                        spans: adjustTextSpansOnEdit(t.text || '', val, t.spans),
+                                    setEditingCaretRange({
+                                      textId: txt.id,
+                                      start: pending.start,
+                                      end: pending.end,
+                                    });
+                                    if (pending.end > pending.start) {
+                                      const nextRng = {
+                                        textId: txt.id,
+                                        start: pending.start,
+                                        end: pending.end,
                                       };
-                                    }),
-                                  }),
-                                  false
-                                );
-                              }}
-                              onKeyDown={(ev) => {
-                                if (ev.key === 'Escape' && !ev.nativeEvent.isComposing) {
-                                  releaseActiveTextBox();
-                                  return;
-                                }
-                                if (
-                                  ev.key === 'Enter' &&
-                                  ev.shiftKey &&
-                                  !ev.nativeEvent.isComposing
-                                ) {
-                                  ev.preventDefault();
-                                  const el = ev.currentTarget;
-                                  const curVal = el.value || '';
-                                  const selStart = el.selectionStart ?? curVal.length;
-                                  const selEnd = el.selectionEnd ?? selStart;
-                                  const before = curVal
-                                    .slice(0, selStart)
-                                    .replace(/[ \t\u200B]+$/, '');
-                                  const after = curVal.slice(selEnd).replace(/^[ \t]+/, '');
-                                  let nextVal: string;
-                                  let nextCursorPos: number;
-                                  if (after.startsWith('\n') || after.startsWith('\r\n')) {
-                                    const nlMatch = after.match(/^\r?\n/);
-                                    const nlLen = nlMatch ? nlMatch[0].length : 1;
-                                    nextVal =
-                                      before +
-                                      '\u200B\n' +
-                                      after.slice(nlLen).replace(/^[ \t]+/, '');
-                                    nextCursorPos = before.length + 2;
-                                  } else if (
-                                    before.endsWith('\n') &&
-                                    !before.endsWith('\n\n') &&
-                                    after.length > 0
-                                  ) {
-                                    const beforeWithoutNl = before
-                                      .replace(/\r?\n$/, '')
-                                      .replace(/[ \t\u200B]+$/, '');
-                                    nextVal = beforeWithoutNl + '\u200B\n' + after;
-                                    nextCursorPos = beforeWithoutNl.length + 2;
-                                  } else {
-                                    nextVal = before + '\u200B\n' + after;
-                                    nextCursorPos = before.length + 2;
+                                      activeTextRangeRef.current = nextRng;
+                                      setActiveTextRange(nextRng);
+                                    }
+                                    return;
                                   }
+                                  const s = el.selectionStart ?? 0;
+                                  const e = el.selectionEnd ?? 0;
+                                  setEditingCaretRange({ textId: txt.id, start: s, end: e });
+                                  if (e > s) {
+                                    const nextRng = { textId: txt.id, start: s, end: e };
+                                    activeTextRangeRef.current = nextRng;
+                                    setActiveTextRange(nextRng);
+                                  } else if (activeTextRangeRef.current?.textId === txt.id) {
+                                    activeTextRangeRef.current = null;
+                                    setActiveTextRange(null);
+                                  }
+                                }}
+                                onKeyUp={(ev) => {
+                                  const el = ev.currentTarget;
+                                  const s = el.selectionStart ?? 0;
+                                  const e = el.selectionEnd ?? 0;
+                                  setEditingCaretRange({ textId: txt.id, start: s, end: e });
+                                  if (e > s) {
+                                    const nextRng = { textId: txt.id, start: s, end: e };
+                                    activeTextRangeRef.current = nextRng;
+                                    setActiveTextRange(nextRng);
+                                  } else if (activeTextRangeRef.current?.textId === txt.id) {
+                                    activeTextRangeRef.current = null;
+                                    setActiveTextRange(null);
+                                  }
+                                }}
+                                onMouseUp={(ev) => {
+                                  const el = ev.currentTarget;
+                                  const pending = pendingCaretSelectionRef.current;
+                                  if (
+                                    pending &&
+                                    pending.textId === txt.id &&
+                                    performance.now() - lastProgrammaticSelectionTimeRef.current < 450
+                                  ) {
+                                    try {
+                                      el.setSelectionRange(pending.start, pending.end);
+                                    } catch {
+                                      // ignore
+                                    }
+                                    return;
+                                  }
+                                  const s = el.selectionStart ?? 0;
+                                  const e = el.selectionEnd ?? 0;
+                                  setEditingCaretRange({ textId: txt.id, start: s, end: e });
+                                  if (e > s) {
+                                    const nextRng = { textId: txt.id, start: s, end: e };
+                                    activeTextRangeRef.current = nextRng;
+                                    setActiveTextRange(nextRng);
+                                  } else if (activeTextRangeRef.current?.textId === txt.id) {
+                                    activeTextRangeRef.current = null;
+                                    setActiveTextRange(null);
+                                  }
+                                }}
+                                onChange={(ev) => {
+                                  const val = ev.target.value;
+                                  const nextS = ev.target.selectionStart ?? val.length;
+                                  const nextE = ev.target.selectionEnd ?? nextS;
+                                  pendingCaretSelectionRef.current = null;
+                                  lastProgrammaticSelectionTimeRef.current = 0;
                                   activeTextRangeRef.current = null;
                                   setActiveTextRange(null);
+                                  setEditingCaretRange({
+                                    textId: txt.id,
+                                    start: nextS,
+                                    end: nextE,
+                                  });
                                   updateActivePage(
                                     (page) => ({
                                       ...page,
@@ -52577,7 +57460,7 @@ export default function App() {
                                         if (t.id !== txt.id) return t;
                                         const tight = t.boxWidth
                                           ? measureWrappedTextLayout(
-                                              nextVal,
+                                              val,
                                               t.fontFamily,
                                               t.bold,
                                               t.fontSize,
@@ -52586,85 +57469,174 @@ export default function App() {
                                           : null;
                                         return {
                                           ...t,
-                                          text: nextVal,
-                                          latex: t.isMath
-                                            ? convertPlainTextToMathLatex(nextVal)
-                                            : t.latex,
+                                          text: val,
+                                          latex: t.isMath ? convertPlainTextToMathLatex(val) : t.latex,
                                           boxWidth: tight
                                             ? Math.max(t.boxWidth || 0, tight.tightW)
                                             : t.boxWidth,
                                           boxHeight: tight ? tight.tightH : t.boxHeight,
-                                          spans: adjustTextSpansOnEdit(
-                                            t.text || '',
-                                            nextVal,
-                                            t.spans
-                                          ),
+                                          spans: adjustTextSpansOnEdit(t.text || '', val, t.spans),
                                         };
                                       }),
                                     }),
                                     false
                                   );
-                                  window.requestAnimationFrame(() => {
-                                    try {
-                                      el.focus();
-                                      el.setSelectionRange(nextCursorPos, nextCursorPos);
-                                    } catch {
-                                      // ignore
+                                }}
+                                onKeyDown={(ev) => {
+                                  pendingCaretSelectionRef.current = null;
+                                  lastProgrammaticSelectionTimeRef.current = 0;
+                                  if (ev.key === 'Escape' && !ev.nativeEvent.isComposing) {
+                                    releaseActiveTextBox();
+                                    return;
+                                  }
+                                  if (
+                                    ev.key === 'Enter' &&
+                                    ev.shiftKey &&
+                                    !ev.nativeEvent.isComposing
+                                  ) {
+                                    ev.preventDefault();
+                                    const el = ev.currentTarget;
+                                    const curVal = el.value || '';
+                                    const selStart = el.selectionStart ?? curVal.length;
+                                    const selEnd = el.selectionEnd ?? selStart;
+                                    const before = curVal
+                                      .slice(0, selStart)
+                                      .replace(/[ \t\u200B]+$/, '');
+                                    const after = curVal.slice(selEnd).replace(/^[ \t]+/, '');
+                                    let nextVal: string;
+                                    let nextCursorPos: number;
+                                    if (after.startsWith('\n') || after.startsWith('\r\n')) {
+                                      const nlMatch = after.match(/^\r?\n/);
+                                      const nlLen = nlMatch ? nlMatch[0].length : 1;
+                                      nextVal =
+                                        before +
+                                        '\u200B\n' +
+                                        after.slice(nlLen).replace(/^[ \t]+/, '');
+                                      nextCursorPos = before.length + 2;
+                                    } else if (
+                                      before.endsWith('\n') &&
+                                      !before.endsWith('\n\n') &&
+                                      after.length > 0
+                                    ) {
+                                      const beforeWithoutNl = before
+                                        .replace(/\r?\n$/, '')
+                                        .replace(/[ \t\u200B]+$/, '');
+                                      nextVal = beforeWithoutNl + '\u200B\n' + after;
+                                      nextCursorPos = beforeWithoutNl.length + 2;
+                                    } else {
+                                      nextVal = before + '\u200B\n' + after;
+                                      nextCursorPos = before.length + 2;
                                     }
-                                  });
-                                }
-                              }}
-                              onBlur={(ev) => {
-                                if (
-                                  draggingTextRef.current?.id === txt.id ||
-                                  selectedTextId === txt.id
-                                ) {
-                                  return;
-                                }
-                                if (performance.now() - lastTextCreatedTimeRef.current < 450) {
-                                  const targetEl = ev.currentTarget;
-                                  window.requestAnimationFrame(() => targetEl.focus());
-                                  return;
-                                }
-                                setEditingTextId((curr) => (curr === txt.id ? null : curr));
-                                if (!txt.text || txt.text.trim().length === 0) {
-                                  updateActivePage(
-                                    (page) => ({
-                                      ...page,
-                                      texts: (page.texts || []).filter((t) => t.id !== txt.id),
-                                    }),
-                                    false
+                                    activeTextRangeRef.current = null;
+                                    setActiveTextRange(null);
+                                    setEditingCaretRange({
+                                      textId: txt.id,
+                                      start: nextCursorPos,
+                                      end: nextCursorPos,
+                                    });
+                                    updateActivePage(
+                                      (page) => ({
+                                        ...page,
+                                        texts: (page.texts || []).map((t) => {
+                                          if (t.id !== txt.id) return t;
+                                          const tight = t.boxWidth
+                                            ? measureWrappedTextLayout(
+                                                nextVal,
+                                                t.fontFamily,
+                                                t.bold,
+                                                t.fontSize,
+                                                t.boxWidth
+                                              )
+                                            : null;
+                                          return {
+                                            ...t,
+                                            text: nextVal,
+                                            latex: t.isMath
+                                              ? convertPlainTextToMathLatex(nextVal)
+                                              : t.latex,
+                                            boxWidth: tight
+                                              ? Math.max(t.boxWidth || 0, tight.tightW)
+                                              : t.boxWidth,
+                                            boxHeight: tight ? tight.tightH : t.boxHeight,
+                                            spans: adjustTextSpansOnEdit(
+                                              t.text || '',
+                                              nextVal,
+                                              t.spans
+                                            ),
+                                          };
+                                        }),
+                                      }),
+                                      false
+                                    );
+                                    window.requestAnimationFrame(() => {
+                                      try {
+                                        el.focus();
+                                        el.setSelectionRange(nextCursorPos, nextCursorPos);
+                                      } catch {
+                                        // ignore
+                                      }
+                                    });
+                                  }
+                                }}
+                                onBlur={(ev) => {
+                                  if (
+                                    draggingTextRef.current?.id === txt.id ||
+                                    selectedTextId === txt.id
+                                  ) {
+                                    return;
+                                  }
+                                  if (performance.now() - lastTextCreatedTimeRef.current < 450) {
+                                    const targetEl = ev.currentTarget;
+                                    window.requestAnimationFrame(() => targetEl.focus());
+                                    return;
+                                  }
+                                  setEditingTextId((curr) => (curr === txt.id ? null : curr));
+                                  setEditingCaretRange((curr) =>
+                                    curr?.textId === txt.id ? null : curr
                                   );
-                                  setSelectedTextId((curr) => (curr === txt.id ? null : curr));
-                                }
-                              }}
-                              style={{
-                                fieldSizing: 'content',
-                                width: 'auto',
-                                height: 'auto',
-                                minInlineSize: '2ch',
-                                maxInlineSize: txt.boxWidth
-                                  ? `${Math.max(36, txt.boxWidth - 12)}px`
-                                  : '42ch',
-                                minBlockSize: '1.18lh',
-                                maxBlockSize: '16lh',
-                                overflowWrap: 'break-word',
-                                color: txt.color,
-                                fontSize: txt.fontSize,
-                                fontWeight: txt.bold ? 700 : 500,
-                                textAlign: txt.textAlign || 'left',
-                                lineHeight: 1.18,
-                                ...fontCss,
-                                touchAction: 'none',
-                                pointerEvents:
-                                  draggingTextRef.current?.id === txt.id ||
-                                  (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
-                                    ? 'none'
-                                    : 'auto',
-                              } as React.CSSProperties}
-                              className="bg-transparent outline-none resize-none border-0 p-0 m-0 block cursor-grab active:cursor-grabbing"
-                            />
-                          ) : txt.isMath && txt.latex ? (
+                                  if (!txt.text || txt.text.trim().length === 0) {
+                                    updateActivePage(
+                                      (page) => ({
+                                        ...page,
+                                        texts: (page.texts || []).filter((t) => t.id !== txt.id),
+                                      }),
+                                      false
+                                    );
+                                    setSelectedTextId((curr) => (curr === txt.id ? null : curr));
+                                  }
+                                }}
+                                style={{
+                                  gridArea: isEditingTxt ? '1 / 1' : undefined,
+                                  width: '100%',
+                                  height: '100%',
+                                  position: isEditingTxt ? 'relative' : 'absolute',
+                                  left: isEditingTxt ? undefined : 0,
+                                  top: isEditingTxt ? undefined : 0,
+                                  opacity: isEditingTxt ? 1 : 0,
+                                  zIndex: isEditingTxt ? 1 : -1,
+                                  minInlineSize: '2ch',
+                                  maxInlineSize: txt.boxWidth
+                                    ? `${Math.max(36, txt.boxWidth - 12)}px`
+                                    : '42ch',
+                                  minBlockSize: '1.18lh',
+                                  overflowWrap: 'break-word',
+                                  color: 'transparent',
+                                  caretColor: 'transparent',
+                                  fontSize: txt.fontSize,
+                                  fontWeight: txt.bold ? 700 : 500,
+                                  textAlign: txt.textAlign || 'left',
+                                  lineHeight: 1.18,
+                                  ...fontCss,
+                                  WebkitUserSelect: 'text',
+                                  userSelect: 'text',
+                                  touchAction: 'none',
+                                  pointerEvents: 'none',
+                                } as React.CSSProperties}
+                                className="bg-transparent outline-none resize-none border-0 p-0 m-0 block pointer-events-none select-text overflow-hidden"
+                              />
+                            </div>
+                          )}
+                          {!isEditingTxt && (txt.isMath && txt.latex ? (
                             <div
                               data-text-content="true"
                               style={{
@@ -52962,7 +57934,7 @@ export default function App() {
                                 txt.text || 'Κείμενο...'
                               )}
                             </div>
-                          )}
+                          ))}
                         </div>
                       );
                     })}
@@ -53203,18 +58175,20 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Movable & Rotatable Minimalist A4 Ruler (per-page: stays on the page where it was added!) */}
+                    {/* Movable, Rotatable & Resizable Minimalist A4 Ruler (per-page: stays on the page where it was added & clamps cleanly before the page edge!) */}
                     {(() => {
                       const pageRuler =
-                        rulersByPageId[pageObj.id] || DEFAULT_PAGE_RULER_STATE;
+                        rulersByPageId[pageObj.id] || pageObj.ruler || DEFAULT_PAGE_RULER_STATE;
                       if (!pageRuler.visible) return null;
                       // 100% of A4 Portrait width (920px) = 20cm => 1cm = 46px in page coordinates!
-                      // 80% of paper width = 736px (16cm) in Portrait, or 1008px in Landscape.
-                      const rulerW = Math.round(pW * 0.8);
-                      const rulerH = 54;
+                      const rGeom = getEffectiveRulerGeometry(pageRuler, pW, pH);
+                      const rulerW = rGeom.effectiveRulerW;
+                      const rulerH = rGeom.rulerH;
                       const oneCmPx = 920 / 20; // 46px per 1cm
                       const halfCmPx = oneCmPx / 2; // 23px per 0.5cm
                       const totalHalfCmSteps = Math.floor(rulerW / halfCmPx);
+                      const resizeCursor =
+                        Math.abs(rGeom.sinA) >= 0.7 ? 'ns-resize' : 'ew-resize';
                       const pointerCandidates = pageObj.strokes.filter(
                         (s) =>
                           s.points.length >= 2 &&
@@ -53230,31 +58204,31 @@ export default function App() {
                             data-ui-panel="true"
                             data-ruler-root="true"
                             tabIndex={0}
-                            aria-label="Χάρακας (σύρετε με το χέρι ή μετακινήστε με τα βελάκια)"
+                            aria-label="Χάρακας (σύρετε για μετακίνηση ή από την άκρη για αλλαγή μεγέθους)"
                             onKeyDown={(e) => {
                               const step = 15;
                               if (e.key === 'ArrowLeft') {
                                 e.preventDefault();
                                 setRulerState(
-                                  (r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x - step)) }),
+                                  (r) => ({ ...r, x: r.x - step }),
                                   pageObj.id
                                 );
                               } else if (e.key === 'ArrowRight') {
                                 e.preventDefault();
                                 setRulerState(
-                                  (r) => ({ ...r, x: Math.max(40, Math.min(pW - 40, r.x + step)) }),
+                                  (r) => ({ ...r, x: r.x + step }),
                                   pageObj.id
                                 );
                               } else if (e.key === 'ArrowUp') {
                                 e.preventDefault();
                                 setRulerState(
-                                  (r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y - step)) }),
+                                  (r) => ({ ...r, y: r.y - step }),
                                   pageObj.id
                                 );
                               } else if (e.key === 'ArrowDown') {
                                 e.preventDefault();
                                 setRulerState(
-                                  (r) => ({ ...r, y: Math.max(40, Math.min(pH - 40, r.y + step)) }),
+                                  (r) => ({ ...r, y: r.y + step }),
                                   pageObj.id
                                 );
                               }
@@ -53278,25 +58252,52 @@ export default function App() {
                               } catch {
                                 // ignore capture error
                               }
+
+                              // Check if pointer is on the end resize handle or within 26px of the far end of the ruler
+                              const hitResizeHandle = Boolean(
+                                (e.target as HTMLElement).closest('[data-ruler-resize="end"]')
+                              );
+                              const pageContainerEl = e.currentTarget.parentElement;
+                              const pageRect = pageContainerEl?.getBoundingClientRect();
+                              let isNearFarEnd = hitResizeHandle;
+                              if (!isNearFarEnd && pageRect) {
+                                const ptPageX = (e.clientX - pageRect.left) / zoomRef.current;
+                                const ptPageY = (e.clientY - pageRect.top) / zoomRef.current;
+                                const distAlongFromOrigin =
+                                  (ptPageX - rGeom.originX) * rGeom.cosA +
+                                  (ptPageY - rGeom.originY) * rGeom.sinA;
+                                if (distAlongFromOrigin >= rulerW - 26) {
+                                  isNearFarEnd = true;
+                                }
+                              }
+
+                              const syncedCenterX =
+                                rGeom.originX + (rGeom.userLength / 2) * rGeom.cosA;
+                              const syncedCenterY =
+                                rGeom.originY + (rGeom.userLength / 2) * rGeom.sinA;
+
                               rulerDragRef.current = {
                                 pageId: pageObj.id,
-                                mode: 'move',
+                                mode: isNearFarEnd ? 'resize' : 'move',
                                 pointerId: e.pointerId,
                                 startClientX: e.clientX,
                                 startClientY: e.clientY,
-                                initialX: pageRuler.x,
-                                initialY: pageRuler.y,
+                                initialX: syncedCenterX,
+                                initialY: syncedCenterY,
                                 initialAngle: pageRuler.angle,
                                 startPointerAngleDeg: 0,
                                 centerClientX: 0,
                                 centerClientY: 0,
+                                originX: rGeom.originX,
+                                originY: rGeom.originY,
+                                initialLength: rulerW,
                               };
                             }}
                             onPointerMove={(e) => {
                               const st = rulerDragRef.current;
                               if (
                                 !st ||
-                                st.mode !== 'move' ||
+                                (st.mode !== 'move' && st.mode !== 'resize') ||
                                 st.pointerId !== e.pointerId ||
                                 st.pageId !== pageObj.id
                               ) {
@@ -53305,11 +58306,43 @@ export default function App() {
                               e.stopPropagation();
                               const dx = (e.clientX - st.startClientX) / zoomRef.current;
                               const dy = (e.clientY - st.startClientY) / zoomRef.current;
-                              const nextX = Math.max(40, Math.min(pW - 40, st.initialX + dx));
-                              let nextY = Math.max(40, Math.min(pH - 40, st.initialY + dy));
-                              const rad = (pageRuler.angle * Math.PI) / 180;
-                              const sinA = Math.sin(rad);
-                              const cosA = Math.cos(rad);
+
+                              if (st.mode === 'resize') {
+                                const origX = st.originX ?? rGeom.originX;
+                                const origY = st.originY ?? rGeom.originY;
+                                const initLen = st.initialLength ?? rulerW;
+                                const deltaAlong = dx * rGeom.cosA + dy * rGeom.sinA;
+                                const nextLen = Math.max(
+                                  69,
+                                  Math.min(
+                                    rGeom.maxLenToPageEdge,
+                                    Math.round(initLen + deltaAlong)
+                                  )
+                                );
+                                const nextCenterX = origX + (nextLen / 2) * rGeom.cosA;
+                                const nextCenterY = origY + (nextLen / 2) * rGeom.sinA;
+                                setRulerState(
+                                  (prev) => ({
+                                    ...prev,
+                                    x: nextCenterX,
+                                    y: nextCenterY,
+                                    lengthPx: nextLen,
+                                  }),
+                                  pageObj.id
+                                );
+                                return;
+                              }
+
+                              const sinA = rGeom.sinA;
+                              const cosA = rGeom.cosA;
+                              const uLen = rGeom.userLength;
+                              const rawOrigX = st.initialX - (uLen / 2) * cosA + dx;
+                              const rawOrigY = st.initialY - (uLen / 2) * sinA + dy;
+                              const clampedOrigX = Math.max(12, Math.min(pW - 36, rawOrigX));
+                              const clampedOrigY = Math.max(12, Math.min(pH - 36, rawOrigY));
+                              const nextX = clampedOrigX + (uLen / 2) * cosA;
+                              let nextY = clampedOrigY + (uLen / 2) * sinA;
+
                               if (Math.abs(sinA) >= 0.96) {
                                 // Gently snap the 0 cm origin of the vertical ruler to a nearby spring pointer arrow
                                 const closeEdgeThreshold = rulerH / 2 + 36;
@@ -53324,7 +58357,7 @@ export default function App() {
                                       ? 0
                                       : Math.min(Math.abs(sPerp0), Math.abs(sPerpEnd));
                                   if (segPerpDist <= closeEdgeThreshold) {
-                                    const targetY = cPEnd.y + (rulerW / 2) * (sinA >= 0 ? 1 : -1);
+                                    const targetY = cPEnd.y + (uLen / 2) * (sinA >= 0 ? 1 : -1);
                                     if (Math.abs(nextY - targetY) <= 14) {
                                       nextY = targetY;
                                       break;
@@ -53343,15 +58376,18 @@ export default function App() {
                               }
                             }}
                             onLostPointerCapture={() => {
-                              if (rulerDragRef.current?.mode === 'move') {
+                              if (
+                                rulerDragRef.current?.mode === 'move' ||
+                                rulerDragRef.current?.mode === 'resize'
+                              ) {
                                 rulerDragRef.current = null;
                               }
                             }}
                             style={{
                               width: rulerW,
                               height: rulerH,
-                              left: pageRuler.x - rulerW / 2,
-                              top: pageRuler.y - rulerH / 2,
+                              left: rGeom.centerX - rulerW / 2,
+                              top: rGeom.centerY - rulerH / 2,
                               transform: `rotate(${pageRuler.angle}deg)`,
                               touchAction: 'none',
                               WebkitUserSelect: 'none',
@@ -53359,6 +58395,18 @@ export default function App() {
                             }}
                             className="absolute bg-slate-200/75 backdrop-blur-[1.5px] border border-slate-400/65 rounded-md shadow-md cursor-grab active:cursor-grabbing z-20 outline-none"
                           >
+                            {/* Far-End Interactive Resize Grip (Σύρετε με δάχτυλο ή ποντίκι στην άκρη του χάρακα για μείωση/αύξηση μεγέθους) */}
+                            <div
+                              data-ruler-resize="end"
+                              title="Σύρετε την άκρη του χάρακα για αυξομείωση του μήκους του"
+                              style={{ cursor: resizeCursor }}
+                              className="absolute right-0 inset-y-0 w-6 z-20 flex items-center justify-end pr-1.5 rounded-r-md hover:bg-slate-400/25 active:bg-slate-400/40 transition-colors"
+                            >
+                              <div className="flex gap-[2px] items-center pointer-events-none opacity-65">
+                                <div className="w-[1.5px] h-5 rounded-full bg-slate-600" />
+                                <div className="w-[1.5px] h-5 rounded-full bg-slate-600" />
+                              </div>
+                            </div>
                             {/* Top-Center Rotation Stem & Circular Handle */}
                             <div
                               data-ui-panel="true"
@@ -53713,12 +58761,63 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* Goodnotes Fast Right-Edge Page Scrubber for Multi-Page PDFs (5+ pages) */}
+            {!isCleanProjectorMode && activeNotebook.pages.length > 4 && (
+              <div
+                data-ui-panel="true"
+                onPointerEnter={triggerPageControlsVisibility}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  triggerPageControlsVisibility();
+                  const track = e.currentTarget;
+                  const scrubToClientY = (clientY: number) => {
+                    const rect = track.getBoundingClientRect();
+                    const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / Math.max(1, rect.height)));
+                    const targetIdx = Math.round(ratio * (activeNotebook.pages.length - 1));
+                    scrollToPageIndex(targetIdx);
+                  };
+                  scrubToClientY(e.clientY);
+                  const onMove = (ev: PointerEvent) => {
+                    scrubToClientY(ev.clientY);
+                  };
+                  const onUp = () => {
+                    window.removeEventListener('pointermove', onMove);
+                    window.removeEventListener('pointerup', onUp);
+                    window.removeEventListener('pointercancel', onUp);
+                  };
+                  window.addEventListener('pointermove', onMove);
+                  window.addEventListener('pointerup', onUp);
+                  window.addEventListener('pointercancel', onUp);
+                }}
+                style={{ touchAction: 'none' }}
+                className={`fixed right-1.5 top-28 bottom-10 w-5 z-30 flex flex-col items-center select-none cursor-ns-resize transition-opacity duration-500 ${
+                  pageControlsVisible ? 'opacity-95' : 'opacity-25 hover:opacity-95'
+                }`}
+                title="Σύρε πάνω-κάτω για αστραπιαία μετάβαση σε οποιαδήποτε σελίδα (1 έως 170+)"
+              >
+                <div className="relative w-1.5 flex-1 rounded-full bg-slate-400/35 backdrop-blur-xs">
+                  <div
+                    style={{
+                      top: `${
+                        activeNotebook.pages.length > 1
+                          ? (activePageIndex / (activeNotebook.pages.length - 1)) * 100
+                          : 0
+                      }%`,
+                    }}
+                    className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-full bg-[#1b2a4a]/90 text-white text-[10px] font-bold shadow-md whitespace-nowrap border border-white/25"
+                  >
+                    {activePageIndex + 1}/{activeNotebook.pages.length}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
 
       {/* =========================================================================
-          MULTI-PAGE THUMBNAIL GRID VIEW (3 or 4 Columns × Scrollable Rows for 30+ Pages)
+          MULTI-PAGE THUMBNAIL GRID VIEW (Virtualized 3 or 4 Columns × Scrollable Rows for 170+ Pages)
          ========================================================================= */}
       {showThumbnailsModal && (
         <div
@@ -53747,7 +58846,26 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {activeNotebook.pages.length > 6 && (
+                  <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs">
+                    <span className="text-sky-200 font-semibold whitespace-nowrap">
+                      Σελ. {activePageIndex + 1}/{activeNotebook.pages.length}
+                    </span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={activeNotebook.pages.length}
+                      value={activePageIndex + 1}
+                      onChange={(e) => {
+                        const targetIdx = Math.max(0, Math.min(activeNotebook.pages.length - 1, Number(e.target.value) - 1));
+                        scrollToPageIndex(targetIdx);
+                      }}
+                      className="w-28 sm:w-40 accent-sky-400 cursor-pointer"
+                      title="Γρήγορη κύλιση σε οποιαδήποτε σελίδα"
+                    />
+                  </div>
+                )}
                 <button
                   onClick={() => setShowThumbnailsModal(false)}
                   className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold text-white cursor-pointer"
@@ -53757,8 +58875,18 @@ export default function App() {
               </div>
             </div>
 
-            {/* Scrollable Thumbnail Grid (e.g. 4 rows × 3 columns or 4 columns for 30+ page documents) */}
+            {/* Virtualized Scrollable Thumbnail Grid (Smooth 120fps even for 170+ page PDF books!) */}
             <div
+              ref={(el) => {
+                if (el && el.dataset.scrolledToActive !== '1') {
+                  el.dataset.scrolledToActive = '1';
+                  const rowIdx = Math.floor(activePageIndex / thumbnailCols);
+                  const targetScroll = Math.max(0, rowIdx * 280 - 120);
+                  el.scrollTop = targetScroll;
+                  setThumbModalScrollTop(targetScroll);
+                }
+              }}
+              onScroll={(e) => setThumbModalScrollTop(e.currentTarget.scrollTop)}
               style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
               className="flex-1 overflow-y-auto p-5"
             >
@@ -53769,131 +58897,162 @@ export default function App() {
                     : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
                 }`}
               >
-                {activeNotebook.pages.map((pObj, pIdx) => {
-                  const isSelectedPage = pIdx === activePageIndex;
-                  const pW = getPageLogicalWidth(pObj);
-                  const pH = getPageLogicalHeight(pObj);
+                {(() => {
+                  const estRowHeight = 270;
+                  const firstVisibleRow = Math.max(0, Math.floor(thumbModalScrollTop / estRowHeight) - 3);
+                  const lastVisibleRow = Math.ceil((thumbModalScrollTop + 900) / estRowHeight) + 4;
+                  const firstVisibleIdx = firstVisibleRow * thumbnailCols;
+                  const lastVisibleIdx = (lastVisibleRow + 1) * thumbnailCols;
 
-                  return (
-                    <div
-                      key={pObj.id}
-                      className={`group flex flex-col rounded-xl bg-white border-2 shadow-sm hover:shadow-md transition overflow-hidden ${
-                        isSelectedPage
-                          ? 'border-[#0066ff] ring-2 ring-[#0066ff]/25'
-                          : 'border-slate-200 hover:border-sky-400'
-                      }`}
-                    >
-                      {/* Clickable Miniature Page Preview */}
+                  return activeNotebook.pages.map((pObj, pIdx) => {
+                    const isSelectedPage = pIdx === activePageIndex;
+                    const pW = getPageLogicalWidth(pObj);
+                    const pH = getPageLogicalHeight(pObj);
+                    const isThumbInWindow =
+                      activeNotebook.pages.length <= 24 ||
+                      (pIdx >= firstVisibleIdx && pIdx <= lastVisibleIdx) ||
+                      Math.abs(pIdx - activePageIndex) <= 6;
+                    const hasOverlayContent =
+                      (pObj.strokes?.length || 0) > 0 ||
+                      (pObj.images?.length || 0) > 0 ||
+                      (pObj.texts?.length || 0) > 0;
+
+                    return (
                       <div
-                        onClick={() => {
-                          scrollToPageIndex(pIdx);
-                          setShowThumbnailsModal(false);
-                        }}
-                        style={{
-                          aspectRatio: `${pW} / ${pH}`,
-                          minHeight: '200px',
-                          backgroundColor: pObj.backgroundDataUrl
-                            ? '#ffffff'
-                            : pObj.template === 'dark-grid'
-                            ? '#0f172a'
-                            : '#fffdf7',
-                        }}
-                        className="relative w-full overflow-hidden cursor-pointer flex items-center justify-center"
+                        key={pObj.id}
+                        className={`group flex flex-col rounded-xl bg-white border-2 shadow-sm hover:shadow-md transition overflow-hidden ${
+                          isSelectedPage
+                            ? 'border-[#0066ff] ring-2 ring-[#0066ff]/25'
+                            : 'border-slate-200 hover:border-sky-400'
+                        }`}
                       >
-                        {/* Page Number Badge */}
+                        {/* Clickable Miniature Page Preview */}
                         <div
-                          className={`absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-full text-xs font-bold shadow ${
-                            isSelectedPage ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
-                          }`}
-                        >
-                          {pIdx + 1}
-                        </div>
-
-                        {isSelectedPage && (
-                          <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow">
-                            Ενεργή
-                          </div>
-                        )}
-
-                        {/* Larger Trash Can Button at Bottom-Right Inside the Page */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deletePageAtIndex(pIdx);
+                          onClick={() => {
+                            scrollToPageIndex(pIdx);
+                            setShowThumbnailsModal(false);
                           }}
-                          className="absolute bottom-2.5 right-2.5 z-10 p-2.5 rounded-xl bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/90 shadow-md transition cursor-pointer"
-                          title="Διαγραφή αυτής της σελίδας"
+                          style={{
+                            aspectRatio: `${pW} / ${pH}`,
+                            minHeight: '200px',
+                            backgroundColor:
+                              pObj.backgroundDataUrl || pObj.pdfPageNumber
+                                ? '#ffffff'
+                                : pObj.template === 'dark-grid'
+                                ? '#0f172a'
+                                : '#fffdf7',
+                          }}
+                          className="relative w-full overflow-hidden cursor-pointer flex items-center justify-center"
                         >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                          {/* Page Number Badge */}
+                          <div
+                            className={`absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-full text-xs font-bold shadow ${
+                              isSelectedPage ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
+                            }`}
+                          >
+                            {pIdx + 1}
+                          </div>
 
-                        {/* PDF / JPG / PNG Background Preview if present */}
-                        {pObj.backgroundDataUrl && (
-                          <img
-                            src={pObj.backgroundDataUrl}
-                            alt={pObj.title}
-                            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                          />
-                        )}
+                          {isSelectedPage && (
+                            <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow">
+                              Ενεργή
+                            </div>
+                          )}
 
-                        {/* Miniature Vector SVG Preview of Inserted Images, Handwritten Strokes, Shapes & Texts */}
-                        <svg
-                          viewBox={`0 0 ${pW} ${pH}`}
-                          className="absolute inset-0 w-full h-full pointer-events-none"
-                        >
-                          {(pObj.images || []).map((im) => (
-                            <image
-                              key={im.id}
-                              href={im.dataUrl}
-                              x={im.x}
-                              y={im.y}
-                              width={im.width}
-                              height={im.height}
-                              preserveAspectRatio="none"
-                            />
-                          ))}
-                          {pObj.strokes.map((st) => {
-                            if (st.points.length === 0) return null;
-                            if (st.points.length === 1) {
-                              return (
-                                <circle
-                                  key={st.id}
-                                  cx={st.points[0].x}
-                                  cy={st.points[0].y}
-                                  r={Math.max(3, st.width)}
-                                  fill={st.color}
-                                />
+                          {/* Larger Trash Can Button at Bottom-Right Inside the Page (hidden in Lightweight PDF/Image Mode) */}
+                          {!isLightweightDocMode && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deletePageAtIndex(pIdx);
+                              }}
+                              className="absolute bottom-2.5 right-2.5 z-10 p-2.5 rounded-xl bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/90 shadow-md transition cursor-pointer"
+                              title="Διαγραφή αυτής της σελίδας"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          )}
+
+                          {/* PDF / JPG / PNG Background Preview (mounted only when within visible scroll window!) */}
+                          {isThumbInWindow &&
+                            (() => {
+                              const thumbBgUrl = resolvePageBackgroundUrl(
+                                activeNotebook.id,
+                                pObj,
+                                'thumb'
                               );
-                            }
-                            const renderPts =
-                              (st.shapeType === 'resistor' || st.shapeType === 'spring') && st.points.length >= 4
-                                ? computeResistorOrSpringPoints(st.shapeType, st.points)
-                                : st.points;
-                            const ptsStr = renderPts.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
-                            return (
-                              <polyline
-                                key={st.id}
-                                fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
-                                fillOpacity={Math.max(
-                                  0.05,
-                                  Math.min(0.95, (100 - (st.fillTransparency ?? 90)) / 100)
-                                )}
-                                stroke={st.color}
-                                strokeWidth={Math.max(3, st.width * 1.6)}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                opacity={st.opacity ?? 1}
-                                points={ptsStr}
-                              />
-                            );
-                          })}
-                          {renderSvgPageTextsPreview(pObj.texts, pW, pH)}
-                        </svg>
+                              return thumbBgUrl ? (
+                                <img
+                                  src={thumbBgUrl}
+                                  alt={pObj.title}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                                />
+                              ) : null;
+                            })()}
+
+                          {/* Miniature Vector SVG Preview (only when page has strokes/images/texts & is in window) */}
+                          {isThumbInWindow && hasOverlayContent && (
+                            <svg
+                              viewBox={`0 0 ${pW} ${pH}`}
+                              className="absolute inset-0 w-full h-full pointer-events-none"
+                            >
+                              {(pObj.images || []).map((im) => (
+                                <image
+                                  key={im.id}
+                                  href={im.dataUrl}
+                                  x={im.x}
+                                  y={im.y}
+                                  width={im.width}
+                                  height={im.height}
+                                  preserveAspectRatio="none"
+                                />
+                              ))}
+                              {pObj.strokes.map((st) => {
+                                if (st.points.length === 0) return null;
+                                if (st.points.length === 1) {
+                                  return (
+                                    <circle
+                                      key={st.id}
+                                      cx={st.points[0].x}
+                                      cy={st.points[0].y}
+                                      r={Math.max(3, st.width)}
+                                      fill={st.color}
+                                    />
+                                  );
+                                }
+                                const renderPts =
+                                  (st.shapeType === 'resistor' || st.shapeType === 'spring') && st.points.length >= 4
+                                    ? computeResistorOrSpringPoints(st.shapeType, st.points)
+                                    : st.points;
+                                const ptsStr = renderPts.map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`).join(' ');
+                                return (
+                                  <polyline
+                                    key={st.id}
+                                    fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
+                                    fillOpacity={Math.max(
+                                      0.05,
+                                      Math.min(0.95, (100 - (st.fillTransparency ?? 90)) / 100)
+                                    )}
+                                    stroke={st.color}
+                                    strokeWidth={Math.max(3, st.width * 1.6)}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    opacity={st.opacity ?? 1}
+                                    points={ptsStr}
+                                  />
+                                );
+                              })}
+                              {renderSvgPageTextsPreview(pObj.texts, pW, pH)}
+                            </svg>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>

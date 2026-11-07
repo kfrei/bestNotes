@@ -36,6 +36,22 @@ rules_version = '2';
 //   - geminiApiKey: string (required, 0..512 chars) - application-level Gemini API key
 //   - updatedAt: string (required, 1..100 chars) - ISO timestamp of last configuration update
 //
+// Collection: live_rooms
+// Document ID: {roomId} (must match data.roomId, immutable)
+// Fields:
+//   - roomId: string (required, 1..32 chars, immutable) - 4-digit PIN or room identifier matching {roomId}
+//   - updatedAt: string (required, 1..100 chars) - ISO timestamp of last room state update
+//   - senderId: string (optional, 0..128 chars) - sender client identifier
+//   - receiverId: string (optional, 0..128 chars) - receiver client identifier
+//   - rtcOfferJson: string (optional, 0..65536 chars) - serialized WebRTC SDP offer JSON
+//   - rtcAnswerJson: string (optional, 0..65536 chars) - serialized WebRTC SDP answer JSON
+//   - senderCandidatesJson: string (optional, 0..65536 chars) - serialized sender ICE candidates JSON
+//   - receiverCandidatesJson: string (optional, 0..65536 chars) - serialized receiver ICE candidates JSON
+//   - viewportJson: string (optional, 0..4096 chars) - serialized 16:9 viewport state JSON
+//   - liveInkJson: string (optional, 0..100000 chars) - serialized live ink strokes JSON
+//   - pageJson: string (optional, 0..950000 chars) - serialized page content JSON
+//   - simStateJson: string (optional, 0..65536 chars) - serialized simulation state JSON
+//
 // ===============================================================
 
 service cloud.firestore {
@@ -140,6 +156,37 @@ service cloud.firestore {
         isValidOptionalString('deviceId', 0, 256);
     }
 
+    function isValidLiveRoomDoc(data, roomId) {
+      return hasOnlyAllowedFields([
+          'roomId',
+          'updatedAt',
+          'senderId',
+          'receiverId',
+          'rtcOfferJson',
+          'rtcAnswerJson',
+          'senderCandidatesJson',
+          'receiverCandidatesJson',
+          'viewportJson',
+          'liveInkJson',
+          'pageJson',
+          'simStateJson'
+        ]) &&
+        hasRequiredFields(['roomId', 'updatedAt']) &&
+        validStringLength('roomId', 1, 32) &&
+        data.roomId == roomId &&
+        validStringLength('updatedAt', 1, 100) &&
+        isValidOptionalString('senderId', 0, 128) &&
+        isValidOptionalString('receiverId', 0, 128) &&
+        isValidOptionalString('rtcOfferJson', 0, 65536) &&
+        isValidOptionalString('rtcAnswerJson', 0, 65536) &&
+        isValidOptionalString('senderCandidatesJson', 0, 65536) &&
+        isValidOptionalString('receiverCandidatesJson', 0, 65536) &&
+        isValidOptionalString('viewportJson', 0, 4096) &&
+        isValidOptionalString('liveInkJson', 0, 100000) &&
+        isValidOptionalString('pageJson', 0, 950000) &&
+        isValidOptionalString('simStateJson', 0, 65536);
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -166,6 +213,14 @@ service cloud.firestore {
         request.resource.data.keys().hasOnly(['geminiApiKey', 'updatedAt']) &&
         validStringLength('geminiApiKey', 0, 512) &&
         validStringLength('updatedAt', 1, 100);
+    }
+
+    match /live_rooms/{roomId} {
+      allow read: if true;
+      allow create: if isValidLiveRoomDoc(request.resource.data, roomId);
+      allow update: if isValidLiveRoomDoc(request.resource.data, roomId) &&
+        areImmutableFieldsUnchanged(['roomId']);
+      allow delete: if true;
     }
 
     // Default deny all other paths
