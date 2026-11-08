@@ -86,6 +86,8 @@ import {
   getDoc,
   getDocFromServer,
   setDoc,
+  deleteDoc,
+  writeBatch,
   onSnapshot,
   onAuthStateChanged,
   signOut,
@@ -543,11 +545,7 @@ function cleanNotebookForStorage(nb: Notebook): Notebook {
       let anyImgChanged = false;
       for (let i = 0; i < imgs.length; i++) {
         const im = imgs[i];
-        if (
-          im.originalDataUrl &&
-          im.originalDataUrl.startsWith('data:') &&
-          im.originalDataUrl !== im.dataUrl
-        ) {
+        if (im.originalDataUrl && im.originalDataUrl.startsWith('data:')) {
           anyImgChanged = true;
           break;
         }
@@ -558,9 +556,7 @@ function cleanNotebookForStorage(nb: Notebook): Notebook {
         images: imgs.map((im) => ({
           ...im,
           originalDataUrl:
-            im.originalDataUrl &&
-            im.originalDataUrl.startsWith('data:') &&
-            im.originalDataUrl !== im.dataUrl
+            im.originalDataUrl && im.originalDataUrl.startsWith('data:')
               ? undefined
               : im.originalDataUrl,
         })),
@@ -582,11 +578,11 @@ function serializeNotebookForFirestore(nb: Notebook): string {
   for (let i = 0; i < pages.length; i++) {
     totalBgChars += pages[i].backgroundDataUrl?.length || 0;
   }
-  // For massive multi-page PDF books (> 25 pages & > 10 MB of base64 page backgrounds),
+  // For multi-page PDF books (> 5 pages & > 2.5 MB of base64 page backgrounds),
   // keep page 0's cover background + 100% of strokes/texts/images/layers in Firestore while
-  // keeping the heavy PDF page bitmaps in fast local IndexedDB so JSON.stringify & Firestore sync never freeze!
+  // keeping the heavy PDF page bitmaps in fast local IndexedDB so JSON.stringify & Firestore sync never freeze or flood chunks!
   const forFirestore: Notebook =
-    pages.length > 25 && totalBgChars > 10_000_000
+    pages.length > 5 && totalBgChars > 2_500_000
       ? {
           ...cleaned,
           pages: pages.map((p, idx) =>
@@ -745,8 +741,26 @@ function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
   }
 }
 
-// 380 KB per Firestore chunk (guarantees < 450 KB UTF-8 bytes without double-JSON-escaping, well under 1 MB limit)
-const FIRESTORE_CHUNK_SIZE = 380000;
+// 750 KB single-doc threshold; when chunked, 450 KB per chunk so chunk0 fits inside manifestJson (< 500 KB)
+// AND all chunks + manifest commit in a single atomic Firestore writeBatch!
+const FIRESTORE_SINGLE_DOC_LIMIT = 750000;
+const FIRESTORE_CHUNK_SIZE = 450000;
+
+const sessionDeletedNotebookIds = new Set<string>();
+const sessionRestoredNotebookIds = new Set<string>();
+
+function getMonotonicIsoTimestamp(...candidates: (string | undefined)[]): string {
+  let maxMs = Date.now();
+  for (const c of candidates) {
+    if (c) {
+      const parsed = Date.parse(c);
+      if (!Number.isNaN(parsed) && parsed >= maxMs) {
+        maxMs = parsed + 1000;
+      }
+    }
+  }
+  return new Date(maxMs).toISOString();
+}
 
 async function saveNotebookToFirestoreChunked(
   uid: string,
@@ -754,53 +768,143 @@ async function saveNotebookToFirestoreChunked(
   dataJson: string,
   deviceId: string
 ): Promise<boolean> {
+  if (sessionDeletedNotebookIds.has(nb.id)) {
+    return false;
+  }
   const updatedAt = nb.updatedAt || new Date().toISOString();
   const safeTitle = (nb.title || 'Σημείωση').slice(0, 900);
   const primaryRef = doc(db, 'users', uid, 'notebooks', nb.id);
+  let prevChunkCount = 0;
 
-  // STRICT SERVER-SIDE TIMESTAMP GUARD:
-  // Query live Firestore server before writing so a second device (e.g. iPad opened hours later)
-  // can NEVER overwrite a newer Cloud document with an older local version!
+  // STRICT SERVER-SIDE TIMESTAMP & TOMBSTONE GUARD:
+  // Query live Firestore server before writing so a second device (e.g. second Mac mini or iPad opened later)
+  // can NEVER overwrite a newer Cloud document or resurrect a soft-deleted document!
   try {
     const existingSnap = await getDocFromServer(primaryRef).catch(() => getDoc(primaryRef));
+    if (sessionDeletedNotebookIds.has(nb.id)) {
+      return false;
+    }
     if (existingSnap.exists()) {
       const existingData = existingSnap.data();
+      if (existingData?.deleted === true && !sessionRestoredNotebookIds.has(nb.id)) {
+        console.warn(`[CloudSync] Blocked background resurrection of soft-deleted notebook ${nb.id}`);
+        return false;
+      }
       const cloudUpdatedAt = typeof existingData?.updatedAt === 'string' ? existingData.updatedAt : '';
-      if (cloudUpdatedAt && updatedAt < cloudUpdatedAt && existingData?.deleted !== true) {
+      if (cloudUpdatedAt && updatedAt < cloudUpdatedAt && !sessionRestoredNotebookIds.has(nb.id)) {
         console.warn(
           `[CloudSync] Blocked stale overwrite of ${nb.id} (local ${updatedAt} < cloud ${cloudUpdatedAt})`
         );
         return false;
+      }
+      if (
+        typeof existingData?.dataJson === 'string' &&
+        existingData.dataJson.startsWith('{"__chunked":true')
+      ) {
+        try {
+          const oldManifest = JSON.parse(existingData.dataJson) as { chunkCount?: number };
+          if (typeof oldManifest.chunkCount === 'number' && oldManifest.chunkCount > 0) {
+            prevChunkCount = oldManifest.chunkCount;
+          }
+        } catch {
+          // ignore
+        }
       }
     }
   } catch {
     // Offline or transient network error -> proceed
   }
 
-  if (dataJson.length <= FIRESTORE_CHUNK_SIZE) {
-    await setDoc(
-      primaryRef,
-      {
-        id: nb.id,
-        title: safeTitle,
-        updatedAt,
-        dataJson,
-        deleted: false,
-        deviceId,
-      },
-      { merge: true }
-    );
+  if (dataJson.length <= FIRESTORE_SINGLE_DOC_LIMIT) {
+    if (prevChunkCount > 0) {
+      const batch = writeBatch(db);
+      batch.set(
+        primaryRef,
+        {
+          id: nb.id,
+          title: safeTitle,
+          updatedAt,
+          dataJson,
+          deleted: false,
+          deviceId,
+        },
+        { merge: true }
+      );
+      for (let cIdx = 0; cIdx < Math.max(prevChunkCount, 6); cIdx++) {
+        batch.delete(doc(db, 'users', uid, 'notebooks', `${nb.id}__chunk_${cIdx}`));
+      }
+      await batch.commit();
+    } else {
+      await setDoc(
+        primaryRef,
+        {
+          id: nb.id,
+          title: safeTitle,
+          updatedAt,
+          dataJson,
+          deleted: false,
+          deviceId,
+        },
+        { merge: true }
+      );
+    }
     return true;
   }
 
-  // Multi-chunk storage for large notebooks (>380 KB, e.g. 2-10 MB with multiple cropped high-res images)
-  // Store ALL chunks (0..N-1) as raw strings in __chunk_0 .. __chunk_{N-1} so chunk 0 is NEVER double-escaped in JSON.stringify!
+  // Multi-chunk storage for large notebooks (>750 KB, e.g. 1-6 MB with multiple cropped high-res images)
   const chunks: string[] = [];
   for (let i = 0; i < dataJson.length; i += FIRESTORE_CHUNK_SIZE) {
     chunks.push(dataJson.slice(i, i + FIRESTORE_CHUNK_SIZE));
   }
 
-  // 1. Write chunk documents (0..N-1) in small batches of 6 so Firestore's WebChannel never floods
+  const manifestJson = JSON.stringify({
+    __chunked: true,
+    chunkCount: chunks.length,
+    totalLength: dataJson.length,
+    version: updatedAt,
+    chunk0: chunks[0],
+  });
+
+  // Commit all chunks (0..N-1) AND the primary manifest doc in a SINGLE atomic writeBatch whenever possible!
+  if (chunks.length <= 14) {
+    const batch = writeBatch(db);
+    for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+      const chunkDocId = `${nb.id}__chunk_${cIdx}`;
+      batch.set(
+        doc(db, 'users', uid, 'notebooks', chunkDocId),
+        {
+          id: chunkDocId,
+          title: '__CHUNK__',
+          updatedAt,
+          dataJson: chunks[cIdx],
+          deleted: false,
+          deviceId,
+        },
+        { merge: true }
+      );
+    }
+    batch.set(
+      primaryRef,
+      {
+        id: nb.id,
+        title: safeTitle,
+        updatedAt,
+        dataJson: manifestJson,
+        deleted: false,
+        deviceId,
+      },
+      { merge: true }
+    );
+    if (prevChunkCount > chunks.length) {
+      for (let cIdx = chunks.length; cIdx < prevChunkCount; cIdx++) {
+        batch.delete(doc(db, 'users', uid, 'notebooks', `${nb.id}__chunk_${cIdx}`));
+      }
+    }
+    await batch.commit();
+    return true;
+  }
+
+  // Fallback for huge multi-batch notebooks (> 6 MB)
   for (let batchStart = 0; batchStart < chunks.length; batchStart += 6) {
     const batchPromises: Promise<void>[] = [];
     const batchEnd = Math.min(chunks.length, batchStart + 6);
@@ -824,14 +928,6 @@ async function saveNotebookToFirestoreChunked(
     await Promise.all(batchPromises);
   }
 
-  // 2. Write primary document with tiny (<150 byte) chunk manifest
-  const manifestJson = JSON.stringify({
-    __chunked: true,
-    chunkCount: chunks.length,
-    totalLength: dataJson.length,
-    version: updatedAt,
-  });
-
   await setDoc(
     primaryRef,
     {
@@ -844,6 +940,12 @@ async function saveNotebookToFirestoreChunked(
     },
     { merge: true }
   );
+
+  if (prevChunkCount > chunks.length) {
+    for (let cIdx = chunks.length; cIdx < prevChunkCount; cIdx++) {
+      void deleteDoc(doc(db, 'users', uid, 'notebooks', `${nb.id}__chunk_${cIdx}`)).catch(() => {});
+    }
+  }
   return true;
 }
 
@@ -940,8 +1042,7 @@ const RESTORED_USER_FOLDERS_PRESET: CustomFolderMeta[] = [
   },
 ];
 
-const createDefaultFolders = (): CustomFolderMeta[] =>
-  RESTORED_USER_FOLDERS_PRESET.map((f) => ({ ...f }));
+const createDefaultFolders = (): CustomFolderMeta[] => [];
 
 const FOLDER_PRESET_COLORS: { hex: string; label: string }[] = [
   { hex: '#f59e0b', label: 'Κεχριμπάρι' },
@@ -1060,35 +1161,40 @@ function ensureGymnasioArnaiasSubfolders(
   }
 
   // Ensure the core user folders (Γενικά, Γυμνάσιο Αρναίας, Α1, Β1, Β2, Γ1, Γ2) and their styling are never lost
-  // even if an older unrefreshed device overwrote customFoldersJson with [] or unstyled entries!
-  for (const preset of RESTORED_USER_FOLDERS_PRESET) {
-    const cur = byKey.get(preset.name);
-    if (!cur) {
-      byKey.set(preset.name, { ...preset });
-    } else if (!cur.deleted) {
-      const wasUnstyledReset =
-        (!cur.color || cur.color.toLowerCase() === '#f59e0b') &&
-        (!cur.icon || cur.icon === 'folder');
-      const nextColor =
-        cur.color && cur.color.toLowerCase() !== '#f59e0b' ? cur.color : preset.color;
-      const nextIcon = cur.icon && cur.icon !== 'folder' ? cur.icon : preset.icon;
-      const nextFav = wasUnstyledReset
-        ? preset.favorite
-        : cur.favorite !== undefined
-        ? cur.favorite
-        : preset.favorite;
-      const nextTs =
-        cur.updatedAt && cur.updatedAt > (preset.updatedAt || '')
-          ? cur.updatedAt
-          : preset.updatedAt;
-      byKey.set(preset.name, {
-        ...cur,
-        name: preset.name,
-        color: nextColor,
-        icon: nextIcon,
-        favorite: nextFav,
-        updatedAt: nextTs,
-      });
+  // ONLY for accounts that already have Γενικά or Γυμνάσιο Αρναίας (never for Guest mode or unrelated empty accounts!)
+  const hasArnaiaOrGenika = Array.from(byKey.keys()).some(
+    (k) => k === 'Γενικά' || k === 'Γυμνάσιο Αρναίας' || k.startsWith('Γυμνάσιο Αρναίας/')
+  );
+  if (hasArnaiaOrGenika) {
+    for (const preset of RESTORED_USER_FOLDERS_PRESET) {
+      const cur = byKey.get(preset.name);
+      if (!cur) {
+        byKey.set(preset.name, { ...preset });
+      } else if (!cur.deleted) {
+        const wasUnstyledReset =
+          (!cur.color || cur.color.toLowerCase() === '#f59e0b') &&
+          (!cur.icon || cur.icon === 'folder');
+        const nextColor =
+          cur.color && cur.color.toLowerCase() !== '#f59e0b' ? cur.color : preset.color;
+        const nextIcon = cur.icon && cur.icon !== 'folder' ? cur.icon : preset.icon;
+        const nextFav = wasUnstyledReset
+          ? preset.favorite
+          : cur.favorite !== undefined
+          ? cur.favorite
+          : preset.favorite;
+        const nextTs =
+          cur.updatedAt && cur.updatedAt > (preset.updatedAt || '')
+            ? cur.updatedAt
+            : preset.updatedAt;
+        byKey.set(preset.name, {
+          ...cur,
+          name: preset.name,
+          color: nextColor,
+          icon: nextIcon,
+          favorite: nextFav,
+          updatedAt: nextTs,
+        });
+      }
     }
   }
 
@@ -1531,6 +1637,7 @@ export default function App() {
   const hasLoadedIndexedDbRef = useRef<boolean>(false);
   const hasCompletedInitialCloudLoadRef = useRef<boolean>(false);
   const allRemotePrimaryIdsRef = useRef<Set<string>>(new Set());
+  const remoteDeletedIdsRef = useRef<Set<string>>(new Set());
   const userEditedInSessionRef = useRef<Set<string>>(new Set());
   const userEditedFoldersInSessionRef = useRef<boolean>(false);
   const hasLoadedUserDocRef = useRef<boolean>(false);
@@ -1695,15 +1802,35 @@ export default function App() {
                 for (const n of prev) map.set(n.id, n);
                 let changed = false;
                 for (const idbNb of cleanIdb) {
-                  // CRITICAL: If Cloud Firestore has ALREADY delivered this notebook before IndexedDB finished reading,
-                  // never allow local IndexedDB cache to overwrite the authoritative Cloud version!
-                  if (allRemotePrimaryIdsRef.current.has(idbNb.id)) {
+                  // Only skip if Cloud has explicitly soft-deleted this notebook
+                  if (remoteDeletedIdsRef.current.has(idbNb.id)) {
                     continue;
                   }
                   const cur = map.get(idbNb.id);
                   if (!cur) {
                     map.set(idbNb.id, idbNb);
                     changed = true;
+                  } else if (
+                    allRemotePrimaryIdsRef.current.has(idbNb.id) &&
+                    !userEditedInSessionRef.current.has(idbNb.id)
+                  ) {
+                    // Never overwrite an authoritative Cloud notebook with a stale IndexedDB copy;
+                    // only restore stripped local backgroundDataUrl on PDF pages if missing in Cloud.
+                    const idbBgByPageId = new Map<string, string>();
+                    for (const p of idbNb.pages || []) {
+                      if (p.backgroundDataUrl) idbBgByPageId.set(p.id, p.backgroundDataUrl);
+                    }
+                    if (idbBgByPageId.size > 0 && (cur.pages || []).some((p) => !p.backgroundDataUrl)) {
+                      map.set(idbNb.id, {
+                        ...cur,
+                        pages: (cur.pages || []).map((p, idx) => {
+                          if (p.backgroundDataUrl) return p;
+                          const bg = idbBgByPageId.get(p.id) || idbNb.pages?.[idx]?.backgroundDataUrl;
+                          return bg ? { ...p, backgroundDataUrl: bg } : p;
+                        }),
+                      });
+                      changed = true;
+                    }
                   } else {
                     const idbTime = idbNb.updatedAt || '';
                     const curTime = cur.updatedAt || '';
@@ -1791,13 +1918,17 @@ export default function App() {
           setCloudInitialLoaded(false);
           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
           localStorage.removeItem(AUTH_UID_STORAGE_KEY);
-          // Guest mode: strictly ephemeral empty library (0 notes, 0 folders)
+          // Guest mode: strictly ephemeral empty library (0 notes, 0 folders, 0 recycle bin)
           const freshBlank = createDefaultBlankNotebooks();
           setNotebooks(freshBlank);
           setOpenNotebookIds([]);
           setActiveNotebookId('');
           setActivePageIndex(0);
-          setCustomFolders(createDefaultFolders());
+          setActiveLibraryFolder(null);
+          customFoldersRef.current = [];
+          setCustomFolders([]);
+          localDeletedNotebooksRef.current = [];
+          setDeletedCloudNotebooks([]);
           setShapeLibrary([]);
         }
       } catch {
@@ -3137,6 +3268,7 @@ export default function App() {
   // Modals
   const [showThumbnailsModal, setShowThumbnailsModal] = useState<boolean>(false);
   const [thumbModalScrollTop, setThumbModalScrollTop] = useState<number>(0);
+  const thumbModalGridScrollRef = useRef<HTMLDivElement | null>(null);
   const [showMathModal, setShowMathModal] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [thumbnailCols, setThumbnailCols] = useState<3 | 4>(3);
@@ -3499,6 +3631,12 @@ export default function App() {
     FALLBACK_EMPTY_NOTEBOOK;
   const activePage =
     activeNotebook.pages[Math.min(activePageIndex, activeNotebook.pages.length - 1)] || activeNotebook.pages[0];
+  const activeNotebookLiveRef = useRef<Notebook>(activeNotebook);
+  activeNotebookLiveRef.current = activeNotebook;
+  const activePageIndexLiveRef = useRef<number>(activePageIndex);
+  activePageIndexLiveRef.current = activePageIndex;
+  const activePageLiveRef = useRef<NotePage>(activePage);
+  activePageLiveRef.current = activePage;
   const pageWidth = getPageLogicalWidth(activePage);
   const pageHeight = getPageLogicalHeight(activePage);
 
@@ -3516,6 +3654,10 @@ export default function App() {
             setPdfPageRenderTick((t) => t + 1);
           }
         });
+        if (qualityMode === 'full') {
+          const thumbCached = getCachedPdfPageDataUrl(nbId, pageObj.pdfPageNumber, 'thumb');
+          if (thumbCached) return thumbCached;
+        }
       }
       return undefined;
     },
@@ -3919,8 +4061,11 @@ export default function App() {
 
   const pushNotebookToCloudTracked = useCallback((uid: string, nb: Notebook, explicitJson?: string) => {
     try {
+      if (sessionDeletedNotebookIds.has(nb.id)) {
+        return;
+      }
       const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
-      if (remoteTime && (nb.updatedAt || '') < remoteTime) {
+      if (remoteTime && (nb.updatedAt || '') < remoteTime && !sessionRestoredNotebookIds.has(nb.id)) {
         return;
       }
       const dataJson = explicitJson ?? serializeNotebookForFirestore(nb);
@@ -3971,9 +4116,9 @@ export default function App() {
         lastSyncedMetaRef.current.folders = foldersStr;
         // 1. Write to dedicated subcollection doc (100% reliable, zero legacy schema conflicts)
         void setDoc(
-          doc(db, 'users', currentUser.uid, 'notebooks', '__folders_meta__'),
+          doc(db, 'users', currentUser.uid, 'notebooks', 'folders_meta_v1'),
           {
-            id: '__folders_meta__',
+            id: 'folders_meta_v1',
             title: '__FOLDERS_META__',
             updatedAt: nowIso,
             dataJson: foldersStr,
@@ -4524,7 +4669,7 @@ export default function App() {
     const nbsColRef = collection(db, 'users', uid, 'notebooks');
     const userDocRef = doc(db, 'users', uid);
 
-    const foldersMetaDocRef = doc(db, 'users', uid, 'notebooks', '__folders_meta__');
+    const foldersMetaDocRef = doc(db, 'users', uid, 'notebooks', 'folders_meta_v1');
 
     const mergeAndApplyRemoteFolders = (
       rawFoldersJson: string,
@@ -4579,7 +4724,7 @@ export default function App() {
           void setDoc(
             foldersMetaDocRef,
             {
-              id: '__folders_meta__',
+              id: 'folders_meta_v1',
               title: '__FOLDERS_META__',
               updatedAt: bestTs,
               dataJson: mergedStr,
@@ -4614,7 +4759,7 @@ export default function App() {
       if (!hasLoadedUserDocRef.current) {
         hasLoadedUserDocRef.current = true;
       }
-    }, 4000);
+    }, 10000);
 
     const unsubNotebooks = onSnapshot(
       nbsColRef,
@@ -4634,7 +4779,7 @@ export default function App() {
             void setDoc(
               foldersMetaDocRef,
               {
-                id: '__folders_meta__',
+                id: 'folders_meta_v1',
                 title: '__FOLDERS_META__',
                 updatedAt: nowIso,
                 dataJson: foldersStr,
@@ -4652,6 +4797,7 @@ export default function App() {
         // Track ALL primary document IDs present in Firestore (even if chunks are still in transit!)
         // so the 2nd device NEVER mistakes an in-transit chunked doc for a "missing" doc and overwrites it!
         const allRemotePrimaryIds = new Set<string>();
+        const remoteDeletedIds = new Set<string>();
         let hasFoldersMetaDoc = false;
         let remoteFoldersMetaJson = '';
         let remoteFoldersMetaTs = '';
@@ -4659,7 +4805,11 @@ export default function App() {
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
-          if (data.id === '__folders_meta__' || data.title === '__FOLDERS_META__') {
+          if (
+            data.id === 'folders_meta_v1' ||
+            data.id === '__folders_meta__' ||
+            data.title === '__FOLDERS_META__'
+          ) {
             hasFoldersMetaDoc = true;
             if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
               remoteFoldersMetaJson = data.dataJson;
@@ -4675,12 +4825,19 @@ export default function App() {
             }
           } else {
             allRemotePrimaryIds.add(data.id);
+            if (data.deleted === true) {
+              remoteDeletedIds.add(data.id);
+            }
             if (typeof data.updatedAt === 'string' && data.updatedAt.length > 0) {
               remoteUpdatedAtMapRef.current.set(data.id, data.updatedAt);
             }
           }
         });
         allRemotePrimaryIdsRef.current = allRemotePrimaryIds;
+        for (const delId of sessionDeletedNotebookIds) {
+          remoteDeletedIds.add(delId);
+        }
+        remoteDeletedIdsRef.current = remoteDeletedIds;
         if (!isFromCache && !hasCompletedInitialCloudLoadRef.current) {
           hasCompletedInitialCloudLoadRef.current = true;
           setCloudInitialLoaded(true);
@@ -4698,6 +4855,7 @@ export default function App() {
           const data = docSnap.data();
           if (!data || typeof data.id !== 'string') return;
           if (
+            data.id === 'folders_meta_v1' ||
             data.id === '__folders_meta__' ||
             data.title === '__FOLDERS_META__' ||
             data.id.includes('__chunk_') ||
@@ -4725,13 +4883,7 @@ export default function App() {
                 let missingChunk = false;
                 for (let cIdx = startIdx; cIdx < manifest.chunkCount; cIdx++) {
                   const chunkEntry = chunkMap.get(`${data.id}__chunk_${cIdx}`);
-                  if (
-                    !chunkEntry ||
-                    (!data.deleted &&
-                      manifest.version &&
-                      chunkEntry.updatedAt &&
-                      chunkEntry.updatedAt !== manifest.version)
-                  ) {
+                  if (!chunkEntry) {
                     missingChunk = true;
                     break;
                   }
@@ -4740,6 +4892,8 @@ export default function App() {
                 if (missingChunk) {
                   if (data.deleted === true) {
                     remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
+                  } else {
+                    allRemotePrimaryIds.delete(data.id);
                   }
                   return;
                 }
@@ -4748,58 +4902,7 @@ export default function App() {
 
               const parsed = JSON.parse(fullJson) as Notebook;
               if (parsed && parsed.id && Array.isArray(parsed.pages)) {
-                if (data.deleted === true) {
-                  // Auto-recover accidentally deleted "Ο Κύκλος του Νερού" note from Firestore!
-                  const normBlob = normalizeGreekSearchText(
-                    [
-                      parsed.title || '',
-                      data.title || '',
-                      ...(parsed.tags || []),
-                      ...parsed.pages.flatMap((p) => [
-                        ...(p.tags || []),
-                        ...(p.texts || []).map((t) => t.text || ''),
-                      ]),
-                    ].join(' ')
-                  );
-                  const isWaterCycleNote =
-                    normBlob.includes('κυκλ') ||
-                    normBlob.includes('νερ') ||
-                    normBlob.includes('εξατμισ') ||
-                    normBlob.includes('συμπυκνωσ') ||
-                    normBlob.includes('βροχ');
-                  const autoRestoreKey = `bestnotes_autorestored_v1_${parsed.id}`;
-                  let wasAutoRestored = false;
-                  try {
-                    wasAutoRestored = localStorage.getItem(autoRestoreKey) === 'true';
-                  } catch {
-                    // ignore
-                  }
-                  if (isWaterCycleNote && !wasAutoRestored) {
-                    try {
-                      localStorage.setItem(autoRestoreKey, 'true');
-                    } catch {
-                      // ignore
-                    }
-                    void setDoc(
-                      doc(db, 'users', uid, 'notebooks', parsed.id),
-                      {
-                        deleted: false,
-                        updatedAt: new Date().toISOString(),
-                        deviceId: deviceIdRef.current,
-                      },
-                      { merge: true }
-                    );
-                    remoteMap.set(parsed.id, {
-                      nb: parsed,
-                      deleted: false,
-                      deviceId: data.deviceId,
-                      dataJson: fullJson,
-                      updatedAt: new Date().toISOString(),
-                    });
-                    showToast(`🎉 Βρέθηκε και επαναφέρθηκε αυτόματα το «${parsed.title}» από το Cloud!`);
-                    return;
-                  }
-
+                if (data.deleted === true || sessionDeletedNotebookIds.has(data.id)) {
                   softDeletedList.push(parsed);
                   remoteMap.set(data.id, { deleted: true, deviceId: data.deviceId, updatedAt: data.updatedAt });
                   return;
@@ -4848,7 +4951,7 @@ export default function App() {
           }
         });
 
-        // Apply any folder styling rescued from notebooks or from the dedicated __folders_meta__ subcollection doc!
+        // Apply any folder styling rescued from notebooks or from the dedicated folders_meta_v1 subcollection doc!
         if (rescuedFolderStyles.length > 0) {
           const mergedWithRescued = ensureGymnasioArnaiasSubfolders(
             mergeCustomFoldersNewest(customFoldersRef.current, rescuedFolderStyles, false)
@@ -4862,8 +4965,8 @@ export default function App() {
         if (remoteFoldersMetaJson) {
           mergeAndApplyRemoteFolders(remoteFoldersMetaJson, remoteFoldersMetaTs, isFromCache);
         } else if (!isFromCache && !hasFoldersMetaDoc && customFoldersRef.current.length > 0) {
-          // CRITICAL: Only seed __folders_meta__ when the LIVE SERVER (!isFromCache) genuinely has no __folders_meta__ doc,
-          // NEVER from a waking device's stale local cache (where __folders_meta__ didn't exist yet)!
+          // CRITICAL: Only seed folders_meta_v1 when the LIVE SERVER (!isFromCache) genuinely has no folders_meta_v1 doc,
+          // NEVER from a waking device's stale local cache (where folders_meta_v1 didn't exist yet)!
           const seededFolders = ensureGymnasioArnaiasSubfolders(customFoldersRef.current);
           const foldersStr = JSON.stringify(seededFolders);
           const localFoldersTs =
@@ -4873,7 +4976,7 @@ export default function App() {
             void setDoc(
               foldersMetaDocRef,
               {
-                id: '__folders_meta__',
+                id: 'folders_meta_v1',
                 title: '__FOLDERS_META__',
                 updatedAt: localFoldersTs,
                 dataJson: foldersStr,
@@ -4910,8 +5013,16 @@ export default function App() {
           // Process remote notebooks
           for (const [id, rem] of remoteMap.entries()) {
             const localNb = mergedMap.get(id);
-            if (rem.deleted) {
+            if (rem.deleted || sessionDeletedNotebookIds.has(id)) {
               if (localNb) {
+                if (
+                  !sessionDeletedNotebookIds.has(id) &&
+                  isFromCache &&
+                  rem.updatedAt &&
+                  (localNb.updatedAt || '') > rem.updatedAt
+                ) {
+                  continue;
+                }
                 mergedMap.delete(id);
                 lastSyncedJsonMapRef.current.delete(id);
                 lastSeenRemoteJsonMapRef.current.delete(id);
@@ -4947,16 +5058,19 @@ export default function App() {
             const remoteUpdatedAt = rem.updatedAt || rem.nb.updatedAt || '';
 
             // 1. MULTI-DEVICE & REFRESH-SAFE TIMESTAMP RULE:
-            // - If this device's local copy has a strictly NEWER updatedAt than the Cloud snapshot
-            //   (e.g. the user edited/moved it right before hitting Refresh!), keep the newer local copy
-            //   and push it to the Cloud so Refresh NEVER reverts a recent action!
+            // - Only keep a local copy with localUpdatedAt > remoteUpdatedAt if the snapshot is from local cache
+            //   OR the user actively edited this notebook during the current session.
             if (
-              userEditedInSessionRef.current.has(id) &&
               localUpdatedAt &&
               remoteUpdatedAt &&
-              localUpdatedAt > remoteUpdatedAt
+              localUpdatedAt > remoteUpdatedAt &&
+              (isFromCache || userEditedInSessionRef.current.has(id))
             ) {
-              if ((inFlightSavesMapRef.current.get(id) || 0) === 0) {
+              if (
+                !isFromCache &&
+                userEditedInSessionRef.current.has(id) &&
+                (inFlightSavesMapRef.current.get(id) || 0) === 0
+              ) {
                 notebooksToPushBack.push(localNb);
               }
               continue;
@@ -5177,9 +5291,9 @@ export default function App() {
     for (const nb of notebooksRef.current) {
       try {
         // CRITICAL MULTI-DEVICE GUARD:
-        // 1) Never allow an existing Cloud notebook to be overwritten by this device unless the user
-        //    has explicitly edited it during this active session (userEditedInSessionRef)!
-        if (allRemotePrimaryIdsRef.current.has(nb.id) && !userEditedInSessionRef.current.has(nb.id)) {
+        // 1) Never allow ANY notebook to be uploaded by this device unless the user
+        //    has explicitly created, imported, or edited it during this active session (userEditedInSessionRef)!
+        if (!userEditedInSessionRef.current.has(nb.id)) {
           continue;
         }
         // 2) Only push a notebook if its local updatedAt is strictly newer than the Cloud version!
@@ -5214,7 +5328,7 @@ export default function App() {
       let anyUnsynced = false;
       for (const nb of notebooks) {
         try {
-          if (allRemotePrimaryIdsRef.current.has(nb.id) && !userEditedInSessionRef.current.has(nb.id)) {
+          if (!userEditedInSessionRef.current.has(nb.id)) {
             continue;
           }
           const remoteTime = remoteUpdatedAtMapRef.current.get(nb.id) || '';
@@ -5308,9 +5422,9 @@ export default function App() {
         payload.customFoldersJson = foldersStr;
         payload.foldersUpdatedAt = nowIso;
         void setDoc(
-          doc(db, 'users', uid, 'notebooks', '__folders_meta__'),
+          doc(db, 'users', uid, 'notebooks', 'folders_meta_v1'),
           {
-            id: '__folders_meta__',
+            id: 'folders_meta_v1',
             title: '__FOLDERS_META__',
             updatedAt: nowIso,
             dataJson: foldersStr,
@@ -6215,7 +6329,7 @@ export default function App() {
           return;
         }
         e.preventDefault();
-        const nextZoom = Math.min(3.5, Math.max(0.2, zoomRef.current - e.deltaY * 0.008));
+        const nextZoom = Math.min(3.5, Math.max(0.15, zoomRef.current - e.deltaY * 0.008));
         zoomRef.current = nextZoom;
         if (paperTransformElRef.current) {
           paperTransformElRef.current.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0) scale(${nextZoom})`;
@@ -6279,6 +6393,13 @@ export default function App() {
     })),
     tapes: (p.tapes || []).map((tp) => ({ ...tp })),
     ruler: p.ruler ? { ...p.ruler } : undefined,
+    atomSims: p.atomSims
+      ? p.atomSims.map((as) => ({
+          ...as,
+          atoms: (as.atoms || []).map((at) => ({ ...at })),
+          bonds: as.bonds ? as.bonds.map((b) => ({ ...b })) : [],
+        }))
+      : undefined,
   }), []);
 
   const suppressNextUndoRecordRef = useRef<boolean>(false);
@@ -6296,6 +6417,10 @@ export default function App() {
     if ((a.springSims?.length || 0) !== (b.springSims?.length || 0)) return false;
     if ((a.forceSims?.length || 0) !== (b.forceSims?.length || 0)) return false;
     if ((a.circuitSims?.length || 0) !== (b.circuitSims?.length || 0)) return false;
+    if ((a.atomSims?.length || 0) !== (b.atomSims?.length || 0)) return false;
+    if (a.atomSims !== b.atomSims && JSON.stringify(a.atomSims || []) !== JSON.stringify(b.atomSims || [])) {
+      return false;
+    }
 
     for (let i = 0; i < a.strokes.length; i++) {
       const sa = a.strokes[i];
@@ -6368,13 +6493,16 @@ export default function App() {
 
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
-      const targetIdx = activeDrawingPageIndexRef.current ?? activePageIndex;
-      userEditedInSessionRef.current.add(activeNotebook.id);
+      const liveNbId = activeNotebookLiveRef.current.id;
+      const targetIdx = isDrawingRef.current
+        ? (activeDrawingPageIndexRef.current ?? activePageIndexLiveRef.current)
+        : activePageIndexLiveRef.current;
+      userEditedInSessionRef.current.add(liveNbId);
       const shouldRecordUndo = recordUndo && !suppressNextUndoRecordRef.current;
       suppressNextUndoRecordRef.current = false;
       setNotebooks((prevNotebooks) =>
         prevNotebooks.map((nb) => {
-          if (nb.id !== activeNotebook.id) return nb;
+          if (nb.id !== liveNbId) return nb;
           const safeIdx = Math.min(targetIdx, nb.pages.length - 1);
           const currentPage = nb.pages[safeIdx] || nb.pages[0];
           const updatedPage = updater(clonePageFast(currentPage));
@@ -6390,7 +6518,7 @@ export default function App() {
           }
           const newPages = [...nb.pages];
           newPages[safeIdx] = updatedPage;
-          return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
+          return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
         })
       );
       setIsDirty(true);
@@ -7933,9 +8061,92 @@ export default function App() {
   );
 
   // Checks if a 1-finger touch point (clientX, clientY) lands either on an active Lasso selection box/handle
-  // OR directly on any shape, group, stroke, image, or text box on the page!
+  // OR directly on any shape, group, stroke, image, simulation control, or text box on the page!
   const isClientPointOnSelectableOrLasso = useCallback(
     (clientX: number, clientY: number, targetEl?: EventTarget | null): boolean => {
+      const canvas = targetEl instanceof HTMLCanvasElement ? targetEl : activeCanvasRef.current;
+      let ptX = -99999;
+      let ptY = -99999;
+      let targetPageObj = activePage;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const logicalW = canvas.width / CANVAS_DPR;
+          const logicalH = canvas.height / CANVAS_DPR;
+          ptX = (clientX - rect.left) * (logicalW / rect.width);
+          ptY = (clientY - rect.top) * (logicalH / rect.height);
+          for (const p of activeNotebook.pages) {
+            if (activeCanvasMapRef.current.get(p.id) === canvas) {
+              targetPageObj = p;
+              break;
+            }
+          }
+        }
+      }
+
+      // Always allow 1-finger touch on interactive Atom / ChemOCR / 3D Molecule controls on iPad (even in Pencil-Only Mode or any tool!)
+      if (atomOverlayHitRef.current && ptX > -90000) {
+        const aHit = atomOverlayHitRef.current;
+        for (const btn of aHit.buttons || []) {
+          if (
+            ptX >= btn.x1 - 10 &&
+            ptX <= btn.x2 + 10 &&
+            ptY >= btn.y1 - 10 &&
+            ptY <= btn.y2 + 10
+          ) {
+            return true;
+          }
+        }
+        for (const rc of aHit.reactionCards || []) {
+          if (
+            ptX >= rc.x1 - 10 &&
+            ptX <= rc.x2 + 10 &&
+            ptY >= rc.y1 - 10 &&
+            ptY <= rc.y2 + 10
+          ) {
+            return true;
+          }
+          const corners = [
+            { x: rc.x1, y: rc.y1 },
+            { x: rc.x2, y: rc.y1 },
+            { x: rc.x1, y: rc.y2 },
+            { x: rc.x2, y: rc.y2 },
+          ];
+          if (corners.some((c) => Math.hypot(ptX - c.x, ptY - c.y) <= 24)) {
+            return true;
+          }
+        }
+        for (const b3d of aHit.mol3DBoxes || []) {
+          if (
+            ptX >= b3d.x1 - 8 &&
+            ptX <= b3d.x2 + 8 &&
+            ptY >= b3d.y1 - 8 &&
+            ptY <= b3d.y2 + 8
+          ) {
+            return true;
+          }
+        }
+        for (const rh of aHit.resizeHandles || []) {
+          if (Math.hypot(ptX - rh.hx, ptY - rh.hy) <= rh.r + 8) {
+            return true;
+          }
+        }
+        for (const elHit of aHit.electrons || []) {
+          if (Math.hypot(ptX - elHit.x, ptY - elHit.y) <= elHit.r + 6) {
+            return true;
+          }
+        }
+        for (const nucHit of aHit.nuclei || []) {
+          const hitThreshold =
+            activeTool === 'lasso' || activeTool === 'direct-node'
+              ? nucHit.outerR + 10
+              : nucHit.r + 8;
+          if (Math.hypot(ptX - nucHit.x, ptY - nucHit.y) <= hitThreshold) {
+            return true;
+          }
+        }
+      }
+
       const currentTxtId = selectedTextId || editingTextId;
       if (currentTxtId && (activeTool === 'lasso' || activeTool === 'text')) {
         const txtDom = document.querySelector(`[data-text-id="${currentTxtId}"]`) as HTMLElement | null;
@@ -7973,23 +8184,7 @@ export default function App() {
         }
       }
       if (activeTool === 'lasso' && isClientPointInLassoSelection(clientX, clientY, targetEl)) return true;
-      const canvas = targetEl instanceof HTMLCanvasElement ? targetEl : activeCanvasRef.current;
-      if (!canvas) return false;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return false;
-
-      const logicalW = canvas.width / CANVAS_DPR;
-      const logicalH = canvas.height / CANVAS_DPR;
-      const ptX = (clientX - rect.left) * (logicalW / rect.width);
-      const ptY = (clientY - rect.top) * (logicalH / rect.height);
-
-      let targetPageObj = activePage;
-      for (const p of activeNotebook.pages) {
-        if (activeCanvasMapRef.current.get(p.id) === canvas) {
-          targetPageObj = p;
-          break;
-        }
-      }
+      if (!canvas || ptX <= -90000) return false;
 
       if (activeTool === 'lasso' || activeTool === 'text') {
         const lockedTxtLayerIds = new Set(
@@ -10451,33 +10646,124 @@ export default function App() {
     }
   }, [activePage.id, activePageIndex, viewMode]);
 
+  // Two-Pages / Multi-Page Spread Mode toggle (when enabled and zoom <= 40%, dynamically fills each row across the screen width depending on zoom!)
+  const [isMultiPageSpreadEnabled, setIsMultiPageSpreadEnabled] = useState<boolean>(false);
+  const isMultiPageSpreadEnabledRef = useRef<boolean>(false);
+  isMultiPageSpreadEnabledRef.current = isMultiPageSpreadEnabled;
+
+  const getMultiPageSpreadCols = useCallback(
+    (
+      z: number,
+      enabled = isMultiPageSpreadEnabledRef.current,
+      pageCount = activeNotebook.pages.length
+    ): number => {
+      if (!enabled || z > 0.405 || pageCount < 2) return 1;
+      const wsW =
+        workspaceRef.current?.clientWidth ||
+        (typeof window !== 'undefined' ? window.innerWidth : 1440);
+      const pW = Math.max(200, pageWidth);
+      const availW = Math.max(320, wsW - 20);
+      const scaledPageW = pW * z;
+      const scaledGap = PAGE_GAP * z;
+      const fitCols = Math.floor((availW + scaledGap) / Math.max(40, scaledPageW + scaledGap));
+      const rawCols = Math.max(2, Math.min(10, fitCols));
+      return Math.min(pageCount, rawCols);
+    },
+    [activeNotebook.pages.length, pageWidth]
+  );
+  const multiPageSpreadCols = getMultiPageSpreadCols(
+    zoom,
+    isMultiPageSpreadEnabled,
+    activeNotebook.pages.length
+  );
+
   const getPageTopOffset = useCallback(
-    (targetIdx: number) => {
+    (targetIdx: number, customZoom?: number) => {
+      const cols = getMultiPageSpreadCols(
+        customZoom ?? zoomRef.current,
+        isMultiPageSpreadEnabledRef.current,
+        activeNotebook.pages.length
+      );
+      if (cols <= 1) {
+        let y = 0;
+        for (let i = 0; i < targetIdx && i < activeNotebook.pages.length; i++) {
+          const p = activeNotebook.pages[i];
+          y += getPageLogicalHeight(p) + PAGE_GAP;
+        }
+        return y;
+      }
+      const targetRow = Math.floor(targetIdx / cols);
       let y = 0;
-      for (let i = 0; i < targetIdx && i < activeNotebook.pages.length; i++) {
-        const p = activeNotebook.pages[i];
-        y += getPageLogicalHeight(p) + PAGE_GAP;
+      for (let r = 0; r < targetRow; r++) {
+        let rowMaxH = 0;
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          if (idx < activeNotebook.pages.length) {
+            rowMaxH = Math.max(rowMaxH, getPageLogicalHeight(activeNotebook.pages[idx]));
+          }
+        }
+        y += rowMaxH + PAGE_GAP;
       }
       return y;
     },
-    [activeNotebook.pages]
+    [activeNotebook.pages, getMultiPageSpreadCols]
   );
 
-  const totalDocumentHeight = activeNotebook.pages.reduce(
-    (acc, p, idx) => acc + getPageLogicalHeight(p) + (idx > 0 ? PAGE_GAP : 0),
-    0
+  const computeTotalDocumentHeight = useCallback(
+    (customZoom?: number) => {
+      const cols = getMultiPageSpreadCols(
+        customZoom ?? zoomRef.current,
+        isMultiPageSpreadEnabledRef.current,
+        activeNotebook.pages.length
+      );
+      if (cols <= 1) {
+        return activeNotebook.pages.reduce(
+          (acc, p, idx) => acc + getPageLogicalHeight(p) + (idx > 0 ? PAGE_GAP : 0),
+          0
+        );
+      }
+      const numRows = Math.ceil(activeNotebook.pages.length / cols);
+      let totalH = 0;
+      for (let r = 0; r < numRows; r++) {
+        let rowMaxH = 0;
+        for (let c = 0; c < cols; c++) {
+          const idx = r * cols + c;
+          if (idx < activeNotebook.pages.length) {
+            rowMaxH = Math.max(rowMaxH, getPageLogicalHeight(activeNotebook.pages[idx]));
+          }
+        }
+        totalH += rowMaxH + (r > 0 ? PAGE_GAP : 0);
+      }
+      return totalH;
+    },
+    [activeNotebook.pages, getMultiPageSpreadCols]
   );
+
+  const totalDocumentHeight = computeTotalDocumentHeight(zoom);
   const totalDocumentHeightRef = useRef<number>(totalDocumentHeight);
   totalDocumentHeightRef.current = totalDocumentHeight;
   const anyPageBottomVisibleRef = useRef<boolean>(false);
 
   const debouncedTransformCommitRef = useRef<number | null>(null);
   const applyPaperTransformDirect = useCallback(
-    (nextZoom: number, nextPanX: number, nextPanY: number, commitReactState = false) => {
-      const clampedZoom = Math.min(3.5, Math.max(0.2, nextZoom));
+    (
+      nextZoom: number,
+      nextPanX: number,
+      nextPanY: number,
+      commitReactState = false,
+      keepActivePage = false
+    ) => {
+      const minZoomAllowed = isMultiPageSpreadEnabledRef.current ? 0.12 : 0.2;
+      const clampedZoom = Math.min(3.5, Math.max(minZoomAllowed, nextZoom));
       const wsWidth = workspaceRef.current?.clientWidth || window.innerWidth || 980;
       const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
-      const scaledW = clampedZoom * pageWidth;
+      const cols = getMultiPageSpreadCols(
+        clampedZoom,
+        isMultiPageSpreadEnabledRef.current,
+        activeNotebook.pages.length
+      );
+      const logicalDocW = cols * pageWidth + (cols - 1) * PAGE_GAP;
+      const scaledW = clampedZoom * logicalDocW;
       // Allow smooth horizontal focal-point pan when zoomed in wider than the viewport; keep centered (0) when fit-to-width
       const maxPanX = scaledW > wsWidth ? (scaledW - wsWidth) / 2 + 64 : 0;
       const clampedPanX = maxPanX > 0 ? Math.max(-maxPanX, Math.min(maxPanX, nextPanX)) : 0;
@@ -10486,7 +10772,9 @@ export default function App() {
       // and at the bottom (~42px) for "+ Σελίδα Μετά", without allowing empty scrolling beyond them
       const topHeaderAllowance = isCleanProjectorMode ? 0 : Math.round(32 * clampedZoom);
       const bottomFooterAllowance = isCleanProjectorMode ? 0 : Math.round(42 * clampedZoom);
-      const scaledDocH = clampedZoom * totalDocumentHeightRef.current;
+      const effectiveDocH = computeTotalDocumentHeight(clampedZoom);
+      totalDocumentHeightRef.current = effectiveDocH;
+      const scaledDocH = clampedZoom * effectiveDocH;
       const maxPanY = topHeaderAllowance;
       const minPanY = Math.min(maxPanY, wsHeight - scaledDocH - bottomFooterAllowance);
       const clampedPanY = Math.max(minPanY, Math.min(maxPanY, nextPanY));
@@ -10556,20 +10844,44 @@ export default function App() {
 
       // Update activePageIndex live as the user scrolls across pages so the virtualized 5-page canvas window
       // and top-bar page counter (1/170 -> 2/170) track the viewport at 120fps!
-      if (didScrollVertically && activeNotebook.pages.length > 1) {
+      if (!keepActivePage && didScrollVertically && activeNotebook.pages.length > 1) {
         const docFocusY = (-clampedPanY + wsHeight * 0.5) / clampedZoom;
         let accumY = 0;
         let bestIdx = 0;
-        for (let i = 0; i < activeNotebook.pages.length; i++) {
-          const pH = getPageLogicalHeight(activeNotebook.pages[i]);
-          if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
-            bestIdx = i;
-            break;
+        if (cols <= 1) {
+          for (let i = 0; i < activeNotebook.pages.length; i++) {
+            const pH = getPageLogicalHeight(activeNotebook.pages[i]);
+            if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
+              bestIdx = i;
+              break;
+            }
+            if (docFocusY > accumY + pH + PAGE_GAP) {
+              bestIdx = i;
+            }
+            accumY += pH + PAGE_GAP;
           }
-          if (docFocusY > accumY + pH + PAGE_GAP) {
-            bestIdx = i;
+        } else {
+          const numRows = Math.ceil(activeNotebook.pages.length / cols);
+          let bestRow = 0;
+          for (let r = 0; r < numRows; r++) {
+            let rowMaxH = 0;
+            for (let c = 0; c < cols; c++) {
+              const idx = r * cols + c;
+              if (idx < activeNotebook.pages.length) {
+                rowMaxH = Math.max(rowMaxH, getPageLogicalHeight(activeNotebook.pages[idx]));
+              }
+            }
+            if (docFocusY >= accumY && docFocusY <= accumY + rowMaxH + PAGE_GAP) {
+              bestRow = r;
+              break;
+            }
+            if (docFocusY > accumY + rowMaxH + PAGE_GAP) {
+              bestRow = r;
+            }
+            accumY += rowMaxH + PAGE_GAP;
           }
-          accumY += pH + PAGE_GAP;
+          const colOffset = activeDrawingPageIndexRef.current % cols;
+          bestIdx = Math.min(activeNotebook.pages.length - 1, bestRow * cols + colOffset);
         }
         if (bestIdx !== activeDrawingPageIndexRef.current) {
           activeDrawingPageIndexRef.current = bestIdx;
@@ -10587,8 +10899,12 @@ export default function App() {
         window.clearTimeout(debouncedTransformCommitRef.current);
         debouncedTransformCommitRef.current = null;
       }
-      const crossedGridZoomThreshold =
-        activeNotebook.pages.length > 5 && (clampedZoom < 0.5) !== (zoom < 0.5);
+      const prevCols = getMultiPageSpreadCols(
+        zoom,
+        isMultiPageSpreadEnabledRef.current,
+        activeNotebook.pages.length
+      );
+      const crossedGridZoomThreshold = cols !== prevCols;
       if (commitReactState || bottomVisibilityChanged || crossedGridZoomThreshold) {
         setZoom(clampedZoom);
         setPan({ x: clampedPanX, y: clampedPanY });
@@ -10607,6 +10923,9 @@ export default function App() {
       isFullBleedWidth,
       isCleanProjectorMode,
       activePageIndex,
+      zoom,
+      getMultiPageSpreadCols,
+      computeTotalDocumentHeight,
     ]
   );
 
@@ -10662,8 +10981,24 @@ export default function App() {
   // Smoothly zoom in/out around the vertical center of the visible workspace viewport
   const zoomAroundViewportCenter = useCallback(
     (targetZoom: number) => {
-      const clampedNext = Math.min(3.5, Math.max(0.2, targetZoom));
+      const minZ = isMultiPageSpreadEnabledRef.current ? 0.12 : 0.2;
+      const clampedNext = Math.min(3.5, Math.max(minZ, targetZoom));
       const oldZoom = zoomRef.current;
+      const oldCols = getMultiPageSpreadCols(
+        oldZoom,
+        isMultiPageSpreadEnabledRef.current,
+        activeNotebook.pages.length
+      );
+      const nextCols = getMultiPageSpreadCols(
+        clampedNext,
+        isMultiPageSpreadEnabledRef.current,
+        activeNotebook.pages.length
+      );
+      if (oldCols !== nextCols) {
+        const targetY = -getPageTopOffset(activeDrawingPageIndexRef.current, clampedNext) * clampedNext + 12;
+        applyPaperTransformDirect(clampedNext, 0, targetY, true, true);
+        return;
+      }
       const wsHeight = workspaceRef.current?.clientHeight || window.innerHeight || 820;
       const focusY = wsHeight * 0.5;
       const docFocusY = (focusY - panRef.current.y) / Math.max(0.05, oldZoom);
@@ -10671,7 +11006,7 @@ export default function App() {
       const nextPanX = oldZoom > 0.05 ? panRef.current.x * (clampedNext / oldZoom) : 0;
       applyPaperTransformDirect(clampedNext, nextPanX, nextPanY, true);
     },
-    [applyPaperTransformDirect]
+    [activeNotebook.pages.length, getMultiPageSpreadCols, getPageTopOffset, applyPaperTransformDirect]
   );
 
   // Responsive Fit-to-Width on initial notebook open or browser window width resize,
@@ -10747,7 +11082,7 @@ export default function App() {
         clampedIdx === 0 && !isCleanProjectorMode
           ? Math.round(32 * zoomRef.current)
           : -topY * zoomRef.current;
-      applyPaperTransformDirect(zoomRef.current, panRef.current.x, targetPanY, true);
+      applyPaperTransformDirect(zoomRef.current, panRef.current.x, targetPanY, true, true);
     },
     [activeNotebook.pages.length, isCleanProjectorMode, getPageTopOffset, applyPaperTransformDirect]
   );
@@ -10756,27 +11091,57 @@ export default function App() {
   const syncActivePageFromPanY = useCallback(
     (panY: number) => {
       const wsHeight = workspaceRef.current?.clientHeight || 820;
-      const docFocusY = (-panY + wsHeight * 0.5) / zoomRef.current;
+      const curZoom = zoomRef.current;
+      const cols = getMultiPageSpreadCols(
+        curZoom,
+        isMultiPageSpreadEnabledRef.current,
+        activeNotebook.pages.length
+      );
+      const docFocusY = (-panY + wsHeight * 0.5) / Math.max(0.05, curZoom);
       let accumY = 0;
       let bestIdx = 0;
-      for (let i = 0; i < activeNotebook.pages.length; i++) {
-        const p = activeNotebook.pages[i];
-        const pH = getPageLogicalHeight(p);
-        if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
-          bestIdx = i;
-          break;
+      if (cols <= 1) {
+        for (let i = 0; i < activeNotebook.pages.length; i++) {
+          const p = activeNotebook.pages[i];
+          const pH = getPageLogicalHeight(p);
+          if (docFocusY >= accumY && docFocusY <= accumY + pH + PAGE_GAP) {
+            bestIdx = i;
+            break;
+          }
+          if (docFocusY > accumY + pH + PAGE_GAP) {
+            bestIdx = i;
+          }
+          accumY += pH + PAGE_GAP;
         }
-        if (docFocusY > accumY + pH + PAGE_GAP) {
-          bestIdx = i;
+      } else {
+        const numRows = Math.ceil(activeNotebook.pages.length / cols);
+        let bestRow = 0;
+        for (let r = 0; r < numRows; r++) {
+          let rowMaxH = 0;
+          for (let c = 0; c < cols; c++) {
+            const idx = r * cols + c;
+            if (idx < activeNotebook.pages.length) {
+              rowMaxH = Math.max(rowMaxH, getPageLogicalHeight(activeNotebook.pages[idx]));
+            }
+          }
+          if (docFocusY >= accumY && docFocusY <= accumY + rowMaxH + PAGE_GAP) {
+            bestRow = r;
+            break;
+          }
+          if (docFocusY > accumY + rowMaxH + PAGE_GAP) {
+            bestRow = r;
+          }
+          accumY += rowMaxH + PAGE_GAP;
         }
-        accumY += pH + PAGE_GAP;
+        const colOffset = activeDrawingPageIndexRef.current % cols;
+        bestIdx = Math.min(activeNotebook.pages.length - 1, bestRow * cols + colOffset);
       }
       if (bestIdx !== activeDrawingPageIndexRef.current) {
         activeDrawingPageIndexRef.current = bestIdx;
         setActivePageIndex(bestIdx);
       }
     },
-    [activeNotebook.pages]
+    [activeNotebook.pages, getMultiPageSpreadCols]
   );
 
   const insertPageAtIndex = useCallback(
@@ -14389,7 +14754,8 @@ export default function App() {
         st.lastMidY = currMidY;
         st.lastMoveTime = now;
 
-        const newZoom = Math.min(3.5, Math.max(0.2, st.initialZoom * (currDist / st.initialDist)));
+        const minZ = isMultiPageSpreadEnabledRef.current ? 0.15 : 0.2;
+        const newZoom = Math.min(3.5, Math.max(minZ, st.initialZoom * (currDist / st.initialDist)));
         const nextPanX =
           st.initialPanX + (currMidX - st.startMidX) - st.paperOffsetX * (newZoom - st.initialZoom);
         const nextPanY =
@@ -14653,7 +15019,8 @@ export default function App() {
         const paperRect = paperTransformElRef.current?.getBoundingClientRect();
         const oldZoom = zoomRef.current;
         const factor = Math.exp(-e.deltaY * 0.0045);
-        const newZoom = Math.min(3.5, Math.max(0.2, oldZoom * factor));
+        const minZ = isMultiPageSpreadEnabledRef.current ? 0.15 : 0.2;
+        const newZoom = Math.min(3.5, Math.max(minZ, oldZoom * factor));
         const originScreenX = paperRect
           ? paperRect.left + paperRect.width / 2
           : (workspaceRef.current?.clientWidth || window.innerWidth) / 2;
@@ -16976,7 +17343,7 @@ export default function App() {
       atomReactionAnimRef.current = nextAnim;
       setAtomReactionAnim(nextAnim);
     },
-    [computeReactionBondsForAtomSim]
+    [computeReactionBondsForAtomSim, updateActivePage]
   );
 
   const registerOrActivateAtomSimFromLasso = useCallback(() => {
@@ -17097,6 +17464,7 @@ export default function App() {
     getValidAtomSims,
     getActiveAtomSim,
     getNextDefaultAtomSimName,
+    updateActivePage,
   ]);
 
   const assignPeriodicElementToAtomSim = useCallback(
@@ -17285,7 +17653,14 @@ export default function App() {
         };
       });
     },
-    [selectedStrokeIds, activePage, getValidAtomSims, getActiveAtomSim, getNextDefaultAtomSimName]
+    [
+      selectedStrokeIds,
+      activePage,
+      getValidAtomSims,
+      getActiveAtomSim,
+      getNextDefaultAtomSimName,
+      updateActivePage,
+    ]
   );
 
   const bondAtomsByElectronDrag = useCallback(
@@ -17387,7 +17762,7 @@ export default function App() {
         };
       });
     },
-    []
+    [updateActivePage]
   );
 
   const handleAtomSimAction = useCallback(
@@ -17447,7 +17822,10 @@ export default function App() {
         return;
       }
 
-      if (activeChemCorrectionRef.current) {
+      if (
+        activeChemCorrectionRef.current &&
+        performance.now() - lastChemCorrectionClickTimeRef.current > 180
+      ) {
         activeChemCorrectionRef.current = null;
         setActiveChemCorrection(null);
       }
@@ -17889,7 +18267,7 @@ export default function App() {
         return;
       }
     },
-    [computeReactionBondsForAtomSim, triggerAtomReactionAnimation]
+    [computeReactionBondsForAtomSim, triggerAtomReactionAnimation, updateActivePage]
   );
 
   const scrollToSpringSim = useCallback(
@@ -25309,7 +25687,7 @@ export default function App() {
             const rhsTermGroups = splitSegsIntoTerms(rhsSegs);
 
             ctx.save();
-            ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.font = 'bold 15.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const measureTermGroupsWidth = (groups: (typeof chemVal.segments)[]) => {
               let w = 0;
               groups.forEach((grp, gIdx) => {
@@ -25427,20 +25805,32 @@ export default function App() {
                 }
 
                 const hitX = xCursor;
-                const hitW = Math.max(18, termInnerW + 6);
-                const hitY = 6;
-                const hitH = cardH - 12;
+                const hitW = Math.max(20, termInnerW + 6);
+                const hitY = 0;
+                const hitH = cardH;
                 const isTermActive =
                   aSim.activeReactionTerm === termPlainText &&
                   (aSim.showAtomsBelowReaction !== false || !!aSim.show3DMolecule);
+
+                if (isTermActive) {
+                  ctx.save();
+                  ctx.fillStyle = 'rgba(37, 99, 235, 0.10)';
+                  ctx.strokeStyle = 'rgba(59, 130, 246, 0.35)';
+                  ctx.lineWidth = 1.2;
+                  ctx.beginPath();
+                  ctx.roundRect(hitX - 2, 5, hitW + 4, cardH - 10, 7);
+                  ctx.fill();
+                  ctx.stroke();
+                  ctx.restore();
+                }
 
                 if (termPlainText) {
                   atomButtonsHit.push({
                     simId: aSim.id,
                     action: `click-reaction-term:${termPlainText}`,
-                    x1: scaledCardX + hitX * rScale,
+                    x1: scaledCardX + (hitX - 2) * rScale,
                     y1: scaledCardY + hitY * rScale,
-                    x2: scaledCardX + (hitX + hitW) * rScale,
+                    x2: scaledCardX + (hitX + hitW + 2) * rScale,
                     y2: scaledCardY + (hitY + hitH) * rScale,
                   });
                 }
@@ -30237,7 +30627,10 @@ export default function App() {
       } else {
         if (hadActiveTextOnTouch) {
           releaseActiveTextBox();
-          if (activeTool === 'text') {
+          if (
+            activeTool === 'text' &&
+            !isClientPointOnSelectableOrLasso(e.clientX, e.clientY, e.currentTarget)
+          ) {
             return;
           }
         }
@@ -30252,6 +30645,7 @@ export default function App() {
     // Switch active page immediately if user touches another page in the Word-style vertical stack!
     const targetPage = activeNotebook.pages[pageIdx] || activePage;
     activeDrawingPageIndexRef.current = pageIdx;
+    activePageIndexLiveRef.current = pageIdx;
     if (pageIdx !== activePageIndex) {
       setActivePageIndex(pageIdx);
     }
@@ -30530,14 +30924,22 @@ export default function App() {
     if (atomOverlayHitRef.current) {
       const aHit = atomOverlayHitRef.current;
 
-      // 0-corr) Clicking directly on a red corrected coefficient/subscript ALWAYS shows/toggles "Διόρθωση: ..." (in any tool, including Lasso!)
+      // 0-btn) Priority 1: Explicit 3D Window Controls (☁️ Νέφος ON/OFF, ✕ Close, 3D Molecule Tabs) & Reaction View Toggle (2D/3D, ➔, Bond Label)
+      // Execute immediately on pointerdown with generous touch/pen padding so they never get swallowed by reaction card drag or 3D card drag on iPad!
       for (const btn of [...aHit.buttons].reverse()) {
-        if (!btn.action.startsWith('click-chem-correction:')) continue;
+        const isImmediateControlBtn =
+          btn.action === 'toggle-charge-cloud' ||
+          btn.action === 'close-3d-molecule' ||
+          btn.action.startsWith('select-3d-mol:') ||
+          btn.action === 'toggle-reaction-view-mode' ||
+          btn.action === 'toggle-reaction-flow' ||
+          btn.action === 'toggle-bond-label';
+        if (!isImmediateControlBtn) continue;
         if (
-          pt.x >= btn.x1 - 4 &&
-          pt.x <= btn.x2 + 4 &&
-          pt.y >= btn.y1 - 4 &&
-          pt.y <= btn.y2 + 4
+          pt.x >= btn.x1 - 8 &&
+          pt.x <= btn.x2 + 8 &&
+          pt.y >= btn.y1 - 8 &&
+          pt.y <= btn.y2 + 8
         ) {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
@@ -30553,13 +30955,7 @@ export default function App() {
         }
       }
 
-      // Clicking anywhere else on the canvas immediately dismisses any open chemical correction message
-      if (activeChemCorrectionRef.current) {
-        activeChemCorrectionRef.current = null;
-        setActiveChemCorrection(null);
-      }
-
-      // 0) Corner Resize Handles of Selected Reaction Equation Card (works in any tool, just like a selected math equation!)
+      // 0-corner) Corner Resize Handles of Selected Reaction Equation Card (tight 10px radius so they never swallow taps on compounds!)
       if (selectedReactionSimIdRef.current) {
         const selRc = (aHit.reactionCards || []).find(
           (rc) => rc.simId === selectedReactionSimIdRef.current
@@ -30571,7 +30967,7 @@ export default function App() {
             { x: selRc.x1, y: selRc.y2 },
             { x: selRc.x2, y: selRc.y2 },
           ];
-          const hitCorner = corners.find((c) => Math.hypot(pt.x - c.x, pt.y - c.y) <= 18);
+          const hitCorner = corners.find((c) => Math.hypot(pt.x - c.x, pt.y - c.y) <= 10);
           if (hitCorner) {
             e.preventDefault();
             const cardCenterY = (selRc.y1 + selRc.y2) / 2;
@@ -30599,6 +30995,140 @@ export default function App() {
             return;
           }
         }
+      }
+
+      // 0-term) Priority 2: Clicking on ANY Reactant or Product Compound (`click-reaction-term:...`) in ANY tool (including Lasso & Apple Pencil on iPad!)
+      // Executes IMMEDIATELY on pointerdown to display/toggle that compound's 2D atoms (or 3D molecule) WITHOUT selecting the whole reaction card!
+      const matchingTermBtns = [...aHit.buttons]
+        .reverse()
+        .filter(
+          (b) =>
+            b.action.startsWith('click-reaction-term:') &&
+            pt.x >= b.x1 - 8 &&
+            pt.x <= b.x2 + 8 &&
+            pt.y >= b.y1 - 8 &&
+            pt.y <= b.y2 + 8
+        )
+        .sort((a, b) => {
+          const cxA = (a.x1 + a.x2) * 0.5;
+          const cxB = (b.x1 + b.x2) * 0.5;
+          return Math.abs(pt.x - cxA) - Math.abs(pt.x - cxB);
+        });
+      for (const btn of matchingTermBtns.slice(0, 1)) {
+        if (btn) {
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (selectedImageIds.length > 0) setSelectedImageIds([]);
+          if (selectedImageId) setSelectedImageId(null);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          if (selectedTextId) setSelectedTextId(null);
+          if (selectedReactionSimIdRef.current) {
+            selectedReactionSimIdRef.current = null;
+            setSelectedReactionSimId(null);
+          }
+          const targetAtomSim =
+            (targetPage.atomSims || []).find((s) => s.id === btn.simId) ||
+            getActiveAtomSim(targetPage);
+
+          // Check if the tap ALSO hit a red corrected coefficient/subscript inside this compound
+          const matchedCorrBtn = [...aHit.buttons]
+            .reverse()
+            .find(
+              (b) =>
+                b.simId === btn.simId &&
+                b.action.startsWith('click-chem-correction:') &&
+                pt.x >= b.x1 - 4 &&
+                pt.x <= b.x2 + 4 &&
+                pt.y >= b.y1 - 4 &&
+                pt.y <= b.y2 + 4
+            );
+
+          if (matchedCorrBtn && targetAtomSim) {
+            handleAtomSimAction(targetAtomSim, matchedCorrBtn.action);
+            const termText = btn.action.slice('click-reaction-term:'.length).trim();
+            const viewMode = targetAtomSim.reactionViewMode || '2d';
+            const isSameAlreadyOpen =
+              targetAtomSim.activeReactionTerm === termText &&
+              ((viewMode === '2d' &&
+                targetAtomSim.showAtomsBelowReaction !== false &&
+                !targetAtomSim.show3DMolecule) ||
+                (viewMode === '3d' && !!targetAtomSim.show3DMolecule));
+            if (!isSameAlreadyOpen) {
+              handleAtomSimAction(targetAtomSim, btn.action);
+            }
+          } else {
+            if (activeChemCorrectionRef.current) {
+              activeChemCorrectionRef.current = null;
+              setActiveChemCorrection(null);
+            }
+            handleAtomSimAction(targetAtomSim, btn.action);
+          }
+
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+      }
+
+      // 0-corr) Fallback if a red corrected coefficient/subscript was clicked slightly outside a compound's horizontal box
+      for (const btn of [...aHit.buttons].reverse()) {
+        if (!btn.action.startsWith('click-chem-correction:')) continue;
+        if (
+          pt.x >= btn.x1 - 5 &&
+          pt.x <= btn.x2 + 5 &&
+          pt.y >= btn.y1 - 5 &&
+          pt.y <= btn.y2 + 5
+        ) {
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          if (selectedReactionSimIdRef.current) {
+            selectedReactionSimIdRef.current = null;
+            setSelectedReactionSimId(null);
+          }
+          const targetAtomSim =
+            (targetPage.atomSims || []).find((s) => s.id === btn.simId) ||
+            getActiveAtomSim(targetPage);
+          handleAtomSimAction(targetAtomSim, btn.action);
+          const matchedTermBtn = [...aHit.buttons]
+            .reverse()
+            .find(
+              (b) =>
+                b.simId === btn.simId &&
+                b.action.startsWith('click-reaction-term:') &&
+                pt.x >= b.x1 - 12 &&
+                pt.x <= b.x2 + 12 &&
+                pt.y >= b.y1 - 8 &&
+                pt.y <= b.y2 + 8
+            );
+          if (matchedTermBtn && targetAtomSim) {
+            const termText = matchedTermBtn.action.slice('click-reaction-term:'.length).trim();
+            const viewMode = targetAtomSim.reactionViewMode || '2d';
+            const isSameAlreadyOpen =
+              targetAtomSim.activeReactionTerm === termText &&
+              ((viewMode === '2d' &&
+                targetAtomSim.showAtomsBelowReaction !== false &&
+                !targetAtomSim.show3DMolecule) ||
+                (viewMode === '3d' && !!targetAtomSim.show3DMolecule));
+            if (!isSameAlreadyOpen) {
+              handleAtomSimAction(targetAtomSim, matchedTermBtn.action);
+            }
+          }
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+      }
+
+      // Clicking anywhere else on the canvas immediately dismisses any open chemical correction message
+      if (
+        activeChemCorrectionRef.current &&
+        performance.now() - lastChemCorrectionClickTimeRef.current > 180
+      ) {
+        activeChemCorrectionRef.current = null;
+        setActiveChemCorrection(null);
       }
 
       const startReactionCardMove = (
@@ -30647,40 +31177,13 @@ export default function App() {
         isDrawingRef.current = true;
       };
 
-      // 0b) When Lasso tool is active: clicking anywhere on the Reaction Equation Card selects it & lets you drag it
-      // (and if released without dragging on a reactant/product or 2D/3D badge, triggers that button too!)
-      if (activeTool === 'lasso' || activeTool === 'direct-node') {
-        for (const rc of [...(aHit.reactionCards || [])].reverse()) {
-          if (
-            pt.x >= rc.x1 - 6 &&
-            pt.x <= rc.x2 + 6 &&
-            pt.y >= rc.y1 - 6 &&
-            pt.y <= rc.y2 + 6
-          ) {
-            const matchedBtn = [...aHit.buttons]
-              .reverse()
-              .find(
-                (b) =>
-                  b.simId === rc.simId &&
-                  pt.x >= b.x1 - 4 &&
-                  pt.x <= b.x2 + 4 &&
-                  pt.y >= b.y1 - 4 &&
-                  pt.y <= b.y2 + 4
-              );
-            startReactionCardMove(rc, matchedBtn?.action);
-            return;
-          }
-        }
-      }
-
-      // 1) On-Canvas Reaction Buttons ([ ➔ ], [ 2D/3D ], clickable reactants/products, red corrections, 3D window controls)
+      // 1) Any remaining On-Canvas Reaction / Atom Buttons
       for (const btn of [...aHit.buttons].reverse()) {
-        const tolX = btn.action.startsWith('click-chem-correction:') ? 4 : 4;
         if (
-          pt.x >= btn.x1 - tolX &&
-          pt.x <= btn.x2 + tolX &&
-          pt.y >= btn.y1 - 4 &&
-          pt.y <= btn.y2 + 4
+          pt.x >= btn.x1 - 8 &&
+          pt.x <= btn.x2 + 8 &&
+          pt.y >= btn.y1 - 8 &&
+          pt.y <= btn.y2 + 8
         ) {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
@@ -30696,7 +31199,7 @@ export default function App() {
         }
       }
 
-      // 1a) Grabbing the Reaction Card background/border (even outside Lasso mode) selects & drags the Reaction Card
+      // 1a) Grabbing the Reaction Card arrow (→), '+' sign, or background/border selects & drags the whole Reaction Card
       for (const rc of [...(aHit.reactionCards || [])].reverse()) {
         if (
           pt.x >= rc.x1 - 4 &&
@@ -33973,10 +34476,10 @@ export default function App() {
       } else if (dragAt.kind === 'reaction-card-move') {
         const dx = latestPt.x - dragAt.startX;
         const dy = latestPt.y - dragAt.startY;
-        if (Math.hypot(dx, dy) > 5) {
+        if (Math.hypot(dx, dy) > 18) {
           dragAt.pendingButtonAction = undefined;
         }
-        if (Math.hypot(dx, dy) > 3) {
+        if (Math.hypot(dx, dy) > 14) {
           const pW = getPageLogicalWidth(activePage);
           const pH = getPageLogicalHeight(activePage);
           const nextBarX = Math.round(Math.max(70, Math.min(pW - 70, dragAt.origAtomX + dx)));
@@ -38935,7 +39438,7 @@ export default function App() {
         Math.hypot(
           finishedAtomDrag.curX - finishedAtomDrag.startX,
           finishedAtomDrag.curY - finishedAtomDrag.startY
-        ) <= 5
+        ) <= 18
       ) {
         const targetSim =
           (activePage.atomSims || []).find((s) => s.id === finishedAtomDrag.simId) ||
@@ -42347,7 +42850,8 @@ export default function App() {
       const ts = Date.now();
       const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
       const centerX = Math.max(240, Math.min(540, Math.round((minX + maxX) / 2)));
-      const atomsY = Math.max(210, Math.round(minY + 155));
+      const barY = Math.max(24, Math.round(minY));
+      const atomsY = Math.max(210, Math.round(barY + 145));
 
       const builtProduct = buildAtomNodesAndBondsForTerm(primaryProduct, centerX, atomsY);
 
@@ -42362,6 +42866,8 @@ export default function App() {
         showReactionEquation: true,
         reactionEquationText: finalEq,
         userRawReactionText: rawReaction,
+        reactionBarX: centerX,
+        reactionBarY: barY,
         activeReactionTerm: undefined,
         reactionArrowStep: 0,
         showAtomsBelowReaction: false, // Αρχικά μετά τη μετατροπή φαίνεται ΜΟΝΟ η αντίδραση! Με κλικ σε αντιδρών ή προϊόν εμφανίζεται από κάτω.
@@ -42426,8 +42932,9 @@ export default function App() {
 
       const ts = Date.now();
       const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
-      const centerX = Math.max(250, Math.min(540, Math.round(targetTxt.x + 170)));
-      const atomsY = Math.max(220, Math.round(targetTxt.y + 175));
+      const centerX = Math.max(250, Math.min(540, Math.round(targetTxt.x + 150)));
+      const barY = Math.max(24, Math.round(targetTxt.y));
+      const atomsY = Math.max(220, Math.round(barY + 145));
       const builtProduct = buildAtomNodesAndBondsForTerm(primaryProduct, centerX, atomsY);
 
       const newAtomSim: AtomSimConfig = {
@@ -42441,6 +42948,8 @@ export default function App() {
         showReactionEquation: true,
         reactionEquationText: finalEq,
         userRawReactionText: rawUserStr,
+        reactionBarX: centerX,
+        reactionBarY: barY,
         activeReactionTerm: undefined,
         reactionArrowStep: 0,
         showAtomsBelowReaction: false, // Αρχικά φαίνεται μόνο η αντίδραση· με κλικ σε αντιδρών/προϊόν εμφανίζεται από κάτω!
@@ -42452,21 +42961,14 @@ export default function App() {
         const curValid = getValidAtomSims(page);
         return {
           ...page,
-          texts: (page.texts || []).map((t) =>
-            t.id === txtId
-              ? {
-                  ...t,
-                  chemRawInput: rawUserStr,
-                  text: finalEq,
-                }
-              : t
-          ),
+          texts: (page.texts || []).filter((t) => t.id !== txtId),
           atomSims: [...curValid, newAtomSim],
           activeAtomSimId: newSimId,
         };
       });
 
       setEditingTextId(null);
+      setSelectedTextId(null);
       setShowSimulationPanel(true);
       setSimActiveCategory('atoms');
       if (validation.hasCorrections) {
@@ -42674,6 +43176,7 @@ export default function App() {
       });
 
       setEditingTextId(null);
+      setSelectedTextId(null);
       showToast(`🧊 3D.OCR: Δημιουργήθηκε το 3D Μόριο «${mol3D.nameEl}» (${mol3D.polarityLabel})! Σύρε το πλαίσιο ελεύθερα.`);
     },
     [
@@ -44809,7 +45312,11 @@ export default function App() {
             setOpenNotebookIds([]);
             setActiveNotebookId('');
             setActivePageIndex(0);
+            setActiveLibraryFolder(null);
+            customFoldersRef.current = [];
             setCustomFolders([]);
+            localDeletedNotebooksRef.current = [];
+            setDeletedCloudNotebooks([]);
             setViewMode('library');
             return;
           }
@@ -45104,7 +45611,10 @@ export default function App() {
               {/* 2-Finger Pinch Zoom Pill (- / 100% Reset / +) */}
               <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
                 <button
-                  onClick={() => zoomAroundViewportCenter(zoomRef.current - 0.15)}
+                  onClick={() => {
+                    const step = zoomRef.current <= 0.45 ? 0.06 : 0.15;
+                    zoomAroundViewportCenter(zoomRef.current - step);
+                  }}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
                   title="Σμίκρυνση (Zoom Out — ή Cmd - / Ctrl -)"
                 >
@@ -45124,13 +45634,57 @@ export default function App() {
                   {Math.round(zoom * 100)}%
                 </button>
                 <button
-                  onClick={() => zoomAroundViewportCenter(zoomRef.current + 0.15)}
+                  onClick={() => {
+                    const step = zoomRef.current < 0.4 ? 0.06 : 0.15;
+                    zoomAroundViewportCenter(zoomRef.current + step);
+                  }}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
                   title="Μεγέθυνση (Zoom In — ή Cmd + / Ctrl +)"
                 >
                   <ZoomIn className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Two-Pages / Multi-Page Side-by-Side Spread Button (When enabled & Zoom <= 40%, fills each row with pages depending on zoom!) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const nextEnabled = !isMultiPageSpreadEnabled;
+                  isMultiPageSpreadEnabledRef.current = nextEnabled;
+                  setIsMultiPageSpreadEnabled(nextEnabled);
+                  if (nextEnabled) {
+                    const targetZ = zoomRef.current <= 0.4 ? zoomRef.current : 0.35;
+                    const targetY = -getPageTopOffset(activePageIndex, targetZ) * targetZ + 12;
+                    applyPaperTransformDirect(targetZ, 0, targetY, true, true);
+                  } else if (zoomRef.current <= 0.405) {
+                    const fitZ = computeFitWidthZoom(pageWidth, isFullBleedWidth);
+                    const targetY = -getPageTopOffset(activePageIndex, fitZ) * fitZ + 8;
+                    applyPaperTransformDirect(fitZ, 0, targetY, true, true);
+                  }
+                }}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                  isMultiPageSpreadEnabled
+                    ? 'bg-[#31487a] text-white ring-1 ring-sky-400/60'
+                    : 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
+                }`}
+                title="Προβολή Πολλών Σελίδων Δίπλα-Δίπλα (κάτω από 40% Zoom γεμίζει αυτόματα κάθε γραμμή της οθόνης ανάλογα με το Zoom!)"
+              >
+                <svg
+                  viewBox="0 0 18 14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-4 h-3.5 shrink-0"
+                >
+                  <rect x="1.5" y="1.5" width="6.5" height="11" rx="1" />
+                  <rect x="10" y="1.5" width="6.5" height="11" rx="1" />
+                </svg>
+                {isMultiPageSpreadEnabled && zoom <= 0.405 && activeNotebook.pages.length >= 2 && (
+                  <span>×{multiPageSpreadCols}</span>
+                )}
+              </button>
 
               {/* 16:9 Full-Width & Fullscreen Direct 1-Click Button */}
               <button
@@ -45511,9 +46065,16 @@ export default function App() {
                         explicitLandingNavRef.current = true;
                         try {
                           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
+                          localStorage.removeItem(AUTH_UID_STORAGE_KEY);
+                          localStorage.removeItem(`${UI_SESSION_STORAGE_KEY}_latest`);
                         } catch {
                           // ignore
                         }
+                        customFoldersRef.current = [];
+                        setCustomFolders([]);
+                        setActiveLibraryFolder(null);
+                        localDeletedNotebooksRef.current = [];
+                        setDeletedCloudNotebooks([]);
                         await signOut(auth);
                         setViewMode('landing');
                         showToast('👋 Αποσυνδέθηκες και επέστρεψες στην Αρχική Σελίδα.');
@@ -46312,6 +46873,28 @@ export default function App() {
 
               const confirmDeleteNotebook = (nb: Notebook) => {
                 setPendingDeleteNotebook(null);
+                sessionDeletedNotebookIds.add(nb.id);
+                sessionRestoredNotebookIds.delete(nb.id);
+                userEditedInSessionRef.current.delete(nb.id);
+                const nowIso = getMonotonicIsoTimestamp(
+                  nb.updatedAt,
+                  remoteUpdatedAtMapRef.current.get(nb.id)
+                );
+                const seedKeyById: Record<string, string> = {
+                  [VOLCANO_NOTEBOOK_ID]: 'bestnotes_volcano_seeded_v1',
+                  [PHOTOSYNTHESIS_NOTEBOOK_ID]: 'bestnotes_photosynthesis_seeded_v1',
+                  [ACIDS_NOTEBOOK_ID]: 'bestnotes_acids_seeded_v1',
+                  [BASES_NOTEBOOK_ID]: 'bestnotes_bases_seeded_v1',
+                  [WEIGHT_NOTEBOOK_ID]: 'bestnotes_weight_seeded_v1',
+                  [WATER_PHASES_NOTEBOOK_ID]: 'bestnotes_water_phases_seeded_v1',
+                };
+                if (seedKeyById[nb.id]) {
+                  try {
+                    localStorage.setItem(seedKeyById[nb.id], 'deleted');
+                  } catch {
+                    // ignore
+                  }
+                }
                 const nextLocalBin = [
                   nb,
                   ...localDeletedNotebooksRef.current.filter((d) => d.id !== nb.id),
@@ -46321,7 +46904,11 @@ export default function App() {
                   nb,
                   ...prev.filter((d) => d.id !== nb.id),
                 ]);
+                remoteDeletedIdsRef.current.add(nb.id);
+                remoteUpdatedAtMapRef.current.set(nb.id, nowIso);
+                const remaining = notebooks.filter((n) => n.id !== nb.id);
                 if (currentUser) {
+                  saveNotebooksToLocalAndIdb(currentUser.uid, remaining);
                   void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextLocalBin);
                   lastSyncedJsonMapRef.current.delete(nb.id);
                   const softDeleteJson = serializeNotebookForFirestore(nb);
@@ -46330,9 +46917,9 @@ export default function App() {
                     {
                       id: nb.id,
                       title: (nb.title || 'Σημείωση').slice(0, 900),
-                      updatedAt: new Date().toISOString(),
-                      ...(softDeleteJson.length <= FIRESTORE_CHUNK_SIZE
-                        ? { dataJson: softDeleteJson, chunkCount: 0 }
+                      updatedAt: nowIso,
+                      ...(softDeleteJson.length <= FIRESTORE_SINGLE_DOC_LIMIT
+                        ? { dataJson: softDeleteJson }
                         : {}),
                       deleted: true,
                       deviceId: deviceIdRef.current,
@@ -46340,7 +46927,6 @@ export default function App() {
                     { merge: true }
                   );
                 }
-                const remaining = notebooks.filter((n) => n.id !== nb.id);
                 if (remaining.length === 0) {
                   setNotebooks([]);
                   setOpenNotebookIds([]);
@@ -46688,27 +47274,27 @@ export default function App() {
                             <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => {
+                                  sessionDeletedNotebookIds.delete(delNb.id);
+                                  sessionRestoredNotebookIds.add(delNb.id);
+                                  const nowIso = getMonotonicIsoTimestamp(
+                                    delNb.updatedAt,
+                                    remoteUpdatedAtMapRef.current.get(delNb.id)
+                                  );
+                                  const restoredNb: Notebook = { ...delNb, updatedAt: nowIso };
                                   const nextBin = localDeletedNotebooksRef.current.filter(
                                     (n) => n.id !== delNb.id
                                   );
                                   localDeletedNotebooksRef.current = nextBin;
+                                  remoteDeletedIdsRef.current.delete(delNb.id);
+                                  userEditedInSessionRef.current.add(delNb.id);
                                   if (currentUser) {
                                     void saveNotebooksToIndexedDB(`${currentUser.uid}__recycle_bin`, nextBin);
-                                    void setDoc(
-                                      doc(db, 'users', currentUser.uid, 'notebooks', delNb.id),
-                                      {
-                                        deleted: false,
-                                        updatedAt: new Date().toISOString(),
-                                        deviceId: deviceIdRef.current,
-                                      },
-                                      { merge: true }
-                                    );
+                                    pushNotebookToCloudTracked(currentUser.uid, restoredNb);
                                   }
-                                  userEditedInSessionRef.current.add(delNb.id);
                                   setNotebooks((prev) =>
                                     prev.some((n) => n.id === delNb.id)
                                       ? prev
-                                      : [{ ...delNb, updatedAt: new Date().toISOString() }, ...prev]
+                                      : [restoredNb, ...prev]
                                   );
                                   setDeletedCloudNotebooks((prev) =>
                                     prev.filter((n) => n.id !== delNb.id)
@@ -54145,10 +54731,15 @@ export default function App() {
                                           ...p,
                                           activeAtomSimId: sim.id,
                                           atomSims: (p.atomSims || []).map((s) =>
-                                            s.id === sim.id &&
-                                            s.showReactionEquation === false &&
-                                            s.showAtomsBelowReaction === false
-                                              ? { ...s, show3DMolecule: true }
+                                            s.id === sim.id
+                                              ? s.showReactionEquation === false &&
+                                                s.showAtomsBelowReaction === false
+                                                ? { ...s, show3DMolecule: true }
+                                                : s.showReactionEquation &&
+                                                  s.showAtomsBelowReaction === false &&
+                                                  !s.show3DMolecule
+                                                ? { ...s, showAtomsBelowReaction: true }
+                                                : s
                                               : s
                                           ),
                                         }))
@@ -54232,7 +54823,12 @@ export default function App() {
                                             ...p,
                                             atomSims: (p.atomSims || []).map((s) =>
                                               s.id === activeAtomSim.id
-                                                ? { ...s, selectedAtomId: atNode.id }
+                                                ? {
+                                                    ...s,
+                                                    selectedAtomId: atNode.id,
+                                                    showAtomsBelowReaction: true,
+                                                    show3DMolecule: false,
+                                                  }
                                                 : s
                                             ),
                                           }))
@@ -55355,117 +55951,7 @@ export default function App() {
               </div>
             )}
 
-            {/* AUTO MULTI-PAGE GRID VIEW WHEN DOCUMENT HAS > 5 PAGES AND ZOOM < 50% (< 0.50) */}
-            {activeNotebook.pages.length > 5 && zoom < 0.5 ? (
-              <div
-                onPointerDown={(e) => e.stopPropagation()}
-                onWheel={(e) => e.stopPropagation()}
-                onScroll={(e) => setThumbModalScrollTop(e.currentTarget.scrollTop)}
-                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-                className="absolute inset-0 z-30 bg-[#eef2f6] overflow-y-auto p-4 sm:p-6"
-              >
-                <div className="max-w-6xl mx-auto space-y-4">
-                  <div className="sticky top-0 z-20 flex items-center justify-between gap-3 flex-wrap bg-[#1b2a4a]/95 backdrop-blur-xs text-white px-4 py-2.5 rounded-2xl shadow-lg">
-                    <div className="flex items-center gap-2.5">
-                      <LayoutGrid className="w-5 h-5 text-sky-300 shrink-0" />
-                      <div>
-                        <div className="text-xs sm:text-sm font-bold">
-                          Προβολή Πολλών Σελίδων (Zoom {Math.round(zoom * 100)}% &lt; 50%) — {activeNotebook.title}
-                        </div>
-                        <div className="text-[11px] text-slate-300">
-                          {activeNotebook.pages.length} σελίδες • Γρήγορο scroll &amp; πάτημα σε οποιαδήποτε σελίδα για ανάγνωση
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const targetZ = Math.max(0.65, computeFitWidthZoom());
-                        const targetY = -getPageTopOffset(activePageIndex) * targetZ + 8;
-                        applyPaperTransformDirect(targetZ, 0, targetY, true);
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-[#0066ff] hover:bg-blue-500 text-white text-xs font-bold shadow cursor-pointer"
-                    >
-                      🔍 Κανονική Προβολή Σελίδας ({activePageIndex + 1}/{activeNotebook.pages.length})
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {(() => {
-                      const cols = 4;
-                      const estRowH = 250;
-                      const firstRow = Math.max(0, Math.floor(thumbModalScrollTop / estRowH) - 3);
-                      const lastRow = Math.ceil((thumbModalScrollTop + 950) / estRowH) + 5;
-                      const firstVisIdx = firstRow * cols;
-                      const lastVisIdx = (lastRow + 1) * cols;
-
-                      return activeNotebook.pages.map((pObj, pIdx) => {
-                        const isSel = pIdx === activePageIndex;
-                        const pW = getPageLogicalWidth(pObj);
-                        const pH = getPageLogicalHeight(pObj);
-                        const inWin =
-                          activeNotebook.pages.length <= 24 ||
-                          (pIdx >= firstVisIdx && pIdx <= lastVisIdx) ||
-                          Math.abs(pIdx - activePageIndex) <= 6;
-                        const thumbUrl = inWin
-                          ? resolvePageBackgroundUrl(activeNotebook.id, pObj, 'thumb')
-                          : undefined;
-
-                        return (
-                          <div
-                            key={pObj.id}
-                            onClick={() => {
-                              activeDrawingPageIndexRef.current = pIdx;
-                              setActivePageIndex(pIdx);
-                              const targetZ = Math.max(0.65, computeFitWidthZoom(pW));
-                              let accY = 0;
-                              for (let i = 0; i < pIdx; i++) {
-                                accY += getPageLogicalHeight(activeNotebook.pages[i]) + PAGE_GAP;
-                              }
-                              applyPaperTransformDirect(targetZ, 0, -accY * targetZ + 8, true);
-                            }}
-                            style={{
-                              aspectRatio: `${pW} / ${pH}`,
-                              minHeight: '180px',
-                              backgroundColor:
-                                thumbUrl || pObj.pdfPageNumber
-                                  ? '#ffffff'
-                                  : pObj.template === 'dark-grid'
-                                  ? '#0f172a'
-                                  : '#fffdf7',
-                            }}
-                            className={`relative rounded-xl bg-white border-2 shadow-xs hover:shadow-md transition overflow-hidden cursor-pointer flex items-center justify-center select-none ${
-                              isSel
-                                ? 'border-[#0066ff] ring-2 ring-[#0066ff]/30'
-                                : 'border-slate-200 hover:border-sky-400'
-                            }`}
-                          >
-                            <div
-                              className={`absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full text-[11px] font-bold shadow ${
-                                isSel ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
-                              }`}
-                            >
-                              {pIdx + 1}
-                            </div>
-                            {thumbUrl && (
-                              <img
-                                src={thumbUrl}
-                                alt={pObj.title}
-                                loading="lazy"
-                                decoding="async"
-                                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                              />
-                            )}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {/* WORD-STYLE CONTINUOUS MULTI-PAGE VERTICAL DOCUMENT STACK (WITH 2x RETINA 120HZ CANVASES) */}
+            {/* WORD-STYLE CONTINUOUS MULTI-PAGE VERTICAL OR SIDE-BY-SIDE DOCUMENT STACK (WITH 2x RETINA 120HZ CANVASES) */}
             <div
               ref={paperTransformElRef}
               style={{
@@ -55473,13 +55959,23 @@ export default function App() {
                 transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
                 willChange: 'transform',
                 gap: `${PAGE_GAP}px`,
+                ...(multiPageSpreadCols > 1
+                  ? {
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${multiPageSpreadCols}, max-content)`,
+                      justifyItems: 'center',
+                      alignItems: 'start',
+                    }
+                  : {}),
               }}
-              className={`relative flex flex-col items-center shrink-0 ${
-                activeNotebook.pages.length > 5 && zoom < 0.5 ? 'invisible pointer-events-none' : ''
-              }`}
+              className={
+                multiPageSpreadCols > 1
+                  ? 'relative shrink-0'
+                  : 'relative flex flex-col items-center shrink-0'
+              }
             >
               {/* GOODNOTES PULL-TO-ADD-PAGE PEEK ABOVE FIRST PAGE */}
-              {!isLightweightDocMode && pullAddPageState?.side === 'top' && (
+              {!isLightweightDocMode && multiPageSpreadCols <= 1 && pullAddPageState?.side === 'top' && (
                 <div
                   style={{ width: pageWidth, height: 150, top: -168 }}
                   className="absolute left-0 rounded-b-xl bg-[#fffdf7] border-2 border-dashed border-[#0066ff] shadow-lg flex flex-col items-center justify-end pb-4 pointer-events-none z-30"
@@ -55499,23 +55995,46 @@ export default function App() {
                 </div>
               )}
 
-              {/* Render All Pages Vertically (Word / Goodnotes Continuous Scroll with Viewport Virtualization for 170+ Page PDFs) */}
+              {/* Render All Pages (Vertical Single Column OR Multi-Column Side-by-Side Spread when <= 40% Zoom) */}
               {activeNotebook.pages.map((pageObj, pageIdx) => {
                 const pW = getPageLogicalWidth(pageObj);
                 const pH = getPageLogicalHeight(pageObj);
                 const isCurrentActive = pageIdx === activePageIndex;
                 const pageDist = Math.abs(pageIdx - activePageIndex);
-                const isCanvasMounted = activeNotebook.pages.length <= 6 || pageDist <= 2;
-                const isPreviewImgMounted = activeNotebook.pages.length <= 12 || pageDist <= 5;
+                const activeRow =
+                  multiPageSpreadCols > 1
+                    ? Math.floor(activePageIndex / multiPageSpreadCols)
+                    : activePageIndex;
+                const pageRow =
+                  multiPageSpreadCols > 1
+                    ? Math.floor(pageIdx / multiPageSpreadCols)
+                    : pageIdx;
+                const rowDist = Math.abs(pageRow - activeRow);
+                // Keep 2x Retina GPU canvases strictly to <= 5 pages around activePageIndex to avoid VRAM exhaustion!
+                const isCanvasMounted =
+                  activeNotebook.pages.length <= 8 || pageDist <= 2;
+                // Mount lightweight preview <img> across 6 full rows above & below in Multi-Page Spread mode (or 8 pages in single column)
+                const isPreviewImgMounted =
+                  activeNotebook.pages.length <= 24 ||
+                  (multiPageSpreadCols > 1 ? rowDist <= 6 : pageDist <= 8);
                 const resolvedBgUrl = isCanvasMounted
-                  ? resolvePageBackgroundUrl(activeNotebook.id, pageObj, 'full')
+                  ? resolvePageBackgroundUrl(
+                      activeNotebook.id,
+                      pageObj,
+                      multiPageSpreadCols > 1 && activeNotebook.pages.length > 12 ? 'thumb' : 'full'
+                    )
                   : isPreviewImgMounted
                   ? resolvePageBackgroundUrl(activeNotebook.id, pageObj, 'thumb')
                   : undefined;
 
                 // Goodnotes-style Viewport Virtualization:
-                // Never allocate 2x Retina GPU canvases for pages > 2 pages away from the active viewport!
+                // Never allocate 2x Retina GPU canvases for pages far away from the active viewport!
                 if (!isCanvasMounted) {
+                  const hasPreviewOverlay =
+                    isPreviewImgMounted &&
+                    ((pageObj.strokes?.length || 0) > 0 ||
+                      (pageObj.images?.length || 0) > 0 ||
+                      (pageObj.texts?.length || 0) > 0);
                   return (
                     <div
                       key={pageObj.id}
@@ -55526,14 +56045,61 @@ export default function App() {
                       }}
                       className="relative shadow-md bg-white border border-slate-200/80 shrink-0 select-none"
                     >
+                      {!isCleanProjectorMode && isPreviewImgMounted && (
+                        <div className="absolute -top-7 left-0 right-0 flex items-center justify-between px-1 select-none z-20 pointer-events-none">
+                          <span
+                            className={`text-xs font-bold transition-opacity duration-500 text-slate-600 ${
+                              pageControlsVisible ? 'opacity-100' : 'opacity-0'
+                            }`}
+                          >
+                            Σελίδα {pageIdx + 1} από {activeNotebook.pages.length} — {pageObj.title}
+                          </span>
+                        </div>
+                      )}
                       {isPreviewImgMounted && resolvedBgUrl && (
                         <img
                           src={resolvedBgUrl}
                           alt=""
-                          loading="lazy"
                           decoding="async"
                           className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none"
                         />
+                      )}
+                      {hasPreviewOverlay && (
+                        <svg
+                          viewBox={`0 0 ${pW} ${pH}`}
+                          className="absolute inset-0 w-full h-full pointer-events-none"
+                        >
+                          {(pageObj.images || []).map((im) => (
+                            <image
+                              key={im.id}
+                              href={im.dataUrl}
+                              x={im.x}
+                              y={im.y}
+                              width={im.width}
+                              height={im.height}
+                              preserveAspectRatio="none"
+                            />
+                          ))}
+                          {pageObj.strokes.map((st) => {
+                            if (st.points.length === 0) return null;
+                            const ptsStr = st.points
+                              .map((pt) => `${Math.round(pt.x)},${Math.round(pt.y)}`)
+                              .join(' ');
+                            return (
+                              <polyline
+                                key={st.id}
+                                fill={st.fillStyle && st.fillStyle !== 'none' ? st.color : 'none'}
+                                stroke={st.color}
+                                strokeWidth={Math.max(2, st.width)}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                opacity={st.opacity ?? 1}
+                                points={ptsStr}
+                              />
+                            );
+                          })}
+                          {renderSvgPageTextsPreview(pageObj.texts, pW, pH)}
+                        </svg>
                       )}
                     </div>
                   );
@@ -55551,7 +56117,11 @@ export default function App() {
                   <div
                     key={pageObj.id}
                     style={{ width: pW, height: pH }}
-                    className="relative shadow-md bg-white border border-slate-200/80 transition-shadow shrink-0"
+                    className={`relative shadow-md bg-white border transition-shadow shrink-0 ${
+                      multiPageSpreadCols > 1 && isCurrentActive
+                        ? 'border-[#0066ff] ring-4 ring-[#0066ff]/60'
+                        : 'border-slate-200/80'
+                    }`}
                   >
                     {/* Instant base image layer for PDF / Image pages so scrolling into a new page has 0ms blank flash */}
                     {resolvedBgUrl && (
@@ -58860,6 +59430,23 @@ export default function App() {
                       onChange={(e) => {
                         const targetIdx = Math.max(0, Math.min(activeNotebook.pages.length - 1, Number(e.target.value) - 1));
                         scrollToPageIndex(targetIdx);
+                        const scrollEl = thumbModalGridScrollRef.current;
+                        if (scrollEl) {
+                          const cardEl = scrollEl.querySelector(
+                            `[data-thumb-page-idx="${targetIdx}"]`
+                          ) as HTMLElement | null;
+                          const totalRows = Math.max(
+                            1,
+                            Math.ceil(activeNotebook.pages.length / thumbnailCols)
+                          );
+                          const rowH =
+                            scrollEl.scrollHeight > 200 ? scrollEl.scrollHeight / totalRows : 445;
+                          const targetScroll = cardEl
+                            ? Math.max(0, cardEl.offsetTop - 72)
+                            : Math.max(0, Math.floor(targetIdx / thumbnailCols) * rowH - 72);
+                          scrollEl.scrollTop = targetScroll;
+                          setThumbModalScrollTop(targetScroll);
+                        }
                       }}
                       className="w-28 sm:w-40 accent-sky-400 cursor-pointer"
                       title="Γρήγορη κύλιση σε οποιαδήποτε σελίδα"
@@ -58878,12 +59465,24 @@ export default function App() {
             {/* Virtualized Scrollable Thumbnail Grid (Smooth 120fps even for 170+ page PDF books!) */}
             <div
               ref={(el) => {
+                thumbModalGridScrollRef.current = el;
                 if (el && el.dataset.scrolledToActive !== '1') {
                   el.dataset.scrolledToActive = '1';
-                  const rowIdx = Math.floor(activePageIndex / thumbnailCols);
-                  const targetScroll = Math.max(0, rowIdx * 280 - 120);
-                  el.scrollTop = targetScroll;
-                  setThumbModalScrollTop(targetScroll);
+                  window.requestAnimationFrame(() => {
+                    const cardEl = el.querySelector(
+                      `[data-thumb-page-idx="${activePageIndex}"]`
+                    ) as HTMLElement | null;
+                    const totalRows = Math.max(
+                      1,
+                      Math.ceil(activeNotebook.pages.length / thumbnailCols)
+                    );
+                    const rowH = el.scrollHeight > 200 ? el.scrollHeight / totalRows : 445;
+                    const targetScroll = cardEl
+                      ? Math.max(0, cardEl.offsetTop - 72)
+                      : Math.max(0, Math.floor(activePageIndex / thumbnailCols) * rowH - 72);
+                    el.scrollTop = targetScroll;
+                    setThumbModalScrollTop(targetScroll);
+                  });
                 }
               }}
               onScroll={(e) => setThumbModalScrollTop(e.currentTarget.scrollTop)}
@@ -58898,11 +59497,24 @@ export default function App() {
                 }`}
               >
                 {(() => {
-                  const estRowHeight = 270;
+                  const totalRows = Math.max(
+                    1,
+                    Math.ceil(activeNotebook.pages.length / thumbnailCols)
+                  );
+                  const scrollEl = thumbModalGridScrollRef.current;
+                  const estRowHeight =
+                    scrollEl && scrollEl.scrollHeight > 200
+                      ? Math.max(180, scrollEl.scrollHeight / totalRows)
+                      : 445;
+                  const viewportH =
+                    scrollEl && scrollEl.clientHeight > 100 ? scrollEl.clientHeight : 880;
                   const firstVisibleRow = Math.max(0, Math.floor(thumbModalScrollTop / estRowHeight) - 3);
-                  const lastVisibleRow = Math.ceil((thumbModalScrollTop + 900) / estRowHeight) + 4;
+                  const lastVisibleRow = Math.min(
+                    totalRows - 1,
+                    Math.ceil((thumbModalScrollTop + viewportH) / estRowHeight) + 3
+                  );
                   const firstVisibleIdx = firstVisibleRow * thumbnailCols;
-                  const lastVisibleIdx = (lastVisibleRow + 1) * thumbnailCols;
+                  const lastVisibleIdx = (lastVisibleRow + 1) * thumbnailCols - 1;
 
                   return activeNotebook.pages.map((pObj, pIdx) => {
                     const isSelectedPage = pIdx === activePageIndex;
@@ -58920,6 +59532,7 @@ export default function App() {
                     return (
                       <div
                         key={pObj.id}
+                        data-thumb-page-idx={pIdx}
                         className={`group flex flex-col rounded-xl bg-white border-2 shadow-sm hover:shadow-md transition overflow-hidden ${
                           isSelectedPage
                             ? 'border-[#0066ff] ring-2 ring-[#0066ff]/25'
@@ -58986,7 +59599,6 @@ export default function App() {
                                 <img
                                   src={thumbBgUrl}
                                   alt={pObj.title}
-                                  loading="lazy"
                                   decoding="async"
                                   className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                                 />

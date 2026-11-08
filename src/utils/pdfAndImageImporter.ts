@@ -109,6 +109,100 @@ function setCachedPageDataUrl(cacheKey: string, dataUrl: string, isThumb: boolea
   }
 }
 
+interface QueuedPdfPageRender {
+  cacheKey: string;
+  notebookId: string;
+  pageNumber: number;
+  qualityMode: 'full' | 'thumb';
+  promise: Promise<string | null>;
+  resolve: (val: string | null) => void;
+}
+
+const pendingPdfRenderQueue: QueuedPdfPageRender[] = [];
+let activePdfRenderWorkers = 0;
+const MAX_CONCURRENT_PDF_RENDERS = 3;
+const MAX_PENDING_PDF_QUEUE = 28;
+
+async function executeSinglePdfPageRender(
+  notebookId: string,
+  pageNumber: number,
+  qualityMode: 'full' | 'thumb',
+  cacheKey: string
+): Promise<string | null> {
+  const alreadyCached = getCachedPdfPageDataUrl(notebookId, pageNumber, qualityMode);
+  if (alreadyCached) return alreadyCached;
+
+  const pdfDoc = await getOrLoadPdfDocProxy(notebookId);
+  if (!pdfDoc || pageNumber < 1 || pageNumber > pdfDoc.numPages) return null;
+
+  const pdfPage = await pdfDoc.getPage(pageNumber);
+  const unscaledViewport = pdfPage.getViewport({ scale: 1 });
+  const aspect = Math.max(
+    0.25,
+    Math.min(4, unscaledViewport.width / Math.max(1, unscaledViewport.height))
+  );
+  const isLandscape = aspect > 1.05;
+  const customWidth = isLandscape
+    ? A4_LONG_PX
+    : Math.max(320, Math.round(A4_LONG_PX * aspect));
+  const customHeight = isLandscape
+    ? Math.max(320, Math.round(A4_LONG_PX / aspect))
+    : A4_LONG_PX;
+
+  const targetScale = qualityMode === 'thumb' ? 0.42 : 1.45;
+  const jpegQuality = qualityMode === 'thumb' ? 0.68 : 0.84;
+
+  const scale = Math.min(
+    (customWidth * targetScale) / Math.max(1, unscaledViewport.width),
+    (customHeight * targetScale) / Math.max(1, unscaledViewport.height)
+  );
+  const viewport = pdfPage.getViewport({ scale });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(viewport.width));
+  canvas.height = Math.max(1, Math.round(viewport.height));
+  const ctx = canvas.getContext('2d', { alpha: false })!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  await pdfPage.render({
+    canvasContext: ctx,
+    viewport,
+  }).promise;
+
+  const dataUrl = canvas.toDataURL('image/jpeg', jpegQuality);
+  canvas.width = 1;
+  canvas.height = 1;
+  try {
+    pdfPage.cleanup();
+  } catch {
+    // ignore
+  }
+
+  setCachedPageDataUrl(cacheKey, dataUrl, qualityMode === 'thumb');
+  return dataUrl;
+}
+
+function pumpPdfRenderQueue() {
+  while (activePdfRenderWorkers < MAX_CONCURRENT_PDF_RENDERS && pendingPdfRenderQueue.length > 0) {
+    // Pop from the FRONT (most recently requested visible page = LIFO priority!)
+    const job = pendingPdfRenderQueue.shift()!;
+    activePdfRenderWorkers++;
+    void executeSinglePdfPageRender(job.notebookId, job.pageNumber, job.qualityMode, job.cacheKey)
+      .then((url) => {
+        job.resolve(url);
+      })
+      .catch(() => {
+        job.resolve(null);
+      })
+      .finally(() => {
+        inFlightPageRenders.delete(job.cacheKey);
+        activePdfRenderWorkers--;
+        pumpPdfRenderQueue();
+      });
+  }
+}
+
 export function getCachedPdfPageDataUrl(
   notebookId: string,
   pageNumber: number,
@@ -133,68 +227,43 @@ export function ensurePdfPageDataUrl(
   if (existing) return Promise.resolve(existing);
 
   const cacheKey = `${notebookId}__p${pageNumber}__${qualityMode}`;
+  // If already waiting in the queue, promote it to the very front (LIFO priority!)
+  const queuedIdx = pendingPdfRenderQueue.findIndex((item) => item.cacheKey === cacheKey);
+  if (queuedIdx >= 0) {
+    if (queuedIdx > 0) {
+      const [item] = pendingPdfRenderQueue.splice(queuedIdx, 1);
+      pendingPdfRenderQueue.unshift(item);
+    }
+    return pendingPdfRenderQueue[0].promise;
+  }
+
   const inFlight = inFlightPageRenders.get(cacheKey);
   if (inFlight) return inFlight;
 
-  const renderPromise = (async () => {
-    try {
-      const pdfDoc = await getOrLoadPdfDocProxy(notebookId);
-      if (!pdfDoc || pageNumber < 1 || pageNumber > pdfDoc.numPages) return null;
+  let resolveFn!: (val: string | null) => void;
+  const renderPromise = new Promise<string | null>((resolve) => {
+    resolveFn = resolve;
+  });
 
-      const pdfPage = await pdfDoc.getPage(pageNumber);
-      const unscaledViewport = pdfPage.getViewport({ scale: 1 });
-      const aspect = Math.max(
-        0.25,
-        Math.min(4, unscaledViewport.width / Math.max(1, unscaledViewport.height))
-      );
-      const isLandscape = aspect > 1.05;
-      const customWidth = isLandscape
-        ? A4_LONG_PX
-        : Math.max(320, Math.round(A4_LONG_PX * aspect));
-      const customHeight = isLandscape
-        ? Math.max(320, Math.round(A4_LONG_PX / aspect))
-        : A4_LONG_PX;
-
-      const targetScale = qualityMode === 'thumb' ? 0.42 : 1.45;
-      const jpegQuality = qualityMode === 'thumb' ? 0.68 : 0.84;
-
-      const scale = Math.min(
-        (customWidth * targetScale) / Math.max(1, unscaledViewport.width),
-        (customHeight * targetScale) / Math.max(1, unscaledViewport.height)
-      );
-      const viewport = pdfPage.getViewport({ scale });
-
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(viewport.width));
-      canvas.height = Math.max(1, Math.round(viewport.height));
-      const ctx = canvas.getContext('2d', { alpha: false })!;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      await pdfPage.render({
-        canvasContext: ctx,
-        viewport,
-      }).promise;
-
-      const dataUrl = canvas.toDataURL('image/jpeg', jpegQuality);
-      canvas.width = 1;
-      canvas.height = 1;
-      try {
-        pdfPage.cleanup();
-      } catch {
-        // ignore
-      }
-
-      setCachedPageDataUrl(cacheKey, dataUrl, qualityMode === 'thumb');
-      return dataUrl;
-    } catch {
-      return null;
-    } finally {
-      inFlightPageRenders.delete(cacheKey);
-    }
-  })();
-
+  // Insert at the front of the queue so the page the user just stopped on renders FIRST!
+  pendingPdfRenderQueue.unshift({
+    cacheKey,
+    notebookId,
+    pageNumber,
+    qualityMode,
+    promise: renderPromise,
+    resolve: resolveFn,
+  });
   inFlightPageRenders.set(cacheKey, renderPromise);
+
+  // Evict stale off-screen requests from the back of the queue during fast 1->55->170 scrolling
+  while (pendingPdfRenderQueue.length > MAX_PENDING_PDF_QUEUE) {
+    const dropped = pendingPdfRenderQueue.pop()!;
+    inFlightPageRenders.delete(dropped.cacheKey);
+    dropped.resolve(null);
+  }
+
+  pumpPdfRenderQueue();
   return renderPromise;
 }
 

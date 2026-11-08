@@ -194,7 +194,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUserDoc(request.resource.data);
-      allow update: if isOwner(userId) && isValidUserDoc(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidUserDoc(request.resource.data) &&
+        (!('foldersUpdatedAt' in resource.data &&
+           resource.data.foldersUpdatedAt is string &&
+           'foldersUpdatedAt' in request.resource.data &&
+           request.resource.data.foldersUpdatedAt is string) ||
+         request.resource.data.foldersUpdatedAt >= resource.data.foldersUpdatedAt);
       allow delete: if isOwner(userId);
 
       match /notebooks/{notebookId} {
@@ -202,7 +208,11 @@ service cloud.firestore {
         allow create: if isOwner(userId) && isValidNotebookDoc(request.resource.data, notebookId);
         allow update: if isOwner(userId) &&
           isValidNotebookDoc(request.resource.data, notebookId) &&
-          areImmutableFieldsUnchanged(['id']);
+          areImmutableFieldsUnchanged(['id']) &&
+          (!('updatedAt' in resource.data &&
+             resource.data.updatedAt is string &&
+             request.resource.data.updatedAt is string) ||
+           request.resource.data.updatedAt >= resource.data.updatedAt);
         allow delete: if isOwner(userId);
       }
     }
