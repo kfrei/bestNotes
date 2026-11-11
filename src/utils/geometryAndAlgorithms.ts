@@ -1849,11 +1849,11 @@ export function createPhysicsStencilStrokes(
         pressure: 0.7,
       };
     });
-    const filamentGreyColor = '#334155';
+    const filamentColor = color || '#334155';
     out.push({
       id: `st-${uid}-bulb-coil`,
       tool: 'pen',
-      color: filamentGreyColor,
+      color: filamentColor,
       width: baseWidth,
       opacity: 0.9,
       points: coilBezierPts,
@@ -1869,7 +1869,7 @@ export function createPhysicsStencilStrokes(
     out.push({
       id: `st-${uid}-bulb-lead-l`,
       tool: 'pen',
-      color: filamentGreyColor,
+      color: filamentColor,
       width: baseWidth,
       opacity: 0.9,
       lineStyle: 'dashed',
@@ -1902,7 +1902,7 @@ export function createPhysicsStencilStrokes(
     out.push({
       id: `st-${uid}-bulb-lead-r`,
       tool: 'pen',
-      color: filamentGreyColor,
+      color: filamentColor,
       width: baseWidth,
       opacity: 0.9,
       lineStyle: 'dashed',
@@ -6003,26 +6003,39 @@ export function recomputeAutoSmoothHandles(pts: BezierPoint[], isClosed = false)
  * upgrading any quadratic `(cx, cy)` control points to cubic `(inDx, inDy, outDx, outDy)` and swapping
  * incoming/outgoing tangent handles on every vertex.
  */
+function isQuadraticSegmentCollinear(
+  prev: BezierPoint,
+  curr: BezierPoint,
+  tol = 1.5
+): boolean {
+  if (curr.cx === undefined || curr.cy === undefined) return false;
+  return pointToSegmentDist(curr.cx, curr.cy, prev.x, prev.y, curr.x, curr.y) <= tol;
+}
+
+function upgradeQuadraticSegmentIfCurved(prev: BezierPoint, curr: BezierPoint): void {
+  if (curr.cx === undefined || curr.cy === undefined) return;
+  if (prev.outDx !== undefined || curr.inDx !== undefined) return;
+  if (isQuadraticSegmentCollinear(prev, curr)) {
+    // Keep geometrically straight segments linear (no synthetic horizontal/vertical cubic
+    // tangents that turn into an S-curve if an endpoint is later offset orthogonally).
+    curr.cx = undefined;
+    curr.cy = undefined;
+    return;
+  }
+  prev.outDx = (2 / 3) * (curr.cx - prev.x);
+  prev.outDy = (2 / 3) * (curr.cy - prev.y);
+  curr.inDx = (2 / 3) * (curr.cx - curr.x);
+  curr.inDy = (2 / 3) * (curr.cy - curr.y);
+  curr.cx = undefined;
+  curr.cy = undefined;
+}
+
 export function reverseBezierPointsExact(pts: BezierPoint[]): BezierPoint[] {
   const n = pts.length;
   if (n === 0) return [];
   const upgraded = pts.map((p) => ({ ...p }));
   for (let i = 1; i < n; i++) {
-    const prev = upgraded[i - 1];
-    const curr = upgraded[i];
-    if (
-      curr.cx !== undefined &&
-      curr.cy !== undefined &&
-      prev.outDx === undefined &&
-      curr.inDx === undefined
-    ) {
-      prev.outDx = (2 / 3) * (curr.cx - prev.x);
-      prev.outDy = (2 / 3) * (curr.cy - prev.y);
-      curr.inDx = (2 / 3) * (curr.cx - curr.x);
-      curr.inDy = (2 / 3) * (curr.cy - curr.y);
-      curr.cx = undefined;
-      curr.cy = undefined;
-    }
+    upgradeQuadraticSegmentIfCurved(upgraded[i - 1], upgraded[i]);
   }
   const out: BezierPoint[] = [];
   for (let i = n - 1; i >= 0; i--) {
@@ -6130,21 +6143,7 @@ export function convertOpenStrokeToBezierSplinePoints(s: StrokeObject): BezierPo
 
   const out = s.points.map((p) => ({ ...p }));
   for (let i = 1; i < out.length; i++) {
-    const prev = out[i - 1];
-    const curr = out[i];
-    if (
-      curr.cx !== undefined &&
-      curr.cy !== undefined &&
-      prev.outDx === undefined &&
-      curr.inDx === undefined
-    ) {
-      prev.outDx = (2 / 3) * (curr.cx - prev.x);
-      prev.outDy = (2 / 3) * (curr.cy - prev.y);
-      curr.inDx = (2 / 3) * (curr.cx - curr.x);
-      curr.inDy = (2 / 3) * (curr.cy - curr.y);
-      curr.cx = undefined;
-      curr.cy = undefined;
-    }
+    upgradeQuadraticSegmentIfCurved(out[i - 1], out[i]);
   }
   return out;
 }
@@ -6186,7 +6185,7 @@ export interface CircuitComponentInfo {
   switchClosed?: boolean;
 }
 
-function classifyCircuitStrokeKind(s: StrokeObject): CircuitComponentKind | null {
+export function classifyCircuitStrokeKind(s: StrokeObject): CircuitComponentKind | null {
   const st = s.shapeType;
   if (st === 'battery') return 'battery';
   if (st === 'voltage-source') return 'voltage-source';
@@ -6446,12 +6445,17 @@ export function getCircuitComponentsWithTerminals(
       if (bodyStroke) {
         let bMinX = Infinity;
         let bMaxX = -Infinity;
+        let bMinY = Infinity;
+        let bMaxY = -Infinity;
         for (const p of bodyStroke.points) {
           if (p.x < bMinX) bMinX = p.x;
           if (p.x > bMaxX) bMaxX = p.x;
+          if (p.y < bMinY) bMinY = p.y;
+          if (p.y > bMaxY) bMaxY = p.y;
         }
-        leftTerm = { x: Number.isFinite(bMinX) ? bMinX : minX + w * 0.16, y: cy };
-        rightTerm = { x: Number.isFinite(bMaxX) ? bMaxX : maxX - w * 0.16, y: cy };
+        const bCy = Number.isFinite(bMinY) && Number.isFinite(bMaxY) ? (bMinY + bMaxY) / 2 : cy;
+        leftTerm = { x: Number.isFinite(bMinX) ? bMinX : minX + w * 0.16, y: bCy };
+        rightTerm = { x: Number.isFinite(bMaxX) ? bMaxX : maxX - w * 0.16, y: bCy };
       } else {
         leftTerm = { x: minX + w * 0.16, y: cy };
         rightTerm = { x: maxX - w * 0.16, y: cy };
@@ -6975,6 +6979,1284 @@ export function splitWiresUnderCircuitComponent(
   }
 
   return currentStrokes;
+}
+
+interface ExternalWireLine {
+  stroke: StrokeObject;
+  p0Idx: number;
+  p1Idx: number;
+  p0: BezierPoint;
+  p1: BezierPoint;
+  orient: 'h' | 'v';
+  wireCoord: number; // y for 'h', x for 'v'
+}
+
+function isVerticalCircuitComponent(c: CircuitComponentInfo): boolean {
+  return (
+    c.orientation === 'v' ||
+    ((c.kind === 'switch' || c.kind === 'resistor' || c.kind === 'battery' || c.kind === 'fan') &&
+      c.h > c.w * 1.18)
+  );
+}
+
+function extractCircuitWireSegments(
+  strokes: StrokeObject[],
+  includeStroke: (s: StrokeObject) => boolean,
+  excludeCompStrokeIds?: Set<string>
+): ExternalWireLine[] {
+  const out: ExternalWireLine[] = [];
+  for (const s of strokes) {
+    if (!includeStroke(s)) continue;
+    if (excludeCompStrokeIds?.has(s.id) || classifyCircuitStrokeKind(s) !== null) continue;
+    if (s.tool === 'highlighter' || s.arrowStart || s.arrowEnd || s.points.length < 2) continue;
+    if ((s.fillStyle || 'none') !== 'none') continue;
+    if (s.points[0]?.twist === 999) continue;
+    const isLineShape = Boolean(s.isShape && s.shapeType === 'line');
+    if (!isLineShape && !(!s.isShape && s.points.length === 2)) continue;
+
+    if (s.points.length === 2 || !isLineShape) {
+      const p0Idx = 0;
+      const p1Idx = s.points.length - 1;
+      const p0 = s.points[p0Idx];
+      const p1 = s.points[p1Idx];
+      const dx = Math.abs(p1.x - p0.x);
+      const dy = Math.abs(p1.y - p0.y);
+      if (Math.hypot(dx, dy) < 6) continue;
+      if (dy <= Math.max(10, dx * 0.22)) {
+        out.push({ stroke: s, p0Idx, p1Idx, p0, p1, orient: 'h', wireCoord: (p0.y + p1.y) / 2 });
+      } else if (dx <= Math.max(10, dy * 0.22)) {
+        out.push({ stroke: s, p0Idx, p1Idx, p0, p1, orient: 'v', wireCoord: (p0.x + p1.x) / 2 });
+      }
+    } else {
+      for (let i = 0; i < s.points.length - 1; i++) {
+        const p0 = s.points[i];
+        const p1 = s.points[i + 1];
+        const dx = Math.abs(p1.x - p0.x);
+        const dy = Math.abs(p1.y - p0.y);
+        if (Math.hypot(dx, dy) < 6) continue;
+        if (dy <= Math.max(10, dx * 0.22)) {
+          out.push({ stroke: s, p0Idx: i, p1Idx: i + 1, p0, p1, orient: 'h', wireCoord: (p0.y + p1.y) / 2 });
+        } else if (dx <= Math.max(10, dy * 0.22)) {
+          out.push({ stroke: s, p0Idx: i, p1Idx: i + 1, p0, p1, orient: 'v', wireCoord: (p0.x + p1.x) / 2 });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function extractExternalCircuitWireLines(
+  strokes: StrokeObject[],
+  movingStrokeIds: Set<string>
+): ExternalWireLine[] {
+  return extractCircuitWireSegments(strokes, (s) => !movingStrokeIds.has(s.id));
+}
+
+function getWireSegBounds(w: ExternalWireLine): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  return {
+    minX: Math.min(w.p0.x, w.p1.x),
+    maxX: Math.max(w.p0.x, w.p1.x),
+    minY: Math.min(w.p0.y, w.p1.y),
+    maxY: Math.max(w.p0.y, w.p1.y),
+  };
+}
+
+function isWirePassThroughAtPoint(
+  w: ExternalWireLine,
+  px: number,
+  py: number,
+  crossTol = 24,
+  passMargin = 24
+): boolean {
+  const b = getWireSegBounds(w);
+  if (w.orient === 'h') {
+    return Math.abs(py - w.wireCoord) <= crossTol && b.minX < px - passMargin && b.maxX > px + passMargin;
+  }
+  return Math.abs(px - w.wireCoord) <= crossTol && b.minY < py - passMargin && b.maxY > py + passMargin;
+}
+
+function getCompTerminalList(c: CircuitComponentInfo): { x: number; y: number }[] {
+  const pts: { x: number; y: number }[] = [c.leftTerm, c.rightTerm];
+  if (c.kind === 'bulb' || !isVerticalCircuitComponent(c)) {
+    pts.push({ x: c.minX, y: c.leftTerm.y }, { x: c.maxX, y: c.rightTerm.y });
+  } else {
+    pts.push({ x: c.cx, y: c.minY }, { x: c.cx, y: c.maxY });
+  }
+  return pts;
+}
+
+function findWiresReachableFromComponents(
+  comps: CircuitComponentInfo[],
+  allWires: ExternalWireLine[]
+): Set<string> {
+  const reachable = new Set<string>();
+  if (comps.length === 0 || allWires.length === 0) return reachable;
+
+  const segKey = (w: ExternalWireLine) => `${w.stroke.id}:${w.p0Idx}`;
+  const queue: ExternalWireLine[] = [];
+
+  for (const w of allWires) {
+    let touchesComp = false;
+    for (const c of comps) {
+      for (const term of getCompTerminalList(c)) {
+        if (pointToSegmentDist(term.x, term.y, w.p0.x, w.p0.y, w.p1.x, w.p1.y) <= 30) {
+          touchesComp = true;
+          break;
+        }
+      }
+      if (touchesComp) break;
+    }
+    if (touchesComp) {
+      reachable.add(segKey(w));
+      queue.push(w);
+    }
+  }
+
+  let qi = 0;
+  while (qi < queue.length) {
+    const cur = queue[qi++];
+    for (const nxt of allWires) {
+      const k = segKey(nxt);
+      if (reachable.has(k)) continue;
+      const connected =
+        pointToSegmentDist(cur.p0.x, cur.p0.y, nxt.p0.x, nxt.p0.y, nxt.p1.x, nxt.p1.y) <= 26 ||
+        pointToSegmentDist(cur.p1.x, cur.p1.y, nxt.p0.x, nxt.p0.y, nxt.p1.x, nxt.p1.y) <= 26 ||
+        pointToSegmentDist(nxt.p0.x, nxt.p0.y, cur.p0.x, cur.p0.y, cur.p1.x, cur.p1.y) <= 26 ||
+        pointToSegmentDist(nxt.p1.x, nxt.p1.y, cur.p0.x, cur.p0.y, cur.p1.x, cur.p1.y) <= 26;
+      if (connected) {
+        reachable.add(k);
+        queue.push(nxt);
+      }
+    }
+  }
+
+  return reachable;
+}
+
+/**
+ * Returns subtle magnetic rail snap deltas so sliding a connected circuit component
+ * or circuit wire segment along its horizontal/vertical loop rails stays razor-level.
+ */
+export function getCircuitWireRailSnapDelta(
+  strokes: StrokeObject[],
+  movingStrokeIds: Set<string>,
+  candDx: number,
+  candDy: number,
+  snapRadius = 6.5
+): { snapDx: number; snapDy: number } {
+  const comps = getCircuitComponentsWithTerminals(strokes);
+  const movedComps = comps.filter((c) => c.strokeIds.every((id) => movingStrokeIds.has(id)));
+  if (movedComps.length === 0) {
+    if (comps.length === 0 || movingStrokeIds.size === 0) return { snapDx: 0, snapDy: 0 };
+    const compStrokeIds = new Set<string>();
+    for (const c of comps) {
+      for (const id of c.strokeIds) compStrokeIds.add(id);
+    }
+    const movingWires = extractCircuitWireSegments(
+      strokes,
+      (s) => movingStrokeIds.has(s.id),
+      compStrokeIds
+    );
+    if (movingWires.length === 0) return { snapDx: 0, snapDy: 0 };
+    const stationaryWires = extractCircuitWireSegments(
+      strokes,
+      (s) => !movingStrokeIds.has(s.id),
+      compStrokeIds
+    );
+    const reachable = findWiresReachableFromComponents(comps, [...movingWires, ...stationaryWires]);
+    const circuitMovingWires = movingWires.filter((w) => reachable.has(`${w.stroke.id}:${w.p0Idx}`));
+    if (circuitMovingWires.length === 0) return { snapDx: 0, snapDy: 0 };
+
+    const allVert = circuitMovingWires.every((w) => w.orient === 'v');
+    const allHoriz = circuitMovingWires.every((w) => w.orient === 'h');
+    const wireSnapRad = Math.max(snapRadius, 7.5);
+    let snapDx = 0;
+    let snapDy = 0;
+    if (allVert && Math.abs(candDy) <= wireSnapRad && Math.abs(candDx) > 0.5) {
+      snapDy = -candDy;
+    } else if (allVert && Math.abs(candDx) <= wireSnapRad && Math.abs(candDy) > wireSnapRad) {
+      snapDx = -candDx;
+    } else if (allHoriz && Math.abs(candDx) <= wireSnapRad && Math.abs(candDy) > 0.5) {
+      snapDx = -candDx;
+    } else if (allHoriz && Math.abs(candDy) <= wireSnapRad && Math.abs(candDx) > wireSnapRad) {
+      snapDy = -candDy;
+    }
+    return { snapDx, snapDy };
+  }
+
+  const extWires = extractExternalCircuitWireLines(strokes, movingStrokeIds);
+  if (extWires.length === 0) return { snapDx: 0, snapDy: 0 };
+
+  let snapDx = 0;
+  let snapDy = 0;
+  let bestDistY = snapRadius;
+  let bestDistX = snapRadius;
+
+  for (const mc of movedComps) {
+    const isVert = isVerticalCircuitComponent(mc);
+    if (!isVert) {
+      const prevL = mc.leftTerm;
+      const prevR = mc.rightTerm;
+      const candYL = prevL.y + candDy;
+      const candYR = prevR.y + candDy;
+      for (const w of extWires) {
+        if (w.orient !== 'h') continue;
+        const wStartIsLeft = w.p0.x <= w.p1.x;
+        const leftPt = wStartIsLeft ? w.p0 : w.p1;
+        const rightPt = wStartIsLeft ? w.p1 : w.p0;
+        const matchesLeft =
+          leftPt.x < prevL.x - 4 &&
+          rightPt.x >= prevL.x - 28 &&
+          rightPt.x <= Math.max(prevL.x + 28, mc.cx + 14) &&
+          Math.abs(rightPt.y - prevL.y) <= 28;
+        const matchesRight =
+          rightPt.x > prevR.x + 4 &&
+          leftPt.x <= prevR.x + 28 &&
+          leftPt.x >= prevL.x + 4 &&
+          Math.abs(leftPt.y - prevR.y) <= 28;
+        if (matchesLeft) {
+          const dyOff = w.wireCoord - candYL;
+          if (Math.abs(dyOff) < bestDistY) {
+            bestDistY = Math.abs(dyOff);
+            snapDy = dyOff;
+          }
+        } else if (matchesRight) {
+          const dyOff = w.wireCoord - candYR;
+          if (Math.abs(dyOff) < bestDistY) {
+            bestDistY = Math.abs(dyOff);
+            snapDy = dyOff;
+          }
+        }
+      }
+    } else {
+      const prevT = mc.orientation === 'v' ? mc.leftTerm : { x: mc.cx, y: mc.minY };
+      const prevB = mc.orientation === 'v' ? mc.rightTerm : { x: mc.cx, y: mc.maxY };
+      const candXT = prevT.x + candDx;
+      const candXB = prevB.x + candDx;
+      for (const w of extWires) {
+        if (w.orient !== 'v') continue;
+        const wStartIsTop = w.p0.y <= w.p1.y;
+        const topPt = wStartIsTop ? w.p0 : w.p1;
+        const botPt = wStartIsTop ? w.p1 : w.p0;
+        const matchesTop =
+          topPt.y < prevT.y - 4 &&
+          botPt.y >= prevT.y - 28 &&
+          botPt.y <= Math.max(prevT.y + 28, mc.cy + 14) &&
+          Math.abs(botPt.x - prevT.x) <= 28;
+        const matchesBot =
+          botPt.y > prevB.y + 4 &&
+          topPt.y <= prevB.y + 28 &&
+          topPt.y >= prevT.y + 4 &&
+          Math.abs(topPt.x - prevB.x) <= 28;
+        if (matchesTop) {
+          const dxOff = w.wireCoord - candXT;
+          if (Math.abs(dxOff) < bestDistX) {
+            bestDistX = Math.abs(dxOff);
+            snapDx = dxOff;
+          }
+        } else if (matchesBot) {
+          const dxOff = w.wireCoord - candXB;
+          if (Math.abs(dxOff) < bestDistX) {
+            bestDistX = Math.abs(dxOff);
+            snapDx = dxOff;
+          }
+        }
+      }
+    }
+  }
+
+  return { snapDx, snapDy };
+}
+
+function isCubicSegmentCollinear(prev: BezierPoint, curr: BezierPoint, tol = 2.0): boolean {
+  const ctrl = getCubicSegmentControlPoints(prev, curr);
+  if (!ctrl) return false;
+  return (
+    pointToSegmentDist(ctrl.cp1x, ctrl.cp1y, prev.x, prev.y, curr.x, curr.y) <= tol &&
+    pointToSegmentDist(ctrl.cp2x, ctrl.cp2y, prev.x, prev.y, curr.x, curr.y) <= tol
+  );
+}
+
+/**
+ * Updates quadratic `(cx, cy)` midpoints and strips dormant collinear cubic handles
+ * on segments touched by `editedIndices`, so adapted multi-segment wires stay straight
+ * instead of bowing or warping into cubic S-curves while genuine curves shift cleanly.
+ */
+function updateEditedLineWireHandles(
+  beforeEditPts: BezierPoint[],
+  pts: BezierPoint[],
+  editedIndices: ReadonlySet<number>,
+  refPts: BezierPoint[] = beforeEditPts
+): void {
+  if (editedIndices.size === 0) return;
+  for (let i = 1; i < pts.length; i++) {
+    if (!editedIndices.has(i - 1) && !editedIndices.has(i)) continue;
+    const befPrev = beforeEditPts[i - 1];
+    const befCurr = beforeEditPts[i];
+    const refPrev = refPts[i - 1] ?? befPrev;
+    const refCurr = refPts[i] ?? befCurr;
+
+    if (befCurr?.cx !== undefined && befCurr?.cy !== undefined) {
+      const wasLinear =
+        (refPrev && refCurr && isQuadraticSegmentCollinear(refPrev, refCurr, 2.0)) ||
+        (befPrev && befCurr && isQuadraticSegmentCollinear(befPrev, befCurr, 2.0));
+      if (wasLinear) {
+        pts[i] = {
+          ...pts[i],
+          cx: (pts[i - 1].x + pts[i].x) / 2,
+          cy: (pts[i - 1].y + pts[i].y) / 2,
+        };
+      } else if (befPrev) {
+        const avgDx = (pts[i - 1].x - befPrev.x + (pts[i].x - befCurr.x)) / 2;
+        const avgDy = (pts[i - 1].y - befPrev.y + (pts[i].y - befCurr.y)) / 2;
+        pts[i] = {
+          ...pts[i],
+          cx: befCurr.cx + avgDx,
+          cy: befCurr.cy + avgDy,
+        };
+      }
+    }
+
+    const hadFlatCubic =
+      (refPrev && refCurr && isCubicSegmentCollinear(refPrev, refCurr, 2.0)) ||
+      (befPrev && befCurr && isCubicSegmentCollinear(befPrev, befCurr, 2.0));
+    if (hadFlatCubic) {
+      pts[i - 1] = { ...pts[i - 1], outDx: undefined, outDy: undefined };
+      pts[i] = { ...pts[i], inDx: undefined, inDy: undefined };
+    }
+  }
+}
+
+function adaptCircuitLoopFromSegments(
+  prevStrokes: StrokeObject[],
+  nextStrokes: StrokeObject[],
+  movingStrokeIds: Set<string>,
+  prevComps: CircuitComponentInfo[],
+  mode: 'move' | 'scale-x' | 'scale-y',
+  dx: number,
+  dy: number,
+  alreadyAdaptedStrokeIds?: Set<string>
+): StrokeObject[] {
+  if (prevComps.length === 0 || movingStrokeIds.size === 0) return nextStrokes;
+
+  const compStrokeIds = new Set<string>();
+  const movedCompKeys = new Set<string>();
+  for (const c of prevComps) {
+    for (const id of c.strokeIds) compStrokeIds.add(id);
+    if (c.strokeIds.every((id) => movingStrokeIds.has(id))) {
+      movedCompKeys.add(c.key);
+    }
+  }
+
+  const movingWires = extractCircuitWireSegments(
+    prevStrokes,
+    (s) => movingStrokeIds.has(s.id),
+    compStrokeIds
+  );
+  if (movingWires.length === 0) return nextStrokes;
+
+  const stationaryWires = extractCircuitWireSegments(
+    prevStrokes,
+    (s) => !movingStrokeIds.has(s.id),
+    compStrokeIds
+  );
+  const allWires = [...movingWires, ...stationaryWires];
+  const reachable = findWiresReachableFromComponents(prevComps, allWires);
+  const segKey = (w: ExternalWireLine) => `${w.stroke.id}:${w.p0Idx}`;
+  const activeMovingWires = movingWires.filter((w) => reachable.has(segKey(w)));
+  if (activeMovingWires.length === 0) return nextStrokes;
+
+  const nextStrokeMap = new Map(nextStrokes.map((s) => [s.id, s]));
+  const segDeltaMap = new Map<string, { dx: number; dy: number }>();
+  for (const w of activeMovingWires) {
+    if (mode === 'move') {
+      segDeltaMap.set(segKey(w), { dx, dy });
+    } else {
+      const ns = nextStrokeMap.get(w.stroke.id);
+      const np0 = ns?.points[w.p0Idx];
+      const np1 = ns?.points[w.p1Idx];
+      if (!np0 || !np1) {
+        segDeltaMap.set(segKey(w), { dx: 0, dy: 0 });
+      } else {
+        const sDx = mode === 'scale-x' ? ((np0.x - w.p0.x) + (np1.x - w.p1.x)) / 2 : 0;
+        const sDy = mode === 'scale-y' ? ((np0.y - w.p0.y) + (np1.y - w.p1.y)) / 2 : 0;
+        segDeltaMap.set(segKey(w), { dx: sDx, dy: sDy });
+      }
+    }
+  }
+
+  const vertexEdits = new Map<string, Map<number, { x?: number; y?: number }>>();
+  const setVertexCoord = (strokeId: string, ptIdx: number, axis: 'x' | 'y', val: number) => {
+    let map = vertexEdits.get(strokeId);
+    if (!map) {
+      map = new Map();
+      vertexEdits.set(strokeId, map);
+    }
+    const prev = map.get(ptIdx) || {};
+    prev[axis] = val;
+    map.set(ptIdx, prev);
+  };
+
+  const strokeShifts = new Map<string, { dx: number; dy: number }>();
+  const addStrokeShift = (strokeId: string, sdx: number, sdy: number) => {
+    if (movingStrokeIds.has(strokeId) || alreadyAdaptedStrokeIds?.has(strokeId)) return;
+    const prev = strokeShifts.get(strokeId) || { dx: 0, dy: 0 };
+    if (Math.abs(sdx) > 1e-4 && Math.abs(prev.dx) < 1e-4) prev.dx = sdx;
+    if (Math.abs(sdy) > 1e-4 && Math.abs(prev.dy) < 1e-4) prev.dy = sdy;
+    strokeShifts.set(strokeId, prev);
+  };
+
+  const isEndpointPinnedToUnmovedComp = (
+    pt: { x: number; y: number },
+    expectedCompOrient: 'h' | 'v'
+  ): boolean => {
+    for (const c of prevComps) {
+      if (movedCompKeys.has(c.key) || strokeShifts.has(c.strokeIds[0])) continue;
+      const cVert = isVerticalCircuitComponent(c);
+      if ((expectedCompOrient === 'v') !== cVert) continue;
+      for (const term of getCompTerminalList(c)) {
+        if (distance(pt, term) <= 28) return true;
+      }
+    }
+    return false;
+  };
+
+  const findTouchingCompForSegOrPt = (
+    seg: ExternalWireLine | null,
+    pt: { x: number; y: number } | null,
+    orient: 'h' | 'v',
+    skipKeys: Set<string>
+  ): CircuitComponentInfo | null => {
+    for (const c of prevComps) {
+      if (skipKeys.has(c.key)) continue;
+      const cVert = isVerticalCircuitComponent(c);
+      if ((orient === 'v') !== cVert) continue;
+      const terms = [c.leftTerm, c.rightTerm];
+      if (seg) {
+        for (const t of terms) {
+          if (pointToSegmentDist(t.x, t.y, seg.p0.x, seg.p0.y, seg.p1.x, seg.p1.y) <= 28) {
+            return c;
+          }
+        }
+      }
+      if (pt) {
+        if (distance(pt, c.leftTerm) <= 28 || distance(pt, c.rightTerm) <= 28) {
+          return c;
+        }
+      }
+    }
+    return null;
+  };
+
+  const collectCollinearBranch = (
+    seeds: ExternalWireLine[],
+    orient: 'h' | 'v'
+  ): { wireSegs: ExternalWireLine[]; comps: CircuitComponentInfo[] } => {
+    const wireSegs: ExternalWireLine[] = [];
+    const comps: CircuitComponentInfo[] = [];
+    const seenSegs = new Set<string>();
+    const seenComps = new Set<string>();
+    const frontierPts: { x: number; y: number }[] = [];
+    const frontierSegs: ExternalWireLine[] = [];
+
+    const addSeg = (w: ExternalWireLine) => {
+      const k = segKey(w);
+      if (seenSegs.has(k)) return;
+      seenSegs.add(k);
+      wireSegs.push(w);
+      frontierSegs.push(w);
+      frontierPts.push(w.p0, w.p1);
+    };
+
+    for (const s of seeds) {
+      if (s.orient === orient) addSeg(s);
+    }
+
+    let pi = 0;
+    let si = 0;
+    while (pi < frontierPts.length || si < frontierSegs.length) {
+      while (si < frontierSegs.length) {
+        const seg = frontierSegs[si++];
+        const comp = findTouchingCompForSegOrPt(seg, null, orient, seenComps);
+        if (comp) {
+          seenComps.add(comp.key);
+          comps.push(comp);
+          frontierPts.push(comp.leftTerm, comp.rightTerm);
+        }
+      }
+      if (pi >= frontierPts.length) break;
+      const pt = frontierPts[pi++];
+
+      for (const w of allWires) {
+        if (w.orient !== orient) continue;
+        const k = segKey(w);
+        if (seenSegs.has(k)) continue;
+        const nearDist = Math.min(distance(pt, w.p0), distance(pt, w.p1));
+        if (nearDist <= 22) {
+          addSeg(w);
+        }
+      }
+
+      const comp = findTouchingCompForSegOrPt(null, pt, orient, seenComps);
+      if (comp) {
+        seenComps.add(comp.key);
+        comps.push(comp);
+        frontierPts.push(comp.leftTerm, comp.rightTerm);
+      }
+    }
+
+    return { wireSegs, comps };
+  };
+
+  interface BranchSegRef {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    coord: number; // oldY for 'h', oldX for 'v'
+  }
+
+  const getHorizontalBranchSegments = (branch: {
+    wireSegs: ExternalWireLine[];
+    comps: CircuitComponentInfo[];
+  }): BranchSegRef[] => {
+    const segs: BranchSegRef[] = [];
+    for (const w of branch.wireSegs) {
+      const b = getWireSegBounds(w);
+      segs.push({ ...b, coord: w.wireCoord });
+    }
+    for (const c of branch.comps) {
+      segs.push({
+        minX: c.minX,
+        maxX: c.maxX,
+        minY: Math.min(c.leftTerm.y, c.rightTerm.y),
+        maxY: Math.max(c.leftTerm.y, c.rightTerm.y),
+        coord: c.leftTerm.y,
+      });
+      if (Math.abs(c.rightTerm.y - c.leftTerm.y) > 2) {
+        segs.push({
+          minX: c.cx,
+          maxX: c.maxX,
+          minY: c.rightTerm.y,
+          maxY: c.rightTerm.y,
+          coord: c.rightTerm.y,
+        });
+      }
+    }
+    return segs;
+  };
+
+  const getVerticalBranchSegments = (branch: {
+    wireSegs: ExternalWireLine[];
+    comps: CircuitComponentInfo[];
+  }): BranchSegRef[] => {
+    const segs: BranchSegRef[] = [];
+    for (const w of branch.wireSegs) {
+      const b = getWireSegBounds(w);
+      segs.push({ ...b, coord: w.wireCoord });
+    }
+    for (const c of branch.comps) {
+      const topY = c.orientation === 'v' ? Math.min(c.leftTerm.y, c.rightTerm.y) : c.minY;
+      const botY = c.orientation === 'v' ? Math.max(c.leftTerm.y, c.rightTerm.y) : c.maxY;
+      segs.push({
+        minX: c.leftTerm.x,
+        maxX: c.rightTerm.x,
+        minY: topY,
+        maxY: botY,
+        coord: c.cx,
+      });
+    }
+    return segs;
+  };
+
+  const movingH = activeMovingWires.filter((w) => w.orient === 'h');
+  const movingV = activeMovingWires.filter((w) => w.orient === 'v');
+
+  // --- PASS 1: VERTICAL LOOP / BRANCH PULL (when mode === 'move' or 'scale-y') ---
+  if (mode !== 'scale-x') {
+    const seedDeltaY = new Map<string, number>();
+    const hSeeds: ExternalWireLine[] = [];
+
+    for (const mh of movingH) {
+      const d = segDeltaMap.get(segKey(mh))?.dy ?? 0;
+      if (Math.abs(d) > 0.05) {
+        hSeeds.push(mh);
+        seedDeltaY.set(segKey(mh), d);
+      }
+    }
+
+    if (mode === 'move' && Math.abs(dy) > 1e-4) {
+      for (const mv of movingV) {
+        const ends: { pt: { x: number; y: number }; idx: number }[] = [
+          { pt: mv.p0, idx: mv.p0Idx },
+          { pt: mv.p1, idx: mv.p1Idx },
+        ];
+        for (const ep of ends) {
+          const passH = stationaryWires.find(
+            (sw) => sw.orient === 'h' && isWirePassThroughAtPoint(sw, ep.pt.x, ep.pt.y)
+          );
+          if (passH) {
+            setVertexCoord(mv.stroke.id, ep.idx, 'y', passH.wireCoord);
+            continue;
+          }
+          if (isEndpointPinnedToUnmovedComp(ep.pt, 'v')) {
+            setVertexCoord(mv.stroke.id, ep.idx, 'y', ep.pt.y);
+            continue;
+          }
+          for (const hw of stationaryWires) {
+            if (hw.orient !== 'h') continue;
+            const dEnd = Math.min(distance(ep.pt, hw.p0), distance(ep.pt, hw.p1));
+            if (dEnd <= 24) {
+              hSeeds.push(hw);
+              seedDeltaY.set(segKey(hw), dy);
+            }
+          }
+        }
+      }
+    }
+
+    if (mode === 'scale-y') {
+      for (const mv of movingV) {
+        for (const ep of [
+          { pt: mv.p0, idx: mv.p0Idx },
+          { pt: mv.p1, idx: mv.p1Idx },
+        ]) {
+          const passH = stationaryWires.find(
+            (sw) => sw.orient === 'h' && isWirePassThroughAtPoint(sw, ep.pt.x, ep.pt.y)
+          );
+          if (passH && Math.abs((segDeltaMap.get(segKey(mv))?.dy ?? 0)) < 0.05) {
+            setVertexCoord(mv.stroke.id, ep.idx, 'y', passH.wireCoord);
+          } else if (isEndpointPinnedToUnmovedComp(ep.pt, 'v')) {
+            setVertexCoord(mv.stroke.id, ep.idx, 'y', ep.pt.y);
+          }
+        }
+      }
+    }
+
+    if (hSeeds.length > 0) {
+      const processedSeeds = new Set<string>();
+      for (const seed of hSeeds) {
+        if (processedSeeds.has(segKey(seed))) continue;
+        const targetDy = seedDeltaY.get(segKey(seed)) ?? dy;
+        if (Math.abs(targetDy) < 1e-4) continue;
+
+        const branchH = collectCollinearBranch([seed], 'h');
+        for (const w of branchH.wireSegs) processedSeeds.add(segKey(w));
+
+        const branchSegs = getHorizontalBranchSegments(branchH);
+        const branchWireIdSet = new Set(branchH.wireSegs.map((w) => segKey(w)));
+        const branchCompStrokeSet = new Set<string>();
+        for (const c of branchH.comps) {
+          for (const id of c.strokeIds) branchCompStrokeSet.add(id);
+        }
+
+        let minDy = -Infinity;
+        let maxDy = Infinity;
+
+        type AttachedVEnd = {
+          vw: ExternalWireLine;
+          ptIdx: number;
+          segY: number;
+        };
+        const attachedVEnds: AttachedVEnd[] = [];
+
+        for (const vw of stationaryWires) {
+          if (vw.orient !== 'v') continue;
+          if (branchWireIdSet.has(segKey(vw)) || branchCompStrokeSet.has(vw.stroke.id)) continue;
+
+          const topIsP0 = vw.p0.y <= vw.p1.y;
+          const topPt = topIsP0 ? vw.p0 : vw.p1;
+          const topIdx = topIsP0 ? vw.p0Idx : vw.p1Idx;
+          const botPt = topIsP0 ? vw.p1 : vw.p0;
+          const botIdx = topIsP0 ? vw.p1Idx : vw.p0Idx;
+          const vLen = Math.abs(botPt.y - topPt.y);
+
+          for (const seg of branchSegs) {
+            const xInSeg = vw.wireCoord >= seg.minX - 24 && vw.wireCoord <= seg.maxX + 24;
+            if (!xInSeg) continue;
+            const dTop = Math.abs(topPt.y - seg.coord);
+            const dBot = Math.abs(botPt.y - seg.coord);
+
+            if (topPt.y < seg.coord - 24 && botPt.y > seg.coord + 24) {
+              minDy = Math.max(minDy, topPt.y + 2 - seg.coord);
+              maxDy = Math.min(maxDy, botPt.y - 2 - seg.coord);
+            } else if (
+              dTop <= 24 &&
+              botPt.y > seg.coord + 12 &&
+              vLen >= 10 &&
+              !isEndpointPinnedToUnmovedComp(topPt, 'v')
+            ) {
+              maxDy = Math.min(maxDy, botPt.y - 8 - seg.coord);
+              attachedVEnds.push({ vw, ptIdx: topIdx, segY: seg.coord });
+              break;
+            } else if (
+              dBot <= 24 &&
+              topPt.y < seg.coord - 12 &&
+              vLen >= 10 &&
+              !isEndpointPinnedToUnmovedComp(botPt, 'v')
+            ) {
+              minDy = Math.max(minDy, topPt.y + 8 - seg.coord);
+              attachedVEnds.push({ vw, ptIdx: botIdx, segY: seg.coord });
+              break;
+            }
+          }
+        }
+
+        const effDy = Math.max(minDy, Math.min(maxDy, targetDy));
+
+        for (const w of branchH.wireSegs) {
+          if (movingStrokeIds.has(w.stroke.id)) {
+            if (Math.abs(effDy - targetDy) > 1e-4 || mode === 'scale-y') {
+              setVertexCoord(w.stroke.id, w.p0Idx, 'y', w.p0.y + effDy);
+              setVertexCoord(w.stroke.id, w.p1Idx, 'y', w.p1.y + effDy);
+            }
+          } else if (!alreadyAdaptedStrokeIds?.has(w.stroke.id)) {
+            // Shift only the horizontal segment's vertices (preserves welded multi-segment polylines like C-loops!)
+            setVertexCoord(w.stroke.id, w.p0Idx, 'y', w.p0.y + effDy);
+            setVertexCoord(w.stroke.id, w.p1Idx, 'y', w.p1.y + effDy);
+          }
+        }
+        for (const c of branchH.comps) {
+          if (movedCompKeys.has(c.key)) continue;
+          for (const sid of c.strokeIds) {
+            addStrokeShift(sid, 0, effDy);
+          }
+        }
+        for (const ae of attachedVEnds) {
+          setVertexCoord(ae.vw.stroke.id, ae.ptIdx, 'y', ae.segY + effDy);
+        }
+        for (const mv of movingV) {
+          for (const bw of branchH.wireSegs) {
+            const d0 = Math.min(distance(mv.p0, bw.p0), distance(mv.p0, bw.p1));
+            const d1 = Math.min(distance(mv.p1, bw.p0), distance(mv.p1, bw.p1));
+            if (d0 <= 24 && d0 <= d1) {
+              setVertexCoord(mv.stroke.id, mv.p0Idx, 'y', mv.p0.y + effDy);
+            } else if (d1 <= 24 && d1 < d0) {
+              setVertexCoord(mv.stroke.id, mv.p1Idx, 'y', mv.p1.y + effDy);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // --- PASS 2: HORIZONTAL LOOP / BRANCH PULL (when mode === 'move' or 'scale-x') ---
+  if (mode !== 'scale-y') {
+    const seedDeltaX = new Map<string, number>();
+    const vSeeds: ExternalWireLine[] = [];
+
+    for (const mv of movingV) {
+      const d = segDeltaMap.get(segKey(mv))?.dx ?? 0;
+      if (Math.abs(d) > 0.05 || mode === 'move') {
+        vSeeds.push(mv);
+        seedDeltaX.set(segKey(mv), d);
+      }
+    }
+
+    if (mode === 'scale-x') {
+      // Keep moving horizontal endpoints attached to stationary components pinned during horizontal stretch!
+      for (const mh of movingH) {
+        if (isEndpointPinnedToUnmovedComp(mh.p0, 'h')) {
+          setVertexCoord(mh.stroke.id, mh.p0Idx, 'x', mh.p0.x);
+        }
+        if (isEndpointPinnedToUnmovedComp(mh.p1, 'h')) {
+          setVertexCoord(mh.stroke.id, mh.p1Idx, 'x', mh.p1.x);
+        }
+      }
+    }
+
+    if (mode === 'move' && Math.abs(dx) > 1e-4) {
+      for (const mh of movingH) {
+        for (const ep of [
+          { pt: mh.p0, idx: mh.p0Idx },
+          { pt: mh.p1, idx: mh.p1Idx },
+        ]) {
+          if (isEndpointPinnedToUnmovedComp(ep.pt, 'h')) {
+            setVertexCoord(mh.stroke.id, ep.idx, 'x', ep.pt.x);
+            continue;
+          }
+          const passV = stationaryWires.find(
+            (sw) => sw.orient === 'v' && isWirePassThroughAtPoint(sw, ep.pt.x, ep.pt.y)
+          );
+          if (passV) {
+            vSeeds.push(passV);
+            seedDeltaX.set(segKey(passV), dx);
+            continue;
+          }
+          for (const vw of stationaryWires) {
+            if (vw.orient !== 'v') continue;
+            const dEnd = Math.min(distance(ep.pt, vw.p0), distance(ep.pt, vw.p1));
+            if (dEnd <= 24) {
+              vSeeds.push(vw);
+              seedDeltaX.set(segKey(vw), dx);
+            }
+          }
+        }
+      }
+    }
+
+    if (vSeeds.length > 0) {
+      const processedSeeds = new Set<string>();
+      for (const seed of vSeeds) {
+        if (processedSeeds.has(segKey(seed))) continue;
+        const targetDx = seedDeltaX.get(segKey(seed)) ?? dx;
+
+        const branchV = collectCollinearBranch([seed], 'v');
+        for (const w of branchV.wireSegs) processedSeeds.add(segKey(w));
+
+        const branchSegs = getVerticalBranchSegments(branchV);
+        const branchWireIdSet = new Set(branchV.wireSegs.map((w) => segKey(w)));
+        const branchCompStrokeSet = new Set<string>();
+        for (const c of branchV.comps) {
+          for (const id of c.strokeIds) branchCompStrokeSet.add(id);
+        }
+
+        let minDx = -Infinity;
+        let maxDx = Infinity;
+
+        type AttachedHEnd = {
+          hw: ExternalWireLine;
+          ptIdx: number;
+          segX: number;
+        };
+        const attachedHEnds: AttachedHEnd[] = [];
+
+        for (const hw of stationaryWires) {
+          if (hw.orient !== 'h') continue;
+          if (branchWireIdSet.has(segKey(hw)) || branchCompStrokeSet.has(hw.stroke.id)) continue;
+
+          const leftIsP0 = hw.p0.x <= hw.p1.x;
+          const leftPt = leftIsP0 ? hw.p0 : hw.p1;
+          const leftIdx = leftIsP0 ? hw.p0Idx : hw.p1Idx;
+          const rightPt = leftIsP0 ? hw.p1 : hw.p0;
+          const rightIdx = leftIsP0 ? hw.p1Idx : hw.p0Idx;
+          const hLen = Math.abs(rightPt.x - leftPt.x);
+
+          for (const seg of branchSegs) {
+            const yInSeg = hw.wireCoord >= seg.minY - 24 && hw.wireCoord <= seg.maxY + 24;
+            if (!yInSeg) continue;
+            const dLeft = Math.abs(leftPt.x - seg.coord);
+            const dRight = Math.abs(rightPt.x - seg.coord);
+
+            if (leftPt.x < seg.coord - 24 && rightPt.x > seg.coord + 24) {
+              minDx = Math.max(minDx, leftPt.x + 2 - seg.coord);
+              maxDx = Math.min(maxDx, rightPt.x - 2 - seg.coord);
+            } else if (
+              dLeft <= 24 &&
+              rightPt.x > seg.coord + 12 &&
+              hLen >= 10 &&
+              !isEndpointPinnedToUnmovedComp(leftPt, 'h')
+            ) {
+              maxDx = Math.min(maxDx, rightPt.x - 8 - seg.coord);
+              attachedHEnds.push({ hw, ptIdx: leftIdx, segX: seg.coord });
+              break;
+            } else if (
+              dRight <= 24 &&
+              leftPt.x < seg.coord - 12 &&
+              hLen >= 10 &&
+              !isEndpointPinnedToUnmovedComp(rightPt, 'h')
+            ) {
+              minDx = Math.max(minDx, leftPt.x + 8 - seg.coord);
+              attachedHEnds.push({ hw, ptIdx: rightIdx, segX: seg.coord });
+              break;
+            }
+          }
+        }
+
+        const effDx = Math.max(minDx, Math.min(maxDx, targetDx));
+
+        for (const w of branchV.wireSegs) {
+          if (movingStrokeIds.has(w.stroke.id)) {
+            if (Math.abs(effDx - targetDx) > 1e-4 || mode === 'scale-x') {
+              setVertexCoord(w.stroke.id, w.p0Idx, 'x', w.p0.x + effDx);
+              setVertexCoord(w.stroke.id, w.p1Idx, 'x', w.p1.x + effDx);
+            }
+          } else if (!alreadyAdaptedStrokeIds?.has(w.stroke.id)) {
+            setVertexCoord(w.stroke.id, w.p0Idx, 'x', w.p0.x + effDx);
+            setVertexCoord(w.stroke.id, w.p1Idx, 'x', w.p1.x + effDx);
+          }
+        }
+        for (const c of branchV.comps) {
+          if (movedCompKeys.has(c.key)) continue;
+          for (const sid of c.strokeIds) {
+            addStrokeShift(sid, effDx, 0);
+          }
+        }
+        for (const ae of attachedHEnds) {
+          setVertexCoord(ae.hw.stroke.id, ae.ptIdx, 'x', ae.segX + effDx);
+        }
+        for (const mh of movingH) {
+          for (const bw of branchV.wireSegs) {
+            const d0 = Math.min(distance(mh.p0, bw.p0), distance(mh.p0, bw.p1));
+            const d1 = Math.min(distance(mh.p1, bw.p0), distance(mh.p1, bw.p1));
+            if (d0 <= 24 && d0 <= d1) {
+              setVertexCoord(mh.stroke.id, mh.p0Idx, 'x', mh.p0.x + effDx);
+            } else if (d1 <= 24 && d1 < d0) {
+              setVertexCoord(mh.stroke.id, mh.p1Idx, 'x', mh.p1.x + effDx);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (vertexEdits.size === 0 && strokeShifts.size === 0) return nextStrokes;
+
+  const prevStrokeMap = new Map(prevStrokes.map((s) => [s.id, s]));
+
+  return nextStrokes.map((s) => {
+    const shift = strokeShifts.get(s.id);
+    const vEdit = vertexEdits.get(s.id);
+    if (!shift && !vEdit) return s;
+
+    let pts = s.points.map((p) => ({ ...p }));
+    if (shift && (Math.abs(shift.dx) > 1e-4 || Math.abs(shift.dy) > 1e-4)) {
+      pts = pts.map((p) => ({
+        ...p,
+        x: p.x + shift.dx,
+        y: p.y + shift.dy,
+        cx: p.cx !== undefined ? p.cx + shift.dx : undefined,
+        cy: p.cy !== undefined ? p.cy + shift.dy : undefined,
+      }));
+    }
+    if (vEdit) {
+      const refPts = prevStrokeMap.get(s.id)?.points ?? s.points;
+      const beforeEditPts = pts.map((p) => ({ ...p }));
+      const editedIndices = new Set<number>();
+      for (const [idx, coords] of vEdit.entries()) {
+        if (idx < 0 || idx >= pts.length) continue;
+        pts[idx] = {
+          ...pts[idx],
+          x: coords.x !== undefined ? coords.x : pts[idx].x,
+          y: coords.y !== undefined ? coords.y : pts[idx].y,
+        };
+        editedIndices.add(idx);
+      }
+      updateEditedLineWireHandles(beforeEditPts, pts, editedIndices, refPts);
+    }
+
+    return {
+      ...s,
+      circuitBox:
+        shift && s.circuitBox
+          ? {
+              ...s.circuitBox,
+              cx: s.circuitBox.cx + shift.dx,
+              termY: s.circuitBox.termY + shift.dy,
+            }
+          : s.circuitBox,
+      points: pts,
+    };
+  });
+}
+
+/**
+ * Adapts connected circuit branches/components when scaling a wire frame via Lasso orange side handles
+ * ('scale-x' or 'scale-y'), keeping connected horizontal/vertical circuit rails & bulbs/batteries intact.
+ */
+export function adaptCircuitWiresOnScaleTransform(
+  prevStrokes: StrokeObject[],
+  nextStrokes: StrokeObject[],
+  movingStrokeIds: Set<string>,
+  scaleMode: 'scale-x' | 'scale-y'
+): StrokeObject[] {
+  if (movingStrokeIds.size === 0) return nextStrokes;
+  const prevComps = getCircuitComponentsWithTerminals(prevStrokes);
+  if (prevComps.length === 0) return nextStrokes;
+  const movedComps = prevComps.filter((c) => c.strokeIds.every((id) => movingStrokeIds.has(id)));
+  if (movedComps.length > 0) return nextStrokes;
+
+  return adaptCircuitLoopFromSegments(
+    prevStrokes,
+    nextStrokes,
+    movingStrokeIds,
+    prevComps,
+    scaleMode,
+    0,
+    0
+  );
+}
+
+/**
+ * Live-adapts connected circuit wires (and orthogonal corners / T-risers) when one or more
+ * circuit components (bulb, battery, resistor, switch, fan, ammeter, voltmeter, voltage-source)
+ * or circuit wire segments are moved by (dx, dy) via pointer drag or arrow-key nudge.
+ */
+export function adaptCircuitWiresOnComponentMove(
+  prevStrokes: StrokeObject[],
+  nextStrokes: StrokeObject[],
+  movingStrokeIds: Set<string>,
+  dx: number,
+  dy: number
+): StrokeObject[] {
+  if ((Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) || movingStrokeIds.size === 0) {
+    return nextStrokes;
+  }
+
+  const prevComps = getCircuitComponentsWithTerminals(prevStrokes);
+  if (prevComps.length === 0) return nextStrokes;
+  const movedComps = prevComps.filter((c) => c.strokeIds.every((id) => movingStrokeIds.has(id)));
+  if (movedComps.length === 0) {
+    return adaptCircuitLoopFromSegments(
+      prevStrokes,
+      nextStrokes,
+      movingStrokeIds,
+      prevComps,
+      'move',
+      dx,
+      dy
+    );
+  }
+
+  const movedKeySet = new Set(movedComps.map((c) => c.key));
+  const unmovedComps = prevComps.filter((c) => !movedKeySet.has(c.key));
+  const extWires = extractExternalCircuitWireLines(prevStrokes, movingStrokeIds);
+  if (extWires.length === 0) {
+    return adaptCircuitLoopFromSegments(
+      prevStrokes,
+      nextStrokes,
+      movingStrokeIds,
+      prevComps,
+      'move',
+      dx,
+      dy
+    );
+  }
+
+  const wireEdits = new Map<string, Map<number, { x: number; y: number }>>();
+  const setWireVertex = (wId: string, ptIdx: number, x: number, y: number) => {
+    let map = wireEdits.get(wId);
+    if (!map) {
+      map = new Map();
+      wireEdits.set(wId, map);
+    }
+    map.set(ptIdx, { x, y });
+  };
+
+  const isPinnedByUnmovedComp = (px: number, py: number, movedOrient: 'h' | 'v'): boolean => {
+    for (const uc of unmovedComps) {
+      const uVert = isVerticalCircuitComponent(uc);
+      if (movedOrient === 'h' && !uVert) {
+        if (
+          distance({ x: px, y: py }, uc.leftTerm) <= 30 ||
+          distance({ x: px, y: py }, uc.rightTerm) <= 30 ||
+          (px >= uc.minX - 16 && px <= uc.maxX + 16 && Math.abs(py - uc.cy) <= 30)
+        ) {
+          return true;
+        }
+      } else if (movedOrient === 'v' && uVert) {
+        const uTop = uc.orientation === 'v' ? uc.leftTerm : { x: uc.cx, y: uc.minY };
+        const uBot = uc.orientation === 'v' ? uc.rightTerm : { x: uc.cx, y: uc.maxY };
+        if (
+          distance({ x: px, y: py }, uTop) <= 30 ||
+          distance({ x: px, y: py }, uBot) <= 30 ||
+          (py >= uc.minY - 16 && py <= uc.maxY + 16 && Math.abs(px - uc.cx) <= 30)
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const hasUnmovedCompBetweenX = (xA: number, xB: number, refY: number): boolean => {
+    const lo = Math.min(xA, xB) + 6;
+    const hi = Math.max(xA, xB) - 6;
+    if (lo >= hi) return false;
+    return unmovedComps.some((uc) => uc.cx >= lo && uc.cx <= hi && Math.abs(uc.cy - refY) <= 36);
+  };
+
+  const hasUnmovedCompBetweenY = (yA: number, yB: number, refX: number): boolean => {
+    const lo = Math.min(yA, yB) + 6;
+    const hi = Math.max(yA, yB) - 6;
+    if (lo >= hi) return false;
+    return unmovedComps.some((uc) => uc.cy >= lo && uc.cy <= hi && Math.abs(uc.cx - refX) <= 36);
+  };
+
+  for (const mc of movedComps) {
+    const isVert = isVerticalCircuitComponent(mc);
+
+    if (!isVert) {
+      const prevL = mc.leftTerm;
+      const prevR = mc.rightTerm;
+      const newL = { x: prevL.x + dx, y: prevL.y + dy };
+      const newR = { x: prevR.x + dx, y: prevR.y + dy };
+
+      for (const w of extWires) {
+        if (w.orient !== 'h') continue;
+        const wStartIsLeft = w.p0.x <= w.p1.x;
+        const leftIdx = wStartIsLeft ? w.p0Idx : w.p1Idx;
+        const rightIdx = wStartIsLeft ? w.p1Idx : w.p0Idx;
+        const leftPt = wStartIsLeft ? w.p0 : w.p1;
+        const rightPt = wStartIsLeft ? w.p1 : w.p0;
+
+        // 1. Horizontal wire approaching from the LEFT into mc.leftTerm
+        const attachesLeft =
+          leftPt.x < prevL.x - 4 &&
+          rightPt.x >= prevL.x - 28 &&
+          rightPt.x <= Math.max(prevL.x + 28, mc.cx + 14) &&
+          Math.abs(rightPt.y - prevL.y) <= 28 &&
+          !hasUnmovedCompBetweenX(leftPt.x, prevL.x, prevL.y);
+
+        // 2. Horizontal wire approaching from the RIGHT into mc.rightTerm (also trims overlaps inside body!)
+        const attachesRight =
+          !attachesLeft &&
+          rightPt.x > prevR.x + 4 &&
+          leftPt.x <= prevR.x + 28 &&
+          leftPt.x >= prevL.x + 4 &&
+          Math.abs(leftPt.y - prevR.y) <= 28 &&
+          !hasUnmovedCompBetweenX(prevR.x, rightPt.x, prevR.y);
+
+        if (!attachesLeft && !attachesRight) continue;
+
+        const innerIdx = attachesLeft ? rightIdx : leftIdx;
+        const outerIdx = attachesLeft ? leftIdx : rightIdx;
+        const innerOldPt = attachesLeft ? rightPt : leftPt;
+        const outerPt = attachesLeft ? leftPt : rightPt;
+        const targetTerm = attachesLeft ? newL : newR;
+
+        // Avoid flipping wire direction backward if component is dragged all the way past the far rail
+        if (attachesLeft && targetTerm.x <= outerPt.x + 2) continue;
+        if (attachesRight && targetTerm.x >= outerPt.x - 2) continue;
+
+        setWireVertex(w.stroke.id, innerIdx, targetTerm.x, targetTerm.y);
+
+        if (
+          Math.abs(targetTerm.y - outerPt.y) > 0.1 &&
+          !isPinnedByUnmovedComp(outerPt.x, outerPt.y, 'h')
+        ) {
+          setWireVertex(w.stroke.id, outerIdx, outerPt.x, targetTerm.y);
+
+          // Extend/shrink any vertical corner or T-riser wire whose endpoint meets this horizontal wire
+          const spanMinX = Math.min(outerPt.x, innerOldPt.x, targetTerm.x) - 20;
+          const spanMaxX = Math.max(outerPt.x, innerOldPt.x, targetTerm.x) + 20;
+          for (const vw of extWires) {
+            if (vw.orient !== 'v') continue;
+            if (vw.stroke.id === w.stroke.id && (vw.p0Idx === outerIdx || vw.p1Idx === outerIdx)) {
+              // Shared corner vertex on the same polyline is already updated via outerIdx
+              continue;
+            }
+            if (vw.wireCoord < spanMinX || vw.wireCoord > spanMaxX) continue;
+            const d0 = Math.abs(vw.p0.y - outerPt.y);
+            const d1 = Math.abs(vw.p1.y - outerPt.y);
+            if (d0 <= 24 && d0 <= d1 && Math.hypot(vw.p1.x - vw.p0.x, vw.p1.y - vw.p0.y) > 16) {
+              setWireVertex(vw.stroke.id, vw.p0Idx, vw.p0.x, targetTerm.y);
+            } else if (
+              d1 <= 24 &&
+              d1 < d0 &&
+              Math.hypot(vw.p1.x - vw.p0.x, vw.p1.y - vw.p0.y) > 16
+            ) {
+              setWireVertex(vw.stroke.id, vw.p1Idx, vw.p1.x, targetTerm.y);
+            }
+          }
+        }
+      }
+    } else {
+      const prevT = mc.orientation === 'v' ? mc.leftTerm : { x: mc.cx, y: mc.minY };
+      const prevB = mc.orientation === 'v' ? mc.rightTerm : { x: mc.cx, y: mc.maxY };
+      const newT = { x: prevT.x + dx, y: prevT.y + dy };
+      const newB = { x: prevB.x + dx, y: prevB.y + dy };
+
+      for (const w of extWires) {
+        if (w.orient !== 'v') continue;
+        const wStartIsTop = w.p0.y <= w.p1.y;
+        const topIdx = wStartIsTop ? w.p0Idx : w.p1Idx;
+        const botIdx = wStartIsTop ? w.p1Idx : w.p0Idx;
+        const topPt = wStartIsTop ? w.p0 : w.p1;
+        const botPt = wStartIsTop ? w.p1 : w.p0;
+
+        const attachesTop =
+          topPt.y < prevT.y - 4 &&
+          botPt.y >= prevT.y - 28 &&
+          botPt.y <= Math.max(prevT.y + 28, mc.cy + 14) &&
+          Math.abs(botPt.x - prevT.x) <= 28 &&
+          !hasUnmovedCompBetweenY(topPt.y, prevT.y, prevT.x);
+
+        const attachesBot =
+          !attachesTop &&
+          botPt.y > prevB.y + 4 &&
+          topPt.y <= prevB.y + 28 &&
+          topPt.y >= prevT.y + 4 &&
+          Math.abs(topPt.x - prevB.x) <= 28 &&
+          !hasUnmovedCompBetweenY(prevB.y, botPt.y, prevB.x);
+
+        if (!attachesTop && !attachesBot) continue;
+
+        const innerIdx = attachesTop ? botIdx : topIdx;
+        const outerIdx = attachesTop ? topIdx : botIdx;
+        const innerOldPt = attachesTop ? botPt : topPt;
+        const outerPt = attachesTop ? topPt : botPt;
+        const targetTerm = attachesTop ? newT : newB;
+
+        if (attachesTop && targetTerm.y <= outerPt.y + 2) continue;
+        if (attachesBot && targetTerm.y >= outerPt.y - 2) continue;
+
+        setWireVertex(w.stroke.id, innerIdx, targetTerm.x, targetTerm.y);
+
+        if (
+          Math.abs(targetTerm.x - outerPt.x) > 0.1 &&
+          !isPinnedByUnmovedComp(outerPt.x, outerPt.y, 'v')
+        ) {
+          setWireVertex(w.stroke.id, outerIdx, targetTerm.x, outerPt.y);
+
+          const spanMinY = Math.min(outerPt.y, innerOldPt.y, targetTerm.y) - 20;
+          const spanMaxY = Math.max(outerPt.y, innerOldPt.y, targetTerm.y) + 20;
+          for (const hw of extWires) {
+            if (hw.orient !== 'h') continue;
+            if (hw.stroke.id === w.stroke.id && (hw.p0Idx === outerIdx || hw.p1Idx === outerIdx)) {
+              // Shared corner vertex on the same polyline is already updated via outerIdx
+              continue;
+            }
+            if (hw.wireCoord < spanMinY || hw.wireCoord > spanMaxY) continue;
+            const d0 = Math.abs(hw.p0.x - outerPt.x);
+            const d1 = Math.abs(hw.p1.x - outerPt.x);
+            if (d0 <= 24 && d0 <= d1 && Math.hypot(hw.p1.x - hw.p0.x, hw.p1.y - hw.p0.y) > 16) {
+              setWireVertex(hw.stroke.id, hw.p0Idx, targetTerm.x, hw.p0.y);
+            } else if (
+              d1 <= 24 &&
+              d1 < d0 &&
+              Math.hypot(hw.p1.x - hw.p0.x, hw.p1.y - hw.p0.y) > 16
+            ) {
+              setWireVertex(hw.stroke.id, hw.p1Idx, targetTerm.x, hw.p1.y);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const adaptedAfterComps =
+    wireEdits.size === 0
+      ? nextStrokes
+      : nextStrokes.map((s) => {
+          const vEdit = wireEdits.get(s.id);
+          if (!vEdit || s.points.length < 2) return s;
+          const pts = s.points.map((p) => ({ ...p }));
+          const editedIndices = new Set<number>();
+          for (const [idx, pos] of vEdit.entries()) {
+            if (idx < 0 || idx >= pts.length) continue;
+            pts[idx] = { ...pts[idx], x: pos.x, y: pos.y };
+            editedIndices.add(idx);
+          }
+          updateEditedLineWireHandles(s.points, pts, editedIndices);
+          return { ...s, points: pts };
+        });
+
+  return adaptCircuitLoopFromSegments(
+    prevStrokes,
+    adaptedAfterComps,
+    movingStrokeIds,
+    prevComps,
+    'move',
+    dx,
+    dy,
+    new Set(wireEdits.keys())
+  );
 }
 
 export function toggleSwitchStrokeGroup(
@@ -21813,6 +23095,332 @@ export class SmartSketchAudioEngine {
     }
   }
 }
+
+export interface MatchedBoxShadowResult {
+  updatedBox: StrokeObject;
+  removedCompanionStrokeId?: string;
+}
+
+interface CanonicalRectBox {
+  stroke: StrokeObject;
+  tl: { x: number; y: number };
+  tr: { x: number; y: number };
+  br: { x: number; y: number };
+  bl: { x: number; y: number };
+  ux: number;
+  uy: number;
+  vx: number;
+  vy: number;
+  boxW: number;
+  boxH: number;
+}
+
+const EXCLUDED_SHADOW_BOX_GROUPS = [
+  'math-graph-grp-',
+  'wave-axes-',
+  'incline-grp-',
+  'switch-grp-',
+  'fan-grp-',
+  'ammeter-grp-',
+  'voltmeter-grp-',
+];
+
+function extractCanonicalRectBox(s: StrokeObject): CanonicalRectBox | null {
+  if (s.tool === 'highlighter' || s.shapeType === 'title-box') return null;
+  if (s.groupId && EXCLUDED_SHADOW_BOX_GROUPS.some((prefix) => s.groupId!.startsWith(prefix))) {
+    return null;
+  }
+
+  let rawCorners: { x: number; y: number }[] | null = null;
+  if (
+    s.isShape &&
+    s.shapeType === 'rectangle' &&
+    s.points.length >= 4 &&
+    s.points.length <= 5 &&
+    !s.points.some(
+      (p) =>
+        p.smooth ||
+        p.inDx !== undefined ||
+        p.inDy !== undefined ||
+        p.outDx !== undefined ||
+        p.outDy !== undefined ||
+        p.cx !== undefined ||
+        p.cy !== undefined
+    )
+  ) {
+    rawCorners = s.points.slice(0, 4);
+  } else if (
+    s.isShape &&
+    (s.shapeType === 'trapezoid' || s.shapeType === 'line') &&
+    s.points.length >= 4 &&
+    s.points.length <= 5 &&
+    distance(s.points[0], s.points[s.points.length - 1]) <= 6
+  ) {
+    rawCorners = s.points.slice(0, 4);
+  } else if (!s.isShape && s.points.length >= 8 && isFreehandLoopClosed(s.points, true)) {
+    const snapped = recognizeAndSnapShape(s.points, 'auto');
+    if (snapped?.shapeType === 'rectangle' && snapped.points.length >= 4) {
+      rawCorners = snapped.points.slice(0, 4);
+    }
+  }
+  if (!rawCorners || rawCorners.length < 4) return null;
+
+  const cx = rawCorners.reduce((acc, p) => acc + p.x, 0) / 4;
+  const cy = rawCorners.reduce((acc, p) => acc + p.y, 0) / 4;
+  const sorted = [...rawCorners].sort(
+    (a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx)
+  );
+
+  let idxBR = 0;
+  let maxSum = -Infinity;
+  for (let i = 0; i < 4; i++) {
+    const sum = sorted[i].x + sorted[i].y;
+    if (sum > maxSum) {
+      maxSum = sum;
+      idxBR = i;
+    }
+  }
+
+  const tl = sorted[(idxBR + 2) % 4];
+  const tr = sorted[(idxBR + 3) % 4];
+  const br = sorted[idxBR];
+  const bl = sorted[(idxBR + 1) % 4];
+
+  const uDx = br.x - bl.x;
+  const uDy = br.y - bl.y;
+  const boxW = Math.hypot(uDx, uDy);
+  const topW = distance(tl, tr);
+  const vDx = br.x - tr.x;
+  const vDy = br.y - tr.y;
+  const boxH = Math.hypot(vDx, vDy);
+  const leftH = distance(tl, bl);
+
+  if (boxW < 24 || boxH < 18) return null;
+  if (Math.abs(topW - boxW) > Math.max(topW, boxW) * 0.22) return null;
+  if (Math.abs(leftH - boxH) > Math.max(leftH, boxH) * 0.22) return null;
+
+  const ux = uDx / boxW;
+  const uy = uDy / boxW;
+  const vx = vDx / boxH;
+  const vy = vDy / boxH;
+  if (Math.abs(ux * vx + uy * vy) > 0.2) return null;
+
+  return { stroke: s, tl, tr, br, bl, ux, uy, vx, vy, boxW, boxH };
+}
+
+function measureStrokePathLen(pts: { x: number; y: number }[]): number {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += distance(pts[i - 1], pts[i]);
+  }
+  return len;
+}
+
+function evaluateShadowCornerFit(
+  vertPts: { x: number; y: number }[],
+  horizPts: { x: number; y: number }[],
+  box: CanonicalRectBox
+): number | null {
+  if (vertPts.length < 2 || horizPts.length < 2) return null;
+
+  const toLocal = (p: { x: number; y: number }) => {
+    const dx = p.x - box.br.x;
+    const dy = p.y - box.br.y;
+    return {
+      x: dx * box.ux + dy * box.uy,
+      y: dx * box.vx + dy * box.vy,
+    };
+  };
+
+  const vLoc = vertPts.map(toLocal);
+  const hLoc = horizPts.map(toLocal);
+
+  const vFirst = vLoc[0];
+  const vLast = vLoc[vLoc.length - 1];
+  const vTop = vFirst.y <= vLast.y ? vFirst : vLast;
+  const vBot = vFirst.y <= vLast.y ? vLast : vFirst;
+
+  const hFirst = hLoc[0];
+  const hLast = hLoc[hLoc.length - 1];
+  const hLeft = hFirst.x <= hLast.x ? hFirst : hLast;
+  const hRight = hFirst.x <= hLast.x ? hLast : hFirst;
+
+  const vdx = vBot.x - vTop.x;
+  const vdy = vBot.y - vTop.y;
+  const vertLen = Math.hypot(vdx, vdy);
+
+  const hdx = hRight.x - hLeft.x;
+  const hdy = hRight.y - hLeft.y;
+  const horizLen = Math.hypot(hdx, hdy);
+
+  if (vertLen < 14 || horizLen < 14 || Math.max(vertLen, horizLen) < 18) return null;
+  if (vertLen > box.boxH * 1.3 + 28 || horizLen > box.boxW * 1.3 + 28) return null;
+
+  if (vdy / vertLen < 0.85 || hdx / horizLen < 0.85) return null;
+  const cosAngle = Math.abs((vdx * hdx + vdy * hdy) / (vertLen * horizLen));
+  if (cosAngle > 0.42) return null;
+
+  const maxVDev = Math.max(10, vertLen * 0.22);
+  let sumVX = 0;
+  for (const vp of vLoc) {
+    sumVX += vp.x;
+    if (vp.x < -4) return null;
+    if (pointToSegmentDist(vp.x, vp.y, vTop.x, vTop.y, vBot.x, vBot.y) > maxVDev) return null;
+  }
+
+  const maxHDev = Math.max(10, horizLen * 0.22);
+  let sumHY = 0;
+  for (const hp of hLoc) {
+    sumHY += hp.y;
+    if (hp.y < -4) return null;
+    if (pointToSegmentDist(hp.x, hp.y, hLeft.x, hLeft.y, hRight.x, hRight.y) > maxHDev) return null;
+  }
+
+  const maxOffsetX = Math.max(26, Math.min(48, box.boxW * 0.32));
+  const maxOffsetY = Math.max(26, Math.min(48, box.boxH * 0.38));
+
+  const meanVX = sumVX / vLoc.length;
+  const meanHY = sumHY / hLoc.length;
+  if (meanVX < 1.5 || meanVX > maxOffsetX) return null;
+  if (meanHY < 1.5 || meanHY > maxOffsetY) return null;
+
+  const kx = (vBot.x + hRight.x) * 0.5;
+  const ky = (vBot.y + hRight.y) * 0.5;
+  if (Math.hypot(vBot.x - hRight.x, vBot.y - hRight.y) > 18) return null;
+  if (kx < 0.5 || kx > maxOffsetX || ky < 0.5 || ky > maxOffsetY) return null;
+
+  // Vertical leg must extend up alongside the right edge, and horizontal leg left under bottom edge.
+  if (vTop.y > -8 || vTop.y < -box.boxH - 22) return null;
+  if (hLeft.x > -8 || hLeft.x < -box.boxW - 22) return null;
+
+  return Math.hypot(kx, ky);
+}
+
+/**
+ * Detects an external bottom-right shadow L-corner drawn around a rectangle/box
+ * (either as one continuous L stroke or as two joining perpendicular straight strokes)
+ * and upgrades that rectangle into a shadowed rounded 'title-box'.
+ */
+export function tryMatchShadowCornerOnBox(
+  rawPts: BezierPoint[],
+  candidateStrokes: StrokeObject[],
+  targetLayerId: string
+): MatchedBoxShadowResult | null {
+  if (rawPts.length < 2) return null;
+  const totalLen = measureStrokePathLen(rawPts);
+  if (totalLen < 14) return null;
+  const directDist = distance(rawPts[0], rawPts[rawPts.length - 1]);
+
+  const boxes: CanonicalRectBox[] = [];
+  for (let i = candidateStrokes.length - 1; i >= 0; i--) {
+    const s = candidateStrokes[i];
+    if ((s.layerId || 'layer-1') !== targetLayerId) continue;
+    const box = extractCanonicalRectBox(s);
+    if (box) boxes.push(box);
+  }
+  if (boxes.length === 0) return null;
+
+  let bestScore = Infinity;
+  let bestBox: CanonicalRectBox | null = null;
+  let bestCompanionId: string | undefined;
+
+  // 1. Single continuous open L-stroke (`┐`/vertical-then-left OR horizontal-then-up)
+  if (rawPts.length >= 3 && totalLen >= 30 && directDist >= Math.max(18, totalLen * 0.45)) {
+    const first = rawPts[0];
+    const last = rawPts[rawPts.length - 1];
+    let kIdx = -1;
+    let maxChordDist = 0;
+    for (let i = 1; i < rawPts.length - 1; i++) {
+      const d = pointToSegmentDist(rawPts[i].x, rawPts[i].y, first.x, first.y, last.x, last.y);
+      if (d > maxChordDist) {
+        maxChordDist = d;
+        kIdx = i;
+      }
+    }
+    if (kIdx >= 1 && maxChordDist >= 8) {
+      const corner = rawPts[kIdx];
+      const legA = rawPts.slice(0, kIdx + 1);
+      const legB = rawPts.slice(kIdx);
+      if (distance(first, corner) + distance(corner, last) >= totalLen * 0.78) {
+        for (const box of boxes) {
+          const scoreAB = evaluateShadowCornerFit(legA, legB, box);
+          const scoreBA = evaluateShadowCornerFit(legB, legA, box);
+          const score =
+            scoreAB !== null && scoreBA !== null
+              ? Math.min(scoreAB, scoreBA)
+              : scoreAB ?? scoreBA;
+          if (score !== null && score < bestScore) {
+            bestScore = score;
+            bestBox = box;
+            bestCompanionId = undefined;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Two-stroke L-corner (vertical leg + horizontal leg meeting at the outer bottom-right corner)
+  const isStraightSingleStroke = directDist / Math.max(1, totalLen) >= 0.86;
+  if (bestBox === null && isStraightSingleStroke) {
+    for (let i = candidateStrokes.length - 1; i >= 0; i--) {
+      const prev = candidateStrokes[i];
+      if ((prev.layerId || 'layer-1') !== targetLayerId) continue;
+      if (prev.groupId || prev.arrowStart || prev.arrowEnd || prev.points.length < 2) continue;
+      if (prev.points[0]?.twist === 999) continue;
+      if (prev.isShape && prev.shapeType !== 'line') continue;
+      const prevChord = distance(prev.points[0], prev.points[prev.points.length - 1]);
+      if (prevChord < 14) continue;
+      const prevLen = measureStrokePathLen(prev.points);
+      if (prevChord / Math.max(1, prevLen) < 0.86) continue;
+
+      const r0 = rawPts[0];
+      const r1 = rawPts[rawPts.length - 1];
+      const p0 = prev.points[0];
+      const p1 = prev.points[prev.points.length - 1];
+      const minEndpointGap = Math.min(
+        distance(r0, p0),
+        distance(r0, p1),
+        distance(r1, p0),
+        distance(r1, p1)
+      );
+      if (minEndpointGap > 18) continue;
+
+      for (const box of boxes) {
+        if (prev.id === box.stroke.id) continue;
+        const scoreRP = evaluateShadowCornerFit(rawPts, prev.points, box);
+        const scorePR = evaluateShadowCornerFit(prev.points, rawPts, box);
+        const score =
+          scoreRP !== null && scorePR !== null ? Math.min(scoreRP, scorePR) : scoreRP ?? scorePR;
+        if (score !== null && score + minEndpointGap * 0.25 < bestScore) {
+          bestScore = score + minEndpointGap * 0.25;
+          bestBox = box;
+          bestCompanionId = prev.id;
+        }
+      }
+    }
+  }
+
+  if (!bestBox) return null;
+
+  const hasExistingFill = Boolean(bestBox.stroke.fillStyle && bestBox.stroke.fillStyle !== 'none');
+  const boxColor = bestBox.stroke.color || '#111827';
+  const updatedBox: StrokeObject = {
+    ...bestBox.stroke,
+    isShape: true,
+    shapeType: 'title-box',
+    points: makePolygonBezier([bestBox.tl, bestBox.tr, bestBox.br, bestBox.bl]),
+    fillStyle: hasExistingFill ? bestBox.stroke.fillStyle : 'solid',
+    fillColor: hasExistingFill ? bestBox.stroke.fillColor || boxColor : boxColor,
+    fillTransparency: hasExistingFill ? bestBox.stroke.fillTransparency ?? 90 : 90,
+    keyNodeIndices: undefined,
+  };
+
+  return {
+    updatedBox,
+    removedCompanionStrokeId: bestCompanionId,
+  };
+}
+
 
 
 

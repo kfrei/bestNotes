@@ -225,10 +225,15 @@ import {
   smoothStrokeToBezier,
   recognizeAndSnapShape,
   isScribbleEraseGesture,
+  tryMatchShadowCornerOnBox,
   createPhysicsStencilStrokes,
   computeInclinedPlaneBlockPoints,
   getCircuitComponentsWithTerminals,
+  classifyCircuitStrokeKind,
   splitWiresUnderCircuitComponent,
+  getCircuitWireRailSnapDelta,
+  adaptCircuitWiresOnComponentMove,
+  adaptCircuitWiresOnScaleTransform,
   toggleSwitchStrokeGroup,
   recognizeHandDrawnCircuitSymbols,
   autoAlignAndConnectCircuit,
@@ -3274,18 +3279,16 @@ export default function App() {
   });
   const [driveSyncProgressText, setDriveSyncProgressText] = useState<string>('');
   const [activeDriveUploadingNbId, setActiveDriveUploadingNbId] = useState<string | null>(null);
+  type DriveSyncedRecordEntry = {
+    updatedAt: string;
+    title: string;
+    folder: string;
+    basePath: string;
+    syncedAtMs: number;
+    mathPdfVer?: number;
+  };
   const [driveSyncedRecords, setDriveSyncedRecords] = useState<
-    Record<
-      string,
-      {
-        updatedAt: string;
-        title: string;
-        folder: string;
-        basePath: string;
-        syncedAtMs: number;
-        mathPdfVer?: number;
-      }
-    >
+    Record<string, DriveSyncedRecordEntry>
   >(() => {
     try {
       const raw = localStorage.getItem('bestnotes_drive_synced_records_v1');
@@ -3315,6 +3318,93 @@ export default function App() {
   });
   const driveSyncedFoldersRef = useRef(driveSyncedFolders);
   driveSyncedFoldersRef.current = driveSyncedFolders;
+
+  const driveSyncedFolderTimesRef = useRef<Record<string, number>>(
+    (() => {
+      try {
+        const raw = localStorage.getItem('bestnotes_drive_synced_folders_ts_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      } catch {
+        // ignore
+      }
+      return {};
+    })()
+  );
+  const remoteDriveSyncMetaUpdatedAtRef = useRef<string>('');
+  const lastPushedDriveSyncJsonRef = useRef<string>('');
+  const driveSyncMetaPushTimerRef = useRef<number | null>(null);
+
+  const pushDriveSyncMetaToCloud = useCallback(
+    (immediate = false) => {
+      const uid = currentUser?.uid;
+      if (!uid) return;
+      const execPush = () => {
+        const recs = driveSyncedRecordsRef.current;
+        const folds = driveSyncedFoldersRef.current;
+        const fTimes = driveSyncedFolderTimesRef.current;
+        let maxSyncMs = 0;
+        for (const rec of Object.values(recs)) {
+          if (rec && typeof rec.syncedAtMs === 'number' && rec.syncedAtMs > maxSyncMs) {
+            maxSyncMs = rec.syncedAtMs;
+          }
+        }
+        const devId = (() => {
+          try {
+            return localStorage.getItem('bestnotes_device_id_v1') || 'web';
+          } catch {
+            return 'web';
+          }
+        })();
+        const payloadObj = {
+          records: recs,
+          folders: folds,
+          folderTimes: fTimes,
+          lastSyncedAtMs: maxSyncMs,
+          updatedByDeviceId: devId,
+        };
+        const latestJson = JSON.stringify(payloadObj);
+        if (latestJson.length >= 900000 || latestJson === lastPushedDriveSyncJsonRef.current) {
+          return;
+        }
+        const prevRemoteMs = Date.parse(
+          remoteDriveSyncMetaUpdatedAtRef.current || '1970-01-01T00:00:00.000Z'
+        );
+        const nextMs = Math.max(Date.now(), (Number.isFinite(prevRemoteMs) ? prevRemoteMs : 0) + 1);
+        const nextIso = new Date(nextMs).toISOString();
+        remoteDriveSyncMetaUpdatedAtRef.current = nextIso;
+        lastPushedDriveSyncJsonRef.current = latestJson;
+        void setDoc(
+          doc(db, 'users', uid, 'notebooks', 'drive_sync_meta_v1'),
+          {
+            id: 'drive_sync_meta_v1',
+            title: '__DRIVE_SYNC_META__',
+            updatedAt: nextIso,
+            dataJson: latestJson,
+            deleted: false,
+            deviceId: devId,
+          },
+          { merge: true }
+        ).catch(() => {});
+      };
+
+      if (driveSyncMetaPushTimerRef.current !== null) {
+        window.clearTimeout(driveSyncMetaPushTimerRef.current);
+        driveSyncMetaPushTimerRef.current = null;
+      }
+      if (immediate) {
+        execPush();
+      } else {
+        driveSyncMetaPushTimerRef.current = window.setTimeout(() => {
+          driveSyncMetaPushTimerRef.current = null;
+          execPush();
+        }, 400);
+      }
+    },
+    [currentUser]
+  );
 
   const isNotebookDriveSynced = useCallback(
     (nb: Notebook, basePathOverride?: string): boolean => {
@@ -3353,25 +3443,34 @@ export default function App() {
       const effBase = (basePathOverride ?? driveBasePath).trim();
       const parts = normF.split('/');
       const nextFolders = { ...driveSyncedFoldersRef.current };
+      const nextFolderTimes = { ...driveSyncedFolderTimesRef.current };
+      const nowMs = Date.now();
       let acc = '';
       let changed = false;
       for (const seg of parts) {
         acc = acc ? `${acc}/${seg}` : seg;
         if (nextFolders[acc] !== effBase) {
           nextFolders[acc] = effBase;
+          nextFolderTimes[acc] = nowMs;
           changed = true;
         }
       }
       if (!changed) return;
       driveSyncedFoldersRef.current = nextFolders;
+      driveSyncedFolderTimesRef.current = nextFolderTimes;
       setDriveSyncedFolders(nextFolders);
       try {
         localStorage.setItem('bestnotes_drive_synced_folders_v1', JSON.stringify(nextFolders));
+        localStorage.setItem(
+          'bestnotes_drive_synced_folders_ts_v1',
+          JSON.stringify(nextFolderTimes)
+        );
       } catch {
         // ignore
       }
+      pushDriveSyncMetaToCloud(false);
     },
-    [driveBasePath]
+    [driveBasePath, pushDriveSyncMetaToCloud]
   );
 
   const markNotebookDriveSynced = useCallback(
@@ -3403,8 +3502,9 @@ export default function App() {
       if (normF) {
         markFolderDriveSynced(normF, effBase);
       }
+      pushDriveSyncMetaToCloud(false);
     },
-    [driveBasePath, markFolderDriveSynced]
+    [driveBasePath, markFolderDriveSynced, pushDriveSyncMetaToCloud]
   );
   const driveNeedsFullScopeConsentRef = useRef<boolean>(false);
   const [driveAutoSyncIntervalMin, setDriveAutoSyncIntervalMin] = useState<number>(() => {
@@ -5063,6 +5163,8 @@ export default function App() {
       lastSyncedJsonMapRef.current.clear();
       lastSeenRemoteJsonMapRef.current.clear();
       inFlightSavesMapRef.current.clear();
+      remoteDriveSyncMetaUpdatedAtRef.current = '';
+      lastPushedDriveSyncJsonRef.current = '';
       return;
     }
 
@@ -5071,6 +5173,171 @@ export default function App() {
     const userDocRef = doc(db, 'users', uid);
 
     const foldersMetaDocRef = doc(db, 'users', uid, 'notebooks', 'folders_meta_v1');
+    const driveSyncMetaDocRef = doc(db, 'users', uid, 'notebooks', 'drive_sync_meta_v1');
+
+    const mergeAndApplyRemoteDriveSyncMeta = (
+      rawSyncJson: string,
+      remoteSyncTs: string,
+      fromCache = false
+    ) => {
+      if (!rawSyncJson || rawSyncJson.length === 0) return;
+      try {
+        const parsed = JSON.parse(rawSyncJson) as {
+          records?: Record<string, DriveSyncedRecordEntry>;
+          folders?: Record<string, string>;
+          folderTimes?: Record<string, number>;
+          lastSyncedAtMs?: number;
+        };
+        if (!parsed || typeof parsed !== 'object') return;
+        if (
+          remoteSyncTs &&
+          (!remoteDriveSyncMetaUpdatedAtRef.current ||
+            remoteSyncTs > remoteDriveSyncMetaUpdatedAtRef.current)
+        ) {
+          remoteDriveSyncMetaUpdatedAtRef.current = remoteSyncTs;
+        }
+
+        const remoteRecs =
+          parsed.records && typeof parsed.records === 'object' ? parsed.records : {};
+        const remoteFolders =
+          parsed.folders && typeof parsed.folders === 'object' ? parsed.folders : {};
+        const remoteFolderTimes =
+          parsed.folderTimes && typeof parsed.folderTimes === 'object' ? parsed.folderTimes : {};
+
+        const localRecs = driveSyncedRecordsRef.current;
+        const localFolders = driveSyncedFoldersRef.current;
+        const localFolderTimes = driveSyncedFolderTimesRef.current;
+
+        const mergedRecs: Record<string, DriveSyncedRecordEntry> = {};
+        let localHasNewer = false;
+        const allNbIds = new Set([...Object.keys(localRecs), ...Object.keys(remoteRecs)]);
+        for (const id of allNbIds) {
+          const loc = localRecs[id];
+          const rem = remoteRecs[id];
+          if (loc && !rem) {
+            mergedRecs[id] = loc;
+            localHasNewer = true;
+          } else if (!loc && rem) {
+            mergedRecs[id] = rem;
+          } else if (loc && rem) {
+            const locVer = loc.mathPdfVer || 0;
+            const remVer = rem.mathPdfVer || 0;
+            const locUpd = loc.updatedAt || '';
+            const remUpd = rem.updatedAt || '';
+            const locTs = loc.syncedAtMs || 0;
+            const remTs = rem.syncedAtMs || 0;
+            const locWins =
+              locUpd !== remUpd
+                ? locUpd > remUpd
+                : loc.basePath === rem.basePath && locVer !== remVer
+                ? locVer > remVer
+                : locTs > remTs;
+            if (locWins) {
+              mergedRecs[id] = loc;
+              if (
+                loc.updatedAt !== rem.updatedAt ||
+                loc.syncedAtMs > rem.syncedAtMs ||
+                locVer > remVer ||
+                loc.basePath !== rem.basePath ||
+                loc.folder !== rem.folder ||
+                loc.title !== rem.title
+              ) {
+                localHasNewer = true;
+              }
+            } else {
+              mergedRecs[id] = rem;
+            }
+          }
+        }
+
+        const mergedFolders: Record<string, string> = {};
+        const mergedFolderTimes: Record<string, number> = {};
+        const allFolderKeys = new Set([...Object.keys(localFolders), ...Object.keys(remoteFolders)]);
+        for (const fKey of allFolderKeys) {
+          const locVal = localFolders[fKey];
+          const remVal = remoteFolders[fKey];
+          const locFT = localFolderTimes[fKey] || 0;
+          const remFT = remoteFolderTimes[fKey] || 0;
+          if (locVal !== undefined && remVal === undefined) {
+            mergedFolders[fKey] = locVal;
+            if (locFT > 0) mergedFolderTimes[fKey] = locFT;
+            localHasNewer = true;
+          } else if (locVal === undefined && remVal !== undefined) {
+            mergedFolders[fKey] = remVal;
+            if (remFT > 0) mergedFolderTimes[fKey] = remFT;
+          } else if (locVal !== undefined && remVal !== undefined) {
+            if (locVal === remVal) {
+              mergedFolders[fKey] = remVal;
+              const maxT = Math.max(locFT, remFT);
+              if (maxT > 0) mergedFolderTimes[fKey] = maxT;
+            } else if (locFT > remFT) {
+              mergedFolders[fKey] = locVal;
+              mergedFolderTimes[fKey] = locFT;
+              localHasNewer = true;
+            } else {
+              mergedFolders[fKey] = remVal;
+              if (remFT > 0) mergedFolderTimes[fKey] = remFT;
+            }
+          }
+        }
+
+        if (JSON.stringify(mergedRecs) !== JSON.stringify(localRecs)) {
+          driveSyncedRecordsRef.current = mergedRecs;
+          setDriveSyncedRecords(mergedRecs);
+          try {
+            localStorage.setItem('bestnotes_drive_synced_records_v1', JSON.stringify(mergedRecs));
+          } catch {
+            // ignore
+          }
+        }
+        if (JSON.stringify(mergedFolders) !== JSON.stringify(localFolders)) {
+          driveSyncedFoldersRef.current = mergedFolders;
+          setDriveSyncedFolders(mergedFolders);
+          try {
+            localStorage.setItem(
+              'bestnotes_drive_synced_folders_v1',
+              JSON.stringify(mergedFolders)
+            );
+          } catch {
+            // ignore
+          }
+        }
+        if (JSON.stringify(mergedFolderTimes) !== JSON.stringify(localFolderTimes)) {
+          driveSyncedFolderTimesRef.current = mergedFolderTimes;
+          try {
+            localStorage.setItem(
+              'bestnotes_drive_synced_folders_ts_v1',
+              JSON.stringify(mergedFolderTimes)
+            );
+          } catch {
+            // ignore
+          }
+        }
+
+        if (typeof parsed.lastSyncedAtMs === 'number' && parsed.lastSyncedAtMs > 0) {
+          setLastDriveAutoSyncAt((prev) => {
+            if (prev && prev >= parsed.lastSyncedAtMs!) return prev;
+            try {
+              localStorage.setItem(
+                'bestnotes_drive_last_autosync_at_v1',
+                String(parsed.lastSyncedAtMs)
+              );
+            } catch {
+              // ignore
+            }
+            return parsed.lastSyncedAtMs!;
+          });
+        }
+
+        if (!fromCache && localHasNewer) {
+          pushDriveSyncMetaToCloud(true);
+        } else {
+          lastPushedDriveSyncJsonRef.current = rawSyncJson;
+        }
+      } catch {
+        // ignore
+      }
+    };
 
     const mergeAndApplyRemoteFolders = (
       rawFoldersJson: string,
@@ -5190,6 +5457,12 @@ export default function App() {
               { merge: true }
             ).catch(() => {});
           }
+          if (
+            Object.keys(driveSyncedRecordsRef.current).length > 0 ||
+            Object.keys(driveSyncedFoldersRef.current).length > 0
+          ) {
+            pushDriveSyncMetaToCloud(true);
+          }
           return;
         }
 
@@ -5202,6 +5475,9 @@ export default function App() {
         let hasFoldersMetaDoc = false;
         let remoteFoldersMetaJson = '';
         let remoteFoldersMetaTs = '';
+        let hasDriveSyncMetaDoc = false;
+        let remoteDriveSyncMetaJson = '';
+        let remoteDriveSyncMetaTs = '';
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
@@ -5215,6 +5491,14 @@ export default function App() {
             if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
               remoteFoldersMetaJson = data.dataJson;
               remoteFoldersMetaTs = typeof data.updatedAt === 'string' ? data.updatedAt : '';
+            }
+            return;
+          }
+          if (data.id === 'drive_sync_meta_v1' || data.title === '__DRIVE_SYNC_META__') {
+            hasDriveSyncMetaDoc = true;
+            if (typeof data.dataJson === 'string' && data.dataJson.length > 0) {
+              remoteDriveSyncMetaJson = data.dataJson;
+              remoteDriveSyncMetaTs = typeof data.updatedAt === 'string' ? data.updatedAt : '';
             }
             return;
           }
@@ -5259,6 +5543,8 @@ export default function App() {
             data.id === 'folders_meta_v1' ||
             data.id === '__folders_meta__' ||
             data.title === '__FOLDERS_META__' ||
+            data.id === 'drive_sync_meta_v1' ||
+            data.title === '__DRIVE_SYNC_META__' ||
             data.id.includes('__chunk_') ||
             data.title === '__CHUNK__'
           ) {
@@ -5387,6 +5673,20 @@ export default function App() {
               { merge: true }
             ).catch(() => {});
           }
+        }
+        if (remoteDriveSyncMetaJson) {
+          mergeAndApplyRemoteDriveSyncMeta(
+            remoteDriveSyncMetaJson,
+            remoteDriveSyncMetaTs,
+            isFromCache
+          );
+        } else if (
+          !isFromCache &&
+          !hasDriveSyncMetaDoc &&
+          (Object.keys(driveSyncedRecordsRef.current).length > 0 ||
+            Object.keys(driveSyncedFoldersRef.current).length > 0)
+        ) {
+          pushDriveSyncMetaToCloud(true);
         }
 
         const mergedBinMap = new Map<string, Notebook>();
@@ -5657,6 +5957,22 @@ export default function App() {
         .catch(() => {
           // ignore if offline
         });
+      void getDocFromServer(driveSyncMetaDocRef)
+        .then((snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data && typeof data.dataJson === 'string' && data.dataJson.length > 0) {
+              mergeAndApplyRemoteDriveSyncMeta(
+                data.dataJson,
+                typeof data.updatedAt === 'string' ? data.updatedAt : '',
+                false
+              );
+            }
+          }
+        })
+        .catch(() => {
+          // ignore if offline
+        });
       void getDocFromServer(userDocRef)
         .then((snap) => {
           if (snap.exists()) {
@@ -5682,7 +5998,7 @@ export default function App() {
       window.removeEventListener('focus', refreshUserDocFromServerOnWake);
       window.removeEventListener('pageshow', refreshUserDocFromServerOnWake);
     };
-  }, [currentUser, pushNotebookToCloudTracked]);
+  }, [currentUser, pushNotebookToCloudTracked, pushDriveSyncMetaToCloud]);
 
   const performCloudFirestoreSyncNow = useCallback(() => {
     if (!currentUser || !hasLoadedIndexedDbRef.current || !hasCompletedInitialCloudLoadRef.current) {
@@ -5770,6 +6086,9 @@ export default function App() {
       if (document.visibilityState === 'hidden') {
         saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
         performCloudFirestoreSyncNow();
+        if (driveSyncMetaPushTimerRef.current !== null) {
+          pushDriveSyncMetaToCloud(true);
+        }
         if (userEditedFoldersInSessionRef.current) {
           commitUserFoldersChange(customFoldersRef.current);
         }
@@ -5782,6 +6101,9 @@ export default function App() {
     const flushOnPageHide = () => {
       saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
       performCloudFirestoreSyncNow();
+      if (driveSyncMetaPushTimerRef.current !== null) {
+        pushDriveSyncMetaToCloud(true);
+      }
       if (userEditedFoldersInSessionRef.current) {
         commitUserFoldersChange(customFoldersRef.current);
       }
@@ -5794,7 +6116,7 @@ export default function App() {
       window.removeEventListener('pagehide', flushOnPageHide);
       window.removeEventListener('beforeunload', flushOnPageHide);
     };
-  }, [currentUser, performCloudFirestoreSyncNow, commitUserFoldersChange]);
+  }, [currentUser, performCloudFirestoreSyncNow, commitUserFoldersChange, pushDriveSyncMetaToCloud]);
 
   // 3. Persist customFolders & shapeLibrary to LocalStorage + IndexedDB + Cloud Firestore
   useEffect(() => {
@@ -6188,6 +6510,8 @@ export default function App() {
             showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
           }
         }
+      } finally {
+        pushDriveSyncMetaToCloud(true);
       }
     },
     [
@@ -6201,6 +6525,7 @@ export default function App() {
       notebooks,
       isNotebookDriveSynced,
       markNotebookDriveSynced,
+      pushDriveSyncMetaToCloud,
       pushNotebookToCloudTracked,
       saveDriveCredentials,
       invalidateDriveToken,
@@ -6399,6 +6724,7 @@ export default function App() {
         setActiveDriveUploadingNbId(null);
         setDriveSyncProgressText('');
         setDriveSyncingAll(false);
+        pushDriveSyncMetaToCloud(true);
       }
     },
     [
@@ -6409,6 +6735,7 @@ export default function App() {
       notebooks,
       isNotebookDriveSynced,
       markNotebookDriveSynced,
+      pushDriveSyncMetaToCloud,
       activeNotebook.id,
       viewMode,
       activeLibraryFolder,
@@ -6790,6 +7117,7 @@ export default function App() {
         setActiveDriveUploadingNbId(null);
         setDriveSyncProgressText('');
         setSyncingDriveFolderPath(null);
+        pushDriveSyncMetaToCloud(true);
       }
     },
     [
@@ -6804,6 +7132,7 @@ export default function App() {
       isNotebookDriveSynced,
       markFolderDriveSynced,
       markNotebookDriveSynced,
+      pushDriveSyncMetaToCloud,
       activeNotebook.id,
       activePage?.id,
       rulersByPageId,
@@ -9793,7 +10122,7 @@ export default function App() {
       s.shapeType === 'fan' && s.points.length === 2
         ? '#111827'
         : isBulbInternalFilamentOrLead
-        ? '#334155'
+        ? s.color || '#334155'
         : s.color;
     const isLegacyStencilWidth =
       (s.shapeType === 'bulb' ||
@@ -39165,18 +39494,25 @@ export default function App() {
               continue;
             }
             const otherIsOpen =
-              (!other.isShape && other.points[0]?.twist !== 999) ||
-              (other.isShape &&
-                (other.shapeType === 'line' ||
-                  other.shapeType === 'arrow' ||
-                  other.shapeType === 'spring-pointer' ||
-                  other.shapeType === 'double-arrow' ||
-                  other.shapeType === 'sine' ||
-                  other.shapeType === 'cosine' ||
-                  other.shapeType === 'parabola' ||
-                  other.shapeType === 'hyperbola' ||
-                  other.shapeType === 'arc') &&
-                other.points[0]?.twist !== 999);
+              classifyCircuitStrokeKind(other) === null &&
+              !(
+                other.groupId &&
+                (other.groupId.startsWith('axes-') ||
+                  other.groupId.startsWith('wave-axes-') ||
+                  other.groupId.startsWith('wave-guide-'))
+              ) &&
+              ((!other.isShape && other.points[0]?.twist !== 999) ||
+                (other.isShape &&
+                  (other.shapeType === 'line' ||
+                    other.shapeType === 'arrow' ||
+                    other.shapeType === 'spring-pointer' ||
+                    other.shapeType === 'double-arrow' ||
+                    other.shapeType === 'sine' ||
+                    other.shapeType === 'cosine' ||
+                    other.shapeType === 'parabola' ||
+                    other.shapeType === 'hyperbola' ||
+                    other.shapeType === 'arc') &&
+                  other.points[0]?.twist !== 999));
             if (!otherIsOpen) continue;
 
             const startPt = other.points[0];
@@ -40548,39 +40884,7 @@ export default function App() {
                   )
                   .map((s) => s.groupId as string)
               );
-              return {
-                ...page,
-                texts:
-                  selMathGroupIds.size > 0
-                    ? (page.texts || []).map((t) => {
-                        if (!t.groupId || !selMathGroupIds.has(t.groupId)) return t;
-                        const sp = stretchPoint(t.x + 10, t.y + 8);
-                        return { ...t, x: sp.x - 10, y: sp.y - 8 };
-                      })
-                    : page.texts,
-                images: (page.images || []).map((im) => {
-                  if (!effectiveImgIds.includes(im.id)) return im;
-                  const p0 = stretchPoint(im.x, im.y);
-                  const p1 = stretchPoint(im.x + im.width, im.y + im.height);
-                  const newX = Math.min(p0.x, p1.x);
-                  const newY = Math.min(p0.y, p1.y);
-                  const newW = Math.max(24, Math.abs(p1.x - p0.x));
-                  const newH = Math.max(24, Math.abs(p1.y - p0.y));
-                  const sxRatio = newW / Math.max(1, im.width);
-                  const syRatio = newH / Math.max(1, im.height);
-                  return {
-                    ...im,
-                    x: newX,
-                    y: newY,
-                    width: newW,
-                    height: newH,
-                    clipPolygon: im.clipPolygon?.map((cp) => ({
-                      x: cp.x * sxRatio,
-                      y: cp.y * syRatio,
-                    })),
-                  };
-                }),
-                strokes: page.strokes.map((s) => {
+              const stretchedStrokes = page.strokes.map((s) => {
                   if (!selectedStrokeIds.includes(s.id)) return s;
                   // Keep inclined-plane block a true 90° rectangle sitting flush on the stretched slope when grouped
                   if (s.shapeType === 'incline-block' && s.groupId) {
@@ -40688,7 +40992,51 @@ export default function App() {
                       return nextPt;
                     }),
                   };
+                });
+              const adaptedStrokes =
+                (tf.mode === 'scale-x' || tf.mode === 'scale-y') &&
+                selectedStrokeIds.length > 0 &&
+                effectiveImgIds.length === 0
+                  ? adaptCircuitWiresOnScaleTransform(
+                      page.strokes,
+                      stretchedStrokes,
+                      new Set(selectedStrokeIds),
+                      tf.mode
+                    )
+                  : stretchedStrokes;
+              return {
+                ...page,
+                texts:
+                  selMathGroupIds.size > 0
+                    ? (page.texts || []).map((t) => {
+                        if (!t.groupId || !selMathGroupIds.has(t.groupId)) return t;
+                        const sp = stretchPoint(t.x + 10, t.y + 8);
+                        return { ...t, x: sp.x - 10, y: sp.y - 8 };
+                      })
+                    : page.texts,
+                images: (page.images || []).map((im) => {
+                  if (!effectiveImgIds.includes(im.id)) return im;
+                  const p0 = stretchPoint(im.x, im.y);
+                  const p1 = stretchPoint(im.x + im.width, im.y + im.height);
+                  const newX = Math.min(p0.x, p1.x);
+                  const newY = Math.min(p0.y, p1.y);
+                  const newW = Math.max(24, Math.abs(p1.x - p0.x));
+                  const newH = Math.max(24, Math.abs(p1.y - p0.y));
+                  const sxRatio = newW / Math.max(1, im.width);
+                  const syRatio = newH / Math.max(1, im.height);
+                  return {
+                    ...im,
+                    x: newX,
+                    y: newY,
+                    width: newW,
+                    height: newH,
+                    clipPolygon: im.clipPolygon?.map((cp) => ({
+                      x: cp.x * sxRatio,
+                      y: cp.y * syRatio,
+                    })),
+                  };
                 }),
+                strokes: adaptedStrokes,
               };
             },
             false
@@ -41135,11 +41483,16 @@ export default function App() {
             draggedSt.shapeType === 'line' &&
             !draggedSt.arrowEnd &&
             !draggedSt.arrowStart &&
-            draggedSt.points.length >= 2 &&
-            !(draggedSt.groupId && draggedSt.groupId.startsWith('axes-'))
+            draggedSt.points.length === 2 &&
+            !(
+              draggedSt.groupId &&
+              (draggedSt.groupId.startsWith('axes-') ||
+                draggedSt.groupId.startsWith('wave-axes-') ||
+                draggedSt.groupId.startsWith('wave-guide-'))
+            )
           ) {
             const p0 = draggedSt.points[0];
-            const p1 = draggedSt.points[draggedSt.points.length - 1];
+            const p1 = draggedSt.points[1];
             const cand0 = { x: p0.x + rawDx, y: p0.y + rawDy };
             const cand1 = { x: p1.x + rawDx, y: p1.y + rawDy };
             const lineLen = Math.hypot(cand1.x - cand0.x, cand1.y - cand0.y);
@@ -41151,7 +41504,11 @@ export default function App() {
                 if (other.id === draggedSt.id || hiddenOrLockedLayerIds.has(other.layerId)) {
                   continue;
                 }
-                if (other.shapeType === 'line' && other.points.length >= 2) {
+                if (
+                  other.shapeType === 'line' &&
+                  other.points.length === 2 &&
+                  classifyCircuitStrokeKind(other) === null
+                ) {
                   const spA = other.points[0];
                   const spB = other.points[other.points.length - 1];
                   const abx = spB.x - spA.x;
@@ -41322,11 +41679,17 @@ export default function App() {
           const isOpenLassoWeldable = (st: StrokeObject) =>
             st.points.length >= 2 &&
             st.points[0]?.twist !== 999 &&
+            classifyCircuitStrokeKind(st) === null &&
             st.shapeType !== 'spring-pointer' &&
             st.shapeType !== 'arrow' &&
             !st.arrowEnd &&
             !st.attachedToSpringId &&
-            !(st.groupId && (st.groupId.startsWith('axes-') || st.groupId.startsWith('wave-axes-'))) &&
+            !(
+              st.groupId &&
+              (st.groupId.startsWith('axes-') ||
+                st.groupId.startsWith('wave-axes-') ||
+                st.groupId.startsWith('wave-guide-'))
+            ) &&
             (!st.isShape ||
               st.shapeType === 'line' ||
               st.shapeType === 'double-arrow' ||
@@ -41856,6 +42219,23 @@ export default function App() {
               }
             }
           }
+
+          if (targetStrokeIdList.length > 0 && targetImgIdList.length === 0) {
+            const snapCircuitSet = new Set<string>(targetStrokeIdList);
+            if (movingGroupIds.size > 0) {
+              for (const st of activePage.strokes) {
+                if (st.groupId && movingGroupIds.has(st.groupId)) snapCircuitSet.add(st.id);
+              }
+            }
+            const railSnap = getCircuitWireRailSnapDelta(
+              activePage.strokes,
+              snapCircuitSet,
+              rawDx + snapDx,
+              rawDy + snapDy
+            );
+            if (railSnap.snapDx !== 0) snapDx += railSnap.snapDx;
+            if (railSnap.snapDy !== 0) snapDy += railSnap.snapDy;
+          }
         }
 
         const dx = rawDx + snapDx;
@@ -42120,6 +42500,13 @@ export default function App() {
                 ...s,
                 attachedToWeightId: nextAttachedToWeightId,
                 attachedToSpringId: nextAttachedToSpringId,
+                circuitBox: s.circuitBox
+                  ? {
+                      ...s.circuitBox,
+                      cx: s.circuitBox.cx + dx,
+                      termY: s.circuitBox.termY + dy,
+                    }
+                  : undefined,
                 points: s.points.map((p) => ({
                   ...p,
                   x: p.x + dx,
@@ -42137,6 +42524,14 @@ export default function App() {
                 restoredNaturalSpringCorners.natFreePt
               );
             }
+
+            movedStrokes = adaptCircuitWiresOnComponentMove(
+              page.strokes,
+              movedStrokes,
+              movingStrokeSet,
+              dx,
+              dy
+            );
 
             const selMathGroupIds = new Set(
               page.strokes
@@ -42529,6 +42924,34 @@ export default function App() {
             ) >= 1.5
               ? [...currentStrokePtsRef.current, lastRawCanvasPtRef.current]
               : currentStrokePtsRef.current;
+          if (
+            !arrowEnd &&
+            (['pen', 'pencil'].includes(activeTool) ||
+              (activeTool === 'shape' && (shapePreset === 'auto' || shapePreset === 'line')))
+          ) {
+            const shadowBoxMatch = tryMatchShadowCornerOnBox(
+              ptsForSnap,
+              activePage.strokes,
+              activeLayerId
+            );
+            if (shadowBoxMatch) {
+              isDrawingRef.current = false;
+              currentStrokePtsRef.current = [];
+              snappedCurrentStrokeRef.current = null;
+              holdAnchorPtRef.current = null;
+              lastCreatedShapeIdsRef.current = [shadowBoxMatch.updatedBox.id];
+              clearActiveOverlay();
+              updateActivePage((page) => ({
+                ...page,
+                strokes: page.strokes
+                  .filter((st) => st.id !== shadowBoxMatch.removedCompanionStrokeId)
+                  .map((st) =>
+                    st.id === shadowBoxMatch.updatedBox.id ? shadowBoxMatch.updatedBox : st
+                  ),
+              }));
+              return;
+            }
+          }
           if (
             ['pen', 'pencil', 'highlighter'].includes(activeTool) &&
             tryMatchManualArrowheadOnLine(ptsForSnap, activePage.strokes, activeLayerId)
@@ -43601,7 +44024,23 @@ export default function App() {
     let weldedRemoveSecondaryId: string | null = null;
     let weldedClosedIntoPolygon = false;
 
-    if (['pen', 'pencil', 'highlighter'].includes(activeTool) && !arrowEnd) {
+    if (
+      !arrowEnd &&
+      (['pen', 'pencil'].includes(activeTool) ||
+        (activeTool === 'shape' && (shapePreset === 'auto' || shapePreset === 'line')))
+    ) {
+      const shadowBoxMatch = tryMatchShadowCornerOnBox(
+        rawPts,
+        activePage.strokes,
+        activeLayerId
+      );
+      if (shadowBoxMatch) {
+        weldedIntoExistingStroke = shadowBoxMatch.updatedBox;
+        weldedRemoveSecondaryId = shadowBoxMatch.removedCompanionStrokeId ?? null;
+      }
+    }
+
+    if (!weldedIntoExistingStroke && ['pen', 'pencil', 'highlighter'].includes(activeTool) && !arrowEnd) {
       const manualArrow = tryMatchManualArrowheadOnLine(rawPts, activePage.strokes, activeLayerId);
       if (manualArrow) {
         weldedIntoExistingStroke = manualArrow;
@@ -43609,6 +44048,7 @@ export default function App() {
     }
 
     if (
+      !weldedIntoExistingStroke &&
       isShape &&
       shapeType === 'line' &&
       finalPts.length === 2 &&
@@ -45714,11 +46154,11 @@ export default function App() {
               }
             }
 
-            return {
-              ...page,
-              strokes:
-                movingStrokeSet.size > 0
-                  ? page.strokes.map((s) =>
+            const nextStrokes =
+              movingStrokeSet.size > 0
+                ? adaptCircuitWiresOnComponentMove(
+                    page.strokes,
+                    page.strokes.map((s) =>
                       movingStrokeSet.has(s.id)
                         ? {
                             ...s,
@@ -45738,8 +46178,16 @@ export default function App() {
                             })),
                           }
                         : s
-                    )
-                  : page.strokes,
+                    ),
+                    movingStrokeSet,
+                    dx,
+                    dy
+                  )
+                : page.strokes;
+
+            return {
+              ...page,
+              strokes: nextStrokes,
               images:
                 imgSet.size > 0 || selUserGroupIds.size > 0
                   ? (page.images || []).map((im) =>
@@ -52034,13 +52482,9 @@ export default function App() {
                                 >
                                   {(() => {
                                     const nbSyncRec = driveSyncedRecords[nb.id];
-                                    const nbNormF = normalizeFolderPath(nb.folder || '');
-                                    const isNbDriveUpToDate = Boolean(
-                                      nbSyncRec &&
-                                        nbSyncRec.updatedAt === (nb.updatedAt || '') &&
-                                        nbSyncRec.title === (nb.title || '') &&
-                                        nbSyncRec.folder === nbNormF &&
-                                        nbSyncRec.basePath === driveBasePath.trim()
+                                    const isNbDriveUpToDate = isNotebookDriveSynced(
+                                      nb,
+                                      driveBasePath
                                     );
                                     const hasNbChangesSinceSync = Boolean(
                                       nbSyncRec && !isNbDriveUpToDate
@@ -52809,13 +53253,9 @@ export default function App() {
                                 )}
                                 {(() => {
                                   const nbSyncRec = driveSyncedRecords[nb.id];
-                                  const nbNormF = normalizeFolderPath(nb.folder || '');
-                                  const isNbDriveUpToDate = Boolean(
-                                    nbSyncRec &&
-                                      nbSyncRec.updatedAt === (nb.updatedAt || '') &&
-                                      nbSyncRec.title === (nb.title || '') &&
-                                      nbSyncRec.folder === nbNormF &&
-                                      nbSyncRec.basePath === driveBasePath.trim()
+                                  const isNbDriveUpToDate = isNotebookDriveSynced(
+                                    nb,
+                                    driveBasePath
                                   );
                                   const hasNbChangesSinceSync = Boolean(
                                     nbSyncRec && !isNbDriveUpToDate

@@ -161,7 +161,7 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     ctx.globalAlpha = isBulbInternalFilamentOrLead ? 0.9 : s.opacity ?? 1;
   }
 
-  ctx.strokeStyle = isBulbInternalFilamentOrLead ? '#334155' : s.color;
+  ctx.strokeStyle = isBulbInternalFilamentOrLead ? s.color || '#334155' : s.color;
   ctx.lineWidth = s.width;
   ctx.lineCap = s.tool === 'highlighter' ? 'butt' : 'round';
   ctx.lineJoin = 'round';
