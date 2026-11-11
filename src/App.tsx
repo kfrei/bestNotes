@@ -3323,7 +3323,7 @@ export default function App() {
       const hasMathTexts = (nb.pages || []).some((p) =>
         (p.texts || []).some((t) => Boolean(t.isMath))
       );
-      if (hasMathTexts && (rec.mathPdfVer || 0) < 2) {
+      if (hasMathTexts && (rec.mathPdfVer || 0) < 3) {
         return false;
       }
       const normF = (nb.folder || '')
@@ -3390,7 +3390,7 @@ export default function App() {
           folder: normF,
           basePath: effBase,
           syncedAtMs: Date.now(),
-          mathPdfVer: 2,
+          mathPdfVer: 3,
         },
       };
       driveSyncedRecordsRef.current = nextRecords;
@@ -51703,17 +51703,17 @@ export default function App() {
                                                 e.stopPropagation();
                                                 void handleSyncFolderTreeToGoogleDrive(folder.path);
                                               }}
-                                              className={`p-1.5 rounded-lg border transition cursor-pointer focus:outline-none backdrop-blur-xs ${
+                                              className={`relative overflow-visible p-1.5 rounded-lg border transition cursor-pointer focus:outline-none backdrop-blur-xs ${
                                                 isFolderDriveSyncing
                                                   ? 'bg-red-50/95 border-red-300 text-red-600 shadow-xs opacity-100 cursor-wait'
                                                   : isOtherFolderDriveSyncing
                                                   ? `bg-white/75 border-white/80 ${
                                                       needsDriveSync
-                                                        ? 'text-[#0066ff]'
+                                                        ? 'text-red-500'
                                                         : 'text-slate-700'
                                                     } opacity-50 cursor-not-allowed`
                                                   : needsDriveSync
-                                                  ? 'bg-white/75 hover:bg-[#0066ff] text-[#0066ff] hover:text-white border-white/80'
+                                                  ? 'bg-white/75 hover:bg-red-50 text-red-500 hover:text-red-600 border-white/80 hover:border-red-200 shadow-2xs'
                                                   : 'bg-white/75 hover:bg-[#0066ff] text-slate-700 hover:text-white border-white/80'
                                               }`}
                                               title={
@@ -51732,9 +51732,23 @@ export default function App() {
                                                 className={`w-3.5 h-3.5 ${
                                                   isFolderDriveSyncing
                                                     ? 'bn-drive-sync-spin text-red-600'
+                                                    : needsDriveSync
+                                                    ? 'text-red-500'
                                                     : ''
                                                 }`}
                                               />
+                                              {pendingDriveCount > 0 && (
+                                                <span
+                                                  className={`absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full bg-red-600 text-white text-[9.5px] font-extrabold flex items-center justify-center border-[1.5px] border-white shadow-xs pointer-events-none z-20 leading-none ${
+                                                    isFolderDriveSyncing ? 'animate-pulse' : ''
+                                                  }`}
+                                                >
+                                                  {pendingDriveCount}
+                                                </span>
+                                              )}
+                                              {pendingDriveCount === 0 && hasUnsyncedSubfolders && (
+                                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-600 border border-white shadow-xs pointer-events-none z-10" />
+                                              )}
                                             </button>
                                           );
                                         })()}
@@ -52596,17 +52610,17 @@ export default function App() {
                                           e.stopPropagation();
                                           void handleSyncFolderTreeToGoogleDrive(folder.path);
                                         }}
-                                        className={`p-2 rounded-xl transition cursor-pointer focus:outline-none ${
+                                        className={`relative overflow-visible p-2 rounded-xl transition cursor-pointer focus:outline-none ${
                                           isFolderDriveSyncing
                                             ? 'bg-red-50 border border-red-300 text-red-600 shadow-xs opacity-100 cursor-wait'
                                             : isOtherFolderDriveSyncing
                                             ? `bg-slate-100 ${
                                                 needsDriveSync
-                                                  ? 'text-[#0066ff]'
+                                                  ? 'text-red-500'
                                                   : 'text-slate-700'
                                               } opacity-50 cursor-not-allowed`
                                             : needsDriveSync
-                                            ? 'bg-slate-100 hover:bg-[#0066ff] text-[#0066ff] hover:text-white'
+                                            ? 'bg-slate-100 hover:bg-red-50 text-red-500 hover:text-red-600 border border-transparent hover:border-red-200 shadow-2xs'
                                             : 'bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white'
                                         }`}
                                         title={
@@ -52625,9 +52639,23 @@ export default function App() {
                                           className={`w-4 h-4 ${
                                             isFolderDriveSyncing
                                               ? 'bn-drive-sync-spin text-red-600'
+                                              : needsDriveSync
+                                              ? 'text-red-500'
                                               : ''
                                           }`}
                                         />
+                                        {pendingDriveCount > 0 && (
+                                          <span
+                                            className={`absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 rounded-full bg-red-600 text-white text-[9.5px] font-extrabold flex items-center justify-center border-[1.5px] border-white shadow-xs pointer-events-none z-20 leading-none ${
+                                              isFolderDriveSyncing ? 'animate-pulse' : ''
+                                            }`}
+                                          >
+                                            {pendingDriveCount}
+                                          </span>
+                                        )}
+                                        {pendingDriveCount === 0 && hasUnsyncedSubfolders && (
+                                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-600 border border-white shadow-xs pointer-events-none z-20" />
+                                        )}
                                       </button>
                                     );
                                   })()}

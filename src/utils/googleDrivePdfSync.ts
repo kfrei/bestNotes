@@ -2116,7 +2116,7 @@ function ensureKatexFontsLoadedForPdf(): Promise<void> {
         document.fonts.load('20px KaTeX_Size1'),
         document.fonts.load('20px KaTeX_Size2'),
       ]).then(() => undefined),
-      new Promise<void>((resolve) => setTimeout(resolve, 900)),
+      new Promise<void>((resolve) => setTimeout(resolve, 1500)),
     ]);
   }
   return katexFontsReadyPromise;
@@ -2149,9 +2149,9 @@ async function drawKatexMathObjectForPdf(
 
   const host = document.createElement('div');
   host.style.position = 'fixed';
-  host.style.left = '-10000px';
+  host.style.left = '0px';
   host.style.top = '0px';
-  host.style.visibility = 'hidden';
+  host.style.opacity = '0';
   host.style.pointerEvents = 'none';
   host.style.zIndex = '-9999';
   host.style.width = 'max-content';
@@ -2213,6 +2213,7 @@ async function drawKatexMathObjectForPdf(
     }
     const originLeft = hostRect.left;
     const originTop = hostRect.top;
+    let drawnItemsCount = 0;
 
     const getClippedBounds = (
       baseRect: DOMRect,
@@ -2245,11 +2246,7 @@ async function drawKatexMathObjectForPdf(
       for (const el of allEls) {
         if (el.closest('svg, .katex-mathml')) continue;
         const cs = window.getComputedStyle(el);
-        if (
-          cs.display === 'none' ||
-          cs.visibility === 'hidden' ||
-          parseFloat(cs.opacity || '1') <= 0
-        ) {
+        if (cs.display === 'none') {
           continue;
         }
         const er = el.getBoundingClientRect();
@@ -2267,6 +2264,7 @@ async function drawKatexMathObjectForPdf(
             er.width,
             er.height
           );
+          drawnItemsCount++;
         }
 
         const bbw = cs.borderBottomStyle !== 'none' ? parseFloat(cs.borderBottomWidth || '0') : 0;
@@ -2279,6 +2277,7 @@ async function drawKatexMathObjectForPdf(
             er.width,
             drawH
           );
+          drawnItemsCount++;
         }
         const btw = cs.borderTopStyle !== 'none' ? parseFloat(cs.borderTopWidth || '0') : 0;
         if (btw > 0.05 && er.width > 0.2) {
@@ -2290,6 +2289,7 @@ async function drawKatexMathObjectForPdf(
             er.width,
             drawH
           );
+          drawnItemsCount++;
         }
         const blw = cs.borderLeftStyle !== 'none' ? parseFloat(cs.borderLeftWidth || '0') : 0;
         if (blw > 0.05 && er.height > 0.2) {
@@ -2301,6 +2301,7 @@ async function drawKatexMathObjectForPdf(
             drawW,
             er.height
           );
+          drawnItemsCount++;
         }
         const brw = cs.borderRightStyle !== 'none' ? parseFloat(cs.borderRightWidth || '0') : 0;
         if (brw > 0.05 && er.height > 0.2) {
@@ -2312,13 +2313,14 @@ async function drawKatexMathObjectForPdf(
             drawW,
             er.height
           );
+          drawnItemsCount++;
         }
       }
 
       // 2. Vector `<svg>` paths (`\sqrt{...}`, `\vec{...}`, `\widehat{...}`, extensible arrows, tall braces)
       for (const svgEl of Array.from(kRoot.querySelectorAll('svg'))) {
         const svgCs = window.getComputedStyle(svgEl);
-        if (svgCs.display === 'none' || svgCs.visibility === 'hidden') continue;
+        if (svgCs.display === 'none') continue;
         const sr = svgEl.getBoundingClientRect();
         if (sr.width <= 0.2 || sr.height <= 0.2) continue;
         const clip = getClippedBounds(sr, svgEl.parentElement);
@@ -2374,6 +2376,7 @@ async function drawKatexMathObjectForPdf(
           if (!dAttr) continue;
           try {
             ctx.fill(new Path2D(dAttr));
+            drawnItemsCount++;
           } catch {
             // ignore malformed path
           }
@@ -2393,15 +2396,14 @@ async function drawKatexMathObjectForPdf(
         if (!rawStr || /^[\u200B\s]*$/.test(rawStr) || !parentEl) continue;
         if (parentEl.closest('svg, .katex-mathml')) continue;
         const cs = window.getComputedStyle(parentEl);
-        if (
-          cs.display === 'none' ||
-          cs.visibility === 'hidden' ||
-          parseFloat(cs.opacity || '1') <= 0
-        ) {
+        if (cs.display === 'none') {
           continue;
         }
         range.selectNodeContents(targetTextNode);
-        const rRect = range.getBoundingClientRect();
+        let rRect = range.getBoundingClientRect();
+        if (rRect.width <= 0.1 || rRect.height <= 0.1) {
+          rRect = parentEl.getBoundingClientRect();
+        }
         if (rRect.width <= 0.1 || rRect.height <= 0.1) continue;
 
         const fStyle = cs.fontStyle && cs.fontStyle !== 'normal' ? `${cs.fontStyle} ` : '';
@@ -2426,15 +2428,22 @@ async function drawKatexMathObjectForPdf(
           const fontBoxH = m.fontBoundingBoxAscent + m.fontBoundingBoxDescent;
           baseY =
             tx.y + (rRect.top - originTop) + (rRect.height - fontBoxH) / 2 + m.fontBoundingBoxAscent;
+        } else if (typeof m.actualBoundingBoxAscent === 'number') {
+          baseY =
+            tx.y +
+            (rRect.top - originTop) +
+            m.actualBoundingBoxAscent +
+            Math.max(0, (rRect.height - (m.actualBoundingBoxAscent + (m.actualBoundingBoxDescent || 0))) * 0.5);
         } else {
           baseY = tx.y + (rRect.top - originTop) + rRect.height * 0.8;
         }
 
         ctx.fillText(rawStr, tx.x + (rRect.left - originLeft), baseY);
+        drawnItemsCount++;
       }
     }
     ctx.restore();
-    return true;
+    return drawnItemsCount > 0;
   } catch {
     return false;
   } finally {
