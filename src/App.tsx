@@ -77,6 +77,16 @@ import {
   Heart,
   Target,
   Music,
+  School,
+  NotebookPen,
+  Library,
+  Backpack,
+  Orbit,
+  Thermometer,
+  TestTubes,
+  FlaskRound,
+  Brain,
+  HeartPulse,
 } from 'lucide-react';
 import {
   auth,
@@ -100,6 +110,9 @@ import { LandingPage, AuthModal, isExplainBoardsBrand } from './components/Landi
 import { LiveTvSenderEngine, LiveTvReceiverEngine } from './utils/liveTvSync';
 import {
   syncNotebookPdfToGoogleDrive,
+  syncDriveFolderStructureToGoogleDrive,
+  verifyDriveAccessToken,
+  clearDriveFolderResolutionCache,
   exportNotebookToPdfBlob,
   exportNotebookToLivePdfHtml,
   DEFAULT_DRIVE_BASE_PATH,
@@ -137,13 +150,22 @@ import {
   A4_GRID_STEP_PX,
   getPageLogicalWidth,
   getPageLogicalHeight,
+  PAPER_WHITE_GREY_SWATCHES,
+  PAPER_BEIGE_VINTAGE_SWATCHES,
+  getEffectivePaperColor,
+  isDarkPaperColor,
+  getPaperRuleColors,
 } from './types/note';
 import {
   importGoodnotesFile,
   exportBestnotesFile,
   createBestnotesFileBlob,
 } from './utils/goodnotesParser';
-import { buildVolcanoCreationNotebook, VOLCANO_NOTEBOOK_ID } from './utils/volcanoNoteSeed';
+import {
+  buildVolcanoCreationNotebook,
+  VOLCANO_NOTEBOOK_ID,
+  upgradeWaterCycleNotebookPageToNativeTexts,
+} from './utils/volcanoNoteSeed';
 import {
   buildPhotosynthesisNotebook,
   buildAcidsNotebook,
@@ -159,10 +181,44 @@ import {
   WATER_PHASES_NOTEBOOK_ID,
 } from './utils/weightAndWaterPhasesSeed';
 import {
+  buildDaVinciNotebook,
+  DAVINCI_NOTEBOOK_ID,
+} from './utils/davinciNoteSeed';
+import {
+  buildEinsteinNotebook,
+  EINSTEIN_NOTEBOOK_ID,
+} from './utils/einsteinNoteSeed';
+import {
+  buildWaterChemistryNotebook,
+  WATER_CHEMISTRY_NOTEBOOK_ID,
+} from './utils/waterChemistryNoteSeed';
+import {
+  buildWaterPhaseChangesNotebook,
+  WATER_PHASE_CHANGES_NOTEBOOK_ID,
+} from './utils/waterPhasesNoteSeed';
+import {
+  buildCellBiologyNotebook,
+  CELL_BIOLOGY_NOTEBOOK_ID,
+} from './utils/cellBiologyNoteSeed';
+import {
+  buildElectricalResistanceNotebook,
+  ELECTRICAL_RESISTANCE_NOTEBOOK_ID,
+} from './utils/electricalResistanceNoteSeed';
+import {
+  buildElectricCircuitNotebook,
+  ELECTRIC_CIRCUIT_NOTEBOOK_ID,
+} from './utils/electricCircuitNoteSeed';
+import {
+  buildConductorsAndCurrentNotebook,
+  CONDUCTORS_CURRENT_NOTEBOOK_ID,
+} from './utils/conductorsAndCurrentNoteSeed';
+import {
   renderPdfFileToPages,
   renderImageFileToPage,
   getCachedPdfPageDataUrl,
+  getBestAvailablePdfPageDataUrl,
   ensurePdfPageDataUrl,
+  type PdfQualityMode,
 } from './utils/pdfAndImageImporter';
 import {
   distance,
@@ -174,6 +230,7 @@ import {
   getCircuitComponentsWithTerminals,
   splitWiresUnderCircuitComponent,
   toggleSwitchStrokeGroup,
+  recognizeHandDrawnCircuitSymbols,
   autoAlignAndConnectCircuit,
   convertCircuitComponents,
   analyzeCircuitForSimulation,
@@ -191,12 +248,14 @@ import {
   get3DShapeSubPaths,
   encodeCanvasOptimizedDataUrl,
   matchesGreekSmartQuery,
+  scoreGreekSmartQuery,
   matchesNotebookSmartSearch,
   normalizeGreekSearchText,
   generateSmartGreekTagsFromImages,
   transcribeHandwrittenStrokesWithGemini,
   transcribeHandwrittenMathWithGemini,
   transcribeHandwrittenChemistryWithGemini,
+  analyzeTypedChemistryWithGemini,
   transcribeEquationForGraphWithGemini,
   getUnifiedOcrErrorMessage,
   convertPlainTextToMathLatex,
@@ -229,6 +288,7 @@ import {
   parseChemicalReactionToAtomSetup,
   inferReactionFromCanvasAtoms,
   validateAndCorrectChemicalEquation,
+  registerAiChemValidation,
   get3DMoleculeModel,
   PRESET_3D_MOLECULES,
   normalizeHandwrittenCompoundFormula,
@@ -236,6 +296,7 @@ import {
   getNaturalOuterOrbitRadiusPx,
   buildAtomNodesAndBondsForTerm,
   normalizeCovalentAtomPositions,
+  analyzeCompoundOxidationNumbers,
 } from './utils/periodicTableData';
 import {
   CURATED_STICKERS_CATALOG,
@@ -245,6 +306,7 @@ import {
   preloadIconifyStickersBatch,
   searchOnlineIconifyStickers,
   rasterizeStickerUrlToPngDataUrl,
+  tintMonochromeSketchDataUrl,
   type StickerCategory,
   type StickerColorStyle,
   type StickerCatalogItem,
@@ -503,19 +565,43 @@ const AiAnimatedImageOverlay: React.FC<{
   );
 };
 
+const STICKER_HAYSTACK_CACHE = new WeakMap<StickerCatalogItem, string>();
+function getStickerNormalizedHaystack(item: StickerCatalogItem): string {
+  const cached = STICKER_HAYSTACK_CACHE.get(item);
+  if (cached !== undefined) return cached;
+  const norm = normalizeGreekText(
+    `${item.title} ${item.category} ${item.tags.join(' ')} ${item.iconifyId}`
+  );
+  STICKER_HAYSTACK_CACHE.set(item, norm);
+  return norm;
+}
+
+const MINDMAP_HAYSTACK_CACHE = new WeakMap<
+  (typeof MIND_MAPS_CATALOG)[number],
+  { primary: string; titleAndTags: string }
+>();
+function getMindMapHaystacks(item: (typeof MIND_MAPS_CATALOG)[number]) {
+  const cached = MINDMAP_HAYSTACK_CACHE.get(item);
+  if (cached) return cached;
+  const titleAndTags = `${item.title} ${item.tags.join(' ')}`;
+  const primary = `${titleAndTags} ${item.chapterTitle} ${item.chapter} ${item.subject} ${item.grade} ${item.englishKey}`;
+  const entry = { primary, titleAndTags };
+  MINDMAP_HAYSTACK_CACHE.set(item, entry);
+  return entry;
+}
+
 function matchesGreekSearchTokens(haystackNorm: string, qNorm: string): boolean {
   if (!qNorm) return true;
-  const words = haystackNorm.split(/[\s,./()\-–—:;•]+/).filter(Boolean);
-  return qNorm.split(/\s+/).every((tok) => {
-    if (haystackNorm.includes(tok)) return true;
-    if (tok.length >= 4) {
-      const stem = tok.replace(/(ου|ων|εσ|εισ|οσ|ησ|ασ|ον|αν|ην|ο|α|η|ι|ε|υ)$/, '');
-      if (stem.length >= 3) {
-        return words.some((w) => w.startsWith(stem));
-      }
-    }
-    return false;
-  });
+  return scoreGreekSmartQuery(haystackNorm, qNorm) > 0;
+}
+
+function scoreMindMapItemSearch(item: (typeof MIND_MAPS_CATALOG)[number], qNorm: string): number {
+  if (!qNorm) return 100;
+  const { primary, titleAndTags } = getMindMapHaystacks(item);
+  const baseScore = scoreGreekSmartQuery(primary, qNorm);
+  if (baseScore <= 0) return 0;
+  const titleAndTagsScore = scoreGreekSmartQuery(titleAndTags, qNorm);
+  return titleAndTagsScore > 0 ? baseScore + titleAndTagsScore * 0.25 : baseScore;
 }
 
 function getNotebookContentScore(nb: Notebook): number {
@@ -1045,39 +1131,51 @@ const RESTORED_USER_FOLDERS_PRESET: CustomFolderMeta[] = [
 const createDefaultFolders = (): CustomFolderMeta[] => [];
 
 const FOLDER_PRESET_COLORS: { hex: string; label: string }[] = [
-  { hex: '#f59e0b', label: 'Κεχριμπάρι' },
-  { hex: '#0066ff', label: 'Μπλε' },
-  { hex: '#10b981', label: 'Σμαραγδί' },
-  { hex: '#ef4444', label: 'Κόκκινο' },
-  { hex: '#8b5cf6', label: 'Μωβ' },
-  { hex: '#06b6d4', label: 'Κυανό' },
-  { hex: '#f97316', label: 'Πορτοκαλί' },
+  { hex: '#e11d48', label: 'Κόκκινο' },
   { hex: '#ec4899', label: 'Ροζ' },
-  { hex: '#6366f1', label: 'Ινδικό' },
+  { hex: '#ea580c', label: 'Πορτοκαλί' },
+  { hex: '#f59e0b', label: 'Κεχριμπάρι' },
+  { hex: '#65a30d', label: 'Λαχανί' },
+  { hex: '#10b981', label: 'Σμαραγδί' },
+  { hex: '#06b6d4', label: 'Τιρκουάζ' },
+  { hex: '#0066ff', label: 'Μπλε' },
+  { hex: '#8b5cf6', label: 'Μωβ' },
+  { hex: '#a21caf', label: 'Δαμασκηνί' },
+  { hex: '#92400e', label: 'Καφέ' },
   { hex: '#475569', label: 'Γκρι-Μπλε' },
 ];
 
 const FOLDER_PRESET_ICONS: { id: string; label: string }[] = [
   { id: 'folder', label: 'Φάκελος' },
-  { id: 'school', label: 'Σχολείο' },
-  { id: 'book', label: 'Βιβλίο' },
+  { id: 'school', label: 'Καπέλο Αποφοίτησης' },
+  { id: 'book', label: 'Ανοιχτό Βιβλίο' },
   { id: 'atom', label: 'Φυσική / Άτομο' },
-  { id: 'flask', label: 'Χημεία / Φιάλη' },
+  { id: 'flask', label: 'Χημεία / Κωνική Φιάλη' },
   { id: 'dna', label: 'Βιολογία / DNA' },
-  { id: 'leaf', label: 'Φύση / Φύλλο' },
+  { id: 'leaf', label: 'Βιολογία / Φυτό' },
   { id: 'calculator', label: 'Μαθηματικά' },
-  { id: 'compass', label: 'Γεωμετρία' },
-  { id: 'zap', label: 'Ηλεκτρισμός' },
-  { id: 'magnet', label: 'Μαγνητισμός' },
-  { id: 'globe', label: 'Γεωγραφία' },
-  { id: 'rocket', label: 'Διάστημα' },
-  { id: 'lightbulb', label: 'Ιδέες' },
-  { id: 'microscope', label: 'Εργαστήριο' },
-  { id: 'pen', label: 'Σημειώσεις' },
-  { id: 'clipboard', label: 'Διαγωνίσματα' },
+  { id: 'compass', label: 'Γεωμετρία / Πυξίδα' },
+  { id: 'zap', label: 'Φυσική / Ηλεκτρισμός' },
+  { id: 'magnet', label: 'Φυσική / Μαγνητισμός' },
+  { id: 'globe', label: 'Γεωγραφία / Υδρόγειος' },
+  { id: 'rocket', label: 'Φυσική / Διάστημα' },
+  { id: 'lightbulb', label: 'Ιδέες / Οπτική' },
+  { id: 'microscope', label: 'Βιολογία / Μικροσκόπιο' },
+  { id: 'pen', label: 'Σημειώσεις / Στυλό' },
+  { id: 'clipboard', label: 'Διαγωνίσματα / Ασκήσεις' },
   { id: 'trophy', label: 'Επιτυχίες' },
   { id: 'target', label: 'Στόχοι' },
   { id: 'music', label: 'Μουσική' },
+  { id: 'school-building', label: 'Σχολείο / Τάξη' },
+  { id: 'notebook', label: 'Τετράδιο' },
+  { id: 'library', label: 'Βιβλία / Βιβλιοθήκη' },
+  { id: 'backpack', label: 'Σχολική Τσάντα' },
+  { id: 'orbit', label: 'Φυσική / Τροχιές & Δυνάμεις' },
+  { id: 'thermometer', label: 'Φυσική / Θερμότητα' },
+  { id: 'test-tubes', label: 'Χημεία / Δοκιμαστικοί Σωλήνες' },
+  { id: 'flask-round', label: 'Χημεία / Σφαιρική Φιάλη' },
+  { id: 'brain', label: 'Βιολογία / Εγκέφαλος' },
+  { id: 'heart-pulse', label: 'Βιολογία / Καρδιά & Υγεία' },
 ];
 
 function renderFolderCustomIcon(
@@ -1126,6 +1224,26 @@ function renderFolderCustomIcon(
       return <Target className={sizeClass} style={style} />;
     case 'music':
       return <Music className={sizeClass} style={style} />;
+    case 'school-building':
+      return <School className={sizeClass} style={style} />;
+    case 'notebook':
+      return <NotebookPen className={sizeClass} style={style} />;
+    case 'library':
+      return <Library className={sizeClass} style={style} />;
+    case 'backpack':
+      return <Backpack className={sizeClass} style={style} />;
+    case 'orbit':
+      return <Orbit className={sizeClass} style={style} />;
+    case 'thermometer':
+      return <Thermometer className={sizeClass} style={style} />;
+    case 'test-tubes':
+      return <TestTubes className={sizeClass} style={style} />;
+    case 'flask-round':
+      return <FlaskRound className={sizeClass} style={style} />;
+    case 'brain':
+      return <Brain className={sizeClass} style={style} />;
+    case 'heart-pulse':
+      return <HeartPulse className={sizeClass} style={style} />;
     case 'heart':
       return <Heart className={sizeClass} style={{ color: c, fill: `${c}33` }} />;
     case 'star':
@@ -1478,6 +1596,19 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
     return pageModified ? { ...p, id: pid, strokes: nextStrokes } : p;
   });
 
+  // Self-healing guard for "Κύκλος Νερού" (nb-1792959661594):
+  // If an older cached Oct 25 snapshot (with 12 cropped images and 0 editable TextObjects) is loaded,
+  // automatically upgrade it in-place to the Nov 4 native-text version (7 transparent images + 14 editable TextObjects + 9 StrokeObjects).
+  if (
+    (nb.id === 'nb-1792959661594' || nb.title === 'Κύκλος Νερού' || nb.title === 'Ο Κύκλος του Νερού') &&
+    nextPages.length > 0 &&
+    (nextPages[0].texts || []).length === 0 &&
+    (nextPages[0].images || []).length >= 10
+  ) {
+    nextPages[0] = upgradeWaterCycleNotebookPageToNativeTexts(nextPages[0]);
+    repaired = true;
+  }
+
   const isMultiPagePdfDoc =
     nb.pages.length > 10 && nb.pages.some((p) => Boolean(p.backgroundDataUrl || p.pdfPageNumber));
   const nextSourceFormat =
@@ -1600,7 +1731,7 @@ export default function App() {
           simShowDarkWireTrack?: boolean;
           simSpeedMultiplier?: number;
           showShapeLibraryPanel?: boolean;
-          libraryTab?: 'all' | 'educational' | 'stickers' | 'custom';
+          libraryTab?: 'all' | 'educational' | 'sketches' | 'stickers' | 'custom';
           librarySubjectFilter?: 'Όλα' | MindMapSubject;
           libraryGradeFilter?: 'Όλες' | MindMapGrade;
           stickerCategoryFilter?: StickerCategory;
@@ -1661,7 +1792,7 @@ export default function App() {
 
   const initialZoom =
     typeof initialSession?.zoom === 'number' && Number.isFinite(initialSession.zoom)
-      ? Math.min(3.5, Math.max(0.2, initialSession.zoom))
+      ? Math.min(1.4, Math.max(0.2, initialSession.zoom))
       : 1;
   const initialPanY = (() => {
     if (typeof initialSession?.panY === 'number' && Number.isFinite(initialSession.panY)) {
@@ -2530,6 +2661,7 @@ export default function App() {
       fixedX1?: number;
       fixedX2?: number;
       yOffset?: number;
+      yOffset2?: number;
       existingStrokeId?: string;
     }[];
     layerId: string;
@@ -2631,7 +2763,14 @@ export default function App() {
   const [showShapeLibraryPanel, setShowShapeLibraryPanel] = useState<boolean>(() =>
     Boolean(initialSession?.showShapeLibraryPanel)
   );
-  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'stickers' | 'custom'>(
+  const [shapeLibPos, setShapeLibPos] = useState<{ x: number; y: number } | null>(null);
+  const shapeLibDragRef = useRef<{
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const [libraryTab, setLibraryTab] = useState<'all' | 'educational' | 'sketches' | 'stickers' | 'custom'>(
     () => initialSession?.libraryTab || 'all'
   );
   const [librarySubjectFilter, setLibrarySubjectFilter] = useState<'Όλα' | MindMapSubject>(
@@ -2644,6 +2783,10 @@ export default function App() {
   const [stickerCategoryFilter, setStickerCategoryFilter] = useState<StickerCategory>(
     () => initialSession?.stickerCategoryFilter || 'Όλα'
   );
+  const [sketchSubFilter, setSketchSubFilter] = useState<
+    'all' | 'scientists' | 'physics' | 'nature'
+  >('all');
+  const [libVisibleCount, setLibVisibleCount] = useState<number>(36);
   const [stickerColorStyleFilter, setStickerColorStyleFilter] = useState<StickerColorStyle>(
     () => initialSession?.stickerColorStyleFilter || 'all'
   );
@@ -2654,11 +2797,25 @@ export default function App() {
   const [isSearchingOnlineStickers, setIsSearchingOnlineStickers] = useState<boolean>(false);
   const [stickerCacheVersion, setStickerCacheVersion] = useState<number>(0);
   const [failedStickerIds, setFailedStickerIds] = useState<Set<string>>(() => new Set());
+  const stickersPreloadedOnceRef = useRef(false);
 
-  // Batch-preload all Curated Stickers in just 5 JSON requests so 0 individual .svg requests hit Cloudflare rate-limits
   useEffect(() => {
+    setLibVisibleCount(36);
+  }, [
+    libraryTab,
+    librarySubjectFilter,
+    stickerCategoryFilter,
+    sketchSubFilter,
+    shapeLibSearchQuery,
+    stickerSearchQuery,
+  ]);
+
+  // Batch-preload all Curated Stickers once so 0 individual .svg requests hit Cloudflare rate-limits
+  useEffect(() => {
+    if (!showShapeLibraryPanel || stickersPreloadedOnceRef.current) return;
     let active = true;
     void preloadIconifyStickersBatch(CURATED_STICKERS_CATALOG.map((s) => s.iconifyId)).then(() => {
+      stickersPreloadedOnceRef.current = true;
       if (active) setStickerCacheVersion((v) => v + 1);
     });
     return () => {
@@ -2775,6 +2932,7 @@ export default function App() {
   }, [selectedImageId]);
   const [activeNodeStrokeId, setActiveNodeStrokeId] = useState<string | null>(null);
   const shiftKeyPressedRef = useRef<boolean>(false);
+  const lastArrowNudgeAtRef = useRef<number>(0);
   const lassoAdditiveRef = useRef<boolean>(false);
   const lastCreatedShapeIdsRef = useRef<string[]>([]);
   const [draggingNodeIdx, setDraggingNodeIdx] = useState<{
@@ -2870,6 +3028,7 @@ export default function App() {
     textId: string;
     start: number;
     end: number;
+    direction?: 'forward' | 'backward' | 'none';
   } | null>(null);
   const activeTextRangeRef = useRef<{
     textId: string;
@@ -2903,6 +3062,8 @@ export default function App() {
     origW?: number;
     origH?: number;
     origFontSize?: number;
+    origLineHeight?: number;
+    origVisualLines?: number;
     lockedCornerText?: string;
     origSpans?: TextStyleSpan[];
     pW?: number;
@@ -2913,6 +3074,27 @@ export default function App() {
     wasAlreadyEditing?: boolean;
     startedOnTextarea?: boolean;
     startedOnDragBar?: boolean;
+  } | null>(null);
+  const textSmartAlignBridgeRef = useRef<{
+    getReferenceSnapBoxes: (
+      excludeStrokeIds: string[],
+      excludeImgIds: string[],
+      excludeTxtIds?: string[],
+      pageOverride?: NotePage
+    ) => {
+      minX: number;
+      maxX: number;
+      minY: number;
+      maxY: number;
+      cx: number;
+      cy: number;
+      isText?: boolean;
+    }[];
+    drawSmartAlignmentGuidesForBox: (
+      selBox: { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number },
+      refBoxes: { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number }[]
+    ) => void;
+    clearActiveOverlay: () => void;
   } | null>(null);
 
   // Image Cropping (Freehand & Magnetic Lasso)
@@ -3029,11 +3211,13 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'dirty'>('synced');
   const [secondsToNextSync, setSecondsToNextSync] = useState<number>(20);
   const [showUserDropdown, setShowUserDropdown] = useState<boolean>(false);
+  const rejectedDriveTokensRef = useRef<Set<string>>(new Set());
+  const hasAutoSyncedSchoolFoldersRef = useRef<boolean>(false);
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(() => {
     try {
-      const savedToken = localStorage.getItem('bestnotes_drive_token_v2');
-      const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v2') || '0');
-      if (savedToken && savedTime > 0 && Date.now() - savedTime > 55 * 60 * 1000) {
+      const savedToken = localStorage.getItem('bestnotes_drive_token_v3');
+      const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
+      if (savedToken && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
         return null;
       }
       return savedToken;
@@ -3061,6 +3245,168 @@ export default function App() {
   });
   const [lastDrivePdfLink, setLastDrivePdfLink] = useState<string | null>(null);
   const [driveSyncingAll, setDriveSyncingAll] = useState<boolean>(false);
+  const hasResumedPendingFolderSyncRef = useRef<boolean>(false);
+  const [syncingDriveFolderPath, setSyncingDriveFolderPath] = useState<string | null>(() => {
+    try {
+      const savedToken = localStorage.getItem('bestnotes_drive_token_v3');
+      const savedTokenTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
+      if (!savedToken || (savedTokenTime > 0 && Date.now() - savedTokenTime > 50 * 60 * 1000)) {
+        localStorage.removeItem('bestnotes_pending_drive_folder_sync_v1');
+        return null;
+      }
+      const rawPending = localStorage.getItem('bestnotes_pending_drive_folder_sync_v1');
+      if (!rawPending) return null;
+      const parsed = JSON.parse(rawPending);
+      if (
+        parsed &&
+        typeof parsed.folderPath === 'string' &&
+        parsed.folderPath.trim() &&
+        typeof parsed.updatedAt === 'number' &&
+        Date.now() - parsed.updatedAt < 15 * 60 * 1000
+      ) {
+        return parsed.folderPath.trim();
+      }
+      localStorage.removeItem('bestnotes_pending_drive_folder_sync_v1');
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const [driveSyncProgressText, setDriveSyncProgressText] = useState<string>('');
+  const [activeDriveUploadingNbId, setActiveDriveUploadingNbId] = useState<string | null>(null);
+  const [driveSyncedRecords, setDriveSyncedRecords] = useState<
+    Record<
+      string,
+      {
+        updatedAt: string;
+        title: string;
+        folder: string;
+        basePath: string;
+        syncedAtMs: number;
+        mathPdfVer?: number;
+      }
+    >
+  >(() => {
+    try {
+      const raw = localStorage.getItem('bestnotes_drive_synced_records_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const driveSyncedRecordsRef = useRef(driveSyncedRecords);
+  driveSyncedRecordsRef.current = driveSyncedRecords;
+
+  const [driveSyncedFolders, setDriveSyncedFolders] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('bestnotes_drive_synced_folders_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const driveSyncedFoldersRef = useRef(driveSyncedFolders);
+  driveSyncedFoldersRef.current = driveSyncedFolders;
+
+  const isNotebookDriveSynced = useCallback(
+    (nb: Notebook, basePathOverride?: string): boolean => {
+      const rec = driveSyncedRecordsRef.current[nb.id];
+      if (!rec) return false;
+      const hasMathTexts = (nb.pages || []).some((p) =>
+        (p.texts || []).some((t) => Boolean(t.isMath))
+      );
+      if (hasMathTexts && (rec.mathPdfVer || 0) < 2) {
+        return false;
+      }
+      const normF = (nb.folder || '')
+        .split('/')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('/');
+      const effBase = (basePathOverride ?? driveBasePath).trim();
+      return (
+        rec.updatedAt === (nb.updatedAt || '') &&
+        rec.title === (nb.title || '') &&
+        rec.folder === normF &&
+        rec.basePath === effBase
+      );
+    },
+    [driveBasePath]
+  );
+
+  const markFolderDriveSynced = useCallback(
+    (rawFolderPath: string, basePathOverride?: string) => {
+      const normF = (rawFolderPath || '')
+        .split('/')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('/');
+      if (!normF) return;
+      const effBase = (basePathOverride ?? driveBasePath).trim();
+      const parts = normF.split('/');
+      const nextFolders = { ...driveSyncedFoldersRef.current };
+      let acc = '';
+      let changed = false;
+      for (const seg of parts) {
+        acc = acc ? `${acc}/${seg}` : seg;
+        if (nextFolders[acc] !== effBase) {
+          nextFolders[acc] = effBase;
+          changed = true;
+        }
+      }
+      if (!changed) return;
+      driveSyncedFoldersRef.current = nextFolders;
+      setDriveSyncedFolders(nextFolders);
+      try {
+        localStorage.setItem('bestnotes_drive_synced_folders_v1', JSON.stringify(nextFolders));
+      } catch {
+        // ignore
+      }
+    },
+    [driveBasePath]
+  );
+
+  const markNotebookDriveSynced = useCallback(
+    (nb: Notebook, basePathOverride?: string) => {
+      const normF = (nb.folder || '')
+        .split('/')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('/');
+      const effBase = (basePathOverride ?? driveBasePath).trim();
+      const nextRecords = {
+        ...driveSyncedRecordsRef.current,
+        [nb.id]: {
+          updatedAt: nb.updatedAt || '',
+          title: nb.title || '',
+          folder: normF,
+          basePath: effBase,
+          syncedAtMs: Date.now(),
+          mathPdfVer: 2,
+        },
+      };
+      driveSyncedRecordsRef.current = nextRecords;
+      setDriveSyncedRecords(nextRecords);
+      try {
+        localStorage.setItem('bestnotes_drive_synced_records_v1', JSON.stringify(nextRecords));
+      } catch {
+        // ignore
+      }
+      if (normF) {
+        markFolderDriveSynced(normF, effBase);
+      }
+    },
+    [driveBasePath, markFolderDriveSynced]
+  );
+  const driveNeedsFullScopeConsentRef = useRef<boolean>(false);
   const [driveAutoSyncIntervalMin, setDriveAutoSyncIntervalMin] = useState<number>(() => {
     try {
       const saved = Number(localStorage.getItem('bestnotes_drive_autosync_min_v1') || '120');
@@ -3084,6 +3430,7 @@ export default function App() {
     (nextPath: string) => {
       const cleaned = nextPath.trim() || DEFAULT_DRIVE_BASE_PATH;
       setDriveBasePath(cleaned);
+      clearDriveFolderResolutionCache();
       try {
         localStorage.setItem('bestnotes_drive_base_path_v1', cleaned);
       } catch {
@@ -3103,16 +3450,49 @@ export default function App() {
     [currentUser]
   );
 
+  const invalidateDriveToken = useCallback(
+    (badToken?: string | null) => {
+      if (badToken) {
+        rejectedDriveTokensRef.current.add(badToken);
+      }
+      clearDriveFolderResolutionCache();
+      setDriveAccessToken(null);
+      try {
+        localStorage.removeItem('bestnotes_drive_token_v3');
+        localStorage.removeItem('bestnotes_drive_token_time_v3');
+        localStorage.removeItem('bestnotes_drive_token_v2');
+        localStorage.removeItem('bestnotes_drive_token_v1');
+      } catch {
+        // ignore
+      }
+      if (currentUser) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          {
+            driveAccessTokenV3: '',
+            driveTokenIssuedAtV3: 0,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+    },
+    [currentUser]
+  );
+
   const saveDriveCredentials = useCallback(
     (token: string | null, email: string | null, issuedAt = Date.now()) => {
+      clearDriveFolderResolutionCache();
       setDriveAccessToken(token);
       if (email) setDriveEmail(email);
       try {
         if (token) {
-          localStorage.setItem('bestnotes_drive_token_v2', token);
-          localStorage.setItem('bestnotes_drive_token_time_v2', String(issuedAt));
+          rejectedDriveTokensRef.current.delete(token);
+          localStorage.setItem('bestnotes_drive_token_v3', token);
+          localStorage.setItem('bestnotes_drive_token_time_v3', String(issuedAt));
         } else {
-          localStorage.removeItem('bestnotes_drive_token_v2');
+          localStorage.removeItem('bestnotes_drive_token_v3');
+          localStorage.removeItem('bestnotes_drive_token_time_v3');
         }
         if (email) {
           localStorage.setItem('bestnotes_drive_email_v1', email);
@@ -3125,7 +3505,7 @@ export default function App() {
           doc(db, 'users', currentUser.uid),
           {
             ...(email ? { driveEmail: email } : {}),
-            ...(token ? { driveAccessTokenV2: token, driveTokenIssuedAt: issuedAt } : {}),
+            ...(token ? { driveAccessTokenV3: token, driveTokenIssuedAtV3: issuedAt } : {}),
             updatedAt: new Date().toISOString(),
           },
           { merge: true }
@@ -3175,6 +3555,24 @@ export default function App() {
     }
   }, [currentUser, driveEmail]);
 
+  // Proactively verify Google Drive OAuth token validity & full `drive` scope so expired/limited tokens are cleared before user clicks Sync (preventing popup-blocker issues)
+  useEffect(() => {
+    if (!driveAccessToken) return;
+    let cancelled = false;
+    void verifyDriveAccessToken(driveAccessToken).then((check) => {
+      if (cancelled) return;
+      if (!check.valid || !check.hasFullDriveScope) {
+        driveNeedsFullScopeConsentRef.current = !check.hasFullDriveScope;
+        invalidateDriveToken(driveAccessToken);
+      } else {
+        driveNeedsFullScopeConsentRef.current = false;
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [driveAccessToken, invalidateDriveToken]);
+
   // Library ("Σημειώσεις") View Controls: Icons vs List, Sort (Alpha vs Date), Search, Folders
   const [libraryLayoutMode, setLibraryLayoutMode] = useState<'grid' | 'list'>(() => {
     try {
@@ -3185,10 +3583,10 @@ export default function App() {
     }
     return 'grid';
   });
-  const [librarySortBy, setLibrarySortBy] = useState<'date' | 'alpha'>(() => {
+  const [librarySortBy, setLibrarySortBy] = useState<'date' | 'alpha' | 'size'>(() => {
     try {
       const saved = localStorage.getItem('bestnotes_lib_sort_v1');
-      if (saved === 'date' || saved === 'alpha') return saved;
+      if (saved === 'date' || saved === 'alpha' || saved === 'size') return saved;
     } catch {
       // ignore
     }
@@ -3201,6 +3599,10 @@ export default function App() {
       ? initialSession.activeLibraryFolder.trim()
       : null
   );
+  const [isClosingDocument, setIsClosingDocument] = useState<boolean>(false);
+  const navigateToLibraryFolder = useCallback((targetPath: string | null, _immediate = false) => {
+    setActiveLibraryFolder(targetPath);
+  }, []);
   const [customFolders, setCustomFolders] = useState<CustomFolderMeta[]>(() => {
     if (initialAuthUid) {
       try {
@@ -3643,7 +4045,7 @@ export default function App() {
   // On-demand PDF page renderer tick & resolver (so 170-page PDFs stay at their exact 13.1 MB native size!)
   const [, setPdfPageRenderTick] = useState<number>(0);
   const resolvePageBackgroundUrl = useCallback(
-    (nbId: string, pageObj: NotePage | undefined, qualityMode: 'full' | 'thumb' = 'full'): string | undefined => {
+    (nbId: string, pageObj: NotePage | undefined, qualityMode: PdfQualityMode = 'full'): string | undefined => {
       if (!pageObj) return undefined;
       if (pageObj.backgroundDataUrl) return pageObj.backgroundDataUrl;
       if (typeof pageObj.pdfPageNumber === 'number' && pageObj.pdfPageNumber >= 1) {
@@ -3654,10 +4056,9 @@ export default function App() {
             setPdfPageRenderTick((t) => t + 1);
           }
         });
-        if (qualityMode === 'full') {
-          const thumbCached = getCachedPdfPageDataUrl(nbId, pageObj.pdfPageNumber, 'thumb');
-          if (thumbCached) return thumbCached;
-        }
+        // Progressive fallback: immediately display the best lower-res tier already in memory while higher tier renders!
+        const bestFallback = getBestAvailablePdfPageDataUrl(nbId, pageObj.pdfPageNumber);
+        if (bestFallback) return bestFallback;
       }
       return undefined;
     },
@@ -5166,20 +5567,21 @@ export default function App() {
         });
       }
       if (
-        typeof data.driveAccessTokenV2 === 'string' &&
-        data.driveAccessTokenV2.length > 0 &&
-        typeof data.driveTokenIssuedAt === 'number' &&
-        Date.now() - data.driveTokenIssuedAt < 52 * 60 * 1000
+        typeof data.driveAccessTokenV3 === 'string' &&
+        data.driveAccessTokenV3.length > 0 &&
+        !rejectedDriveTokensRef.current.has(data.driveAccessTokenV3) &&
+        typeof data.driveTokenIssuedAtV3 === 'number' &&
+        Date.now() - data.driveTokenIssuedAtV3 < 50 * 60 * 1000
       ) {
         setDriveAccessToken((prev) => {
-          if (prev === data.driveAccessTokenV2) return prev;
+          if (prev === data.driveAccessTokenV3) return prev;
           try {
-            localStorage.setItem('bestnotes_drive_token_v2', data.driveAccessTokenV2);
-            localStorage.setItem('bestnotes_drive_token_time_v2', String(data.driveTokenIssuedAt));
+            localStorage.setItem('bestnotes_drive_token_v3', data.driveAccessTokenV3);
+            localStorage.setItem('bestnotes_drive_token_time_v3', String(data.driveTokenIssuedAtV3));
           } catch {
             // ignore
           }
-          return data.driveAccessTokenV2;
+          return data.driveAccessTokenV3;
         });
       }
       if (
@@ -5454,7 +5856,7 @@ export default function App() {
           if (
             im.dataUrl &&
             im.dataUrl.startsWith('data:image/png') &&
-            im.dataUrl.length > 300000 &&
+            im.dataUrl.length > 150000 &&
             !checkedLegacyImgIdsRef.current.has(im.id)
           ) {
             checkedLegacyImgIdsRef.current.add(im.id);
@@ -5489,7 +5891,15 @@ export default function App() {
                                     images: (pg.images || []).map((imgItem) =>
                                       imgItem.id !== targetImgId
                                         ? imgItem
-                                        : { ...imgItem, dataUrl: optUrl, originalDataUrl: undefined }
+                                        : {
+                                            ...imgItem,
+                                            dataUrl: optUrl,
+                                            originalDataUrl:
+                                              imgItem.originalDataUrl &&
+                                              !imgItem.originalDataUrl.startsWith('data:')
+                                                ? imgItem.originalDataUrl
+                                                : undefined,
+                                          }
                                     ),
                                   }
                             ),
@@ -5526,13 +5936,30 @@ export default function App() {
       performCloudFirestoreSyncNow();
 
       let token = overrideToken ?? driveAccessToken;
+      if (token && rejectedDriveTokensRef.current.has(token)) {
+        token = null;
+      }
       const targetNb = overrideNotebook ?? activeNotebook;
       const hintEmail = driveEmail || currentUser.email || null;
+
+      // Check token age synchronously before any await so browser popup blockers never block signInToGoogleDrive!
+      try {
+        const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
+        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
+          token = null;
+        }
+      } catch {
+        // ignore
+      }
 
       // If user explicitly triggered Drive PDF sync (or has Drive linked) and the 1h token expired, renew seamlessly with login_hint!
       if (!token && forceDrivePrompt && showFeedback) {
         try {
-          const refreshed = await signInToGoogleDrive(hintEmail, false);
+          const refreshed = await signInToGoogleDrive(
+            hintEmail,
+            driveNeedsFullScopeConsentRef.current
+          );
+          driveNeedsFullScopeConsentRef.current = false;
           token = refreshed.accessToken;
           saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
         } catch {
@@ -5555,7 +5982,7 @@ export default function App() {
 
       setSyncStatus('syncing');
       const pdfExportOpts = {
-        activePageId: activePage.id,
+        activePageId: activePage?.id,
         liveSimCanvas: simCanvasRef.current,
         rulersByPageId,
         isCircuitSimulating: isSimulating,
@@ -5564,8 +5991,108 @@ export default function App() {
         circuitFlowDirection: simFlowDirection,
         circuitShowDarkWireTrack: simShowDarkWireTrack,
       };
+
+      const seededIds = new Set<string>([
+        VOLCANO_NOTEBOOK_ID,
+        PHOTOSYNTHESIS_NOTEBOOK_ID,
+        ACIDS_NOTEBOOK_ID,
+        BASES_NOTEBOOK_ID,
+        WEIGHT_NOTEBOOK_ID,
+        WATER_PHASES_NOTEBOOK_ID,
+        DAVINCI_NOTEBOOK_ID,
+        EINSTEIN_NOTEBOOK_ID,
+        WATER_CHEMISTRY_NOTEBOOK_ID,
+        WATER_PHASE_CHANGES_NOTEBOOK_ID,
+        CELL_BIOLOGY_NOTEBOOK_ID,
+        ELECTRICAL_RESISTANCE_NOTEBOOK_ID,
+        ELECTRIC_CIRCUIT_NOTEBOOK_ID,
+        CONDUCTORS_CURRENT_NOTEBOOK_ID,
+      ]);
+
+      const normFolder = (p: string) =>
+        (p || '')
+          .split('/')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join('/');
+      const currentLibFolder = viewMode === 'library' ? normFolder(activeLibraryFolder || '') : '';
+      const folderNotebooksToSync =
+        !overrideNotebook && forceDrivePrompt && currentLibFolder
+          ? notebooks.filter((n) => {
+              const nf = normFolder(n.folder || '');
+              return nf === currentLibFolder || nf.startsWith(`${currentLibFolder}/`);
+            })
+          : [];
+
+      // Also always include non-seeded user school class notebooks (e.g. inside "Γυμνάσιο Αρναίας/Γ2", "Α1", "Β1", "Β2", "Γ1")
+      // when the user clicks the sync button so class folders like Γ2 are ALWAYS kept in sync!
+      const userSchoolClassNotebooks =
+        !overrideNotebook && forceDrivePrompt
+          ? notebooks.filter((n) => {
+              if (seededIds.has(n.id)) return false;
+              const nf = normFolder(n.folder || '');
+              return nf.length > 0 && !nf.endsWith('Γενικά');
+            })
+          : [];
+
+      const combinedTargetMap = new Map<string, Notebook>();
+      for (const nbItem of folderNotebooksToSync) {
+        combinedTargetMap.set(nbItem.id, nbItem);
+      }
+      for (const nbItem of userSchoolClassNotebooks) {
+        combinedTargetMap.set(nbItem.id, nbItem);
+      }
+      if (combinedTargetMap.size === 0 || viewMode !== 'library') {
+        combinedTargetMap.set(targetNb.id, targetNb);
+      }
+      const allCombinedTargets = Array.from(combinedTargetMap.values());
+      // Only export & upload notebooks that actually changed since their last Google Drive sync
+      // (unless overrideNotebook was explicitly clicked on a single note card)
+      const targetsToSync = overrideNotebook
+        ? allCombinedTargets
+        : allCombinedTargets.filter((nbItem) => !isNotebookDriveSynced(nbItem, driveBasePath));
+
+      if (targetsToSync.length === 0) {
+        setSyncStatus('synced');
+        setIsDirty(false);
+        setSecondsToNextSync(20);
+        secondsToNextDrivePdfSyncRef.current = 120;
+        hasPendingDrivePdfSyncRef.current = false;
+        if (showFeedback) {
+          showToast(
+            `✅ Όλα τα αρχεία είναι ήδη ενημερωμένα στο Google Drive (καμία νέα αλλαγή)!`
+          );
+        }
+        return;
+      }
+
       try {
-        const res = await syncNotebookPdfToGoogleDrive(token, targetNb, pdfExportOpts, driveBasePath);
+        let lastRes: Awaited<ReturnType<typeof syncNotebookPdfToGoogleDrive>> | null = null;
+        for (let i = 0; i < targetsToSync.length; i++) {
+          const nbItem = targetsToSync[i];
+          setActiveDriveUploadingNbId(nbItem.id);
+          if (targetsToSync.length > 1) {
+            setDriveSyncProgressText(
+              `Συγχρονισμός αλλαγών ${i + 1}/${targetsToSync.length}: «${nbItem.title}»...`
+            );
+          }
+          const res = await syncNotebookPdfToGoogleDrive(
+            token,
+            nbItem,
+            nbItem.id === activeNotebook.id ? pdfExportOpts : { ...pdfExportOpts, liveSimCanvas: null },
+            driveBasePath
+          );
+          markNotebookDriveSynced(nbItem, driveBasePath);
+          if (
+            !lastRes ||
+            (currentLibFolder && normFolder(nbItem.folder || '') === currentLibFolder) ||
+            (viewMode !== 'library' && nbItem.id === activeNotebook.id)
+          ) {
+            lastRes = res;
+          }
+        }
+        setActiveDriveUploadingNbId(null);
+        setDriveSyncProgressText('');
         setSyncStatus('synced');
         setIsDirty(false);
         setSecondsToNextSync(20);
@@ -5578,23 +6105,37 @@ export default function App() {
         } catch {
           // ignore
         }
-        if (res.webViewLink) {
-          setLastDrivePdfLink(res.webViewLink);
-        }
-        if (showFeedback) {
-          showToast(
-            `☁️ Google Drive (${res.targetPathDisplay}): Αποθηκεύτηκε ως «${res.pdfFileName}»!`
-          );
+        if (lastRes) {
+          const linkToSave =
+            targetsToSync.length > 1
+              ? lastRes.folderWebViewLink || lastRes.webViewLink
+              : lastRes.webViewLink || lastRes.folderWebViewLink;
+          if (linkToSave) {
+            setLastDrivePdfLink(linkToSave);
+          }
+          if (showFeedback) {
+            if (targetsToSync.length > 1) {
+              showToast(
+                `☁️ Google Drive (${lastRes.targetPathDisplay}): Συγχρονίστηκαν ${targetsToSync.length} PDF (${targetsToSync
+                  .map((n) => `«${n.title}»`)
+                  .join(', ')})!`
+              );
+            } else {
+              showToast(
+                `☁️ Google Drive (${lastRes.targetPathDisplay}): Αποθηκεύτηκε ως «${lastRes.pdfFileName}»!`
+              );
+            }
+          }
         }
       } catch (err: any) {
+        setActiveDriveUploadingNbId(null);
+        setDriveSyncProgressText('');
         if (err?.message === 'DRIVE_TOKEN_EXPIRED' || err?.message === 'DRIVE_SCOPE_MISSING') {
-          // Keep driveEmail connected so Google Drive never logs out visually!
-          setDriveAccessToken(null);
-          try {
-            localStorage.removeItem('bestnotes_drive_token_v2');
-          } catch {
-            // ignore
+          if (err?.message === 'DRIVE_SCOPE_MISSING') {
+            driveNeedsFullScopeConsentRef.current = true;
           }
+          // Keep driveEmail connected so Google Drive never logs out visually, and invalidate the expired/limited token!
+          invalidateDriveToken(token);
           // If this was a manual user click, automatically refresh the token with login_hint right now and retry!
           if (showFeedback) {
             try {
@@ -5602,26 +6143,41 @@ export default function App() {
                 hintEmail,
                 err?.message === 'DRIVE_SCOPE_MISSING'
               );
+              driveNeedsFullScopeConsentRef.current = false;
               saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
-              const retryRes = await syncNotebookPdfToGoogleDrive(
-                refreshed.accessToken,
-                targetNb,
-                pdfExportOpts,
-                driveBasePath
-              );
+              let retryRes: Awaited<ReturnType<typeof syncNotebookPdfToGoogleDrive>> | null = null;
+              for (const nbItem of targetsToSync) {
+                setActiveDriveUploadingNbId(nbItem.id);
+                retryRes = await syncNotebookPdfToGoogleDrive(
+                  refreshed.accessToken,
+                  nbItem,
+                  nbItem.id === activeNotebook.id ? pdfExportOpts : { ...pdfExportOpts, liveSimCanvas: null },
+                  driveBasePath
+                );
+                markNotebookDriveSynced(nbItem, driveBasePath);
+              }
+              setActiveDriveUploadingNbId(null);
               setSyncStatus('synced');
               setIsDirty(false);
               setSecondsToNextSync(20);
               secondsToNextDrivePdfSyncRef.current = 120;
               hasPendingDrivePdfSyncRef.current = false;
-              if (retryRes.webViewLink) setLastDrivePdfLink(retryRes.webViewLink);
-              showToast(
-                `☁️ Google Drive (${retryRes.targetPathDisplay}): Αποθηκεύτηκε ως «${retryRes.pdfFileName}»!`
-              );
+              if (retryRes) {
+                const linkToSave =
+                  targetsToSync.length > 1
+                    ? retryRes.folderWebViewLink || retryRes.webViewLink
+                    : retryRes.webViewLink || retryRes.folderWebViewLink;
+                if (linkToSave) setLastDrivePdfLink(linkToSave);
+                showToast(
+                  targetsToSync.length > 1
+                    ? `☁️ Google Drive (${retryRes.targetPathDisplay}): Συγχρονίστηκαν ${targetsToSync.length} PDF!`
+                    : `☁️ Google Drive (${retryRes.targetPathDisplay}): Αποθηκεύτηκε ως «${retryRes.pdfFileName}»!`
+                );
+              }
               return;
             } catch {
               setSyncStatus('synced');
-              showToast('☁️ Cloud Sync ολοκληρώθηκε! (Πάτησε Συγχρονισμός PDF στο προφίλ 👤 για Google Drive)');
+              showToast('⚠️ Η άδεια Google Drive χρειάζεται ανανέωση — πάτησε το μπλε κουμπί Συγχρονισμός για άμεση σύνδεση!');
               return;
             }
           }
@@ -5640,19 +6196,44 @@ export default function App() {
       driveEmail,
       driveBasePath,
       activeNotebook,
+      viewMode,
+      activeLibraryFolder,
+      notebooks,
+      isNotebookDriveSynced,
+      markNotebookDriveSynced,
       pushNotebookToCloudTracked,
       saveDriveCredentials,
+      invalidateDriveToken,
       showToast,
     ]
   );
 
   const performAllNotebooksDrivePdfSync = useCallback(
-    async (overrideToken?: string) => {
+    async (overrideToken?: string, silentBackground = false) => {
       let token = overrideToken ?? driveAccessToken;
+      if (token && rejectedDriveTokensRef.current.has(token)) {
+        token = null;
+      }
       const hintEmail = driveEmail || currentUser?.email || null;
+
+      // Check token age synchronously before any await so browser popup blockers never block signInToGoogleDrive!
+      try {
+        const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
+        if (!overrideToken && token && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
+          token = null;
+        }
+      } catch {
+        // ignore
+      }
+
       if (!token) {
+        if (silentBackground) return;
         try {
-          const refreshed = await signInToGoogleDrive(hintEmail, false);
+          const refreshed = await signInToGoogleDrive(
+            hintEmail,
+            driveNeedsFullScopeConsentRef.current
+          );
+          driveNeedsFullScopeConsentRef.current = false;
           token = refreshed.accessToken;
           saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
         } catch {
@@ -5666,7 +6247,7 @@ export default function App() {
         let syncedCount = 0;
         let lastLink: string | undefined;
         const batchPdfOpts = {
-          activePageId: activePage.id,
+          activePageId: activePage?.id,
           rulersByPageId,
           isCircuitSimulating: isSimulating,
           circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
@@ -5674,7 +6255,77 @@ export default function App() {
           circuitFlowDirection: simFlowDirection,
           circuitShowDarkWireTrack: simShowDarkWireTrack,
         };
-        for (const nb of notebooks) {
+
+        const seededIds = new Set<string>([
+          VOLCANO_NOTEBOOK_ID,
+          PHOTOSYNTHESIS_NOTEBOOK_ID,
+          ACIDS_NOTEBOOK_ID,
+          BASES_NOTEBOOK_ID,
+          WEIGHT_NOTEBOOK_ID,
+          WATER_PHASES_NOTEBOOK_ID,
+          DAVINCI_NOTEBOOK_ID,
+          EINSTEIN_NOTEBOOK_ID,
+          WATER_CHEMISTRY_NOTEBOOK_ID,
+          WATER_PHASE_CHANGES_NOTEBOOK_ID,
+          CELL_BIOLOGY_NOTEBOOK_ID,
+          ELECTRICAL_RESISTANCE_NOTEBOOK_ID,
+          ELECTRIC_CIRCUIT_NOTEBOOK_ID,
+          CONDUCTORS_CURRENT_NOTEBOOK_ID,
+        ]);
+        const normFolder = (p: string) =>
+          (p || '')
+            .split('/')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .join('/');
+        const currentLibFolder = viewMode === 'library' ? normFolder(activeLibraryFolder || '') : '';
+
+        // Sort notebooks so the currently viewed Library folder (e.g. Γ2) & user school folders sync FIRST,
+        // and heavy seeded demo notebooks sync last!
+        const prioritizedNotebooks = [...notebooks].sort((a, b) => {
+          const aInCur =
+            currentLibFolder &&
+            (normFolder(a.folder || '') === currentLibFolder ||
+              normFolder(a.folder || '').startsWith(`${currentLibFolder}/`))
+              ? 1
+              : 0;
+          const bInCur =
+            currentLibFolder &&
+            (normFolder(b.folder || '') === currentLibFolder ||
+              normFolder(b.folder || '').startsWith(`${currentLibFolder}/`))
+              ? 1
+              : 0;
+          if (aInCur !== bInCur) return bInCur - aInCur;
+          const aSeeded = seededIds.has(a.id) ? 1 : 0;
+          const bSeeded = seededIds.has(b.id) ? 1 : 0;
+          if (aSeeded !== bSeeded) return aSeeded - bSeeded;
+          if (a.id === activeNotebook.id) return -1;
+          if (b.id === activeNotebook.id) return 1;
+          return 0;
+        });
+
+        const changedNotebooksOnly = prioritizedNotebooks.filter(
+          (nb) => !isNotebookDriveSynced(nb, driveBasePath)
+        );
+        const alreadyUpToDateCount = prioritizedNotebooks.length - changedNotebooksOnly.length;
+
+        if (changedNotebooksOnly.length === 0) {
+          setSyncStatus('synced');
+          setIsDirty(false);
+          if (!silentBackground) {
+            showToast(
+              `✅ Όλες οι σημειώσεις (${alreadyUpToDateCount}) είναι ήδη ενημερωμένες στο Google Drive!`
+            );
+          }
+          return;
+        }
+
+        for (let i = 0; i < changedNotebooksOnly.length; i++) {
+          const nb = changedNotebooksOnly[i];
+          setActiveDriveUploadingNbId(nb.id);
+          setDriveSyncProgressText(
+            `Συγχρονισμός αλλαγών ${i + 1}/${changedNotebooksOnly.length}: «${nb.title}»...`
+          );
           let res;
           try {
             res = await syncNotebookPdfToGoogleDrive(token, nb, batchPdfOpts, driveBasePath);
@@ -5683,22 +6334,40 @@ export default function App() {
               innerErr?.message === 'DRIVE_TOKEN_EXPIRED' ||
               innerErr?.message === 'DRIVE_SCOPE_MISSING'
             ) {
+              if (innerErr?.message === 'DRIVE_SCOPE_MISSING') {
+                driveNeedsFullScopeConsentRef.current = true;
+              }
+              invalidateDriveToken(token);
+              if (silentBackground) {
+                break;
+              }
               const refreshed = await signInToGoogleDrive(
                 hintEmail,
                 innerErr?.message === 'DRIVE_SCOPE_MISSING'
               );
+              driveNeedsFullScopeConsentRef.current = false;
               token = refreshed.accessToken;
               saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
               res = await syncNotebookPdfToGoogleDrive(token, nb, batchPdfOpts, driveBasePath);
             } else {
-              throw innerErr;
+              console.warn('Drive PDF sync error for notebook:', nb.title, innerErr);
+              continue;
             }
           }
+          markNotebookDriveSynced(nb, driveBasePath);
           syncedCount++;
-          if (nb.id === activeNotebook.id && res.webViewLink) {
-            lastLink = res.webViewLink;
+          if (
+            currentLibFolder &&
+            normFolder(nb.folder || '') === currentLibFolder &&
+            res?.folderWebViewLink
+          ) {
+            lastLink = res.folderWebViewLink;
+          } else if (nb.id === activeNotebook.id && (res?.webViewLink || res?.folderWebViewLink) && !lastLink) {
+            lastLink = res.webViewLink || res.folderWebViewLink;
           }
         }
+        setActiveDriveUploadingNbId(null);
+        setDriveSyncProgressText('');
         const nowMs = Date.now();
         setLastDriveAutoSyncAt(nowMs);
         try {
@@ -5712,13 +6381,23 @@ export default function App() {
         setSecondsToNextSync(20);
         secondsToNextDrivePdfSyncRef.current = 120;
         hasPendingDrivePdfSyncRef.current = false;
-        showToast(
-          `☁️ Συγχρονίστηκαν όλες οι ${syncedCount} σημειώσεις & υποφάκελοι σε PDF στο Google Drive (${driveBasePath})!`
-        );
+        if (!silentBackground) {
+          showToast(
+            alreadyUpToDateCount > 0
+              ? `☁️ Google Drive: Συγχρονίστηκαν ${syncedCount} σημειώσεις με αλλαγές (${alreadyUpToDateCount} ήδη ενημερωμένες)!`
+              : `☁️ Συγχρονίστηκαν ${syncedCount} σημειώσεις & υποφάκελοι σε PDF στο Google Drive (${driveBasePath})!`
+          );
+        }
       } catch (err: any) {
+        setActiveDriveUploadingNbId(null);
+        setDriveSyncProgressText('');
         setSyncStatus('dirty');
-        showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
+        if (!silentBackground) {
+          showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
+        }
       } finally {
+        setActiveDriveUploadingNbId(null);
+        setDriveSyncProgressText('');
         setDriveSyncingAll(false);
       }
     },
@@ -5728,11 +6407,501 @@ export default function App() {
       driveBasePath,
       currentUser?.email,
       notebooks,
+      isNotebookDriveSynced,
+      markNotebookDriveSynced,
       activeNotebook.id,
+      viewMode,
+      activeLibraryFolder,
       saveDriveCredentials,
+      invalidateDriveToken,
       showToast,
     ]
   );
+
+  // Sync a specific Library Folder, ALL its subfolders (even empty ones), and ALL notebooks inside them to Google Drive
+  // Persists checkpoint in localStorage so if the user refreshes mid-sync, it resumes automatically without re-clicking!
+  const handleSyncFolderTreeToGoogleDrive = useCallback(
+    async (
+      rawFolderPath: string,
+      resumeOpts?: {
+        completedFolderPaths?: string[];
+        completedNotebookIds?: string[];
+        isAutoResume?: boolean;
+      }
+    ) => {
+      const PENDING_SYNC_KEY = 'bestnotes_pending_drive_folder_sync_v1';
+      const isAutoResume = Boolean(resumeOpts?.isAutoResume);
+      const normFolder = (p: string) =>
+        (p || '')
+          .split('/')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join('/');
+      const targetRootPath = normFolder(rawFolderPath);
+      if (!targetRootPath) return;
+      if ((syncingDriveFolderPath && !isAutoResume) || driveSyncingAll) return;
+
+      let token = driveAccessToken;
+      if (token && rejectedDriveTokensRef.current.has(token)) {
+        token = null;
+      }
+      const hintEmail = driveEmail || currentUser?.email || null;
+
+      // Check token age synchronously before any await so browser popup blockers never block signInToGoogleDrive!
+      try {
+        const savedTime = Number(localStorage.getItem('bestnotes_drive_token_time_v3') || '0');
+        if (token && savedTime > 0 && Date.now() - savedTime > 50 * 60 * 1000) {
+          token = null;
+        }
+      } catch {
+        // ignore
+      }
+
+      if (!token) {
+        if (isAutoResume) {
+          try {
+            localStorage.removeItem(PENDING_SYNC_KEY);
+          } catch {
+            // ignore
+          }
+          setSyncingDriveFolderPath(null);
+          return;
+        }
+        try {
+          const refreshed = await signInToGoogleDrive(
+            hintEmail,
+            driveNeedsFullScopeConsentRef.current
+          );
+          driveNeedsFullScopeConsentRef.current = false;
+          token = refreshed.accessToken;
+          saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+        } catch {
+          showToast('⚠️ Η σύνδεση με το Google Drive ακυρώθηκε.');
+          return;
+        }
+      }
+
+      const deletedPaths = new Set<string>(
+        customFolders
+          .filter((cf) => cf.deleted)
+          .map((cf) => normFolder(cf.name))
+          .filter(Boolean)
+      );
+      const isDeletedOrInsideDeleted = (normP: string) => {
+        if (!normP) return false;
+        for (const delP of deletedPaths) {
+          if (normP === delP || normP.startsWith(`${delP}/`)) return true;
+        }
+        return false;
+      };
+
+      const allFolderPathsSet = new Set<string>([targetRootPath]);
+      const addMatchingHierarchy = (rawP: string) => {
+        const norm = normFolder(rawP);
+        if (!norm) return;
+        if (norm !== targetRootPath && !norm.startsWith(`${targetRootPath}/`)) return;
+        if (isDeletedOrInsideDeleted(norm)) return;
+        const parts = norm.split('/');
+        const rootDepth = targetRootPath.split('/').length;
+        let acc = parts.slice(0, rootDepth).join('/');
+        allFolderPathsSet.add(acc);
+        for (let i = rootDepth; i < parts.length; i++) {
+          acc = `${acc}/${parts[i]}`;
+          if (!isDeletedOrInsideDeleted(acc)) {
+            allFolderPathsSet.add(acc);
+          }
+        }
+      };
+
+      for (const cf of customFolders) {
+        if (!cf.deleted) {
+          addMatchingHierarchy(cf.name);
+        }
+      }
+      for (const nb of notebooks) {
+        if (nb.folder) {
+          addMatchingHierarchy(nb.folder);
+        }
+        if (nb.folderStyles && typeof nb.folderStyles === 'object') {
+          for (const stPath of Object.keys(nb.folderStyles)) {
+            addMatchingHierarchy(stPath);
+          }
+        }
+      }
+
+      const allFolderPaths = Array.from(allFolderPathsSet).sort(
+        (a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b, 'el')
+      );
+      const subfolderPathsCount = Math.max(0, allFolderPaths.length - 1);
+
+      const folderNotebooks = notebooks.filter((n) => {
+        const nf = normFolder(n.folder || '');
+        return nf === targetRootPath || nf.startsWith(`${targetRootPath}/`);
+      });
+
+      const effBase = driveBasePath.trim();
+      const foldersToEnsure = allFolderPaths.filter(
+        (fp) => driveSyncedFoldersRef.current[fp] !== effBase
+      );
+      const changedFolderNotebooks = folderNotebooks.filter(
+        (nb) => !isNotebookDriveSynced(nb, effBase)
+      );
+      const alreadySyncedNotesCount = folderNotebooks.length - changedFolderNotebooks.length;
+
+      const folderShortName = targetRootPath.split('/').pop() || targetRootPath;
+
+      // Fast path: if all subfolders and all files in this folder have ZERO changes since last Drive sync, skip re-uploading!
+      if (foldersToEnsure.length === 0 && changedFolderNotebooks.length === 0) {
+        try {
+          localStorage.removeItem(PENDING_SYNC_KEY);
+        } catch {
+          // ignore
+        }
+        setSyncingDriveFolderPath(null);
+        setSyncStatus('synced');
+        showToast(
+          `✅ Ο φάκελος «${folderShortName}» είναι ήδη πλήρως ενημερωμένος στο Google Drive (${alreadySyncedNotesCount} αρχεία χωρίς νέες αλλαγές)!`
+        );
+        return;
+      }
+
+      const completedFolderPathsSet = new Set<string>(resumeOpts?.completedFolderPaths || []);
+      const completedNotebookIdsSet = new Set<string>(resumeOpts?.completedNotebookIds || []);
+      const persistCheckpoint = () => {
+        try {
+          localStorage.setItem(
+            PENDING_SYNC_KEY,
+            JSON.stringify({
+              folderPath: targetRootPath,
+              completedFolderPaths: Array.from(completedFolderPathsSet),
+              completedNotebookIds: Array.from(completedNotebookIdsSet),
+              updatedAt: Date.now(),
+            })
+          );
+        } catch {
+          // ignore
+        }
+      };
+
+      setSyncingDriveFolderPath(targetRootPath);
+      setSyncStatus('syncing');
+      persistCheckpoint();
+      if (!isAutoResume) {
+        clearDriveFolderResolutionCache();
+      }
+      showToast(
+        isAutoResume
+          ? `🔄 Συνέχιση συγχρονισμού αλλαγών φακέλου «${folderShortName}» με το Google Drive...`
+          : changedFolderNotebooks.length > 0 && alreadySyncedNotesCount > 0
+          ? `🔄 Συγχρονισμός μόνο των ${changedFolderNotebooks.length} αρχείων με αλλαγές στον φάκελο «${folderShortName}»...`
+          : `🔄 Συγχρονισμός φακέλου «${folderShortName}» (υποφάκελοι & περιεχόμενα) με το Google Drive...`
+      );
+      // Yield one frame so the red spinning sync arrows render immediately before PDF canvas work begins
+      await new Promise<void>((resolve) =>
+        window.requestAnimationFrame(() => window.setTimeout(resolve, 0))
+      );
+
+      try {
+        let rootDriveFolderLink: string | undefined;
+        let rootTargetPathDisplay = targetRootPath;
+
+        // 1. Ensure ONLY unsynced folders/subfolders (plus root path if needed) exist in Google Drive
+        const folderQueue = foldersToEnsure.includes(targetRootPath)
+          ? foldersToEnsure
+          : foldersToEnsure.length > 0
+          ? [targetRootPath, ...foldersToEnsure]
+          : [];
+        for (let i = 0; i < folderQueue.length; i++) {
+          const fPath = folderQueue[i];
+          if (fPath !== targetRootPath && completedFolderPathsSet.has(fPath)) {
+            continue;
+          }
+          const subLabel =
+            fPath === targetRootPath ? folderShortName : fPath.slice(targetRootPath.length + 1);
+          setDriveSyncProgressText(
+            `Φάκελος ${i + 1}/${folderQueue.length}: «${subLabel}»...`
+          );
+          let folderRes;
+          try {
+            folderRes = await syncDriveFolderStructureToGoogleDrive(token, fPath, driveBasePath);
+          } catch (innerErr: any) {
+            if (
+              innerErr?.message === 'DRIVE_TOKEN_EXPIRED' ||
+              innerErr?.message === 'DRIVE_SCOPE_MISSING'
+            ) {
+              if (innerErr?.message === 'DRIVE_SCOPE_MISSING') {
+                driveNeedsFullScopeConsentRef.current = true;
+              }
+              invalidateDriveToken(token);
+              if (isAutoResume) {
+                throw new Error(
+                  'Η άδεια Google Drive χρειάζεται ανανέωση — πάτησε το κουμπί συγχρονισμού!'
+                );
+              }
+              const refreshed = await signInToGoogleDrive(
+                hintEmail,
+                innerErr?.message === 'DRIVE_SCOPE_MISSING'
+              );
+              driveNeedsFullScopeConsentRef.current = false;
+              token = refreshed.accessToken;
+              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+              folderRes = await syncDriveFolderStructureToGoogleDrive(token, fPath, driveBasePath);
+            } else {
+              throw innerErr;
+            }
+          }
+          markFolderDriveSynced(fPath, driveBasePath);
+          completedFolderPathsSet.add(fPath);
+          persistCheckpoint();
+          if (fPath === targetRootPath && folderRes) {
+            rootDriveFolderLink = folderRes.folderWebViewLink;
+            rootTargetPathDisplay = folderRes.targetPathDisplay;
+          }
+        }
+
+        // 2. Sync ONLY notebooks that have changes (or have never been synced yet) as PDFs to Google Drive
+        const batchPdfOpts = {
+          activePageId: activePage?.id,
+          liveSimCanvas: simCanvasRef.current,
+          rulersByPageId,
+          isCircuitSimulating: isSimulating,
+          circuitSwitchClosed: isSimulating ? simCircuitSwitchClosed : true,
+          circuitShowElectrons: simShowElectrons,
+          circuitFlowDirection: simFlowDirection,
+          circuitShowDarkWireTrack: simShowDarkWireTrack,
+        };
+        let syncedNotesCount = 0;
+        for (let i = 0; i < changedFolderNotebooks.length; i++) {
+          const nb = changedFolderNotebooks[i];
+          if (completedNotebookIdsSet.has(nb.id) || isNotebookDriveSynced(nb, driveBasePath)) {
+            continue;
+          }
+          setActiveDriveUploadingNbId(nb.id);
+          setDriveSyncProgressText(
+            `Συγχρονισμός αλλαγών ${i + 1}/${changedFolderNotebooks.length}: «${nb.title}»...`
+          );
+          await new Promise<void>((resolve) =>
+            window.requestAnimationFrame(() => window.setTimeout(resolve, 0))
+          );
+          if (currentUser) {
+            pushNotebookToCloudTracked(currentUser.uid, nb);
+          }
+          try {
+            const upRes = await syncNotebookPdfToGoogleDrive(
+              token,
+              nb,
+              nb.id === activeNotebook.id ? batchPdfOpts : { ...batchPdfOpts, liveSimCanvas: null },
+              driveBasePath
+            );
+            if (!rootDriveFolderLink && upRes?.folderWebViewLink) {
+              rootDriveFolderLink = upRes.folderWebViewLink;
+              rootTargetPathDisplay = upRes.targetPathDisplay;
+            }
+            markNotebookDriveSynced(nb, driveBasePath);
+            completedNotebookIdsSet.add(nb.id);
+            persistCheckpoint();
+            syncedNotesCount++;
+          } catch (innerErr: any) {
+            if (
+              innerErr?.message === 'DRIVE_TOKEN_EXPIRED' ||
+              innerErr?.message === 'DRIVE_SCOPE_MISSING'
+            ) {
+              if (innerErr?.message === 'DRIVE_SCOPE_MISSING') {
+                driveNeedsFullScopeConsentRef.current = true;
+              }
+              invalidateDriveToken(token);
+              if (isAutoResume) {
+                throw new Error(
+                  'Η άδεια Google Drive χρειάζεται ανανέωση — πάτησε το κουμπί συγχρονισμού!'
+                );
+              }
+              const refreshed = await signInToGoogleDrive(
+                hintEmail,
+                innerErr?.message === 'DRIVE_SCOPE_MISSING'
+              );
+              driveNeedsFullScopeConsentRef.current = false;
+              token = refreshed.accessToken;
+              saveDriveCredentials(refreshed.accessToken, refreshed.email || refreshed.displayName);
+              const upRes = await syncNotebookPdfToGoogleDrive(
+                token,
+                nb,
+                nb.id === activeNotebook.id
+                  ? batchPdfOpts
+                  : { ...batchPdfOpts, liveSimCanvas: null },
+                driveBasePath
+              );
+              if (!rootDriveFolderLink && upRes?.folderWebViewLink) {
+                rootDriveFolderLink = upRes.folderWebViewLink;
+                rootTargetPathDisplay = upRes.targetPathDisplay;
+              }
+              markNotebookDriveSynced(nb, driveBasePath);
+              completedNotebookIdsSet.add(nb.id);
+              persistCheckpoint();
+              syncedNotesCount++;
+            } else {
+              console.warn('Drive PDF sync error for notebook:', nb.title, innerErr);
+            }
+          }
+        }
+
+        try {
+          localStorage.removeItem(PENDING_SYNC_KEY);
+        } catch {
+          // ignore
+        }
+        const nowMs = Date.now();
+        setLastDriveAutoSyncAt(nowMs);
+        try {
+          localStorage.setItem('bestnotes_drive_last_autosync_at_v1', String(nowMs));
+        } catch {
+          // ignore
+        }
+        if (rootDriveFolderLink) {
+          setLastDrivePdfLink(rootDriveFolderLink);
+        }
+        setSyncStatus('synced');
+        if (alreadySyncedNotesCount > 0) {
+          showToast(
+            `☁️ Google Drive (${rootTargetPathDisplay}): Ενημερώθηκαν ${syncedNotesCount} ${
+              syncedNotesCount === 1 ? 'αρχείο με αλλαγές' : 'αρχεία με αλλαγές'
+            } (${alreadySyncedNotesCount} ήδη συγχρονισμένα)!`
+          );
+        } else {
+          const subSummary =
+            subfolderPathsCount > 0
+              ? `${subfolderPathsCount} ${subfolderPathsCount === 1 ? 'υποφάκελος' : 'υποφάκελοι'} & `
+              : '';
+          const filesSummary = `${syncedNotesCount} ${
+            syncedNotesCount === 1 ? 'αρχείο PDF' : 'αρχεία PDF'
+          }`;
+          showToast(
+            `☁️ Google Drive (${rootTargetPathDisplay}): Συγχρονίστηκε ο φάκελος «${folderShortName}» (${subSummary}${filesSummary})!`
+          );
+        }
+      } catch (err: any) {
+        try {
+          localStorage.removeItem(PENDING_SYNC_KEY);
+        } catch {
+          // ignore
+        }
+        setSyncStatus('dirty');
+        showToast(`❌ Σφάλμα συγχρονισμού Google Drive: ${err?.message || 'Άγνωστο σφάλμα'}`);
+      } finally {
+        setActiveDriveUploadingNbId(null);
+        setDriveSyncProgressText('');
+        setSyncingDriveFolderPath(null);
+      }
+    },
+    [
+      syncingDriveFolderPath,
+      driveSyncingAll,
+      driveAccessToken,
+      driveEmail,
+      driveBasePath,
+      currentUser,
+      customFolders,
+      notebooks,
+      isNotebookDriveSynced,
+      markFolderDriveSynced,
+      markNotebookDriveSynced,
+      activeNotebook.id,
+      activePage?.id,
+      rulersByPageId,
+      isSimulating,
+      simCircuitSwitchClosed,
+      simShowElectrons,
+      simFlowDirection,
+      simShowDarkWireTrack,
+      pushNotebookToCloudTracked,
+      saveDriveCredentials,
+      invalidateDriveToken,
+      showToast,
+    ]
+  );
+
+  // Automatically resume an in-progress folder Google Drive sync if the page was refreshed mid-sync!
+  useEffect(() => {
+    if (hasResumedPendingFolderSyncRef.current) return;
+    if (!driveAccessToken) return;
+    let parsed: {
+      folderPath?: string;
+      completedFolderPaths?: string[];
+      completedNotebookIds?: string[];
+      updatedAt?: number;
+    } | null = null;
+    try {
+      const raw = localStorage.getItem('bestnotes_pending_drive_folder_sync_v1');
+      if (!raw) return;
+      parsed = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (
+      !parsed ||
+      typeof parsed.folderPath !== 'string' ||
+      !parsed.folderPath.trim() ||
+      typeof parsed.updatedAt !== 'number' ||
+      Date.now() - parsed.updatedAt >= 15 * 60 * 1000
+    ) {
+      try {
+        localStorage.removeItem('bestnotes_pending_drive_folder_sync_v1');
+      } catch {
+        // ignore
+      }
+      setSyncingDriveFolderPath(null);
+      return;
+    }
+
+    // Wait for Auth + IndexedDB / Cloud notebooks & folders to hydrate before resuming
+    let expectsLoggedInUser = false;
+    try {
+      expectsLoggedInUser = localStorage.getItem(AUTH_FLAG_STORAGE_KEY) === 'true';
+    } catch {
+      // ignore
+    }
+    if (expectsLoggedInUser && (!currentUser || (!cloudInitialLoaded && !hasLoadedIndexedDbRef.current))) {
+      return;
+    }
+    const delayMs = notebooks.length > 0 ? 500 : 1800;
+    const targetPath = parsed.folderPath.trim();
+    const resumeFolders = Array.isArray(parsed.completedFolderPaths)
+      ? parsed.completedFolderPaths
+      : [];
+    const resumeNotebooks = Array.isArray(parsed.completedNotebookIds)
+      ? parsed.completedNotebookIds
+      : [];
+
+    const timer = window.setTimeout(() => {
+      if (hasResumedPendingFolderSyncRef.current) return;
+      hasResumedPendingFolderSyncRef.current = true;
+      void handleSyncFolderTreeToGoogleDrive(targetPath, {
+        completedFolderPaths: resumeFolders,
+        completedNotebookIds: resumeNotebooks,
+        isAutoResume: true,
+      });
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    driveAccessToken,
+    currentUser,
+    cloudInitialLoaded,
+    notebooks.length,
+    customFolders.length,
+    handleSyncFolderTreeToGoogleDrive,
+  ]);
+
+  // Automatically sync user school class folders (e.g. Γ2) once per session as soon as a valid v3 Drive token is available!
+  useEffect(() => {
+    if (!driveAccessToken || !currentUser || hasAutoSyncedSchoolFoldersRef.current) return;
+    if (syncingDriveFolderPath) return;
+    const timer = window.setTimeout(() => {
+      if (hasAutoSyncedSchoolFoldersRef.current || !driveAccessToken) return;
+      hasAutoSyncedSchoolFoldersRef.current = true;
+      void performDrivePdfSync(false, driveAccessToken, undefined, true);
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [driveAccessToken, currentUser, syncingDriveFolderPath, performDrivePdfSync]);
 
   const [pendingShareFile, setPendingShareFile] = useState<{ file: File; title: string } | null>(null);
   const [shareMenuTarget, setShareMenuTarget] = useState<{
@@ -5997,6 +7166,46 @@ export default function App() {
         seedKey: 'bestnotes_water_phases_seeded_v1',
         build: buildWaterPhasesNotebook,
       },
+      {
+        id: DAVINCI_NOTEBOOK_ID,
+        seedKey: 'bestnotes_davinci_seeded_v1',
+        build: () => buildDaVinciNotebook('Γενικά'),
+      },
+      {
+        id: EINSTEIN_NOTEBOOK_ID,
+        seedKey: 'bestnotes_einstein_seeded_v1',
+        build: () => buildEinsteinNotebook('Γενικά'),
+      },
+      {
+        id: WATER_CHEMISTRY_NOTEBOOK_ID,
+        seedKey: 'bestnotes_water_chemistry_seeded_v1',
+        build: buildWaterChemistryNotebook,
+      },
+      {
+        id: WATER_PHASE_CHANGES_NOTEBOOK_ID,
+        seedKey: 'bestnotes_water_phase_changes_seeded_v1',
+        build: buildWaterPhaseChangesNotebook,
+      },
+      {
+        id: CELL_BIOLOGY_NOTEBOOK_ID,
+        seedKey: 'bestnotes_cell_biology_seeded_v1',
+        build: buildCellBiologyNotebook,
+      },
+      {
+        id: ELECTRICAL_RESISTANCE_NOTEBOOK_ID,
+        seedKey: 'bestnotes_electrical_resistance_seeded_v1',
+        build: buildElectricalResistanceNotebook,
+      },
+      {
+        id: ELECTRIC_CIRCUIT_NOTEBOOK_ID,
+        seedKey: 'bestnotes_electric_circuit_seeded_v1',
+        build: buildElectricCircuitNotebook,
+      },
+      {
+        id: CONDUCTORS_CURRENT_NOTEBOOK_ID,
+        seedKey: 'bestnotes_conductors_current_seeded_v1',
+        build: buildConductorsAndCurrentNotebook,
+      },
     ];
 
     const missingSpecs = seedSpecs.filter((spec) => {
@@ -6196,7 +7405,11 @@ export default function App() {
 
         if (driveAccessToken && (hasPendingDrivePdfSyncRef.current || isTwoHourScheduledDue)) {
           hasPendingDrivePdfSyncRef.current = false;
-          void performDrivePdfSync(false);
+          if (isTwoHourScheduledDue) {
+            void performAllNotebooksDrivePdfSync(undefined, true);
+          } else {
+            void performDrivePdfSync(false);
+          }
         }
       } else {
         secondsToNextDrivePdfSyncRef.current -= 1;
@@ -6211,6 +7424,7 @@ export default function App() {
     notebooks.length,
     performCloudFirestoreSyncNow,
     performDrivePdfSync,
+    performAllNotebooksDrivePdfSync,
   ]);
 
   // Close any open floating popover/panel or modal (Color, Width, Layers, Shape Library, Thumbnails, Math, Settings, User Profile) when clicking/tapping anywhere outside it
@@ -6380,19 +7594,57 @@ export default function App() {
 
   const clonePageFast = useCallback((p: NotePage): NotePage => ({
     ...p,
-    layers: p.layers.map((l) => ({ ...l })),
-    strokes: p.strokes.map((s) => ({
+    layers: (p.layers || []).map((l) => ({ ...l })),
+    strokes: (p.strokes || []).map((s) => ({
       ...s,
-      points: s.points.map((pt) => ({ ...pt })),
+      points: (s.points || []).map((pt) => ({ ...pt })),
       keyNodeIndices: s.keyNodeIndices ? [...s.keyNodeIndices] : undefined,
+      springSupport: s.springSupport ? { ...s.springSupport } : undefined,
+      circuitBox: s.circuitBox ? { ...s.circuitBox } : undefined,
     })),
-    texts: (p.texts || []).map((t) => ({ ...t })),
+    texts: (p.texts || []).map((t) => ({
+      ...t,
+      spans: t.spans ? t.spans.map((sp) => ({ ...sp })) : undefined,
+    })),
     images: (p.images || []).map((im) => ({
       ...im,
       clipPolygon: im.clipPolygon ? im.clipPolygon.map((cp) => ({ ...cp })) : undefined,
     })),
     tapes: (p.tapes || []).map((tp) => ({ ...tp })),
     ruler: p.ruler ? { ...p.ruler } : undefined,
+    springSims: p.springSims
+      ? p.springSims.map((sm) => ({
+          ...sm,
+          graphs: sm.graphs
+            ? {
+                xt: sm.graphs.xt ? { ...sm.graphs.xt } : { visible: false },
+                vt: sm.graphs.vt ? { ...sm.graphs.vt } : { visible: false },
+                at: sm.graphs.at ? { ...sm.graphs.at } : { visible: false },
+                hooke: sm.graphs.hooke ? { ...sm.graphs.hooke } : undefined,
+              }
+            : {
+                xt: { visible: false },
+                vt: { visible: false },
+                at: { visible: false },
+              },
+          hookeMeasurements: sm.hookeMeasurements
+            ? sm.hookeMeasurements.map((m) => ({ ...m }))
+            : undefined,
+          hookePlottedWeights: sm.hookePlottedWeights ? [...sm.hookePlottedWeights] : undefined,
+        }))
+      : undefined,
+    forceSims: p.forceSims
+      ? p.forceSims.map((fs) => ({
+          ...fs,
+          calcBoxPos: fs.calcBoxPos ? { ...fs.calcBoxPos } : undefined,
+        }))
+      : undefined,
+    circuitSims: p.circuitSims
+      ? p.circuitSims.map((cs) => ({
+          ...cs,
+          strokeIds: cs.strokeIds ? [...cs.strokeIds] : [],
+        }))
+      : undefined,
     atomSims: p.atomSims
       ? p.atomSims.map((as) => ({
           ...as,
@@ -6402,23 +7654,52 @@ export default function App() {
       : undefined,
   }), []);
 
+  const MAX_UNDO_STACK_SIZE = 250;
   const suppressNextUndoRecordRef = useRef<boolean>(false);
+  const textEditUndoRecordedForIdRef = useRef<string | null>(null);
   const undoStackRef = useRef<NotePage[]>(undoStack);
-  undoStackRef.current = undoStack;
   const redoStackRef = useRef<NotePage[]>(redoStack);
-  redoStackRef.current = redoStack;
 
   const isSamePageStateForUndo = useCallback((a: NotePage, b: NotePage): boolean => {
-    if (a.id !== b.id) return false;
+    if (
+      a.id !== b.id ||
+      a.template !== b.template ||
+      (a.paperColor || '') !== (b.paperColor || '') ||
+      a.orientation !== b.orientation
+    ) {
+      return false;
+    }
     if (a.strokes.length !== b.strokes.length) return false;
     if ((a.texts?.length || 0) !== (b.texts?.length || 0)) return false;
     if ((a.images?.length || 0) !== (b.images?.length || 0)) return false;
     if ((a.tapes?.length || 0) !== (b.tapes?.length || 0)) return false;
+    if ((a.layers?.length || 0) !== (b.layers?.length || 0)) return false;
     if ((a.springSims?.length || 0) !== (b.springSims?.length || 0)) return false;
     if ((a.forceSims?.length || 0) !== (b.forceSims?.length || 0)) return false;
     if ((a.circuitSims?.length || 0) !== (b.circuitSims?.length || 0)) return false;
     if ((a.atomSims?.length || 0) !== (b.atomSims?.length || 0)) return false;
-    if (a.atomSims !== b.atomSims && JSON.stringify(a.atomSims || []) !== JSON.stringify(b.atomSims || [])) {
+    if (
+      a.springSims !== b.springSims &&
+      JSON.stringify(a.springSims || []) !== JSON.stringify(b.springSims || [])
+    ) {
+      return false;
+    }
+    if (
+      a.forceSims !== b.forceSims &&
+      JSON.stringify(a.forceSims || []) !== JSON.stringify(b.forceSims || [])
+    ) {
+      return false;
+    }
+    if (
+      a.circuitSims !== b.circuitSims &&
+      JSON.stringify(a.circuitSims || []) !== JSON.stringify(b.circuitSims || [])
+    ) {
+      return false;
+    }
+    if (
+      a.atomSims !== b.atomSims &&
+      JSON.stringify(a.atomSims || []) !== JSON.stringify(b.atomSims || [])
+    ) {
       return false;
     }
 
@@ -6429,29 +7710,41 @@ export default function App() {
         sa.id !== sb.id ||
         sa.color !== sb.color ||
         sa.width !== sb.width ||
+        (sa.opacity ?? 1) !== (sb.opacity ?? 1) ||
+        (sa.lineStyle || 'solid') !== (sb.lineStyle || 'solid') ||
+        (sa.fillColor || '') !== (sb.fillColor || '') ||
+        (sa.fillStyle || 'none') !== (sb.fillStyle || 'none') ||
+        (sa.fillTransparency ?? 0) !== (sb.fillTransparency ?? 0) ||
+        Boolean(sa.isShape) !== Boolean(sb.isShape) ||
         sa.shapeType !== sb.shapeType ||
+        Boolean(sa.arrowStart) !== Boolean(sb.arrowStart) ||
+        Boolean(sa.arrowEnd) !== Boolean(sb.arrowEnd) ||
         sa.groupId !== sb.groupId ||
+        sa.layerId !== sb.layerId ||
+        sa.zOrder !== sb.zOrder ||
         sa.switchClosed !== sb.switchClosed ||
         sa.attachedToSpringId !== sb.attachedToSpringId ||
         sa.attachedToWeightId !== sb.attachedToWeightId ||
+        sa.springSupport?.supportStrokeId !== sb.springSupport?.supportStrokeId ||
+        sa.springSupport?.fixedEnd !== sb.springSupport?.fixedEnd ||
         sa.points.length !== sb.points.length
       ) {
         return false;
       }
-      if (sa.points.length > 0) {
-        const p0a = sa.points[0];
-        const p0b = sb.points[0];
-        const pLa = sa.points[sa.points.length - 1];
-        const pLb = sb.points[sb.points.length - 1];
-        const pMa = sa.points[Math.floor(sa.points.length / 2)];
-        const pMb = sb.points[Math.floor(sb.points.length / 2)];
+      for (let j = 0; j < sa.points.length; j++) {
+        const pa = sa.points[j];
+        const pb = sb.points[j];
         if (
-          Math.abs(p0a.x - p0b.x) > 0.05 ||
-          Math.abs(p0a.y - p0b.y) > 0.05 ||
-          Math.abs(pLa.x - pLb.x) > 0.05 ||
-          Math.abs(pLa.y - pLb.y) > 0.05 ||
-          Math.abs(pMa.x - pMb.x) > 0.05 ||
-          Math.abs(pMa.y - pMb.y) > 0.05
+          Math.abs(pa.x - pb.x) > 0.05 ||
+          Math.abs(pa.y - pb.y) > 0.05 ||
+          Math.abs((pa.cx ?? pa.x) - (pb.cx ?? pb.x)) > 0.05 ||
+          Math.abs((pa.cy ?? pa.y) - (pb.cy ?? pb.y)) > 0.05 ||
+          Math.abs((pa.inDx ?? 0) - (pb.inDx ?? 0)) > 0.05 ||
+          Math.abs((pa.inDy ?? 0) - (pb.inDy ?? 0)) > 0.05 ||
+          Math.abs((pa.outDx ?? 0) - (pb.outDx ?? 0)) > 0.05 ||
+          Math.abs((pa.outDy ?? 0) - (pb.outDy ?? 0)) > 0.05 ||
+          Boolean(pa.smooth) !== Boolean(pb.smooth) ||
+          pa.twist !== pb.twist
         ) {
           return false;
         }
@@ -6464,10 +7757,21 @@ export default function App() {
       if (
         ta[i].id !== tb[i].id ||
         ta[i].text !== tb[i].text ||
+        (ta[i].latex || '') !== (tb[i].latex || '') ||
+        Boolean(ta[i].isMath) !== Boolean(tb[i].isMath) ||
         Math.abs(ta[i].x - tb[i].x) > 0.05 ||
         Math.abs(ta[i].y - tb[i].y) > 0.05 ||
+        Math.abs((ta[i].boxWidth ?? 0) - (tb[i].boxWidth ?? 0)) > 0.05 ||
+        Math.abs((ta[i].boxHeight ?? 0) - (tb[i].boxHeight ?? 0)) > 0.05 ||
+        Math.abs((ta[i].lineHeight ?? 0) - (tb[i].lineHeight ?? 0)) > 0.005 ||
         ta[i].fontSize !== tb[i].fontSize ||
-        ta[i].color !== tb[i].color
+        ta[i].color !== tb[i].color ||
+        Boolean(ta[i].bold) !== Boolean(tb[i].bold) ||
+        (ta[i].fontFamily || 'sans') !== (tb[i].fontFamily || 'sans') ||
+        (ta[i].textAlign || 'left') !== (tb[i].textAlign || 'left') ||
+        ta[i].groupId !== tb[i].groupId ||
+        ta[i].layerId !== tb[i].layerId ||
+        JSON.stringify(ta[i].spans || []) !== JSON.stringify(tb[i].spans || [])
       ) {
         return false;
       }
@@ -6478,11 +7782,48 @@ export default function App() {
     for (let i = 0; i < ia.length; i++) {
       if (
         ia[i].id !== ib[i].id ||
+        ia[i].dataUrl !== ib[i].dataUrl ||
         Math.abs(ia[i].x - ib[i].x) > 0.05 ||
         Math.abs(ia[i].y - ib[i].y) > 0.05 ||
         Math.abs(ia[i].width - ib[i].width) > 0.05 ||
         Math.abs(ia[i].height - ib[i].height) > 0.05 ||
-        ia[i].rotation !== ib[i].rotation
+        (ia[i].rotation ?? 0) !== (ib[i].rotation ?? 0) ||
+        ia[i].groupId !== ib[i].groupId ||
+        ia[i].layerId !== ib[i].layerId ||
+        ia[i].zOrder !== ib[i].zOrder ||
+        JSON.stringify(ia[i].clipPolygon || []) !== JSON.stringify(ib[i].clipPolygon || [])
+      ) {
+        return false;
+      }
+    }
+
+    const tpa = a.tapes || [];
+    const tpb = b.tapes || [];
+    for (let i = 0; i < tpa.length; i++) {
+      if (
+        tpa[i].id !== tpb[i].id ||
+        Math.abs(tpa[i].x1 - tpb[i].x1) > 0.05 ||
+        Math.abs(tpa[i].y1 - tpb[i].y1) > 0.05 ||
+        Math.abs(tpa[i].x2 - tpb[i].x2) > 0.05 ||
+        Math.abs(tpa[i].y2 - tpb[i].y2) > 0.05 ||
+        Boolean(tpa[i].revealed) !== Boolean(tpb[i].revealed) ||
+        tpa[i].color !== tpb[i].color ||
+        tpa[i].width !== tpb[i].width ||
+        tpa[i].layerId !== tpb[i].layerId
+      ) {
+        return false;
+      }
+    }
+
+    const la = a.layers || [];
+    const lb = b.layers || [];
+    for (let i = 0; i < la.length; i++) {
+      if (
+        la[i].id !== lb[i].id ||
+        la[i].name !== lb[i].name ||
+        Boolean(la[i].visible) !== Boolean(lb[i].visible) ||
+        Boolean(la[i].locked) !== Boolean(lb[i].locked) ||
+        (la[i].opacity ?? 1) !== (lb[i].opacity ?? 1)
       ) {
         return false;
       }
@@ -6490,6 +7831,25 @@ export default function App() {
 
     return true;
   }, []);
+
+  const pushUndoSnapshot = useCallback(
+    (pageSnap: NotePage) => {
+      const snap = clonePageFast(pageSnap);
+      const curStack = undoStackRef.current;
+      if (
+        curStack.length > 0 &&
+        isSamePageStateForUndo(curStack[curStack.length - 1], snap)
+      ) {
+        return;
+      }
+      const nextU = [...curStack.slice(-(MAX_UNDO_STACK_SIZE - 1)), snap];
+      undoStackRef.current = nextU;
+      setUndoStack(nextU);
+      redoStackRef.current = [];
+      setRedoStack([]);
+    },
+    [clonePageFast, isSamePageStateForUndo]
+  );
 
   const updateActivePage = useCallback(
     (updater: (prev: NotePage) => NotePage, recordUndo = true) => {
@@ -6500,31 +7860,26 @@ export default function App() {
       userEditedInSessionRef.current.add(liveNbId);
       const shouldRecordUndo = recordUndo && !suppressNextUndoRecordRef.current;
       suppressNextUndoRecordRef.current = false;
-      setNotebooks((prevNotebooks) =>
-        prevNotebooks.map((nb) => {
+      setNotebooks((prevNotebooks) => {
+        const nextNotebooks = prevNotebooks.map((nb) => {
           if (nb.id !== liveNbId) return nb;
           const safeIdx = Math.min(targetIdx, nb.pages.length - 1);
           const currentPage = nb.pages[safeIdx] || nb.pages[0];
           const updatedPage = updater(clonePageFast(currentPage));
           if (shouldRecordUndo && !isSamePageStateForUndo(currentPage, updatedPage)) {
-            const snap = clonePageFast(currentPage);
-            setUndoStack((u) => {
-              const nextU = [...u.slice(-30), snap];
-              undoStackRef.current = nextU;
-              return nextU;
-            });
-            setRedoStack([]);
-            redoStackRef.current = [];
+            pushUndoSnapshot(currentPage);
           }
           const newPages = [...nb.pages];
           newPages[safeIdx] = updatedPage;
           return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
-        })
-      );
+        });
+        notebooksRef.current = nextNotebooks;
+        return nextNotebooks;
+      });
       setIsDirty(true);
       setSyncStatus('dirty');
     },
-    [activeNotebook.id, activePageIndex, clonePageFast, isSamePageStateForUndo]
+    [activeNotebook.id, activePageIndex, clonePageFast, isSamePageStateForUndo, pushUndoSnapshot]
   );
 
   // Clear undo/redo stacks when switching between notebooks so a snapshot from Notebook A never applies to Notebook B
@@ -6533,6 +7888,7 @@ export default function App() {
     undoStackRef.current = [];
     setRedoStack([]);
     redoStackRef.current = [];
+    textEditUndoRecordedForIdRef.current = null;
   }, [activeNotebook.id]);
 
   const handleUndo = useCallback(() => {
@@ -6542,6 +7898,7 @@ export default function App() {
       return;
     }
 
+    textEditUndoRecordedForIdRef.current = null;
     const curNb =
       notebooksRef.current.find((n) => n.id === activeNotebook.id) || activeNotebook;
     let prevPage: NotePage | null = null;
@@ -6580,26 +7937,28 @@ export default function App() {
     userEditedInSessionRef.current.add(activeNotebook.id);
 
     const redoSnap = clonePageFast(currentTargetPage);
-    setRedoStack((r) => {
-      const nextR = [...r, redoSnap];
-      redoStackRef.current = nextR;
-      return nextR;
-    });
+    const nextR = [...redoStackRef.current.slice(-(MAX_UNDO_STACK_SIZE - 1)), redoSnap];
+    redoStackRef.current = nextR;
+    setRedoStack(nextR);
+
     if (targetIdx !== activePageIndex) {
       activeDrawingPageIndexRef.current = targetIdx;
+      activePageIndexLiveRef.current = targetIdx;
       setActivePageIndex(targetIdx);
     }
     const targetPrevPage = prevPage;
-    setNotebooks((prevNotebooks) =>
-      prevNotebooks.map((nb) => {
+    setNotebooks((prevNotebooks) => {
+      const nextNotebooks = prevNotebooks.map((nb) => {
         if (nb.id !== activeNotebook.id) return nb;
         const idxById = nb.pages.findIndex((p) => p.id === targetPrevPage.id);
         const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
         const newPages = [...nb.pages];
         newPages[safeIdx] = clonePageFast(targetPrevPage);
-        return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
-      })
-    );
+        return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
+      });
+      notebooksRef.current = nextNotebooks;
+      return nextNotebooks;
+    });
     setIsDirty(true);
     setSyncStatus('dirty');
 
@@ -6611,6 +7970,8 @@ export default function App() {
     setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
     setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setEditingTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setSelectedLassoTextIds((prev) => prev.filter((id) => validTxtIds.has(id)));
     setImageCropMode('none');
     showToast('↩️ Αναίρεση (Undo)!');
   }, [
@@ -6628,6 +7989,7 @@ export default function App() {
       showToast('ℹ️ Δεν υπάρχει ενέργεια για Επανάληψη (Redo)!');
       return;
     }
+    textEditUndoRecordedForIdRef.current = null;
     const nextPage = stack.pop()!;
     redoStackRef.current = stack;
     setRedoStack(stack);
@@ -6643,25 +8005,27 @@ export default function App() {
     const currentTargetPage = curNb.pages[targetIdx] || activePage;
 
     const undoSnap = clonePageFast(currentTargetPage);
-    setUndoStack((u) => {
-      const nextU = [...u, undoSnap];
-      undoStackRef.current = nextU;
-      return nextU;
-    });
+    const nextU = [...undoStackRef.current.slice(-(MAX_UNDO_STACK_SIZE - 1)), undoSnap];
+    undoStackRef.current = nextU;
+    setUndoStack(nextU);
+
     if (targetIdx !== activePageIndex) {
       activeDrawingPageIndexRef.current = targetIdx;
+      activePageIndexLiveRef.current = targetIdx;
       setActivePageIndex(targetIdx);
     }
-    setNotebooks((prevNotebooks) =>
-      prevNotebooks.map((nb) => {
+    setNotebooks((prevNotebooks) => {
+      const nextNotebooks = prevNotebooks.map((nb) => {
         if (nb.id !== activeNotebook.id) return nb;
         const idxById = nb.pages.findIndex((p) => p.id === nextPage.id);
         const safeIdx = idxById >= 0 ? idxById : Math.min(targetIdx, nb.pages.length - 1);
         const newPages = [...nb.pages];
         newPages[safeIdx] = clonePageFast(nextPage);
-        return { ...nb, updatedAt: new Date().toISOString(), pages: newPages };
-      })
-    );
+        return { ...nb, updatedAt: getMonotonicIsoTimestamp(), pages: newPages };
+      });
+      notebooksRef.current = nextNotebooks;
+      return nextNotebooks;
+    });
     setIsDirty(true);
     setSyncStatus('dirty');
 
@@ -6673,6 +8037,8 @@ export default function App() {
     setSelectedImageIds((prev) => prev.filter((id) => validImgIds.has(id)));
     setSelectedImageId((prev) => (prev && validImgIds.has(prev) ? prev : null));
     setSelectedTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setEditingTextId((prev) => (prev && validTxtIds.has(prev) ? prev : null));
+    setSelectedLassoTextIds((prev) => prev.filter((id) => validTxtIds.has(id)));
     setImageCropMode('none');
     showToast('↪️ Επανάληψη (Redo)!');
   }, [activeNotebook, activePageIndex, activePage, clonePageFast, showToast]);
@@ -6749,7 +8115,14 @@ export default function App() {
       s.shapeType === 'switch-knob' ||
       s.shapeType === 'fan' ||
       s.shapeType === 'fan-blade' ||
-      s.shapeType === 'fan-hub'
+      s.shapeType === 'fan-hub' ||
+      s.shapeType === 'ammeter' ||
+      s.shapeType === 'ammeter-needle' ||
+      s.shapeType === 'ammeter-label' ||
+      s.shapeType === 'voltmeter' ||
+      s.shapeType === 'voltmeter-needle' ||
+      s.shapeType === 'voltmeter-label' ||
+      s.shapeType === 'title-box'
     );
   };
 
@@ -7676,7 +9049,13 @@ export default function App() {
               s.shapeType === 'resistor' ||
               s.shapeType === 'fan' ||
               s.shapeType === 'fan-blade' ||
-              s.shapeType === 'fan-hub'
+              s.shapeType === 'fan-hub' ||
+              s.shapeType === 'ammeter' ||
+              s.shapeType === 'ammeter-needle' ||
+              s.shapeType === 'ammeter-label' ||
+              s.shapeType === 'voltmeter' ||
+              s.shapeType === 'voltmeter-needle' ||
+              s.shapeType === 'voltmeter-label'
             ) {
               const sb = getStrokeBounds(s);
               return (
@@ -8426,6 +9805,12 @@ export default function App() {
         s.shapeType === 'fan' ||
         s.shapeType === 'fan-blade' ||
         s.shapeType === 'fan-hub' ||
+        s.shapeType === 'ammeter' ||
+        s.shapeType === 'ammeter-needle' ||
+        s.shapeType === 'ammeter-label' ||
+        s.shapeType === 'voltmeter' ||
+        s.shapeType === 'voltmeter-needle' ||
+        s.shapeType === 'voltmeter-label' ||
         s.shapeType === 'incline-wedge' ||
         s.shapeType === 'incline-block' ||
         s.shapeType === 'wave-axis-x' ||
@@ -8865,6 +10250,118 @@ export default function App() {
       }
     }
 
+    // 0c. Title Box ('title-box'): slightly rounded corners + realistic darker multi-layer gradient drop shadow strictly outside the frame!
+    if (s.shapeType === 'title-box' && s.points.length >= 4) {
+      const [q0, q1, q2, q3] = s.points;
+      const wDx = q1.x - q0.x;
+      const wDy = q1.y - q0.y;
+      const hDx = q3.x - q0.x;
+      const hDy = q3.y - q0.y;
+      const wLen = Math.hypot(wDx, wDy);
+      const hLen = Math.hypot(hDx, hDy);
+      if (wLen > 2 && hLen > 2) {
+        const ux = wDx / wLen;
+        const uy = wDy / wLen;
+        const vx = hDx / hLen;
+        const vy = hDy / hLen;
+        const rCorner = Math.max(3.5, Math.min(7.5, Math.min(wLen, hLen) * 0.1));
+
+        const traceRoundedQuad = (
+          c0: { x: number; y: number },
+          c1: { x: number; y: number },
+          c2: { x: number; y: number },
+          c3: { x: number; y: number },
+          rad: number
+        ) => {
+          const corners = [c0, c1, c2, c3];
+          ctx.moveTo((c3.x + c0.x) * 0.5, (c3.y + c0.y) * 0.5);
+          for (let ci = 0; ci < 4; ci++) {
+            const prevC = corners[(ci + 3) % 4];
+            const curC = corners[ci];
+            const nextC = corners[(ci + 1) % 4];
+            const lenA = Math.hypot(curC.x - prevC.x, curC.y - prevC.y);
+            const lenB = Math.hypot(nextC.x - curC.x, nextC.y - curC.y);
+            const effR = Math.max(0, Math.min(rad, lenA * 0.46, lenB * 0.46));
+            ctx.arcTo(curC.x, curC.y, (curC.x + nextC.x) * 0.5, (curC.y + nextC.y) * 0.5, effR);
+          }
+          ctx.closePath();
+        };
+
+        // 1. Exterior-only clip ('evenodd') so the rich gradient shadow NEVER bleeds into the transparent interior!
+        const bMinX = Math.min(q0.x, q1.x, q2.x, q3.x);
+        const bMaxX = Math.max(q0.x, q1.x, q2.x, q3.x);
+        const bMinY = Math.min(q0.y, q1.y, q2.y, q3.y);
+        const bMaxY = Math.max(q0.y, q1.y, q2.y, q3.y);
+        const shadowScale = Math.max(0.62, Math.min(1.18, Math.min(wLen, hLen) / 74));
+        const baseAlpha = s.opacity ?? 1;
+
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.rect(bMinX - 52, bMinY - 52, bMaxX - bMinX + 104, bMaxY - bMinY + 104);
+        traceRoundedQuad(q0, q1, q2, q3, rCorner);
+        ctx.clip('evenodd');
+
+        const grad = ctx.createLinearGradient(bMinX, bMinY, bMaxX + 14, bMaxY + 14);
+        grad.addColorStop(0, '#1e293b');
+        grad.addColorStop(0.55, '#0f172a');
+        grad.addColorStop(1, '#020617');
+        ctx.fillStyle = grad;
+
+        const SHADOW_STEPS = 16;
+        for (let step = 0; step < SHADOW_STEPS; step++) {
+          const u = step / (SHADOW_STEPS - 1);
+          const shiftX = (1.1 + u * 9.6) * shadowScale;
+          const shiftY = (1.3 + u * 10.2) * shadowScale;
+          const leadInset = (1.6 + u * 2.2) * shadowScale;
+          const feather = u * 2.4 * shadowScale;
+
+          const s0 = {
+            x: q0.x + shiftX + ux * leadInset + vx * leadInset,
+            y: q0.y + shiftY + uy * leadInset + vy * leadInset,
+          };
+          const s1 = {
+            x: q1.x + shiftX + ux * feather + vx * leadInset,
+            y: q1.y + shiftY + uy * feather + vy * leadInset,
+          };
+          const s2 = {
+            x: q2.x + shiftX + ux * feather + vx * feather,
+            y: q2.y + shiftY + uy * feather + vy * feather,
+          };
+          const s3 = {
+            x: q3.x + shiftX + ux * leadInset + vx * feather,
+            y: q3.y + shiftY + uy * leadInset + vy * feather,
+          };
+
+          const layerAlpha = (0.056 * Math.pow(1 - u, 0.55) + 0.012) * baseAlpha;
+          ctx.globalAlpha = layerAlpha;
+          ctx.beginPath();
+          traceRoundedQuad(s0, s1, s2, s3, rCorner + feather * 0.85 + 1.2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // 2. Optional interior fill (transparent by default; fills cleanly if user toggles 'Γεμάτο' F/Φ)
+        ctx.beginPath();
+        traceRoundedQuad(q0, q1, q2, q3, rCorner);
+        if (s.fillStyle && s.fillStyle !== 'none') {
+          const fillTrans = s.fillTransparency ?? 90;
+          ctx.save();
+          ctx.fillStyle = s.fillColor || s.color || '#2563eb';
+          ctx.globalAlpha =
+            (fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100))) *
+            baseAlpha;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 3. Crisp slightly-rounded frame outline
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+    }
+
     ctx.beginPath();
     // 1. Circle / Ellipse (4 cardinal points every 90° by default, or >= 3 smooth cubic spline points when user adds/deletes nodes!)
     if (
@@ -9050,6 +10547,8 @@ export default function App() {
         const isStencilCustomFill =
           s.shapeType === 'fan-blade' ||
           s.shapeType === 'fan-hub' ||
+          s.shapeType === 'ammeter-needle' ||
+          s.shapeType === 'voltmeter-needle' ||
           s.shapeType === 'incline-wedge' ||
           s.shapeType === 'incline-block' ||
           s.shapeType === 'switch' ||
@@ -9058,7 +10557,10 @@ export default function App() {
           ? s.fillColor || s.color || '#2563eb'
           : s.color || s.fillColor || '#2563eb';
         const fillTrans =
-          s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub'
+          s.shapeType === 'fan-blade' ||
+          s.shapeType === 'fan-hub' ||
+          s.shapeType === 'ammeter-needle' ||
+          s.shapeType === 'voltmeter-needle'
             ? 0
             : s.fillTransparency ?? 90;
         ctx.save();
@@ -9143,13 +10645,16 @@ export default function App() {
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
-    template: PaperTemplateType
+    template: PaperTemplateType,
+    paperColor?: string
   ) => {
     ctx.save();
-    ctx.fillStyle = template === 'dark-grid' ? '#0f172a' : '#fffdf7';
+    const bgHex = getEffectivePaperColor({ template, paperColor });
+    const ruleColors = getPaperRuleColors(bgHex);
+    ctx.fillStyle = bgHex;
     ctx.fillRect(0, 0, width, height);
 
-    const gridColor = template === 'dark-grid' ? 'rgba(148, 163, 184, 0.16)' : 'rgba(180, 190, 205, 0.35)';
+    const gridColor = ruleColors.grid;
     const step = A4_GRID_STEP_PX;
 
     if (template === 'grid' || template === 'dark-grid') {
@@ -9176,7 +10681,7 @@ export default function App() {
       }
       ctx.stroke();
       if (template === 'cornell') {
-        ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+        ctx.strokeStyle = ruleColors.cornell;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(step * 10, lineStep * 3);
@@ -9186,7 +10691,7 @@ export default function App() {
         ctx.stroke();
       }
     } else if (template === 'dotted') {
-      ctx.fillStyle = 'rgba(120, 130, 145, 0.45)';
+      ctx.fillStyle = ruleColors.dot;
       for (let x = step; x < width; x += step) {
         for (let y = step; y < height; y += step) {
           ctx.beginPath();
@@ -9229,7 +10734,7 @@ export default function App() {
       if (pageObj.backgroundDataUrl || pageObj.pdfPageNumber) {
         // Transparent canvas; underlying <img> renders the PDF/image page
       } else {
-        drawPaperBackground(ctx, pWidth, pHeight, pageObj.template);
+        drawPaperBackground(ctx, pWidth, pHeight, pageObj.template, pageObj.paperColor);
       }
 
       const visibleLayerMap = new Map(pageObj.layers.map((l) => [l.id, l]));
@@ -9448,14 +10953,16 @@ export default function App() {
           ) {
             continue;
           }
-          // While simulation is running, hide static Fan strokes ONLY for the currently active simulated circuit!
+          // While simulation is running, hide static Fan & Meter Needle strokes ONLY for the currently active simulated circuit!
           if (
             isCurrentActivePage &&
             isSimulating &&
             isStrokeInActiveSim(s) &&
             (s.shapeType === 'fan' ||
               s.shapeType === 'fan-blade' ||
-              s.shapeType === 'fan-hub')
+              s.shapeType === 'fan-hub' ||
+              s.shapeType === 'ammeter-needle' ||
+              s.shapeType === 'voltmeter-needle')
           ) {
             continue;
           }
@@ -10646,9 +12153,9 @@ export default function App() {
     }
   }, [activePage.id, activePageIndex, viewMode]);
 
-  // Two-Pages / Multi-Page Spread Mode toggle (when enabled and zoom <= 40%, dynamically fills each row across the screen width depending on zoom!)
-  const [isMultiPageSpreadEnabled, setIsMultiPageSpreadEnabled] = useState<boolean>(false);
-  const isMultiPageSpreadEnabledRef = useRef<boolean>(false);
+  // Multi-Page Spread Mode: dynamically transitions 1 <-> 2 <-> 3 <-> 4 <-> 5+ pages per row depending on zoom percentage!
+  const [isMultiPageSpreadEnabled, setIsMultiPageSpreadEnabled] = useState<boolean>(true);
+  const isMultiPageSpreadEnabledRef = useRef<boolean>(true);
   isMultiPageSpreadEnabledRef.current = isMultiPageSpreadEnabled;
 
   const getMultiPageSpreadCols = useCallback(
@@ -10657,7 +12164,7 @@ export default function App() {
       enabled = isMultiPageSpreadEnabledRef.current,
       pageCount = activeNotebook.pages.length
     ): number => {
-      if (!enabled || z > 0.405 || pageCount < 2) return 1;
+      if (!enabled || z > 0.76 || pageCount < 2) return 1;
       const wsW =
         workspaceRef.current?.clientWidth ||
         (typeof window !== 'undefined' ? window.innerWidth : 1440);
@@ -10666,7 +12173,7 @@ export default function App() {
       const scaledPageW = pW * z;
       const scaledGap = PAGE_GAP * z;
       const fitCols = Math.floor((availW + scaledGap) / Math.max(40, scaledPageW + scaledGap));
-      const rawCols = Math.max(2, Math.min(10, fitCols));
+      const rawCols = Math.max(1, Math.min(10, fitCols));
       return Math.min(pageCount, rawCols);
     },
     [activeNotebook.pages.length, pageWidth]
@@ -10676,6 +12183,7 @@ export default function App() {
     isMultiPageSpreadEnabled,
     activeNotebook.pages.length
   );
+  const prevSpreadColsRef = useRef<number>(multiPageSpreadCols);
 
   const getPageTopOffset = useCallback(
     (targetIdx: number, customZoom?: number) => {
@@ -10762,6 +12270,29 @@ export default function App() {
         isMultiPageSpreadEnabledRef.current,
         activeNotebook.pages.length
       );
+      const prevCols = prevSpreadColsRef.current;
+      const crossedGridZoomThreshold = cols !== prevCols;
+      if (crossedGridZoomThreshold) {
+        prevSpreadColsRef.current = cols;
+        const targetPageIdx = Math.max(
+          0,
+          Math.min(activeNotebook.pages.length - 1, activeDrawingPageIndexRef.current)
+        );
+        nextPanX = 0;
+        nextPanY = -getPageTopOffset(targetPageIdx, clampedZoom) * clampedZoom + 12;
+        keepActivePage = true;
+        if (pinchStateRef.current?.active) {
+          const st = pinchStateRef.current;
+          st.initialZoom = clampedZoom;
+          st.initialPanX = 0;
+          st.initialPanY = nextPanY;
+          st.initialDist = Math.max(10, st.lastDist);
+          st.startMidX = st.lastMidX;
+          st.startMidY = st.lastMidY;
+          st.paperOffsetX = 0;
+          st.paperOffsetY = (st.lastMidY - nextPanY) / clampedZoom;
+        }
+      }
       const logicalDocW = cols * pageWidth + (cols - 1) * PAGE_GAP;
       const scaledW = clampedZoom * logicalDocW;
       // Allow smooth horizontal focal-point pan when zoomed in wider than the viewport; keep centered (0) when fit-to-width
@@ -10899,12 +12430,6 @@ export default function App() {
         window.clearTimeout(debouncedTransformCommitRef.current);
         debouncedTransformCommitRef.current = null;
       }
-      const prevCols = getMultiPageSpreadCols(
-        zoom,
-        isMultiPageSpreadEnabledRef.current,
-        activeNotebook.pages.length
-      );
-      const crossedGridZoomThreshold = cols !== prevCols;
       if (commitReactState || bottomVisibilityChanged || crossedGridZoomThreshold) {
         setZoom(clampedZoom);
         setPan({ x: clampedPanX, y: clampedPanY });
@@ -10923,8 +12448,8 @@ export default function App() {
       isFullBleedWidth,
       isCleanProjectorMode,
       activePageIndex,
-      zoom,
       getMultiPageSpreadCols,
+      getPageTopOffset,
       computeTotalDocumentHeight,
     ]
   );
@@ -10965,8 +12490,9 @@ export default function App() {
         }
         return;
       }
-      if (wsWidth > pageWidth + 8 && (Math.abs(zoomRef.current - 1) <= 0.04 || isCleanProjectorMode)) {
-        const fitZ = computeFitWidthZoom(pageWidth, true);
+      if (wsWidth > pageWidth + 8 && (Math.abs(zoomRef.current - 1) <= 0.005 || isCleanProjectorMode)) {
+        const rawFitZ = computeFitWidthZoom(pageWidth, true);
+        const fitZ = isCleanProjectorMode ? rawFitZ : Math.min(1.4, rawFitZ);
         applyPaperTransformDirect(fitZ, 0, panRef.current.y, true);
       }
     };
@@ -10976,7 +12502,7 @@ export default function App() {
       window.clearTimeout(timer);
       window.removeEventListener('resize', applyAutoFullWidth);
     };
-  }, [viewMode, pageWidth, isFullBleedWidth, isCleanProjectorMode, computeFitWidthZoom, applyPaperTransformDirect]);
+  }, [viewMode, activeNotebookId, pageWidth, isFullBleedWidth, isCleanProjectorMode, computeFitWidthZoom]);
 
   // Smoothly zoom in/out around the vertical center of the visible workspace viewport
   const zoomAroundViewportCenter = useCallback(
@@ -11014,7 +12540,10 @@ export default function App() {
   const lastObservedWsWidthRef = useRef<number | null>(null);
   const lastObservedNotebookIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (viewMode !== 'editor') return;
+    if (viewMode !== 'editor') {
+      lastObservedNotebookIdRef.current = null;
+      return;
+    }
     const ws = workspaceRef.current;
     if (!ws) return;
 
@@ -11023,7 +12552,8 @@ export default function App() {
       if (wsWidth <= 0) return;
       const pW = Math.max(200, pageWidth);
       const horizMargin = Math.min(28, Math.max(8, Math.round(wsWidth * 0.02)));
-      const fitWidthZoom = Math.min(3.5, Math.max(0.2, (wsWidth - horizMargin) / pW));
+      // Cap initial auto-fit at 140% (1.4) so wide screens don't over-magnify pages to ~179% on open
+      const fitWidthZoom = Math.min(1.4, Math.max(0.2, (wsWidth - horizMargin) / pW));
 
       const prevWsW = lastObservedWsWidthRef.current;
       const prevNbId = lastObservedNotebookIdRef.current;
@@ -11152,6 +12682,7 @@ export default function App() {
         id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         title: `Σελίδα ${clampedIdx + 1}`,
         template: refPage.backgroundDataUrl ? 'blank' : refPage.template,
+        paperColor: refPage.backgroundDataUrl ? undefined : refPage.paperColor,
         orientation: refPage.orientation || 'portrait',
         layers: [
           { id: 'layer-1', name: 'Σημειώσεις & Σχήματα', visible: true, locked: false, opacity: 1 },
@@ -13169,6 +14700,9 @@ export default function App() {
     showToast,
   ]);
 
+  const getDefaultTextLineHeight = (fontFamily?: TextFontStyle): number =>
+    fontFamily === 'marker' ? 1.44 : 1.18;
+
   const getTextFontCss = (fontFamily?: TextFontStyle, isBold?: boolean): React.CSSProperties => {
     const boldActive = Boolean(isBold) || fontFamily === 'calligraphic-bold';
     switch (fontFamily) {
@@ -13186,16 +14720,20 @@ export default function App() {
         };
       case 'marker':
         return {
-          fontFamily: "'ExplainBoardsPen', 'Mynerve', cursive",
+          fontFamily: boldActive
+            ? "'ExplainBoardsPenBold', 'ExplainBoardsPen', 'Alegreya Sans', cursive"
+            : "'ExplainBoardsPen', 'Alegreya Sans', cursive",
           fontStyle: 'normal',
           fontWeight: boldActive ? 700 : 400,
-          letterSpacing: boldActive ? '0.01em' : '0em',
-          WebkitTextStroke: boldActive ? '1.15px currentColor' : '0.2px currentColor',
+          fontSynthesis: 'none',
+          lineHeight: 1.44,
+          letterSpacing: '0em',
+          WebkitTextStroke: '0px transparent',
           paintOrder: 'stroke fill',
         };
       case 'mansalva':
         return {
-          fontFamily: "'Mansalva', 'ExplainBoardsPen', cursive",
+          fontFamily: "'Mansalva', 'ExplainBoardsPenLegacy', cursive",
           fontStyle: 'oblique 6deg',
           fontWeight: boldActive ? 700 : 400,
           letterSpacing: boldActive ? '0em' : '-0.015em',
@@ -13262,13 +14800,19 @@ export default function App() {
     return texts.map((tx) => {
       const fontCss = getTextFontCss(tx.fontFamily, tx.bold);
       const fSize = tx.fontSize || 20;
-      const lineStep = fSize * 1.18;
+      const lineStep = fSize * (tx.lineHeight || getDefaultTextLineHeight(tx.fontFamily));
       const rawTxt = ((tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '')
         .replace(/\u200B/g, '')
-        .replace(/\\(?:Left|Right|left|right)(?![A-Za-z])/g, '')
-        .replace(/\\(?:text|mathrm|mathbf|mathit)\{([^}]*)\}/g, '$1')
+        .replace(/\\(?:displaystyle|textstyle|Left|Right|left|right)(?![A-Za-z])/g, '')
+        .replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^}]*)\}/g, '$1')
+        .replace(/\\vec\{([^}]*)\}/g, '$1\u20D7')
         .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)')
         .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+        .replace(/\\,/g, '\u2009')
+        .replace(/\\;|\\:/g, ' ')
+        .replace(/\\!/g, '')
+        .replace(/\\qquad(?![A-Za-z])/g, '    ')
+        .replace(/\\quad(?![A-Za-z])/g, '  ')
         .replace(/\\(?:Rightarrow|implies)(?![A-Za-z])/g, '⇒')
         .replace(/\\(?:Leftrightarrow|iff)(?![A-Za-z])/g, '⇔')
         .replace(/\\(?:rightarrow|to)(?![A-Za-z])/g, '→')
@@ -13276,7 +14820,15 @@ export default function App() {
         .replace(/\\(?:geq|ge)(?![A-Za-z])/g, '≥')
         .replace(/\\(?:leq|le)(?![A-Za-z])/g, '≤')
         .replace(/\\(?:neq|ne)(?![A-Za-z])/g, '≠')
+        .replace(/\\simeq(?![A-Za-z])/g, '≃')
+        .replace(/\\cong(?![A-Za-z])/g, '≅')
+        .replace(/\\sim(?![A-Za-z])/g, '∼')
         .replace(/\\approx(?![A-Za-z])/g, '≈')
+        .replace(/\\propto(?![A-Za-z])/g, '∝')
+        .replace(/\\equiv(?![A-Za-z])/g, '≡')
+        .replace(/\\perp(?![A-Za-z])/g, '⊥')
+        .replace(/\\parallel(?![A-Za-z])/g, '∥')
+        .replace(/\\(?:circ|degree)(?![A-Za-z])/g, '°')
         .replace(/\\pm(?![A-Za-z])/g, '±')
         .replace(/\\infty(?![A-Za-z])/g, '∞')
         .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
@@ -13284,13 +14836,16 @@ export default function App() {
         .replace(/\\Delta(?![A-Za-z])/g, 'Δ')
         .replace(/\\delta(?![A-Za-z])/g, 'δ')
         .replace(/\\omega(?![A-Za-z])/g, 'ω')
+        .replace(/\\Omega(?![A-Za-z])/g, 'Ω')
         .replace(/\\pi(?![A-Za-z])/g, 'π')
         .replace(/\\alpha(?![A-Za-z])/g, 'α')
         .replace(/\\beta(?![A-Za-z])/g, 'β')
         .replace(/\\gamma(?![A-Za-z])/g, 'γ')
         .replace(/\\theta(?![A-Za-z])/g, 'θ')
         .replace(/\\mu(?![A-Za-z])/g, 'μ')
-        .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·');
+        .replace(/\\cdot(?![A-Za-z])/g, '·')
+        .replace(/\\times(?![A-Za-z])/g, '×')
+        .replace(/\\div(?![A-Za-z])/g, '÷');
 
       const maxBoxW =
         !tx.isMath && tx.boxWidth
@@ -13378,7 +14933,7 @@ export default function App() {
           {wrappedLines.slice(0, 42).map((line, lIdx) => {
             const lineY = tx.y + 2 + fSize * 0.92 + lIdx * lineStep;
             if (lineY - fSize > pH) return null;
-            const parts = tx.isMath ? [line.replace(/[{}]/g, '')] : line.split(tokenRegex);
+            const parts = line.split(tokenRegex);
             let isFirstSeg = true;
             return (
               <React.Fragment key={lIdx}>
@@ -13386,7 +14941,7 @@ export default function App() {
                   if (!part) return null;
                   const xAttr = isFirstSeg ? anchorX : undefined;
                   isFirstSeg = false;
-                  if (!tx.isMath && part.startsWith('^') && part.length > 1) {
+                  if (part.startsWith('^') && part.length > 1) {
                     let inner = part.slice(1);
                     if (
                       (inner.startsWith('(') && inner.endsWith(')')) ||
@@ -13405,7 +14960,7 @@ export default function App() {
                       </tspan>
                     );
                   }
-                  if (!tx.isMath && part.startsWith('_') && part.length > 1) {
+                  if (part.startsWith('_') && part.length > 1) {
                     let inner = part.slice(1);
                     if (
                       (inner.startsWith('(') && inner.endsWith(')')) ||
@@ -13426,7 +14981,7 @@ export default function App() {
                   }
                   return (
                     <tspan key={pIdx} x={xAttr} y={lineY}>
-                      {part}
+                      {part.replace(/[{}]/g, '')}
                     </tspan>
                   );
                 })}
@@ -13683,21 +15238,23 @@ export default function App() {
       fontFamily: TextFontStyle | undefined,
       bold: boolean | undefined,
       boxW: number,
-      boxH: number
+      boxH: number,
+      lineHeightOverride?: number
     ): number => {
       if (!textMeasureCtxRef.current) {
         const c = document.createElement('canvas');
         textMeasureCtxRef.current = c.getContext('2d');
       }
       const ctx = textMeasureCtxRef.current;
-      const availW = Math.max(20, boxW - 12);
+      const availW = Math.max(20, boxW - 14);
       const availH = Math.max(12, boxH - 4);
+      const lh = lineHeightOverride || getDefaultTextLineHeight(fontFamily);
       const sampleText = rawText && rawText.trim().length > 0 ? rawText : 'Αβγ';
       if (!ctx) {
-        return Math.max(8, Math.min(96, Math.round(availH / 1.2)));
+        return Math.max(8, Math.min(96, Math.round(availH / lh)));
       }
 
-      const css = getTextFontCss(fontFamily);
+      const css = getTextFontCss(fontFamily, bold);
       const stylePrefix =
         css.fontStyle && css.fontStyle !== 'normal' ? `${css.fontStyle} ` : '';
       const weightPrefix = bold ? '700 ' : '500 ';
@@ -13734,7 +15291,7 @@ export default function App() {
           totalLines += linesInPara;
         }
 
-        const totalH = totalLines * (sz * 1.18);
+        const totalH = totalLines * (sz * lh);
         return totalH <= availH;
       };
 
@@ -13761,30 +15318,32 @@ export default function App() {
       fontFamily: TextFontStyle | undefined,
       bold: boolean | undefined,
       fontSize: number,
-      maxBoxW: number
+      maxBoxW: number,
+      lineHeightOverride?: number
     ): { maxLineW: number; totalLines: number; tightW: number; tightH: number } => {
       if (!textMeasureCtxRef.current) {
         const c = document.createElement('canvas');
         textMeasureCtxRef.current = c.getContext('2d');
       }
       const ctx = textMeasureCtxRef.current;
-      const availW = Math.max(20, maxBoxW - 12);
+      const availW = Math.max(10, maxBoxW - 12);
+      const lh = lineHeightOverride || getDefaultTextLineHeight(fontFamily);
       const sampleText = rawText && rawText.trim().length > 0 ? rawText : 'Αβγ';
       if (!ctx) {
         return {
           maxLineW: availW,
           totalLines: 1,
           tightW: maxBoxW,
-          tightH: Math.max(20, Math.ceil(fontSize * 1.18 + 4)),
+          tightH: Math.max(20, Math.ceil(fontSize * lh + 4)),
         };
       }
-      const css = getTextFontCss(fontFamily);
+      const css = getTextFontCss(fontFamily, bold);
       const stylePrefix =
         css.fontStyle && css.fontStyle !== 'normal' ? `${css.fontStyle} ` : '';
       const weightPrefix = bold ? '700 ' : '500 ';
       const familyStr = String(css.fontFamily || 'sans-serif');
       ctx.font = `${stylePrefix}${weightPrefix}${fontSize}px ${familyStr}`;
-      const spaceW = ctx.measureText(' ').width * 1.01;
+      const spaceW = ctx.measureText(' ').width * 1.02;
       const paragraphs = sampleText.split(/\r?\n/);
       let totalLines = 0;
       let maxLineW = 0;
@@ -13798,7 +15357,7 @@ export default function App() {
         let lineW = 0;
         let linesInPara = 1;
         for (const word of words) {
-          const wordW = ctx.measureText(word).width * 1.01;
+          const wordW = ctx.measureText(word).width * 1.02;
           if (lineW === 0) {
             lineW = wordW;
           } else if (lineW + spaceW + wordW <= availW) {
@@ -13816,15 +15375,16 @@ export default function App() {
       return {
         maxLineW,
         totalLines: Math.max(1, totalLines),
-        tightW: Math.max(36, Math.ceil(maxLineW + 12)),
-        tightH: Math.max(20, Math.ceil(Math.max(1, totalLines) * (fontSize * 1.18) + 4)),
+        tightW: Math.max(22, Math.ceil(maxLineW + 14)),
+        tightH: Math.max(16, Math.ceil(Math.max(1, totalLines) * (fontSize * lh) + 4)),
       };
     },
     []
   );
 
-  // Converts any visual soft-wrapped lines inside maxBoxW into explicit permanent '\n' line breaks
-  // so that diagonal corner resizing (or pressing Shift+Enter) never pulls a line up onto the previous line.
+  // Converts any visual soft-wrapped lines inside maxBoxW into explicit '\n' line breaks
+  // (preserving '\u200B\n' Shift+Enter breaks) so diagonal corner resizing locks visual lines
+  // while side handles can still unwrap soft-wrapped lines later via reflowTextForResponsiveBox.
   const bakeSoftWrappedLinesForBox = useCallback(
     (
       rawText: string,
@@ -13840,8 +15400,8 @@ export default function App() {
       }
       const ctx = textMeasureCtxRef.current;
       if (!ctx) return rawText;
-      const availW = Math.max(20, maxBoxW - 12);
-      const css = getTextFontCss(fontFamily);
+      const availW = Math.max(10, maxBoxW - 12);
+      const css = getTextFontCss(fontFamily, bold);
       const stylePrefix =
         css.fontStyle && css.fontStyle !== 'normal' ? `${css.fontStyle} ` : '';
       const weightPrefix = bold ? '700 ' : '500 ';
@@ -13858,10 +15418,10 @@ export default function App() {
           continue;
         }
         let curLine = words[0];
-        let lineW = ctx.measureText(words[0]).width * 1.01;
+        let lineW = ctx.measureText(words[0].replace(/\u200B/g, '')).width * 1.01;
         for (let i = 1; i < words.length; i++) {
           const word = words[i];
-          const wordW = ctx.measureText(word).width * 1.01;
+          const wordW = ctx.measureText(word.replace(/\u200B/g, '')).width * 1.01;
           if (lineW + spaceW + wordW <= availW) {
             curLine += ' ' + word;
             lineW += spaceW + wordW;
@@ -13883,6 +15443,7 @@ export default function App() {
     if (!activeId) return false;
     draggingTextRef.current = null;
     pendingCaretSelectionRef.current = null;
+    textEditUndoRecordedForIdRef.current = null;
     lastTextCreatedTimeRef.current = 0;
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -13898,17 +15459,27 @@ export default function App() {
           !targetTxt.isMath &&
           (!targetTxt.text || targetTxt.text.trim().length === 0)
         ) {
-          return {
+          const nextPage = {
             ...page,
             texts: (page.texts || []).filter((t) => t.id !== activeId),
           };
+          const curStack = undoStackRef.current;
+          if (
+            curStack.length > 0 &&
+            isSamePageStateForUndo(curStack[curStack.length - 1], nextPage)
+          ) {
+            const popped = curStack.slice(0, -1);
+            undoStackRef.current = popped;
+            setUndoStack(popped);
+          }
+          return nextPage;
         }
         return page;
       },
       false
     );
     return true;
-  }, [editingTextId, selectedTextId, updateActivePage]);
+  }, [editingTextId, selectedTextId, isSamePageStateForUndo, updateActivePage]);
 
   const resolveTextResizeHandleFromRect = useCallback(
     (
@@ -13974,6 +15545,7 @@ export default function App() {
       if (d.resizeHandle) {
         if (!d.moved && Math.hypot(clientX - d.startClientX, clientY - d.startClientY) > 3) {
           d.moved = true;
+          pushUndoSnapshot(activeNotebook.pages[d.pageIdx] || activePage);
         }
         if (!d.moved) return;
         const origW = d.origW || 180;
@@ -13984,20 +15556,20 @@ export default function App() {
         let nextH = origH;
 
         if (d.resizeHandle.includes('e')) {
-          nextW = Math.max(64, Math.round(origW + dx));
+          nextW = Math.max(22, Math.round(origW + dx));
         }
         if (d.resizeHandle.includes('w')) {
-          const clampedDx = Math.min(origW - 64, dx);
+          const clampedDx = Math.min(origW - 22, dx);
           nextX = Math.round(d.origX + clampedDx);
-          nextW = Math.max(64, Math.round(origW - clampedDx));
+          nextW = Math.max(22, Math.round(origW - clampedDx));
         }
         if (d.resizeHandle.includes('s')) {
-          nextH = Math.max(30, Math.round(origH + dy));
+          nextH = Math.max(14, Math.round(origH + dy));
         }
         if (d.resizeHandle.includes('n')) {
-          const clampedDy = Math.min(origH - 30, dy);
+          const clampedDy = Math.min(origH - 14, dy);
           nextY = Math.round(d.origY + clampedDy);
-          nextH = Math.max(30, Math.round(origH - clampedDy));
+          nextH = Math.max(14, Math.round(origH - clampedDy));
         }
 
         let nextAutoFs: number | null = null;
@@ -14018,7 +15590,7 @@ export default function App() {
                     ? hRatio
                     : wRatio;
                 const baseFs = d.origFontSize || t.fontSize || 22;
-                const mathFs = Math.max(10, Math.min(96, Math.round(baseFs * ratio)));
+                const mathFs = Math.max(10, Math.min(180, Math.round(baseFs * ratio)));
                 nextAutoFs = mathFs;
                 return {
                   ...t,
@@ -14029,58 +15601,223 @@ export default function App() {
                   fontSize: mathFs,
                 };
               }
-              const reflowedText = reflowTextForResponsiveBox(t.text);
-              const isPureVert = d.resizeHandle === 'n' || d.resizeHandle === 's';
+
+              const rHandle = d.resizeHandle || '';
               const isCorner =
-                d.resizeHandle === 'nw' ||
-                d.resizeHandle === 'ne' ||
-                d.resizeHandle === 'sw' ||
-                d.resizeHandle === 'se';
-              const targetWForFit = isPureVert
-                ? Math.max(48, Math.round(origW * (nextH / Math.max(20, origH))))
-                : nextW;
-              const targetHForFit =
-                isCorner && reflowedText.includes('\u200B\n')
-                  ? Math.max(nextH, Math.round(origH * (nextW / Math.max(36, origW))))
-                  : nextH;
-              const autoFs =
-                reflowedText && reflowedText.trim().length > 0
-                  ? computeMaxFitFontSizeForBox(
-                      reflowedText,
-                      t.fontFamily,
-                      t.bold,
-                      targetWForFit,
-                      targetHForFit
+                rHandle === 'nw' ||
+                rHandle === 'ne' ||
+                rHandle === 'sw' ||
+                rHandle === 'se';
+              const isPureVert = rHandle === 'n' || rHandle === 's';
+              const isPureHoriz = rHandle === 'e' || rHandle === 'w';
+
+              // 1) DIAGONAL CORNERS (nw, ne, sw, se): Pure proportional fontSize scaling with lines 100% locked!
+              if (isCorner) {
+                const baseFs = d.origFontSize || t.fontSize || 20;
+                if (d.lockedCornerText === undefined) {
+                  const explicitLines = (t.text || '').split(/\r?\n/).length;
+                  const curWrap = t.boxWidth
+                    ? measureWrappedTextLayout(
+                        t.text,
+                        t.fontFamily,
+                        t.bold,
+                        baseFs,
+                        t.boxWidth,
+                        t.lineHeight
+                      )
+                    : null;
+                  d.lockedCornerText =
+                    curWrap && curWrap.totalLines > explicitLines
+                      ? bakeSoftWrappedLinesForBox(
+                          t.text,
+                          t.fontFamily,
+                          t.bold,
+                          baseFs,
+                          origW
+                        )
+                      : t.text;
+                  d.origSpans = t.spans ? t.spans.map((sp) => ({ ...sp })) : undefined;
+                }
+                const sxSign = rHandle.includes('w') ? -1 : 1;
+                const sySign = rHandle.includes('n') ? -1 : 1;
+                const denom = Math.max(260, origW * origW + origH * origH);
+                const rawScale = 1 + (sxSign * dx * origW + sySign * dy * origH) / denom;
+                const autoFs = Math.max(6, Math.min(180, Math.round(baseFs * Math.max(0.12, rawScale))));
+                const actualRatio = autoFs / Math.max(6, baseFs);
+                nextAutoFs = autoFs;
+                const lockedText = d.lockedCornerText ?? t.text;
+                const finalX = rHandle.includes('w')
+                  ? Math.round(d.origX + origW * (1 - actualRatio))
+                  : d.origX;
+                const finalY = rHandle.includes('n')
+                  ? Math.round(d.origY + origH * (1 - actualRatio))
+                  : d.origY;
+                const adjustedSpans = adjustTextSpansOnEdit(
+                  t.text || '',
+                  lockedText,
+                  d.origSpans || t.spans
+                );
+                const scaledSpans = adjustedSpans
+                  ? adjustedSpans.map((sp) =>
+                      sp.fontSize !== undefined
+                        ? {
+                            ...sp,
+                            fontSize: Math.max(6, Math.min(180, Math.round(sp.fontSize * actualRatio))),
+                          }
+                        : sp
                     )
-                  : t.fontSize;
-              nextAutoFs = autoFs;
-              const tight = measureWrappedTextLayout(
-                reflowedText,
-                t.fontFamily,
-                t.bold,
-                autoFs,
-                targetWForFit
-              );
-              const finalW = isPureVert
-                ? tight.tightW
-                : Math.max(36, Math.min(nextW, tight.tightW));
-              const finalH = tight.tightH;
-              const finalX =
-                isPureVert && t.textAlign === 'center'
-                  ? Math.round(d.origX + (origW - finalW) / 2)
-                  : d.resizeHandle?.includes('w')
-                  ? Math.round(d.origX + (origW - finalW))
-                  : nextX;
-              return {
-                ...t,
-                text: reflowedText,
-                x: finalX,
-                y: nextY,
-                boxWidth: finalW,
-                boxHeight: finalH,
-                fontSize: autoFs,
-                spans: adjustTextSpansOnEdit(t.text || '', reflowedText, t.spans),
-              };
+                  : undefined;
+                return {
+                  ...t,
+                  text: lockedText,
+                  x: finalX,
+                  y: finalY,
+                  boxWidth: undefined,
+                  boxHeight: undefined,
+                  fontSize: autoFs,
+                  spans: scaledSpans,
+                };
+              }
+
+              // 2) SIDE PILLS (e, w): Pure column width & word-wrap reflow (fontSize stays constant, Shift+Enter preserved!)
+              if (isPureHoriz) {
+                const visibleGlyphCount = (t.text || '').replace(/[\s\u200B]+/g, '').length;
+                if (visibleGlyphCount <= 1 && !(t.text || '').includes('\n')) {
+                  const baseFs = d.origFontSize || t.fontSize || 20;
+                  if (d.origSpans === undefined) {
+                    d.origSpans = t.spans ? t.spans.map((sp) => ({ ...sp })) : undefined;
+                  }
+                  const wRatio = nextW / Math.max(16, origW);
+                  const autoFs = Math.max(6, Math.min(180, Math.round(baseFs * wRatio)));
+                  const actualRatio = autoFs / Math.max(6, baseFs);
+                  nextAutoFs = autoFs;
+                  const finalX =
+                    rHandle === 'w'
+                      ? Math.round(d.origX + origW * (1 - actualRatio))
+                      : d.origX;
+                  const scaledSpans = d.origSpans
+                    ? d.origSpans.map((sp) =>
+                        sp.fontSize !== undefined
+                          ? {
+                              ...sp,
+                              fontSize: Math.max(6, Math.min(180, Math.round(sp.fontSize * actualRatio))),
+                            }
+                          : sp
+                      )
+                    : t.spans;
+                  return {
+                    ...t,
+                    x: finalX,
+                    boxWidth: undefined,
+                    boxHeight: undefined,
+                    fontSize: autoFs,
+                    spans: scaledSpans,
+                  };
+                }
+                const reflowedText = reflowTextForResponsiveBox(t.text);
+                const unwrapped = measureWrappedTextLayout(
+                  reflowedText,
+                  t.fontFamily,
+                  t.bold,
+                  t.fontSize,
+                  99999,
+                  t.lineHeight
+                );
+                const targetW =
+                  rHandle === 'w'
+                    ? Math.max(22, Math.min(Math.max(origW, unwrapped.tightW), Math.round(origW - dx)))
+                    : Math.max(22, Math.round(origW + dx));
+                const finalX =
+                  rHandle === 'w'
+                    ? Math.round(d.origX + (origW - targetW))
+                    : d.origX;
+                return {
+                  ...t,
+                  text: reflowedText,
+                  x: finalX,
+                  boxWidth: targetW,
+                  boxHeight: undefined,
+                  spans: adjustTextSpansOnEdit(t.text || '', reflowedText, t.spans),
+                };
+              }
+
+              // 3) TOP / BOTTOM PILLS (n, s): Adjust line spacing (lineHeight) on 2+ lines, or vertical fontSize on 1 line!
+              if (isPureVert) {
+                const baseFs = d.origFontSize || t.fontSize || 20;
+                if (d.origVisualLines === undefined) {
+                  const curLh = t.lineHeight || getDefaultTextLineHeight(t.fontFamily);
+                  const canWrapMultiLine =
+                    (t.text || '').includes('\n') ||
+                    (Boolean(t.boxWidth) && (t.text || '').replace(/[\s\u200B]+/g, '').length > 1);
+                  const measuredVis = t.boxWidth
+                    ? measureWrappedTextLayout(
+                        t.text,
+                        t.fontFamily,
+                        t.bold,
+                        baseFs,
+                        t.boxWidth,
+                        curLh
+                      ).totalLines
+                    : Math.max(1, (t.text || '').split(/\r?\n/).length);
+                  const domEstLines = canWrapMultiLine
+                    ? Math.max(1, Math.round((origH - 4) / Math.max(8, baseFs * curLh)))
+                    : 1;
+                  d.origVisualLines = Math.max(measuredVis, domEstLines);
+                  d.origLineHeight = curLh;
+                }
+                const visLines = d.origVisualLines || 1;
+                if (visLines >= 2) {
+                  const rawLh = (nextH - 4) / Math.max(8, visLines * baseFs);
+                  const nextLh = Math.max(0.88, Math.min(2.6, Number(rawLh.toFixed(3))));
+                  const actualNewH = Math.round(visLines * baseFs * nextLh + 4);
+                  const finalY =
+                    rHandle === 'n'
+                      ? Math.round(d.origY + (origH - actualNewH))
+                      : d.origY;
+                  return {
+                    ...t,
+                    y: finalY,
+                    lineHeight: nextLh,
+                    boxHeight: undefined,
+                  };
+                }
+                if (d.origSpans === undefined) {
+                  d.origSpans = t.spans ? t.spans.map((sp) => ({ ...sp })) : undefined;
+                }
+                const hRatio = nextH / Math.max(14, origH);
+                const autoFs = Math.max(6, Math.min(180, Math.round(baseFs * hRatio)));
+                const actualRatio = autoFs / Math.max(6, baseFs);
+                nextAutoFs = autoFs;
+                const finalY =
+                  rHandle === 'n'
+                    ? Math.round(d.origY + origH * (1 - actualRatio))
+                    : d.origY;
+                const finalX =
+                  t.textAlign === 'center'
+                    ? Math.round(d.origX + (origW * (1 - actualRatio)) / 2)
+                    : d.origX;
+                const scaledSpans = d.origSpans
+                  ? d.origSpans.map((sp) =>
+                      sp.fontSize !== undefined
+                        ? {
+                            ...sp,
+                            fontSize: Math.max(6, Math.min(180, Math.round(sp.fontSize * actualRatio))),
+                          }
+                        : sp
+                    )
+                  : t.spans;
+                return {
+                  ...t,
+                  x: finalX,
+                  y: finalY,
+                  boxWidth: undefined,
+                  boxHeight: undefined,
+                  fontSize: autoFs,
+                  spans: scaledSpans,
+                };
+              }
+
+              return t;
             }),
           }),
           false
@@ -14095,6 +15832,7 @@ export default function App() {
       const dragThresholdPx = d.startedOnDragBar ? 3 : d.wasAlreadyEditing ? 18 : 10;
       if (!d.moved && screenDist > dragThresholdPx) {
         d.moved = true;
+        pushUndoSnapshot(activeNotebook.pages[d.pageIdx] || activePage);
       }
       if (!d.moved) return;
       const pageCenterX = pW / 2;
@@ -14102,11 +15840,91 @@ export default function App() {
         `[data-text-id="${d.id}"]`
       ) as HTMLElement | null;
       const curBoxW = liveTxtEl?.offsetWidth || d.origW || 180;
-      let nextX = Math.round(d.origX + dx);
-      if (Math.abs(nextX + curBoxW / 2 - pageCenterX) <= 7) {
-        nextX = Math.round(pageCenterX - curBoxW / 2);
+      const curBoxH = liveTxtEl?.offsetHeight || d.origH || 36;
+      const rawX = d.origX + dx;
+      const rawY = d.origY + dy;
+
+      const alignBridge = textSmartAlignBridgeRef.current;
+      const targetPageObj = activeNotebook.pages[d.pageIdx] || activePage;
+      const refBoxes = alignBridge
+        ? alignBridge.getReferenceSnapBoxes([], [], [d.id], targetPageObj)
+        : [];
+
+      const candMinX = rawX;
+      const candMaxX = rawX + curBoxW;
+      const candCx = rawX + curBoxW / 2;
+      const candMinY = rawY;
+      const candMaxY = rawY + curBoxH;
+      const candCy = rawY + curBoxH / 2;
+
+      let snapDx: number | null = null;
+      let snapDy: number | null = null;
+
+      // Magnetic Snap to Horizontal Page Center (pW / 2)
+      if (Math.abs(candCx - pageCenterX) <= 6.5) {
+        snapDx = pageCenterX - candCx;
       }
-      const nextY = Math.round(d.origY + dy);
+
+      let bestDiffX = 4.5;
+      let bestDiffY = 4.5;
+
+      for (const ref of refBoxes) {
+        const thresh = ref.isText ? 4.5 : 2.6;
+        const limitX = Math.min(bestDiffX, thresh);
+        const limitY = Math.min(bestDiffY, thresh);
+
+        // Left / Right edge snaps (αριστερά / δεξιά)
+        for (const sx of [candMinX, candMaxX]) {
+          for (const rx of [ref.minX, ref.maxX]) {
+            const dEdgeX = Math.abs(sx - rx);
+            if (dEdgeX <= limitX) {
+              bestDiffX = dEdgeX;
+              snapDx = rx - sx;
+            }
+          }
+        }
+        // Center X snap
+        const dCx = Math.abs(candCx - ref.cx);
+        if (dCx < Math.min(bestDiffX, thresh)) {
+          bestDiffX = dCx;
+          snapDx = ref.cx - candCx;
+        }
+
+        // Top / Bottom edge snaps (πάνω / κάτω)
+        for (const sy of [candMinY, candMaxY]) {
+          for (const ry of [ref.minY, ref.maxY]) {
+            const dEdgeY = Math.abs(sy - ry);
+            if (dEdgeY <= limitY) {
+              bestDiffY = dEdgeY;
+              snapDy = ry - sy;
+            }
+          }
+        }
+        // Center Y snap
+        const dCy = Math.abs(candCy - ref.cy);
+        if (dCy < Math.min(bestDiffY, thresh)) {
+          bestDiffY = dCy;
+          snapDy = ref.cy - candCy;
+        }
+      }
+
+      const nextX = snapDx !== null ? rawX + snapDx : Math.round(rawX);
+      const nextY = snapDy !== null ? rawY + snapDy : Math.round(rawY);
+
+      if (alignBridge && d.pageIdx === activePageIndex) {
+        alignBridge.drawSmartAlignmentGuidesForBox(
+          {
+            minX: nextX,
+            maxX: nextX + curBoxW,
+            minY: nextY,
+            maxY: nextY + curBoxH,
+            cx: nextX + curBoxW / 2,
+            cy: nextY + curBoxH / 2,
+          },
+          refBoxes
+        );
+      }
+
       updateActivePage(
         (page) => ({
           ...page,
@@ -14118,10 +15936,14 @@ export default function App() {
       );
     },
     [
+      activeNotebook.pages,
+      activePage,
+      activePageIndex,
       adjustTextSpansOnEdit,
       bakeSoftWrappedLinesForBox,
       computeMaxFitFontSizeForBox,
       measureWrappedTextLayout,
+      pushUndoSnapshot,
       updateActivePage,
     ]
   );
@@ -14371,8 +16193,46 @@ export default function App() {
     const targetPageIdx = d.pageIdx;
     const tapX = d.lastClientX ?? d.startClientX;
     const tapY = d.lastClientY ?? d.startClientY;
-    const hadResizeOrDragBar = Boolean(d.resizeHandle || d.startedOnDragBar);
+    const resizeHandle = d.resizeHandle;
+    const hadResizeOrDragBar = Boolean(resizeHandle || d.startedOnDragBar);
     draggingTextRef.current = null;
+    if (didMove) {
+      textSmartAlignBridgeRef.current?.clearActiveOverlay();
+    }
+    if (didMove && (resizeHandle === 'e' || resizeHandle === 'w')) {
+      updateActivePage(
+        (page) => ({
+          ...page,
+          texts: (page.texts || []).map((t) => {
+            if (t.id !== targetId || t.isMath || !t.boxWidth) return t;
+            const explicitLines = Math.max(1, (t.text || '').split(/\r?\n/).length);
+            const unwrapped = measureWrappedTextLayout(
+              t.text,
+              t.fontFamily,
+              t.bold,
+              t.fontSize,
+              99999,
+              t.lineHeight
+            );
+            const wrapped = measureWrappedTextLayout(
+              t.text,
+              t.fontFamily,
+              t.bold,
+              t.fontSize,
+              t.boxWidth,
+              t.lineHeight
+            );
+            if (t.boxWidth >= unwrapped.tightW - 2 && wrapped.totalLines <= explicitLines) {
+              return { ...t, boxWidth: undefined, boxHeight: undefined };
+            }
+            const snugW = Math.max(22, Math.min(t.boxWidth, wrapped.tightW));
+            return { ...t, boxWidth: snugW, boxHeight: undefined };
+          }),
+        }),
+        false
+      );
+      return;
+    }
     if (!didMove && !hadResizeOrDragBar) {
       const targetPageObj = activeNotebook.pages[targetPageIdx] || activePage;
       const txtObj = (targetPageObj.texts || []).find((t) => t.id === targetId);
@@ -14404,11 +16264,21 @@ export default function App() {
         focusAndPlaceCaretInTextBox(targetId, caretIndex, caretIndex);
       }
     }
-  }, [activeNotebook.pages, activePage, getTextCaretAndWordAtPoint, focusAndPlaceCaretInTextBox]);
+  }, [
+    activeNotebook.pages,
+    activePage,
+    focusAndPlaceCaretInTextBox,
+    getTextCaretAndWordAtPoint,
+    measureWrappedTextLayout,
+    updateActivePage,
+  ]);
 
   useEffect(() => {
     const onWinPointerMove = (ev: PointerEvent) => {
       if (pinchStateRef.current?.active) {
+        if (draggingTextRef.current?.moved) {
+          textSmartAlignBridgeRef.current?.clearActiveOverlay();
+        }
         draggingTextRef.current = null;
         return;
       }
@@ -14427,10 +16297,16 @@ export default function App() {
       const d = draggingTextRef.current;
       if (!d) return;
       if (d.pointerId !== undefined && ev.pointerId !== d.pointerId) return;
+      if (d.moved) {
+        textSmartAlignBridgeRef.current?.clearActiveOverlay();
+      }
       draggingTextRef.current = null;
     };
     const onWinTouchMove = (ev: TouchEvent) => {
       if (ev.touches.length >= 2 || pinchStateRef.current?.active) {
+        if (draggingTextRef.current?.moved) {
+          textSmartAlignBridgeRef.current?.clearActiveOverlay();
+        }
         draggingTextRef.current = null;
         return;
       }
@@ -14479,6 +16355,9 @@ export default function App() {
       }
     };
     const onWinTouchCancel = () => {
+      if (draggingTextRef.current?.moved) {
+        textSmartAlignBridgeRef.current?.clearActiveOverlay();
+      }
       draggingTextRef.current = null;
     };
     window.addEventListener('pointermove', onWinPointerMove, { passive: true });
@@ -17426,7 +19305,9 @@ export default function App() {
                   atoms: updatedAtoms,
                   selectedAtomId: newAtomId,
                   showAtomsBelowReaction: true,
-                  reactionEquationText: inferred.equationDisplay,
+                  reactionEquationText: s.userRawReactionText
+                    ? s.reactionEquationText
+                    : inferred.equationDisplay,
                 }
               : s
           ),
@@ -17646,7 +19527,9 @@ export default function App() {
                   selectedAtomId: nextSelectedId,
                   bonds: [],
                   showAtomsBelowReaction: true,
-                  reactionEquationText: inferred.equationDisplay,
+                  reactionEquationText: s.userRawReactionText
+                    ? s.reactionEquationText
+                    : inferred.equationDisplay,
                 }
               : s
           ),
@@ -17769,39 +19652,263 @@ export default function App() {
     (sim: AtomSimConfig | null, action: string) => {
       if (!sim) return;
 
-      // Υπολογισμός κέντρου & σταθερής άνω στάθμης (topOrbitY) ώστε η μπάρα της αντίδρασης να μη μετακινείται ποτέ κατακόρυφα
-      const buildAlignedTermForSim = (s: AtomSimConfig, termText: string) => {
+      // Έξυπνη εύρεση ελεύθερου χώρου (Κάτω -> Δεξιά -> Αριστερά -> Πάνω) ώστε τα 2D & 3D μοντέλα
+      // να μη βγαίνουν ποτέ εκτός σελίδας όταν η αντίδραση βρίσκεται χαμηλά ή κοντά στα άκρα, και να αποφεύγουν υπάρχοντα γραπτά!
+      const findSmartModelPlacementForSim = (
+        s: AtomSimConfig,
+        modelW: number,
+        modelH: number
+      ): { x1: number; y1: number; cx: number; cy: number } => {
+        const pW = getPageLogicalWidth(activePage);
+        const pH = getPageLogicalHeight(activePage);
+        const marginX = 14;
+        const marginY = 14;
+        const maxBottomY = pH - 18;
+
         let minX = Infinity,
           maxX = -Infinity,
           minOrbitTopY = Infinity;
         for (const a of s.atoms) {
           const rOut = a.outerRadiusPx || getNaturalOuterOrbitRadiusPx(a.z);
-          if (a.x < minX) minX = a.x;
-          if (a.x > maxX) maxX = a.x;
+          if (a.x - rOut < minX) minX = a.x - rOut;
+          if (a.x + rOut > maxX) maxX = a.x + rOut;
           if (a.y - rOut < minOrbitTopY) minOrbitTopY = a.y - rOut;
         }
         const rScale = Math.max(0.55, Math.min(3.0, s.reactionScale || 1));
-        const cx =
+        const hitCard = atomOverlayHitRef.current?.reactionCards?.find(
+          (rc) => rc.simId === s.id
+        );
+
+        const barCX =
           s.reactionBarX !== undefined
             ? Math.round(s.reactionBarX)
             : Number.isFinite(minX)
             ? Math.round((minX + maxX) / 2)
-            : 360;
-        const targetTopY =
+            : Math.round(pW / 2);
+        const barTopY =
           s.reactionBarY !== undefined
-            ? Math.round(s.reactionBarY + 38 * rScale + 18)
+            ? Math.round(s.reactionBarY)
             : Number.isFinite(minOrbitTopY)
-            ? minOrbitTopY
-            : 180;
-        const rawBuilt = buildAtomNodesAndBondsForTerm(termText, cx, targetTopY + 90);
-        let builtMinTopY = Infinity;
+            ? Math.max(22, Math.round(minOrbitTopY - 54))
+            : 120;
+
+        const estCardW = Math.max(
+          210,
+          Math.round(((s.reactionEquationText || '').length * 10 + 76) * rScale)
+        );
+        const estCardH = Math.round(38 * rScale);
+        const cardX1 = hitCard ? hitCard.x1 : Math.max(8, barCX - estCardW / 2);
+        const cardX2 = hitCard ? hitCard.x2 : cardX1 + estCardW;
+        const cardY1 = hitCard ? hitCard.y1 : barTopY;
+        const cardY2 = hitCard ? hitCard.y2 : barTopY + estCardH;
+        const cardCX = (cardX1 + cardX2) / 2;
+        const cardCY = (cardY1 + cardY2) / 2;
+
+        // Συλλογή εμποδίων στη σελίδα (χειρόγραφα strokes, κείμενα, εικόνες, άλλες αντιδράσεις)
+        const obstacles: { x1: number; y1: number; x2: number; y2: number }[] = [];
+        for (const st of activePage.strokes || []) {
+          const b = getStrokeBounds(st);
+          if (Number.isFinite(b.minX) && Number.isFinite(b.minY)) {
+            obstacles.push({
+              x1: b.minX - 6,
+              y1: b.minY - 6,
+              x2: b.maxX + 6,
+              y2: b.maxY + 6,
+            });
+          }
+        }
+        for (const t of activePage.texts || []) {
+          const estTxtW = Math.max(90, Math.round((t.text || '').length * (t.fontSize || 18) * 0.55));
+          obstacles.push({
+            x1: t.x - 6,
+            y1: t.y - 6,
+            x2: t.x + estTxtW + 6,
+            y2: t.y + 42,
+          });
+        }
+        for (const img of activePage.images || []) {
+          obstacles.push({
+            x1: img.x - 6,
+            y1: img.y - 6,
+            x2: img.x + img.width + 6,
+            y2: img.y + img.height + 6,
+          });
+        }
+        for (const other of activePage.atomSims || []) {
+          if (other.id === s.id) continue;
+          if (other.showReactionEquation && other.reactionBarX !== undefined && other.reactionBarY !== undefined) {
+            obstacles.push({
+              x1: other.reactionBarX - 130,
+              y1: other.reactionBarY - 12,
+              x2: other.reactionBarX + 130,
+              y2: other.reactionBarY + 48,
+            });
+          }
+          if (other.showAtomsBelowReaction !== false) {
+            for (const oa of other.atoms) {
+              const r = oa.outerRadiusPx || getNaturalOuterOrbitRadiusPx(oa.z);
+              obstacles.push({
+                x1: oa.x - r - 6,
+                y1: oa.y - r - 6,
+                x2: oa.x + r + 6,
+                y2: oa.y + r + 24,
+              });
+            }
+          }
+          if (other.show3DMolecule && other.mol3DBoxX !== undefined && other.mol3DBoxY !== undefined) {
+            obstacles.push({
+              x1: other.mol3DBoxX - 6,
+              y1: other.mol3DBoxY - 6,
+              x2: other.mol3DBoxX + 446,
+              y2: other.mol3DBoxY + 230,
+            });
+          }
+        }
+
+        const clampX = (x: number) =>
+          Math.max(marginX, Math.min(Math.max(marginX, pW - modelW - marginX), Math.round(x)));
+        const clampY = (y: number) =>
+          Math.max(marginY, Math.min(Math.max(marginY, maxBottomY - modelH), Math.round(y)));
+
+        const yBelow = Math.round(cardY2 + 18);
+        const xRight = Math.round(cardX2 + 20);
+        const xLeft = Math.round(cardX1 - 20 - modelW);
+        // Αφήνουμε 48px πάνω από την κάρτα της αντίδρασης ώστε να χωράει άνετα και το Modal Αριθμών Οξείδωσης (Α.Ο.)!
+        const yAbove = Math.round(cardY1 - 48 - modelH);
+
+        const candidates: { x1: number; y1: number; pref: number }[] = [
+          // 1. Κάτω από την αντίδραση (προεπιλογή όταν υπάρχει χώρος στη σελίδα)
+          { x1: clampX(cardCX - modelW / 2), y1: yBelow, pref: 0 },
+          { x1: clampX(cardX2 - modelW * 0.25), y1: yBelow, pref: 30 },
+          { x1: clampX(cardX1 - modelW * 0.75), y1: yBelow, pref: 35 },
+          // 2. Δεξιά από την αντίδραση
+          { x1: xRight, y1: clampY(cardCY - modelH / 2), pref: 65 },
+          { x1: xRight, y1: clampY(cardY2 - modelH), pref: 70 },
+          { x1: xRight, y1: clampY(cardY1 - 16), pref: 80 },
+          // 3. Αριστερά από την αντίδραση
+          { x1: xLeft, y1: clampY(cardCY - modelH / 2), pref: 75 },
+          { x1: xLeft, y1: clampY(cardY2 - modelH), pref: 80 },
+          { x1: xLeft, y1: clampY(cardY1 - 16), pref: 90 },
+          // 4. Πάνω από την αντίδραση (κέντρο, δεξιά, αριστερά, ή λίγο ψηλότερα αν υπάρχουν γραπτά ακριβώς από πάνω)
+          { x1: clampX(cardCX - modelW / 2), y1: Math.max(marginY, yAbove), pref: 105 },
+          { x1: clampX(cardX2 - modelW * 0.2), y1: Math.max(marginY, yAbove), pref: 115 },
+          { x1: clampX(cardX1 - modelW * 0.8), y1: Math.max(marginY, yAbove), pref: 120 },
+          { x1: clampX(pW - modelW - 18), y1: Math.max(marginY, yAbove), pref: 135 },
+          { x1: marginX, y1: Math.max(marginY, yAbove), pref: 140 },
+          { x1: clampX(cardCX - modelW / 2), y1: Math.max(marginY, yAbove - 130), pref: 165 },
+          { x1: clampX(pW - modelW - 18), y1: Math.max(marginY, yAbove - 130), pref: 175 },
+          { x1: marginX, y1: Math.max(marginY, yAbove - 130), pref: 180 },
+        ];
+
+        const intersectArea = (
+          ax1: number,
+          ay1: number,
+          ax2: number,
+          ay2: number,
+          bx1: number,
+          by1: number,
+          bx2: number,
+          by2: number
+        ) => {
+          const ix = Math.max(0, Math.min(ax2, bx2) - Math.max(ax1, bx1));
+          const iy = Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1));
+          return ix * iy;
+        };
+
+        // Ζώνη κάρτας αντίδρασης + Modal Α.Ο. από πάνω της ώστε το μοντέλο να μην καλύπτει ποτέ την ίδια την αντίδραση
+        const selfCardBox = {
+          x1: cardX1 - 8,
+          y1: Math.max(4, cardY1 - 46),
+          x2: cardX2 + 8,
+          y2: cardY2 + 8,
+        };
+
+        let best = {
+          x1: clampX(cardCX - modelW / 2),
+          y1: clampY(yBelow),
+          score: Infinity,
+        };
+
+        for (const cand of candidates) {
+          const cx1 = cand.x1;
+          const cy1 = cand.y1;
+          const cx2 = cx1 + modelW;
+          const cy2 = cy1 + modelH;
+
+          const overLeft = Math.max(0, marginX - cx1);
+          const overRight = Math.max(0, cx2 - (pW - marginX));
+          const overTop = Math.max(0, marginY - cy1);
+          const overBottom = Math.max(0, cy2 - maxBottomY);
+          const outOfBoundsPenalty = (overLeft + overRight + overTop + overBottom) * 50000;
+
+          const selfOverlap =
+            intersectArea(
+              cx1,
+              cy1,
+              cx2,
+              cy2,
+              selfCardBox.x1,
+              selfCardBox.y1,
+              selfCardBox.x2,
+              selfCardBox.y2
+            ) * 500;
+
+          let obsOverlap = 0;
+          for (const ob of obstacles) {
+            obsOverlap += intersectArea(cx1, cy1, cx2, cy2, ob.x1, ob.y1, ob.x2, ob.y2) * 15;
+          }
+
+          const distPenalty =
+            Math.hypot(cx1 + modelW / 2 - cardCX, cy1 + modelH / 2 - cardCY) * 0.15;
+          const totalScore = outOfBoundsPenalty + selfOverlap + obsOverlap + cand.pref + distPenalty;
+
+          if (totalScore < best.score) {
+            best = {
+              x1: clampX(cx1),
+              y1: clampY(cy1),
+              score: totalScore,
+            };
+          }
+        }
+
+        return {
+          x1: best.x1,
+          y1: best.y1,
+          cx: Math.round(best.x1 + modelW / 2),
+          cy: Math.round(best.y1 + modelH / 2),
+        };
+      };
+
+      const buildAlignedTermForSim = (s: AtomSimConfig, termText: string) => {
+        const rawBuilt = buildAtomNodesAndBondsForTerm(termText, 0, 0);
+        let rawMinX = Infinity,
+          rawMaxX = -Infinity,
+          rawMinY = Infinity,
+          rawMaxY = -Infinity;
         for (const a of rawBuilt.atoms) {
           const rOut = a.outerRadiusPx || getNaturalOuterOrbitRadiusPx(a.z);
-          if (a.y - rOut < builtMinTopY) builtMinTopY = a.y - rOut;
+          if (a.x - rOut < rawMinX) rawMinX = a.x - rOut;
+          if (a.x + rOut > rawMaxX) rawMaxX = a.x + rOut;
+          if (a.y - rOut < rawMinY) rawMinY = a.y - rOut;
+          if (a.y + rOut + 26 > rawMaxY) rawMaxY = a.y + rOut + 26;
         }
-        const shiftY = Number.isFinite(builtMinTopY) ? Math.round(targetTopY - builtMinTopY) : 0;
+        const modelW = Number.isFinite(rawMinX)
+          ? Math.max(120, Math.ceil(rawMaxX - rawMinX))
+          : 180;
+        const modelH = Number.isFinite(rawMinY)
+          ? Math.max(120, Math.ceil(rawMaxY - rawMinY))
+          : 180;
+
+        const bestPos = findSmartModelPlacementForSim(s, modelW, modelH);
+        const shiftX = Number.isFinite(rawMinX) ? Math.round(bestPos.x1 - rawMinX) : bestPos.cx;
+        const shiftY = Number.isFinite(rawMinY) ? Math.round(bestPos.y1 - rawMinY) : bestPos.cy;
+
         return {
-          atoms: rawBuilt.atoms.map((a) => ({ ...a, y: a.y + shiftY })),
+          atoms: rawBuilt.atoms.map((a) => ({
+            ...a,
+            x: a.x + shiftX,
+            y: a.y + shiftY,
+          })),
           bonds: rawBuilt.bonds,
         };
       };
@@ -17828,6 +19935,75 @@ export default function App() {
       ) {
         activeChemCorrectionRef.current = null;
         setActiveChemCorrection(null);
+      }
+
+      // Κλικ σε εναλλακτικό Αριθμό Οξείδωσης (π.χ. [ +3 ⇒ PCl₃ ] ↔ [ +5 ⇒ PCl₅ ] ή [ +4 ⇒ SO₂ ] ↔ [ +6 ⇒ SO₃ ]) μέσα στο Modal Α.Ο.
+      if (action.startsWith('switch-reaction-compound:')) {
+        const nextFormulaAscii = action.slice('switch-reaction-compound:'.length).trim();
+        if (!nextFormulaAscii) return;
+        const targetSyms = Array.from(nextFormulaAscii.matchAll(/[A-Z][a-z]?/g)).map((m) => m[0]);
+        const replaceMatchingTerm = (eqStr: string) => {
+          const sides = eqStr.split(/→|->|-->/);
+          if (sides.length < 2) return formatChemEquationText(nextFormulaAscii);
+          const lhs = sides[0].trim();
+          const rhsTerms = sides[1]
+            .split('+')
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .map((t) => {
+              const tSyms = Array.from(t.matchAll(/[A-Z][a-z]?/g)).map((m) => m[0]);
+              if (
+                tSyms.length === targetSyms.length &&
+                targetSyms.every((sym) => tSyms.includes(sym))
+              ) {
+                return nextFormulaAscii;
+              }
+              return t;
+            });
+          return `${lhs} -> ${rhsTerms.join(' + ')}`;
+        };
+
+        const baseEq = sim.userRawReactionText || sim.reactionEquationText || '';
+        const updatedRaw = replaceMatchingTerm(baseEq);
+        const nextVal = validateAndCorrectChemicalEquation(updatedRaw);
+        const nextCorrEq = nextVal.correctedEquation;
+        const rhsPart = (nextCorrEq.split('→')[1] || nextCorrEq).trim();
+        const rhsTerms = rhsPart.split('+').map((t) => t.trim()).filter(Boolean);
+        const matchedActiveTerm =
+          rhsTerms.find((t) => {
+            const tSyms = Array.from(t.matchAll(/[A-Z][a-z]?/g)).map((m) => m[0]);
+            return (
+              tSyms.length === targetSyms.length &&
+              targetSyms.every((sym) => tSyms.includes(sym))
+            );
+          }) || formatChemEquationText(nextFormulaAscii);
+
+        const viewMode = sim.reactionViewMode || '2d';
+        const built = buildAlignedTermForSim(sim, matchedActiveTerm);
+        const best3DPos = findSmartModelPlacementForSim(sim, 440, 224);
+
+        updateActivePage((page) => ({
+          ...page,
+          atomSims: (page.atomSims || []).map((s) =>
+            s.id === sim.id
+              ? {
+                  ...s,
+                  userRawReactionText: updatedRaw,
+                  reactionEquationText: nextCorrEq,
+                  activeReactionTerm: matchedActiveTerm,
+                  selected3DMolId: matchedActiveTerm,
+                  atoms: built.atoms,
+                  bonds: built.bonds,
+                  selectedAtomId: built.atoms[0]?.id,
+                  showAtomsBelowReaction: viewMode === '2d',
+                  show3DMolecule: viewMode === '3d',
+                  mol3DBoxX: viewMode === '3d' ? best3DPos.x1 : s.mol3DBoxX,
+                  mol3DBoxY: viewMode === '3d' ? best3DPos.y1 : s.mol3DBoxY,
+                }
+              : s
+          ),
+        }));
+        return;
       }
 
       // Κλικ πάνω σε συγκεκριμένο Αντιδρών ή Προϊόν στην μπάρα της αντίδρασης:
@@ -17867,6 +20043,7 @@ export default function App() {
         if (viewMode === '3d') {
           atomReactionAnimRef.current = null;
           setAtomReactionAnim(null);
+          const best3DPos = findSmartModelPlacementForSim(sim, 440, 224);
           updateActivePage((page) => ({
             ...page,
             atomSims: (page.atomSims || []).map((s) =>
@@ -17877,6 +20054,8 @@ export default function App() {
                     selected3DMolId: termText,
                     showAtomsBelowReaction: false,
                     show3DMolecule: true,
+                    mol3DBoxX: best3DPos.x1,
+                    mol3DBoxY: best3DPos.y1,
                     showChargeCloud: s.showChargeCloud ?? true,
                     showBondLabel: false,
                   }
@@ -17943,6 +20122,7 @@ export default function App() {
         if (nextMode === '3d') {
           atomReactionAnimRef.current = null;
           setAtomReactionAnim(null);
+          const best3DPos = findSmartModelPlacementForSim(sim, 440, 224);
           updateActivePage((page) => ({
             ...page,
             atomSims: (page.atomSims || []).map((s) =>
@@ -17954,6 +20134,8 @@ export default function App() {
                     selected3DMolId: targetTerm,
                     showAtomsBelowReaction: false,
                     show3DMolecule: true,
+                    mol3DBoxX: best3DPos.x1,
+                    mol3DBoxY: best3DPos.y1,
                     showChargeCloud: s.showChargeCloud ?? true,
                     showBondLabel: false,
                   }
@@ -17990,6 +20172,29 @@ export default function App() {
             setAtomReactionAnim(nextAnim);
           }
         }
+        return;
+      }
+
+      // Εμφάνιση / Απόκρυψη της μπάρας «Αριθμοί Οξείδωσης (Α.Ο.)» πάνω από την αντίδραση (από το Simulation Dashboard)
+      if (action === 'toggle-oxidation-numbers') {
+        const nextShowOx = !sim.showOxidationNumbers;
+        updateActivePage((page) => ({
+          ...page,
+          atomSims: (page.atomSims || []).map((s) => {
+            const inferred = inferReactionFromCanvasAtoms(s.atoms.map((a) => a.z));
+            const eqStr = s.reactionEquationText || inferred.equationDisplay;
+            const rhsPart = (eqStr.split(/→|->|-->/)[1] || eqStr).trim();
+            const primaryProductTerm = (rhsPart.split('+')[0] || rhsPart).trim();
+            return {
+              ...s,
+              showOxidationNumbers: nextShowOx,
+              activeReactionTerm:
+                nextShowOx && !s.activeReactionTerm
+                  ? primaryProductTerm || undefined
+                  : s.activeReactionTerm,
+            };
+          }),
+        }));
         return;
       }
 
@@ -18044,6 +20249,7 @@ export default function App() {
           atomReactionAnimRef.current = nextAnim;
           setAtomReactionAnim(nextAnim);
         } else if (nextStep === 2) {
+          const best3DPos = findSmartModelPlacementForSim(sim, 440, 224);
           updateActivePage((page) => ({
             ...page,
             atomSims: (page.atomSims || []).map((s) =>
@@ -18053,6 +20259,8 @@ export default function App() {
                     reactionArrowStep: 2,
                     showAtomsBelowReaction: false,
                     show3DMolecule: true,
+                    mol3DBoxX: best3DPos.x1,
+                    mol3DBoxY: best3DPos.y1,
                     showChargeCloud: true,
                   }
                 : s
@@ -18181,11 +20389,61 @@ export default function App() {
               ? {
                   ...s,
                   show3DMolecule: false,
+                  activeReactionTerm:
+                    s.showAtomsBelowReaction === false ? undefined : s.activeReactionTerm,
                   showChargeCloud: s.showChargeCloud ?? true,
                 }
               : s
           ),
         }));
+        return;
+      }
+      if (action === 'close-2d-atoms') {
+        atomReactionAnimRef.current = null;
+        setAtomReactionAnim(null);
+        updateActivePage((page) => {
+          // Αν ανήκει σε αντίδραση, κρύβει το 2D μοντέλο κάτω από την αντίδραση· αν είναι μεμονωμένο άτομο, το κλείνει/αφαιρεί
+          if (sim.showReactionEquation) {
+            return {
+              ...page,
+              atomSims: (page.atomSims || []).map((s) =>
+                s.id === sim.id
+                  ? {
+                      ...s,
+                      activeReactionTerm: undefined,
+                      showAtomsBelowReaction: false,
+                      showBondLabel: false,
+                    }
+                  : s
+              ),
+            };
+          }
+          const rem = (page.atomSims || []).filter((s) => s.id !== sim.id);
+          return {
+            ...page,
+            atomSims: rem,
+            activeAtomSimId:
+              page.activeAtomSimId === sim.id ? rem[0]?.id : page.activeAtomSimId,
+          };
+        });
+        return;
+      }
+      if (action === 'delete-atom-sim') {
+        atomReactionAnimRef.current = null;
+        setAtomReactionAnim(null);
+        if (selectedReactionSimIdRef.current === sim.id) {
+          selectedReactionSimIdRef.current = null;
+          setSelectedReactionSimId(null);
+        }
+        updateActivePage((page) => {
+          const rem = (page.atomSims || []).filter((s) => s.id !== sim.id);
+          return {
+            ...page,
+            atomSims: rem,
+            activeAtomSimId:
+              page.activeAtomSimId === sim.id ? rem[0]?.id : page.activeAtomSimId,
+          };
+        });
         return;
       }
       if (action === 'toggle-3d-molecule') {
@@ -18219,11 +20477,18 @@ export default function App() {
               ),
             };
           }
+          const best3DPos = findSmartModelPlacementForSim(sim, 440, 224);
           return {
             ...page,
             atomSims: allSims.map((s) =>
               s.id === sim.id
-                ? { ...s, show3DMolecule: true, showChargeCloud: s.showChargeCloud ?? true }
+                ? {
+                    ...s,
+                    show3DMolecule: true,
+                    mol3DBoxX: s.mol3DBoxX ?? best3DPos.x1,
+                    mol3DBoxY: s.mol3DBoxY ?? best3DPos.y1,
+                    showChargeCloud: s.showChargeCloud ?? true,
+                  }
                 : s
             ),
           };
@@ -18251,6 +20516,7 @@ export default function App() {
       }
       if (action.startsWith('select-3d-mol:')) {
         const molId = action.split(':')[1] || 'H2O';
+        const best3DPos = findSmartModelPlacementForSim(sim, 440, 224);
         updateActivePage((page) => ({
           ...page,
           atomSims: (page.atomSims || []).map((s) =>
@@ -18258,6 +20524,8 @@ export default function App() {
               ? {
                   ...s,
                   show3DMolecule: true,
+                  mol3DBoxX: s.mol3DBoxX ?? best3DPos.x1,
+                  mol3DBoxY: s.mol3DBoxY ?? best3DPos.y1,
                   showChargeCloud: s.showChargeCloud ?? true,
                   selected3DMolId: molId,
                 }
@@ -18267,7 +20535,7 @@ export default function App() {
         return;
       }
     },
-    [computeReactionBondsForAtomSim, triggerAtomReactionAnimation, updateActivePage]
+    [activePage, computeReactionBondsForAtomSim, triggerAtomReactionAnimation, updateActivePage]
   );
 
   const scrollToSpringSim = useCallback(
@@ -18746,13 +21014,16 @@ export default function App() {
     };
   };
 
-  const updateActiveSpringSimConfig = (updater: (sim: SpringSimConfig) => SpringSimConfig) => {
+  const updateActiveSpringSimConfig = (
+    updater: (sim: SpringSimConfig) => SpringSimConfig,
+    recordUndo = true
+  ) => {
     updateActivePage((page) => {
       const activeSim = getActiveSpringSim(page);
       if (!activeSim) return page;
       const nextSim = updater(activeSim);
       return applySpringSimParametersToStrokes(page, nextSim);
-    }, false);
+    }, recordUndo);
   };
 
   const getReferenceNaturalLengthPxForSpring = (
@@ -18834,7 +21105,7 @@ export default function App() {
   // Automatically normalize any Hooke-mode springs and hooked-weights (25x48px) on the active page so 1, 2, 3, 4 weights (m = 0,1 kg, g = 10 m/s²)
   // stretch by exact 10 mm (1 cm = 46 px), 20 mm (2 cm = 92 px), 30 mm (3 cm = 138 px), 40 mm (4 cm = 184 px)!
   useEffect(() => {
-    if (isSpringSimulating || springSettleAnim) return;
+    if (isSpringSimulating || springSettleAnim || isDrawingRef.current) return;
     const sims = getValidSpringSims(activePage);
     const hasOversizedHookedWeight = activePage.strokes.some((s) => {
       if (s.shapeType !== 'hooked-weight') return false;
@@ -19862,7 +22133,13 @@ export default function App() {
       s.shapeType === 'switch-knob' ||
       s.shapeType === 'fan' ||
       s.shapeType === 'fan-blade' ||
-      s.shapeType === 'fan-hub'
+      s.shapeType === 'fan-hub' ||
+      s.shapeType === 'ammeter' ||
+      s.shapeType === 'ammeter-needle' ||
+      s.shapeType === 'ammeter-label' ||
+      s.shapeType === 'voltmeter' ||
+      s.shapeType === 'voltmeter-needle' ||
+      s.shapeType === 'voltmeter-label'
     );
   };
 
@@ -20115,19 +22392,67 @@ export default function App() {
     return { ...page, strokes: splitStrokes, circuitSims: nextSims };
   };
 
-  const registerOrActivateSimFromLasso = (customName?: string): boolean => {
+  const registerOrActivateSimFromLasso = (
+    customName?: string,
+    allowHandDrawnGuess?: boolean
+  ): boolean => {
     if (selectedStrokeIds.length === 0) {
       showToast('🎯 Επιλέξτε πρώτα με το Λάσο το κύκλωμα που θέλετε να προσομοιώσετε!');
       return false;
     }
     const rawSelSet = new Set(selectedStrokeIds);
+    const rawSelStrokes = activePage.strokes.filter((s) => rawSelSet.has(s.id));
+    const canGuessHandDrawn =
+      Boolean(allowHandDrawnGuess) ||
+      (showSimulationPanel && simActiveCategory === 'circuits');
+    const lassoHandRec = canGuessHandDrawn
+      ? recognizeHandDrawnCircuitSymbols(
+          rawSelStrokes,
+          activePage.texts || [],
+          {
+            requireCircuitContext: false,
+            explicitCircuitIntent: true,
+            convertFreehandWires: true,
+          }
+        )
+      : {
+          changed: false,
+          strokes: rawSelStrokes,
+          removedStrokeIds: [] as string[],
+          addedCompStrokeIds: [] as string[],
+          addedWireStrokeIds: [] as string[],
+          removedTextIds: [] as string[],
+        };
+    const workingPageStrokes: StrokeObject[] = lassoHandRec.changed
+      ? (() => {
+          const out: StrokeObject[] = [];
+          let insertedRec = false;
+          for (const s of activePage.strokes) {
+            if (rawSelSet.has(s.id)) {
+              if (!insertedRec) {
+                out.push(...lassoHandRec.strokes);
+                insertedRec = true;
+              }
+              continue;
+            }
+            out.push(s);
+          }
+          if (!insertedRec) out.push(...lassoHandRec.strokes);
+          return out;
+        })()
+      : activePage.strokes;
+    if (lassoHandRec.changed) {
+      for (const id of lassoHandRec.addedCompStrokeIds) rawSelSet.add(id);
+      for (const id of lassoHandRec.addedWireStrokeIds || []) rawSelSet.add(id);
+    }
+
     const selGroupIds = new Set(
-      activePage.strokes
+      workingPageStrokes
         .filter((s) => rawSelSet.has(s.id) && isCircuitEligibleStroke(s) && s.groupId)
         .map((s) => s.groupId!)
     );
     const expandedIdSet = new Set<string>();
-    for (const s of activePage.strokes) {
+    for (const s of workingPageStrokes) {
       if (
         isCircuitEligibleStroke(s) &&
         (rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId)))
@@ -20137,7 +22462,7 @@ export default function App() {
     }
 
     // Transitively include all connected circuit wires & components (<= 40px) belonging to this circuit!
-    const eligible = activePage.strokes.filter(
+    const eligible = workingPageStrokes.filter(
       (s) => expandedIdSet.has(s.id) || isCircuitEligibleStroke(s)
     );
     let addedConnected = true;
@@ -20150,7 +22475,7 @@ export default function App() {
           expandedIdSet.add(cand.id);
           addedConnected = true;
           if (cand.groupId) {
-            for (const g of activePage.strokes) {
+            for (const g of workingPageStrokes) {
               if (g.groupId === cand.groupId) expandedIdSet.add(g.id);
             }
           }
@@ -20158,7 +22483,7 @@ export default function App() {
       }
     }
 
-    const expandedStrokes = activePage.strokes.filter((s) => expandedIdSet.has(s.id));
+    const expandedStrokes = workingPageStrokes.filter((s) => expandedIdSet.has(s.id));
 
     const hasSource = expandedStrokes.some(
       (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
@@ -20170,9 +22495,54 @@ export default function App() {
 
     const alignedSubset = autoAlignAndConnectCircuit(expandedStrokes);
     const simCheck = analyzeCircuitForSimulation(alignedSubset, true);
-    if (!simCheck.isCircuitClosed) {
-      showToast('⚠️ Το επιλεγμένο κύκλωμα είναι ανοιχτό! Κλείστε τους αγωγούς σε κλειστό κύκλωμα.');
-      return false;
+    const hasLiveVoltmeterReading = simCheck.components.some(
+      (cs) => cs.comp.kind === 'voltmeter' && cs.active
+    );
+    const replaceOnPageSet = new Set<string>([
+      ...expandedIdSet,
+      ...(lassoHandRec.changed ? lassoHandRec.removedStrokeIds : []),
+    ]);
+    const removeTextSet = new Set<string>(
+      lassoHandRec.changed ? lassoHandRec.removedTextIds : []
+    );
+
+    if (!simCheck.isCircuitClosed && !hasLiveVoltmeterReading) {
+      // Open or unwired components (e.g., hand-drawn Battery + Bulb without closed wires):
+      // Persist the converted crisp stencils & launch interactive Circuit Completion automatically!
+      const nextStrokesSnapshot: StrokeObject[] = [];
+      let insertedOpen = false;
+      for (const s of activePage.strokes) {
+        if (replaceOnPageSet.has(s.id)) {
+          if (!insertedOpen) {
+            nextStrokesSnapshot.push(...alignedSubset);
+            insertedOpen = true;
+          }
+          continue;
+        }
+        nextStrokesSnapshot.push(s);
+      }
+      if (!insertedOpen) {
+        nextStrokesSnapshot.push(...alignedSubset);
+      }
+
+      if (removeTextSet.size > 0) {
+        updateActivePage(
+          (page) => ({
+            ...page,
+            texts: (page.texts || []).filter((t) => !removeTextSet.has(t.id)),
+          }),
+          false
+        );
+      }
+
+      setShowSimulationPanel(true);
+      setSimActiveCategory('circuits');
+      handleStartCircuitCompletion(
+        nextStrokesSnapshot,
+        alignedSubset.map((s) => s.id),
+        replaceOnPageSet
+      );
+      return true;
     }
 
     const alignedIds = alignedSubset.map((s) => s.id);
@@ -20191,7 +22561,7 @@ export default function App() {
       const nextStrokes: StrokeObject[] = [];
       let inserted = false;
       for (const s of page.strokes) {
-        if (expandedIdSet.has(s.id)) {
+        if (replaceOnPageSet.has(s.id)) {
           if (!inserted) {
             nextStrokes.push(...alignedSubset);
             inserted = true;
@@ -20216,6 +22586,10 @@ export default function App() {
       return {
         ...page,
         strokes: nextStrokes,
+        texts:
+          removeTextSet.size > 0
+            ? (page.texts || []).filter((t) => !removeTextSet.has(t.id))
+            : page.texts,
         circuitSims: nextSims,
         activeCircuitSimId: targetSimId,
       };
@@ -20226,7 +22600,7 @@ export default function App() {
     setSelectedImageId(null);
     setSelectedImageIds([]);
     setActiveNodeStrokeId(null);
-    setSimCircuitSwitchClosed(false);
+    setSimCircuitSwitchClosed(!simCheck.isCircuitClosed && hasLiveVoltmeterReading);
     setIsSimulating(true);
     setShowSimulationPanel(true);
     showToast(`⚡ Ενεργή προσομοίωση: "${targetSimName}"`);
@@ -20243,14 +22617,16 @@ export default function App() {
     if (span.kind === 'h-top') {
       const x1 = span.fixedX1 !== undefined ? span.fixedX1 : prop.xLeft;
       const x2 = span.fixedX2 !== undefined ? span.fixedX2 : prop.xRight;
-      const y = prop.yTop + (span.yOffset || 0);
-      return { x1, y1: y, x2, y2: y };
+      const y1 = prop.yTop + (span.yOffset || 0);
+      const y2 = prop.yTop + (span.yOffset2 !== undefined ? span.yOffset2 : span.yOffset || 0);
+      return { x1, y1, x2, y2 };
     }
     if (span.kind === 'h-bot') {
       const x1 = span.fixedX1 !== undefined ? span.fixedX1 : prop.xLeft;
       const x2 = span.fixedX2 !== undefined ? span.fixedX2 : prop.xRight;
-      const y = prop.yBot + (span.yOffset || 0);
-      return { x1, y1: y, x2, y2: y };
+      const y1 = prop.yBot + (span.yOffset || 0);
+      const y2 = prop.yBot + (span.yOffset2 !== undefined ? span.yOffset2 : span.yOffset || 0);
+      return { x1, y1, x2, y2 };
     }
     if (span.kind === 'v-left') {
       return { x1: prop.xLeft, y1: prop.yTop, x2: prop.xLeft, y2: prop.yBot };
@@ -20263,26 +22639,36 @@ export default function App() {
     };
   };
 
-  const handleStartCircuitCompletion = () => {
-    const activeSim = getActiveCircuitSim(activePage);
-    const existingPageSims = getValidCircuitSims(activePage);
+  const handleStartCircuitCompletion = (
+    overridePageStrokes?: StrokeObject[],
+    overrideSelectedIds?: string[],
+    extraReplaceIds?: Set<string>
+  ) => {
+    const sourcePageStrokes = overridePageStrokes || activePage.strokes;
+    const sourceSelectedIds =
+      overrideSelectedIds !== undefined ? overrideSelectedIds : selectedStrokeIds;
+    const pageForSimLookup = overridePageStrokes
+      ? { ...activePage, strokes: overridePageStrokes }
+      : activePage;
+    const activeSim = getActiveCircuitSim(pageForSimLookup);
+    const existingPageSims = getValidCircuitSims(pageForSimLookup);
     const registeredSimStrokeIds = new Set<string>();
     for (const es of existingPageSims) {
-      for (const sid of getSimExpandedStrokeSet(activePage, es)) {
+      for (const sid of getSimExpandedStrokeSet(pageForSimLookup, es)) {
         registeredSimStrokeIds.add(sid);
       }
     }
 
     const expandedIdSet = new Set<string>();
 
-    if (selectedStrokeIds.length > 0) {
-      const rawSelSet = new Set(selectedStrokeIds);
+    if (sourceSelectedIds.length > 0) {
+      const rawSelSet = new Set(sourceSelectedIds);
       const selGroupIds = new Set(
-        activePage.strokes
+        sourcePageStrokes
           .filter((s) => rawSelSet.has(s.id) && s.groupId)
           .map((s) => s.groupId!)
       );
-      for (const s of activePage.strokes) {
+      for (const s of sourcePageStrokes) {
         if (rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))) {
           expandedIdSet.add(s.id);
         }
@@ -20290,7 +22676,7 @@ export default function App() {
       const selectionTouchesExistingSim = [...expandedIdSet].some((id) =>
         registeredSimStrokeIds.has(id)
       );
-      const eligible = activePage.strokes.filter(
+      const eligible = sourcePageStrokes.filter(
         (s) =>
           expandedIdSet.has(s.id) ||
           (isCircuitEligibleStroke(s) &&
@@ -20306,7 +22692,7 @@ export default function App() {
             expandedIdSet.add(cand.id);
             added = true;
             if (cand.groupId) {
-              for (const g of activePage.strokes) {
+              for (const g of sourcePageStrokes) {
                 if (g.groupId === cand.groupId) expandedIdSet.add(g.id);
               }
             }
@@ -20315,31 +22701,46 @@ export default function App() {
       }
     } else {
       // If nothing is selected with Lasso, first check if there are new unregistered circuit components on this page!
-      const unregisteredEligible = activePage.strokes.filter(
+      const unregisteredEligible = sourcePageStrokes.filter(
         (s) => isCircuitEligibleStroke(s) && !registeredSimStrokeIds.has(s.id)
       );
       if (unregisteredEligible.length > 0) {
         for (const s of unregisteredEligible) expandedIdSet.add(s.id);
       } else if (activeSim) {
-        const simSet = getSimExpandedStrokeSet(activePage, activeSim);
+        const simSet = getSimExpandedStrokeSet(pageForSimLookup, activeSim);
         for (const id of simSet) expandedIdSet.add(id);
       } else {
-        for (const s of activePage.strokes) {
+        for (const s of sourcePageStrokes) {
           if (isCircuitEligibleStroke(s)) expandedIdSet.add(s.id);
         }
       }
     }
 
-    const rawSubset = activePage.strokes.filter((s) => expandedIdSet.has(s.id));
+    const rawSubset = sourcePageStrokes.filter((s) => expandedIdSet.has(s.id));
     if (rawSubset.length === 0) {
       showToast('🎯 Επιλέξτε πρώτα τα ηλεκτρικά στοιχεία ή το κύκλωμα με το Λάσο!');
       return;
     }
 
-    const preAligned = autoAlignAndConnectCircuit(rawSubset);
+    const completionHandRec = recognizeHandDrawnCircuitSymbols(
+      rawSubset,
+      activePage.texts || [],
+      {
+        requireCircuitContext: false,
+        explicitCircuitIntent: true,
+        convertFreehandWires: true,
+      }
+    );
+    const completionRemoveTextSet = new Set<string>(
+      completionHandRec.changed ? completionHandRec.removedTextIds : []
+    );
+
+    const preAligned = autoAlignAndConnectCircuit(
+      completionHandRec.changed ? completionHandRec.strokes : rawSubset
+    );
     const comps = getCircuitComponentsWithTerminals(preAligned);
     if (comps.length === 0) {
-      showToast('⚠️ Δεν βρέθηκαν ηλεκτρικά στοιχεία (Μπαταρία, Λάμπα, Φτερωτή, Αντίσταση) στην επιλογή!');
+      showToast('⚠️ Δεν βρέθηκαν ηλεκτρικά στοιχεία (Μπαταρία, Λάμπα, Όργανο, Φτερωτή, Αντίσταση) στην επιλογή!');
       return;
     }
 
@@ -20398,28 +22799,38 @@ export default function App() {
     const wirePenSubType = refWireStroke?.penType;
     const wireOpacity = refWireStroke?.opacity ?? 1;
 
-    // Partition components into Top Row and Bottom Row
-    const minTermY = Math.min(...comps.map((c) => c.leftTerm.y));
-    const maxTermY = Math.max(...comps.map((c) => c.leftTerm.y));
+    // Partition SERIES components (including Ammeter in series!) into Top Row and Bottom Row,
+    // while keeping Voltmeters aside so each Voltmeter is connected in PARALLEL across a load/source
+    // (note: if ONLY a Battery/Source + Voltmeter exist with no series load/ammeter/switch, connect the Voltmeter directly across the Source without creating a short-circuit wire!).
+    const rawSeriesComps = comps.filter((c) => c.kind !== 'voltmeter');
+    const hasNonSourceSeries = rawSeriesComps.some(
+      (c) => c.kind !== 'battery' && c.kind !== 'voltage-source'
+    );
+    const seriesComps = hasNonSourceSeries ? rawSeriesComps : comps;
+    const voltmeterComps = hasNonSourceSeries ? comps.filter((c) => c.kind === 'voltmeter') : [];
+    const baseLoopComps = seriesComps.length > 0 ? seriesComps : comps;
+
+    const minTermY = Math.min(...baseLoopComps.map((c) => c.leftTerm.y));
+    const maxTermY = Math.max(...baseLoopComps.map((c) => c.leftTerm.y));
     let topCompsInit: typeof comps = [];
     let botCompsInit: typeof comps = [];
 
-    if (comps.length >= 2 && maxTermY - minTermY >= 35) {
+    if (baseLoopComps.length >= 2 && maxTermY - minTermY >= 35) {
       const midY = (minTermY + maxTermY) / 2;
-      topCompsInit = comps.filter((c) => c.leftTerm.y < midY).sort((a, b) => a.cx - b.cx);
-      botCompsInit = comps.filter((c) => c.leftTerm.y >= midY).sort((a, b) => a.cx - b.cx);
+      topCompsInit = baseLoopComps.filter((c) => c.leftTerm.y < midY).sort((a, b) => a.cx - b.cx);
+      botCompsInit = baseLoopComps.filter((c) => c.leftTerm.y >= midY).sort((a, b) => a.cx - b.cx);
     } else if (
-      comps.some((c) => c.kind === 'battery' || c.kind === 'voltage-source') &&
-      comps.some((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
+      baseLoopComps.some((c) => c.kind === 'battery' || c.kind === 'voltage-source') &&
+      baseLoopComps.some((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
     ) {
-      topCompsInit = comps
+      topCompsInit = baseLoopComps
         .filter((c) => c.kind !== 'battery' && c.kind !== 'voltage-source')
         .sort((a, b) => a.cx - b.cx);
-      botCompsInit = comps
+      botCompsInit = baseLoopComps
         .filter((c) => c.kind === 'battery' || c.kind === 'voltage-source')
         .sort((a, b) => a.cx - b.cx);
     } else {
-      topCompsInit = [...comps].sort((a, b) => a.cx - b.cx);
+      topCompsInit = [...baseLoopComps].sort((a, b) => a.cx - b.cx);
       botCompsInit = [];
     }
 
@@ -20446,50 +22857,318 @@ export default function App() {
           ? Math.round(hSegsBot.reduce((a, b) => a + b.avgY, 0) / hSegsBot.length)
           : yTop + 165;
     }
+    if (voltmeterComps.length > 0 && yTop < 125) {
+      yTop = 125;
+    }
     if (yBot - yTop < 85) {
       yBot = yTop + 150;
     }
 
-    // Align all Top Row components so their leftTerm.y === yTop, and all Bottom Row components so their leftTerm.y === yBot
-    const topKeySet = new Set(topCompsInit.map((c) => c.key));
-    const topSeedIdSet = new Set(topCompsInit.flatMap((c) => c.strokeIds));
-    const dyByStrokeId = new Map<string, number>();
-    for (const c of comps) {
-      const targetRowY = topKeySet.has(c.key) ? yTop : yBot;
-      const dy = targetRowY - c.leftTerm.y;
-      for (const sid of c.strokeIds) {
-        dyByStrokeId.set(sid, dy);
+    // Decide which series component each Voltmeter measures in parallel (prefer loads unless placed right next to a source or no loads exist)
+    const vmTargetByKey = new Map<string, string>();
+    const targetVmMaxRadius = new Map<string, number>();
+    if (seriesComps.length > 0 && voltmeterComps.length > 0) {
+      const loadComps = seriesComps.filter(
+        (c) => c.kind === 'bulb' || c.kind === 'resistor' || c.kind === 'fan'
+      );
+      for (const vm of voltmeterComps) {
+        let bestTarget = seriesComps[0];
+        let bestAnyDist = Infinity;
+        for (const sc of seriesComps) {
+          const d = Math.hypot(sc.cx - vm.cx, sc.cy - vm.cy);
+          if (d < bestAnyDist) {
+            bestAnyDist = d;
+            bestTarget = sc;
+          }
+        }
+        if (loadComps.length > 0 && (bestTarget.kind === 'battery' || bestTarget.kind === 'voltage-source')) {
+          let bestLoad = loadComps[0];
+          let bestLoadDist = Infinity;
+          for (const lc of loadComps) {
+            const d = Math.hypot(lc.cx - vm.cx, lc.cy - vm.cy);
+            if (d < bestLoadDist) {
+              bestLoadDist = d;
+              bestLoad = lc;
+            }
+          }
+          if (bestAnyDist > bestLoadDist * 0.68) {
+            bestTarget = bestLoad;
+          }
+        }
+        vmTargetByKey.set(vm.key, bestTarget.key);
+        const vmRad = vm.circleR ?? Math.max(18, (vm.rightTerm.x - vm.leftTerm.x) / 2);
+        targetVmMaxRadius.set(
+          bestTarget.key,
+          Math.max(targetVmMaxRadius.get(bestTarget.key) || 0, vmRad)
+        );
       }
     }
 
-    const shiftedCompStrokes = preAligned
+    // Ensure series components on the same row have clean horizontal spacing (including room for parallel Voltmeter taps!)
+    const dxByStrokeId = new Map<string, number>();
+    const spaceOutSeriesRow = (rowInit: typeof comps) => {
+      if (rowInit.length <= 1) return;
+      let prevRight = rowInit[0].rightTerm.x;
+      let prevVmRad = targetVmMaxRadius.get(rowInit[0].key) || 0;
+      let prevHalfSpan = (rowInit[0].rightTerm.x - rowInit[0].leftTerm.x) / 2;
+      for (let i = 1; i < rowInit.length; i++) {
+        const cur = rowInit[i];
+        const curVmRad = targetVmMaxRadius.get(cur.key) || 0;
+        const curHalfSpan = (cur.rightTerm.x - cur.leftTerm.x) / 2;
+        const needPrevMargin = prevVmRad > 0 ? Math.max(24, Math.ceil(prevVmRad + 22 - prevHalfSpan) * 2) : 0;
+        const needCurMargin = curVmRad > 0 ? Math.max(24, Math.ceil(curVmRad + 22 - curHalfSpan) * 2) : 0;
+        const minGap = Math.max(32, needPrevMargin, needCurMargin);
+        const curLeft = cur.leftTerm.x;
+        let dx = 0;
+        if (curLeft < prevRight + minGap) {
+          dx = Math.round(prevRight + minGap - curLeft);
+          for (const sid of cur.strokeIds) {
+            dxByStrokeId.set(sid, dx);
+          }
+        }
+        prevRight = cur.rightTerm.x + dx;
+        prevVmRad = curVmRad;
+        prevHalfSpan = curHalfSpan;
+      }
+    };
+    spaceOutSeriesRow(topCompsInit);
+    spaceOutSeriesRow(botCompsInit);
+
+    // Align all Top Row series components left-to-right (chaining any bulb's stepped rightTerm.y so meters/components sit dead-center on the wire!), and Bottom Row to yBot
+    const topKeySet = new Set(topCompsInit.map((c) => c.key));
+    const topSeedIdSet = new Set(topCompsInit.flatMap((c) => c.strokeIds));
+    const dyByStrokeId = new Map<string, number>();
+    const alignSeriesRowY = (rowList: typeof comps, startY: number) => {
+      let curWireY = startY;
+      for (const c of rowList) {
+        const refY =
+          c.kind === 'ammeter' || c.kind === 'voltmeter'
+            ? (c.circleCy ?? c.cy)
+            : c.leftTerm.y;
+        const dy = curWireY - refY;
+        for (const sid of c.strokeIds) {
+          dyByStrokeId.set(sid, dy);
+        }
+        curWireY += c.rightTerm.y - c.leftTerm.y;
+      }
+    };
+    alignSeriesRowY(topCompsInit, yTop);
+    alignSeriesRowY(botCompsInit, yBot);
+
+    let shiftedCompStrokes = preAligned
       .filter((s) => compStrokeSet.has(s.id))
       .map((s) => {
+        const dx = dxByStrokeId.get(s.id) || 0;
         const dy = dyByStrokeId.get(s.id) || 0;
-        if (Math.abs(dy) < 0.25) return s;
+        if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) return s;
         return {
           ...s,
           circuitBox: s.circuitBox
-            ? { ...s.circuitBox, termY: s.circuitBox.termY + dy }
+            ? {
+                ...s.circuitBox,
+                cx: s.circuitBox.cx + dx,
+                termY: s.circuitBox.termY + dy,
+              }
             : undefined,
           points: s.points.map((pt) => ({
             ...pt,
+            x: pt.x + dx,
             y: pt.y + dy,
+            cx: pt.cx !== undefined ? pt.cx + dx : undefined,
             cy: pt.cy !== undefined ? pt.cy + dy : undefined,
           })),
         };
       });
 
-    const finalComps = getCircuitComponentsWithTerminals(shiftedCompStrokes);
-    const topComps = finalComps
+    // Position any Voltmeters on clean parallel branches centered symmetrically above (top row) or below (bottom row) their target component!
+    const tempCompsAfterSeries = getCircuitComponentsWithTerminals(shiftedCompStrokes);
+    const parallelVmPlacement: {
+      vmKey: string;
+      vmSeedIds: string[];
+      targetKey: string;
+      isTopRow: boolean;
+      vmTargetY: number;
+      vmR: number;
+    }[] = [];
+    if (seriesComps.length > 0 && voltmeterComps.length > 0) {
+      const vmDxMap = new Map<string, number>();
+      const vmDyMap = new Map<string, number>();
+      const stackCountByTarget = new Map<string, number>();
+
+      for (const origVm of voltmeterComps) {
+        const targetKey = vmTargetByKey.get(origVm.key);
+        const targetComp =
+          tempCompsAfterSeries.find((tc) => tc.key === targetKey) ||
+          tempCompsAfterSeries.find((tc) => tc.kind !== 'voltmeter');
+        const curVm =
+          tempCompsAfterSeries.find((tc) => tc.key === origVm.key) || origVm;
+        if (!targetComp) continue;
+
+        const isTopRow =
+          topKeySet.has(targetComp.key) ||
+          targetComp.strokeIds.some((sid) => topSeedIdSet.has(sid));
+        const stackIdx = stackCountByTarget.get(targetComp.key) || 0;
+        stackCountByTarget.set(targetComp.key, stackIdx + 1);
+
+        const vmR = curVm.circleR ?? Math.max(18, (curVm.rightTerm.x - curVm.leftTerm.x) / 2);
+        const clearance =
+          (isTopRow
+            ? Math.max(26, yTop - targetComp.minY)
+            : Math.max(26, targetComp.maxY - yBot)) +
+          vmR +
+          30 +
+          stackIdx * (vmR * 2 + 28);
+        const vmTargetY = isTopRow
+          ? Math.max(36, Math.round(yTop - Math.max(82, clearance)))
+          : Math.round(yBot + Math.max(82, clearance));
+
+        const targetMidX = (targetComp.leftTerm.x + targetComp.rightTerm.x) / 2;
+        const vmCircleCx = curVm.circleCx ?? curVm.cx;
+        const vmCircleCy = curVm.circleCy ?? curVm.cy;
+        const dxVm = Math.round(targetMidX - vmCircleCx);
+        const dyVm = Math.round(vmTargetY - vmCircleCy);
+        for (const sid of curVm.strokeIds) {
+          vmDxMap.set(sid, dxVm);
+          vmDyMap.set(sid, dyVm);
+        }
+        parallelVmPlacement.push({
+          vmKey: curVm.key,
+          vmSeedIds: curVm.strokeIds,
+          targetKey: targetComp.key,
+          isTopRow,
+          vmTargetY,
+          vmR,
+        });
+      }
+
+      if (vmDxMap.size > 0) {
+        shiftedCompStrokes = shiftedCompStrokes.map((s) => {
+          const dx = vmDxMap.get(s.id) || 0;
+          const dy = vmDyMap.get(s.id) || 0;
+          if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) return s;
+          return {
+            ...s,
+            points: s.points.map((pt) => ({
+              ...pt,
+              x: pt.x + dx,
+              y: pt.y + dy,
+              cx: pt.cx !== undefined ? pt.cx + dx : undefined,
+              cy: pt.cy !== undefined ? pt.cy + dy : undefined,
+            })),
+          };
+        });
+      }
+    }
+
+    let finalComps = getCircuitComponentsWithTerminals(shiftedCompStrokes);
+    const parallelVmKeySet = new Set(parallelVmPlacement.map((p) => p.vmKey));
+    const parallelVmStrokeSet = new Set(parallelVmPlacement.flatMap((p) => p.vmSeedIds));
+    let finalMainComps = finalComps.filter(
+      (c) => !parallelVmKeySet.has(c.key) && !c.strokeIds.some((sid) => parallelVmStrokeSet.has(sid))
+    );
+    let topComps = finalMainComps
       .filter((c) => topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
       .sort((a, b) => a.cx - b.cx);
-    const botComps = finalComps
+    let botComps = finalMainComps
       .filter((c) => !topKeySet.has(c.key) && !c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
       .sort((a, b) => a.cx - b.cx);
 
-    const minCompLeftX = Math.round(Math.min(...finalComps.map((c) => c.leftTerm.x)));
-    const maxCompRightX = Math.round(Math.max(...finalComps.map((c) => c.rightTerm.x)));
+    let minCompLeftX = Math.round(Math.min(...finalComps.map((c) => c.leftTerm.x)));
+    let maxCompRightX = Math.round(Math.max(...finalComps.map((c) => c.rightTerm.x)));
+
+    // Precompute strictly SYMMETRIC tap X coordinates for any parallel Voltmeters so the Voltmeter circle sits dead-center!
+    const computedParallelBranches: {
+      rowKind: 'h-top' | 'h-bot';
+      rowY: number;
+      tapXL: number;
+      tapYL: number;
+      tapXR: number;
+      tapYR: number;
+      vmLeftX: number;
+      vmRightX: number;
+      vmY: number;
+      vmStrokeIds: string[];
+      isTopRow: boolean;
+      targetKey: string;
+    }[] = [];
+
+    const vmRecenterDxMap = new Map<string, number>();
+    for (const pl of parallelVmPlacement) {
+      const rowList = pl.isTopRow ? topComps : botComps;
+      const tIdx = rowList.findIndex((c) => c.key === pl.targetKey);
+      if (tIdx < 0) continue;
+      const tComp = rowList[tIdx];
+      const vmComp = finalComps.find(
+        (c) => c.key === pl.vmKey || c.strokeIds.some((sid) => pl.vmSeedIds.includes(sid))
+      );
+      if (!vmComp) continue;
+      const vmR = vmComp.circleR ?? pl.vmR;
+      const tMidX = (tComp.leftTerm.x + tComp.rightTerm.x) / 2;
+      const tHalfW = (tComp.rightTerm.x - tComp.leftTerm.x) / 2;
+
+      const prevComp = tIdx > 0 ? rowList[tIdx - 1] : null;
+      const nextComp = tIdx < rowList.length - 1 ? rowList[tIdx + 1] : null;
+
+      const idealHalfSpan = Math.max(tHalfW + 22, vmR + 24);
+      const maxLeftHalf = prevComp
+        ? Math.max(tHalfW + 12, Math.floor(tMidX - (prevComp.rightTerm.x + tComp.leftTerm.x) / 2))
+        : idealHalfSpan;
+      const maxRightHalf = nextComp
+        ? Math.max(tHalfW + 12, Math.floor((tComp.rightTerm.x + nextComp.leftTerm.x) / 2 - tMidX))
+        : idealHalfSpan;
+      const symHalfSpan = Math.max(
+        Math.max(tHalfW + 12, vmR + 12),
+        Math.min(idealHalfSpan, maxLeftHalf, maxRightHalf)
+      );
+
+      const tapXL = Math.round(tMidX - symHalfSpan);
+      const tapXR = Math.round(tMidX + symHalfSpan);
+      const exactBranchMidX = Math.round((tapXL + tapXR) / 2);
+      const curVmCircleCx = vmComp.circleCx ?? vmComp.cx;
+      const recenterDx = exactBranchMidX - curVmCircleCx;
+      if (Math.abs(recenterDx) >= 0.25) {
+        for (const sid of vmComp.strokeIds) {
+          vmRecenterDxMap.set(sid, recenterDx);
+        }
+      }
+
+      const vmLeftX = Math.round(exactBranchMidX - vmR);
+      const vmRightX = Math.round(exactBranchMidX + vmR);
+      const vmCircleCy = Math.round(vmComp.circleCy ?? vmComp.cy);
+
+      minCompLeftX = Math.min(minCompLeftX, tapXL - 28);
+      maxCompRightX = Math.max(maxCompRightX, tapXR + 28);
+
+      computedParallelBranches.push({
+        rowKind: pl.isTopRow ? 'h-top' : 'h-bot',
+        rowY: pl.isTopRow ? yTop : yBot,
+        tapXL,
+        tapYL: Math.round(tComp.leftTerm.y),
+        tapXR,
+        tapYR: Math.round(tComp.rightTerm.y),
+        vmLeftX,
+        vmRightX,
+        vmY: vmCircleCy,
+        vmStrokeIds: vmComp.strokeIds,
+        isTopRow: pl.isTopRow,
+        targetKey: tComp.key,
+      });
+    }
+
+    if (vmRecenterDxMap.size > 0) {
+      shiftedCompStrokes = shiftedCompStrokes.map((s) => {
+        const dx = vmRecenterDxMap.get(s.id) || 0;
+        if (Math.abs(dx) < 0.25) return s;
+        return {
+          ...s,
+          points: s.points.map((pt) => ({
+            ...pt,
+            x: pt.x + dx,
+            cx: pt.cx !== undefined ? pt.cx + dx : undefined,
+          })),
+        };
+      });
+    }
 
     const leftVertSegs = rawExternalSegs.filter(
       (s) => s.orientation === 'v' && s.avgX < minCompLeftX - 10
@@ -20517,6 +23196,103 @@ export default function App() {
         : hOuterRightXs.length > 0
         ? Math.round(Math.max(...hOuterRightXs))
         : Math.round(maxCompRightX + 88);
+
+    // Symmetrically center any series Ammeter / Voltmeter along its available horizontal wire span [boundL, boundR]!
+    const seriesMeterSymDx = new Map<string, number>();
+    const centerSeriesMetersOnRow = (rowList: typeof topComps, isTopRow: boolean) => {
+      if (!rowList.some((c) => c.kind === 'ammeter' || c.kind === 'voltmeter')) return;
+      const rowBranchByTarget = new Map<string, { tapXL: number; tapXR: number }>();
+      for (const pb of computedParallelBranches) {
+        if (pb.isTopRow === isTopRow) {
+          rowBranchByTarget.set(pb.targetKey, { tapXL: pb.tapXL, tapXR: pb.tapXR });
+        }
+      }
+      let idx = 0;
+      while (idx < rowList.length) {
+        if (rowList[idx].kind !== 'ammeter' && rowList[idx].kind !== 'voltmeter') {
+          idx++;
+          continue;
+        }
+        const startIdx = idx;
+        while (
+          idx + 1 < rowList.length &&
+          (rowList[idx + 1].kind === 'ammeter' || rowList[idx + 1].kind === 'voltmeter')
+        ) {
+          idx++;
+        }
+        const endIdx = idx;
+        const boundL =
+          startIdx > 0
+            ? Math.max(
+                rowList[startIdx - 1].rightTerm.x,
+                rowBranchByTarget.get(rowList[startIdx - 1].key)?.tapXR ?? -Infinity
+              )
+            : xLeft;
+        const boundR =
+          endIdx < rowList.length - 1
+            ? Math.min(
+                rowList[endIdx + 1].leftTerm.x,
+                rowBranchByTarget.get(rowList[endIdx + 1].key)?.tapXL ?? Infinity
+              )
+            : xRight;
+        const radii: number[] = [];
+        let sumDiam = 0;
+        for (let j = startIdx; j <= endIdx; j++) {
+          const rj =
+            rowList[j].circleR ??
+            Math.max(15, (rowList[j].rightTerm.x - rowList[j].leftTerm.x) / 2);
+          radii.push(rj);
+          sumDiam += rj * 2;
+        }
+        const count = endIdx - startIdx + 1;
+        const freeW = boundR - boundL - sumDiam;
+        if (freeW >= (count + 1) * 12) {
+          const equalGap = freeW / (count + 1);
+          let cursorX = boundL;
+          for (let j = startIdx; j <= endIdx; j++) {
+            const mc = rowList[j];
+            const rj = radii[j - startIdx];
+            const targetCx = Math.round(cursorX + equalGap + rj);
+            cursorX += equalGap + rj * 2;
+            const curCx = mc.circleCx ?? mc.cx;
+            const dx = targetCx - curCx;
+            if (Math.abs(dx) >= 0.25) {
+              for (const sid of mc.strokeIds) {
+                seriesMeterSymDx.set(sid, dx);
+              }
+            }
+          }
+        }
+        idx++;
+      }
+    };
+    centerSeriesMetersOnRow(topComps, true);
+    centerSeriesMetersOnRow(botComps, false);
+
+    if (seriesMeterSymDx.size > 0) {
+      shiftedCompStrokes = shiftedCompStrokes.map((s) => {
+        const dx = seriesMeterSymDx.get(s.id) || 0;
+        if (Math.abs(dx) < 0.25) return s;
+        return {
+          ...s,
+          points: s.points.map((pt) => ({
+            ...pt,
+            x: pt.x + dx,
+            cx: pt.cx !== undefined ? pt.cx + dx : undefined,
+          })),
+        };
+      });
+      finalComps = getCircuitComponentsWithTerminals(shiftedCompStrokes);
+      finalMainComps = finalComps.filter(
+        (c) => !parallelVmKeySet.has(c.key) && !c.strokeIds.some((sid) => parallelVmStrokeSet.has(sid))
+      );
+      topComps = finalMainComps
+        .filter((c) => topKeySet.has(c.key) || c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+        .sort((a, b) => a.cx - b.cx);
+      botComps = finalMainComps
+        .filter((c) => !topKeySet.has(c.key) && !c.strokeIds.some((sid) => topSeedIdSet.has(sid)))
+        .sort((a, b) => a.cx - b.cx);
+    }
 
     // Build parameterized rectangular circuit spans (preserving stepped rightTerm.y offset for 2-terminal bulbs!)
     const spans: NonNullable<typeof circuitProposal>['spans'] = [];
@@ -20584,11 +23360,46 @@ export default function App() {
     spans.push({ id: 'v-left', kind: 'v-left' });
     spans.push({ id: 'v-right', kind: 'v-right' });
 
+    // Append parallel branch spans for each Voltmeter (vertical risers + horizontal leads to the circle perimeter!)
+    computedParallelBranches.forEach((pb, vIdx) => {
+      spans.push({
+        id: `par-vm-${vIdx}-vl`,
+        kind: pb.rowKind,
+        fixedX1: pb.tapXL,
+        fixedX2: pb.tapXL,
+        yOffset: pb.tapYL - pb.rowY,
+        yOffset2: pb.vmY - pb.rowY,
+      });
+      spans.push({
+        id: `par-vm-${vIdx}-hl`,
+        kind: pb.rowKind,
+        fixedX1: pb.tapXL,
+        fixedX2: pb.vmLeftX,
+        yOffset: pb.vmY - pb.rowY,
+      });
+      spans.push({
+        id: `par-vm-${vIdx}-hr`,
+        kind: pb.rowKind,
+        fixedX1: pb.vmRightX,
+        fixedX2: pb.tapXR,
+        yOffset: pb.vmY - pb.rowY,
+      });
+      spans.push({
+        id: `par-vm-${vIdx}-vr`,
+        kind: pb.rowKind,
+        fixedX1: pb.tapXR,
+        fixedX2: pb.tapXR,
+        yOffset: pb.vmY - pb.rowY,
+        yOffset2: pb.tapYR - pb.rowY,
+      });
+    });
+
     const defaultLayerId = shiftedCompStrokes[0]?.layerId || activeLayerId;
     const matchedWireStrokes: StrokeObject[] = [];
 
-    // Match existing solid wire segments to spans and snap them cleanly
+    // Match existing solid wire segments to main loop spans and snap them cleanly
     for (const sp of spans) {
+      if (sp.id.startsWith('par-vm-')) continue;
       const targetCoords =
         sp.kind === 'h-top'
           ? {
@@ -20704,26 +23515,28 @@ export default function App() {
       }
     }
 
-    const validSims = getValidCircuitSims(activePage);
+    const validSims = getValidCircuitSims(pageForSimLookup);
+    const allReplacedIds = new Set<string>([
+      ...expandedIdSet,
+      ...(extraReplaceIds ? Array.from(extraReplaceIds) : []),
+      ...(completionHandRec.changed ? completionHandRec.removedStrokeIds : []),
+    ]);
     const matchingExisting = validSims.find((sim) => {
-      const overlap = sim.strokeIds.filter((id) => expandedIdSet.has(id)).length;
-      return overlap >= Math.max(1, Math.min(sim.strokeIds.length, expandedIdSet.size) * 0.4);
+      const overlap = sim.strokeIds.filter((id) => allReplacedIds.has(id)).length;
+      return overlap >= Math.max(1, Math.min(sim.strokeIds.length, allReplacedIds.size) * 0.4);
     });
     const targetSimId =
       matchingExisting?.id || `sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-    const targetSimName = matchingExisting?.name || getNextDefaultSimName(activePage);
+    const targetSimName = matchingExisting?.name || getNextDefaultSimName(pageForSimLookup);
 
     const newSubStrokes = [...shiftedCompStrokes, ...matchedWireStrokes];
     const newSubIds = newSubStrokes.map((s) => s.id);
-
-    setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-    setRedoStack([]);
 
     updateActivePage((page) => {
       const nextStrokes: StrokeObject[] = [];
       let inserted = false;
       for (const s of page.strokes) {
-        if (expandedIdSet.has(s.id)) {
+        if (allReplacedIds.has(s.id)) {
           if (!inserted) {
             nextStrokes.push(...newSubStrokes);
             inserted = true;
@@ -20746,6 +23559,10 @@ export default function App() {
       return {
         ...page,
         strokes: nextStrokes,
+        texts:
+          completionRemoveTextSet.size > 0
+            ? (page.texts || []).filter((t) => !completionRemoveTextSet.has(t.id))
+            : page.texts,
         circuitSims: nextSims,
         activeCircuitSimId: targetSimId,
       };
@@ -20777,8 +23594,14 @@ export default function App() {
       minCompLeftX,
       maxCompRightX,
       componentStrokeIds: shiftedCompStrokes.map((s) => s.id),
-      topCompStrokeIds: topComps.flatMap((c) => c.strokeIds),
-      botCompStrokeIds: botComps.flatMap((c) => c.strokeIds),
+      topCompStrokeIds: [
+        ...topComps.flatMap((c) => c.strokeIds),
+        ...computedParallelBranches.filter((pb) => pb.isTopRow).flatMap((pb) => pb.vmStrokeIds),
+      ],
+      botCompStrokeIds: [
+        ...botComps.flatMap((c) => c.strokeIds),
+        ...computedParallelBranches.filter((pb) => !pb.isTopRow).flatMap((pb) => pb.vmStrokeIds),
+      ],
       spans,
       layerId: defaultLayerId,
     });
@@ -20909,16 +23732,50 @@ export default function App() {
         ).strokes;
         const rawComps = getCircuitComponentsWithTerminals(convertedOnly);
         if (rawComps.length > 0) {
+          const parallelSpanSet = prop.spans.filter((sp) => sp.id.startsWith('par-vm-'));
+          const hasParallelSpans = parallelSpanSet.length > 0;
           const dyBySid = new Map<string, number>();
           const topCompKeys = new Set<string>();
+          const parallelVmKeys = new Set<string>();
+          const topRawList: typeof rawComps = [];
+          const botRawList: typeof rawComps = [];
           for (const c of rawComps) {
+            if (hasParallelSpans && c.kind === 'voltmeter') {
+              parallelVmKeys.add(c.key);
+              const isTop =
+                Math.abs(c.cy - prop.yTop) <= Math.abs(c.cy - prop.yBot);
+              if (isTop) topCompKeys.add(c.key);
+              continue;
+            }
+            const refY =
+              c.kind === 'ammeter' || c.kind === 'voltmeter'
+                ? (c.circleCy ?? c.cy)
+                : c.leftTerm.y;
             const isTop =
-              Math.abs(c.leftTerm.y - prop.yTop) <= Math.abs(c.leftTerm.y - prop.yBot);
-            if (isTop) topCompKeys.add(c.key);
-            const targetRowY = isTop ? prop.yTop : prop.yBot;
-            const dy = targetRowY - c.leftTerm.y;
-            for (const sid of c.strokeIds) dyBySid.set(sid, dy);
+              Math.abs(refY - prop.yTop) <= Math.abs(refY - prop.yBot);
+            if (isTop) {
+              topCompKeys.add(c.key);
+              topRawList.push(c);
+            } else {
+              botRawList.push(c);
+            }
           }
+          topRawList.sort((a, b) => a.cx - b.cx);
+          botRawList.sort((a, b) => a.cx - b.cx);
+          const chainRowY = (list: typeof rawComps, startY: number) => {
+            let curY = startY;
+            for (const c of list) {
+              const refY =
+                c.kind === 'ammeter' || c.kind === 'voltmeter'
+                  ? (c.circleCy ?? c.cy)
+                  : c.leftTerm.y;
+              const dy = curY - refY;
+              for (const sid of c.strokeIds) dyBySid.set(sid, dy);
+              curY += c.rightTerm.y - c.leftTerm.y;
+            }
+          };
+          chainRowY(topRawList, prop.yTop);
+          chainRowY(botRawList, prop.yBot);
 
           const alignedCompStrokes = convertedOnly.map((s) => {
             const dy = dyBySid.get(s.id) || 0;
@@ -20937,10 +23794,11 @@ export default function App() {
           });
 
           const finalComps = getCircuitComponentsWithTerminals(alignedCompStrokes);
-          const topComps = finalComps
+          const finalMainComps = finalComps.filter((c) => !parallelVmKeys.has(c.key));
+          const topComps = finalMainComps
             .filter((c) => topCompKeys.has(c.key))
             .sort((a, b) => a.cx - b.cx);
-          const botComps = finalComps
+          const botComps = finalMainComps
             .filter((c) => !topCompKeys.has(c.key))
             .sort((a, b) => a.cx - b.cx);
 
@@ -21042,6 +23900,9 @@ export default function App() {
             kind: 'v-right',
             existingStrokeId: oldSpanById.get('v-right')?.existingStrokeId,
           });
+          for (const psp of parallelSpanSet) {
+            nextSpans.push({ ...psp });
+          }
 
           const nextProp: NonNullable<typeof circuitProposal> = {
             ...prop,
@@ -21050,8 +23911,12 @@ export default function App() {
             minCompLeftX,
             maxCompRightX,
             componentStrokeIds: alignedCompStrokes.map((s) => s.id),
-            topCompStrokeIds: topComps.flatMap((c) => c.strokeIds),
-            botCompStrokeIds: botComps.flatMap((c) => c.strokeIds),
+            topCompStrokeIds: finalComps
+              .filter((c) => topCompKeys.has(c.key))
+              .flatMap((c) => c.strokeIds),
+            botCompStrokeIds: finalComps
+              .filter((c) => !topCompKeys.has(c.key))
+              .flatMap((c) => c.strokeIds),
             spans: nextSpans,
           };
 
@@ -21071,9 +23936,6 @@ export default function App() {
               .map((sp) => sp.existingStrokeId)
               .filter((id): id is string => Boolean(id)),
           ];
-
-          setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-          setRedoStack([]);
 
           updateActivePage((page) => {
             const nextStrokes: StrokeObject[] = [];
@@ -21470,7 +24332,7 @@ export default function App() {
         for (const sp of prop.spans) {
           if (sp.existingStrokeId) {
             if (sp.id === 'v-left') {
-              const paperBg = activePage.template === 'dark-grid' ? '#0f172a' : '#fffdf7';
+              const paperBg = getEffectivePaperColor(activePage);
               ctx.save();
               ctx.strokeStyle = paperBg;
               ctx.lineWidth = 10;
@@ -21849,6 +24711,77 @@ export default function App() {
         ctx.restore();
       }
 
+      // 3b. Live Ammeter & Voltmeter Needles (Image 2 style: pivoted strictly on bottom-left circle perimeter;
+      //     stationary when inactive, gentle left-right needle micro-oscillation when measuring current/voltage!)
+      for (let mIdx = 0; mIdx < simData.components.length; mIdx++) {
+        const cs = simData.components[mIdx];
+        if (cs.comp.kind !== 'ammeter' && cs.comp.kind !== 'voltmeter') continue;
+        const m = cs.comp;
+        const ccx = m.circleCx ?? m.cx;
+        const ccy = m.circleCy ?? m.cy;
+        const rC =
+          m.circleR ??
+          Math.max(14, Math.min(m.maxX - m.minX, m.maxY - m.minY) * 0.36);
+
+        const meterStrokes = visibleStrokes.filter((s) => m.strokeIds.includes(s.id));
+        const ringStroke = meterStrokes.find(
+          (s) => s.shapeType === 'ammeter' || s.shapeType === 'voltmeter'
+        );
+        const needleStroke = meterStrokes.find(
+          (s) => s.shapeType === 'ammeter-needle' || s.shapeType === 'voltmeter-needle'
+        );
+        const needleColor = needleStroke?.color || ringStroke?.color || m.color || '#111827';
+        const lineW = Math.max(1.8, ringStroke?.width || 2.0);
+
+        // Anchor strictly ON the bottom-left perimeter of the circle (-45° chord through circle center when at rest)
+        const invSqrt2 = Math.SQRT1_2;
+        const pvx = ccx - rC * invSqrt2;
+        const pvy = ccy + rC * invSqrt2;
+        const baseAng = -Math.PI / 4;
+        const phaseSeed = mIdx * 1.37;
+        const oscAng = cs.active
+          ? Math.sin(elapsedSec * 9.4 * simSpeedMultiplier + phaseSeed) * 0.052 +
+            Math.sin(elapsedSec * 16.3 * simSpeedMultiplier + phaseSeed + 0.85) * 0.021
+          : 0;
+        const ang = baseAng + oscAng;
+        const ux = Math.cos(ang);
+        const uy = Math.sin(ang);
+        const nx = -uy;
+        const ny = ux;
+
+        const totalNeedleLen = rC * 2.60;
+        const headLen = Math.max(7.2, rC * 0.32);
+        const headHalfW = Math.max(4.2, headLen * 0.52);
+        const tipX = pvx + ux * totalNeedleLen;
+        const tipY = pvy + uy * totalNeedleLen;
+        const baseHeadX = tipX - ux * headLen;
+        const baseHeadY = tipY - uy * headLen;
+        const shaftEndX = tipX - ux * (headLen * 0.78);
+        const shaftEndY = tipY - uy * (headLen * 0.78);
+
+        ctx.save();
+        ctx.strokeStyle = needleColor;
+        ctx.fillStyle = needleColor;
+        ctx.lineWidth = lineW;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(pvx, pvy);
+        ctx.lineTo(shaftEndX, shaftEndY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(baseHeadX + nx * headHalfW, baseHeadY + ny * headHalfW);
+        ctx.lineTo(baseHeadX - nx * headHalfW, baseHeadY - ny * headHalfW);
+        ctx.closePath();
+        ctx.fill();
+        ctx.lineWidth = Math.max(1.2, lineW * 0.72);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // 4. Moving Charge Carriers / Electrons along Continuous Circuit Chains (100% uniform period, speed & spacing!)
       if (simShowElectrons && simParticleChains.length > 0) {
         const dirSign = simFlowDirection === 'conventional' ? 1 : -1;
@@ -21907,7 +24840,7 @@ export default function App() {
         const sw = simData.autoSwitch;
         ctx.save();
         // Mask the underlying vertical wire between yTop and yBottom so the switch gap is clearly visible!
-        const paperBg = activePage.template === 'dark-grid' ? '#0f172a' : '#fffdf7';
+        const paperBg = getEffectivePaperColor(activePage);
         ctx.strokeStyle = paperBg;
         ctx.lineWidth = simShowDarkWireTrack ? 16 : 10;
         ctx.lineCap = 'butt';
@@ -22739,7 +25672,7 @@ export default function App() {
                     curveColor: '#16a34a',
                   };
 
-            const isDarkGrid = activePage.template === 'dark-grid';
+            const isDarkGrid = isDarkPaperColor(getEffectivePaperColor(activePage));
             const axisInk = isDarkGrid ? '#f8fafc' : '#0f172a';
 
             ctx.save();
@@ -23054,7 +25987,7 @@ export default function App() {
             const hy =
               hCfg.customMoved && hCfg.y !== undefined ? hCfg.y : defaultHookeY;
 
-            const isDarkGrid = activePage.template === 'dark-grid';
+            const isDarkGrid = isDarkPaperColor(getEffectivePaperColor(activePage));
             const axisInk = isDarkGrid ? '#f8fafc' : '#0f172a';
             let diagramTopY = hy;
             let frameBotY = hy;
@@ -25659,7 +28592,10 @@ export default function App() {
             const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
             const rawForCheck =
               aSim.userRawReactionText || aSim.reactionEquationText || inferred.equationDisplay;
-            const chemVal = validateAndCorrectChemicalEquation(rawForCheck);
+            const chemVal = validateAndCorrectChemicalEquation(
+              rawForCheck,
+              aSim.reactionEquationText
+            );
 
             const arrowSegIdx = chemVal.segments.findIndex((s) => s.text.includes('→'));
             const lhsSegs =
@@ -25726,12 +28662,119 @@ export default function App() {
               scale: rScale,
             });
 
-            // Το μήνυμα διόρθωσης εμφανίζεται ΜΟΝΟ αν ο χρήστης κάνει κλικ πάνω σε κάποιον κόκκινο συντελεστή/δείκτη!
+            // Το μήνυμα διόρθωσης ή το Modal Ελέγχου Αριθμών Οξείδωσης (Α.Ο.) όταν ο χρήστης πατάει πάνω σε ένωση/μοντέλο!
             const activeCorrForSim =
               activeChemCorrectionRef.current?.targetId === aSim.id
                 ? activeChemCorrectionRef.current
                 : null;
-            if (chemVal.hasCorrections && activeCorrForSim) {
+            const defaultOxTerm =
+              (chemVal.correctedEquation.split('→')[1] || chemVal.correctedEquation)
+                .split('+')[0]
+                ?.trim() || '';
+            const targetOxTerm = aSim.activeReactionTerm || defaultOxTerm;
+            const oxModal =
+              Boolean(aSim.showOxidationNumbers) && targetOxTerm
+                ? analyzeCompoundOxidationNumbers(
+                    targetOxTerm,
+                    aSim.userRawReactionText
+                  )
+                : null;
+
+            if (oxModal) {
+              const aoChipsText = oxModal.items
+                .map((it) => `${it.label}: ${it.aoText}${it.detail ? ` (${it.detail})` : ''}`)
+                .join('   •   ');
+              const line1Text = `Αριθμοί Οξείδωσης (${oxModal.suggestedPretty}):  ${aoChipsText}   ⇒   ${oxModal.sumEquationText} ✓`;
+              const line2Text = oxModal.hadInitialError
+                ? `⚠️ Αρχική ένωση: ${oxModal.initialWrongPretty || oxModal.inputPretty} (Λάθος Α.Ο.)   ➔   ✅ Προτεινόμενη Ένωση: ${oxModal.suggestedPretty} (${oxModal.compoundNameEl})`
+                : '';
+              const alts = oxModal.alternativeCompounds || [];
+              const hasAlts = alts.length > 1;
+
+              ctx.save();
+              ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              const w1 = ctx.measureText(line1Text).width;
+              const w2 = line2Text ? ctx.measureText(line2Text).width : 0;
+              const altRowW = hasAlts
+                ? 130 + alts.reduce((acc, a) => acc + ctx.measureText(`Α.Ο. +${a.posAO} ⇒ ${a.formulaPretty}`).width + 26, 0)
+                : 0;
+              const modalW = Math.max(scaledCardW, Math.max(w1, w2, altRowW) + 28);
+              const numLines = 1 + (line2Text ? 1 : 0) + (hasAlts ? 1 : 0);
+              const modalH = numLines === 3 ? 62 : numLines === 2 ? 42 : 22;
+              const mx = Math.max(12, Math.min(pageWidth - modalW - 12, scaledCardX + scaledCardW / 2 - modalW / 2));
+              const my = Math.max(4, scaledCardY - modalH - 6);
+
+              ctx.shadowColor = 'rgba(15, 23, 42, 0.10)';
+              ctx.shadowBlur = 8;
+              ctx.shadowOffsetY = 2;
+              ctx.fillStyle = oxModal.hadInitialError
+                ? 'rgba(255, 251, 235, 0.98)'
+                : 'rgba(248, 250, 252, 0.98)';
+              ctx.strokeStyle = oxModal.hadInitialError ? '#f59e0b' : '#94a3b8';
+              ctx.lineWidth = 1.25;
+              ctx.beginPath();
+              ctx.roundRect(mx, my, modalW, modalH, 8);
+              ctx.fill();
+              ctx.stroke();
+
+              ctx.shadowColor = 'transparent';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#1e293b';
+              ctx.fillText(line1Text, mx + modalW / 2, my + 11.5);
+
+              if (line2Text) {
+                ctx.fillStyle = '#b45309';
+                ctx.fillText(line2Text, mx + modalW / 2, my + 29);
+              }
+
+              if (hasAlts) {
+                const altCenterY = my + (line2Text ? 49 : 30);
+                const prefixStr = 'Επιλογή Α.Ο.: ';
+                ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                const prefixW = ctx.measureText(prefixStr).width;
+                const pillWidths = alts.map(
+                  (a) => ctx.measureText(`+${a.posAO} ⇒ ${a.formulaPretty}`).width + 16
+                );
+                const totalAltsW =
+                  prefixW + pillWidths.reduce((s, w) => s + w, 0) + (alts.length - 1) * 6;
+                let curAltX = mx + modalW / 2 - totalAltsW / 2;
+
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#475569';
+                ctx.fillText(prefixStr, curAltX, altCenterY);
+                curAltX += prefixW;
+
+                alts.forEach((alt, idx) => {
+                  const pw = pillWidths[idx];
+                  const ph = 17;
+                  const py = altCenterY - ph / 2;
+                  ctx.fillStyle = alt.isCurrent ? '#2563eb' : '#ffffff';
+                  ctx.strokeStyle = alt.isCurrent ? '#1d4ed8' : '#94a3b8';
+                  ctx.lineWidth = 1.1;
+                  ctx.beginPath();
+                  ctx.roundRect(curAltX, py, pw, ph, 5);
+                  ctx.fill();
+                  ctx.stroke();
+
+                  ctx.fillStyle = alt.isCurrent ? '#ffffff' : '#1e293b';
+                  ctx.textAlign = 'center';
+                  ctx.fillText(`+${alt.posAO} ⇒ ${alt.formulaPretty}`, curAltX + pw / 2, altCenterY + 0.5);
+
+                  atomButtonsHit.push({
+                    simId: aSim.id,
+                    action: `switch-reaction-compound:${alt.formulaAscii}`,
+                    x1: curAltX,
+                    y1: py,
+                    x2: curAltX + pw,
+                    y2: py + ph,
+                  });
+
+                  curAltX += pw + 6;
+                });
+              }
+              ctx.restore();
+            } else if (chemVal.hasCorrections && activeCorrForSim) {
               const corrBannerText = `Διόρθωση: ${
                 activeCorrForSim.reason ||
                 chemVal.explanationNotes[0] ||
@@ -25828,10 +28871,10 @@ export default function App() {
                   atomButtonsHit.push({
                     simId: aSim.id,
                     action: `click-reaction-term:${termPlainText}`,
-                    x1: scaledCardX + (hitX - 2) * rScale,
-                    y1: scaledCardY + hitY * rScale,
-                    x2: scaledCardX + (hitX + hitW + 2) * rScale,
-                    y2: scaledCardY + (hitY + hitH) * rScale,
+                    x1: scaledCardX + (hitX + 2) * rScale,
+                    y1: scaledCardY + 10 * rScale,
+                    x2: scaledCardX + (hitX + 4 + termInnerW) * rScale,
+                    y2: scaledCardY + (cardH - 10) * rScale,
                   });
                 }
 
@@ -25856,10 +28899,10 @@ export default function App() {
                           chemVal.explanationNotes[0] ||
                           'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
                         }`,
-                        x1: scaledCardX + (innerX - 5) * rScale,
-                        y1: scaledCardY + 2 * rScale,
-                        x2: scaledCardX + (innerX + ww + 3) * rScale,
-                        y2: scaledCardY + (cardH - 2) * rScale,
+                        x1: scaledCardX + (innerX - 1) * rScale,
+                        y1: scaledCardY + 10 * rScale,
+                        x2: scaledCardX + (innerX + ww + 1) * rScale,
+                        y2: scaledCardY + (cardH - 10) * rScale,
                       });
                     }
                     innerX += ww + 3;
@@ -25876,10 +28919,10 @@ export default function App() {
                         chemVal.explanationNotes[0] ||
                         'Συμπληρώθηκαν οι σωστοί δείκτες & συντελεστές'
                       }`,
-                      x1: scaledCardX + (innerX - 5) * rScale,
-                      y1: scaledCardY + 2 * rScale,
-                      x2: scaledCardX + (innerX + tw + 3) * rScale,
-                      y2: scaledCardY + (cardH - 2) * rScale,
+                      x1: scaledCardX + (innerX - 1) * rScale,
+                      y1: scaledCardY + 10 * rScale,
+                      x2: scaledCardX + (innerX + tw + 1) * rScale,
+                      y2: scaledCardY + (cardH - 10) * rScale,
                     });
                     innerX += tw + 1;
                   } else {
@@ -25944,7 +28987,7 @@ export default function App() {
 
             ctx.restore();
 
-            // Όταν η κάρτα της αντίδρασης είναι επιλεγμένη (με Λάσο): μπλε περίγραμμα (#0066ff) + 4 γωνιακά κυκλάκια αυξομείωσης όπως στη μαθηματική εξίσωση!
+            // Όταν η κάρτα της αντίδρασης είναι επιλεγμένη (με Λάσο/κλικ): μπλε περίγραμμα (#0066ff) + 4 γωνιακά κυκλάκια αυξομείωσης + μικρό διακριτικό ✕ κλεισίματος!
             if (selectedReactionSimIdRef.current === aSim.id) {
               ctx.save();
               ctx.strokeStyle = '#0066ff';
@@ -25974,6 +29017,30 @@ export default function App() {
                 ctx.fill();
                 ctx.stroke();
               }
+
+              // Μικρό διακριτικό ✕ πάνω δεξιά στην επιλεγμένη κάρτα αντίδρασης
+              const rxCloseX = scaledCardX + scaledCardW + 13;
+              const rxCloseY = scaledCardY + 4;
+              ctx.fillStyle = 'rgba(248, 250, 252, 0.94)';
+              ctx.strokeStyle = '#cbd5e1';
+              ctx.lineWidth = 1.3;
+              ctx.beginPath();
+              ctx.arc(rxCloseX, rxCloseY, 9, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              ctx.fillStyle = '#64748b';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('✕', rxCloseX, rxCloseY + 0.5);
+              atomButtonsHit.push({
+                simId: aSim.id,
+                action: 'delete-atom-sim',
+                x1: rxCloseX - 11,
+                y1: rxCloseY - 11,
+                x2: rxCloseX + 11,
+                y2: rxCloseY + 11,
+              });
               ctx.restore();
             }
           } else if (
@@ -26077,6 +29144,13 @@ export default function App() {
           // 2. Σχεδίαση κάθε Ατόμου (Πυρήνας ανάλογος του Z, Τροχιές ανάλογες του μεγέθους ατόμου, Ζευγαράκια 2-2 e⁻, Σύμβολο Στοιχείου)
           const hasCompoundBonds = (aSim.bonds || []).length > 0 && aSim.atoms.length >= 2;
           const centralAtomId = aSim.atoms[0]?.id;
+          const rightmostAtomId = aSim.atoms.reduce(
+            (bestId, cur) => {
+              const bestAt = aSim.atoms.find((a) => a.id === bestId);
+              return !bestAt || cur.x > bestAt.x ? cur.id : bestId;
+            },
+            aSim.atoms[0]?.id || ''
+          );
           const hasAnySelectedAtom = Boolean(
             aSim.selectedAtomId && aSim.atoms.some((a) => a.id === aSim.selectedAtomId)
           );
@@ -26172,7 +29246,7 @@ export default function App() {
               //   ώστε τα μη δεσμικά ζεύγη (lone pairs, π.χ. 2 στο O του H₂O/CO₂, 1 στο N της NH₃) να παραμένουν ζεύγη!
               const rotRate = aSim.isRotating !== false ? 0.00036 : 0;
               const baseRot =
-                now * rotRate * (s % 2 === 0 ? 1 : -0.75) + atomIdx * 0.55;
+                now * rotRate * (s % 2 === 0 ? 1 : -0.75) + atomIdx * 0.55 + s * 0.36;
               const initShellE = Math.max(
                 0,
                 (el.shells[s] || 0) + (isOuter ? atom.extraElectrons || 0 : 0)
@@ -26186,7 +29260,10 @@ export default function App() {
               const numPairs = Math.min(Math.floor(eCount / 2), naturalPairs);
               const numUnpaired = Math.max(0, eCount - numPairs * 2);
               const totalSlots = Math.max(1, numPairs + numUnpaired);
-              const pairHalfAng = Math.min(0.16, 6.5 / r_s);
+              const pairHalfAng =
+                eCount >= 18
+                  ? Math.min(0.105, 4.8 / r_s)
+                  : Math.min(0.15, 6.0 / r_s);
 
               const eAngles: number[] = [];
               for (let g = 0; g < totalSlots; g++) {
@@ -26248,7 +29325,7 @@ export default function App() {
                 const ey = isBeingDragged
                   ? draggingAtomHandleRef.current!.curY
                   : atom.y + rEff * Math.sin(ang);
-                const er = isOuter ? 4.4 : 3.6;
+                const er = isOuter ? 4.4 : eCount >= 18 ? 3.05 : 3.5;
 
                 if (isBeingDragged) {
                   // Ελαστική διακεκομμένη γραμμή από την εξωτερική στιβάδα στο ηλεκτρόνιο που σέρνει ο χρήστης
@@ -26430,6 +29507,32 @@ export default function App() {
               ctx.fillStyle = '#334155';
               ctx.fillText(nameSuffix, labelStartX + azWidth + 3.5 + symW, labelCenterY + 0.5);
             }
+
+            // Αν εμφανίζονται όλες οι στιβάδες (!faintInner) ή σε μεμονωμένο άτομο, δείξε διακριτικά την κατανομή e⁻ ανά στιβάδα (π.χ. K:2 · L:8 · M:18 · N:18 · O:8 · P:2)
+            if (!faintInner || isSingleAtomView) {
+              const shellNames = ['K', 'L', 'M', 'N', 'O', 'P', 'Q'];
+              const activeShellCounts = el.shells.map((cnt, idx) =>
+                idx === el.shells.length - 1 ? Math.max(0, cnt + extraE) : cnt
+              );
+              const shellsText = activeShellCounts
+                .map((cnt, idx) => `${shellNames[idx] || ''}:${cnt}`)
+                .join(' · ');
+              ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              const stW = ctx.measureText(shellsText).width + 12;
+              const stX = atom.x - stW / 2;
+              const stY = atom.y + maxOrbitR + 8;
+              ctx.fillStyle = 'rgba(248, 250, 252, 0.94)';
+              ctx.strokeStyle = 'rgba(203, 213, 225, 0.85)';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.roundRect(stX, stY, stW, 17, 5);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#475569';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(shellsText, atom.x, stY + 9);
+            }
             ctx.restore();
 
             // Κουμπάκι ομοιόμορφης/αναλογικής αυξομείωσης μεγέθους (⤡): διάφανο κυκλάκι με απαλό γκρι περίγραμμα και βελάκια που αναβοσβήνουν απαλά!
@@ -26438,8 +29541,9 @@ export default function App() {
               : isSelectedAtom;
             if (showResizeHandleOnThisAtom) {
               const handleAng = Math.PI / 4;
-              const hx = atom.x + maxOrbitR * Math.cos(handleAng);
-              const hy = atom.y + maxOrbitR * Math.sin(handleAng);
+              const handleDist = maxOrbitR + 18;
+              const hx = atom.x + handleDist * Math.cos(handleAng);
+              const hy = atom.y + handleDist * Math.sin(handleAng);
               const pulseAlpha = 0.28 + 0.64 * (0.5 + 0.5 * Math.sin(now * 0.0055));
 
               ctx.save();
@@ -26480,6 +29584,41 @@ export default function App() {
                 hx,
                 hy,
                 r: 18,
+              });
+            }
+
+            // Μικρό διακριτικό κουμπί ✕ (πάνω-δεξιά στην εξωτερική τροχιά) όταν το 2D άτομο/μόριο είναι επιλεγμένο ή ανοιχτό κάτω από αντίδραση
+            const showCloseHandleOnThisAtom = hasCompoundBonds
+              ? (hasAnySelectedAtom || Boolean(aSim.showReactionEquation)) &&
+                atom.id === rightmostAtomId
+              : isSelectedAtom || Boolean(aSim.showReactionEquation);
+            if (showCloseHandleOnThisAtom) {
+              const closeAng = -Math.PI / 4;
+              const closeDist = maxOrbitR + 16;
+              const cxBtn = atom.x + closeDist * Math.cos(closeAng);
+              const cyBtn = atom.y + closeDist * Math.sin(closeAng);
+              ctx.save();
+              ctx.fillStyle = 'rgba(248, 250, 252, 0.92)';
+              ctx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
+              ctx.lineWidth = 1.4;
+              ctx.beginPath();
+              ctx.arc(cxBtn, cyBtn, 9.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+              ctx.fillStyle = '#64748b';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('✕', cxBtn, cyBtn + 0.5);
+              ctx.restore();
+
+              atomButtonsHit.push({
+                simId: aSim.id,
+                action: 'close-2d-atoms',
+                x1: cxBtn - 12,
+                y1: cyBtn - 12,
+                x2: cxBtn + 12,
+                y2: cyBtn + 12,
               });
             }
           });
@@ -26705,11 +29844,12 @@ export default function App() {
                 : firstCount === 2
                 ? `${allBonds.length} Διπλοί Ομοιοπολικοί Δεσμοί (${totalSharedPairs} κοινά ζεύγη e⁻)`
                 : `${allBonds.length} Απλοί Ομοιοπολικοί Δεσμοί (${totalSharedPairs} κοινά ζεύγη e⁻)`;
+            const atomsCenterX = Number.isFinite(minSimX) ? (minSimX + maxSimX) / 2 : simCenterX;
             ctx.save();
             ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             ctx.fillStyle = '#0369a1';
             ctx.textAlign = 'center';
-            ctx.fillText(summaryLabel, simCenterX, maxSimY + 22);
+            ctx.fillText(summaryLabel, atomsCenterX, Math.min(pageHeight - 10, maxSimY + 22));
             ctx.restore();
           }
 
@@ -26766,16 +29906,29 @@ export default function App() {
 
             const boxW = 440;
             const boxH = 224;
-            const defaultBoxX = Math.max(18, simCenterX - boxW / 2);
+            const defaultBoxX = Math.max(
+              14,
+              Math.min(pageWidth - boxW - 14, Math.round(simCenterX - boxW / 2))
+            );
             const scaledReactionBottom = topBarY + 38 * rScale;
-            const defaultBoxY =
+            const rawBelowY =
               aSim.showReactionEquation === false && aSim.showAtomsBelowReaction === false
                 ? Math.max(36, (aSim.atoms[0]?.y ?? 220) - boxH / 2)
                 : aSim.showAtomsBelowReaction === false
                 ? scaledReactionBottom + 12
                 : Math.max(scaledReactionBottom + 22, (Number.isFinite(maxSimY) ? maxSimY : 320) + 38);
-            const boxX = aSim.mol3DBoxX ?? defaultBoxX;
-            const boxY = aSim.mol3DBoxY ?? defaultBoxY;
+            const defaultBoxY =
+              rawBelowY + boxH <= pageHeight - 14
+                ? rawBelowY
+                : Math.max(14, Math.round(topBarY - 48 - boxH));
+            const boxX = Math.max(
+              12,
+              Math.min(pageWidth - boxW - 12, aSim.mol3DBoxX ?? defaultBoxX)
+            );
+            const boxY = Math.max(
+              12,
+              Math.min(pageHeight - boxH - 12, aSim.mol3DBoxY ?? defaultBoxY)
+            );
             const cx3d = boxX + boxW * 0.45;
             const cy3d = boxY + 118;
 
@@ -26794,24 +29947,84 @@ export default function App() {
               origPitch: aSim.rot3DPitch ?? 0.24,
             });
 
-            // Πλαίσιο 3D Μορίου (Draggable)
+            // Πλαίσιο 3D Μορίου (Draggable) — Απαλό μπεζ-πράσινο οργανικό/τυχαίο dégradé με ελαφριά διαφάνεια
             ctx.save();
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.16)';
+            ctx.shadowColor = 'rgba(15, 23, 42, 0.10)';
             ctx.shadowBlur = 14;
             ctx.shadowOffsetY = 4;
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.94)'; // Σκούρο φόντο εργαστηρίου ώστε το χρωματικό νέφος φορτίου δ⁺/δ⁻ να λάμπει!
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 1.8;
+
+            // ντετερμινιστικό ψευδο-τυχαίο seed ανά κάρτα/μόριο ώστε το dégradé να είναι οργανικό χωρίς τρεμόπαιγμα
+            const seedStr = `${aSim.id}_${mol3D.id}`;
+            let seedHash = 2166136261;
+            for (let si = 0; si < seedStr.length; si++) {
+              seedHash ^= seedStr.charCodeAt(si);
+              seedHash = Math.imul(seedHash, 16777619);
+            }
+            const sRand = (n: number) => {
+              const x = Math.sin((seedHash >>> 0) * 0.0001 + n * 12.9898) * 43758.5453;
+              return x - Math.floor(x);
+            };
+
+            const gx0 = boxX + boxW * (0.05 + sRand(1) * 0.22);
+            const gy0 = boxY + boxH * (0.04 + sRand(2) * 0.20);
+            const gx1 = boxX + boxW * (0.78 + sRand(3) * 0.18);
+            const gy1 = boxY + boxH * (0.76 + sRand(4) * 0.20);
+            const bgGrad = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
+            bgGrad.addColorStop(0, 'rgba(250, 246, 235, 0.73)'); // Απαλό ζεστό μπεζ με διαφάνεια ώστε να αχνοφαίνονται οι γραμμές του τετραδίου
+            bgGrad.addColorStop(0.48, 'rgba(231, 243, 233, 0.71)'); // Απαλό φασκόμηλο / πράσινο-μπεζ
+            bgGrad.addColorStop(1, 'rgba(244, 240, 225, 0.73)'); // Απαλή άμμος-ελιά
+
+            ctx.fillStyle = bgGrad;
+            ctx.strokeStyle = 'rgba(148, 179, 156, 0.78)';
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.roundRect(boxX, boxY, boxW, boxH, 16);
             ctx.fill();
+
+            // Οργανικές απαλές κηλίδες dégradé (μπεζ & απαλό πράσινο) μέσα στο πλαίσιο
+            ctx.save();
+            ctx.clip();
+            const blobs = [
+              {
+                cx: boxX + boxW * (0.18 + sRand(5) * 0.64),
+                cy: boxY + boxH * (0.18 + sRand(6) * 0.64),
+                r: Math.max(boxW, boxH) * (0.45 + sRand(7) * 0.22),
+                c0: 'rgba(198, 228, 207, 0.26)',
+                c1: 'rgba(198, 228, 207, 0)',
+              },
+              {
+                cx: boxX + boxW * (0.15 + sRand(8) * 0.70),
+                cy: boxY + boxH * (0.15 + sRand(9) * 0.70),
+                r: Math.max(boxW, boxH) * (0.42 + sRand(10) * 0.24),
+                c0: 'rgba(247, 235, 208, 0.28)',
+                c1: 'rgba(247, 235, 208, 0)',
+              },
+              {
+                cx: boxX + boxW * (0.22 + sRand(11) * 0.56),
+                cy: boxY + boxH * (0.22 + sRand(12) * 0.56),
+                r: Math.max(boxW, boxH) * (0.38 + sRand(13) * 0.20),
+                c0: 'rgba(209, 234, 222, 0.22)',
+                c1: 'rgba(209, 234, 222, 0)',
+              },
+            ];
+            for (const b of blobs) {
+              const rg = ctx.createRadialGradient(b.cx, b.cy, 4, b.cx, b.cy, b.r);
+              rg.addColorStop(0, b.c0);
+              rg.addColorStop(1, b.c1);
+              ctx.fillStyle = rg;
+              ctx.fillRect(boxX, boxY, boxW, boxH);
+            }
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxW, boxH, 16);
             ctx.stroke();
             ctx.restore();
 
-            // Header μπάρα 3D Μορίου: Μόνο το Όνομα και ο Τύπος (π.χ. Νερό (H₂O), Μεθάνιο (CH₄)) χωρίς έτοιμα κουμπάκια!
+            // Header μπάρα 3D Μορίου: Μόνο το Όνομα και ο Τύπος (π.χ. Νερό (H₂O), Μεθάνιο (CH₄)) σε σκούρο γκρι
             ctx.save();
             ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = '#f8fafc';
+            ctx.fillStyle = '#334155';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             ctx.fillText(`🧊 ${mol3D.nameEl}`, boxX + 14, boxY + 18);
@@ -26826,9 +30039,9 @@ export default function App() {
               boxY + 8,
               66,
               20,
-              showCloud ? '#be185d' : 'rgba(51, 65, 85, 0.9)',
-              '#ffffff',
-              showCloud ? '#f472b6' : '#475569'
+              showCloud ? 'rgba(225, 29, 72, 0.14)' : 'rgba(255, 255, 255, 0.66)',
+              showCloud ? '#9f1239' : '#475569',
+              showCloud ? 'rgba(225, 29, 72, 0.36)' : 'rgba(148, 163, 184, 0.45)'
             );
 
             drawAtomPillButton(
@@ -26839,12 +30052,12 @@ export default function App() {
               boxY + 8,
               22,
               20,
-              'rgba(51, 65, 85, 0.9)',
-              '#cbd5e1',
-              '#475569'
+              'rgba(255, 255, 255, 0.68)',
+              '#475569',
+              'rgba(148, 163, 184, 0.45)'
             );
 
-            // Αριστερά με γκρι αχνό: Τα έως 5 πιο πρόσφατα 3D μόρια που εμφανίστηκαν μετά το πιο πρόσφατο άνοιγμα του τετραδίου!
+            // Αριστερά με διακριτικό γκρι: Τα έως 5 πιο πρόσφατα 3D μόρια που εμφανίστηκαν μετά το πιο πρόσφατο άνοιγμα του τετραδίου!
             recent3DMoleculesRef.current.items.slice(0, 5).forEach((recItem, rIdx) => {
               const isCurMol = recItem.id === mol3D.id;
               const recX = boxX + 10;
@@ -26857,9 +30070,9 @@ export default function App() {
                 recY,
                 40,
                 19,
-                isCurMol ? 'rgba(148, 163, 184, 0.22)' : 'rgba(148, 163, 184, 0.08)',
-                isCurMol ? 'rgba(226, 232, 240, 0.85)' : 'rgba(148, 163, 184, 0.52)',
-                isCurMol ? 'rgba(148, 163, 184, 0.42)' : 'rgba(148, 163, 184, 0.18)'
+                isCurMol ? 'rgba(22, 101, 52, 0.13)' : 'rgba(255, 255, 255, 0.52)',
+                isCurMol ? '#1e293b' : '#64748b',
+                isCurMol ? 'rgba(22, 101, 52, 0.34)' : 'rgba(148, 163, 184, 0.34)'
               );
             });
 
@@ -26949,67 +30162,141 @@ export default function App() {
             });
 
             // 6α. ΧΡΩΜΑΤΙΚΟ ΝΕΦΟΣ ΗΛΕΚΤΡΟΣΤΑΤΙΚΟΥ ΔΥΝΑΜΙΚΟΥ / ΚΑΤΑΝΟΜΗΣ ΦΟΡΤΙΟΥ (δ⁻ Κόκκινο/Πορτοκαλί, δ⁺ Μπλε/Κυανό)
+            // Σχεδιασμένο ως οργανικό, διάχυτο, απαλό νέφος (χωρίς ευθύγραμμους σωλήνες ή σκληρά περιγράμματα!)
             if (showCloud) {
-              // Γέφυρα νέφους κατά μήκος κάθε δεσμού (συνεχές 3D μοριακό νέφος ηλεκτρονίων)
-              for (const b of mol3D.bonds) {
-                const a1 = projAtoms[b.fromIdx];
-                const a2 = projAtoms[b.toIdx];
-                if (!a1 || !a2) continue;
-                ctx.save();
-                const grad = ctx.createLinearGradient(a1.px, a1.py, a2.px, a2.py);
-                const c1 =
-                  a1.partialCharge < 0
-                    ? 'rgba(239, 68, 68, 0.30)'
-                    : 'rgba(14, 165, 233, 0.30)';
-                const c2 =
-                  a2.partialCharge < 0
-                    ? 'rgba(239, 68, 68, 0.30)'
-                    : 'rgba(14, 165, 233, 0.30)';
-                grad.addColorStop(0, c1);
-                grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.20)');
-                grad.addColorStop(1, c2);
-                ctx.strokeStyle = grad;
-                ctx.lineWidth = Math.max(a1.rPx, a2.rPx) * 2.1;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.moveTo(a1.px, a1.py);
-                ctx.lineTo(a2.px, a2.py);
-                ctx.stroke();
-                ctx.restore();
-              }
+              const pulse = 1 + Math.sin(now * 0.0024) * 0.04;
 
-              // Ογκομετρικό 3D νέφος φορτίου γύρω από κάθε σφαιρίδιο (χωρίς επίπεδους 2D διακεκομμένους κύκλους)
-              const pulse = 1 + Math.sin(now * 0.003) * 0.045;
+              // 1) Απαλή σκιά βάθους πίσω από το συνολικό μοριακό νέφος για αίσθηση 3D όγκου
               for (const pa of projAtoms) {
-                const cloudR = pa.rPx * 2.4 * pulse;
-                const rg = ctx.createRadialGradient(
-                  pa.px - pa.rPx * 0.18,
-                  pa.py - pa.rPx * 0.18,
-                  pa.rPx * 0.2,
-                  pa.px,
-                  pa.py,
-                  cloudR
-                );
-                if (pa.partialCharge < 0) {
-                  const intensity = Math.min(0.58, 0.28 + Math.abs(pa.partialCharge) * 0.32);
-                  rg.addColorStop(0, `rgba(239, 68, 68, ${intensity})`);
-                  rg.addColorStop(0.5, `rgba(249, 115, 22, ${intensity * 0.52})`);
-                  rg.addColorStop(0.82, `rgba(244, 63, 94, ${intensity * 0.18})`);
-                  rg.addColorStop(1, 'rgba(239, 68, 68, 0)');
-                } else {
-                  const intensity = Math.min(0.54, 0.26 + Math.abs(pa.partialCharge) * 0.32);
-                  rg.addColorStop(0, `rgba(56, 189, 248, ${intensity})`);
-                  rg.addColorStop(0.5, `rgba(59, 130, 246, ${intensity * 0.48})`);
-                  rg.addColorStop(0.82, `rgba(99, 102, 241, ${intensity * 0.16})`);
-                  rg.addColorStop(1, 'rgba(59, 130, 246, 0)');
-                }
+                const shR = pa.rPx * 2.55 * pulse;
+                const shX = pa.px + 4;
+                const shY = pa.py + 6;
+                const shGrad = ctx.createRadialGradient(shX, shY, pa.rPx * 0.25, shX, shY, shR);
+                shGrad.addColorStop(0, 'rgba(15, 23, 42, 0.085)');
+                shGrad.addColorStop(0.55, 'rgba(15, 23, 42, 0.035)');
+                shGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
                 ctx.save();
-                ctx.fillStyle = rg;
+                ctx.fillStyle = shGrad;
                 ctx.beginPath();
-                ctx.arc(pa.px, pa.py, cloudR, 0, Math.PI * 2);
+                ctx.arc(shX, shY, shR, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
               }
+
+              // 2) Διάχυτα ενδιάμεσα σύννεφα (feathered puffs) κατά μήκος των δεσμών με τυχαία εγκάρσια διασπορά (όχι σωλήνες!)
+              mol3D.bonds.forEach((b, bIdx) => {
+                const a1 = projAtoms[b.fromIdx];
+                const a2 = projAtoms[b.toIdx];
+                if (!a1 || !a2) return;
+                const dx = a2.px - a1.px;
+                const dy = a2.py - a1.py;
+                const len = Math.max(1, Math.hypot(dx, dy));
+                const nx = -dy / len;
+                const ny = dx / len;
+                const steps = [0.22, 0.38, 0.52, 0.66, 0.80];
+
+                steps.forEach((t, sIdx) => {
+                  const seedN = 30 + bIdx * 11 + sIdx * 5;
+                  const jitterAlong = (sRand(seedN) - 0.5) * 0.07;
+                  const tc = Math.max(0.12, Math.min(0.88, t + jitterAlong));
+                  const perpSign = sIdx % 2 === 0 ? 1 : -1;
+                  const perpMag = (0.14 + sRand(seedN + 1) * 0.24) * Math.min(a1.rPx, a2.rPx);
+                  const drift = Math.sin(now * 0.002 + seedN) * 1.8;
+                  const cxPuff = a1.px + dx * tc + nx * (perpSign * perpMag + drift);
+                  const cyPuff = a1.py + dy * tc + ny * (perpSign * perpMag - drift);
+                  const rPuff =
+                    ((a1.rPx * (1 - tc) + a2.rPx * tc) * (1.55 + sRand(seedN + 2) * 0.45)) *
+                    pulse;
+
+                  const interpCharge = a1.partialCharge * (1 - tc) + a2.partialCharge * tc;
+                  const pGrad = ctx.createRadialGradient(
+                    cxPuff,
+                    cyPuff,
+                    rPuff * 0.06,
+                    cxPuff,
+                    cyPuff,
+                    rPuff
+                  );
+                  if (interpCharge < -0.04) {
+                    pGrad.addColorStop(0, 'rgba(239, 68, 68, 0.16)');
+                    pGrad.addColorStop(0.45, 'rgba(251, 146, 60, 0.085)');
+                    pGrad.addColorStop(0.78, 'rgba(244, 63, 94, 0.028)');
+                    pGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                  } else if (interpCharge > 0.04) {
+                    pGrad.addColorStop(0, 'rgba(14, 165, 233, 0.15)');
+                    pGrad.addColorStop(0.45, 'rgba(56, 189, 248, 0.08)');
+                    pGrad.addColorStop(0.78, 'rgba(99, 102, 241, 0.025)');
+                    pGrad.addColorStop(1, 'rgba(14, 165, 233, 0)');
+                  } else {
+                    pGrad.addColorStop(0, 'rgba(168, 85, 247, 0.11)');
+                    pGrad.addColorStop(0.5, 'rgba(129, 140, 248, 0.05)');
+                    pGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+                  }
+
+                  ctx.save();
+                  ctx.fillStyle = pGrad;
+                  ctx.beginPath();
+                  ctx.arc(cxPuff, cyPuff, rPuff, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.restore();
+                });
+              });
+
+              // 3) Οργανικά, ασύμμετρα «τούφες/σύννεφα» (multi-wisp dégradé nebula) γύρω από κάθε άτομο
+              projAtoms.forEach((pa, aIdx) => {
+                const isNeg = pa.partialCharge < 0;
+                const baseAlpha = Math.min(
+                  isNeg ? 0.28 : 0.25,
+                  0.14 + Math.abs(pa.partialCharge) * 0.16
+                );
+                const wispCount = 7;
+
+                for (let w = 0; w < wispCount; w++) {
+                  const seedW = 100 + aIdx * 19 + w * 7;
+                  const ang =
+                    (w * Math.PI * 2) / wispCount +
+                    (sRand(seedW) - 0.5) * 0.65 +
+                    Math.sin(now * 0.0014 + seedW) * 0.08;
+                  const dist =
+                    w === 0
+                      ? 0
+                      : pa.rPx * (0.34 + sRand(seedW + 1) * 0.58);
+                  const wx = pa.px + Math.cos(ang) * dist;
+                  const wy = pa.py + Math.sin(ang) * dist;
+                  const wR =
+                    pa.rPx *
+                    (w === 0 ? 2.45 : 1.45 + sRand(seedW + 2) * 0.85) *
+                    pulse;
+                  const wAlpha = w === 0 ? baseAlpha * 1.15 : baseAlpha * (0.58 + sRand(seedW + 3) * 0.38);
+
+                  const rg = ctx.createRadialGradient(
+                    wx - wR * 0.12,
+                    wy - wR * 0.12,
+                    wR * 0.05,
+                    wx,
+                    wy,
+                    wR
+                  );
+                  if (isNeg) {
+                    rg.addColorStop(0, `rgba(239, 68, 68, ${wAlpha.toFixed(3)})`);
+                    rg.addColorStop(0.38, `rgba(249, 115, 22, ${(wAlpha * 0.56).toFixed(3)})`);
+                    rg.addColorStop(0.72, `rgba(244, 63, 94, ${(wAlpha * 0.20).toFixed(3)})`);
+                    rg.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                  } else {
+                    rg.addColorStop(0, `rgba(14, 165, 233, ${wAlpha.toFixed(3)})`);
+                    rg.addColorStop(0.38, `rgba(56, 189, 248, ${(wAlpha * 0.54).toFixed(3)})`);
+                    rg.addColorStop(0.72, `rgba(99, 102, 241, ${(wAlpha * 0.18).toFixed(3)})`);
+                    rg.addColorStop(1, 'rgba(56, 189, 248, 0)');
+                  }
+
+                  ctx.save();
+                  ctx.fillStyle = rg;
+                  ctx.beginPath();
+                  ctx.arc(wx, wy, wR, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.restore();
+                }
+              });
             }
 
             // 6β. Μονήρη ζεύγη ηλεκτρονίων (3D Lone Pair Lobes, π.χ. στο H₂O και στο NH₃)
@@ -27235,13 +30522,13 @@ export default function App() {
 
                 // 1. 3D Drop Shadow / Ambient Occlusion πίσω και κάτω από τη σφαίρα
                 ctx.save();
-                ctx.shadowColor = 'rgba(2, 6, 23, 0.68)';
-                ctx.shadowBlur = pa.rPx * 0.55;
-                ctx.shadowOffsetX = pa.rPx * 0.14;
-                ctx.shadowOffsetY = pa.rPx * 0.22;
-                ctx.fillStyle = '#020617';
+                ctx.shadowColor = 'rgba(15, 23, 42, 0.28)';
+                ctx.shadowBlur = pa.rPx * 0.50;
+                ctx.shadowOffsetX = pa.rPx * 0.12;
+                ctx.shadowOffsetY = pa.rPx * 0.20;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
                 ctx.beginPath();
-                ctx.arc(pa.px, pa.py, pa.rPx * 0.97, 0, Math.PI * 2);
+                ctx.arc(pa.px, pa.py, pa.rPx * 0.96, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
 
@@ -27343,7 +30630,7 @@ export default function App() {
                 // 6. Ένδειξη μερικού φορτίου (δ⁻ / δ⁺) κάτω από τη σφαίρα
                 if (showCloud && pa.chargeLabel) {
                   ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-                  ctx.fillStyle = pa.partialCharge < 0 ? '#fecaca' : '#bae6fd';
+                  ctx.fillStyle = pa.partialCharge < 0 ? '#b91c1c' : '#0369a1';
                   ctx.textAlign = 'center';
                   ctx.fillText(pa.chargeLabel, pa.px, pa.py + pa.rPx + 11);
                 }
@@ -27355,8 +30642,8 @@ export default function App() {
             const legX = boxX + boxW - 146;
             const legY = boxY + 62;
             ctx.save();
-            ctx.fillStyle = 'rgba(30, 41, 59, 0.88)';
-            ctx.strokeStyle = '#475569';
+            ctx.fillStyle = 'rgba(255, 253, 247, 0.72)';
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.42)';
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.roundRect(legX, legY, 134, 68, 10);
@@ -27364,7 +30651,7 @@ export default function App() {
             ctx.stroke();
 
             ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = '#e2e8f0';
+            ctx.fillStyle = '#334155';
             ctx.textAlign = 'left';
             ctx.fillText('Κατανομή Φορτίου:', legX + 8, legY + 16);
 
@@ -27373,23 +30660,23 @@ export default function App() {
             ctx.beginPath();
             ctx.arc(legX + 14, legY + 34, 5, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = '#fca5a5';
+            ctx.fillStyle = '#991b1b';
             ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             ctx.fillText('δ⁻ Πυκνό νέφος e⁻', legX + 24, legY + 34);
 
             // Μπλε δ⁺
-            ctx.fillStyle = '#38bdf8';
+            ctx.fillStyle = '#0284c7';
             ctx.beginPath();
             ctx.arc(legX + 14, legY + 52, 5, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = '#bae6fd';
+            ctx.fillStyle = '#075985';
             ctx.fillText('δ⁺ Έλλειμμα e⁻', legX + 24, legY + 52);
             ctx.restore();
 
             // Κάτω μπάρα: ΜΟΝΟ αν είναι Ισχυρά Πολικό Μόριο / Μη Πολικό Μόριο / Πολικό Μόριο (χωρίς μ, γωνίες ή VSEPR)
             ctx.save();
             ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-            ctx.fillStyle = '#bae6fd';
+            ctx.fillStyle = '#334155';
             ctx.textAlign = 'center';
             ctx.fillText(mol3D.polarityLabel, boxX + boxW / 2, boxY + boxH - 14);
             ctx.restore();
@@ -28117,7 +31404,9 @@ export default function App() {
         shapePreset === 'voltage-source' ||
         shapePreset === 'inclined-plane' ||
         shapePreset === 'switch' ||
-        shapePreset === 'fan') &&
+        shapePreset === 'fan' ||
+        shapePreset === 'ammeter' ||
+        shapePreset === 'voltmeter') &&
       currentStrokePtsRef.current.length >= 2
     ) {
       let minX = Infinity,
@@ -28135,11 +31424,13 @@ export default function App() {
           ? 104
           : shapePreset === 'switch' || shapePreset === 'fan'
             ? 84
-            : shapePreset === 'battery' || shapePreset === 'voltage-source'
-              ? 96
-              : shapePreset === 'inclined-plane'
-                ? 130
-                : 120;
+            : shapePreset === 'ammeter' || shapePreset === 'voltmeter'
+              ? 76
+              : shapePreset === 'battery' || shapePreset === 'voltage-source'
+                ? 96
+                : shapePreset === 'inclined-plane'
+                  ? 130
+                  : 120;
       const minH =
         shapePreset === 'bulb'
           ? 88
@@ -28147,15 +31438,17 @@ export default function App() {
             ? 48
             : shapePreset === 'fan'
               ? 68
-              : shapePreset === 'battery'
-                ? 52
-                : shapePreset === 'voltage-source'
-                  ? 68
-                  : shapePreset === 'inclined-plane'
-                    ? 90
-                    : shapePreset === 'wave-axes'
-                      ? 110
-                      : 65;
+              : shapePreset === 'ammeter' || shapePreset === 'voltmeter'
+                ? 76
+                : shapePreset === 'battery'
+                  ? 52
+                  : shapePreset === 'voltage-source'
+                    ? 68
+                    : shapePreset === 'inclined-plane'
+                      ? 90
+                      : shapePreset === 'wave-axes'
+                        ? 110
+                        : 65;
       const w = Math.max(minW, maxX - minX);
       const h = Math.max(minH, maxY - minY);
       const previewStencils = createPhysicsStencilStrokes(
@@ -28188,6 +31481,8 @@ export default function App() {
       shapePreset !== 'inclined-plane' &&
       shapePreset !== 'switch' &&
       shapePreset !== 'fan' &&
+      shapePreset !== 'ammeter' &&
+      shapePreset !== 'voltmeter' &&
       currentStrokePtsRef.current.length >= 2
         ? recognizeAndSnapShape(currentStrokePtsRef.current, shapePreset)
         : null;
@@ -28211,15 +31506,21 @@ export default function App() {
       snapType !== 'cosine' &&
       snapType !== 'parabola' &&
       snapType !== 'hyperbola' &&
-      snapType !== 'arc';
-    const liveFillStyle: FillStyleType = isFillableSnapShape ? fillStyle : 'none';
+      snapType !== 'arc' &&
+      snapType !== 'title-box';
+    const isTitleBoxSnap = isCompletedShape && snapType === 'title-box';
+    const liveFillStyle: FillStyleType = isTitleBoxSnap
+      ? 'solid'
+      : isFillableSnapShape
+        ? fillStyle
+        : 'none';
     const previewStroke: StrokeObject = {
       id: 'live',
       tool: activeTool === 'highlighter' ? 'highlighter' : activeTool === 'pencil' ? 'pencil' : 'pen',
       color: strokeColor,
       fillColor: liveFillStyle !== 'none' ? strokeColor : undefined,
       fillStyle: liveFillStyle,
-      fillTransparency,
+      fillTransparency: isTitleBoxSnap ? 90 : fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
@@ -29842,8 +33143,7 @@ export default function App() {
       if (pt && (pt.smooth || pt.inDx !== undefined || pt.outDx !== undefined)) {
         // Second click on 〰️ while Bézier handles are visible: convert node to sharp straight corner (∧) and hide handles!
         activeBezierNodeRef.current = null;
-        setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-        setRedoStack([]);
+        pushUndoSnapshot(activePage);
         const isClosedPoly =
           (target.shapeType === 'line' &&
             target.points.length >= 3 &&
@@ -29880,8 +33180,7 @@ export default function App() {
       }
     }
 
-    setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-    setRedoStack([]);
+    pushUndoSnapshot(activePage);
     updateActivePage(
       (page) => ({
         ...page,
@@ -29967,8 +33266,7 @@ export default function App() {
         showToast('⚠️ Η γραμμή χρειάζεται τουλάχιστον 2 κόμβους!');
         return;
       }
-      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-      setRedoStack([]);
+      pushUndoSnapshot(activePage);
       updateActivePage(
         (page) => ({
           ...page,
@@ -30027,8 +33325,7 @@ export default function App() {
         showToast('⚠️ Ο κύκλος/έλλειψη χρειάζεται τουλάχιστον 3 κόμβους!');
         return;
       }
-      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-      setRedoStack([]);
+      pushUndoSnapshot(activePage);
       updateActivePage(
         (page) => ({
           ...page,
@@ -30056,8 +33353,7 @@ export default function App() {
         showToast('⚠️ Ένα κλειστό πολύγωνο χρειάζεται τουλάχιστον 3 κόμβους!');
         return;
       }
-      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-      setRedoStack([]);
+      pushUndoSnapshot(activePage);
       updateActivePage(
         (page) => ({
           ...page,
@@ -30087,8 +33383,7 @@ export default function App() {
         showToast('⚠️ Η γραμμή χρειάζεται τουλάχιστον 2 κόμβους!');
         return;
       }
-      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-      setRedoStack([]);
+      pushUndoSnapshot(activePage);
       updateActivePage(
         (page) => ({
           ...page,
@@ -30108,8 +33403,7 @@ export default function App() {
       target.shapeType === 'hyperbola' ||
       target.shapeType === 'arc';
     if (isThreePtCurve && nodeIdx === 1 && target.points.length >= 3) {
-      setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-      setRedoStack([]);
+      pushUndoSnapshot(activePage);
       updateActivePage(
         (page) => ({
           ...page,
@@ -30134,8 +33428,41 @@ export default function App() {
   };
 
   // Illustrator-style Smart Alignment & Magnetic Snap Helpers (Edges -> Red Line, Centers -> Red '+' Crosshair)
-  const getReferenceSnapBoxes = (excludeStrokeIds: string[], excludeImgIds: string[]) => {
-    const visibleLayerIds = new Set(activePage.layers.filter((l) => l.visible).map((l) => l.id));
+  const getTextAlignmentBox = (
+    t: TextObject
+  ): { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number } => {
+    const domEl = document.querySelector(`[data-text-id="${t.id}"]`) as HTMLElement | null;
+    let w = domEl && domEl.offsetWidth > 0 ? domEl.offsetWidth : t.boxWidth || 0;
+    let h = domEl && domEl.offsetHeight > 0 ? domEl.offsetHeight : t.boxHeight || 0;
+    if (w <= 0 || h <= 0) {
+      const vb = getTextVisualBounds(t);
+      return {
+        minX: vb.minX,
+        maxX: vb.maxX,
+        minY: vb.minY,
+        maxY: vb.maxY,
+        cx: vb.cx,
+        cy: vb.cy,
+      };
+    }
+    return {
+      minX: t.x,
+      maxX: t.x + w,
+      minY: t.y,
+      maxY: t.y + h,
+      cx: t.x + w / 2,
+      cy: t.y + h / 2,
+    };
+  };
+
+  const getReferenceSnapBoxes = (
+    excludeStrokeIds: string[],
+    excludeImgIds: string[],
+    excludeTxtIds: string[] = [],
+    pageOverride?: NotePage
+  ) => {
+    const pageObj = pageOverride || activePage;
+    const visibleLayerIds = new Set(pageObj.layers.filter((l) => l.visible).map((l) => l.id));
     const boxes: {
       minX: number;
       maxX: number;
@@ -30143,9 +33470,10 @@ export default function App() {
       maxY: number;
       cx: number;
       cy: number;
+      isText?: boolean;
     }[] = [];
 
-    for (const s of activePage.strokes) {
+    for (const s of pageObj.strokes) {
       if (excludeStrokeIds.includes(s.id) || !visibleLayerIds.has(s.layerId)) continue;
       if (s.points.length < 2) continue;
       const b = getStrokeBounds(s);
@@ -30160,9 +33488,9 @@ export default function App() {
       });
     }
 
-    const pW = getPageLogicalWidth(activePage);
-    const pH = getPageLogicalHeight(activePage);
-    for (const im of activePage.images || []) {
+    const pW = getPageLogicalWidth(pageObj);
+    const pH = getPageLogicalHeight(pageObj);
+    for (const im of pageObj.images || []) {
       if (excludeImgIds.includes(im.id) || !visibleLayerIds.has(im.layerId)) continue;
       // Skip full-page imported PDF sheets so we only snap to actual shapes/images on the canvas
       if (im.width * im.height > pW * pH * 0.72) continue;
@@ -30176,6 +33504,18 @@ export default function App() {
       });
     }
 
+    for (const t of pageObj.texts || []) {
+      if (excludeTxtIds.includes(t.id) || !visibleLayerIds.has(t.layerId)) continue;
+      if (!(t.text || '').trim()) continue;
+      if (t.groupId?.startsWith('math-graph-grp-') || t.id.startsWith('math-graph-txt-')) continue;
+      const tb = getTextAlignmentBox(t);
+      if (tb.maxX - tb.minX < 2 || tb.maxY - tb.minY < 2) continue;
+      boxes.push({
+        ...tb,
+        isText: true,
+      });
+    }
+
     return boxes;
   };
 
@@ -30183,7 +33523,8 @@ export default function App() {
     strokeIds: string[],
     imgIds: string[],
     offsetX = 0,
-    offsetY = 0
+    offsetY = 0,
+    txtIds: string[] = []
   ): { minX: number; maxX: number; minY: number; maxY: number; cx: number; cy: number } | null => {
     let minX = Infinity;
     let maxX = -Infinity;
@@ -30205,6 +33546,15 @@ export default function App() {
       if (im.x + im.width > maxX) maxX = im.x + im.width;
       if (im.y < minY) minY = im.y;
       if (im.y + im.height > maxY) maxY = im.y + im.height;
+    }
+
+    for (const t of activePage.texts || []) {
+      if (!txtIds.includes(t.id)) continue;
+      const tb = getTextAlignmentBox(t);
+      if (tb.minX < minX) minX = tb.minX;
+      if (tb.maxX > maxX) maxX = tb.maxX;
+      if (tb.minY < minY) minY = tb.minY;
+      if (tb.maxY > maxY) maxY = tb.maxY;
     }
 
     if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
@@ -30433,6 +33783,12 @@ export default function App() {
     aCtx.restore();
   };
 
+  textSmartAlignBridgeRef.current = {
+    getReferenceSnapBoxes,
+    drawSmartAlignmentGuidesForBox,
+    clearActiveOverlay,
+  };
+
   // Draws a crisp 1:1 Equal-Dimensions Visual Guide (Circle ◯ or Square □) when stretching a shape/ellipse/rectangle to 1:1 aspect ratio!
   const drawOneToOneSnapOverlay = (
     cx: number,
@@ -30556,8 +33912,8 @@ export default function App() {
           e.stopPropagation();
           outsidePanDragRef.current = null;
           cancelScrollMomentum();
-          const curBoxW = (activeTxtObj.isMath ? 0 : activeTxtObj.boxWidth) || activeTxtEl.offsetWidth || 180;
-          const curBoxH = (activeTxtObj.isMath ? 0 : activeTxtObj.boxHeight) || activeTxtEl.offsetHeight || 48;
+          const curBoxW = activeTxtEl.offsetWidth || (activeTxtObj.isMath ? 0 : activeTxtObj.boxWidth) || 180;
+          const curBoxH = activeTxtEl.offsetHeight || (activeTxtObj.isMath ? 0 : activeTxtObj.boxHeight) || 48;
           draggingTextRef.current = {
             id: activeTxtObj.id,
             pageIdx,
@@ -30807,6 +34163,7 @@ export default function App() {
           if (activeNodeStrokeId) setActiveNodeStrokeId(null);
           forceSimAnimRef.current = null;
           setForceSimAnim(null);
+          pushUndoSnapshot(targetPage);
           draggingForceHandleRef.current = {
             simId: fHit.simId,
             kind: 'calc-box',
@@ -30871,8 +34228,7 @@ export default function App() {
             if (activeNodeStrokeId) setActiveNodeStrokeId(null);
             forceSimAnimRef.current = null;
             setForceSimAnim(null);
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-            setRedoStack([]);
+            pushUndoSnapshot(targetPage);
             const targetVecStroke = h.strokeId
               ? targetPage.strokes.find((s) => s.id === h.strokeId)
               : curForceSim?.primaryStrokeId
@@ -30930,6 +34286,8 @@ export default function App() {
         const isImmediateControlBtn =
           btn.action === 'toggle-charge-cloud' ||
           btn.action === 'close-3d-molecule' ||
+          btn.action === 'close-2d-atoms' ||
+          btn.action === 'delete-atom-sim' ||
           btn.action.startsWith('select-3d-mol:') ||
           btn.action === 'toggle-reaction-view-mode' ||
           btn.action === 'toggle-reaction-flow' ||
@@ -30970,6 +34328,7 @@ export default function App() {
           const hitCorner = corners.find((c) => Math.hypot(pt.x - c.x, pt.y - c.y) <= 10);
           if (hitCorner) {
             e.preventDefault();
+            pushUndoSnapshot(targetPage);
             const cardCenterY = (selRc.y1 + selRc.y2) / 2;
             draggingAtomHandleRef.current = {
               simId: selRc.simId,
@@ -30997,140 +34356,6 @@ export default function App() {
         }
       }
 
-      // 0-term) Priority 2: Clicking on ANY Reactant or Product Compound (`click-reaction-term:...`) in ANY tool (including Lasso & Apple Pencil on iPad!)
-      // Executes IMMEDIATELY on pointerdown to display/toggle that compound's 2D atoms (or 3D molecule) WITHOUT selecting the whole reaction card!
-      const matchingTermBtns = [...aHit.buttons]
-        .reverse()
-        .filter(
-          (b) =>
-            b.action.startsWith('click-reaction-term:') &&
-            pt.x >= b.x1 - 8 &&
-            pt.x <= b.x2 + 8 &&
-            pt.y >= b.y1 - 8 &&
-            pt.y <= b.y2 + 8
-        )
-        .sort((a, b) => {
-          const cxA = (a.x1 + a.x2) * 0.5;
-          const cxB = (b.x1 + b.x2) * 0.5;
-          return Math.abs(pt.x - cxA) - Math.abs(pt.x - cxB);
-        });
-      for (const btn of matchingTermBtns.slice(0, 1)) {
-        if (btn) {
-          e.preventDefault();
-          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
-          if (selectedImageIds.length > 0) setSelectedImageIds([]);
-          if (selectedImageId) setSelectedImageId(null);
-          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
-          if (selectedTextId) setSelectedTextId(null);
-          if (selectedReactionSimIdRef.current) {
-            selectedReactionSimIdRef.current = null;
-            setSelectedReactionSimId(null);
-          }
-          const targetAtomSim =
-            (targetPage.atomSims || []).find((s) => s.id === btn.simId) ||
-            getActiveAtomSim(targetPage);
-
-          // Check if the tap ALSO hit a red corrected coefficient/subscript inside this compound
-          const matchedCorrBtn = [...aHit.buttons]
-            .reverse()
-            .find(
-              (b) =>
-                b.simId === btn.simId &&
-                b.action.startsWith('click-chem-correction:') &&
-                pt.x >= b.x1 - 4 &&
-                pt.x <= b.x2 + 4 &&
-                pt.y >= b.y1 - 4 &&
-                pt.y <= b.y2 + 4
-            );
-
-          if (matchedCorrBtn && targetAtomSim) {
-            handleAtomSimAction(targetAtomSim, matchedCorrBtn.action);
-            const termText = btn.action.slice('click-reaction-term:'.length).trim();
-            const viewMode = targetAtomSim.reactionViewMode || '2d';
-            const isSameAlreadyOpen =
-              targetAtomSim.activeReactionTerm === termText &&
-              ((viewMode === '2d' &&
-                targetAtomSim.showAtomsBelowReaction !== false &&
-                !targetAtomSim.show3DMolecule) ||
-                (viewMode === '3d' && !!targetAtomSim.show3DMolecule));
-            if (!isSameAlreadyOpen) {
-              handleAtomSimAction(targetAtomSim, btn.action);
-            }
-          } else {
-            if (activeChemCorrectionRef.current) {
-              activeChemCorrectionRef.current = null;
-              setActiveChemCorrection(null);
-            }
-            handleAtomSimAction(targetAtomSim, btn.action);
-          }
-
-          isDrawingRef.current = false;
-          activePointerIdRef.current = null;
-          activePointerTypeRef.current = null;
-          return;
-        }
-      }
-
-      // 0-corr) Fallback if a red corrected coefficient/subscript was clicked slightly outside a compound's horizontal box
-      for (const btn of [...aHit.buttons].reverse()) {
-        if (!btn.action.startsWith('click-chem-correction:')) continue;
-        if (
-          pt.x >= btn.x1 - 5 &&
-          pt.x <= btn.x2 + 5 &&
-          pt.y >= btn.y1 - 5 &&
-          pt.y <= btn.y2 + 5
-        ) {
-          e.preventDefault();
-          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
-          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
-          if (selectedReactionSimIdRef.current) {
-            selectedReactionSimIdRef.current = null;
-            setSelectedReactionSimId(null);
-          }
-          const targetAtomSim =
-            (targetPage.atomSims || []).find((s) => s.id === btn.simId) ||
-            getActiveAtomSim(targetPage);
-          handleAtomSimAction(targetAtomSim, btn.action);
-          const matchedTermBtn = [...aHit.buttons]
-            .reverse()
-            .find(
-              (b) =>
-                b.simId === btn.simId &&
-                b.action.startsWith('click-reaction-term:') &&
-                pt.x >= b.x1 - 12 &&
-                pt.x <= b.x2 + 12 &&
-                pt.y >= b.y1 - 8 &&
-                pt.y <= b.y2 + 8
-            );
-          if (matchedTermBtn && targetAtomSim) {
-            const termText = matchedTermBtn.action.slice('click-reaction-term:'.length).trim();
-            const viewMode = targetAtomSim.reactionViewMode || '2d';
-            const isSameAlreadyOpen =
-              targetAtomSim.activeReactionTerm === termText &&
-              ((viewMode === '2d' &&
-                targetAtomSim.showAtomsBelowReaction !== false &&
-                !targetAtomSim.show3DMolecule) ||
-                (viewMode === '3d' && !!targetAtomSim.show3DMolecule));
-            if (!isSameAlreadyOpen) {
-              handleAtomSimAction(targetAtomSim, matchedTermBtn.action);
-            }
-          }
-          isDrawingRef.current = false;
-          activePointerIdRef.current = null;
-          activePointerTypeRef.current = null;
-          return;
-        }
-      }
-
-      // Clicking anywhere else on the canvas immediately dismisses any open chemical correction message
-      if (
-        activeChemCorrectionRef.current &&
-        performance.now() - lastChemCorrectionClickTimeRef.current > 180
-      ) {
-        activeChemCorrectionRef.current = null;
-        setActiveChemCorrection(null);
-      }
-
       const startReactionCardMove = (
         rc: NonNullable<typeof aHit.reactionCards>[number],
         pendingAction?: string
@@ -31141,6 +34366,7 @@ export default function App() {
         if (selectedImageId) setSelectedImageId(null);
         if (activeNodeStrokeId) setActiveNodeStrokeId(null);
         if (selectedTextId) setSelectedTextId(null);
+        pushUndoSnapshot(targetPage);
         selectedReactionSimIdRef.current = rc.simId;
         setSelectedReactionSimId(rc.simId);
         const targetSimForCard = (targetPage.atomSims || []).find((s) => s.id === rc.simId);
@@ -31177,13 +34403,134 @@ export default function App() {
         isDrawingRef.current = true;
       };
 
-      // 1) Any remaining On-Canvas Reaction / Atom Buttons
+      // 0-term) Priority 2: Clicking directly on the letters of ANY Reactant or Product Compound (`click-reaction-term:...`) in ANY tool (including Lasso & Apple Pencil on iPad!)
+      // Tight glyph bounding box (no border/whitespace expansion) so clicking on the card border, white space, '+', or '→' selects/moves/drags the reaction card!
+      const matchingTermBtns = [...aHit.buttons]
+        .reverse()
+        .filter(
+          (b) =>
+            b.action.startsWith('click-reaction-term:') &&
+            pt.x >= b.x1 &&
+            pt.x <= b.x2 &&
+            pt.y >= b.y1 &&
+            pt.y <= b.y2
+        )
+        .sort((a, b) => {
+          const cxA = (a.x1 + a.x2) * 0.5;
+          const cxB = (b.x1 + b.x2) * 0.5;
+          return Math.abs(pt.x - cxA) - Math.abs(pt.x - cxB);
+        });
+      for (const btn of matchingTermBtns.slice(0, 1)) {
+        if (btn) {
+          // Αν η κάρτα αντίδρασης είναι ΗΔΗ επιλεγμένη (μπλε περίγραμμα), επέτρεψε το drag της κάρτας από οπουδήποτε, και αν απλώς γίνει κλικ χωρίς μετακίνηση εκτέλεσε το click-reaction-term!
+          if (selectedReactionSimIdRef.current === btn.simId) {
+            const selRc = (aHit.reactionCards || []).find((rc) => rc.simId === btn.simId);
+            if (selRc) {
+              startReactionCardMove(selRc, btn.action);
+              return;
+            }
+          }
+
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (selectedImageIds.length > 0) setSelectedImageIds([]);
+          if (selectedImageId) setSelectedImageId(null);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          if (selectedTextId) setSelectedTextId(null);
+          const targetAtomSim =
+            (targetPage.atomSims || []).find((s) => s.id === btn.simId) ||
+            getActiveAtomSim(targetPage);
+
+          // Check if the tap ALSO hit a red corrected coefficient/subscript inside this compound
+          const matchedCorrBtn = [...aHit.buttons]
+            .reverse()
+            .find(
+              (b) =>
+                b.simId === btn.simId &&
+                b.action.startsWith('click-chem-correction:') &&
+                pt.x >= b.x1 &&
+                pt.x <= b.x2 &&
+                pt.y >= b.y1 &&
+                pt.y <= b.y2
+            );
+
+          if (matchedCorrBtn && targetAtomSim) {
+            handleAtomSimAction(targetAtomSim, matchedCorrBtn.action);
+            handleAtomSimAction(targetAtomSim, btn.action);
+          } else {
+            if (activeChemCorrectionRef.current) {
+              activeChemCorrectionRef.current = null;
+              setActiveChemCorrection(null);
+            }
+            handleAtomSimAction(targetAtomSim, btn.action);
+          }
+
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+      }
+
+      // 0-corr) Fallback if a red corrected coefficient/subscript was clicked
+      for (const btn of [...aHit.buttons].reverse()) {
+        if (!btn.action.startsWith('click-chem-correction:')) continue;
+        if (
+          pt.x >= btn.x1 &&
+          pt.x <= btn.x2 &&
+          pt.y >= btn.y1 &&
+          pt.y <= btn.y2
+        ) {
+          e.preventDefault();
+          if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
+          if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          const targetAtomSim =
+            (targetPage.atomSims || []).find((s) => s.id === btn.simId) ||
+            getActiveAtomSim(targetPage);
+          handleAtomSimAction(targetAtomSim, btn.action);
+          const matchedTermBtn = [...aHit.buttons]
+            .reverse()
+            .find(
+              (b) =>
+                b.simId === btn.simId &&
+                b.action.startsWith('click-reaction-term:') &&
+                pt.x >= b.x1 - 4 &&
+                pt.x <= b.x2 + 4 &&
+                pt.y >= b.y1 &&
+                pt.y <= b.y2
+            );
+          if (matchedTermBtn && targetAtomSim) {
+            handleAtomSimAction(targetAtomSim, matchedTermBtn.action);
+          }
+          isDrawingRef.current = false;
+          activePointerIdRef.current = null;
+          activePointerTypeRef.current = null;
+          return;
+        }
+      }
+
+      // Clicking anywhere else on the canvas immediately dismisses any open chemical correction message
+      if (
+        activeChemCorrectionRef.current &&
+        performance.now() - lastChemCorrectionClickTimeRef.current > 180
+      ) {
+        activeChemCorrectionRef.current = null;
+        setActiveChemCorrection(null);
+      }
+
+      // 1) Any remaining On-Canvas Reaction / Atom Buttons (excluding compound terms and correction digits so they never steal card border/whitespace clicks!)
       for (const btn of [...aHit.buttons].reverse()) {
         if (
-          pt.x >= btn.x1 - 8 &&
-          pt.x <= btn.x2 + 8 &&
-          pt.y >= btn.y1 - 8 &&
-          pt.y <= btn.y2 + 8
+          btn.action.startsWith('click-reaction-term:') ||
+          btn.action.startsWith('click-chem-correction:')
+        ) {
+          continue;
+        }
+        if (
+          pt.x >= btn.x1 - 4 &&
+          pt.x <= btn.x2 + 4 &&
+          pt.y >= btn.y1 - 4 &&
+          pt.y <= btn.y2 + 4
         ) {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
@@ -31202,10 +34549,10 @@ export default function App() {
       // 1a) Grabbing the Reaction Card arrow (→), '+' sign, or background/border selects & drags the whole Reaction Card
       for (const rc of [...(aHit.reactionCards || [])].reverse()) {
         if (
-          pt.x >= rc.x1 - 4 &&
-          pt.x <= rc.x2 + 4 &&
-          pt.y >= rc.y1 - 4 &&
-          pt.y <= rc.y2 + 4
+          pt.x >= rc.x1 - 6 &&
+          pt.x <= rc.x2 + 6 &&
+          pt.y >= rc.y1 - 6 &&
+          pt.y <= rc.y2 + 6
         ) {
           startReactionCardMove(rc);
           return;
@@ -31232,6 +34579,7 @@ export default function App() {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
           if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          pushUndoSnapshot(targetPage);
           const targetSimForResize = (targetPage.atomSims || []).find((s) => s.id === rh.simId);
           const centralAt = targetSimForResize?.atoms.find((a) => a.id === rh.atomId);
           const centralOrigR = centralAt
@@ -31311,6 +34659,7 @@ export default function App() {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
           if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          pushUndoSnapshot(targetPage);
           updateActivePage(
             (page) => ({
               ...page,
@@ -31366,6 +34715,7 @@ export default function App() {
           e.preventDefault();
           if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
           if (activeNodeStrokeId) setActiveNodeStrokeId(null);
+          pushUndoSnapshot(targetPage);
           const isOverMolecule =
             pt.y >= b3d.y1 + 32 && Math.hypot(pt.x - b3d.cx3d, pt.y - b3d.cy3d) <= b3d.molR;
           draggingAtomHandleRef.current = {
@@ -31480,7 +34830,7 @@ export default function App() {
                   hookePlottedWeights: nextPlotted,
                 })),
               };
-            }, false);
+            }, true);
             isDrawingRef.current = false;
             activePointerIdRef.current = null;
             activePointerTypeRef.current = null;
@@ -31512,7 +34862,7 @@ export default function App() {
                 hookeLineDrawn: nextDrawn,
               })),
             }),
-            false
+            true
           );
           if (nextDrawn) {
             setHookeLineAnim({ simId: spHit.simId, startTime: performance.now() });
@@ -31530,6 +34880,7 @@ export default function App() {
       for (const hPt of spHit.ampHandles) {
         if (Math.hypot(pt.x - hPt.x, pt.y - hPt.y) <= 24) {
           e.preventDefault();
+          pushUndoSnapshot(targetPage);
           draggingSpringAmpHandleRef.current = {
             simId: spHit.simId,
             eqCenterX: spHit.eqCenterX,
@@ -31553,6 +34904,7 @@ export default function App() {
       for (const rh of spHit.graphResizeHandles) {
         if (Math.hypot(pt.x - rh.x, pt.y - rh.y) <= 22) {
           e.preventDefault();
+          pushUndoSnapshot(targetPage);
           // Find all visible diagrams that are vertically stacked in the same column (|gx_other - gx_this| <= 32)
           const stackedKeys = spHit.graphBoxes
             .filter((gb) => Math.abs(gb.x - rh.gx) <= 32)
@@ -31615,6 +34967,7 @@ export default function App() {
             setSelectedLassoTextIds([]);
           }
           e.preventDefault();
+          pushUndoSnapshot(targetPage);
           draggingSpringGraphRef.current = {
             simId: spHit.simId,
             graphKey: gb.key,
@@ -31658,6 +35011,7 @@ export default function App() {
         if (isSpringSimulating && !isSpringPaused) {
           setIsSpringPaused(true);
         }
+        pushUndoSnapshot(targetPage);
         const curSpring = getActiveSpringSim(activePage);
         const amp = Math.max(16, curSpring?.amplitudePx || 55);
         const snapTol = Math.max(11, Math.min(16, amp * 0.22));
@@ -31706,7 +35060,7 @@ export default function App() {
             initialPhaseMode: nextMode,
             customInitialPhaseRad: baseTheta,
           };
-        });
+        }, false);
         activePointerIdRef.current = e.pointerId;
         activePointerTypeRef.current = e.pointerType;
         try {
@@ -31815,8 +35169,7 @@ export default function App() {
       }
       if (targetWaveDiag && waveMode && (targetWaveDiag.guideTop || targetWaveDiag.guideBottom)) {
         e.preventDefault();
-        setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-        setRedoStack([]);
+        pushUndoSnapshot(targetPage);
         const refGuide = targetWaveDiag.guideTop || targetWaveDiag.guideBottom!;
         if (!selectedStrokeIds.includes(refGuide.id)) {
           setSelectedStrokeIds(targetWaveDiag.memberIds);
@@ -31863,8 +35216,7 @@ export default function App() {
       }
       if (targetMathDiag && mathMode) {
         e.preventDefault();
-        setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-        setRedoStack([]);
+        pushUndoSnapshot(targetPage);
         if (!selectedStrokeIds.includes(targetMathDiag.memberIds[0])) {
           setSelectedStrokeIds(targetMathDiag.memberIds);
         }
@@ -32021,6 +35373,7 @@ export default function App() {
         layerId: activeLayerId,
       };
       lastTextCreatedTimeRef.current = performance.now();
+      textEditUndoRecordedForIdRef.current = newTxt.id;
       updateActivePage((page) => ({
         ...page,
         texts: [...(page.texts || []), newTxt],
@@ -32323,8 +35676,7 @@ export default function App() {
             targetImageIds: nextImgIds,
           };
         }
-        setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-        setRedoStack([]);
+        pushUndoSnapshot(targetPage);
         isDraggingSelectionRef.current = { startX: pt.x, startY: pt.y };
         isDrawingRef.current = true;
         return;
@@ -32448,8 +35800,7 @@ export default function App() {
                 bp.outDy !== undefined &&
                 Math.hypot(pt.x - (bp.x + bp.outDx), pt.y - (bp.y + bp.outDy)) <= 20
               ) {
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-                setRedoStack([]);
+                pushUndoSnapshot(targetPage);
                 setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'out' });
                 isDrawingRef.current = true;
                 return;
@@ -32459,8 +35810,7 @@ export default function App() {
                 bp.inDy !== undefined &&
                 Math.hypot(pt.x - (bp.x + bp.inDx), pt.y - (bp.y + bp.inDy)) <= 20
               ) {
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-                setRedoStack([]);
+                pushUndoSnapshot(targetPage);
                 setDraggingNodeIdx({ index: bezNode.nodeIdx, isControl: true, handleSide: 'in' });
                 isDrawingRef.current = true;
                 return;
@@ -32517,8 +35867,7 @@ export default function App() {
                   false
                 );
               }
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-              setRedoStack([]);
+              pushUndoSnapshot(targetPage);
               setDraggingNodeIdx({ index: bestK, isControl: false });
               isDrawingRef.current = true;
               return;
@@ -32586,8 +35935,7 @@ export default function App() {
                 }
                 renderStaticSceneRef.current();
               }
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-              setRedoStack([]);
+              pushUndoSnapshot(targetPage);
               setDraggingNodeIdx({ index: bestIdx, isControl: false });
               isDrawingRef.current = true;
               return;
@@ -32608,8 +35956,7 @@ export default function App() {
           ) {
             hoverAddNodePreviewRef.current = null;
             clearActiveOverlay();
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-            setRedoStack([]);
+            pushUndoSnapshot(targetPage);
             let newDragIdx: number | null = null;
             updateActivePage(
               (page) => ({
@@ -32635,8 +35982,7 @@ export default function App() {
           // - Hold still (~420ms) on the perimeter -> ADD a new Node!
           // - Drag immediately (moves > 10px) -> Drag/Move the shape (while keeping Nodes mode active)!
           if (isPointNearStroke(pt, target, 24, true)) {
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-            setRedoStack([]);
+            pushUndoSnapshot(targetPage);
             const pressX = pt.x;
             const pressY = pt.y;
             const targetId = target.id;
@@ -32680,7 +36026,7 @@ export default function App() {
                       return s;
                     }),
                   }),
-                  true
+                  false
                 );
 
                 if (newDragIdx !== null) {
@@ -32838,8 +36184,7 @@ export default function App() {
           !selectedStrokeIds.includes(directWeightHit.id)
         ) {
           clearActiveOverlay();
-          setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-          setRedoStack([]);
+          pushUndoSnapshot(targetPage);
           if (directWeightHit.shapeType === 'spring') {
             setSelectedHookeSpringId(directWeightHit.id);
           }
@@ -32989,8 +36334,7 @@ export default function App() {
           // A. Check Top Semicircular Rotation Arrow Handle (↻)
           if (selTextsList.length === 0 && Math.hypot(localX - 0, localY - rotStemTopY) < 20) {
             clearActiveOverlay();
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-            setRedoStack([]);
+            pushUndoSnapshot(targetPage);
             selectionTransformRef.current = {
               mode: 'rotate',
               startX: pt.x,
@@ -33015,8 +36359,7 @@ export default function App() {
             Math.hypot(localX, localY - (hh + 24)) < 19
           ) {
             clearActiveOverlay();
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-            setRedoStack([]);
+            pushUndoSnapshot(targetPage);
             selectionTransformRef.current = {
               mode: 'move',
               startX: pt.x,
@@ -33053,8 +36396,7 @@ export default function App() {
           for (const c of localCorners) {
             if (Math.hypot(localX - c.lx, localY - c.ly) < adaptiveCornerHitR) {
               clearActiveOverlay();
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-              setRedoStack([]);
+              pushUndoSnapshot(targetPage);
               const oppWorldX = bcx + c.oppLx * cosA - c.oppLy * sinA;
               const oppWorldY = bcy + c.oppLx * sinA + c.oppLy * cosA;
               selectionTransformRef.current = {
@@ -33106,8 +36448,7 @@ export default function App() {
                 (ch.edge === 'right' && Math.hypot(localX - ch.ix, localY - ch.iy) < 14)
               ) {
                 clearActiveOverlay();
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-                setRedoStack([]);
+                pushUndoSnapshot(targetPage);
                 const oppWorldX = bcx + ch.oppLx * cosA - ch.oppLy * sinA;
                 const oppWorldY = bcy + ch.oppLx * sinA + ch.oppLy * cosA;
                 selectionTransformRef.current = {
@@ -33155,8 +36496,7 @@ export default function App() {
                 (sh.sx === 1 && Math.hypot(localX - sh.ax, localY - sh.ay) < 14)
               ) {
                 clearActiveOverlay();
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-                setRedoStack([]);
+                pushUndoSnapshot(targetPage);
                 const oppWorldX = bcx + sh.oppLx * cosA - sh.oppLy * sinA;
                 const oppWorldY = bcy + sh.oppLx * sinA + sh.oppLy * cosA;
                 const rx = pt.x - oppWorldX;
@@ -33213,8 +36553,7 @@ export default function App() {
                 Math.hypot(localX - m.ax, localY - m.ay) < 15
               ) {
                 clearActiveOverlay();
-                setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-                setRedoStack([]);
+                pushUndoSnapshot(targetPage);
                 const oppWorldX = bcx + m.oppLx * cosA - m.oppLy * sinA;
                 const oppWorldY = bcy + m.oppLx * sinA + m.oppLy * cosA;
                 const rx = pt.x - oppWorldX;
@@ -33264,7 +36603,13 @@ export default function App() {
                   st.shapeType === 'resistor' ||
                   st.shapeType === 'fan' ||
                   st.shapeType === 'fan-blade' ||
-                  st.shapeType === 'fan-hub'
+                  st.shapeType === 'fan-hub' ||
+                  st.shapeType === 'ammeter' ||
+                  st.shapeType === 'ammeter-needle' ||
+                  st.shapeType === 'ammeter-label' ||
+                  st.shapeType === 'voltmeter' ||
+                  st.shapeType === 'voltmeter-needle' ||
+                  st.shapeType === 'voltmeter-label'
                 ) {
                   const sb = getStrokeBounds(st);
                   return (
@@ -33282,8 +36627,7 @@ export default function App() {
               ));
           if (canMoveSelectionAtPt) {
             clearActiveOverlay();
-            setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-            setRedoStack([]);
+            pushUndoSnapshot(targetPage);
             unhookingDragStrokeIdsRef.current = new Set();
             selectionTransformRef.current = {
               mode: 'move',
@@ -33331,8 +36675,7 @@ export default function App() {
         }
         if (hitWeightStroke) {
           clearActiveOverlay();
-          setUndoStack((u) => [...u.slice(-30), clonePageFast(targetPage)]);
-          setRedoStack([]);
+          pushUndoSnapshot(targetPage);
           if (hitWeightStroke.shapeType === 'spring') {
             setSelectedHookeSpringId(hitWeightStroke.id);
           }
@@ -33393,8 +36736,7 @@ export default function App() {
       if (selectedStrokeIds.length > 0) setSelectedStrokeIds([]);
       if (activeNodeStrokeId) setActiveNodeStrokeId(null);
       if (selectedImageId) setSelectedImageId(null);
-      setUndoStack((u) => [...u.slice(-24), clonePageFast(targetPage)]);
-      setRedoStack([]);
+      pushUndoSnapshot(targetPage);
       isDrawingRef.current = true;
       lastEraserPtRef.current = pt;
       drawEraserCursorOverlay(pt);
@@ -35141,18 +38483,20 @@ export default function App() {
       const relY = latestPt.y - dragAmp.eqCenterY;
       const proj = Math.abs(relX * dragAmp.oscUx + relY * dragAmp.oscUy);
       const nextAmp = Math.round(Math.max(18, Math.min(220, proj)));
-      updateActiveSpringSimConfig((sim) =>
-        sim.id !== dragAmp.simId
-          ? sim
-          : {
-              ...sim,
-              amplitudePx: nextAmp,
-              graphs: {
-                xt: { ...sim.graphs.xt, height: sim.graphs.xt.customMoved ? sim.graphs.xt.height : nextAmp },
-                vt: { ...sim.graphs.vt, height: sim.graphs.vt.customMoved ? sim.graphs.vt.height : nextAmp },
-                at: { ...sim.graphs.at, height: sim.graphs.at.customMoved ? sim.graphs.at.height : nextAmp },
+      updateActiveSpringSimConfig(
+        (sim) =>
+          sim.id !== dragAmp.simId
+            ? sim
+            : {
+                ...sim,
+                amplitudePx: nextAmp,
+                graphs: {
+                  xt: { ...sim.graphs.xt, height: sim.graphs.xt.customMoved ? sim.graphs.xt.height : nextAmp },
+                  vt: { ...sim.graphs.vt, height: sim.graphs.vt.customMoved ? sim.graphs.vt.height : nextAmp },
+                  at: { ...sim.graphs.at, height: sim.graphs.at.customMoved ? sim.graphs.at.height : nextAmp },
+                },
               },
-            }
+        false
       );
       return;
     }
@@ -35177,7 +38521,7 @@ export default function App() {
             };
           }
           return { ...sim, graphs: nextGraphs };
-        });
+        }, false);
       } else if (dragR.mode === 'width') {
         const minW = dragR.graphKey === 'hooke' ? 160 : 220;
         const maxW = dragR.graphKey === 'hooke' ? 520 : 680;
@@ -35191,7 +38535,7 @@ export default function App() {
             nextGraphs[k] = { ...(nextGraphs[k] || { visible: true }), width: nextW };
           }
           return { ...sim, graphs: nextGraphs };
-        });
+        }, false);
       } else {
         const minHalfH = dragR.graphKey === 'hooke' ? 35 : 24;
         const nextHalfH = Math.round(
@@ -35211,7 +38555,7 @@ export default function App() {
                 : sim.amplitudePx,
             graphs: nextGraphs,
           };
-        });
+        }, false);
       }
       return;
     }
@@ -35226,21 +38570,23 @@ export default function App() {
       const nextY = Math.round(
         Math.max(8, Math.min(pH - 120, dragG.origBoxY + (latestPt.y - dragG.startY)))
       );
-      updateActiveSpringSimConfig((sim) =>
-        sim.id !== dragG.simId
-          ? sim
-          : {
-              ...sim,
-              graphs: {
-                ...sim.graphs,
-                [dragG.graphKey]: {
-                  ...(sim.graphs[dragG.graphKey] || { visible: true }),
-                  x: nextX,
-                  y: nextY,
-                  customMoved: true,
+      updateActiveSpringSimConfig(
+        (sim) =>
+          sim.id !== dragG.simId
+            ? sim
+            : {
+                ...sim,
+                graphs: {
+                  ...sim.graphs,
+                  [dragG.graphKey]: {
+                    ...(sim.graphs[dragG.graphKey] || { visible: true }),
+                    x: nextX,
+                    y: nextY,
+                    customMoved: true,
+                  },
                 },
               },
-            }
+        false
       );
       return;
     }
@@ -35292,7 +38638,7 @@ export default function App() {
           initialPhaseMode: nextMode,
           customInitialPhaseRad: baseTheta,
         };
-      });
+      }, false);
       return;
     }
 
@@ -36642,8 +39988,8 @@ export default function App() {
 
         // B1. Proportional Resize from 4 Corners (Blue #0066ff dots — preserves exact aspect ratio!)
         if (tf.mode === 'scale') {
-          const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds);
-          const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds);
+          const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds, selectedLassoTextIds);
+          const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds, 0, 0, selectedLassoTextIds);
           let currDist = Math.max(12, distance(latestPt, { x: tf.anchorX, y: tf.anchorY }));
           let scaleFactor = Math.max(0.85, Math.min(1.18, currDist / tf.initialDist));
 
@@ -36825,10 +40171,9 @@ export default function App() {
                             x: tf.anchorX + (t.x + padLeft - tf.anchorX) * scaleFactor - padLeft,
                             y: tf.anchorY + (t.y + padTop - tf.anchorY) * scaleFactor - padTop,
                             fontSize: nextFontSize,
-                            boxWidth:
-                              t.boxWidth && t.text.includes('\n')
-                                ? Math.max(24, Math.round(t.boxWidth * scaleFactor))
-                                : undefined,
+                            boxWidth: t.boxWidth
+                              ? Math.max(36, Math.round(t.boxWidth * scaleFactor) + 2)
+                              : undefined,
                             boxHeight: undefined,
                           };
                         }
@@ -36911,8 +40256,8 @@ export default function App() {
           const fAngle = tf.frameAngle || 0;
           const cosF = Math.cos(fAngle);
           const sinF = Math.sin(fAngle);
-          const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds);
-          const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds);
+          const refBoxes = getReferenceSnapBoxes(selectedStrokeIds, effectiveImgIds, selectedLassoTextIds);
+          const curBox = getSelectionCombinedBox(selectedStrokeIds, effectiveImgIds, 0, 0, selectedLassoTextIds);
 
           const selB = getSelectionBounds();
           const curW = tf.curWidth ?? (selB ? selB.hw * 2 : 0);
@@ -37365,8 +40710,31 @@ export default function App() {
         const moveFineGain = stepMoveDist < 2.8 ? 0.65 : 1.0;
         const rawDx = (latestPt.x - tf.startX) * moveFineGain;
         const rawDy = (latestPt.y - tf.startY) * moveFineGain;
-        const refBoxes = getReferenceSnapBoxes(targetStrokeIdList, targetImgIdList);
-        const curBox = getSelectionCombinedBox(targetStrokeIdList, targetImgIdList);
+        const movingGroupIds = new Set<string>();
+        for (const sid of targetStrokeIdList) {
+          const st = activePage.strokes.find((s) => s.id === sid);
+          if (st?.groupId) movingGroupIds.add(st.groupId);
+        }
+        for (const iid of targetImgIdList) {
+          const im = (activePage.images || []).find((m) => m.id === iid);
+          if (im?.groupId) movingGroupIds.add(im.groupId);
+        }
+        const excludedTxtIdsForMove = Array.from(
+          new Set([
+            ...selectedLassoTextIds,
+            ...(activePage.texts || [])
+              .filter((t) => t.groupId && movingGroupIds.has(t.groupId))
+              .map((t) => t.id),
+          ])
+        );
+        const refBoxes = getReferenceSnapBoxes(targetStrokeIdList, targetImgIdList, excludedTxtIdsForMove);
+        const curBox = getSelectionCombinedBox(
+          targetStrokeIdList,
+          targetImgIdList,
+          0,
+          0,
+          selectedLassoTextIds
+        );
 
         let snapDx = 0;
         let snapDy = 0;
@@ -38429,7 +41797,11 @@ export default function App() {
             );
           });
           if (curBox && !isAttachedOrUnhookingWeight) {
-            const SNAP_T = 2.2;
+            const isPureTextLassoMove =
+              selectedLassoTextIds.length > 0 &&
+              targetStrokeIdList.length === 0 &&
+              targetImgIdList.length === 0;
+            const SNAP_T = isPureTextLassoMove ? 3.8 : 2.2;
             const PAGE_CENTER_SNAP_T = 6.5;
             const pageCenterX = getPageLogicalWidth(activePage) / 2;
             const candMinX = curBox.minX + rawDx;
@@ -39173,8 +42545,6 @@ export default function App() {
               holdAnchorPtRef.current = null;
               lastCreatedShapeIdsRef.current = [manualArrow.id];
               clearActiveOverlay();
-              setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-              setRedoStack([]);
               updateActivePage((page) => ({
                 ...page,
                 strokes: page.strokes.map((s) => (s.id === manualArrow.id ? manualArrow : s)),
@@ -39828,7 +43198,7 @@ export default function App() {
                     return otherSelected.length > 0 ? [...otherSelected, ...newSwIds] : newSwIds;
                   });
                   return { ...page, strokes: toggled.strokes };
-                }, false);
+                }, true);
               } else {
                 // If user tapped (without dragging) on empty space or an inner object inside a multi-object selection box, deselect or narrow selection!
                 const hitAtTap = findSelectableObjectAtPagePoint(ptUp, activePage);
@@ -40055,7 +43425,9 @@ export default function App() {
         shapePreset === 'voltage-source' ||
         shapePreset === 'inclined-plane' ||
         shapePreset === 'switch' ||
-        shapePreset === 'fan')
+        shapePreset === 'fan' ||
+        shapePreset === 'ammeter' ||
+        shapePreset === 'voltmeter')
     ) {
       clearActiveOverlay();
       let minX = Infinity,
@@ -40073,11 +43445,13 @@ export default function App() {
           ? 104
           : shapePreset === 'switch' || shapePreset === 'fan'
             ? 84
-            : shapePreset === 'battery' || shapePreset === 'voltage-source'
-              ? 96
-              : shapePreset === 'inclined-plane'
-                ? 130
-                : 120;
+            : shapePreset === 'ammeter' || shapePreset === 'voltmeter'
+              ? 76
+              : shapePreset === 'battery' || shapePreset === 'voltage-source'
+                ? 96
+                : shapePreset === 'inclined-plane'
+                  ? 130
+                  : 120;
       const minH =
         shapePreset === 'bulb'
           ? 88
@@ -40085,21 +43459,28 @@ export default function App() {
             ? 48
             : shapePreset === 'fan'
               ? 68
-              : shapePreset === 'battery'
-                ? 52
-                : shapePreset === 'voltage-source'
-                  ? 68
-                  : shapePreset === 'inclined-plane'
-                    ? 90
-                    : shapePreset === 'wave-axes'
-                      ? 110
-                      : 65;
+              : shapePreset === 'ammeter' || shapePreset === 'voltmeter'
+                ? 76
+                : shapePreset === 'battery'
+                  ? 52
+                  : shapePreset === 'voltage-source'
+                    ? 68
+                    : shapePreset === 'inclined-plane'
+                      ? 90
+                      : shapePreset === 'wave-axes'
+                        ? 110
+                        : 65;
       const w = Math.max(minW, maxX - minX);
       const h = Math.max(minH, maxY - minY);
+      const isMeterSingleTap =
+        (shapePreset === 'ammeter' || shapePreset === 'voltmeter') &&
+        Math.hypot(maxX - minX, maxY - minY) < 10;
+      const spawnX = isMeterSingleTap ? minX - w * 0.42 : minX;
+      const spawnY = isMeterSingleTap ? minY - h * 0.58 : minY;
       const stencilStrokes = createPhysicsStencilStrokes(
         shapePreset,
-        minX,
-        minY,
+        spawnX,
+        spawnY,
         w,
         h,
         strokeColor,
@@ -40117,7 +43498,9 @@ export default function App() {
           shapePreset === 'battery' ||
           shapePreset === 'voltage-source' ||
           shapePreset === 'switch' ||
-          shapePreset === 'fan'
+          shapePreset === 'fan' ||
+          shapePreset === 'ammeter' ||
+          shapePreset === 'voltmeter'
         ) {
           return splitWiresAndSyncPageSims(page, combined, createdIds);
         }
@@ -40151,7 +43534,7 @@ export default function App() {
           ? [
               rawPts[0],
               {
-                x: rawPts[0].x + 110,
+                x: rawPts[0].x + (shapePreset === 'title-box' ? 280 : 110),
                 y:
                   rawPts[0].y +
                   (shapePreset === 'ellipse' || shapePreset === 'sphere' ? 110 : 75),
@@ -40413,7 +43796,9 @@ export default function App() {
               cs.shapeType !== 'bulb-symbol' &&
               cs.shapeType !== 'resistor' &&
               cs.shapeType !== 'switch' &&
-              cs.shapeType !== 'fan'
+              cs.shapeType !== 'fan' &&
+              cs.shapeType !== 'ammeter' &&
+              cs.shapeType !== 'voltmeter'
             ) {
               return false;
             }
@@ -40579,17 +43964,21 @@ export default function App() {
       shapeType !== 'cosine' &&
       shapeType !== 'parabola' &&
       shapeType !== 'hyperbola' &&
-      shapeType !== 'arc';
+      shapeType !== 'arc' &&
+      shapeType !== 'title-box';
 
     // Respect the selected fillStyle ('none' for outline-only when "Χωρίς Γέμισμα" is active).
+    // Exception: 'title-box' ALWAYS comes filled with 90% transparency regardless of toolbar fill/transparency state!
     const commitFillStyle: FillStyleType =
-      shapeType === 'hooked-weight'
-        ? fillStyle !== 'none'
-          ? fillStyle
-          : 'solid'
-        : canAutoFillStroke
-          ? fillStyle
-          : 'none';
+      shapeType === 'title-box'
+        ? 'solid'
+        : shapeType === 'hooked-weight'
+          ? fillStyle !== 'none'
+            ? fillStyle
+            : 'solid'
+          : canAutoFillStroke
+            ? fillStyle
+            : 'none';
 
     const existingFreePtrCount =
       shapeType === 'spring-pointer'
@@ -40613,7 +44002,7 @@ export default function App() {
             : strokeColor
           : undefined,
       fillStyle: commitFillStyle,
-      fillTransparency,
+      fillTransparency: shapeType === 'title-box' ? 90 : fillTransparency,
       width: activeTool === 'highlighter' ? Math.max(16, strokeWidth * 4.5) : strokeWidth,
       opacity: activeTool === 'highlighter' ? 0.42 : 1,
       lineStyle,
@@ -40641,6 +44030,8 @@ export default function App() {
     }
     clearActiveOverlay();
 
+    // Never run hand-drawn battery/circuit guessing live on pen/pencil strokes!
+    // Hand-drawn circuit recognition ONLY runs when explicitly triggered inside Simulation -> Circuits ("Κυκλώματα").
     updateActivePage((page) => {
       const combined = [...page.strokes, { ...newStroke, zOrder: getNextPageZOrder(page) }];
       if (newStroke.shapeType === 'resistor') {
@@ -40652,7 +44043,11 @@ export default function App() {
       };
     });
 
-    if (activeTool === 'shape' && isShape && newStroke.shapeType !== 'line') {
+    if (
+      activeTool === 'shape' &&
+      isShape &&
+      newStroke.shapeType !== 'line'
+    ) {
       setSelectedStrokeIds([newStroke.id]);
       setSelectedImageId(null);
       setSelectedImageIds([]);
@@ -40718,10 +44113,16 @@ export default function App() {
         }
         if (matchedParentWeightId) {
           const pid = matchedParentWeightId;
-          window.setTimeout(() => attachWeightToWeightChain(pid, newStroke.id), 10);
+          window.setTimeout(() => {
+            suppressNextUndoRecordRef.current = true;
+            attachWeightToWeightChain(pid, newStroke.id);
+          }, 10);
         } else if (matchedSpringId) {
           const sid = matchedSpringId;
-          window.setTimeout(() => attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id), 10);
+          window.setTimeout(() => {
+            suppressNextUndoRecordRef.current = true;
+            attachMassToSpringAndCreateEquilibriumClone(sid, newStroke.id);
+          }, 10);
         }
       } else if (
         newStroke.shapeType === 'line' &&
@@ -40762,10 +44163,10 @@ export default function App() {
         }
         if (bestSup) {
           const hit = bestSup;
-          window.setTimeout(
-            () => snapAndAttachRodToSupport(newStroke.id, hit.id, fixedEnd, { x: hit.x, y: hit.y }),
-            10
-          );
+          window.setTimeout(() => {
+            suppressNextUndoRecordRef.current = true;
+            snapAndAttachRodToSupport(newStroke.id, hit.id, fixedEnd, { x: hit.x, y: hit.y });
+          }, 10);
         }
       } else if (
         newStroke.shapeType === 'circle' ||
@@ -40802,7 +44203,10 @@ export default function App() {
         }
         if (matchedRodId) {
           const rid = matchedRodId;
-          window.setTimeout(() => attachBobToRodForPendulum(rid, newStroke.id), 10);
+          window.setTimeout(() => {
+            suppressNextUndoRecordRef.current = true;
+            attachBobToRodForPendulum(rid, newStroke.id);
+          }, 10);
         }
       } else if (
         newStroke.shapeType === 'rectangle' ||
@@ -40844,7 +44248,10 @@ export default function App() {
         }
         if (matchedInclineId) {
           const iid = matchedInclineId;
-          window.setTimeout(() => attachBlockToInclineForSim(iid, newStroke.id), 10);
+          window.setTimeout(() => {
+            suppressNextUndoRecordRef.current = true;
+            attachBlockToInclineForSim(iid, newStroke.id);
+          }, 10);
         }
       } else if (
         (newStroke.shapeType === 'spring-pointer' ||
@@ -40887,7 +44294,10 @@ export default function App() {
         }
         if (matchedSpringId) {
           const sid = matchedSpringId;
-          window.setTimeout(() => attachPointerToSpring(sid, newStroke.id), 10);
+          window.setTimeout(() => {
+            suppressNextUndoRecordRef.current = true;
+            attachPointerToSpring(sid, newStroke.id);
+          }, 10);
         }
       }
     }
@@ -41286,6 +44696,43 @@ export default function App() {
           });
         }
       }
+      const selImgIds =
+        selectedImageIds.length > 0
+          ? selectedImageIds
+          : selectedImageId
+          ? [selectedImageId]
+          : [];
+      if (selImgIds.length > 0) {
+        const selImgSet = new Set(selImgIds);
+        const imgsToTint = (activePage.images || []).filter((im) => selImgSet.has(im.id));
+        if (imgsToTint.length > 0) {
+          void Promise.all(
+            imgsToTint.map(async (im) => {
+              const src = im.originalDataUrl || im.dataUrl;
+              const tintedDataUrl = await tintMonochromeSketchDataUrl(src, c);
+              const preloaded = new Image();
+              preloaded.src = tintedDataUrl;
+              imageElementsCacheRef.current.set(tintedDataUrl, preloaded);
+              return { id: im.id, tintedDataUrl, origUrl: src };
+            })
+          ).then((results) => {
+            const byId = new Map(results.map((r) => [r.id, r]));
+            updateActivePage((page) => ({
+              ...page,
+              images: (page.images || []).map((im) => {
+                const hit = byId.get(im.id);
+                if (!hit) return im;
+                return {
+                  ...im,
+                  dataUrl: hit.tintedDataUrl,
+                  originalDataUrl: im.originalDataUrl || hit.origUrl,
+                };
+              }),
+            }));
+          });
+        }
+      }
+
       const baseIds =
         selectedStrokeIds.length > 0
           ? selectedStrokeIds
@@ -41431,6 +44878,14 @@ export default function App() {
                   fillTransparency: 0,
                 };
               }
+              if (s.shapeType === 'ammeter-needle' || s.shapeType === 'voltmeter-needle') {
+                return {
+                  ...s,
+                  color: c,
+                  fillColor: s.fillStyle && s.fillStyle !== 'none' ? c : undefined,
+                  fillTransparency: s.fillStyle && s.fillStyle !== 'none' ? 0 : undefined,
+                };
+              }
               return {
                 ...s,
                 color: c,
@@ -41449,6 +44904,9 @@ export default function App() {
       selectedLassoTextIds,
       selectedTextId,
       editingTextId,
+      selectedImageId,
+      selectedImageIds,
+      activePage.images,
       updateActivePage,
       recordRecentColor,
     ]
@@ -41748,6 +45206,17 @@ export default function App() {
                 fillTransparency: 0,
               };
             }
+            if (s.shapeType === 'ammeter-needle' || s.shapeType === 'voltmeter-needle') {
+              if (s.points.length >= 3) {
+                return {
+                  ...s,
+                  fillStyle: 'solid',
+                  fillColor: s.color,
+                  fillTransparency: 0,
+                };
+              }
+              return s;
+            }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
               return {
                 ...s,
@@ -41823,6 +45292,17 @@ export default function App() {
                 fillTransparency: 0,
               };
             }
+            if (s.shapeType === 'ammeter-needle' || s.shapeType === 'voltmeter-needle') {
+              if (s.points.length >= 3) {
+                return {
+                  ...s,
+                  fillStyle: 'solid',
+                  fillColor: s.color,
+                  fillTransparency: 0,
+                };
+              }
+              return s;
+            }
             if (s.isShape || isFreehandLoopClosed(s.points, true)) {
               return {
                 ...s,
@@ -41844,6 +45324,105 @@ export default function App() {
       updateActivePage,
     ]
   );
+
+  const handleCreateNewNoteTab = useCallback(() => {
+    const newNb: Notebook = {
+      id: `nb-${Date.now()}`,
+      title: `Σημείωση ${notebooks.length + 1}`,
+      folder: activeLibraryFolder || activeNotebook?.folder || '',
+      coverColor: '#0284c7',
+      updatedAt: new Date().toISOString(),
+      sourceFormat: '.bestnotes',
+      pages: [
+        {
+          id: `p-${Date.now()}`,
+          title: 'Σελίδα 1',
+          template: 'grid',
+          orientation: 'portrait',
+          layers: [
+            { id: 'layer-1', name: 'Σχήμα Άσκησης', visible: true, locked: false, opacity: 1 },
+            { id: 'layer-2', name: 'Πράξεις & Λύση', visible: true, locked: false, opacity: 1 },
+          ],
+          strokes: [],
+          texts: [],
+          images: [],
+          tapes: [],
+        },
+      ],
+    };
+    userEditedInSessionRef.current.add(newNb.id);
+    setNotebooks((prev) => [newNb, ...prev]);
+    setOpenNotebookIds((prev) => [...prev, newNb.id]);
+    setActiveNotebookId(newNb.id);
+    setActivePageIndex(0);
+    activeDrawingPageIndexRef.current = 0;
+    panRef.current = { x: 0, y: 0 };
+    setPan({ x: 0, y: 0 });
+    setViewMode('editor');
+    showToast(`📄 Νέα Σημείωση: «${newNb.title}»`);
+  }, [notebooks.length, activeLibraryFolder, activeNotebook?.folder, showToast]);
+
+  const handleCloseCurrentTab = useCallback(() => {
+    if (viewMode !== 'editor') return;
+    const targetCloseId = activeNotebookId || activeNotebook?.id;
+    if (!targetCloseId) return;
+    const rem = openNotebookIds.filter(
+      (id) => id !== targetCloseId && notebooks.some((n) => n.id === id)
+    );
+    setIsClosingDocument(true);
+    window.setTimeout(() => {
+      setIsClosingDocument(false);
+      setOpenNotebookIds(rem);
+      if (rem.length === 0) {
+        if (!activeLibraryFolder && activeNotebook?.folder) {
+          setActiveLibraryFolder(activeNotebook.folder);
+        }
+        setActiveNotebookId('');
+        setViewMode('library');
+      } else {
+        setActiveNotebookId(rem[rem.length - 1]);
+      }
+    }, 110);
+  }, [viewMode, activeNotebookId, activeNotebook, openNotebookIds, notebooks, activeLibraryFolder]);
+
+  // Global Tab Shortcuts: Cmd+T / Ctrl+T / Alt+T (New File Tab) & Cmd+W / Ctrl+W / Alt+W (Close Current Tab)
+  useEffect(() => {
+    const onTabShortcutKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[contenteditable="true"]'))
+      ) {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey || e.altKey) && !e.shiftKey) {
+        const code = e.code;
+        const key = e.key.toLowerCase();
+        if (code === 'KeyT' || key === 't' || key === 'τ') {
+          e.preventDefault();
+          e.stopPropagation();
+          handleCreateNewNoteTab();
+          return;
+        }
+        if (code === 'KeyW' || key === 'w' || key === 'ς') {
+          if (viewMode === 'editor') {
+            e.preventDefault();
+            e.stopPropagation();
+            handleCloseCurrentTab();
+          }
+          return;
+        }
+      }
+    };
+    window.addEventListener('keydown', onTabShortcutKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', onTabShortcutKeyDown, { capture: true });
+    };
+  }, [handleCreateNewNoteTab, handleCloseCurrentTab, viewMode]);
 
   // GLOBAL KEYBOARD SHORTCUTS (Works identically in both Greek [Ελληνικά] & English [Αγγλικά] keyboard layouts!)
   // P / Π -> Pencil/Pen ('pen')
@@ -41877,7 +45456,7 @@ export default function App() {
         }
         if (e.code === 'Digit0' || e.code === 'Numpad0' || e.key === '0') {
           e.preventDefault();
-          const fitZ = computeFitWidthZoom();
+          const fitZ = Math.min(1.4, computeFitWidthZoom());
           zoomAroundViewportCenter(Math.abs(zoomRef.current - fitZ) < 0.03 ? 1.0 : fitZ);
           return;
         }
@@ -42028,6 +45607,270 @@ export default function App() {
       }
 
       if (e.altKey) return;
+
+      // ArrowUp / ArrowDown / ArrowLeft / ArrowRight -> Micro-movement (μικρο-μετατόπιση) of any selected object on canvas!
+      if (
+        (e.key === 'ArrowLeft' ||
+          e.key === 'ArrowRight' ||
+          e.key === 'ArrowUp' ||
+          e.key === 'ArrowDown') &&
+        !showThumbnailsModal &&
+        !showSettingsModal &&
+        !showShapeLibraryPanel &&
+        !target?.closest('[data-ruler-root="true"]')
+      ) {
+        const nudgeStep = e.shiftKey ? 5 : 1.5;
+        const dx = e.key === 'ArrowLeft' ? -nudgeStep : e.key === 'ArrowRight' ? nudgeStep : 0;
+        const dy = e.key === 'ArrowUp' ? -nudgeStep : e.key === 'ArrowDown' ? nudgeStep : 0;
+
+        const effectiveImgIds =
+          selectedImageIds.length > 0
+            ? selectedImageIds
+            : selectedImageId
+              ? [selectedImageId]
+              : [];
+        const baseIds =
+          selectedStrokeIds.length > 0
+            ? selectedStrokeIds
+            : activeNodeStrokeId
+              ? [activeNodeStrokeId]
+              : [];
+        const effectiveTxtIds =
+          selectedLassoTextIds.length > 0
+            ? selectedLassoTextIds
+            : selectedTextId !== null
+              ? [selectedTextId]
+              : [];
+
+        if (effectiveImgIds.length > 0 || baseIds.length > 0 || effectiveTxtIds.length > 0) {
+          e.preventDefault();
+          const now = performance.now();
+          const shouldRecordUndo = !e.repeat && now - lastArrowNudgeAtRef.current > 650;
+          lastArrowNudgeAtRef.current = now;
+
+          updateActivePage((page) => {
+            const baseSet = new Set(baseIds);
+            const imgSet = new Set(effectiveImgIds);
+            const txtSet = new Set(effectiveTxtIds);
+
+            const selUserGroupIds = new Set<string>();
+            const selMathGroupIds = new Set<string>();
+            for (const s of page.strokes) {
+              if (baseSet.has(s.id) && s.groupId) {
+                if (s.groupId.startsWith('math-graph-grp-')) {
+                  selMathGroupIds.add(s.groupId);
+                } else {
+                  selUserGroupIds.add(s.groupId);
+                }
+              }
+            }
+            for (const im of page.images || []) {
+              if (imgSet.has(im.id) && im.groupId && !im.groupId.startsWith('math-graph-grp-')) {
+                selUserGroupIds.add(im.groupId);
+              }
+            }
+            for (const t of page.texts || []) {
+              if (txtSet.has(t.id) && t.groupId && !t.groupId.startsWith('math-graph-grp-')) {
+                selUserGroupIds.add(t.groupId);
+              }
+            }
+
+            const movingStrokeSet = new Set<string>();
+            for (const s of page.strokes) {
+              if (
+                baseSet.has(s.id) ||
+                (s.groupId && (selUserGroupIds.has(s.groupId) || selMathGroupIds.has(s.groupId)))
+              ) {
+                movingStrokeSet.add(s.id);
+              }
+            }
+
+            // Keep attached weight chains and spring pointers moving cohesively with their parent
+            for (const sid of Array.from(movingStrokeSet)) {
+              const st = page.strokes.find((s) => s.id === sid);
+              if (!st) continue;
+              const isAttachedToSpringOrParent =
+                Boolean(st.attachedToWeightId) ||
+                Boolean(st.attachedToSpringId) ||
+                (page.springSims || []).some((sm) => sm.massStrokeId === sid);
+              if (!isAttachedToSpringOrParent) {
+                for (const cid of getWeightChainIds(page, sid)) {
+                  movingStrokeSet.add(cid);
+                }
+              }
+              if (st.shapeType === 'spring') {
+                for (const ps of page.strokes) {
+                  if (ps.attachedToSpringId === st.id) {
+                    movingStrokeSet.add(ps.id);
+                  }
+                }
+                for (const sm of page.springSims || []) {
+                  if (sm.eqSpringStrokeId === st.id || sm.naturalSpringStrokeId === st.id) {
+                    for (const wid of getWeightChainIds(page, sm.massStrokeId)) {
+                      movingStrokeSet.add(wid);
+                    }
+                  }
+                }
+              }
+            }
+
+            return {
+              ...page,
+              strokes:
+                movingStrokeSet.size > 0
+                  ? page.strokes.map((s) =>
+                      movingStrokeSet.has(s.id)
+                        ? {
+                            ...s,
+                            circuitBox: s.circuitBox
+                              ? {
+                                  ...s.circuitBox,
+                                  cx: s.circuitBox.cx + dx,
+                                  termY: s.circuitBox.termY + dy,
+                                }
+                              : undefined,
+                            points: s.points.map((p) => ({
+                              ...p,
+                              x: p.x + dx,
+                              y: p.y + dy,
+                              cx: p.cx !== undefined ? p.cx + dx : undefined,
+                              cy: p.cy !== undefined ? p.cy + dy : undefined,
+                            })),
+                          }
+                        : s
+                    )
+                  : page.strokes,
+              images:
+                imgSet.size > 0 || selUserGroupIds.size > 0
+                  ? (page.images || []).map((im) =>
+                      imgSet.has(im.id) || (im.groupId && selUserGroupIds.has(im.groupId))
+                        ? { ...im, x: im.x + dx, y: im.y + dy }
+                        : im
+                    )
+                  : page.images,
+              texts:
+                txtSet.size > 0 || selUserGroupIds.size > 0 || selMathGroupIds.size > 0
+                  ? (page.texts || []).map((t) =>
+                      txtSet.has(t.id) ||
+                      (t.groupId &&
+                        (selUserGroupIds.has(t.groupId) || selMathGroupIds.has(t.groupId)))
+                        ? { ...t, x: t.x + dx, y: t.y + dy }
+                        : t
+                    )
+                  : page.texts,
+            };
+          }, shouldRecordUndo);
+          return;
+        }
+
+        // Selected Reaction Equation Card micro-nudge
+        const activeReactionId = selectedReactionSimId || selectedReactionSimIdRef.current;
+        if (
+          activeReactionId &&
+          (activePage.atomSims || []).some((s) => s.id === activeReactionId && s.showReactionEquation)
+        ) {
+          e.preventDefault();
+          const now = performance.now();
+          const shouldRecordUndo = !e.repeat && now - lastArrowNudgeAtRef.current > 650;
+          lastArrowNudgeAtRef.current = now;
+          const hitRc = atomOverlayHitRef.current?.reactionCards?.find(
+            (rc) => rc.simId === activeReactionId
+          );
+          const pW = getPageLogicalWidth(activePage);
+          const pH = getPageLogicalHeight(activePage);
+
+          updateActivePage((page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) => {
+              if (s.id !== activeReactionId) return s;
+              const baseBarX = s.reactionBarX ?? hitRc?.cx ?? pW / 2;
+              const baseBarY = s.reactionBarY ?? hitRc?.topY ?? 90;
+              const nextBarX = Math.max(70, Math.min(pW - 70, baseBarX + dx));
+              const nextBarY = Math.max(10, Math.min(pH - 48, baseBarY + dy));
+              const actualDx = nextBarX - baseBarX;
+              const actualDy = nextBarY - baseBarY;
+              return {
+                ...s,
+                reactionBarX: nextBarX,
+                reactionBarY: nextBarY,
+                mol3DBoxX: s.mol3DBoxX !== undefined ? s.mol3DBoxX + actualDx : undefined,
+                mol3DBoxY: s.mol3DBoxY !== undefined ? s.mol3DBoxY + actualDy : undefined,
+                atoms: s.atoms.map((a) => ({
+                  ...a,
+                  x: a.x + actualDx,
+                  y: a.y + actualDy,
+                })),
+              };
+            }),
+          }), shouldRecordUndo);
+          return;
+        }
+
+        // Selected Atom in Chemistry/Bohr simulation micro-nudge
+        const simWithSelectedAtom = (activePage.atomSims || []).find(
+          (s) => Boolean(s.selectedAtomId) && s.showAtomsBelowReaction !== false
+        );
+        if (simWithSelectedAtom && simWithSelectedAtom.selectedAtomId) {
+          e.preventDefault();
+          const now = performance.now();
+          const shouldRecordUndo = !e.repeat && now - lastArrowNudgeAtRef.current > 650;
+          lastArrowNudgeAtRef.current = now;
+          const selAtomId = simWithSelectedAtom.selectedAtomId;
+          const targetSimId = simWithSelectedAtom.id;
+          updateActivePage((page) => ({
+            ...page,
+            atomSims: (page.atomSims || []).map((s) =>
+              s.id !== targetSimId
+                ? s
+                : {
+                    ...s,
+                    atoms: s.atoms.map((a) =>
+                      a.id === selAtomId ? { ...a, x: a.x + dx, y: a.y + dy } : a
+                    ),
+                  }
+            ),
+          }), shouldRecordUndo);
+          return;
+        }
+
+        // Selected Spring / Hooke Graph Box micro-nudge
+        if (selectedSpringGraphKey && (activePage.springSims || []).length > 0) {
+          const hitGb = springOverlayHitRef.current?.graphBoxes.find(
+            (gb) => gb.key === selectedSpringGraphKey
+          );
+          const targetSimId = activePage.activeSpringSimId || activePage.springSims?.[0]?.id;
+          if (targetSimId) {
+            e.preventDefault();
+            const now = performance.now();
+            const shouldRecordUndo = !e.repeat && now - lastArrowNudgeAtRef.current > 650;
+            lastArrowNudgeAtRef.current = now;
+            const pW = getPageLogicalWidth(activePage);
+            const pH = getPageLogicalHeight(activePage);
+            updateActivePage((page) => ({
+              ...page,
+              springSims: (page.springSims || []).map((sim) => {
+                if (sim.id !== targetSimId) return sim;
+                const curCfg = sim.graphs[selectedSpringGraphKey] || { visible: true };
+                const baseX = curCfg.x ?? hitGb?.x ?? 40;
+                const baseY = curCfg.y ?? hitGb?.y ?? 40;
+                return {
+                  ...sim,
+                  graphs: {
+                    ...sim.graphs,
+                    [selectedSpringGraphKey]: {
+                      ...curCfg,
+                      x: Math.max(8, Math.min(pW - 220, baseX + dx)),
+                      y: Math.max(8, Math.min(pH - 120, baseY + dy)),
+                      customMoved: true,
+                    },
+                  },
+                };
+              }),
+            }), shouldRecordUndo);
+            return;
+          }
+        }
+      }
 
       // Backspace (<-- above Enter) or Delete -> Delete selected strokes/shapes/groups, images, or text box!
       if (code === 'Backspace' || code === 'Delete' || e.key === 'Backspace' || e.key === 'Delete') {
@@ -42391,17 +46234,19 @@ export default function App() {
     showAlignSubBar,
     editingTextId,
     showMathModal,
+    showThumbnailsModal,
+    showSettingsModal,
+    showShapeLibraryPanel,
     selectedStrokeIds,
     selectedImageId,
     selectedImageIds,
     selectedLassoTextIds,
     selectedTextId,
+    selectedReactionSimId,
+    selectedSpringGraphKey,
     activeNodeStrokeId,
     activeLayerId,
-    activePage.layers,
-    activePage.strokes,
-    activePage.images,
-    activePage.texts,
+    activePage,
     updateActivePage,
     toggleFillStyleToSelection,
     handleAlignSelected,
@@ -42519,7 +46364,7 @@ export default function App() {
       const reflowedText = reflowTextForResponsiveBox(rawCleanText);
       const dominantColor = selStrokes[0]?.color || strokeColor || '#1e293b';
       const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
-      const chosenFont: TextFontStyle = textFontFamily || 'calligraphic';
+      const chosenFont: TextFontStyle = 'marker';
       const boxX = Math.max(12, Math.round(minX));
       const boxY = Math.max(12, Math.round(minY));
       const pW = getPageLogicalWidth(activePage);
@@ -42530,7 +46375,7 @@ export default function App() {
         18,
         Math.min(
           64,
-          computeMaxFitFontSizeForBox(reflowedText, chosenFont, true, initBoxW, initBoxH)
+          computeMaxFitFontSizeForBox(reflowedText, chosenFont, false, initBoxW, initBoxH)
         )
       );
 
@@ -42544,7 +46389,7 @@ export default function App() {
         isMath: false,
         color: dominantColor,
         fontSize: finalFontSize,
-        bold: true,
+        bold: false,
         fontFamily: chosenFont,
         layerId: targetLayerId,
       };
@@ -42560,10 +46405,10 @@ export default function App() {
       setActiveNodeStrokeId(null);
       setSelectedTextId(newTxt.id);
       setTextFontFamily(chosenFont);
-      setTextBold(true);
+      setTextBold(false);
       setTextFontSize(finalFontSize);
       setShowToolSubBar(true);
-      showToast('✍️ Κείμενο OCR: Το χειρόγραφο μετατράπηκε σε κείμενο με επιλογή γραμματοσειράς! (Ctrl+Z για αναίρεση)');
+      showToast('✍️ Κείμενο OCR: Το χειρόγραφο μετατράπηκε σε Πένα! (Ctrl+Z για αναίρεση)');
     } finally {
       setIsConvertingHandwriting(false);
     }
@@ -42571,11 +46416,10 @@ export default function App() {
     isConvertingHandwriting,
     selectedStrokeIds,
     activeNodeStrokeId,
-    activePage.strokes,
+    activePage,
     activeNotebook?.title,
     strokeColor,
     activeLayerId,
-    textFontFamily,
     updateActivePage,
     showToast,
   ]);
@@ -42739,7 +46583,7 @@ export default function App() {
           centerX = Math.max(diagW / 2 + 24, Math.min(pW - diagW / 2 - 24, (minX + maxX) / 2));
           centerY = Math.min(pH - diagH / 2 - 24, maxY + 48 + diagH / 2);
         }
-        const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+        const axisInk = isDarkPaperColor(getEffectivePaperColor(activePage)) ? '#f8fafc' : '#0f172a';
         const wDet = detectWaveTwoVarEquation(cleanLatex) || detectWaveTwoVarEquation(plainText);
         if (wDet && wDet.isWaveXT && !wDet.forcedMode) {
           setWaveDiagramPrompt({
@@ -42841,17 +46685,28 @@ export default function App() {
 
       const rawReaction =
         chemRes?.rawEquation?.trim() || chemRes?.formattedText?.trim() || 'C + O2 -> CO2';
-      const parsed = parseChemicalReactionToAtomSetup(rawReaction);
-      const validation = validateAndCorrectChemicalEquation(rawReaction);
-      const finalEq = validation.correctedEquation || parsed.equationDisplay;
+      const aiCorrected = chemRes?.correctedEquation?.trim();
+      if (aiCorrected) {
+        registerAiChemValidation(rawReaction, aiCorrected, chemRes?.explanationNotes || []);
+      }
+      const parsed = parseChemicalReactionToAtomSetup(aiCorrected || rawReaction);
+      const validation = validateAndCorrectChemicalEquation(rawReaction, aiCorrected);
+      const finalEq =
+        validation.correctedEquation ||
+        (aiCorrected ? formatChemEquationText(aiCorrected) : parsed.equationDisplay);
       const rhsPart = (finalEq.split(/→|->|-->/)[1] || finalEq).trim();
       const primaryProduct = (rhsPart.split('+')[0] || rhsPart).trim();
 
       const ts = Date.now();
       const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
-      const centerX = Math.max(240, Math.min(540, Math.round((minX + maxX) / 2)));
-      const barY = Math.max(24, Math.round(minY));
-      const atomsY = Math.max(210, Math.round(barY + 145));
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const centerX = Math.max(180, Math.min(pW - 180, Math.round((minX + maxX) / 2)));
+      const barY = Math.max(24, Math.min(pH - 54, Math.round(minY)));
+      const atomsY =
+        barY + 260 <= pH - 16
+          ? Math.max(180, Math.round(barY + 145))
+          : Math.max(120, Math.round(barY - 155));
 
       const builtProduct = buildAtomNodesAndBondsForTerm(primaryProduct, centerX, atomsY);
 
@@ -42932,9 +46787,14 @@ export default function App() {
 
       const ts = Date.now();
       const newSimId = `asim-${ts}-${Math.random().toString(36).slice(2, 6)}`;
-      const centerX = Math.max(250, Math.min(540, Math.round(targetTxt.x + 150)));
-      const barY = Math.max(24, Math.round(targetTxt.y));
-      const atomsY = Math.max(220, Math.round(barY + 145));
+      const pW = getPageLogicalWidth(activePage);
+      const pH = getPageLogicalHeight(activePage);
+      const centerX = Math.max(180, Math.min(pW - 180, Math.round(targetTxt.x + 150)));
+      const barY = Math.max(24, Math.min(pH - 54, Math.round(targetTxt.y)));
+      const atomsY =
+        barY + 260 <= pH - 16
+          ? Math.max(180, Math.round(barY + 145))
+          : Math.max(120, Math.round(barY - 155));
       const builtProduct = buildAtomNodesAndBondsForTerm(primaryProduct, centerX, atomsY);
 
       const newAtomSim: AtomSimConfig = {
@@ -42977,8 +46837,43 @@ export default function App() {
         );
       } else {
         showToast(
-          `🧪 Σωστοί Δείκτες («${finalEq}»)! Κάνε κλικ σε οποιοδήποτε αντιδρών ή προϊόν για εμφάνιση της δομής του.`
+          `🧪 Έλεγχος Αντίδρασης («${finalEq}»)... Κάνε κλικ σε οποιοδήποτε αντιδρών ή προϊόν για εμφάνιση της δομής του.`
         );
+        // Αν η εξίσωση είναι σύνθετη (π.χ. Οξειδοαναγωγή ή Οργανική Χημεία) και δεν βρέθηκε τοπική διόρθωση, ρώτα το Gemini AI!
+        if (rawUserStr.includes('->') || rawUserStr.includes('→') || rawUserStr.includes('+')) {
+          void analyzeTypedChemistryWithGemini(rawUserStr).then((aiRes) => {
+            const aiCorr = aiRes?.correctedEquation?.trim();
+            if (!aiCorr) return;
+            const aiVal = registerAiChemValidation(
+              rawUserStr,
+              aiCorr,
+              aiRes?.explanationNotes || []
+            );
+            if (aiVal.hasCorrections) {
+              const formattedAiEq = aiVal.correctedEquation;
+              const aiRhs = (formattedAiEq.split(/→|->|-->/)[1] || formattedAiEq).trim();
+              const aiPrimaryProd = (aiRhs.split('+')[0] || aiRhs).trim();
+              const aiBuilt = buildAtomNodesAndBondsForTerm(aiPrimaryProd, centerX, atomsY);
+              updateActivePage((page) => ({
+                ...page,
+                atomSims: (page.atomSims || []).map((s) =>
+                  s.id === newSimId
+                    ? {
+                        ...s,
+                        reactionEquationText: formattedAiEq,
+                        atoms: aiBuilt.atoms,
+                        selectedAtomId: aiBuilt.atoms[0]?.id,
+                        bonds: aiBuilt.bonds,
+                      }
+                    : s
+                ),
+              }));
+              showToast(
+                `🧪 AI Χημεία: Συμπληρώθηκαν με ΚΟΚΚΙΝΟ οι δείκτες/συντελεστές → «${formattedAiEq}»!`
+              );
+            }
+          });
+        }
       }
     },
     [
@@ -43599,7 +47494,7 @@ export default function App() {
         centerY = Math.min(pH - diagH / 2 - 24, maxY + 48 + diagH / 2);
       }
 
-      const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+      const axisInk = isDarkPaperColor(getEffectivePaperColor(activePage)) ? '#f8fafc' : '#0f172a';
       const targetLayerId = selStrokes[0]?.layerId || activeLayerId;
 
       const candidateEquations = Array.from(
@@ -43864,7 +47759,7 @@ export default function App() {
         centerY = Math.min(pH - diagH / 2 - 24, txtObj.y + boxH + 48 + diagH / 2);
       }
 
-      const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+      const axisInk = isDarkPaperColor(getEffectivePaperColor(activePage)) ? '#f8fafc' : '#0f172a';
       const targetLayerId = txtObj.layerId || activeLayerId;
 
       const candidateEquations = Array.from(
@@ -44588,8 +48483,6 @@ export default function App() {
     const removeSet = new Set(selStrokes.map((s) => s.id));
     const firstIdx = activePage.strokes.findIndex((s) => removeSet.has(s.id));
 
-    setUndoStack((u) => [...u.slice(-30), clonePageFast(activePage)]);
-    setRedoStack([]);
     updateActivePage((page) => {
       const remaining = page.strokes.filter((s) => !removeSet.has(s.id));
       const insertAt = firstIdx >= 0 ? Math.min(firstIdx, remaining.length) : remaining.length;
@@ -45110,41 +49003,53 @@ export default function App() {
   ): Promise<void> => {
     if (files.length === 0) return;
 
-    // Check if the first file is a .bestnotes / .goodnotes / .zip archive
-    const firstLower = files[0].name.toLowerCase();
-    if (
-      firstLower.endsWith('.bestnotes') ||
-      firstLower.endsWith('.goodnotes') ||
-      firstLower.endsWith('.zip')
-    ) {
-      try {
-        const importedNb = await importGoodnotesFile(files[0]);
-        const finalFolder =
-          targetFolderOverride !== undefined
-            ? targetFolderOverride
-            : viewMode === 'library' && activeLibraryFolder
-            ? activeLibraryFolder
-            : importedNb.folder || '';
-        const nbWithFolder = { ...importedNb, folder: finalFolder };
-        userEditedInSessionRef.current.add(nbWithFolder.id);
-        setNotebooks((prev) => [nbWithFolder, ...prev]);
-        setOpenNotebookIds((prev) =>
-          prev.includes(nbWithFolder.id) ? prev : [...prev, nbWithFolder.id]
-        );
+    // Check if any selected/dropped files are .bestnotes / .goodnotes / .zip archives
+    const archiveFiles = files.filter((f) => {
+      const low = f.name.toLowerCase();
+      return low.endsWith('.bestnotes') || low.endsWith('.goodnotes') || low.endsWith('.zip');
+    });
+    if (archiveFiles.length > 0) {
+      let lastImported: Notebook | null = null;
+      for (const archFile of archiveFiles) {
+        try {
+          const importedNb = await importGoodnotesFile(archFile);
+          const finalFolder =
+            targetFolderOverride !== undefined
+              ? targetFolderOverride
+              : viewMode === 'library' && activeLibraryFolder
+              ? activeLibraryFolder
+              : importedNb.folder || '';
+          const nbWithFolder = { ...importedNb, folder: finalFolder };
+          userEditedInSessionRef.current.add(nbWithFolder.id);
+          setNotebooks((prev) => [nbWithFolder, ...prev]);
+          setOpenNotebookIds((prev) =>
+            prev.includes(nbWithFolder.id) ? prev : [...prev, nbWithFolder.id]
+          );
+          if (currentUser) {
+            pushNotebookToCloudTracked(currentUser.uid, nbWithFolder);
+          }
+          lastImported = nbWithFolder;
+        } catch {
+          showToast(`⚠️ Σφάλμα ανάγνωσης αρχείου "${archFile.name}"`);
+        }
+      }
+      if (lastImported) {
         if (targetFolderOverride !== undefined && viewMode === 'library') {
           showToast(
-            `📁 Το "${files[0].name}" προστέθηκε στον φάκελο «${targetFolderOverride || 'Βιβλιοθήκη'}»!`
+            `📁 Το "${archiveFiles[0].name}" προστέθηκε στον φάκελο «${targetFolderOverride || 'Βιβλιοθήκη'}»!`
           );
         } else {
-          setActiveNotebookId(nbWithFolder.id);
+          setActiveNotebookId(lastImported.id);
           setActivePageIndex(0);
           setViewMode('editor');
-          showToast(`📂 Φορτώθηκε το "${files[0].name}" (${nbWithFolder.pages.length} σελ.)!`);
+          showToast(
+            `📂 Φορτώθηκε το "${lastImported.title}" (${lastImported.pages.length} σελ.)!`
+          );
         }
-      } catch {
-        showToast('⚠️ Σφάλμα ανάγνωσης αρχείου .bestNotes');
       }
-      return;
+      const remainingFiles = files.filter((f) => !archiveFiles.includes(f));
+      if (remainingFiles.length === 0) return;
+      files = remainingFiles;
     }
 
     try {
@@ -45164,7 +49069,10 @@ export default function App() {
           lower.endsWith('.jpg') ||
           lower.endsWith('.jpeg') ||
           lower.endsWith('.png') ||
-          lower.endsWith('.webp');
+          lower.endsWith('.gif') ||
+          lower.endsWith('.webp') ||
+          lower.endsWith('.bmp') ||
+          lower.endsWith('.svg');
         if (!isPdf && !isImg) continue;
         totalNativeBytes += file.size || 0;
 
@@ -45189,12 +49097,12 @@ export default function App() {
 
       if (importedPages.length === 0) {
         setStatusBanner(null);
-        showToast('⚠️ Επίλεξε αρχείο .pdf, .jpg, .png ή .bestNotes!');
+        showToast('⚠️ Επίλεξε αρχείο .bestNotes, .pdf, .png, .jpg ή .gif!');
         return;
       }
 
       if (isNewDocMode) {
-        const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|webp)$/i, '');
+        const baseTitle = files[0].name.replace(/\.(pdf|jpe?g|png|gif|webp|bmp|svg)$/i, '');
         const assignedFolder =
           targetFolderOverride !== undefined ? targetFolderOverride : activeLibraryFolder || '';
         const newNb: Notebook = {
@@ -45357,7 +49265,7 @@ export default function App() {
       <input
         ref={fileInputPdfOrDocRef}
         type="file"
-        accept=".pdf,application/pdf,image/jpeg,image/png,image/webp,.jpg,.jpeg,.png"
+        accept=".bestNotes,.bestnotes,.goodnotes,.zip,.pdf,application/pdf,image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg"
         multiple
         className="hidden"
         onChange={handlePdfOrDocFileChange}
@@ -45404,15 +49312,24 @@ export default function App() {
           </button>
           <button
             onClick={() => {
-              if (viewMode === 'editor' && !activeLibraryFolder && activeNotebook?.folder) {
-                setActiveLibraryFolder(activeNotebook.folder);
+              if (viewMode === 'editor') {
+                setIsClosingDocument(true);
+                window.setTimeout(() => {
+                  setActiveLibraryFolder(null);
+                  setShowLibraryFavoritesOnly(false);
+                  setIsClosingDocument(false);
+                  setViewMode('library');
+                }, 110);
+              } else {
+                setActiveLibraryFolder(null);
+                setShowLibraryFavoritesOnly(false);
+                setViewMode('library');
               }
-              setViewMode('library');
             }}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer ${
               viewMode === 'library' ? 'bg-white/15 text-white' : 'text-white/90'
             }`}
-            title="Βιβλιοθήκη (Έγγραφα & Σημειώσεις)"
+            title="Βιβλιοθήκη — Επιστροφή στην Αρχική Βιβλιοθήκη"
           >
             <Home className="w-4 h-4 text-sky-300" />
             <span className="text-xs font-semibold hidden sm:inline">Βιβλιοθήκη</span>
@@ -45564,18 +49481,22 @@ export default function App() {
                       const rem = openNotebookIds.filter(
                         (id) => id !== nb.id && notebooks.some((n) => n.id === id)
                       );
-                      setOpenNotebookIds(rem);
-                      if (rem.length === 0) {
-                        if (!activeLibraryFolder && nb.folder) {
-                          setActiveLibraryFolder(nb.folder);
+                      setIsClosingDocument(true);
+                      window.setTimeout(() => {
+                        setIsClosingDocument(false);
+                        setOpenNotebookIds(rem);
+                        if (rem.length === 0) {
+                          if (!activeLibraryFolder && nb.folder) {
+                            setActiveLibraryFolder(nb.folder);
+                          }
+                          setActiveNotebookId('');
+                          setViewMode('library');
+                        } else if (activeNotebook.id === nb.id || activeNotebookId === nb.id) {
+                          setActiveNotebookId(rem[rem.length - 1]);
                         }
-                        setActiveNotebookId('');
-                        setViewMode('library');
-                      } else if (activeNotebook.id === nb.id || activeNotebookId === nb.id) {
-                        setActiveNotebookId(rem[rem.length - 1]);
-                      }
+                      }, 110);
                     }}
-                    title="Κλείσιμο καρτέλας εγγράφου"
+                    title="Κλείσιμο καρτέλας εγγράφου (Ctrl+W / Alt+W / Cmd+W)"
                     className="shrink-0 ml-0.5 opacity-65 hover:opacity-100 hover:bg-black/10 p-0.5 rounded transition cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -45584,6 +49505,16 @@ export default function App() {
               );
             });
           })()}
+          {viewMode === 'editor' && (
+            <button
+              type="button"
+              onClick={handleCreateNewNoteTab}
+              title="Νέα Σημείωση σε νέα καρτέλα (Ctrl+T / Alt+T / Cmd+T)"
+              className="mb-1 p-1.5 rounded-lg bg-[#263961] hover:bg-[#2f4573] text-slate-200 hover:text-white transition cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Right: Undo / Redo, Page Switcher, Insert/Delete Page, Drive Sync & Settings */}
@@ -45612,8 +49543,9 @@ export default function App() {
               <div className="flex items-center bg-[#263961] rounded-lg px-1 py-0.5 text-xs">
                 <button
                   onClick={() => {
-                    const step = zoomRef.current <= 0.45 ? 0.06 : 0.15;
-                    zoomAroundViewportCenter(zoomRef.current - step);
+                    const zNow = zoomRef.current;
+                    const step = zNow <= 0.45 ? 0.05 : zNow <= 1.25 ? 0.1 : 0.15;
+                    zoomAroundViewportCenter(zNow - step);
                   }}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
                   title="Σμίκρυνση (Zoom Out — ή Cmd - / Ctrl -)"
@@ -45622,7 +49554,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => {
-                    const fitWidthZ = computeFitWidthZoom();
+                    const fitWidthZ = Math.min(1.4, computeFitWidthZoom());
                     const wsH = workspaceRef.current?.clientHeight || window.innerHeight || 820;
                     const fitPageZ = Math.min(fitWidthZ, Math.max(0.35, (wsH - 36) / Math.max(200, pageHeight)));
                     const targetZ = Math.abs(zoomRef.current - fitWidthZ) <= 0.03 ? fitPageZ : fitWidthZ;
@@ -45635,8 +49567,9 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => {
-                    const step = zoomRef.current < 0.4 ? 0.06 : 0.15;
-                    zoomAroundViewportCenter(zoomRef.current + step);
+                    const zNow = zoomRef.current;
+                    const step = zNow < 0.45 ? 0.05 : zNow < 1.2 ? 0.1 : 0.15;
+                    zoomAroundViewportCenter(zNow + step);
                   }}
                   className="p-0.5 text-slate-300 hover:text-white cursor-pointer"
                   title="Μεγέθυνση (Zoom In — ή Cmd + / Ctrl +)"
@@ -45645,29 +49578,42 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Two-Pages / Multi-Page Side-by-Side Spread Button (When enabled & Zoom <= 40%, fills each row with pages depending on zoom!) */}
+              {/* Multi-Page Side-by-Side Spread Button (Gradually steps 1 <-> 2 <-> 3 <-> 4 <-> 5+ pages per row depending on zoom!) */}
               <button
                 type="button"
                 onClick={() => {
-                  const nextEnabled = !isMultiPageSpreadEnabled;
-                  isMultiPageSpreadEnabledRef.current = nextEnabled;
-                  setIsMultiPageSpreadEnabled(nextEnabled);
-                  if (nextEnabled) {
-                    const targetZ = zoomRef.current <= 0.4 ? zoomRef.current : 0.35;
-                    const targetY = -getPageTopOffset(activePageIndex, targetZ) * targetZ + 12;
-                    applyPaperTransformDirect(targetZ, 0, targetY, true, true);
-                  } else if (zoomRef.current <= 0.405) {
+                  if (multiPageSpreadCols > 1) {
                     const fitZ = computeFitWidthZoom(pageWidth, isFullBleedWidth);
                     const targetY = -getPageTopOffset(activePageIndex, fitZ) * fitZ + 8;
                     applyPaperTransformDirect(fitZ, 0, targetY, true, true);
+                  } else {
+                    isMultiPageSpreadEnabledRef.current = true;
+                    setIsMultiPageSpreadEnabled(true);
+                    const wsW =
+                      workspaceRef.current?.clientWidth ||
+                      (typeof window !== 'undefined' ? window.innerWidth : 1440);
+                    const availW = Math.max(320, wsW - 24);
+                    const pW = Math.max(200, pageWidth);
+                    const twoColZ = Math.min(
+                      0.8,
+                      Math.max(0.35, (availW - 16) / (2 * pW + PAGE_GAP))
+                    );
+                    const currentCols = getMultiPageSpreadCols(
+                      zoomRef.current,
+                      true,
+                      activeNotebook.pages.length
+                    );
+                    const targetZ = currentCols >= 2 ? zoomRef.current : twoColZ;
+                    const targetY = -getPageTopOffset(activePageIndex, targetZ) * targetZ + 12;
+                    applyPaperTransformDirect(targetZ, 0, targetY, true, true);
                   }
                 }}
                 className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                  isMultiPageSpreadEnabled
+                  multiPageSpreadCols > 1
                     ? 'bg-[#31487a] text-white ring-1 ring-sky-400/60'
                     : 'bg-[#263961] hover:bg-[#31487a] text-sky-200 hover:text-white'
                 }`}
-                title="Προβολή Πολλών Σελίδων Δίπλα-Δίπλα (κάτω από 40% Zoom γεμίζει αυτόματα κάθε γραμμή της οθόνης ανάλογα με το Zoom!)"
+                title="Προβολή Πολλών Σελίδων Δίπλα-Δίπλα (μεταβαίνει σταδιακά σε 1 ↔ 2 ↔ 3 ↔ 4 ↔ 5+ σελίδες ανά γραμμή ανάλογα με το Zoom!)"
               >
                 <svg
                   viewBox="0 0 18 14"
@@ -45681,9 +49627,7 @@ export default function App() {
                   <rect x="1.5" y="1.5" width="6.5" height="11" rx="1" />
                   <rect x="10" y="1.5" width="6.5" height="11" rx="1" />
                 </svg>
-                {isMultiPageSpreadEnabled && zoom <= 0.405 && activeNotebook.pages.length >= 2 && (
-                  <span>×{multiPageSpreadCols}</span>
-                )}
+                {multiPageSpreadCols > 1 && <span>×{multiPageSpreadCols}</span>}
               </button>
 
               {/* 16:9 Full-Width & Fullscreen Direct 1-Click Button */}
@@ -46148,14 +50092,30 @@ export default function App() {
                           {driveEmail || currentUser?.email || 'Google Drive Account'}
                         </div>
                         <div className="text-[10px] text-sky-700 font-medium mt-0.5 break-words leading-tight">
-                          📁 {driveBasePath}
-                          {activeNotebook.folder &&
-                          !driveBasePath.endsWith(activeNotebook.folder.split('/')[0])
-                            ? ` / ${activeNotebook.folder}`
-                            : activeNotebook.folder && activeNotebook.folder.includes('/')
-                            ? ` / ${activeNotebook.folder.split('/').slice(1).join(' / ')}`
-                            : ''}{' '}
-                          / {activeNotebook.title}.pdf
+                          {viewMode === 'library' && activeLibraryFolder ? (
+                            <>
+                              📁 {driveBasePath}
+                              {!driveBasePath.endsWith(activeLibraryFolder.split('/')[0])
+                                ? ` / ${activeLibraryFolder}`
+                                : activeLibraryFolder.includes('/')
+                                ? ` / ${activeLibraryFolder.split('/').slice(1).join(' / ')}`
+                                : ''}{' '}
+                              <span className="text-emerald-700 font-semibold">
+                                (Φάκελος «{activeLibraryFolder.split('/').pop()}»)
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              📁 {driveBasePath}
+                              {activeNotebook.folder &&
+                              !driveBasePath.endsWith(activeNotebook.folder.split('/')[0])
+                                ? ` / ${activeNotebook.folder}`
+                                : activeNotebook.folder && activeNotebook.folder.includes('/')
+                                ? ` / ${activeNotebook.folder.split('/').slice(1).join(' / ')}`
+                                : ''}{' '}
+                              / {activeNotebook.title}.pdf
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -46206,14 +50166,22 @@ export default function App() {
                       </div>
 
                       <button
-                        onClick={() => void performDrivePdfSync(true, undefined, undefined, true)}
-                        disabled={syncStatus === 'syncing'}
+                        onClick={() => {
+                          if (viewMode === 'library' && activeLibraryFolder) {
+                            void handleSyncFolderTreeToGoogleDrive(activeLibraryFolder);
+                          } else {
+                            void performDrivePdfSync(true, undefined, undefined, true);
+                          }
+                        }}
+                        disabled={syncStatus === 'syncing' || driveSyncingAll || Boolean(syncingDriveFolderPath)}
                         className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition cursor-pointer"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
-                        <span>
-                          {syncStatus === 'syncing'
-                            ? 'Συγχρονισμός PDF...'
+                        <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'syncing' && !driveSyncingAll ? 'animate-spin' : ''}`} />
+                        <span className="truncate">
+                          {syncStatus === 'syncing' && !driveSyncingAll
+                            ? driveSyncProgressText || 'Συγχρονισμός PDF...'
+                            : viewMode === 'library' && activeLibraryFolder
+                            ? `Συγχρονισμός Φακέλου «${activeLibraryFolder.split('/').pop()}»`
                             : 'Συγχρονισμός Τρέχουσας Σημείωσης'}
                         </span>
                       </button>
@@ -46223,10 +50191,10 @@ export default function App() {
                         disabled={driveSyncingAll || syncStatus === 'syncing'}
                         className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 disabled:opacity-50 text-[#1b2a4a] text-[11px] font-semibold transition cursor-pointer"
                       >
-                        <Cloud className="w-3.5 h-3.5 text-sky-600" />
-                        <span>
+                        <Cloud className={`w-3.5 h-3.5 text-sky-600 ${driveSyncingAll ? 'animate-pulse' : ''}`} />
+                        <span className="truncate">
                           {driveSyncingAll
-                            ? 'Συγχρονισμός όλων των φακέλων...'
+                            ? driveSyncProgressText || 'Συγχρονισμός όλων των φακέλων...'
                             : 'Συγχρονισμός Όλων των Σημειώσεων & Φακέλων'}
                         </span>
                       </button>
@@ -46249,7 +50217,7 @@ export default function App() {
                             try {
                               const res = await signInToGoogleDrive(null, true);
                               saveDriveCredentials(res.accessToken, res.email || res.displayName);
-                              await performDrivePdfSync(true, res.accessToken);
+                              await performDrivePdfSync(true, res.accessToken, undefined, true);
                             } catch (err: any) {
                               showToast(`⚠️ Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
                             }
@@ -46274,7 +50242,7 @@ export default function App() {
                             const res = await signInToGoogleDrive(currentUser?.email || null, false);
                             saveDriveCredentials(res.accessToken, res.email || res.displayName);
                             showToast(`✅ Συνδέθηκες στο Google Drive (${res.email})! Συγχρονισμός στο ${driveBasePath}...`);
-                            await performDrivePdfSync(true, res.accessToken);
+                            await performDrivePdfSync(true, res.accessToken, undefined, true);
                           } catch (err: any) {
                             showToast(`⚠️ Σφάλμα Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
                           }
@@ -46469,6 +50437,8 @@ export default function App() {
                 .sort((a, b) =>
                   librarySortBy === 'alpha'
                     ? a.name.localeCompare(b.name, 'el')
+                    : librarySortBy === 'size'
+                    ? (b.totalBytes || 0) - (a.totalBytes || 0)
                     : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
                 );
 
@@ -46515,6 +50485,8 @@ export default function App() {
                 .sort((a, b) =>
                   librarySortBy === 'alpha'
                     ? a.title.localeCompare(b.title, 'el')
+                    : librarySortBy === 'size'
+                    ? getNotebookSizeBytes(b) - getNotebookSizeBytes(a)
                     : new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
                 );
 
@@ -46523,22 +50495,25 @@ export default function App() {
                 0
               );
 
-              const formatLibraryTimestamp = (isoStr?: string, fallbackId?: string) => {
+              const formatLibraryTimestampParts = (isoStr?: string, fallbackId?: string) => {
                 let d = isoStr ? new Date(isoStr) : null;
                 if (!d || Number.isNaN(d.getTime())) {
                   const idMatch = fallbackId?.match(/(\d{12,14})/);
                   d = idMatch ? new Date(Number(idMatch[1])) : new Date();
                 }
-                const datePart = d.toLocaleDateString('el-GR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                });
-                const timePart = d.toLocaleTimeString('el-GR', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false,
-                });
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                const hh = String(d.getHours()).padStart(2, '0');
+                const min = String(d.getMinutes()).padStart(2, '0');
+                return {
+                  datePart: `${dd}/${mm}/${yyyy}`,
+                  timePart: `${hh}:${min}`,
+                };
+              };
+
+              const formatLibraryTimestamp = (isoStr?: string, fallbackId?: string) => {
+                const { datePart, timePart } = formatLibraryTimestampParts(isoStr, fallbackId);
                 return `${datePart}, ${timePart}`;
               };
 
@@ -46887,6 +50862,14 @@ export default function App() {
                   [BASES_NOTEBOOK_ID]: 'bestnotes_bases_seeded_v1',
                   [WEIGHT_NOTEBOOK_ID]: 'bestnotes_weight_seeded_v1',
                   [WATER_PHASES_NOTEBOOK_ID]: 'bestnotes_water_phases_seeded_v1',
+                  [DAVINCI_NOTEBOOK_ID]: 'bestnotes_davinci_seeded_v1',
+                  [EINSTEIN_NOTEBOOK_ID]: 'bestnotes_einstein_seeded_v1',
+                  [WATER_CHEMISTRY_NOTEBOOK_ID]: 'bestnotes_water_chemistry_seeded_v1',
+                  [WATER_PHASE_CHANGES_NOTEBOOK_ID]: 'bestnotes_water_phase_changes_seeded_v1',
+                  [CELL_BIOLOGY_NOTEBOOK_ID]: 'bestnotes_cell_biology_seeded_v1',
+                  [ELECTRICAL_RESISTANCE_NOTEBOOK_ID]: 'bestnotes_electrical_resistance_seeded_v1',
+                  [ELECTRIC_CIRCUIT_NOTEBOOK_ID]: 'bestnotes_electric_circuit_seeded_v1',
+                  [CONDUCTORS_CURRENT_NOTEBOOK_ID]: 'bestnotes_conductors_current_seeded_v1',
                 };
                 if (seedKeyById[nb.id]) {
                   try {
@@ -47050,7 +51033,7 @@ export default function App() {
                             if (activeLibraryFolder) handleFolderDrop(e, '__ROOT__');
                           }}
                           onClick={() => {
-                            setActiveLibraryFolder(null);
+                            navigateToLibraryFolder(null, true);
                             setShowLibraryFavoritesOnly(false);
                           }}
                           className={`flex items-center gap-1.5 text-2xl font-bold transition cursor-pointer rounded-xl px-2 py-0.5 focus:outline-none ${
@@ -47090,7 +51073,7 @@ export default function App() {
                                   if (!isLastCrumb) handleFolderDrop(e, crumbPath);
                                 }}
                                 onClick={() => {
-                                  setActiveLibraryFolder(crumbPath);
+                                  navigateToLibraryFolder(crumbPath, true);
                                   setShowLibraryFavoritesOnly(false);
                                 }}
                                 className={`flex items-center gap-1.5 text-2xl font-bold rounded-xl px-2 py-0.5 transition cursor-pointer focus:outline-none ${
@@ -47164,38 +51147,18 @@ export default function App() {
                           setPan({ x: 0, y: 0 });
                           setViewMode('editor');
                         }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-200/90 hover:bg-emerald-300/90 border border-emerald-400/80 text-emerald-900 text-[15px] font-bold shadow-xs transition cursor-pointer"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-[18px] h-[18px] text-emerald-800 stroke-[2.5]" />
                         <span>Νέα Σημείωση</span>
                       </button>
 
                       <button
                         onClick={() => setIsCreatingFolder((v) => !v)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold shadow-sm cursor-pointer"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-200/90 hover:bg-sky-300/90 border border-sky-400/80 text-sky-900 text-[15px] font-bold shadow-xs transition cursor-pointer"
                       >
-                        <FolderPlus className="w-4 h-4" />
+                        <FolderPlus className="w-[18px] h-[18px] text-sky-800 stroke-[2.2]" />
                         <span>Νέος Φάκελος</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          pdfImportModeRef.current = 'new-notebook';
-                          fileInputPdfOrDocRef.current?.click();
-                        }}
-                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-xs cursor-pointer"
-                      >
-                        <FileText className="w-4 h-4" />
-                        <span>PDF / Εικόνα</span>
-                      </button>
-
-                      <button
-                        onClick={() => fileInputGoodnotesRef.current?.click()}
-                        className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-sky-500 text-[#1b2a4a] text-sm font-semibold shadow-xs cursor-pointer"
-                        title="Άνοιγμα αρχείου .bestNotes / .goodnotes"
-                      >
-                        <Upload className="w-4 h-4 text-sky-600" />
-                        <span>.bestNotes</span>
                       </button>
 
                       {deletedCloudNotebooks.length > 0 && (
@@ -47260,15 +51223,27 @@ export default function App() {
                         </div>
                       </div>
                       <div className="divide-y divide-slate-100">
-                        {deletedCloudNotebooks.map((delNb) => (
+                        {deletedCloudNotebooks.map((delNb) => {
+                          const delTs = formatLibraryTimestampParts(delNb.updatedAt, delNb.id);
+                          return (
                           <div
                             key={delNb.id}
                             className="flex items-center justify-between py-2 gap-3"
                           >
                             <div>
                               <p className="text-sm font-bold text-[#1b2a4a]">{delNb.title}</p>
-                              <p className="text-[11px] text-slate-500">
-                                {delNb.pages.length} {delNb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • {formatNotebookSizeLabel(getNotebookSizeBytes(delNb))} • {formatLibraryTimestamp(delNb.updatedAt, delNb.id)}
+                              <p className="text-[11px] text-slate-500 flex items-center tabular-nums">
+                                <span className="inline-block w-[55px] shrink-0">
+                                  {delNb.pages.length} {delNb.pages.length === 1 ? 'σελίδα' : 'σελίδες'}
+                                </span>
+                                <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                <span className="inline-block w-[46px] shrink-0 text-left font-semibold text-sky-700">
+                                  {formatNotebookSizeLabel(getNotebookSizeBytes(delNb))}
+                                </span>
+                                <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                <span className="inline-block w-[60px] shrink-0">{delTs.datePart}</span>
+                                <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                <span className="inline-block w-[34px] shrink-0">{delTs.timePart}</span>
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5">
@@ -47338,7 +51313,8 @@ export default function App() {
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -47437,9 +51413,8 @@ export default function App() {
 
                         {/* Sort Selector (Left of View Toggle) */}
                         <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
-                          <span className="flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-500">
+                          <span className="flex items-center px-1.5 text-slate-400">
                             <ArrowUpDown className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Ταξινόμηση:</span>
                           </span>
                           <button
                             onClick={() => {
@@ -47456,7 +51431,7 @@ export default function App() {
                                 : 'text-slate-600 hover:text-slate-900'
                             }`}
                           >
-                            Αλφαβητικά (Α-Ω)
+                            Αλφαβητικά
                           </button>
                           <button
                             onClick={() => {
@@ -47474,6 +51449,23 @@ export default function App() {
                             }`}
                           >
                             Ημερομηνία
+                          </button>
+                          <button
+                            onClick={() => {
+                              setLibrarySortBy('size');
+                              try {
+                                localStorage.setItem('bestnotes_lib_sort_v1', 'size');
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded-lg font-semibold transition cursor-pointer ${
+                              librarySortBy === 'size'
+                                ? 'bg-white text-[#0066ff] shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Μέγεθος
                           </button>
                         </div>
 
@@ -47526,7 +51518,10 @@ export default function App() {
                       MODE A: ICONS VIEW (GRID) — Folder Icons & 1st-Page Note Thumbnails
                      ================================================================= */}
                   {libraryLayoutMode === 'grid' ? (
-                    <div className="space-y-6">
+                    <div
+                      key={`grid-${activeLibraryFolder || 'root'}`}
+                      className="space-y-6 bn-fast-fade-in"
+                    >
                       {/* Folders Section in Grid Mode */}
                       {visibleFolders.length > 0 && (
                         <div>
@@ -47553,8 +51548,8 @@ export default function App() {
                                   onDragOver={(e) => handleFolderDragOver(e, folder.path)}
                                   onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
                                   onDrop={(e) => handleFolderDrop(e, folder.path)}
-                                  onClick={() => setActiveLibraryFolder(folder.path)}
-                                  className={`group relative pt-9.5 pb-3.5 px-4 transition-all cursor-pointer flex flex-col justify-between h-38 select-none ${
+                                  onClick={() => navigateToLibraryFolder(folder.path)}
+                                  className={`group relative pt-9.5 pb-3.5 px-4 transition-all duration-200 cursor-pointer flex flex-col justify-between h-38 select-none ${
                                     isDropHover
                                       ? '-translate-y-1.5 scale-[1.03] drop-shadow-xl'
                                       : 'hover:-translate-y-1 drop-shadow-xs hover:drop-shadow-md'
@@ -47577,39 +51572,43 @@ export default function App() {
                                       fillOpacity="0.56"
                                     />
 
-                                    {/* 2. Front Folder Pocket (Lighter Shade of Chosen Color, Less Rounded Corners rx=11) */}
-                                    <rect
-                                      x="0"
-                                      y="30"
-                                      width="240"
-                                      height="130"
-                                      rx="11"
-                                      ry="11"
-                                      fill="#ffffff"
-                                    />
-                                    <rect
-                                      x="0"
-                                      y="30"
-                                      width="240"
-                                      height="130"
-                                      rx="11"
-                                      ry="11"
-                                      fill={folderColor}
-                                      fillOpacity="0.28"
-                                      stroke={isDropHover ? '#0066ff' : folderColor}
-                                      strokeOpacity={isDropHover ? '0.95' : '0.42'}
-                                      strokeWidth={isDropHover ? '3.5' : '1.5'}
-                                      strokeDasharray={
-                                        draggingLibraryNbId && !isDropHover ? '6 4' : undefined
-                                      }
-                                    />
+                                    {/* 2. Front Folder Pocket (Lighter Shade of Chosen Color) */}
+                                    <g>
+                                      <rect
+                                        x="0"
+                                        y="30"
+                                        width="240"
+                                        height="130"
+                                        rx="11"
+                                        ry="11"
+                                        fill="#ffffff"
+                                      />
+                                      <rect
+                                        x="0"
+                                        y="30"
+                                        width="240"
+                                        height="130"
+                                        rx="11"
+                                        ry="11"
+                                        fill={folderColor}
+                                        fillOpacity="0.28"
+                                        stroke={isDropHover ? '#0066ff' : folderColor}
+                                        strokeOpacity={isDropHover ? '0.95' : '0.42'}
+                                        strokeWidth={isDropHover ? '3.5' : '1.5'}
+                                        strokeDasharray={
+                                          draggingLibraryNbId && !isDropHover ? '6 4' : undefined
+                                        }
+                                      />
+                                    </g>
                                   </svg>
 
                                   <div className="relative z-10 flex items-start justify-between">
                                     {/* Custom Folder Icon directly on the folder pocket (larger & slightly lower) */}
                                     <div
-                                      className={`mt-1.5 ml-0.5 flex items-center justify-center transition ${
-                                        isDropHover ? 'scale-110' : 'group-hover:scale-105'
+                                      className={`mt-1.5 ml-0.5 flex items-center justify-center transition duration-200 ${
+                                        isDropHover
+                                          ? 'scale-110'
+                                          : 'group-hover:scale-105'
                                       }`}
                                     >
                                       {renderFolderCustomIcon(
@@ -47624,7 +51623,7 @@ export default function App() {
                                         📥 Άφησε εδώ
                                       </span>
                                     ) : (
-                                      <div className="mt-1 -mr-1.5 flex items-center gap-2">
+                                      <div className="mt-1 -mr-1.5 flex items-center gap-1.5">
                                         <button
                                           type="button"
                                           onClick={(e) => {
@@ -47650,6 +51649,95 @@ export default function App() {
                                             }`}
                                           />
                                         </button>
+                                        {(() => {
+                                          if (!driveAccessToken && !driveEmail) return null;
+                                          const isFolderDriveSyncing = Boolean(
+                                            driveSyncingAll ||
+                                              (syncingDriveFolderPath &&
+                                                (folder.path === syncingDriveFolderPath ||
+                                                  folder.path.startsWith(
+                                                    `${syncingDriveFolderPath}/`
+                                                  ) ||
+                                                  syncingDriveFolderPath.startsWith(
+                                                    `${folder.path}/`
+                                                  )))
+                                          );
+                                          const isOtherFolderDriveSyncing = Boolean(
+                                            (syncingDriveFolderPath || driveSyncingAll) &&
+                                              !isFolderDriveSyncing
+                                          );
+                                          const effBase = driveBasePath.trim();
+                                          const folderAllNotes = notebooks.filter((n) => {
+                                            const nf = normalizeFolderPath(n.folder || '');
+                                            return (
+                                              nf === folder.path ||
+                                              nf.startsWith(`${folder.path}/`)
+                                            );
+                                          });
+                                          const unsyncedFolderNotes = folderAllNotes.filter((n) => {
+                                            void driveSyncedRecords[n.id];
+                                            return !isNotebookDriveSynced(n, effBase);
+                                          });
+                                          const hasUnsyncedSubfolders = Array.from(
+                                            folderMap.keys()
+                                          ).some(
+                                            (fp) =>
+                                              (fp === folder.path ||
+                                                fp.startsWith(`${folder.path}/`)) &&
+                                              driveSyncedFolders[fp] !== effBase
+                                          );
+                                          const pendingDriveCount = unsyncedFolderNotes.length;
+                                          const needsDriveSync =
+                                            pendingDriveCount > 0 || hasUnsyncedSubfolders;
+                                          const changedPreviewNames = unsyncedFolderNotes
+                                            .slice(0, 4)
+                                            .map((n) => `«${n.title}»`)
+                                            .join(', ');
+                                          return (
+                                            <button
+                                              type="button"
+                                              disabled={
+                                                isFolderDriveSyncing || isOtherFolderDriveSyncing
+                                              }
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleSyncFolderTreeToGoogleDrive(folder.path);
+                                              }}
+                                              className={`p-1.5 rounded-lg border transition cursor-pointer focus:outline-none backdrop-blur-xs ${
+                                                isFolderDriveSyncing
+                                                  ? 'bg-red-50/95 border-red-300 text-red-600 shadow-xs opacity-100 cursor-wait'
+                                                  : isOtherFolderDriveSyncing
+                                                  ? `bg-white/75 border-white/80 ${
+                                                      needsDriveSync
+                                                        ? 'text-[#0066ff]'
+                                                        : 'text-slate-700'
+                                                    } opacity-50 cursor-not-allowed`
+                                                  : needsDriveSync
+                                                  ? 'bg-white/75 hover:bg-[#0066ff] text-[#0066ff] hover:text-white border-white/80'
+                                                  : 'bg-white/75 hover:bg-[#0066ff] text-slate-700 hover:text-white border-white/80'
+                                              }`}
+                                              title={
+                                                isFolderDriveSyncing
+                                                  ? `Σε εξέλιξη συγχρονισμός φακέλου "${folder.name}" με το Google Drive...`
+                                                  : !needsDriveSync
+                                                  ? `✅ Πλήρως συγχρονισμένος με το Google Drive (όλα τα αρχεία ενημερωμένα)`
+                                                  : pendingDriveCount > 0
+                                                  ? `Εκκρεμούν ${pendingDriveCount} αρχεία με αλλαγές (${changedPreviewNames}${
+                                                      pendingDriveCount > 4 ? '...' : ''
+                                                    }) — Πάτα για συγχρονισμό μόνο των αλλαγών!`
+                                                  : `Συγχρονισμός φακέλου "${folder.name}" & υποφακέλων με το Google Drive`
+                                              }
+                                            >
+                                              <RefreshCw
+                                                className={`w-3.5 h-3.5 ${
+                                                  isFolderDriveSyncing
+                                                    ? 'bn-drive-sync-spin text-red-600'
+                                                    : ''
+                                                }`}
+                                              />
+                                            </button>
+                                          );
+                                        })()}
                                         <button
                                           type="button"
                                           onClick={(e) => {
@@ -47744,7 +51832,7 @@ export default function App() {
                                 void importFilesAsDocument(droppedFiles, true);
                               }
                             }}
-                            title="Σύρε (Drag & Drop) ή πάτα εδώ για προσθήκη νέου .pdf, .jpg, .png"
+                            title="Σύρε (Drag & Drop) ή πάτα εδώ για άνοιγμα .bestNotes, .pdf, .png, .jpg, .gif"
                             className="group cursor-pointer flex flex-col items-stretch w-full"
                           >
                             <div
@@ -47783,22 +51871,22 @@ export default function App() {
                                 Drag &amp; Drop
                               </span>
                               <span
-                                className={`mt-1 text-xs font-semibold ${
+                                className={`mt-1 text-[11px] font-semibold leading-tight ${
                                   isLibraryDropZoneActive
                                     ? 'text-sky-700'
                                     : 'text-slate-400 group-hover:text-slate-600'
                                 }`}
                               >
-                                new .pdf • .jpg • .png
+                                .bestNotes • .pdf • .png • .jpg • .gif
                               </span>
                               <span className="mt-3 px-2.5 py-1 rounded-lg bg-white/70 border border-slate-300/60 text-[10px] font-semibold text-slate-400 group-hover:text-slate-600">
-                                + Προσθήκη Εγγράφου
+                                + Άνοιγμα Αρχείου
                               </span>
                             </div>
 
                             <div className="mt-2 w-full px-2.5 py-1.5 rounded-xl bg-slate-100/80 border border-dashed border-slate-300/80 flex flex-col items-center">
                               <span className="text-xs font-semibold text-slate-500 group-hover:text-slate-700 truncate max-w-full">
-                                Νέο Έγγραφο
+                                Νέο Έγγραφο / Αρχείο
                               </span>
                               <span className="text-[10px] text-slate-400 truncate max-w-full">
                                 Σύρε αρχείο ή πάτα εδώ
@@ -47818,15 +51906,16 @@ export default function App() {
                             const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
                             const paperBgColor = hasDocBg
                               ? '#ffffff'
-                              : p0?.template === 'dark-grid'
-                              ? '#0f172a'
-                              : '#fffdf7';
+                              : getEffectivePaperColor(p0);
+                            const p0Rules = getPaperRuleColors(paperBgColor);
                             const paperBgImage = hasDocBg
                               ? undefined
-                              : p0?.template === 'grid' || !p0?.template
-                              ? 'linear-gradient(to right, rgba(148,163,184,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.18) 1px, transparent 1px)'
-                              : p0?.template === 'ruled'
-                              ? 'linear-gradient(to bottom, rgba(148,163,184,0.24) 1px, transparent 1px)'
+                              : p0?.template === 'grid' || p0?.template === 'dark-grid' || !p0?.template
+                              ? `linear-gradient(to right, ${p0Rules.grid} 1px, transparent 1px), linear-gradient(to bottom, ${p0Rules.grid} 1px, transparent 1px)`
+                              : p0?.template === 'ruled' || p0?.template === 'cornell'
+                              ? `linear-gradient(to bottom, ${p0Rules.grid} 1px, transparent 1px)`
+                              : p0?.template === 'dotted'
+                              ? `radial-gradient(${p0Rules.dot} 1px, transparent 1px)`
                               : undefined;
 
                             const renderPageSvgContent = () => (
@@ -47929,38 +52018,105 @@ export default function App() {
                                         }
                                   }
                                 >
-                                  {isLandscapeNb ? (
-                                    /* IDEA 2: Authentic GoodNotes-Style Horizontal Notebook (4:3 / A4 Landscape) floating cleanly with no vertical background frame */
-                                    <div className="absolute inset-x-0 top-0 bottom-[18%] flex items-center justify-center pointer-events-none">
-                                      <div
-                                        className="relative w-full rounded-r-xl rounded-l-md shadow-md group-hover:shadow-xl border border-slate-300/95 overflow-hidden transition"
-                                        style={{
-                                          aspectRatio: `${pW} / ${pH}`,
-                                          backgroundColor: paperBgColor,
-                                          backgroundImage: paperBgImage,
-                                          backgroundSize: '12px 12px',
-                                          boxShadow:
-                                            '0 6px 16px -4px rgba(15, 23, 42, 0.16), 0 2px 0 0 #e2e8f0, 0 4px 0 0 #cbd5e1',
+                                  {(() => {
+                                    const nbSyncRec = driveSyncedRecords[nb.id];
+                                    const nbNormF = normalizeFolderPath(nb.folder || '');
+                                    const isNbDriveUpToDate = Boolean(
+                                      nbSyncRec &&
+                                        nbSyncRec.updatedAt === (nb.updatedAt || '') &&
+                                        nbSyncRec.title === (nb.title || '') &&
+                                        nbSyncRec.folder === nbNormF &&
+                                        nbSyncRec.basePath === driveBasePath.trim()
+                                    );
+                                    const hasNbChangesSinceSync = Boolean(
+                                      nbSyncRec && !isNbDriveUpToDate
+                                    );
+                                    const isThisNbUploading = activeDriveUploadingNbId === nb.id;
+                                    const renderNbDriveBadge = (posClass: string) => (
+                                      <button
+                                        type="button"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!isThisNbUploading) {
+                                            void performDrivePdfSync(true, undefined, nb, true);
+                                          }
                                         }}
+                                        className={`${posClass} z-20 pointer-events-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold shadow-2xs backdrop-blur-xs transition cursor-pointer ${
+                                          isThisNbUploading
+                                            ? 'bg-red-50/95 border-red-300 text-red-600 cursor-wait'
+                                            : isNbDriveUpToDate
+                                            ? 'bg-emerald-50/95 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                                            : hasNbChangesSinceSync
+                                            ? 'bg-amber-50/95 hover:bg-amber-100 border-amber-300 text-amber-700'
+                                            : 'bg-white/90 hover:bg-sky-50 border-slate-200/90 text-slate-600 hover:text-[#0066ff]'
+                                        }`}
+                                        title={
+                                          isThisNbUploading
+                                            ? `Συγχρονισμός «${nb.title}» με το Google Drive...`
+                                            : isNbDriveUpToDate
+                                            ? `✅ Ενημερωμένο στο Google Drive — Καμία αλλαγή από τον τελευταίο συγχρονισμό`
+                                            : hasNbChangesSinceSync
+                                            ? `⚠️ Έχει αλλαγές μετά τον τελευταίο συγχρονισμό Google Drive — Πάτα για άμεση ενημέρωση`
+                                            : `Δεν έχει συγχρονιστεί ακόμη στο Google Drive — Πάτα για συγχρονισμό`
+                                        }
                                       >
-                                        {/* Colored Spine on Left of Landscape Notebook */}
+                                        {isThisNbUploading ? (
+                                          <>
+                                            <RefreshCw className="w-2.5 h-2.5 bn-drive-sync-spin text-red-600" />
+                                            <span>Drive...</span>
+                                          </>
+                                        ) : isNbDriveUpToDate ? (
+                                          <span>✓ Drive</span>
+                                        ) : hasNbChangesSinceSync ? (
+                                          <>
+                                            <RefreshCw className="w-2.5 h-2.5 text-amber-600" />
+                                            <span>Αλλαγές</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                            <span>Drive</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    );
+
+                                    return isLandscapeNb ? (
+                                      /* IDEA 2: Authentic GoodNotes-Style Horizontal Notebook (4:3 / A4 Landscape) floating cleanly with no vertical background frame */
+                                      <div className="absolute inset-x-0 top-0 bottom-[18%] flex items-center justify-center pointer-events-none">
                                         <div
-                                          className="absolute left-0 top-0 bottom-0 w-2.5 z-20 shadow-xs"
+                                          className="relative w-full rounded-r-xl rounded-l-md shadow-md group-hover:shadow-xl border border-slate-300/95 overflow-hidden transition"
+                                          style={{
+                                            aspectRatio: `${pW} / ${pH}`,
+                                            backgroundColor: paperBgColor,
+                                            backgroundImage: paperBgImage,
+                                            backgroundSize: '12px 12px',
+                                            boxShadow:
+                                              '0 6px 16px -4px rgba(15, 23, 42, 0.16), 0 2px 0 0 #e2e8f0, 0 4px 0 0 #cbd5e1',
+                                          }}
+                                        >
+                                          {/* Colored Spine on Left of Landscape Notebook */}
+                                          <div
+                                            className="absolute left-0 top-0 bottom-0 w-2.5 z-20 shadow-xs"
+                                            style={{ backgroundColor: nb.coverColor }}
+                                          />
+                                          {renderNbDriveBadge('absolute top-1.5 right-1.5')}
+                                          {renderPageSvgContent()}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {/* Colored Spine on Left of Portrait Notebook */}
+                                        <div
+                                          className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
                                           style={{ backgroundColor: nb.coverColor }}
                                         />
+                                        {renderNbDriveBadge('absolute top-2 right-2')}
                                         {renderPageSvgContent()}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      {/* Colored Spine on Left of Portrait Notebook */}
-                                      <div
-                                        className="absolute left-0 top-0 bottom-0 w-3 z-20 shadow-xs"
-                                        style={{ backgroundColor: nb.coverColor }}
-                                      />
-                                      {renderPageSvgContent()}
-                                    </>
-                                  )}
+                                      </>
+                                    );
+                                  })()}
 
                                   {/* Slim Ribbon at bottom of Card: Folder/.bestNotes Badge + Compact Download, Share PDF & Trash Delete */}
                                   <div
@@ -48131,8 +52287,9 @@ export default function App() {
                                       {nb.title}
                                     </span>
                                   )}
-                                  <span className="text-[10px] text-slate-500 truncate max-w-full">
-                                    {formatLibraryTimestamp(nb.updatedAt, nb.id)} ({nb.pages.length} σελ. • <span className="font-semibold text-slate-700">{nbSizeLabel}</span>)
+                                  <span className="text-[10px] text-slate-500 truncate max-w-full tabular-nums">
+                                    {formatLibraryTimestamp(nb.updatedAt, nb.id)} ({nb.pages.length} σελ.)
+                                    <span className="ml-1.5 font-semibold text-slate-700">{nbSizeLabel}</span>
                                   </span>
                                 </div>
 
@@ -48271,7 +52428,10 @@ export default function App() {
                        MODE B: LIST VIEW — Compact Rows with Mini Folder Icon / Note Preview,
                        Pencil Edit (Direct Open) & Red Trash Delete on the Right
                        ================================================================= */
-                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden">
+                    <div
+                      key={`list-${activeLibraryFolder || 'root'}`}
+                      className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100 overflow-hidden bn-fast-fade-in"
+                    >
                       {/* Folders in List Mode */}
                       {visibleFolders.map((folder) => {
                         const isDropHover = dragOverFolderName === folder.path;
@@ -48289,8 +52449,8 @@ export default function App() {
                             onDragOver={(e) => handleFolderDragOver(e, folder.path)}
                             onDragLeave={(e) => handleFolderDragLeave(e, folder.path)}
                             onDrop={(e) => handleFolderDrop(e, folder.path)}
-                            onClick={() => setActiveLibraryFolder(folder.path)}
-                            className={`flex items-center justify-between px-4 py-3 transition cursor-pointer gap-3 ${
+                            onClick={() => navigateToLibraryFolder(folder.path)}
+                            className={`flex items-center justify-between px-4 py-3 transition-all duration-200 cursor-pointer gap-3 ${
                               isDropHover
                                 ? 'bg-amber-100/80 ring-2 ring-inset ring-[#0066ff]'
                                 : draggingLibraryNbId
@@ -48301,7 +52461,7 @@ export default function App() {
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                               {/* Mini Two-Tone Classic Folder Silhouette with Custom Icon */}
                               <div
-                                className={`relative w-11 h-9 flex items-center justify-center shrink-0 transition ${
+                                className={`relative w-11 h-9 flex items-center justify-center shrink-0 transition duration-200 ${
                                   isDropHover ? 'scale-110' : ''
                                 }`}
                               >
@@ -48377,7 +52537,7 @@ export default function App() {
                                     className={`p-2 rounded-xl border transition cursor-pointer focus:outline-none ${
                                       folder.favorite
                                         ? 'bg-amber-50 border-amber-300 text-amber-500 hover:bg-amber-100'
-                                        : 'bg-slate-50 border-slate-200/80 text-slate-400 hover:text-amber-500 hover:bg-amber-50/70'
+                                        : 'bg-slate-100 border-transparent text-slate-700 hover:text-amber-500 hover:bg-amber-50/70'
                                     }`}
                                     title={
                                       folder.favorite
@@ -48391,6 +52551,86 @@ export default function App() {
                                       }`}
                                     />
                                   </button>
+                                  {(() => {
+                                    if (!driveAccessToken && !driveEmail) return null;
+                                    const isFolderDriveSyncing = Boolean(
+                                      driveSyncingAll ||
+                                        (syncingDriveFolderPath &&
+                                          (folder.path === syncingDriveFolderPath ||
+                                            folder.path.startsWith(`${syncingDriveFolderPath}/`) ||
+                                            syncingDriveFolderPath.startsWith(`${folder.path}/`)))
+                                    );
+                                    const isOtherFolderDriveSyncing = Boolean(
+                                      (syncingDriveFolderPath || driveSyncingAll) &&
+                                        !isFolderDriveSyncing
+                                    );
+                                    const effBase = driveBasePath.trim();
+                                    const folderAllNotes = notebooks.filter((n) => {
+                                      const nf = normalizeFolderPath(n.folder || '');
+                                      return nf === folder.path || nf.startsWith(`${folder.path}/`);
+                                    });
+                                    const unsyncedFolderNotes = folderAllNotes.filter((n) => {
+                                      void driveSyncedRecords[n.id];
+                                      return !isNotebookDriveSynced(n, effBase);
+                                    });
+                                    const hasUnsyncedSubfolders = Array.from(
+                                      folderMap.keys()
+                                    ).some(
+                                      (fp) =>
+                                        (fp === folder.path ||
+                                          fp.startsWith(`${folder.path}/`)) &&
+                                        driveSyncedFolders[fp] !== effBase
+                                    );
+                                    const pendingDriveCount = unsyncedFolderNotes.length;
+                                    const needsDriveSync =
+                                      pendingDriveCount > 0 || hasUnsyncedSubfolders;
+                                    const changedPreviewNames = unsyncedFolderNotes
+                                      .slice(0, 4)
+                                      .map((n) => `«${n.title}»`)
+                                      .join(', ');
+                                    return (
+                                      <button
+                                        type="button"
+                                        disabled={isFolderDriveSyncing || isOtherFolderDriveSyncing}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          void handleSyncFolderTreeToGoogleDrive(folder.path);
+                                        }}
+                                        className={`p-2 rounded-xl transition cursor-pointer focus:outline-none ${
+                                          isFolderDriveSyncing
+                                            ? 'bg-red-50 border border-red-300 text-red-600 shadow-xs opacity-100 cursor-wait'
+                                            : isOtherFolderDriveSyncing
+                                            ? `bg-slate-100 ${
+                                                needsDriveSync
+                                                  ? 'text-[#0066ff]'
+                                                  : 'text-slate-700'
+                                              } opacity-50 cursor-not-allowed`
+                                            : needsDriveSync
+                                            ? 'bg-slate-100 hover:bg-[#0066ff] text-[#0066ff] hover:text-white'
+                                            : 'bg-slate-100 hover:bg-[#0066ff] text-slate-700 hover:text-white'
+                                        }`}
+                                        title={
+                                          isFolderDriveSyncing
+                                            ? `Σε εξέλιξη συγχρονισμός φακέλου "${folder.name}" με το Google Drive...`
+                                            : !needsDriveSync
+                                            ? `✅ Πλήρως συγχρονισμένος με το Google Drive (όλα τα αρχεία ενημερωμένα)`
+                                            : pendingDriveCount > 0
+                                            ? `Εκκρεμούν ${pendingDriveCount} αρχεία με αλλαγές (${changedPreviewNames}${
+                                                pendingDriveCount > 4 ? '...' : ''
+                                              }) — Πάτα για συγχρονισμό μόνο των αλλαγών!`
+                                            : `Συγχρονισμός φακέλου "${folder.name}" & υποφακέλων με το Google Drive`
+                                        }
+                                      >
+                                        <RefreshCw
+                                          className={`w-4 h-4 ${
+                                            isFolderDriveSyncing
+                                              ? 'bn-drive-sync-spin text-red-600'
+                                              : ''
+                                          }`}
+                                        />
+                                      </button>
+                                    );
+                                  })()}
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -48420,11 +52660,68 @@ export default function App() {
                         );
                       })}
 
+                      {/* Unified Drag & Drop / Open File Row in List Mode (.bestNotes, .pdf, .png, .jpg, .gif) */}
+                      <div
+                        onClick={() => {
+                          pdfImportModeRef.current = 'new-notebook';
+                          fileInputPdfOrDocRef.current?.click();
+                        }}
+                        onDragEnter={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsLibraryDropZoneActive(true);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (!isLibraryDropZoneActive) {
+                            setIsLibraryDropZoneActive(true);
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                            setIsLibraryDropZoneActive(false);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsLibraryDropZoneActive(false);
+                          const droppedFiles = Array.from(e.dataTransfer?.files || []);
+                          if (droppedFiles.length > 0) {
+                            void importFilesAsDocument(droppedFiles, true);
+                          }
+                        }}
+                        title="Σύρε (Drag & Drop) ή πάτα εδώ για άνοιγμα .bestNotes, .pdf, .png, .jpg, .gif"
+                        className={`flex items-center justify-between px-4 py-2.5 transition cursor-pointer select-none gap-3 ${
+                          isLibraryDropZoneActive
+                            ? 'bg-sky-100/90 ring-2 ring-inset ring-[#0066ff]'
+                            : 'bg-slate-50/70 hover:bg-sky-50/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-9 h-10 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0 bg-white text-slate-400">
+                            <Upload className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-600 truncate">
+                              + Άνοιγμα Αρχείου (Drag &amp; Drop)
+                            </p>
+                            <p className="text-[11px] text-slate-400 truncate">
+                              .bestNotes • .pdf • .png • .jpg • .gif
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Notes in List Mode */}
                       {visibleNotebooks.map((nb) => {
                         const isDraggingThisNb = draggingLibraryNbId === nb.id;
                         const nbBytes = getNotebookSizeBytes(nb);
                         const nbSizeLabel = formatNotebookSizeLabel(nbBytes);
+                        const nbTs = formatLibraryTimestampParts(nb.updatedAt, nb.id);
                         return (
                           <div
                             key={`list-nb-${nb.id}`}
@@ -48482,9 +52779,83 @@ export default function App() {
                                     {nb.title}
                                   </p>
                                 )}
+                                {(() => {
+                                  const nbSyncRec = driveSyncedRecords[nb.id];
+                                  const nbNormF = normalizeFolderPath(nb.folder || '');
+                                  const isNbDriveUpToDate = Boolean(
+                                    nbSyncRec &&
+                                      nbSyncRec.updatedAt === (nb.updatedAt || '') &&
+                                      nbSyncRec.title === (nb.title || '') &&
+                                      nbSyncRec.folder === nbNormF &&
+                                      nbSyncRec.basePath === driveBasePath.trim()
+                                  );
+                                  const hasNbChangesSinceSync = Boolean(
+                                    nbSyncRec && !isNbDriveUpToDate
+                                  );
+                                  const isThisNbUploading = activeDriveUploadingNbId === nb.id;
+                                  return (
+                                    <button
+                                      type="button"
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!isThisNbUploading) {
+                                          void performDrivePdfSync(true, undefined, nb, true);
+                                        }
+                                      }}
+                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9.5px] font-bold transition cursor-pointer shrink-0 ${
+                                        isThisNbUploading
+                                          ? 'bg-red-50 border-red-300 text-red-600 cursor-wait'
+                                          : isNbDriveUpToDate
+                                          ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                                          : hasNbChangesSinceSync
+                                          ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-700'
+                                          : 'bg-slate-50 hover:bg-sky-50 border-slate-200 text-slate-500 hover:text-[#0066ff]'
+                                      }`}
+                                      title={
+                                        isThisNbUploading
+                                          ? `Συγχρονισμός «${nb.title}» με το Google Drive...`
+                                          : isNbDriveUpToDate
+                                          ? `✅ Ενημερωμένο στο Google Drive — Καμία αλλαγή από τον τελευταίο συγχρονισμό`
+                                          : hasNbChangesSinceSync
+                                          ? `⚠️ Έχει αλλαγές μετά τον τελευταίο συγχρονισμό Google Drive — Πάτα για άμεση ενημέρωση`
+                                          : `Δεν έχει συγχρονιστεί ακόμη στο Google Drive — Πάτα για συγχρονισμό`
+                                      }
+                                    >
+                                      {isThisNbUploading ? (
+                                        <>
+                                          <RefreshCw className="w-2.5 h-2.5 bn-drive-sync-spin text-red-600" />
+                                          <span>Drive...</span>
+                                        </>
+                                      ) : isNbDriveUpToDate ? (
+                                        <span>✓ Drive</span>
+                                      ) : hasNbChangesSinceSync ? (
+                                        <>
+                                          <RefreshCw className="w-2.5 h-2.5 text-amber-600" />
+                                          <span>Αλλαγές</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                          <span>Drive</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  );
+                                })()}
                               </div>
-                              <p className="text-[11px] text-slate-500">
-                                {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'} • <span className="font-semibold text-sky-700">{nbSizeLabel}</span> • {formatLibraryTimestamp(nb.updatedAt, nb.id)}
+                              <p className="text-[11px] text-slate-500 flex items-center tabular-nums">
+                                <span className="inline-block w-[55px] shrink-0">
+                                  {nb.pages.length} {nb.pages.length === 1 ? 'σελίδα' : 'σελίδες'}
+                                </span>
+                                <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                <span className="inline-block w-[46px] shrink-0 text-left font-semibold text-sky-700">
+                                  {nbSizeLabel}
+                                </span>
+                                <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                <span className="inline-block w-[60px] shrink-0">{nbTs.datePart}</span>
+                                <span className="text-slate-300 mx-1 shrink-0">•</span>
+                                <span className="inline-block w-[34px] shrink-0">{nbTs.timePart}</span>
                               </p>
                             </div>
                           </div>
@@ -48705,12 +53076,12 @@ export default function App() {
                           />
                         </div>
 
-                        {/* 2. Folder Color (10 Colors) */}
+                        {/* 2. Folder Color (12 Two-Tone Colors matching the Folder Card) */}
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold text-slate-700">
                             Χρώμα Φακέλου
                           </label>
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
                             {FOLDER_PRESET_COLORS.map((col) => {
                               const isSelectedColor =
                                 editingFolderModal.color.toLowerCase() === col.hex.toLowerCase();
@@ -48723,16 +53094,29 @@ export default function App() {
                                       prev ? { ...prev, color: col.hex } : null
                                     )
                                   }
-                                  style={{ backgroundColor: col.hex }}
-                                  className={`w-8 h-8 rounded-xl transition cursor-pointer flex items-center justify-center focus:outline-none ${
+                                  style={{ borderColor: `${col.hex}88` }}
+                                  className={`relative w-full h-8 rounded-md bg-white border overflow-hidden flex flex-col transition cursor-pointer focus:outline-none ${
                                     isSelectedColor
-                                      ? 'ring-3 ring-[#1b2a4a] scale-110 shadow-md'
-                                      : 'opacity-85 hover:opacity-100 hover:scale-105'
+                                      ? 'ring-2 ring-[#1b2a4a] scale-105 shadow-md'
+                                      : 'opacity-90 hover:opacity-100 hover:scale-105'
                                   }`}
                                   title={col.label}
                                 >
+                                  {/* Small darker stripe at top (~26% height, matching the folder's back flap) */}
+                                  <span
+                                    style={{ backgroundColor: col.hex, opacity: 0.68 }}
+                                    className="w-full h-2 shrink-0 border-b border-black/5"
+                                  />
+                                  {/* Larger lighter body (~74% height, matching the folder's front pocket) */}
+                                  <span
+                                    style={{ backgroundColor: col.hex, opacity: 0.28 }}
+                                    className="w-full flex-1"
+                                  />
                                   {isSelectedColor && (
-                                    <span className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                                    <span
+                                      style={{ backgroundColor: col.hex }}
+                                      className="absolute inset-0 m-auto w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-xs"
+                                    />
                                   )}
                                 </button>
                               );
@@ -48740,10 +53124,10 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* 3. Folder Icon (20 Ready-Made Icons) */}
+                        {/* 3. Folder Icon (30 Ready-Made Icons) */}
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold text-slate-700">
-                            Εικονίδιο Φακέλου (20 Icons)
+                            Εικονίδιο Φακέλου (30 Icons)
                           </label>
                           <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
                             {FOLDER_PRESET_ICONS.map((ic) => {
@@ -48858,24 +53242,24 @@ export default function App() {
                                     }
                                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer focus:outline-none ${
                                       isRootSelected
-                                        ? 'bg-[#0066ff] text-white shadow-2xs'
-                                        : 'bg-white hover:bg-sky-50 text-[#1b2a4a] border border-slate-200/70'
+                                        ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-200/90 shadow-2xs'
+                                        : 'bg-white hover:bg-emerald-50/70 text-[#1b2a4a] border border-slate-200/70'
                                     }`}
                                   >
                                     <span className="flex items-center gap-2">
                                       <Home
                                         className={`w-4 h-4 ${
-                                          isRootSelected ? 'text-white' : 'text-[#0066ff]'
+                                          isRootSelected ? 'text-emerald-700' : 'text-emerald-600'
                                         }`}
                                       />
                                       <span>Βιβλιοθήκη (Αρχικός Φάκελος)</span>
                                     </span>
                                     {isRootSelected ? (
-                                      <span className="text-[10px] font-semibold bg-white/20 px-1.5 py-0.5 rounded-md">
+                                      <span className="text-[10px] font-semibold bg-emerald-200/70 text-emerald-800 px-1.5 py-0.5 rounded-md">
                                         Επιλεγμένο
                                       </span>
                                     ) : (
-                                      <span className="text-[10px] font-semibold text-[#0066ff] opacity-80">
+                                      <span className="text-[10px] font-semibold text-emerald-700 opacity-85">
                                         Μετακίνηση εδώ
                                       </span>
                                     )}
@@ -48902,14 +53286,14 @@ export default function App() {
                                         style={{ paddingLeft: `${(node.depth + 1) * 18 + 8}px` }}
                                         className={`w-full flex items-center justify-between pr-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer focus:outline-none ${
                                           isSelectedParent
-                                            ? 'bg-[#0066ff] text-white shadow-2xs'
-                                            : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200/70'
+                                            ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-200/90 shadow-2xs'
+                                            : 'bg-white hover:bg-emerald-50/70 text-slate-700 border border-slate-200/70'
                                         }`}
                                       >
                                         <span className="flex items-center gap-1.5 min-w-0 truncate">
                                           <span
                                             className={`font-mono text-[11px] select-none ${
-                                              isSelectedParent ? 'text-white/75' : 'text-slate-300'
+                                              isSelectedParent ? 'text-emerald-700/75' : 'text-slate-300'
                                             }`}
                                           >
                                             {node.isLastSibling ? '└─' : '├─'}
@@ -48917,20 +53301,18 @@ export default function App() {
                                           <span className="shrink-0">
                                             {renderFolderCustomIcon(
                                               node.icon,
-                                              isSelectedParent
-                                                ? '#ffffff'
-                                                : node.color || '#f59e0b',
+                                              node.color || '#f59e0b',
                                               'w-4 h-4'
                                             )}
                                           </span>
                                           <span className="truncate font-bold">{node.name}</span>
                                         </span>
                                         {isSelectedParent ? (
-                                          <span className="text-[10px] font-semibold bg-white/20 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
+                                          <span className="text-[10px] font-semibold bg-emerald-200/70 text-emerald-800 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
                                             Επιλεγμένο
                                           </span>
                                         ) : (
-                                          <span className="text-[10px] font-semibold text-[#0066ff] opacity-80 shrink-0 ml-2">
+                                          <span className="text-[10px] font-semibold text-emerald-700 opacity-85 shrink-0 ml-2">
                                             Μετακίνηση εδώ
                                           </span>
                                         )}
@@ -48964,7 +53346,7 @@ export default function App() {
                               );
                               setEditingFolderModal(null);
                             }}
-                            className="px-4 py-2.5 rounded-xl bg-[#0066ff] hover:bg-blue-600 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition cursor-pointer"
+                            className="px-4 py-2.5 rounded-xl bg-emerald-100/90 hover:bg-emerald-200/90 text-emerald-800 border border-emerald-200/90 text-xs font-bold shadow-xs transition cursor-pointer"
                           >
                             Αποθήκευση
                           </button>
@@ -49442,7 +53824,9 @@ export default function App() {
                               s.shapeType === 'bulb-symbol' ||
                               s.shapeType === 'resistor' ||
                               s.shapeType === 'switch' ||
-                              s.shapeType === 'fan')
+                              s.shapeType === 'fan' ||
+                              s.shapeType === 'ammeter' ||
+                              s.shapeType === 'voltmeter')
                         );
                         const hasDedicatedForceShapeSelected = activePage.strokes.some(
                           (s) =>
@@ -49458,15 +53842,20 @@ export default function App() {
                         ) {
                           return;
                         }
-                        const ok = registerOrActivateSimFromLasso();
+                        const canAutoRegisterFromTopSim =
+                          hasCircuitCompSelected ||
+                          (showSimulationPanel && simActiveCategory === 'circuits');
+                        const ok = canAutoRegisterFromTopSim
+                          ? registerOrActivateSimFromLasso()
+                          : false;
                         if (!ok && hasDedicatedForceShapeSelected && registerOrActivateForceSimFromLasso()) {
                           return;
                         }
-                        setSelectedStrokeIds([]);
-                        setSelectedImageId(null);
-                        setSelectedImageIds([]);
-                        setActiveNodeStrokeId(null);
                         if (ok) {
+                          setSelectedStrokeIds([]);
+                          setSelectedImageId(null);
+                          setSelectedImageIds([]);
+                          setActiveNodeStrokeId(null);
                           setSimActiveCategory('circuits');
                         } else {
                           setShowSimulationPanel(true);
@@ -50057,18 +54446,17 @@ export default function App() {
                             t.fontFamily === 'calligraphic-bold'
                               ? 'calligraphic'
                               : t.fontFamily || 'sans';
-                          const nextFs =
-                            t.boxWidth && t.boxHeight
-                              ? computeMaxFitFontSizeForBox(
-                                  t.text,
-                                  normFont,
-                                  nextB,
-                                  t.boxWidth,
-                                  t.boxHeight
-                                )
-                              : t.fontSize;
-                          if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
-                          return { ...t, fontFamily: normFont, bold: nextB, fontSize: nextFs };
+                          const nextBoxW =
+                            t.boxWidth && nextB && !t.bold
+                              ? Math.round(t.boxWidth * 1.07)
+                              : t.boxWidth;
+                          return {
+                            ...t,
+                            fontFamily: normFont,
+                            bold: nextB,
+                            boxWidth: nextBoxW,
+                            boxHeight: undefined,
+                          };
                         }),
                       }));
                     }
@@ -50089,23 +54477,12 @@ export default function App() {
                             .replace(/\\text\{([^}]*)\}/g, '$1')
                             .trim();
                           const nextIsMath = t.isMath && hasRealMath;
-                          const nextFs =
-                            t.boxWidth && t.boxHeight
-                              ? computeMaxFitFontSizeForBox(
-                                  cleanedPlainText,
-                                  nextFont,
-                                  t.bold,
-                                  t.boxWidth,
-                                  t.boxHeight
-                                )
-                              : t.fontSize;
-                          if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
                           return {
                             ...t,
                             text: cleanedPlainText || t.text,
                             isMath: nextIsMath,
                             fontFamily: nextFont,
-                            fontSize: nextFs,
+                            boxHeight: undefined,
                           };
                         }),
                       }));
@@ -50157,7 +54534,7 @@ export default function App() {
                           <button
                             key={fOpt.id}
                             onClick={() => applyFontFamily(fOpt.id)}
-                            style={getTextFontCss(fOpt.id, currentBold)}
+                            style={{ ...getTextFontCss(fOpt.id, currentBold), lineHeight: 1.15 }}
                             className={`px-2 py-0.5 rounded-full text-[11px] font-normal transition cursor-pointer ${
                               currentFontFamily === fOpt.id
                                 ? 'bg-purple-600 text-white shadow-xs'
@@ -50210,6 +54587,27 @@ export default function App() {
                     */}
                     {(
                       [
+                        {
+                          id: 'title-box',
+                          title: 'Πλαίσιο Τίτλου με Σκιά (Ελαφρώς Στρογγυλεμένες Γωνίες)',
+                          isSimItem: false,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <defs>
+                                <linearGradient id="tbShadowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stopColor="#0f172a" stopOpacity="0.58" />
+                                  <stop offset="65%" stopColor="#0f172a" stopOpacity="0.34" />
+                                  <stop offset="100%" stopColor="#0f172a" stopOpacity="0.08" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                d="M 28.2 5.4 L 30.2 5.4 C 31.1 5.4 31.8 6.1 31.8 7.0 L 31.8 17.6 C 31.8 18.8 30.8 19.8 29.6 19.8 L 7.2 19.8 C 6.3 19.8 5.6 19.1 5.6 18.2 L 5.6 16.6 L 26.5 16.6 C 27.4 16.6 28.2 15.8 28.2 14.9 Z"
+                                fill="url(#tbShadowGrad)"
+                              />
+                              <rect x="3" y="3" width="25.2" height="13.6" rx="2.2" fill="rgba(59, 130, 246, 0.14)" stroke="#111827" strokeWidth="1.9" />
+                            </svg>
+                          ),
+                        },
                         {
                           id: 'cuboid',
                           title: 'Παραλληλεπίπεδο / Κύβος 3D',
@@ -50486,6 +54884,32 @@ export default function App() {
                               <polygon points="17,11 23.2,13.5 20.6,17.2" fill="#0284c7" stroke="#0f172a" strokeWidth="1.1" />
                               <polygon points="17,11 13.4,17.2 10.8,13.5" fill="#0284c7" stroke="#0f172a" strokeWidth="1.1" />
                               <circle cx="17" cy="11" r="2.2" fill="#0369a1" stroke="#0f172a" strokeWidth="1.2" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'ammeter',
+                          title: 'Αμπερόμετρο (A — Σύνδεση σε Σειρά)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12.2" cy="13.5" r="6.5" stroke="#111827" strokeWidth="1.65" />
+                              <line x1="7.6" y1="18.1" x2="20.4" y2="5.3" stroke="#111827" strokeWidth="1.55" />
+                              <polygon points="22.2,3.5 18.5,4.6 21.1,7.2" fill="#111827" stroke="#111827" strokeWidth="0.7" />
+                              <path d="M 24.4 6.6 L 26.1 1.5 L 27.8 6.6 M 24.9 5.0 L 27.3 5.0" stroke="#111827" strokeWidth="1.5" />
+                            </svg>
+                          ),
+                        },
+                        {
+                          id: 'voltmeter',
+                          title: 'Βολτόμετρο (V — Σύνδεση Παράλληλα)',
+                          isSimItem: true,
+                          icon: (
+                            <svg className="w-8 h-5" viewBox="0 0 34 22" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12.2" cy="13.5" r="6.5" stroke="#111827" strokeWidth="1.65" />
+                              <line x1="7.6" y1="18.1" x2="20.4" y2="5.3" stroke="#111827" strokeWidth="1.55" />
+                              <polygon points="22.2,3.5 18.5,4.6 21.1,7.2" fill="#111827" stroke="#111827" strokeWidth="0.7" />
+                              <path d="M 24.4 1.6 L 26.1 6.6 L 27.8 1.6" stroke="#111827" strokeWidth="1.5" />
                             </svg>
                           ),
                         },
@@ -51178,6 +55602,27 @@ export default function App() {
                         const hasVs = selStrokes.some((s) => s.shapeType === 'voltage-source');
                         const hasBulb = selStrokes.some((s) => s.shapeType === 'bulb');
                         const hasRes = selStrokes.some((s) => s.shapeType === 'resistor');
+                        const previewHandRec =
+                          showSimulationPanel &&
+                          simActiveCategory === 'circuits' &&
+                          !hasBat &&
+                          !hasVs &&
+                          selStrokes.length >= 1 &&
+                          selStrokes.length <= 28
+                            ? recognizeHandDrawnCircuitSymbols(
+                                selStrokes,
+                                activePage.texts || [],
+                                {
+                                  requireCircuitContext: false,
+                                  explicitCircuitIntent: false,
+                                }
+                              )
+                            : null;
+                        const hasHandSource = Boolean(
+                          previewHandRec?.strokes.some(
+                            (s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source'
+                          )
+                        );
                         const swStroke = selStrokes.find(
                           (s) =>
                             s.shapeType === 'switch' ||
@@ -51187,7 +55632,7 @@ export default function App() {
 
                         return (
                           <>
-                            {(hasBat || hasVs) && (
+                            {(hasBat || hasVs || hasHandSource) && (
                               <button
                                 onClick={() => {
                                   registerOrActivateSimFromLasso();
@@ -51487,6 +55932,8 @@ export default function App() {
               }
             }}
             className={`relative flex-1 overflow-hidden bg-[#f1f3f6] flex justify-center items-start ${
+              isClosingDocument ? 'bn-fast-fade-out' : 'bn-fast-fade-in'
+            } ${
               isCleanProjectorMode ? 'py-0' : 'py-2'
             } px-0 touch-none`}
           >
@@ -51553,15 +56000,90 @@ export default function App() {
                 data-popover-panel="library"
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                className="fixed right-4 sm:right-12 top-28 z-40 w-[360px] sm:w-[450px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 flex flex-col max-h-[80vh]"
+                style={
+                  shapeLibPos
+                    ? { left: `${shapeLibPos.x}px`, top: `${shapeLibPos.y}px` }
+                    : { top: '146px' }
+                }
+                className={`fixed ${
+                  shapeLibPos ? '' : 'right-4 sm:right-12'
+                } z-50 w-[360px] sm:w-[465px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 flex flex-col max-h-[78vh]`}
               >
-                <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 shrink-0">
+                {(() => {
+                  const skHex = (stickerCustomColor || '#1d4ed8').replace('#', '');
+                  const skR = parseInt(skHex.slice(0, 2) || '1d', 16) / 255;
+                  const skG = parseInt(skHex.slice(2, 4) || '4e', 16) / 255;
+                  const skB = parseInt(skHex.slice(4, 6) || 'd8', 16) / 255;
+                  // Source sketch PNGs have darkest ink R_min = 29/255 = 0.1137 => L = 1.1283 * R - 0.1283
+                  const mR = 1.1283 * (1 - skR);
+                  const bR = skR - 0.1283 * (1 - skR);
+                  const mG = 1.1283 * (1 - skG);
+                  const bG = skG - 0.1283 * (1 - skG);
+                  const mB = 1.1283 * (1 - skB);
+                  const bB = skB - 0.1283 * (1 - skB);
+                  const matrixStr = [
+                    mR, 0, 0, 0, bR,
+                    mG, 0, 0, 0, bG,
+                    mB, 0, 0, 0, bB,
+                    0, 0, 0, 1, 0,
+                  ]
+                    .map((v) => v.toFixed(4))
+                    .join(' ');
+                  return (
+                    <svg width="0" height="0" className="absolute pointer-events-none">
+                      <defs>
+                        <filter id="bestnotes-sketch-tint" colorInterpolationFilters="sRGB">
+                          <feColorMatrix type="matrix" values={matrixStr} />
+                        </filter>
+                      </defs>
+                    </svg>
+                  );
+                })()}
+                <div
+                  onPointerDown={(e) => {
+                    const targetEl = e.target as HTMLElement;
+                    if (targetEl.closest('button')) return;
+                    const panelEl = e.currentTarget.closest('[data-popover-panel="library"]') as HTMLElement | null;
+                    const rect = panelEl?.getBoundingClientRect();
+                    const curX = shapeLibPos ? shapeLibPos.x : rect ? rect.left : Math.max(16, window.innerWidth - 480);
+                    const curY = shapeLibPos ? shapeLibPos.y : rect ? rect.top : 146;
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    shapeLibDragRef.current = {
+                      startX: e.clientX,
+                      startY: e.clientY,
+                      origX: curX,
+                      origY: curY,
+                    };
+                  }}
+                  onPointerMove={(e) => {
+                    const drag = shapeLibDragRef.current;
+                    if (!drag) return;
+                    const nextX = Math.max(
+                      8,
+                      Math.min(window.innerWidth - 280, drag.origX + (e.clientX - drag.startX))
+                    );
+                    const nextY = Math.max(
+                      8,
+                      Math.min(window.innerHeight - 120, drag.origY + (e.clientY - drag.startY))
+                    );
+                    setShapeLibPos({ x: nextX, y: nextY });
+                  }}
+                  onPointerUp={() => {
+                    shapeLibDragRef.current = null;
+                  }}
+                  onPointerCancel={() => {
+                    shapeLibDragRef.current = null;
+                  }}
+                  style={{ touchAction: 'none' }}
+                  title="Σύρε από εδώ για μετακίνηση του παραθύρου"
+                  className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 shrink-0 cursor-grab active:cursor-grabbing select-none"
+                >
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-emerald-800">
-                      📚 Συλλογή Εικόνων & Σχημάτων
+                      Συλλογή Εικόνων & Σχημάτων
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      Πάτα σε οποιαδήποτε διαφανή εικόνα για εισαγωγή στη σελίδα
+                      Σύρε τον τίτλο για μετακίνηση • Πάτα σε εικόνα για εισαγωγή
                     </span>
                   </div>
                   <button
@@ -51573,68 +56095,85 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Mode Tabs: All vs Educational Mind Maps vs Stickers & Icons vs User Saved Shapes */}
-                <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
-                  <button
-                    onClick={() => setLibraryTab('all')}
-                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
-                      libraryTab === 'all'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    🌐 Όλα ({MIND_MAPS_CATALOG.length + CURATED_STICKERS_CATALOG.length + shapeLibrary.length})
-                  </button>
-                  <button
-                    onClick={() => setLibraryTab('educational')}
-                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
-                      libraryTab === 'educational'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    🎓 Μαθήματα ({MIND_MAPS_CATALOG.length})
-                  </button>
-                  <button
-                    onClick={() => setLibraryTab('stickers')}
-                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
-                      libraryTab === 'stickers'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    🎨 Εικονίδια ({CURATED_STICKERS_CATALOG.length})
-                  </button>
-                  <button
-                    onClick={() => setLibraryTab('custom')}
-                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition cursor-pointer whitespace-nowrap ${
-                      libraryTab === 'custom'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    ⭐ Δικά μου ({shapeLibrary.length})
-                  </button>
-                </div>
+                {/* Mode Tabs: Όλα | Επιστήμες | Σκίτσα | Εικονίδια | Δικά μου */}
+                {(() => {
+                  const sketchesTotal = CURATED_STICKERS_CATALOG.filter(
+                    (s) => s.category === 'Μονόχρωμα Σκίτσα'
+                  ).length;
+                  const iconsTotal = CURATED_STICKERS_CATALOG.length - sketchesTotal;
+                  return (
+                    <div className="flex items-center justify-between gap-0.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
+                      <button
+                        onClick={() => setLibraryTab('all')}
+                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                          libraryTab === 'all'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Όλα ({MIND_MAPS_CATALOG.length + CURATED_STICKERS_CATALOG.length + shapeLibrary.length})
+                      </button>
+                      <button
+                        onClick={() => setLibraryTab('educational')}
+                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                          libraryTab === 'educational'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Επιστήμες ({MIND_MAPS_CATALOG.length})
+                      </button>
+                      <button
+                        onClick={() => setLibraryTab('sketches')}
+                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                          libraryTab === 'sketches'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Σκίτσα ({sketchesTotal})
+                      </button>
+                      <button
+                        onClick={() => setLibraryTab('stickers')}
+                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                          libraryTab === 'stickers'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Εικονίδια ({iconsTotal})
+                      </button>
+                      <button
+                        onClick={() => setLibraryTab('custom')}
+                        className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
+                          libraryTab === 'custom'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Δικά μου ({shapeLibrary.length})
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {libraryTab === 'all' ? (
                   (() => {
                     const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
 
-                    const matchedLessons = MIND_MAPS_CATALOG.filter((item) => {
-                      if (!qNorm) return true;
-                      const haystack = normalizeGreekText(
-                        `${item.title} ${item.tags.join(' ')} ${item.chapterTitle} ${item.chapter} ${item.description} ${item.subject} ${item.grade} ${item.englishKey}`
-                      );
-                      return matchesGreekSearchTokens(haystack, qNorm);
-                    });
+                    const matchedLessons = qNorm
+                      ? MIND_MAPS_CATALOG.map((item) => ({
+                          item,
+                          score: scoreMindMapItemSearch(item, qNorm),
+                        }))
+                          .filter((x) => x.score > 0)
+                          .sort((a, b) => b.score - a.score)
+                          .map((x) => x.item)
+                      : MIND_MAPS_CATALOG;
 
                     const matchedCuratedStickers = CURATED_STICKERS_CATALOG.filter((item) => {
                       if (!qNorm) return true;
-                      const haystack = normalizeGreekText(
-                        `${item.title} ${item.category} ${item.tags.join(' ')} ${item.iconifyId}`
-                      );
-                      return matchesGreekSearchTokens(haystack, qNorm);
+                      return matchesGreekSearchTokens(getStickerNormalizedHaystack(item), qNorm);
                     });
 
                     void stickerCacheVersion;
@@ -51663,15 +56202,15 @@ export default function App() {
 
                     const styleBadgeMap: Record<Exclude<StickerColorStyle, 'all'>, { label: string; cls: string }> = {
                       multicolor: {
-                        label: '🌈 Πολύχρωμο / 3D',
+                        label: 'Πολύχρωμο / 3D',
                         cls: 'bg-amber-50 text-amber-700 border-amber-200',
                       },
                       duotone: {
-                        label: '🎨 Δίχρωμο',
+                        label: 'Δίχρωμο',
                         cls: 'bg-sky-50 text-[#0066ff] border-sky-200',
                       },
                       monochrome: {
-                        label: '✒️ Μονόχρωμο',
+                        label: 'Μονόχρωμο',
                         cls: 'bg-slate-100 text-slate-700 border-slate-300',
                       },
                     };
@@ -51684,6 +56223,16 @@ export default function App() {
                         stickerCustomColor,
                         stickerCustomWidth
                       );
+                      if (
+                        stItem.iconifyId.startsWith('local-png:') ||
+                        (stItem.iconifyId.startsWith('sketch-png:') && !stickerCustomColor)
+                      ) {
+                        insertImageDataUrlOnPage(
+                          svgUrl,
+                          `🎨 Προστέθηκε: «${stItem.title}» (${stItem.category})`
+                        );
+                        return;
+                      }
                       try {
                         showToast(`⏳ Φόρτωση «${stItem.title}»...`);
                         const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(
@@ -51741,12 +56290,16 @@ export default function App() {
                       }
                     };
 
-                    const displayedLessons = qNorm ? matchedLessons : matchedLessons.slice(0, 8);
-                    const displayedStickers = qNorm ? matchedStickers : matchedStickers.slice(0, 12);
+                    const displayedLessons = qNorm
+                      ? matchedLessons.slice(0, libVisibleCount)
+                      : matchedLessons.slice(0, 8);
+                    const displayedStickers = qNorm
+                      ? matchedStickers.slice(0, libVisibleCount)
+                      : matchedStickers.slice(0, 12);
                     const totalFound = matchedLessons.length + matchedStickers.length + matchedCustom.length;
 
                     return (
-                      <div className="flex flex-col min-h-0 flex-1">
+                      <div key="tab-all" className="flex flex-col min-h-0 flex-1">
                         {/* Unified Search Input across Lessons + Stickers + Online Iconify + Custom */}
                         <div className="relative mb-2 shrink-0">
                           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -51782,15 +56335,15 @@ export default function App() {
                               onClick={() => setLibraryTab('educational')}
                               className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 cursor-pointer"
                             >
-                              🎓 {matchedLessons.length} μαθήματα
+                              {matchedLessons.length} επιστήμες
                             </button>
                             <button
                               type="button"
                               onClick={() => setLibraryTab('stickers')}
                               className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200 font-bold hover:bg-sky-100 cursor-pointer"
                             >
-                              🎨 {matchedStickers.length} εικονίδια
-                              {isSearchingOnlineStickers ? ' (🔍...)' : ''}
+                              {matchedStickers.length} εικονίδια
+                              {isSearchingOnlineStickers ? ' (...)' : ''}
                             </button>
                             {matchedCustom.length > 0 && (
                               <button
@@ -51798,7 +56351,7 @@ export default function App() {
                                 onClick={() => setLibraryTab('custom')}
                                 className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 cursor-pointer"
                               >
-                                ⭐ {matchedCustom.length} δικά μου
+                                {matchedCustom.length} δικά μου
                               </button>
                             )}
                           </div>
@@ -51833,7 +56386,7 @@ export default function App() {
                               <div>
                                 <div className="flex items-center justify-between mb-1.5">
                                   <span className="text-[10.5px] font-bold text-amber-800">
-                                    ⭐ Δικά μου ({matchedCustom.length})
+                                    Δικά μου ({matchedCustom.length})
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
@@ -51890,7 +56443,7 @@ export default function App() {
                               <div>
                                 <div className="flex items-center justify-between mb-1.5">
                                   <span className="text-[10.5px] font-bold text-emerald-800">
-                                    🎓 Μαθήματα & Σχεδιαγράμματα ({matchedLessons.length})
+                                    Επιστήμες & Σχεδιαγράμματα ({matchedLessons.length})
                                   </span>
                                   {!qNorm && matchedLessons.length > displayedLessons.length && (
                                     <button
@@ -51923,7 +56476,7 @@ export default function App() {
                                             {item.subject}
                                           </span>
                                           <span className="text-[9px] font-semibold text-slate-400 truncate">
-                                            {item.grade.replace(' Γυμνασίου', '')} • {item.chapter}
+                                            {item.grade.replace(' Γυμνασίου', ' Γυμν.').replace(' Λυκείου', ' Λυκ.')} • {item.chapter}
                                           </span>
                                         </div>
 
@@ -51951,7 +56504,7 @@ export default function App() {
                                       </div>
 
                                       <div className="flex flex-wrap gap-1 mt-1.5 pt-1 border-t border-slate-200/60">
-                                        {item.tags.map((tag) => (
+                                        {item.tags.slice(0, 10).map((tag) => (
                                           <button
                                             key={tag}
                                             type="button"
@@ -51960,7 +56513,11 @@ export default function App() {
                                               setShapeLibSearchQuery(tag);
                                               setStickerSearchQuery(tag);
                                             }}
-                                            className="px-1.5 py-0.5 rounded bg-white hover:bg-emerald-100 text-emerald-700 border border-slate-200/90 text-[9px] font-medium transition cursor-pointer"
+                                            className={`px-1.5 py-0.5 rounded border text-[9px] transition cursor-pointer ${
+                                              tag === 'premium'
+                                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 font-bold'
+                                                : 'bg-white hover:bg-emerald-100 text-emerald-700 border-slate-200/90 font-medium'
+                                            }`}
                                             title={`Φιλτράρισμα με ${tag}`}
                                           >
                                             {tag}
@@ -51978,8 +56535,8 @@ export default function App() {
                               <div>
                                 <div className="flex items-center justify-between mb-1.5">
                                   <span className="text-[10.5px] font-bold text-sky-800">
-                                    🎨 Εικονίδια & 3D ({matchedStickers.length})
-                                    {isSearchingOnlineStickers ? ' • 🔍 Online αναζήτηση...' : ''}
+                                    Εικονίδια & 3D ({matchedStickers.length})
+                                    {isSearchingOnlineStickers ? ' • Online αναζήτηση...' : ''}
                                   </span>
                                   {!qNorm && matchedStickers.length > displayedStickers.length && (
                                     <button
@@ -52028,6 +56585,12 @@ export default function App() {
                                             src={svgUrl}
                                             alt={stItem.title}
                                             loading="lazy"
+                                            style={
+                                              stItem.iconifyId.startsWith('sketch-png:') &&
+                                              stickerCustomColor
+                                                ? { filter: 'url(#bestnotes-sketch-tint)' }
+                                                : undefined
+                                            }
                                             onError={() =>
                                               setFailedStickerIds((prev) => {
                                                 const next = new Set(prev);
@@ -52035,7 +56598,11 @@ export default function App() {
                                                 return next;
                                               })
                                             }
-                                            className="w-12 h-12 object-contain pointer-events-none select-none group-hover:scale-110 transition-transform"
+                                            className={`${
+                                              stItem.iconifyId.startsWith('sketch-png:')
+                                                ? 'w-full h-full'
+                                                : 'w-12 h-12'
+                                            } object-contain pointer-events-none select-none group-hover:scale-110 transition-transform`}
                                           />
                                         </div>
 
@@ -52061,19 +56628,22 @@ export default function App() {
                 ) : libraryTab === 'educational' ? (
                   (() => {
                     const qNorm = normalizeGreekText(shapeLibSearchQuery.trim());
-                    const filteredCatalog = MIND_MAPS_CATALOG.filter((item) => {
+                    const baseFilteredCatalog = MIND_MAPS_CATALOG.filter((item) => {
                       if (librarySubjectFilter !== 'Όλα' && item.subject !== librarySubjectFilter) {
                         return false;
                       }
-                      if (libraryGradeFilter !== 'Όλες' && item.grade !== libraryGradeFilter) {
-                        return false;
-                      }
-                      if (!qNorm) return true;
-                      const haystack = normalizeGreekText(
-                        `${item.title} ${item.tags.join(' ')} ${item.chapterTitle} ${item.chapter} ${item.description} ${item.subject} ${item.grade} ${item.englishKey}`
-                      );
-                      return matchesGreekSearchTokens(haystack, qNorm);
+                      return true;
                     });
+                    const filteredCatalog = qNorm
+                      ? baseFilteredCatalog
+                          .map((item) => ({
+                            item,
+                            score: scoreMindMapItemSearch(item, qNorm),
+                          }))
+                          .filter((x) => x.score > 0)
+                          .sort((a, b) => b.score - a.score)
+                          .map((x) => x.item)
+                      : baseFilteredCatalog;
 
                     const subjectColors: Record<MindMapSubject, string> = {
                       Φυσική: 'bg-sky-50 text-sky-700 border-sky-200',
@@ -52082,8 +56652,10 @@ export default function App() {
                       Γεωγραφία: 'bg-indigo-50 text-indigo-700 border-indigo-200',
                     };
 
+                    const visibleEduCatalog = filteredCatalog.slice(0, libVisibleCount);
+
                     return (
-                      <div className="flex flex-col min-h-0 flex-1">
+                      <div key="tab-educational" className="flex flex-col min-h-0 flex-1">
                         {/* Search Input */}
                         <div className="relative mb-2 shrink-0">
                           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -52112,56 +56684,48 @@ export default function App() {
                         </div>
 
                         {/* Subject Filter Pills */}
-                        <div className="flex items-center gap-1 flex-wrap mb-1.5 shrink-0">
-                          {(
-                            [
-                              { id: 'Όλα', label: 'Όλα' },
-                              { id: 'Φυσική', label: '⚛️ Φυσική' },
-                              { id: 'Χημεία', label: '🧪 Χημεία' },
-                              { id: 'Βιολογία', label: '🧬 Βιολογία' },
-                              { id: 'Γεωγραφία', label: '🌍 Γεωγραφία' },
-                            ] as const
-                          ).map((s) => (
-                            <button
-                              key={s.id}
-                              onClick={() => setLibrarySubjectFilter(s.id)}
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
-                                librarySubjectFilter === s.id
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              {s.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Grade Filter Pills */}
                         <div className="flex items-center justify-between gap-1 mb-2 pb-2 border-b border-slate-100 shrink-0">
                           <div className="flex items-center gap-1 flex-wrap">
                             {(
                               [
-                                { id: 'Όλες', label: 'Όλες οι Τάξεις' },
-                                { id: "Α' Γυμνασίου", label: "Α' Γυμν." },
-                                { id: "Β' Γυμνασίου", label: "Β' Γυμν." },
-                                { id: "Γ' Γυμνασίου", label: "Γ' Γυμν." },
+                                { id: 'Όλα', label: 'Όλα' },
+                                { id: 'Φυσική', label: 'Φυσική' },
+                                { id: 'Χημεία', label: 'Χημεία' },
+                                { id: 'Βιολογία', label: 'Βιολογία' },
+                                { id: 'Γεωγραφία', label: 'Γεωγραφία' },
                               ] as const
-                            ).map((g) => (
+                            ).map((s) => (
                               <button
-                                key={g.id}
-                                onClick={() => setLibraryGradeFilter(g.id)}
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition cursor-pointer ${
-                                  libraryGradeFilter === g.id
-                                    ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                key={s.id}
+                                onClick={() => setLibrarySubjectFilter(s.id)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                  librarySubjectFilter === s.id
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                                 }`}
                               >
-                                {g.label}
+                                {s.label}
                               </button>
                             ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextQ = shapeLibSearchQuery.trim().toLowerCase() === 'premium' ? '' : 'premium';
+                                setShapeLibSearchQuery(nextQ);
+                                setStickerSearchQuery(nextQ);
+                              }}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                shapeLibSearchQuery.trim().toLowerCase() === 'premium'
+                                  ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                              }`}
+                              title="Εμφάνιση όλων των Premium εικονιδίων"
+                            >
+                              Premium
+                            </button>
                           </div>
                           <span className="text-[10px] font-bold text-emerald-700 shrink-0">
-                            {filteredCatalog.length} εικόνες
+                            {`${filteredCatalog.length} εικόνες`}
                           </span>
                         </div>
 
@@ -52186,10 +56750,22 @@ export default function App() {
                           </div>
                         ) : (
                           <div
+                            key={`edu-grid-${librarySubjectFilter}-${qNorm}`}
                             style={{ WebkitOverflowScrolling: 'touch' }}
+                            onScroll={(e) => {
+                              const el = e.currentTarget;
+                              if (
+                                el.scrollTop + el.clientHeight >= el.scrollHeight - 240 &&
+                                libVisibleCount < filteredCatalog.length
+                              ) {
+                                setLibVisibleCount((prev) =>
+                                  Math.min(filteredCatalog.length, prev + 36)
+                                );
+                              }
+                            }}
                             className="overflow-y-auto pr-1 grid grid-cols-2 gap-2 max-h-[46vh]"
                           >
-                            {filteredCatalog.map((item) => (
+                            {visibleEduCatalog.map((item) => (
                               <div
                                 key={item.id}
                                 onClick={() => {
@@ -52209,7 +56785,7 @@ export default function App() {
                                       {item.subject}
                                     </span>
                                     <span className="text-[9px] font-semibold text-slate-400 truncate">
-                                      {item.grade.replace(' Γυμνασίου', '')} • {item.chapter}
+                                      {item.grade.replace(' Γυμνασίου', ' Γυμν.').replace(' Λυκείου', ' Λυκ.')} • {item.chapter}
                                     </span>
                                   </div>
 
@@ -52224,6 +56800,7 @@ export default function App() {
                                       src={item.url}
                                       alt={item.title}
                                       loading="lazy"
+                                      decoding="async"
                                       className="max-w-full max-h-full object-contain pointer-events-none select-none group-hover:scale-105 transition-transform"
                                     />
                                   </div>
@@ -52237,7 +56814,7 @@ export default function App() {
                                 </div>
 
                                 <div className="flex flex-wrap gap-1 mt-1.5 pt-1 border-t border-slate-200/60">
-                                  {item.tags.map((tag) => (
+                                  {item.tags.slice(0, 6).map((tag) => (
                                     <button
                                       key={tag}
                                       type="button"
@@ -52246,7 +56823,11 @@ export default function App() {
                                         setShapeLibSearchQuery(tag);
                                         setStickerSearchQuery(tag);
                                       }}
-                                      className="px-1.5 py-0.5 rounded bg-white hover:bg-emerald-100 text-emerald-700 border border-slate-200/90 text-[9px] font-medium transition cursor-pointer"
+                                      className={`px-1.5 py-0.5 rounded border text-[9px] transition cursor-pointer ${
+                                        tag === 'premium'
+                                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 font-bold'
+                                          : 'bg-white hover:bg-emerald-100 text-emerald-700 border-slate-200/90 font-medium'
+                                      }`}
                                       title={`Φιλτράρισμα με ${tag}`}
                                     >
                                       {tag}
@@ -52255,46 +56836,90 @@ export default function App() {
                                 </div>
                               </div>
                             ))}
+                            {libVisibleCount < filteredCatalog.length && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLibVisibleCount((prev) =>
+                                    Math.min(filteredCatalog.length, prev + 48)
+                                  )
+                                }
+                                className="col-span-2 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold cursor-pointer transition"
+                              >
+                                Εμφάνιση περισσότερων ({visibleEduCatalog.length} από{' '}
+                                {filteredCatalog.length})
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
                     );
                   })()
-                ) : libraryTab === 'stickers' ? (
+                ) : libraryTab === 'sketches' || libraryTab === 'stickers' ? (
                   (() => {
+                    const isSketchesMode = libraryTab === 'sketches';
+                    const isScientistSketch = (item: StickerCatalogItem) =>
+                      item.id.startsWith('sk-davinci-') ||
+                      item.id.startsWith('sk-newton-') ||
+                      item.id.startsWith('sk-einstein-') ||
+                      item.id.startsWith('sk-curie-') ||
+                      item.id.startsWith('sk-scientist-');
+                    const isNatureSketch = (item: StickerCatalogItem) =>
+                      item.id.startsWith('sk-water-cycle-') ||
+                      item.id.startsWith('sk-rain-cloud-') ||
+                      item.id.startsWith('sk-condensation-cloud') ||
+                      item.id.startsWith('sk-sun-solar-') ||
+                      item.id.startsWith('sk-drought-') ||
+                      item.id.startsWith('sk-volcano-');
                     const qNorm = normalizeGreekText(stickerSearchQuery.trim());
                     const filteredCurated = CURATED_STICKERS_CATALOG.filter((item) => {
-                      if (stickerCategoryFilter !== 'Όλα' && item.category !== stickerCategoryFilter) {
-                        return false;
-                      }
-                      if (stickerColorStyleFilter !== 'all' && item.colorStyle !== stickerColorStyleFilter) {
-                        return false;
+                      if (isSketchesMode) {
+                        if (item.category !== 'Μονόχρωμα Σκίτσα') return false;
+                        if (sketchSubFilter === 'scientists' && !isScientistSketch(item)) return false;
+                        if (sketchSubFilter === 'nature' && !isNatureSketch(item)) return false;
+                        if (
+                          sketchSubFilter === 'physics' &&
+                          (isScientistSketch(item) || isNatureSketch(item))
+                        ) {
+                          return false;
+                        }
+                      } else {
+                        if (item.category === 'Μονόχρωμα Σκίτσα') return false;
+                        if (stickerCategoryFilter === 'Σχολικά & Εργαστήριο') {
+                          if (item.category !== 'Σχολικά & Εργαστήριο') return false;
+                        } else if (stickerCategoryFilter === 'Βελάκια') {
+                          if (item.category !== 'Βελάκια' && item.category !== 'Κεραυνοί & Εφέ') return false;
+                        } else if (stickerCategoryFilter === 'Μηχανική & Οχήματα') {
+                          if (item.category !== 'Μηχανική & Οχήματα' && item.category !== 'Επαγγέλματα') return false;
+                        } else if (stickerCategoryFilter === 'Emoticons') {
+                          if (item.category !== 'Emoticons' && item.category !== 'Σχήματα & 3D') return false;
+                        }
                       }
                       if (!qNorm) return true;
-                      const haystack = normalizeGreekText(
-                        `${item.title} ${item.category} ${item.tags.join(' ')} ${item.iconifyId}`
-                      );
-                      return matchesGreekSearchTokens(haystack, qNorm);
+                      return matchesGreekSearchTokens(getStickerNormalizedHaystack(item), qNorm);
                     });
 
                     void stickerCacheVersion;
                     const seenIconify = new Set(filteredCurated.map((c) => c.iconifyId));
-                    const extraOnline = onlineStickerResults.filter((o) => !seenIconify.has(o.iconifyId));
+                    const extraOnline = isSketchesMode
+                      ? []
+                      : onlineStickerResults.filter((o) => !seenIconify.has(o.iconifyId));
                     const combinedStickers = [...filteredCurated, ...extraOnline].filter(
                       (s) => !failedStickerIds.has(s.id)
                     );
+                    const visibleStickers = combinedStickers.slice(0, libVisibleCount);
 
                     const styleBadgeMap: Record<Exclude<StickerColorStyle, 'all'>, { label: string; cls: string }> = {
                       multicolor: {
-                        label: '🌈 Πολύχρωμο / 3D',
+                        label: 'Πολύχρωμο / 3D',
                         cls: 'bg-amber-50 text-amber-700 border-amber-200',
                       },
                       duotone: {
-                        label: '🎨 Δίχρωμο',
+                        label: 'Δίχρωμο',
                         cls: 'bg-sky-50 text-[#0066ff] border-sky-200',
                       },
                       monochrome: {
-                        label: '✒️ Μονόχρωμο',
+                        label: 'Μονόχρωμο',
                         cls: 'bg-slate-100 text-slate-700 border-slate-300',
                       },
                     };
@@ -52307,6 +56932,16 @@ export default function App() {
                         stickerCustomColor,
                         stickerCustomWidth
                       );
+                      if (
+                        stItem.iconifyId.startsWith('local-png:') ||
+                        (stItem.iconifyId.startsWith('sketch-png:') && !stickerCustomColor)
+                      ) {
+                        insertImageDataUrlOnPage(
+                          svgUrl,
+                          `🎨 Προστέθηκε: «${stItem.title}» (${stItem.category})`
+                        );
+                        return;
+                      }
                       try {
                         showToast(`⏳ Φόρτωση «${stItem.title}»...`);
                         const pngDataUrl = await rasterizeStickerUrlToPngDataUrl(
@@ -52364,9 +56999,17 @@ export default function App() {
                       }
                     };
 
+                    const compactIconCategories: { id: StickerCategory; label: string }[] = [
+                      { id: 'Όλα', label: 'Όλα' },
+                      { id: 'Σχολικά & Εργαστήριο', label: 'Σχολικά & Εργαστήριο' },
+                      { id: 'Βελάκια', label: 'Βελάκια & Εφέ' },
+                      { id: 'Μηχανική & Οχήματα', label: 'Οχήματα & Επαγγέλματα' },
+                      { id: 'Emoticons', label: 'Emoticons & 3D' },
+                    ];
+
                     return (
-                      <div className="flex flex-col min-h-0 flex-1">
-                        {/* Search Input (Greek & English + Live 200k Iconify Search) */}
+                      <div key={`tab-${libraryTab}`} className="flex flex-col min-h-0 flex-1">
+                        {/* Search Input */}
                         <div className="relative mb-2 shrink-0">
                           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           <input
@@ -52376,7 +57019,11 @@ export default function App() {
                               setStickerSearchQuery(e.target.value);
                               setShapeLibSearchQuery(e.target.value);
                             }}
-                            placeholder="Αναζήτηση (π.χ. βέλος, βάρκα, φορτίο, τροφή, γρανάζι)..."
+                            placeholder={
+                              isSketchesMode
+                                ? 'Αναζήτηση σε σκίτσα (π.χ. Νεύτωνας, Αϊνστάιν, βρασμός, νερό)...'
+                                : 'Αναζήτηση (π.χ. βέλος, βάρκα, φορτίο, τροφή, γρανάζι)...'
+                            }
                             className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
                           />
                           {stickerSearchQuery && (
@@ -52393,113 +57040,53 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* Category Filter Pills (Βελάκια, Γρανάζια & Αμαξάκια, Σχολικά, Επαγγέλματα, Emoticons, 3D) */}
-                        <div className="flex items-center gap-1 flex-wrap mb-1.5 shrink-0">
-                          {STICKER_CATEGORIES.map((cat) => (
-                            <button
-                              key={cat.id}
-                              onClick={() => setStickerCategoryFilter(cat.id)}
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
-                                stickerCategoryFilter === cat.id
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                              }`}
-                            >
-                              {cat.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Color Style Filter Pills (Όλα | Πολύχρωμα / 3D | Δίχρωμα | Μονόχρωμα) */}
-                        <div className="flex items-center justify-between gap-1 mb-1.5 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {STICKER_COLOR_STYLES.map((cs) => (
-                              <button
-                                key={cs.id}
-                                onClick={() => setStickerColorStyleFilter(cs.id)}
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition cursor-pointer ${
-                                  stickerColorStyleFilter === cs.id
-                                    ? 'bg-[#1b2a4a] text-white border-[#1b2a4a]'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                }`}
-                              >
-                                {cs.label}
-                              </button>
-                            ))}
-                          </div>
+                        {/* 4 Compact Category Filter Pills (for Εικονίδια & Σκίτσα) + Count */}
+                        <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap">
+                          {!isSketchesMode ? (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {compactIconCategories.map((cat) => (
+                                <button
+                                  key={cat.id}
+                                  onClick={() => setStickerCategoryFilter(cat.id)}
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                    stickerCategoryFilter === cat.id
+                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {cat.label}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {(
+                                [
+                                  { id: 'all', label: 'Όλα' },
+                                  { id: 'scientists', label: 'Φυσικοί & Επιστήμονες' },
+                                  { id: 'physics', label: 'Φυσική & Πειράματα' },
+                                  { id: 'nature', label: 'Κύκλος Νερού & Γεωλογία' },
+                                ] as const
+                              ).map((sub) => (
+                                <button
+                                  key={sub.id}
+                                  onClick={() => setSketchSubFilter(sub.id)}
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                    sketchSubFilter === sub.id
+                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {sub.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           <span className="text-[10px] font-bold text-emerald-700 shrink-0">
-                            {isSearchingOnlineStickers
-                              ? '🔍 Online αναζήτηση...'
-                              : `${combinedStickers.length} εικονίδια`}
+                            {isSearchingOnlineStickers && !isSketchesMode
+                              ? 'Online αναζήτηση...'
+                              : `${combinedStickers.length} ${isSketchesMode ? 'σκίτσα' : 'εικονίδια'}`}
                           </span>
-                        </div>
-
-                        {/* Interactive Color & Thickness Customizer for Arrows & Sketch Symbols */}
-                        <div className="flex items-center justify-between gap-1.5 mb-2 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap">
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9.5px] font-bold text-slate-500">Χρώμα:</span>
-                            <button
-                              type="button"
-                              onClick={() => setStickerCustomColor(null)}
-                              className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border cursor-pointer ${
-                                stickerCustomColor === null
-                                  ? 'bg-slate-800 text-white border-slate-800'
-                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                              }`}
-                              title="Αρχικά χρώματα κάθε βέλους/εικονιδίου"
-                            >
-                              Auto
-                            </button>
-                            {[
-                              { hex: '#dc2626', title: 'Κόκκινο' },
-                              { hex: '#0066ff', title: 'Μπλε' },
-                              { hex: '#16a34a', title: 'Πράσινο' },
-                              { hex: '#ea580c', title: 'Πορτοκαλί' },
-                              { hex: '#7c3aed', title: 'Μωβ' },
-                              { hex: '#db2777', title: 'Ροζ' },
-                              { hex: '#eab308', title: 'Χρυσό' },
-                              { hex: '#0f172a', title: 'Μαύρο' },
-                            ].map((cOpt) => (
-                              <button
-                                key={cOpt.hex}
-                                type="button"
-                                onClick={() => setStickerCustomColor(cOpt.hex)}
-                                style={{ backgroundColor: cOpt.hex }}
-                                className={`w-4 h-4 rounded-full border transition cursor-pointer ${
-                                  stickerCustomColor === cOpt.hex
-                                    ? 'ring-2 ring-offset-1 ring-slate-900 border-white scale-110'
-                                    : 'border-white/80 hover:scale-110 shadow-2xs'
-                                }`}
-                                title={`Χρώμα βελών/συμβόλων: ${cOpt.title}`}
-                              />
-                            ))}
-                          </div>
-
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9.5px] font-bold text-slate-500">Πάχος:</span>
-                            {(
-                              [
-                                { w: null, label: 'Auto' },
-                                { w: 6, label: 'Λεπτό' },
-                                { w: 12, label: 'Μεσαίο' },
-                                { w: 18, label: 'Χοντρό' },
-                              ] as const
-                            ).map((wOpt) => (
-                              <button
-                                key={String(wOpt.w)}
-                                type="button"
-                                onClick={() => setStickerCustomWidth(wOpt.w)}
-                                className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border transition cursor-pointer ${
-                                  stickerCustomWidth === wOpt.w
-                                    ? 'bg-indigo-600 text-white border-indigo-600'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                }`}
-                                title={`Πάχος γραμμής βελών: ${wOpt.label}`}
-                              >
-                                {wOpt.label}
-                              </button>
-                            ))}
-                          </div>
                         </div>
 
                         {/* Stickers Results Grid */}
@@ -52512,6 +57099,7 @@ export default function App() {
                             <button
                               onClick={() => {
                                 setStickerCategoryFilter('Όλα');
+                                setSketchSubFilter('all');
                                 setStickerColorStyleFilter('all');
                                 setStickerSearchQuery('');
                               }}
@@ -52522,10 +57110,22 @@ export default function App() {
                           </div>
                         ) : (
                           <div
+                            key={`stk-grid-${libraryTab}-${sketchSubFilter}-${stickerCategoryFilter}-${qNorm}`}
                             style={{ WebkitOverflowScrolling: 'touch' }}
+                            onScroll={(e) => {
+                              const el = e.currentTarget;
+                              if (
+                                el.scrollTop + el.clientHeight >= el.scrollHeight - 220 &&
+                                libVisibleCount < combinedStickers.length
+                              ) {
+                                setLibVisibleCount((prev) =>
+                                  Math.min(combinedStickers.length, prev + 36)
+                                );
+                              }
+                            }}
                             className="overflow-y-auto pr-1 grid grid-cols-3 gap-2 max-h-[46vh]"
                           >
-                            {combinedStickers.map((stItem) => {
+                            {visibleStickers.map((stItem) => {
                               const svgUrl = getIconifySvgUrl(
                                 stItem.iconifyId,
                                 stItem.colorStyle,
@@ -52561,6 +57161,13 @@ export default function App() {
                                       src={svgUrl}
                                       alt={stItem.title}
                                       loading="lazy"
+                                      decoding="async"
+                                      style={
+                                        stItem.iconifyId.startsWith('sketch-png:') &&
+                                        stickerCustomColor
+                                          ? { filter: 'url(#bestnotes-sketch-tint)' }
+                                          : undefined
+                                      }
                                       onError={() =>
                                         setFailedStickerIds((prev) => {
                                           const next = new Set(prev);
@@ -52568,7 +57175,11 @@ export default function App() {
                                           return next;
                                         })
                                       }
-                                      className="w-12 h-12 object-contain pointer-events-none select-none group-hover:scale-110 transition-transform"
+                                      className={`${
+                                        stItem.iconifyId.startsWith('sketch-png:')
+                                          ? 'w-full h-full'
+                                          : 'w-12 h-12'
+                                      } object-contain pointer-events-none select-none group-hover:scale-110 transition-transform`}
                                     />
                                   </div>
 
@@ -52583,6 +57194,20 @@ export default function App() {
                                 </div>
                               );
                             })}
+                            {libVisibleCount < combinedStickers.length && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLibVisibleCount((prev) =>
+                                    Math.min(combinedStickers.length, prev + 48)
+                                  )
+                                }
+                                className="col-span-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold cursor-pointer transition"
+                              >
+                                Εμφάνιση περισσότερων ({visibleStickers.length} από{' '}
+                                {combinedStickers.length})
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -53321,7 +57946,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       let activeSim = getActiveCircuitSim(activePage);
-                      if (!activeSim && selectedStrokeIds.length > 0) {
+                      if (selectedStrokeIds.length > 0) {
                         const rawSelSet = new Set(selectedStrokeIds);
                         const selGroupIds = new Set(
                           activePage.strokes
@@ -53332,15 +57957,90 @@ export default function App() {
                           (s) => rawSelSet.has(s.id) || (s.groupId && selGroupIds.has(s.groupId))
                         );
                         const expandedIdSet = new Set(expandedStrokes.map((s) => s.id));
-                        const alignedSubset = autoAlignAndConnectCircuit(expandedStrokes);
+                        const joinHandRec = recognizeHandDrawnCircuitSymbols(
+                          expandedStrokes,
+                          activePage.texts || [],
+                          {
+                            requireCircuitContext: false,
+                            explicitCircuitIntent: true,
+                            convertFreehandWires: true,
+                          }
+                        );
+                        const alignedSubset = autoAlignAndConnectCircuit(
+                          joinHandRec.changed ? joinHandRec.strokes : expandedStrokes
+                        );
                         const alignedIds = alignedSubset.map((s) => s.id);
-                        const newSimId = `sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-                        const newSimName = getNextDefaultSimName(activePage);
+                        const replaceJoinSet = new Set<string>([
+                          ...expandedIdSet,
+                          ...(joinHandRec.changed ? joinHandRec.removedStrokeIds : []),
+                        ]);
+                        const removeJoinTextSet = new Set<string>(
+                          joinHandRec.changed ? joinHandRec.removedTextIds : []
+                        );
+
+                        const compsInJoin = getCircuitComponentsWithTerminals(alignedSubset);
+                        const compIdsInJoin = new Set<string>();
+                        for (const c of compsInJoin) {
+                          for (const id of c.strokeIds) compIdsInJoin.add(id);
+                        }
+                        const extWireCount = alignedSubset.filter(
+                          (s) =>
+                            !compIdsInJoin.has(s.id) &&
+                            s.isShape &&
+                            (!s.shapeType || s.shapeType === 'line')
+                        ).length;
+
+                        if (compsInJoin.length > 0 && extWireCount === 0) {
+                          // Components drawn/selected without wires: convert & propose completion wires!
+                          const nextStrokesSnapshot: StrokeObject[] = [];
+                          let insertedOpen = false;
+                          for (const s of activePage.strokes) {
+                            if (replaceJoinSet.has(s.id)) {
+                              if (!insertedOpen) {
+                                nextStrokesSnapshot.push(...alignedSubset);
+                                insertedOpen = true;
+                              }
+                              continue;
+                            }
+                            nextStrokesSnapshot.push(s);
+                          }
+                          if (!insertedOpen) nextStrokesSnapshot.push(...alignedSubset);
+                          if (removeJoinTextSet.size > 0) {
+                            updateActivePage(
+                              (page) => ({
+                                ...page,
+                                texts: (page.texts || []).filter((t) => !removeJoinTextSet.has(t.id)),
+                              }),
+                              false
+                            );
+                          }
+                          handleStartCircuitCompletion(
+                            nextStrokesSnapshot,
+                            alignedIds,
+                            replaceJoinSet
+                          );
+                          return;
+                        }
+
+                        const validSimsNow = getValidCircuitSims(activePage);
+                        const matchingSim = validSimsNow.find((sim) => {
+                          const overlap = sim.strokeIds.filter((id) => replaceJoinSet.has(id)).length;
+                          return (
+                            overlap >=
+                            Math.max(1, Math.min(sim.strokeIds.length, replaceJoinSet.size) * 0.4)
+                          );
+                        });
+                        const targetSimId =
+                          matchingSim?.id ||
+                          `sim-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                        const targetSimName =
+                          matchingSim?.name || getNextDefaultSimName(activePage);
+
                         updateActivePage((page) => {
                           const nextStrokes: StrokeObject[] = [];
                           let inserted = false;
                           for (const s of page.strokes) {
-                            if (expandedIdSet.has(s.id)) {
+                            if (replaceJoinSet.has(s.id)) {
                               if (!inserted) {
                                 nextStrokes.push(...alignedSubset);
                                 inserted = true;
@@ -53351,19 +58051,30 @@ export default function App() {
                           }
                           if (!inserted) nextStrokes.push(...alignedSubset);
                           const currentValid = getValidCircuitSims(page);
+                          const nextSims = matchingSim
+                            ? currentValid.map((sim) =>
+                                sim.id === matchingSim.id
+                                  ? { ...sim, strokeIds: alignedIds }
+                                  : sim
+                              )
+                            : [
+                                ...currentValid,
+                                { id: targetSimId, name: targetSimName, strokeIds: alignedIds },
+                              ];
                           return {
                             ...page,
                             strokes: nextStrokes,
-                            circuitSims: [
-                              ...currentValid,
-                              { id: newSimId, name: newSimName, strokeIds: alignedIds },
-                            ],
-                            activeCircuitSimId: newSimId,
+                            texts:
+                              removeJoinTextSet.size > 0
+                                ? (page.texts || []).filter((t) => !removeJoinTextSet.has(t.id))
+                                : page.texts,
+                            circuitSims: nextSims,
+                            activeCircuitSimId: targetSimId,
                           };
                         });
                         setSelectedStrokeIds([]);
                         setCircuitAlignFlashStart(performance.now());
-                        showToast(`📐 [${newSimName}] Οι αγωγοί ευθυγραμμίστηκαν & ενώθηκαν!`);
+                        showToast(`📐 [${targetSimName}] Τα στοιχεία αναγνωρίστηκαν & οι αγωγοί ενώθηκαν!`);
                         return;
                       }
                       if (!activeSim) {
@@ -53405,11 +58116,22 @@ export default function App() {
                       if (!activeSim) return null;
                       const simSet = getSimExpandedStrokeSet(activePage, activeSim);
                       const simStrokes = activePage.strokes.filter((s) => simSet.has(s.id));
-                      const hasCompleteLoop = analyzeCircuitForSimulation(
+                      const simPreviewEval = analyzeCircuitForSimulation(
                         simStrokes,
                         true
-                      ).isCircuitClosed;
+                      );
+                      const hasCompleteLoop = simPreviewEval.isCircuitClosed;
                       if (!hasCompleteLoop) {
+                        const hasOpenSourceVoltmeter = simPreviewEval.components.some(
+                          (cs) => cs.comp.kind === 'voltmeter' && cs.active
+                        );
+                        if (hasOpenSourceVoltmeter) {
+                          return (
+                            <div className="w-full py-1.5 px-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-[10.5px] leading-snug text-center">
+                              📟 Ανοιχτό κύκλωμα (I = 0) — Το βολτόμετρο μετράει ενεργά την τάση της πηγής!
+                            </div>
+                          );
+                        }
                         return (
                           <div className="w-full py-1.5 px-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10.5px] leading-snug text-center">
                             ⏳ Το κύκλωμα "{activeSim.name}" είναι ανοιχτό. Κλείστε τους αγωγούς για να εμφανιστεί ο διακόπτης αριστερά.
@@ -54748,12 +59470,6 @@ export default function App() {
                                     >
                                       <span>
                                         {sim.showReactionEquation === false &&
-                                        sim.showAtomsBelowReaction === false
-                                          ? '🧊'
-                                          : '⚛️'}
-                                      </span>
-                                      <span>
-                                        {sim.showReactionEquation === false &&
                                         sim.showAtomsBelowReaction === false &&
                                         sim.reactionEquationText
                                           ? sim.reactionEquationText
@@ -54911,7 +59627,7 @@ export default function App() {
                             </div>
 
                             <label className="flex items-center justify-between text-[11px] font-bold text-slate-700 pt-1 cursor-pointer">
-                              <span>🔄 Αργή περιστροφή ζευγών e⁻ (2-2)</span>
+                              <span>Αργή περιστροφή ζευγών e⁻ (2-2)</span>
                               <input
                                 type="checkbox"
                                 checked={activeAtomSim.isRotating !== false}
@@ -54931,7 +59647,7 @@ export default function App() {
                               Χημικοι Δεσμοι & Αντιδραση:
                             </span>
                             <p className="text-[10px] text-slate-500 leading-snug">
-                              💡 Γράπωσε με το ποντίκι/πενάκι ένα <b>εξωτερικό ηλεκτρόνιο</b> και άφησέ το πάνω σε διπλανό άτομο για <b>Ετεροπολικό</b> ή <b>Ομοιοπολικό</b> δεσμό!
+                              Γράπωσε με το ποντίκι/πενάκι ένα <b>εξωτερικό ηλεκτρόνιο</b> και άφησέ το πάνω σε διπλανό άτομο για <b>Ετεροπολικό</b> ή <b>Ομοιοπολικό</b> δεσμό!
                             </p>
                             <div className="flex flex-col gap-1.5">
                               <button
@@ -54939,15 +59655,11 @@ export default function App() {
                                 onClick={() =>
                                   handleAtomSimAction(activeAtomSim, 'toggle-reaction-eq')
                                 }
-                                className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
-                                  activeAtomSim.showReactionEquation
-                                    ? 'bg-teal-600 text-white'
-                                    : 'bg-white text-teal-700 border border-teal-300 hover:bg-teal-50'
-                                }`}
+                                className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
                               >
                                 {activeAtomSim.showReactionEquation
-                                  ? '🧪 Απόκρυψη Εξίσωσης Αντίδρασης'
-                                  : '🧪 Εμφάνιση Αντίδρασης από τα Άτομα'}
+                                  ? 'Απόκρυψη Εξίσωσης Αντίδρασης'
+                                  : 'Εμφάνιση Αντίδρασης από τα Άτομα'}
                               </button>
 
                               {activeAtomSim.atoms.length >= 2 && (
@@ -54959,11 +59671,27 @@ export default function App() {
                                       'play-reaction-arrow'
                                     )
                                   }
-                                  className="w-full py-1.5 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] transition cursor-pointer shadow-2xs"
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
                                 >
-                                  ➔ Κίνηση Ηλεκτρονίων Αντίδρασης (2s)
+                                  Κίνηση Ηλεκτρονίων Αντίδρασης (2s)
                                 </button>
                               )}
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAtomSimAction(activeAtomSim, 'toggle-oxidation-numbers')
+                                }
+                                className={`w-full py-1.5 px-2.5 rounded-lg font-bold text-[10.5px] transition cursor-pointer ${
+                                  activeAtomSim.showOxidationNumbers
+                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs'
+                                    : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                                }`}
+                              >
+                                {activeAtomSim.showOxidationNumbers
+                                  ? 'Αριθμοί Οξείδωσης (Α.Ο.): Εμφανείς ✓'
+                                  : 'Αριθμοί Οξείδωσης (Α.Ο.)'}
+                              </button>
 
                               {activeAtomSim.showReactionEquation && (
                                 <button
@@ -54977,8 +59705,8 @@ export default function App() {
                                   className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
                                 >
                                   {activeAtomSim.showAtomsBelowReaction === false
-                                    ? '⚛️ Εμφάνιση Δομής Ατόμων κάτω από την Αντίδραση'
-                                    : '⚛️ Απόκρυψη Δομής Ατόμων κάτω από την Αντίδραση'}
+                                    ? 'Εμφάνιση Δομής Ατόμων κάτω από την Αντίδραση'
+                                    : 'Απόκρυψη Δομής Ατόμων κάτω από την Αντίδραση'}
                                 </button>
                               )}
 
@@ -54988,9 +59716,9 @@ export default function App() {
                                   onClick={() =>
                                     handleAtomSimAction(activeAtomSim, 'reset-bonds')
                                   }
-                                  className="w-full py-1 px-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[10.5px] transition cursor-pointer"
+                                  className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
                                 >
-                                  ↺ Επαναφορά Ηλεκτρονίων & Δεσμών
+                                  Επαναφορά Ηλεκτρονίων & Δεσμών
                                 </button>
                               )}
                             </div>
@@ -55002,28 +59730,24 @@ export default function App() {
                                 validAtomSims.find((s) => s.show3DMolecule)?.showChargeCloud !== false;
                               return (
                                 <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
-                                  <span className="text-[10px] font-extrabold text-sky-800 uppercase tracking-wider block">
-                                    🧊 3D Μοριο & Χρωματικο Νεφος Φορτιου (δ⁺/δ⁻):
+                                  <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider block">
+                                    3D Μοριο & Χρωματικο Νεφος Φορτιου (δ⁺/δ⁻):
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() =>
                                       handleAtomSimAction(activeAtomSim, 'toggle-3d-molecule')
                                     }
-                                    className={`w-full py-1.5 px-2.5 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
-                                      any3DVisible
-                                        ? 'bg-sky-600 text-white shadow-2xs'
-                                        : 'bg-white text-sky-800 border border-sky-300 hover:bg-sky-50'
-                                    }`}
+                                    className="w-full py-1.5 px-2.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[10.5px] transition cursor-pointer"
                                   >
                                     {any3DVisible
-                                      ? '🧊 Απόκρυψη 3D Μορίου & Νέφους Φορτίου'
-                                      : '🧊 Εμφάνιση 3D Μορίου & Νέφους Φορτίου (δ⁺/δ⁻)'}
+                                      ? 'Απόκρυψη 3D Μορίου & Νέφους Φορτίου'
+                                      : 'Εμφάνιση 3D Μορίου & Νέφους Φορτίου (δ⁺/δ⁻)'}
                                   </button>
 
                                   {any3DVisible && (
                                     <label className="flex items-center justify-between text-[10.5px] font-bold text-slate-700 pt-0.5 cursor-pointer">
-                                      <span>☁️ Χρωματικό νέφος φορτίου (🔴 δ⁻ / 🔵 δ⁺)</span>
+                                      <span>Χρωματικό νέφος φορτίου (δ⁻ / δ⁺)</span>
                                       <input
                                         type="checkbox"
                                         checked={cloudChecked}
@@ -56017,15 +60741,27 @@ export default function App() {
                 const isPreviewImgMounted =
                   activeNotebook.pages.length <= 24 ||
                   (multiPageSpreadCols > 1 ? rowDist <= 6 : pageDist <= 8);
-                const resolvedBgUrl = isCanvasMounted
-                  ? resolvePageBackgroundUrl(
-                      activeNotebook.id,
-                      pageObj,
-                      multiPageSpreadCols > 1 && activeNotebook.pages.length > 12 ? 'thumb' : 'full'
-                    )
-                  : isPreviewImgMounted
-                  ? resolvePageBackgroundUrl(activeNotebook.id, pageObj, 'thumb')
-                  : undefined;
+                // Proportional Level-of-Detail (LOD) based on pages per row (5+ -> thumb, 4/3 -> med, 2 -> high, 1 -> full)
+                const desiredPdfQuality: PdfQualityMode =
+                  multiPageSpreadCols >= 5
+                    ? 'thumb'
+                    : multiPageSpreadCols >= 3
+                    ? rowDist <= 2
+                      ? 'med'
+                      : 'thumb'
+                    : multiPageSpreadCols === 2
+                    ? rowDist <= 2
+                      ? 'high'
+                      : 'thumb'
+                    : pageDist <= 2 || activeNotebook.pages.length <= 6
+                    ? 'full'
+                    : pageDist <= 4
+                    ? 'high'
+                    : 'thumb';
+                const resolvedBgUrl =
+                  isCanvasMounted || isPreviewImgMounted
+                    ? resolvePageBackgroundUrl(activeNotebook.id, pageObj, desiredPdfQuality)
+                    : undefined;
 
                 // Goodnotes-style Viewport Virtualization:
                 // Never allocate 2x Retina GPU canvases for pages far away from the active viewport!
@@ -56038,12 +60774,16 @@ export default function App() {
                   return (
                     <div
                       key={pageObj.id}
-                      style={{ width: pW, height: pH }}
+                      style={{
+                        width: pW,
+                        height: pH,
+                        backgroundColor: resolvedBgUrl ? '#ffffff' : getEffectivePaperColor(pageObj),
+                      }}
                       onPointerDown={() => {
                         activeDrawingPageIndexRef.current = pageIdx;
                         setActivePageIndex(pageIdx);
                       }}
-                      className="relative shadow-md bg-white border border-slate-200/80 shrink-0 select-none"
+                      className="relative shadow-md border border-slate-200/80 shrink-0 select-none"
                     >
                       {!isCleanProjectorMode && isPreviewImgMounted && (
                         <div className="absolute -top-7 left-0 right-0 flex items-center justify-between px-1 select-none z-20 pointer-events-none">
@@ -56116,8 +60856,12 @@ export default function App() {
                 return (
                   <div
                     key={pageObj.id}
-                    style={{ width: pW, height: pH }}
-                    className={`relative shadow-md bg-white border transition-shadow shrink-0 ${
+                    style={{
+                      width: pW,
+                      height: pH,
+                      backgroundColor: resolvedBgUrl ? '#ffffff' : getEffectivePaperColor(pageObj),
+                    }}
+                    className={`relative shadow-md border transition-shadow shrink-0 ${
                       multiPageSpreadCols > 1 && isCurrentActive
                         ? 'border-[#0066ff] ring-4 ring-[#0066ff]/60'
                         : 'border-slate-200/80'
@@ -56419,6 +61163,12 @@ export default function App() {
                       const isEditingTxt =
                         isCurrentActive && canInteractWithText && editingTextId === txt.id;
                       const fontCss = getTextFontCss(txt.fontFamily, txt.bold);
+                      const effLineHeight =
+                        txt.lineHeight ?? getDefaultTextLineHeight(txt.fontFamily);
+                      const isActivelyResizingSide =
+                        draggingTextRef.current?.id === txt.id &&
+                        (draggingTextRef.current?.resizeHandle === 'e' ||
+                          draggingTextRef.current?.resizeHandle === 'w');
                       const liveTxtDom =
                         isSelectedTxt || isEditingTxt
                           ? (document.querySelector(
@@ -56449,6 +61199,8 @@ export default function App() {
                             width:
                               txt.isMath && !isEditingTxt
                                 ? 'max-content'
+                                : isActivelyResizingSide && txt.boxWidth
+                                ? `${txt.boxWidth}px`
                                 : 'fit-content',
                             maxWidth:
                               !txt.isMath && txt.boxWidth
@@ -56462,8 +61214,8 @@ export default function App() {
                             color: txt.color,
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
-                            lineHeight: 1.18,
                             ...fontCss,
+                            lineHeight: effLineHeight,
                             touchAction: 'none',
                             pointerEvents:
                               isSelectedTxt || isEditingTxt
@@ -57008,7 +61760,7 @@ export default function App() {
                                   <div
                                     data-text-resize="n"
                                     style={{ touchAction: 'none' }}
-                                    title="Σύρετε πάνω/κάτω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    title="Σύρετε πάνω/κάτω για αλλαγή απόστασης γραμμών (ή ύψους σε 1 γραμμή)"
                                     className="absolute left-1/2 -translate-x-1/2 -top-[10px] w-[24px] h-[20px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
                                     {isTextCenteredOnPage && (
@@ -57026,7 +61778,7 @@ export default function App() {
                                   <div
                                     data-text-resize="s"
                                     style={{ touchAction: 'none' }}
-                                    title="Σύρετε κάτω/πάνω για αλλαγή ύψους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    title="Σύρετε κάτω/πάνω για αλλαγή απόστασης γραμμών (ή ύψους σε 1 γραμμή)"
                                     className="absolute left-1/2 -translate-x-1/2 -bottom-[10px] w-[24px] h-[20px] flex items-center justify-center cursor-ns-resize z-30 group"
                                   >
                                     <div className="w-3.5 h-1.5 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
@@ -57035,7 +61787,7 @@ export default function App() {
                                   <div
                                     data-text-resize="w"
                                     style={{ touchAction: 'none' }}
-                                    title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    title="Σύρετε αριστερά/δεξιά για αλλαγή πλάτους αναδίπλωσης (σταθερό μέγεθος γραμμάτων)"
                                     className="absolute -left-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[24px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
                                     <div className="w-1.5 h-3.5 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
@@ -57044,7 +61796,7 @@ export default function App() {
                                   <div
                                     data-text-resize="e"
                                     style={{ touchAction: 'none' }}
-                                    title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους και αυτόματη προσαρμογή μεγέθους γραμματοσειράς"
+                                    title="Σύρετε δεξιά/αριστερά για αλλαγή πλάτους αναδίπλωσης (σταθερό μέγεθος γραμμάτων)"
                                     className="absolute -right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[24px] flex items-center justify-center cursor-ew-resize z-40 group"
                                   >
                                     <div className="w-1.5 h-3.5 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
@@ -57062,7 +61814,7 @@ export default function App() {
                               <div
                                 data-text-resize="nw"
                                 style={{ touchAction: 'none' }}
-                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                title="Σύρετε τη γωνία για αναλογική αλλαγή μεγέθους γραμμάτων (κλειδωμένες γραμμές)"
                                 className="absolute -left-[10px] -top-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
@@ -57070,7 +61822,7 @@ export default function App() {
                               <div
                                 data-text-resize="ne"
                                 style={{ touchAction: 'none' }}
-                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                title="Σύρετε τη γωνία για αναλογική αλλαγή μεγέθους γραμμάτων (κλειδωμένες γραμμές)"
                                 className="absolute -right-[10px] -top-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
@@ -57078,7 +61830,7 @@ export default function App() {
                               <div
                                 data-text-resize="sw"
                                 style={{ touchAction: 'none' }}
-                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                title="Σύρετε τη γωνία για αναλογική αλλαγή μεγέθους γραμμάτων (κλειδωμένες γραμμές)"
                                 className="absolute -left-[10px] -bottom-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nesw-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
@@ -57086,7 +61838,7 @@ export default function App() {
                               <div
                                 data-text-resize="se"
                                 style={{ touchAction: 'none' }}
-                                title="Σύρετε τη γωνία για ταυτόχρονη αλλαγή πλάτους & ύψους"
+                                title="Σύρετε τη γωνία για αναλογική αλλαγή μεγέθους γραμμάτων (κλειδωμένες γραμμές)"
                                 className="absolute -right-[10px] -bottom-[10px] w-[20px] h-[20px] flex items-center justify-center cursor-nwse-resize z-50 group"
                               >
                                 <div className="w-2 h-2 rounded-full bg-white border border-slate-500 border-[1.35px] shadow-2xs group-hover:scale-110 transition-transform pointer-events-none" />
@@ -57279,22 +62031,11 @@ export default function App() {
                                             if (t.id !== txt.id) return t;
                                             const effBold =
                                               Boolean(t.bold) || t.fontFamily === 'calligraphic-bold';
-                                            const nextFs =
-                                              t.boxWidth && t.boxHeight
-                                                ? computeMaxFitFontSizeForBox(
-                                                    t.text,
-                                                    nextFont,
-                                                    effBold,
-                                                    t.boxWidth,
-                                                    t.boxHeight
-                                                  )
-                                                : t.fontSize;
-                                            if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
                                             return {
                                               ...t,
                                               fontFamily: nextFont,
                                               bold: effBold,
-                                              fontSize: nextFs,
+                                              boxHeight: undefined,
                                             };
                                           }),
                                         }));
@@ -57371,22 +62112,16 @@ export default function App() {
                                               t.fontFamily === 'calligraphic-bold'
                                                 ? 'calligraphic'
                                                 : t.fontFamily || 'sans';
-                                            const nextFs =
-                                              t.boxWidth && t.boxHeight
-                                                ? computeMaxFitFontSizeForBox(
-                                                    t.text,
-                                                    normFont,
-                                                    nextB,
-                                                    t.boxWidth,
-                                                    t.boxHeight
-                                                  )
-                                                : t.fontSize;
-                                            if (t.boxWidth && t.boxHeight) setTextFontSize(nextFs);
+                                            const nextBoxW =
+                                              t.boxWidth && nextB && !t.bold
+                                                ? Math.round(t.boxWidth * 1.07)
+                                                : t.boxWidth;
                                             return {
                                               ...t,
                                               fontFamily: normFont,
                                               bold: nextB,
-                                              fontSize: nextFs,
+                                              boxWidth: nextBoxW,
+                                              boxHeight: undefined,
                                             };
                                           }),
                                         }));
@@ -57766,8 +62501,8 @@ export default function App() {
                                       position: 'relative',
                                       width: 'fit-content',
                                       maxWidth: txt.boxWidth
-                                        ? `${Math.max(36, txt.boxWidth - 12)}px`
-                                        : '42ch',
+                                        ? `${Math.max(10, txt.boxWidth - 12)}px`
+                                        : `${Math.max(120, pW - txt.x - 16)}px`,
                                     }
                                   : {
                                       position: 'absolute',
@@ -57803,21 +62538,32 @@ export default function App() {
                                     s,
                                     Math.min(fullStr.length, activeCaret.end)
                                   );
-                                  const caretNode =
-                                    e === s ? (
-                                      <span
-                                        key="live-caret"
-                                        className="inline-block w-[2.5px] h-[1.12em] bg-[#0066ff] align-text-bottom animate-pulse pointer-events-none select-none"
-                                        style={{
-                                          marginLeft: '-1.25px',
-                                          marginRight: '-1.25px',
-                                          borderRadius: '1px',
-                                          boxShadow: '0 0 3px rgba(0, 102, 255, 0.65)',
-                                        }}
-                                      />
-                                    ) : null;
+                                  const caretPos =
+                                    e > s &&
+                                    'direction' in activeCaret &&
+                                    activeCaret.direction === 'backward'
+                                      ? s
+                                      : e;
+                                  const caretNode = (
+                                    <span
+                                      key="live-caret"
+                                      className="inline-block w-[2.5px] h-[1.12em] bg-[#0066ff] align-text-bottom animate-pulse pointer-events-none select-none"
+                                      style={{
+                                        marginLeft: '-1.25px',
+                                        marginRight: '-1.25px',
+                                        borderRadius: '1px',
+                                        boxShadow: '0 0 3px rgba(0, 102, 255, 0.65)',
+                                      }}
+                                    />
+                                  );
 
                                   const bSet = new Set<number>([0, s, e, fullStr.length]);
+                                  for (let i = 0; i < fullStr.length; i++) {
+                                    if (fullStr[i] === '\n') {
+                                      bSet.add(i);
+                                      bSet.add(i + 1);
+                                    }
+                                  }
                                   for (const sp of txt.spans || []) {
                                     bSet.add(Math.max(0, Math.min(fullStr.length, sp.start)));
                                     bSet.add(Math.max(0, Math.min(fullStr.length, sp.end)));
@@ -57830,19 +62576,19 @@ export default function App() {
                                       aria-hidden="true"
                                       style={{
                                         gridArea: '1 / 1',
-                                        minInlineSize: '2ch',
+                                        minInlineSize: '0.5ch',
                                         maxInlineSize: txt.boxWidth
-                                          ? `${Math.max(36, txt.boxWidth - 12)}px`
-                                          : '42ch',
-                                        minBlockSize: '1.18lh',
+                                          ? `${Math.max(10, txt.boxWidth - 12)}px`
+                                          : `${Math.max(120, pW - txt.x - 16)}px`,
+                                        minBlockSize: '1lh',
                                         whiteSpace: 'pre-wrap',
                                         overflowWrap: 'break-word',
                                         color: txt.color,
                                         fontSize: txt.fontSize,
                                         fontWeight: txt.bold ? 700 : 500,
                                         textAlign: txt.textAlign || 'left',
-                                        lineHeight: 1.18,
                                         ...fontCss,
+                                        lineHeight: effLineHeight,
                                         pointerEvents: 'none',
                                         userSelect: 'none',
                                         WebkitUserSelect: 'none',
@@ -57855,7 +62601,7 @@ export default function App() {
                                         </>
                                       ) : (
                                         <>
-                                          {s === 0 && caretNode}
+                                          {caretPos === 0 && caretNode}
                                           {sortedBounds.slice(0, -1).map((bStart, bIdx) => {
                                             const bEnd = sortedBounds[bIdx + 1];
                                             if (bEnd <= bStart) return null;
@@ -57870,15 +62616,18 @@ export default function App() {
                                               segStyle.bold
                                             );
                                             const isSelectedSeg =
-                                              e > s && bStart >= s && bEnd <= e;
+                                              e > s &&
+                                              bStart >= s &&
+                                              bEnd <= e &&
+                                              segText !== '\n';
                                             return (
                                               <React.Fragment key={bStart}>
                                                 <span
                                                   style={{
+                                                    fontWeight: segStyle.bold ? 700 : 500,
                                                     ...segCss,
                                                     fontSize: `${segStyle.fontSize}px`,
                                                     color: segStyle.color,
-                                                    fontWeight: segStyle.bold ? 700 : 500,
                                                     backgroundColor: isSelectedSeg
                                                       ? 'rgba(0, 102, 255, 0.28)'
                                                       : undefined,
@@ -57890,7 +62639,7 @@ export default function App() {
                                                 >
                                                   {segText}
                                                 </span>
-                                                {e === s && bEnd === s && caretNode}
+                                                {caretPos > 0 && bEnd === caretPos && caretNode}
                                               </React.Fragment>
                                             );
                                           })}
@@ -57901,6 +62650,9 @@ export default function App() {
                                   );
                                 })()}
                               <textarea
+                                data-ghost-textarea="true"
+                                rows={1}
+                                cols={1}
                                 autoFocus={isEditingTxt}
                                 {...({ writingsuggestions: 'false' } as any)}
                                 ref={(el) => {
@@ -57959,7 +62711,8 @@ export default function App() {
                                   }
                                   const s = el.selectionStart ?? 0;
                                   const e = el.selectionEnd ?? 0;
-                                  setEditingCaretRange({ textId: txt.id, start: s, end: e });
+                                  const dir = el.selectionDirection || 'forward';
+                                  setEditingCaretRange({ textId: txt.id, start: s, end: e, direction: dir });
                                   if (e > s) {
                                     const nextRng = { textId: txt.id, start: s, end: e };
                                     activeTextRangeRef.current = nextRng;
@@ -57973,7 +62726,8 @@ export default function App() {
                                   const el = ev.currentTarget;
                                   const s = el.selectionStart ?? 0;
                                   const e = el.selectionEnd ?? 0;
-                                  setEditingCaretRange({ textId: txt.id, start: s, end: e });
+                                  const dir = el.selectionDirection || 'forward';
+                                  setEditingCaretRange({ textId: txt.id, start: s, end: e, direction: dir });
                                   if (e > s) {
                                     const nextRng = { textId: txt.id, start: s, end: e };
                                     activeTextRangeRef.current = nextRng;
@@ -58000,7 +62754,8 @@ export default function App() {
                                   }
                                   const s = el.selectionStart ?? 0;
                                   const e = el.selectionEnd ?? 0;
-                                  setEditingCaretRange({ textId: txt.id, start: s, end: e });
+                                  const dir = el.selectionDirection || 'forward';
+                                  setEditingCaretRange({ textId: txt.id, start: s, end: e, direction: dir });
                                   if (e > s) {
                                     const nextRng = { textId: txt.id, start: s, end: e };
                                     activeTextRangeRef.current = nextRng;
@@ -58023,6 +62778,10 @@ export default function App() {
                                     start: nextS,
                                     end: nextE,
                                   });
+                                  if (textEditUndoRecordedForIdRef.current !== txt.id) {
+                                    pushUndoSnapshot(activePage);
+                                    textEditUndoRecordedForIdRef.current = txt.id;
+                                  }
                                   updateActivePage(
                                     (page) => ({
                                       ...page,
@@ -58104,6 +62863,10 @@ export default function App() {
                                       start: nextCursorPos,
                                       end: nextCursorPos,
                                     });
+                                    if (textEditUndoRecordedForIdRef.current !== txt.id) {
+                                      pushUndoSnapshot(activePage);
+                                      textEditUndoRecordedForIdRef.current = txt.id;
+                                    }
                                     updateActivePage(
                                       (page) => ({
                                         ...page,
@@ -58176,27 +62939,26 @@ export default function App() {
                                   }
                                 }}
                                 style={{
-                                  gridArea: isEditingTxt ? '1 / 1' : undefined,
                                   width: '100%',
                                   height: '100%',
-                                  position: isEditingTxt ? 'relative' : 'absolute',
-                                  left: isEditingTxt ? undefined : 0,
-                                  top: isEditingTxt ? undefined : 0,
-                                  opacity: isEditingTxt ? 1 : 0,
+                                  position: 'absolute',
+                                  left: 0,
+                                  top: 0,
+                                  opacity: 0,
                                   zIndex: isEditingTxt ? 1 : -1,
-                                  minInlineSize: '2ch',
-                                  maxInlineSize: txt.boxWidth
-                                    ? `${Math.max(36, txt.boxWidth - 12)}px`
-                                    : '42ch',
-                                  minBlockSize: '1.18lh',
+                                  minWidth: 0,
+                                  minHeight: 0,
+                                  minInlineSize: 0,
+                                  maxInlineSize: '100%',
+                                  minBlockSize: 0,
                                   overflowWrap: 'break-word',
                                   color: 'transparent',
                                   caretColor: 'transparent',
                                   fontSize: txt.fontSize,
                                   fontWeight: txt.bold ? 700 : 500,
                                   textAlign: txt.textAlign || 'left',
-                                  lineHeight: 1.18,
                                   ...fontCss,
+                                  lineHeight: effLineHeight,
                                   WebkitUserSelect: 'text',
                                   userSelect: 'text',
                                   touchAction: 'none',
@@ -58265,13 +63027,14 @@ export default function App() {
                                 width: 'fit-content',
                                 maxWidth: txt.boxWidth ? '100%' : undefined,
                                 height: 'auto',
-                                overflow: txt.boxWidth ? 'hidden' : undefined,
+                                overflowX: txt.boxWidth ? 'clip' : undefined,
+                                overflowY: 'visible',
                                 overflowWrap: 'break-word',
                                 whiteSpace: 'pre-wrap',
-                                lineHeight: 1.18,
                                 fontWeight: txt.bold ? 700 : 500,
                                 textAlign: txt.textAlign || 'left',
                                 ...fontCss,
+                                lineHeight: effLineHeight,
                               }}
                             >
                               {txt.chemRawInput ? (
@@ -58433,6 +63196,12 @@ export default function App() {
                                   ) {
                                     const fullStr = txt.text;
                                     const bSet = new Set<number>([0, fullStr.length]);
+                                    for (let i = 0; i < fullStr.length; i++) {
+                                      if (fullStr[i] === '\n') {
+                                        bSet.add(i);
+                                        bSet.add(i + 1);
+                                      }
+                                    }
                                     for (const sp of txt.spans || []) {
                                       bSet.add(Math.max(0, Math.min(fullStr.length, sp.start)));
                                       bSet.add(Math.max(0, Math.min(fullStr.length, sp.end)));
@@ -58475,18 +63244,22 @@ export default function App() {
                                             (isSelectedTxt || isEditingTxt) &&
                                               activeSub &&
                                               bStart >= activeSub.start &&
-                                              bEnd <= activeSub.end
+                                              bEnd <= activeSub.end &&
+                                              segText !== '\n'
                                           );
                                           return (
                                             <span
                                               key={bStart}
                                               style={{
+                                                fontWeight: segStyle.bold ? 700 : 500,
                                                 ...segCss,
                                                 fontSize: `${segStyle.fontSize}px`,
                                                 color: segStyle.color,
-                                                fontWeight: segStyle.bold ? 700 : 500,
                                                 backgroundColor: isSubHighlighted
-                                                  ? 'rgba(56, 189, 248, 0.25)'
+                                                  ? 'rgba(0, 102, 255, 0.28)'
+                                                  : undefined,
+                                                boxShadow: isSubHighlighted
+                                                  ? '0 0 0 1.5px rgba(0, 102, 255, 0.55)'
                                                   : undefined,
                                                 borderRadius: isSubHighlighted ? '3px' : undefined,
                                               }}
@@ -58776,27 +63549,31 @@ export default function App() {
                             tabIndex={0}
                             aria-label="Χάρακας (σύρετε για μετακίνηση ή από την άκρη για αλλαγή μεγέθους)"
                             onKeyDown={(e) => {
-                              const step = 15;
+                              const step = e.shiftKey ? 5 : 1.5;
                               if (e.key === 'ArrowLeft') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 setRulerState(
                                   (r) => ({ ...r, x: r.x - step }),
                                   pageObj.id
                                 );
                               } else if (e.key === 'ArrowRight') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 setRulerState(
                                   (r) => ({ ...r, x: r.x + step }),
                                   pageObj.id
                                 );
                               } else if (e.key === 'ArrowUp') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 setRulerState(
                                   (r) => ({ ...r, y: r.y - step }),
                                   pageObj.id
                                 );
                               } else if (e.key === 'ArrowDown') {
                                 e.preventDefault();
+                                e.stopPropagation();
                                 setRulerState(
                                   (r) => ({ ...r, y: r.y + step }),
                                   pageObj.id
@@ -59551,9 +64328,7 @@ export default function App() {
                             backgroundColor:
                               pObj.backgroundDataUrl || pObj.pdfPageNumber
                                 ? '#ffffff'
-                                : pObj.template === 'dark-grid'
-                                ? '#0f172a'
-                                : '#fffdf7',
+                                : getEffectivePaperColor(pObj),
                           }}
                           className="relative w-full overflow-hidden cursor-pointer flex items-center justify-center"
                         >
@@ -59820,7 +64595,7 @@ export default function App() {
                     centerX = Math.max(diagW / 2 + 24, Math.min(pW - diagW / 2 - 24, targetX + targetW / 2));
                     centerY = Math.min(pH - diagH / 2 - 24, targetY + targetH + 48 + diagH / 2);
                   }
-                  const axisInk = activePage.template === 'dark-grid' ? '#f8fafc' : '#0f172a';
+                  const axisInk = isDarkPaperColor(getEffectivePaperColor(activePage)) ? '#f8fafc' : '#0f172a';
                   const wDet = detectWaveTwoVarEquation(normalizedLatex);
                   if (wDet && wDet.isWaveXT && !wDet.forcedMode) {
                     updateActivePage((page) => ({
@@ -60002,29 +64777,280 @@ export default function App() {
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1.5">Πρότυπο Χαρτιού (Paper Template):</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'grid', label: 'Τετραγωνισμένο' },
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Χρώμα & Πρότυπο Χαρτιού (Paper Color & Template):
+              </label>
+              {(() => {
+                const activePaperHex = getEffectivePaperColor(activePage);
+                const activePattern: PaperTemplateType =
+                  activePage.template === 'dark-grid' ? 'grid' : activePage.template || 'grid';
+                const activeRules = getPaperRuleColors(activePaperHex);
+                const isLand = activePage.orientation === 'landscape';
+                const allSwatches = [
+                  ...PAPER_WHITE_GREY_SWATCHES,
+                  ...PAPER_BEIGE_VINTAGE_SWATCHES,
+                  { id: 'dark-slate', hex: '#0f172a', label: 'Σκούρο' },
+                ];
+                const activeColorLabel =
+                  allSwatches.find((s) => s.hex.toLowerCase() === activePaperHex.toLowerCase())
+                    ?.label || 'Κρεμ Ανοιχτό';
+
+                const renderMiniPatternSvg = (
+                  pat: PaperTemplateType,
+                  wBox: number,
+                  hBox: number,
+                  stepPx: number
+                ) => {
+                  const effPat = pat === 'dark-grid' ? 'grid' : pat;
+                  if (effPat === 'blank') return null;
+                  const xs: number[] = [];
+                  const ys: number[] = [];
+                  for (let x = stepPx; x < wBox; x += stepPx) xs.push(x);
+                  for (let y = stepPx; y < hBox; y += stepPx) ys.push(y);
+                  return (
+                    <svg
+                      viewBox={`0 0 ${wBox} ${hBox}`}
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                    >
+                      {effPat === 'grid' && (
+                        <g stroke={activeRules.grid} strokeWidth="0.9">
+                          {xs.map((x) => (
+                            <line key={`vx-${x}`} x1={x} y1={0} x2={x} y2={hBox} />
+                          ))}
+                          {ys.map((y) => (
+                            <line key={`hy-${y}`} x1={0} y1={y} x2={wBox} y2={y} />
+                          ))}
+                        </g>
+                      )}
+                      {(effPat === 'ruled' || effPat === 'cornell') && (
+                        <>
+                          <g stroke={activeRules.grid} strokeWidth="0.9">
+                            {ys
+                              .filter((y) => y >= stepPx * 1.8)
+                              .map((y) => (
+                                <line key={`ry-${y}`} x1={0} y1={y} x2={wBox} y2={y} />
+                              ))}
+                          </g>
+                          {effPat === 'cornell' && (
+                            <g stroke={activeRules.cornell} strokeWidth="1.2">
+                              <line
+                                x1={Math.round(wBox * 0.28)}
+                                y1={stepPx * 1.6}
+                                x2={Math.round(wBox * 0.28)}
+                                y2={Math.round(hBox * 0.8)}
+                              />
+                              <line
+                                x1={0}
+                                y1={Math.round(hBox * 0.8)}
+                                x2={wBox}
+                                y2={Math.round(hBox * 0.8)}
+                              />
+                            </g>
+                          )}
+                        </>
+                      )}
+                      {effPat === 'dotted' && (
+                        <g fill={activeRules.dot}>
+                          {xs.map((x) =>
+                            ys.map((y) => <circle key={`d-${x}-${y}`} cx={x} cy={y} r="0.85" />)
+                          )}
+                        </g>
+                      )}
+                    </svg>
+                  );
+                };
+
+                const templateOptions: { id: PaperTemplateType; label: string }[] = [
+                  { id: 'grid', label: 'Τετραγων.' },
                   { id: 'ruled', label: 'Γραμμές' },
                   { id: 'dotted', label: 'Τελείες' },
                   { id: 'cornell', label: 'Cornell' },
-                  { id: 'blank', label: 'Λευκό' },
-                  { id: 'dark-grid', label: 'Σκούρο Grid' },
-                ].map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    onClick={() => updateActivePage((page) => ({ ...page, template: tpl.id as PaperTemplateType }))}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
-                      activePage.template === tpl.id
-                        ? 'bg-[#0066ff] border-[#0066ff] text-white'
-                        : 'bg-slate-50 border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {tpl.label}
-                  </button>
-                ))}
-              </div>
+                  { id: 'blank', label: 'Κενό' },
+                ];
+                const activeTplLabel =
+                  templateOptions.find((t) => t.id === activePattern)?.label || 'Τετραγων.';
+
+                return (
+                  <div className="rounded-2xl bg-slate-50/90 border border-slate-200/90 p-3 space-y-3">
+                    {/* Top Row: Live Paper Sheet Miniature + Dual Color Gradations */}
+                    <div className="flex items-center gap-3.5">
+                      {/* Live Paper Sheet Miniature */}
+                      <div className="flex flex-col items-center shrink-0 w-[88px]">
+                        <div
+                          style={{ backgroundColor: activePaperHex }}
+                          className={`relative rounded-lg border shadow-md overflow-hidden transition-all ${
+                            isDarkPaperColor(activePaperHex)
+                              ? 'border-slate-700'
+                              : 'border-slate-300/95'
+                          } ${isLand ? 'w-[86px] h-[61px]' : 'w-[66px] h-[92px]'}`}
+                          title={`Προεπισκόπηση χαρτιού: ${activeColorLabel} • ${activeTplLabel}`}
+                        >
+                          {renderMiniPatternSvg(
+                            activePattern,
+                            isLand ? 86 : 66,
+                            isLand ? 61 : 92,
+                            9
+                          )}
+                          {/* Subtle sample handwriting line so user immediately feels contrast on the paper */}
+                          <svg
+                            viewBox="0 0 60 20"
+                            className="absolute bottom-2 left-1.5 w-11 h-3.5 pointer-events-none opacity-75"
+                          >
+                            <path
+                              d="M3 13 C 9 5, 14 15, 20 9 S 31 14, 38 8 S 48 13, 55 10"
+                              fill="none"
+                              stroke={isDarkPaperColor(activePaperHex) ? '#e2e8f0' : '#1e293b'}
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </div>
+                        <span className="mt-1 text-[10px] font-semibold text-slate-600 text-center leading-tight">
+                          {activeColorLabel}
+                        </span>
+                      </div>
+
+                      {/* Right: Two Color Gradation Rows (White -> Soft Grey & Cream -> Vintage Beige) */}
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <div>
+                          <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 mb-1">
+                            <span>Λευκό → Απαλό Γκρι</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {PAPER_WHITE_GREY_SWATCHES.map((sw) => {
+                              const isSel = activePaperHex.toLowerCase() === sw.hex.toLowerCase();
+                              return (
+                                <button
+                                  key={sw.id}
+                                  type="button"
+                                  onClick={() =>
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      paperColor: sw.hex,
+                                      template:
+                                        page.template === 'dark-grid' ? 'grid' : page.template,
+                                    }))
+                                  }
+                                  style={{ backgroundColor: sw.hex }}
+                                  title={sw.label}
+                                  className={`h-7 flex-1 rounded-lg border transition cursor-pointer flex items-center justify-center ${
+                                    isSel
+                                      ? 'border-[#0066ff] ring-2 ring-[#0066ff]/35 shadow-xs'
+                                      : 'border-slate-300 hover:border-slate-400'
+                                  }`}
+                                >
+                                  {isSel && (
+                                    <span className="w-2 h-2 rounded-full bg-[#0066ff]" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                            {/* Optional Dark Slate paper swatch preserving dark-grid capability */}
+                            {(() => {
+                              const isDarkSel = activePaperHex.toLowerCase() === '#0f172a';
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      paperColor: '#0f172a',
+                                    }))
+                                  }
+                                  style={{ backgroundColor: '#0f172a' }}
+                                  title="Σκούρο Χαρτί"
+                                  className={`h-7 w-7 shrink-0 rounded-lg border transition cursor-pointer flex items-center justify-center ${
+                                    isDarkSel
+                                      ? 'border-[#38bdf8] ring-2 ring-[#0066ff]/45 shadow-xs'
+                                      : 'border-slate-600 hover:border-slate-400'
+                                  }`}
+                                >
+                                  {isDarkSel && (
+                                    <span className="w-2 h-2 rounded-full bg-sky-400" />
+                                  )}
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 mb-1">
+                            <span>Μπεζ Ανοιχτό → Vintage (ήπιοι τόνοι)</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {PAPER_BEIGE_VINTAGE_SWATCHES.map((sw) => {
+                              const isSel = activePaperHex.toLowerCase() === sw.hex.toLowerCase();
+                              return (
+                                <button
+                                  key={sw.id}
+                                  type="button"
+                                  onClick={() =>
+                                    updateActivePage((page) => ({
+                                      ...page,
+                                      paperColor: sw.hex,
+                                      template:
+                                        page.template === 'dark-grid' ? 'grid' : page.template,
+                                    }))
+                                  }
+                                  style={{ backgroundColor: sw.hex }}
+                                  title={sw.label}
+                                  className={`h-7 flex-1 rounded-lg border transition cursor-pointer flex items-center justify-center ${
+                                    isSel
+                                      ? 'border-[#0066ff] ring-2 ring-[#0066ff]/35 shadow-xs'
+                                      : 'border-amber-900/20 hover:border-amber-900/40'
+                                  }`}
+                                >
+                                  {isSel && (
+                                    <span className="w-2 h-2 rounded-full bg-[#0066ff]" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: 5 Visual Paper Template Cards */}
+                    <div className="grid grid-cols-5 gap-1.5 pt-1 border-t border-slate-200/70">
+                      {templateOptions.map((tpl) => {
+                        const isSelTpl = activePattern === tpl.id;
+                        return (
+                          <button
+                            key={tpl.id}
+                            type="button"
+                            onClick={() =>
+                              updateActivePage((page) => ({
+                                ...page,
+                                template: tpl.id,
+                                paperColor: getEffectivePaperColor(page),
+                              }))
+                            }
+                            className={`flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl border text-[11px] font-semibold transition cursor-pointer ${
+                              isSelTpl
+                                ? 'bg-[#0066ff]/10 border-[#0066ff] text-[#0052cc] shadow-2xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                            }`}
+                          >
+                            <div
+                              style={{ backgroundColor: activePaperHex }}
+                              className={`relative w-8 h-10 rounded border overflow-hidden shadow-2xs ${
+                                isDarkPaperColor(activePaperHex)
+                                  ? 'border-slate-600'
+                                  : 'border-slate-300'
+                              }`}
+                            >
+                              {renderMiniPatternSvg(tpl.id, 32, 40, 6.4)}
+                            </div>
+                            <span className="truncate max-w-full">{tpl.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="space-y-2 pt-2 border-t border-slate-100">

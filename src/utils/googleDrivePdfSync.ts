@@ -1,3 +1,4 @@
+import katex from 'katex';
 import {
   Notebook,
   NotePage,
@@ -8,6 +9,9 @@ import {
   A4_GRID_STEP_PX,
   getPageLogicalWidth,
   getPageLogicalHeight,
+  getEffectivePaperColor,
+  isDarkPaperColor,
+  getPaperRuleColors,
 } from '../types/note';
 import {
   computeResistorOrSpringPoints,
@@ -16,6 +20,8 @@ import {
   ensureWaveBezierPoints,
   getCubicSegmentControlPoints,
   analyzeCircuitForSimulation,
+  convertPlainTextToMathLatex,
+  splitAndCleanMathLatexLines,
 } from './geometryAndAlgorithms';
 
 function getStrokeBounds(s: StrokeObject): { minX: number; maxX: number; minY: number; maxY: number } {
@@ -78,10 +84,13 @@ function drawPaperTemplateForPdf(
   ctx: CanvasRenderingContext2D,
   template: NotePage['template'],
   w: number,
-  h: number
+  h: number,
+  paperColor?: string
 ) {
   ctx.save();
-  ctx.fillStyle = template === 'dark-grid' ? '#0f172a' : '#fffdf7';
+  const bgHex = getEffectivePaperColor({ template, paperColor });
+  const ruleColors = getPaperRuleColors(bgHex);
+  ctx.fillStyle = bgHex;
   ctx.fillRect(0, 0, w, h);
 
   if (template === 'blank') {
@@ -89,8 +98,7 @@ function drawPaperTemplateForPdf(
     return;
   }
 
-  ctx.strokeStyle =
-    template === 'dark-grid' ? 'rgba(148, 163, 184, 0.16)' : 'rgba(71, 85, 105, 0.14)';
+  ctx.strokeStyle = ruleColors.pdfGrid;
   ctx.lineWidth = 1;
   const step = A4_GRID_STEP_PX;
 
@@ -114,7 +122,7 @@ function drawPaperTemplateForPdf(
     }
     ctx.stroke();
     if (template === 'cornell') {
-      ctx.strokeStyle = 'rgba(220, 38, 38, 0.35)';
+      ctx.strokeStyle = ruleColors.cornell;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(step * 10, lineStep * 2);
@@ -124,7 +132,7 @@ function drawPaperTemplateForPdf(
       ctx.stroke();
     }
   } else if (template === 'dotted') {
-    ctx.fillStyle = 'rgba(120, 130, 145, 0.45)';
+    ctx.fillStyle = ruleColors.dot;
     for (let x = step; x < w; x += step) {
       for (let y = step; y < h; y += step) {
         ctx.beginPath();
@@ -434,6 +442,114 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
     return;
   }
 
+  if (s.shapeType === 'title-box' && s.points.length >= 4) {
+    const [q0, q1, q2, q3] = s.points;
+    const wDx = q1.x - q0.x;
+    const wDy = q1.y - q0.y;
+    const hDx = q3.x - q0.x;
+    const hDy = q3.y - q0.y;
+    const wLen = Math.hypot(wDx, wDy);
+    const hLen = Math.hypot(hDx, hDy);
+    if (wLen > 2 && hLen > 2) {
+      const ux = wDx / wLen;
+      const uy = wDy / wLen;
+      const vx = hDx / hLen;
+      const vy = hDy / hLen;
+      const rCorner = Math.max(3.5, Math.min(7.5, Math.min(wLen, hLen) * 0.1));
+
+      const traceRoundedQuad = (
+        c0: { x: number; y: number },
+        c1: { x: number; y: number },
+        c2: { x: number; y: number },
+        c3: { x: number; y: number },
+        rad: number
+      ) => {
+        const corners = [c0, c1, c2, c3];
+        ctx.moveTo((c3.x + c0.x) * 0.5, (c3.y + c0.y) * 0.5);
+        for (let ci = 0; ci < 4; ci++) {
+          const prevC = corners[(ci + 3) % 4];
+          const curC = corners[ci];
+          const nextC = corners[(ci + 1) % 4];
+          const lenA = Math.hypot(curC.x - prevC.x, curC.y - prevC.y);
+          const lenB = Math.hypot(nextC.x - curC.x, nextC.y - curC.y);
+          const effR = Math.max(0, Math.min(rad, lenA * 0.46, lenB * 0.46));
+          ctx.arcTo(curC.x, curC.y, (curC.x + nextC.x) * 0.5, (curC.y + nextC.y) * 0.5, effR);
+        }
+        ctx.closePath();
+      };
+
+      const bMinX = Math.min(q0.x, q1.x, q2.x, q3.x);
+      const bMaxX = Math.max(q0.x, q1.x, q2.x, q3.x);
+      const bMinY = Math.min(q0.y, q1.y, q2.y, q3.y);
+      const bMaxY = Math.max(q0.y, q1.y, q2.y, q3.y);
+      const shadowScale = Math.max(0.62, Math.min(1.18, Math.min(wLen, hLen) / 74));
+      const baseAlpha = s.opacity ?? 1;
+
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.rect(bMinX - 52, bMinY - 52, bMaxX - bMinX + 104, bMaxY - bMinY + 104);
+      traceRoundedQuad(q0, q1, q2, q3, rCorner);
+      ctx.clip('evenodd');
+
+      const grad = ctx.createLinearGradient(bMinX, bMinY, bMaxX + 14, bMaxY + 14);
+      grad.addColorStop(0, '#1e293b');
+      grad.addColorStop(0.55, '#0f172a');
+      grad.addColorStop(1, '#020617');
+      ctx.fillStyle = grad;
+
+      const SHADOW_STEPS = 16;
+      for (let step = 0; step < SHADOW_STEPS; step++) {
+        const u = step / (SHADOW_STEPS - 1);
+        const shiftX = (1.1 + u * 9.6) * shadowScale;
+        const shiftY = (1.3 + u * 10.2) * shadowScale;
+        const leadInset = (1.6 + u * 2.2) * shadowScale;
+        const feather = u * 2.4 * shadowScale;
+
+        const s0 = {
+          x: q0.x + shiftX + ux * leadInset + vx * leadInset,
+          y: q0.y + shiftY + uy * leadInset + vy * leadInset,
+        };
+        const s1 = {
+          x: q1.x + shiftX + ux * feather + vx * leadInset,
+          y: q1.y + shiftY + uy * feather + vy * leadInset,
+        };
+        const s2 = {
+          x: q2.x + shiftX + ux * feather + vx * feather,
+          y: q2.y + shiftY + uy * feather + vy * feather,
+        };
+        const s3 = {
+          x: q3.x + shiftX + ux * leadInset + vx * feather,
+          y: q3.y + shiftY + uy * leadInset + vy * feather,
+        };
+
+        const layerAlpha = (0.056 * Math.pow(1 - u, 0.55) + 0.012) * baseAlpha;
+        ctx.globalAlpha = layerAlpha;
+        ctx.beginPath();
+        traceRoundedQuad(s0, s1, s2, s3, rCorner + feather * 0.85 + 1.2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.beginPath();
+      traceRoundedQuad(q0, q1, q2, q3, rCorner);
+      if (s.fillStyle && s.fillStyle !== 'none') {
+        const fillTrans = s.fillTransparency ?? 90;
+        ctx.save();
+        ctx.fillStyle = s.fillColor || s.color || '#2563eb';
+        ctx.globalAlpha =
+          (fillTrans === 0 ? 0.94 : Math.max(0.05, Math.min(0.95, (100 - fillTrans) / 100))) *
+          baseAlpha;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+  }
+
   ctx.beginPath();
   if ((s.shapeType === 'ellipse' || s.shapeType === 'circle') && s.points.length === 4) {
     const pts = s.points;
@@ -567,6 +683,8 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
       const isStencilCustomFill =
         s.shapeType === 'fan-blade' ||
         s.shapeType === 'fan-hub' ||
+        s.shapeType === 'ammeter-needle' ||
+        s.shapeType === 'voltmeter-needle' ||
         s.shapeType === 'incline-wedge' ||
         s.shapeType === 'incline-block' ||
         s.shapeType === 'switch' ||
@@ -575,7 +693,10 @@ function drawStrokeForPdf(ctx: CanvasRenderingContext2D, s: StrokeObject) {
         ? s.fillColor || s.color || '#2563eb'
         : s.color || s.fillColor || '#2563eb';
       const fillTrans =
-        s.shapeType === 'fan-blade' || s.shapeType === 'fan-hub'
+        s.shapeType === 'fan-blade' ||
+        s.shapeType === 'fan-hub' ||
+        s.shapeType === 'ammeter-needle' ||
+        s.shapeType === 'voltmeter-needle'
           ? 0
           : s.fillTransparency ?? 90;
       ctx.save();
@@ -669,7 +790,13 @@ function isCircuitEligibleStrokeForPdf(s: StrokeObject): boolean {
     s.shapeType === 'switch-knob' ||
     s.shapeType === 'fan' ||
     s.shapeType === 'fan-blade' ||
-    s.shapeType === 'fan-hub'
+    s.shapeType === 'fan-hub' ||
+    s.shapeType === 'ammeter' ||
+    s.shapeType === 'ammeter-needle' ||
+    s.shapeType === 'ammeter-label' ||
+    s.shapeType === 'voltmeter' ||
+    s.shapeType === 'voltmeter-needle' ||
+    s.shapeType === 'voltmeter-label'
   );
 }
 
@@ -809,6 +936,8 @@ function getExpandedCircuitClustersForPdf(page: NotePage, visibleLayerIds: Set<s
         s.shapeType === 'bulb-symbol' ||
         s.shapeType === 'resistor' ||
         s.shapeType === 'fan' ||
+        s.shapeType === 'ammeter' ||
+        s.shapeType === 'voltmeter' ||
         s.shapeType === 'line'
     );
     if (hasSource && hasLoadOrWire) {
@@ -1095,7 +1224,7 @@ function drawPageSimulationsSnapshotForPdf(
       if (simData.autoSwitch) {
         const sw = simData.autoSwitch;
         ctx.save();
-        const paperBg = page.template === 'dark-grid' ? '#0f172a' : '#fffdf7';
+        const paperBg = getEffectivePaperColor(page);
         ctx.strokeStyle = paperBg;
         ctx.lineWidth = showDarkTrack ? 16 : 10;
         ctx.lineCap = 'butt';
@@ -1189,7 +1318,10 @@ function drawPageSimulationsSnapshotForPdf(
       const inferred = inferReactionFromCanvasAtoms(aSim.atoms.map((a) => a.z));
       const rawForCheck =
         aSim.userRawReactionText || aSim.reactionEquationText || inferred.equationDisplay;
-      const chemVal = validateAndCorrectChemicalEquation(rawForCheck);
+      const chemVal = validateAndCorrectChemicalEquation(
+        rawForCheck,
+        aSim.reactionEquationText
+      );
       ctx.save();
       ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       const eqText = chemVal.correctedEquation || rawForCheck;
@@ -1529,7 +1661,7 @@ function drawPageSimulationsSnapshotForPdf(
   if (hookeSim) {
     const oneMmPx = 4.6;
     const w = getPageLogicalWidth(page);
-    const isDarkGrid = page.template === 'dark-grid';
+    const isDarkGrid = isDarkPaperColor(getEffectivePaperColor(page));
     const axisInk = isDarkGrid ? '#f8fafc' : '#0f172a';
 
     const getSpringLengthPx = (sp: StrokeObject): number => {
@@ -1970,13 +2102,354 @@ function drawPageSimulationsSnapshotForPdf(
   }
 }
 
+let katexFontsReadyPromise: Promise<void> | null = null;
+function ensureKatexFontsLoadedForPdf(): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return Promise.resolve();
+  if (!katexFontsReadyPromise) {
+    katexFontsReadyPromise = Promise.race([
+      Promise.allSettled([
+        document.fonts.ready,
+        document.fonts.load('italic 20px KaTeX_Math'),
+        document.fonts.load('20px KaTeX_Main'),
+        document.fonts.load('bold 20px KaTeX_Main'),
+        document.fonts.load('20px KaTeX_AMS'),
+        document.fonts.load('20px KaTeX_Size1'),
+        document.fonts.load('20px KaTeX_Size2'),
+      ]).then(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 900)),
+    ]);
+  }
+  return katexFontsReadyPromise;
+}
+
+/**
+ * Renders a MathOCR / LaTeX `TextObject` (`tx.isMath === true`) onto the 2D PDF canvas
+ * using real KaTeX DOM layout + native 2D Canvas glyph/border/Path2D vector primitives
+ * (zero `<foreignObject>` tainting, 100% Safari/iPadOS/Chrome compatible, identical to the editor!).
+ */
+async function drawKatexMathObjectForPdf(
+  ctx: CanvasRenderingContext2D,
+  tx: TextObject,
+  page: NotePage,
+  isMathLabel: boolean,
+  customFontStack: string
+): Promise<boolean> {
+  if (typeof document === 'undefined' || !document.body) return false;
+  const effectiveLatex = (tx.latex || convertPlainTextToMathLatex(tx.text || '') || '').trim();
+  if (!effectiveLatex) return false;
+
+  await ensureKatexFontsLoadedForPdf();
+
+  const fSize = tx.fontSize || 20;
+  const mathRows = splitAndCleanMathLatexLines(effectiveLatex);
+  const rowsToRender = mathRows.length > 0 ? mathRows : [effectiveLatex];
+  const multiM = tx.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
+  const multiGrp = multiM ? multiM[1] : null;
+  const useCustomFont = Boolean(tx.fontFamily && tx.fontFamily !== 'sans');
+
+  const host = document.createElement('div');
+  host.style.position = 'fixed';
+  host.style.left = '-10000px';
+  host.style.top = '0px';
+  host.style.visibility = 'hidden';
+  host.style.pointerEvents = 'none';
+  host.style.zIndex = '-9999';
+  host.style.width = 'max-content';
+  host.style.height = 'auto';
+  host.style.padding = isMathLabel ? '0px 4px' : '2px 6px';
+  host.style.border = '1px solid transparent';
+  host.style.boxSizing = 'border-box';
+  host.style.fontSize = `${fSize}px`;
+  host.style.color = tx.color || '#111827';
+  host.style.lineHeight = isMathLabel ? '1' : '1.18';
+  if (useCustomFont) {
+    host.style.fontFamily = customFontStack;
+  }
+
+  const innerDiv = document.createElement('div');
+  innerDiv.style.display = 'flex';
+  innerDiv.style.flexDirection = 'column';
+  innerDiv.style.gap = '8px';
+  innerDiv.style.alignItems =
+    tx.textAlign === 'center' ? 'center' : tx.textAlign === 'right' ? 'flex-end' : 'flex-start';
+  innerDiv.style.textAlign = tx.textAlign || 'left';
+
+  rowsToRender.forEach((rowLatex, rIdx) => {
+    const rowFnColor = multiGrp
+      ? (page.strokes || []).find(
+          (s) => s.groupId === multiGrp && s.id.includes(`-crv-fn${rIdx + 1}-`)
+        )?.color
+      : undefined;
+    const rowEl = document.createElement('div');
+    if (rowFnColor) {
+      rowEl.style.color = rowFnColor;
+    }
+    rowEl.innerHTML = katex.renderToString(rowLatex, {
+      throwOnError: false,
+      strict: false,
+      displayMode: true,
+    });
+    rowEl.querySelectorAll<HTMLElement>('.katex-display').forEach((dispEl) => {
+      dispEl.style.margin = '0px';
+      dispEl.style.textAlign = tx.textAlign || 'left';
+    });
+    if (useCustomFont) {
+      rowEl.querySelectorAll<HTMLElement>('.katex, .katex *').forEach((kEl) => {
+        kEl.style.fontFamily = 'inherit';
+        kEl.style.fontWeight = 'normal';
+      });
+    }
+    innerDiv.appendChild(rowEl);
+  });
+
+  host.appendChild(innerDiv);
+  document.body.appendChild(host);
+
+  try {
+    const hostRect = host.getBoundingClientRect();
+    const katexRoots = Array.from(host.querySelectorAll<HTMLElement>('.katex-html'));
+    if (katexRoots.length === 0 || hostRect.width <= 0.5 || hostRect.height <= 0.5) {
+      return false;
+    }
+    const originLeft = hostRect.left;
+    const originTop = hostRect.top;
+
+    const getClippedBounds = (
+      baseRect: DOMRect,
+      startNode: HTMLElement | null
+    ): { left: number; top: number; right: number; bottom: number } => {
+      let left = baseRect.left;
+      let top = baseRect.top;
+      let right = baseRect.right;
+      let bottom = baseRect.bottom;
+      let anc = startNode;
+      while (anc && anc !== host) {
+        const acs = window.getComputedStyle(anc);
+        const ov = `${acs.overflow} ${acs.overflowX} ${acs.overflowY}`;
+        if (ov.includes('hidden') || ov.includes('clip')) {
+          const ar = anc.getBoundingClientRect();
+          if (ar.left > left) left = ar.left;
+          if (ar.top > top) top = ar.top;
+          if (ar.right < right) right = ar.right;
+          if (ar.bottom < bottom) bottom = ar.bottom;
+        }
+        anc = anc.parentElement;
+      }
+      return { left, top, right, bottom };
+    };
+
+    ctx.save();
+    for (const kRoot of katexRoots) {
+      // 1. CSS backgrounds & borders (fraction bars `.frac-line`, overlines, underlines, matrix rules)
+      const allEls: HTMLElement[] = [kRoot, ...Array.from(kRoot.querySelectorAll<HTMLElement>('*'))];
+      for (const el of allEls) {
+        if (el.closest('svg, .katex-mathml')) continue;
+        const cs = window.getComputedStyle(el);
+        if (
+          cs.display === 'none' ||
+          cs.visibility === 'hidden' ||
+          parseFloat(cs.opacity || '1') <= 0
+        ) {
+          continue;
+        }
+        const er = el.getBoundingClientRect();
+        if (er.width <= 0.05 && er.height <= 0.05) continue;
+
+        if (
+          cs.backgroundColor &&
+          cs.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
+          cs.backgroundColor !== 'transparent'
+        ) {
+          ctx.fillStyle = cs.backgroundColor;
+          ctx.fillRect(
+            tx.x + (er.left - originLeft),
+            tx.y + (er.top - originTop),
+            er.width,
+            er.height
+          );
+        }
+
+        const bbw = cs.borderBottomStyle !== 'none' ? parseFloat(cs.borderBottomWidth || '0') : 0;
+        if (bbw > 0.05 && er.width > 0.2) {
+          const drawH = Math.max(0.85, bbw);
+          ctx.fillStyle = cs.borderBottomColor || cs.color || tx.color || '#111827';
+          ctx.fillRect(
+            tx.x + (er.left - originLeft),
+            tx.y + (er.bottom - originTop) - drawH,
+            er.width,
+            drawH
+          );
+        }
+        const btw = cs.borderTopStyle !== 'none' ? parseFloat(cs.borderTopWidth || '0') : 0;
+        if (btw > 0.05 && er.width > 0.2) {
+          const drawH = Math.max(0.85, btw);
+          ctx.fillStyle = cs.borderTopColor || cs.color || tx.color || '#111827';
+          ctx.fillRect(
+            tx.x + (er.left - originLeft),
+            tx.y + (er.top - originTop),
+            er.width,
+            drawH
+          );
+        }
+        const blw = cs.borderLeftStyle !== 'none' ? parseFloat(cs.borderLeftWidth || '0') : 0;
+        if (blw > 0.05 && er.height > 0.2) {
+          const drawW = Math.max(0.85, blw);
+          ctx.fillStyle = cs.borderLeftColor || cs.color || tx.color || '#111827';
+          ctx.fillRect(
+            tx.x + (er.left - originLeft),
+            tx.y + (er.top - originTop),
+            drawW,
+            er.height
+          );
+        }
+        const brw = cs.borderRightStyle !== 'none' ? parseFloat(cs.borderRightWidth || '0') : 0;
+        if (brw > 0.05 && er.height > 0.2) {
+          const drawW = Math.max(0.85, brw);
+          ctx.fillStyle = cs.borderRightColor || cs.color || tx.color || '#111827';
+          ctx.fillRect(
+            tx.x + (er.right - originLeft) - drawW,
+            tx.y + (er.top - originTop),
+            drawW,
+            er.height
+          );
+        }
+      }
+
+      // 2. Vector `<svg>` paths (`\sqrt{...}`, `\vec{...}`, `\widehat{...}`, extensible arrows, tall braces)
+      for (const svgEl of Array.from(kRoot.querySelectorAll('svg'))) {
+        const svgCs = window.getComputedStyle(svgEl);
+        if (svgCs.display === 'none' || svgCs.visibility === 'hidden') continue;
+        const sr = svgEl.getBoundingClientRect();
+        if (sr.width <= 0.2 || sr.height <= 0.2) continue;
+        const clip = getClippedBounds(sr, svgEl.parentElement);
+        if (clip.right - clip.left <= 0.2 || clip.bottom - clip.top <= 0.2) continue;
+
+        const vbAttr = (svgEl.getAttribute('viewBox') || '').trim();
+        const vbParts = vbAttr ? vbAttr.split(/[\s,]+/).map(Number) : [];
+        const vbMinX = vbParts.length === 4 && Number.isFinite(vbParts[0]) ? vbParts[0] : 0;
+        const vbMinY = vbParts.length === 4 && Number.isFinite(vbParts[1]) ? vbParts[1] : 0;
+        const vbW =
+          vbParts.length === 4 && Number.isFinite(vbParts[2]) && vbParts[2] > 0
+            ? vbParts[2]
+            : sr.width;
+        const vbH =
+          vbParts.length === 4 && Number.isFinite(vbParts[3]) && vbParts[3] > 0
+            ? vbParts[3]
+            : sr.height;
+
+        const par = (svgEl.getAttribute('preserveAspectRatio') || 'xMidYMid meet').trim();
+        let scaleX = sr.width / vbW;
+        let scaleY = sr.height / vbH;
+        let mapOriginX = sr.left - vbMinX * scaleX;
+        let mapOriginY = sr.top - vbMinY * scaleY;
+
+        if (par !== 'none') {
+          const isSlice = par.includes('slice');
+          const uniScale = isSlice ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
+          scaleX = uniScale;
+          scaleY = uniScale;
+          const extraW = sr.width - vbW * uniScale;
+          const extraH = sr.height - vbH * uniScale;
+          const xAlignOffset = par.includes('xMin') ? 0 : par.includes('xMax') ? extraW : extraW / 2;
+          const yAlignOffset = par.includes('YMin') ? 0 : par.includes('YMax') ? extraH : extraH / 2;
+          mapOriginX = sr.left + xAlignOffset - vbMinX * uniScale;
+          mapOriginY = sr.top + yAlignOffset - vbMinY * uniScale;
+        }
+
+        const svgColor = svgCs.color || tx.color || '#111827';
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(
+          tx.x + (clip.left - originLeft),
+          tx.y + (clip.top - originTop),
+          clip.right - clip.left,
+          clip.bottom - clip.top
+        );
+        ctx.clip();
+        ctx.translate(tx.x + (mapOriginX - originLeft), tx.y + (mapOriginY - originTop));
+        ctx.scale(scaleX, scaleY);
+        ctx.fillStyle = svgColor;
+        for (const pathEl of Array.from(svgEl.querySelectorAll('path'))) {
+          const dAttr = pathEl.getAttribute('d');
+          if (!dAttr) continue;
+          try {
+            ctx.fill(new Path2D(dAttr));
+          } catch {
+            // ignore malformed path
+          }
+        }
+        ctx.restore();
+      }
+
+      // 3. KaTeX glyph runs (`Text` nodes inside `.katex-html`)
+      const walker = document.createTreeWalker(kRoot, NodeFilter.SHOW_TEXT);
+      const range = document.createRange();
+      let curNode = walker.nextNode();
+      while (curNode) {
+        const targetTextNode = curNode;
+        const rawStr = targetTextNode.nodeValue || '';
+        const parentEl = targetTextNode.parentElement;
+        curNode = walker.nextNode();
+        if (!rawStr || /^[\u200B\s]*$/.test(rawStr) || !parentEl) continue;
+        if (parentEl.closest('svg, .katex-mathml')) continue;
+        const cs = window.getComputedStyle(parentEl);
+        if (
+          cs.display === 'none' ||
+          cs.visibility === 'hidden' ||
+          parseFloat(cs.opacity || '1') <= 0
+        ) {
+          continue;
+        }
+        range.selectNodeContents(targetTextNode);
+        const rRect = range.getBoundingClientRect();
+        if (rRect.width <= 0.1 || rRect.height <= 0.1) continue;
+
+        const fStyle = cs.fontStyle && cs.fontStyle !== 'normal' ? `${cs.fontStyle} ` : '';
+        const fWeight =
+          cs.fontWeight && cs.fontWeight !== 'normal' && cs.fontWeight !== '400'
+            ? `${cs.fontWeight} `
+            : '';
+        const fSizeCss = cs.fontSize || `${fSize}px`;
+        const fFam = cs.fontFamily || 'KaTeX_Main, "Times New Roman", serif';
+        ctx.font = `${fStyle}${fWeight}${fSizeCss} ${fFam}`;
+        ctx.fillStyle = cs.color || tx.color || '#111827';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+
+        const m = ctx.measureText(rawStr);
+        let baseY: number;
+        if (
+          typeof m.fontBoundingBoxAscent === 'number' &&
+          typeof m.fontBoundingBoxDescent === 'number' &&
+          m.fontBoundingBoxAscent + m.fontBoundingBoxDescent > 0
+        ) {
+          const fontBoxH = m.fontBoundingBoxAscent + m.fontBoundingBoxDescent;
+          baseY =
+            tx.y + (rRect.top - originTop) + (rRect.height - fontBoxH) / 2 + m.fontBoundingBoxAscent;
+        } else {
+          baseY = tx.y + (rRect.top - originTop) + rRect.height * 0.8;
+        }
+
+        ctx.fillText(rawStr, tx.x + (rRect.left - originLeft), baseY);
+      }
+    }
+    ctx.restore();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    host.remove();
+  }
+}
+
 /**
  * Renders a `TextObject` onto the PDF 2D canvas context with:
+ * - Authentic KaTeX layout & typography when `tx.isMath` is true
  * - Valid CSS `ctx.font` ordering (`italic` BEFORE `bold ${fSize}px`, preventing Canvas fallback to 10px!)
  * - Exact padding matching the canvas DOM (`px-1 py-0` for `math-graph-txt-` labels vs `px-3 py-1.5` for text boxes)
  * - True superscripts (`^2`, `^{2}`), subscripts (`_max`, `_0`, `_1`, `_{max}`), stacked fractions (`\frac{1}{2}`), and math symbols!
  */
-function drawTextObjectForPdf(
+async function drawTextObjectForPdf(
   ctx: CanvasRenderingContext2D,
   tx: TextObject,
   page: NotePage
@@ -1984,7 +2457,6 @@ function drawTextObjectForPdf(
   const rawSource = (tx.isMath ? tx.latex || tx.text : tx.text || tx.latex) || '';
   if (!rawSource.trim()) return;
 
-  ctx.save();
   const isMathLabel =
     tx.id.startsWith('math-graph-txt-') || Boolean(tx.groupId?.startsWith('math-graph-grp-'));
   const fSize = tx.fontSize || 20;
@@ -2003,18 +2475,33 @@ function drawTextObjectForPdf(
       : tx.fontFamily === 'mansalva'
       ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
       : tx.fontFamily === 'marker'
-      ? '"ExplainBoardsPen", "Mynerve", "Mansalva", cursive, sans-serif'
+      ? tx.bold
+        ? '"ExplainBoardsPenBold", "ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
+        : '"ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
       : tx.isMath
       ? '"GFS Neohellenic", Georgia, "Times New Roman", serif'
       : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
+  if (tx.isMath) {
+    const renderedKatex = await drawKatexMathObjectForPdf(ctx, tx, page, isMathLabel, fontStack);
+    if (renderedKatex) return;
+  }
+
+  ctx.save();
   const makeFont = (sz: number, boldOverride?: boolean) =>
     `${fontStyle}${boldOverride ? 'bold ' : fontWeight}${Math.max(7, sz).toFixed(1)}px ${fontStack}`;
 
   const cleanLatexLine = (str: string): string =>
     str
-      .replace(/\\displaystyle\b|\\left\b|\\right\b/g, '')
-      .replace(/\\(?:text|mathrm|operatorname)\{([^}]*)\}/g, '$1')
+      .replace(/\\displaystyle\b|\\textstyle\b|\\left\b|\\right\b/g, '')
+      .replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^}]*)\}/g, '$1')
+      .replace(/\\vec\{([^}]*)\}/g, '$1\u20D7')
+      .replace(/\\sqrt\{([^}]*)\}/g, '√($1)')
+      .replace(/\\,/g, '\u2009')
+      .replace(/\\;|\\:/g, ' ')
+      .replace(/\\!/g, '')
+      .replace(/\\qquad(?![A-Za-z])/g, '    ')
+      .replace(/\\quad(?![A-Za-z])/g, '  ')
       .replace(/\\sigma\s*\\upsilon\s*\\nu/gi, 'συν')
       .replace(/\\eta\s*\\mu/gi, 'ημ')
       .replace(/\\(?:varepsilon|epsilon)(?![A-Za-z])/g, 'ε')
@@ -2046,12 +2533,21 @@ function drawTextObjectForPdf(
       .replace(/\\xi(?![A-Za-z])/g, 'ξ')
       .replace(/\\chi(?![A-Za-z])/g, 'χ')
       .replace(/\\psi(?![A-Za-z])/g, 'ψ')
-      .replace(/\\(?:cdot|times)(?![A-Za-z])/g, '·')
+      .replace(/\\cdot(?![A-Za-z])/g, '·')
+      .replace(/\\times(?![A-Za-z])/g, '×')
+      .replace(/\\div(?![A-Za-z])/g, '÷')
       .replace(/\\(?:le|leq)(?![A-Za-z])/g, '≤')
       .replace(/\\(?:ge|geq)(?![A-Za-z])/g, '≥')
       .replace(/\\(?:ne|neq)(?![A-Za-z])/g, '≠')
+      .replace(/\\simeq(?![A-Za-z])/g, '≃')
+      .replace(/\\cong(?![A-Za-z])/g, '≅')
+      .replace(/\\sim(?![A-Za-z])/g, '∼')
       .replace(/\\approx(?![A-Za-z])/g, '≈')
+      .replace(/\\propto(?![A-Za-z])/g, '∝')
       .replace(/\\equiv(?![A-Za-z])/g, '≡')
+      .replace(/\\perp(?![A-Za-z])/g, '⊥')
+      .replace(/\\parallel(?![A-Za-z])/g, '∥')
+      .replace(/\\(?:circ|degree)(?![A-Za-z])/g, '°')
       .replace(/\\pm(?![A-Za-z])/g, '±')
       .replace(/\\(?:rightarrow|to)(?![A-Za-z])/g, '→')
       .replace(/\\leftarrow(?![A-Za-z])/g, '←')
@@ -2139,9 +2635,11 @@ function drawTextObjectForPdf(
   const maxLineW = !tx.isMath ? Math.max(36, effectiveBoxW - padX * 2) : 0;
 
   if (!tx.isMath && tx.spans && tx.spans.length > 0) {
-    const getFontStackForFamily = (fam: TextObject['fontFamily']) =>
+    const getFontStackForFamily = (fam: TextObject['fontFamily'], isBold?: boolean) =>
       fam === 'calligraphic'
-        ? '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
+        ? isBold
+          ? '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
+          : '"ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
         : fam === 'calligraphic-bold'
         ? '"ExplainBoardsHandBold", "ExplainBoardsHand", "Alegreya Sans", cursive, sans-serif'
         : fam === 'neohellenic'
@@ -2151,7 +2649,9 @@ function drawTextObjectForPdf(
         : fam === 'mansalva'
         ? '"Mansalva", "Mynerve", "Playpen Sans", cursive, sans-serif'
         : fam === 'marker'
-        ? '"ExplainBoardsPen", "Mynerve", "Mansalva", cursive, sans-serif'
+        ? isBold
+          ? '"ExplainBoardsPenBold", "ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
+          : '"ExplainBoardsPen", "Alegreya Sans", cursive, sans-serif'
         : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
     const getStyleAt = (charIdx: number) => {
@@ -2171,7 +2671,7 @@ function drawTextObjectForPdf(
       const segFont = `${segItalic ? 'italic ' : ''}${segBold ? 'bold ' : '500 '}${Math.max(
         7,
         segSz
-      ).toFixed(1)}px ${getFontStackForFamily(segFam)}`;
+      ).toFixed(1)}px ${getFontStackForFamily(segFam, segBold)}`;
       return { sz: segSz, bold: segBold, color: segColor, font: segFont };
     };
 
@@ -2278,8 +2778,9 @@ function drawTextObjectForPdf(
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     for (const rl of renderedLines) {
-      const rowH = rl.maxSzInLine * 1.18;
-      const baseY = curTopY + rl.maxSzInLine * 0.92;
+      const hasMarkerRun = tx.fontFamily === 'marker' || rl.runs.some((r) => r.font.includes('ExplainBoardsPen'));
+      const rowH = rl.maxSzInLine * (tx.lineHeight || (hasMarkerRun ? 1.44 : 1.18));
+      const baseY = curTopY + rl.maxSzInLine * (hasMarkerRun ? 1.06 : 0.92);
       const alignOffsetX =
         alignMode === 'center'
           ? Math.max(0, (contentAreaW - rl.lineW) / 2)
@@ -2326,7 +2827,9 @@ function drawTextObjectForPdf(
     wrappedLines.push(currentLine);
   }
 
-  const lineH = isMathLabel ? fSize * 1.05 : fSize * 1.18;
+  const lineH = isMathLabel
+    ? fSize * 1.05
+    : fSize * (tx.lineHeight || (tx.fontFamily === 'marker' ? 1.44 : 1.18));
   const multiM = tx.id.match(/-(math-graph-grp-[a-z0-9-]+)-multi$/);
   const multiGrp = multiM ? multiM[1] : null;
   const alignMode = tx.textAlign || 'left';
@@ -2782,7 +3285,7 @@ export async function exportNotebookToPdfBlob(
         ctx.drawImage(bgImg, 0, 0, logicalW, logicalH);
       }
     } else {
-      drawPaperTemplateForPdf(ctx, page.template, logicalW, logicalH);
+      drawPaperTemplateForPdf(ctx, page.template, logicalW, logicalH, page.paperColor);
     }
 
     const visibleLayerIds = new Set(
@@ -2790,34 +3293,56 @@ export async function exportNotebookToPdfBlob(
     );
 
     for (const im of page.images || []) {
+      if (!im || !im.dataUrl) continue;
       if (visibleLayerIds.size > 0 && im.layerId && !visibleLayerIds.has(im.layerId)) continue;
-      const imgEl = await loadImageElement(im.dataUrl);
-      if (!imgEl) continue;
-      ctx.save();
-      if (im.rotation) {
-        const cx = im.x + im.width / 2;
-        const cy = im.y + im.height / 2;
-        ctx.translate(cx, cy);
-        ctx.rotate((im.rotation * Math.PI) / 180);
-        ctx.translate(-cx, -cy);
+      try {
+        const imgEl = await loadImageElement(im.dataUrl);
+        if (!imgEl) continue;
+        ctx.save();
+        if (im.rotation) {
+          const cx = im.x + im.width / 2;
+          const cy = im.y + im.height / 2;
+          ctx.translate(cx, cy);
+          ctx.rotate((im.rotation * Math.PI) / 180);
+          ctx.translate(-cx, -cy);
+        }
+        ctx.drawImage(imgEl, im.x, im.y, im.width, im.height);
+        ctx.restore();
+      } catch {
+        // ignore broken image
       }
-      ctx.drawImage(imgEl, im.x, im.y, im.width, im.height);
-      ctx.restore();
     }
 
     for (const st of page.strokes || []) {
       if (visibleLayerIds.size > 0 && st.layerId && !visibleLayerIds.has(st.layerId)) continue;
-      drawStrokeForPdf(ctx, st);
+      try {
+        drawStrokeForPdf(ctx, st);
+      } catch {
+        // ignore malformed stroke
+      }
     }
 
     // Render all active simulations (circuits, bulbs, switches, electrons, Hooke tables/graphs, pendulums, forces, atoms & 3D molecules) in crisp vector quality!
-    drawPageSimulationsSnapshotForPdf(ctx, page, options, false);
+    try {
+      drawPageSimulationsSnapshotForPdf(ctx, page, options, false);
+    } catch {
+      // ignore simulation render error
+    }
 
     // Render Ruler (Χάρακας) and its Pointer Laser Projections & < X cm Readouts if visible on this page!
-    drawRulerAndPointersForPdf(ctx, page, options);
+    try {
+      drawRulerAndPointersForPdf(ctx, page, options);
+    } catch {
+      // ignore ruler render error
+    }
 
     for (const tx of page.texts || []) {
-      drawTextObjectForPdf(ctx, tx, page);
+      if (visibleLayerIds.size > 0 && tx.layerId && !visibleLayerIds.has(tx.layerId)) continue;
+      try {
+        await drawTextObjectForPdf(ctx, tx, page);
+      } catch {
+        // ignore text render error
+      }
     }
 
     // Use 0.75 JPEG quality (enables 4:2:0 chroma subsampling in browsers vs 4:4:4 at >0.90),
@@ -2962,17 +3487,124 @@ function normalizeDriveFolderMatchKey(raw: string): string {
     .join('');
 }
 
-async function ensureDriveFolder(
+const verifiedTokenScopeCache = new Map<string, { valid: boolean; hasFullDriveScope: boolean; checkedAt: number }>();
+const resolvedFolderCache = new Map<
+  string,
+  { folderId: string; folderIds: string[]; resolvedPathDisplay: string; cachedAt: number }
+>();
+
+export function clearDriveFolderResolutionCache(): void {
+  resolvedFolderCache.clear();
+}
+
+export async function verifyDriveAccessToken(
+  accessToken: string
+): Promise<{ valid: boolean; hasFullDriveScope: boolean }> {
+  const cached = verifiedTokenScopeCache.get(accessToken);
+  if (cached && Date.now() - cached.checkedAt < 4 * 60 * 1000) {
+    return { valid: cached.valid, hasFullDriveScope: cached.hasFullDriveScope };
+  }
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(accessToken)}`
+    );
+    if (!res.ok) {
+      return { valid: false, hasFullDriveScope: false };
+    }
+    const data = await res.json();
+    const expiresIn = Number(data.expires_in || 0);
+    if (expiresIn <= 25) {
+      return { valid: false, hasFullDriveScope: false };
+    }
+    const scopes = String(data.scope || '').split(/\s+/);
+    const hasFullDriveScope = scopes.includes('https://www.googleapis.com/auth/drive');
+    const result = { valid: true, hasFullDriveScope };
+    verifiedTokenScopeCache.set(accessToken, { ...result, checkedAt: Date.now() });
+    return result;
+  } catch {
+    return { valid: true, hasFullDriveScope: true };
+  }
+}
+
+interface DriveFolderMeta {
+  id: string;
+  name: string;
+  parents?: string[];
+  createdTime?: string;
+  shared?: boolean;
+}
+
+function sortCandidateDriveFolders(candidates: DriveFolderMeta[]): DriveFolderMeta[] {
+  return [...candidates].sort((a, b) => {
+    // 1. Prefer shared folders (e.g. school folders shared in Google Drive with 👥 icon)
+    const aShared = a.shared ? 1 : 0;
+    const bShared = b.shared ? 1 : 0;
+    if (aShared !== bShared) return bShared - aShared;
+    // 2. Prefer oldest createdTime (the original GoodNotes folder over any newer duplicate folder)
+    const aTime = a.createdTime ? Date.parse(a.createdTime) : Number.MAX_SAFE_INTEGER;
+    const bTime = b.createdTime ? Date.parse(b.createdTime) : Number.MAX_SAFE_INTEGER;
+    return aTime - bTime;
+  });
+}
+
+async function searchGlobalDriveFoldersByName(
+  accessToken: string,
+  folderName: string
+): Promise<DriveFolderMeta[]> {
+  const trimmed = folderName.trim();
+  if (!trimmed) return [];
+  const escapedFull = trimmed.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const firstWord = trimmed.split(/\s+/)[0] || trimmed;
+  const prefix = firstWord.slice(0, Math.min(4, firstWord.length));
+  const escapedPrefix = prefix.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const nameClause =
+    escapedPrefix.length >= 2 && escapedPrefix !== escapedFull
+      ? `(name='${escapedFull}' or name contains '${escapedPrefix}')`
+      : `name='${escapedFull}'`;
+  const q = `mimeType='application/vnd.google-apps.folder' and ${nameClause} and trashed=false`;
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+        q
+      )}&pageSize=100&orderBy=createdTime&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,parents,createdTime,shared)&spaces=drive`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const files: DriveFolderMeta[] = Array.isArray(data.files) ? data.files : [];
+    const targetKey = normalizeDriveFolderMatchKey(trimmed);
+    const exact = files.filter((f) => (f.name || '').trim() === trimmed);
+    const fuzzy = targetKey
+      ? files.filter((f) => normalizeDriveFolderMatchKey(f.name || '') === targetKey)
+      : [];
+    const matched = exact.length > 0 ? exact : fuzzy;
+    return sortCandidateDriveFolders(matched);
+  } catch {
+    return [];
+  }
+}
+
+async function ensureDriveFolderAcrossParents(
   accessToken: string,
   folderName: string,
-  parentId = 'root'
-): Promise<{ id: string; name: string }> {
+  parentIds: string[] = ['root'],
+  alsoSearchGlobally = false
+): Promise<{ ids: string[]; primaryId: string; name: string }> {
   const trimmedTarget = folderName.trim();
-  const q = `mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+  const validParents = Array.from(new Set(parentIds.filter(Boolean)));
+  if (validParents.length === 0) validParents.push('root');
+
+  const parentClause =
+    validParents.length === 1
+      ? `'${validParents[0]}' in parents`
+      : `(${validParents.slice(0, 25).map((id) => `'${id}' in parents`).join(' or ')})`;
+  const q = `mimeType='application/vnd.google-apps.folder' and ${parentClause} and trashed=false`;
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
       q
-    )}&pageSize=100&fields=files(id,name)&spaces=drive`,
+    )}&pageSize=100&orderBy=createdTime&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,parents,createdTime,shared)&spaces=drive`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
@@ -2981,49 +3613,87 @@ async function ensureDriveFolder(
     await throwDriveError(searchRes, 'Drive API error');
   }
   const data = await searchRes.json();
-  const files: { id: string; name: string }[] = Array.isArray(data.files) ? data.files : [];
+  const files: DriveFolderMeta[] = Array.isArray(data.files) ? data.files : [];
 
-  // 1. Exact trimmed match
-  const exact = files.find((f) => (f.name || '').trim() === trimmedTarget);
-  if (exact) {
-    return { id: exact.id, name: exact.name };
-  }
-
-  // 2. Normalized match (case/accent/homoglyph/space-insensitive so 'Α1' === 'A1' and 'x Σ Χ Ο Λ Ε Ι Α' matches existing folder)
+  // Collect all matching folders (exact trimmed or normalized homoglyph/space-insensitive match)
   const targetKey = normalizeDriveFolderMatchKey(trimmedTarget);
-  if (targetKey) {
-    const fuzzy = files.find((f) => normalizeDriveFolderMatchKey(f.name || '') === targetKey);
-    if (fuzzy) {
-      return { id: fuzzy.id, name: fuzzy.name };
+  const exactMatches = files.filter((f) => (f.name || '').trim() === trimmedTarget);
+  const fuzzyMatches = targetKey
+    ? files.filter((f) => normalizeDriveFolderMatchKey(f.name || '') === targetKey)
+    : [];
+
+  let combinedMatches = exactMatches.length > 0 ? exactMatches : fuzzyMatches;
+
+  // For school / class folders (like "Γυμνάσιο Αρναίας" or "Γ2"), also check global Drive folders
+  // in case an upper ancestor folder in Drive has a different path or resides under Computers / Shared!
+  if (alsoSearchGlobally) {
+    const globalMatches = await searchGlobalDriveFoldersByName(accessToken, trimmedTarget);
+    if (globalMatches.length > 0) {
+      const byId = new Map<string, DriveFolderMeta>();
+      for (const m of [...globalMatches, ...combinedMatches]) {
+        const existing = byId.get(m.id);
+        if (!existing || (m.shared && !existing.shared)) {
+          byId.set(m.id, m);
+        }
+      }
+      combinedMatches = Array.from(byId.values());
     }
   }
 
-  // 3. Create subfolder only if it doesn't exist yet inside parentId
-  const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: trimmedTarget,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [parentId],
-    }),
-  });
+  if (combinedMatches.length > 0) {
+    const sorted = sortCandidateDriveFolders(combinedMatches);
+    return {
+      ids: sorted.map((f) => f.id),
+      primaryId: sorted[0].id,
+      name: sorted[0].name,
+    };
+  }
+
+  // Create subfolder inside the primary (oldest/shared) parent only if no match exists
+  const primaryParentId = validParents[0];
+  const createRes = await fetch(
+    'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,name',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: trimmedTarget,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [primaryParentId],
+      }),
+    }
+  );
   if (!createRes.ok) {
     await throwDriveError(createRes, `Αποτυχία δημιουργίας φακέλου ${trimmedTarget}`);
   }
   const created = await createRes.json();
-  return { id: created.id as string, name: (created.name as string) || trimmedTarget };
+  const createdId = created.id as string;
+  return {
+    ids: [createdId],
+    primaryId: createdId,
+    name: (created.name as string) || trimmedTarget,
+  };
 }
 
 async function resolveDriveTargetFolder(
   accessToken: string,
   basePathInput?: string,
   notebookFolder?: string
-): Promise<{ folderId: string; resolvedPathDisplay: string }> {
+): Promise<{ folderId: string; folderIds: string[]; resolvedPathDisplay: string }> {
   const rawBase = (basePathInput || DEFAULT_DRIVE_BASE_PATH).trim();
+  const cacheKey = `${accessToken.slice(-16)}|${rawBase}|${(notebookFolder || '').trim()}`;
+  const cached = resolvedFolderCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < 5 * 60 * 1000) {
+    return {
+      folderId: cached.folderId,
+      folderIds: cached.folderIds,
+      resolvedPathDisplay: cached.resolvedPathDisplay,
+    };
+  }
+
   const nbSegments = (notebookFolder || '')
     .split('/')
     .map((s) => s.trim())
@@ -3032,17 +3702,20 @@ async function resolveDriveTargetFolder(
   // Support direct Google Drive folder URL (e.g. https://drive.google.com/drive/folders/1AbC...)
   const urlMatch = rawBase.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
   if (urlMatch) {
-    let currentId = urlMatch[1];
+    let currentIds = [urlMatch[1]];
     const resolvedNames: string[] = ['Drive Folder'];
     for (const seg of nbSegments) {
-      const next = await ensureDriveFolder(accessToken, seg, currentId);
-      currentId = next.id;
+      const next = await ensureDriveFolderAcrossParents(accessToken, seg, currentIds, false);
+      currentIds = next.ids;
       resolvedNames.push(next.name);
     }
-    return {
-      folderId: currentId,
+    const res = {
+      folderId: currentIds[0],
+      folderIds: currentIds,
       resolvedPathDisplay: resolvedNames.join(' / '),
     };
+    resolvedFolderCache.set(cacheKey, { ...res, cachedAt: Date.now() });
+    return res;
   }
 
   const baseSegments = rawBase
@@ -3073,18 +3746,35 @@ async function resolveDriveTargetFolder(
     combinedSegments.push('BestNotes');
   }
 
-  let currentParentId = 'root';
+  let currentParentIds = ['root'];
   const resolvedNames: string[] = [];
-  for (const seg of combinedSegments) {
-    const folder = await ensureDriveFolder(accessToken, seg, currentParentId);
-    currentParentId = folder.id;
+  for (let idx = 0; idx < combinedSegments.length; idx++) {
+    const seg = combinedSegments[idx];
+    // Search globally for the root anchor ("GoodNotes") and the school base folder ("Γυμνάσιο Αρναίας")
+    // so even if upper folders in Drive differ or if duplicate folders exist, we always include the real school folder!
+    const isSchoolAnchor =
+      idx === 0 ||
+      (seg.length >= 5 &&
+        (idx === baseSegments.length - 1 ||
+          normalizeDriveFolderMatchKey(seg).includes('gymn') ||
+          normalizeDriveFolderMatchKey(seg).includes('arn')));
+    const folder = await ensureDriveFolderAcrossParents(
+      accessToken,
+      seg,
+      currentParentIds,
+      isSchoolAnchor
+    );
+    currentParentIds = folder.ids;
     resolvedNames.push(folder.name);
   }
 
-  return {
-    folderId: currentParentId,
+  const result = {
+    folderId: currentParentIds[0],
+    folderIds: currentParentIds,
     resolvedPathDisplay: resolvedNames.join(' / '),
   };
+  resolvedFolderCache.set(cacheKey, { ...result, cachedAt: Date.now() });
+  return result;
 }
 
 async function uploadOrUpdateDriveFile(
@@ -3099,7 +3789,7 @@ async function uploadOrUpdateDriveFile(
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
       q
-    )}&fields=files(id,name,webViewLink)&spaces=drive`,
+    )}&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name,webViewLink)&spaces=drive`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
@@ -3122,8 +3812,8 @@ async function uploadOrUpdateDriveFile(
   form.append('file', blob);
 
   const url = existingFile
-    ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart&fields=id,name,webViewLink`
-    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink';
+    ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink`
+    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink';
 
   const uploadRes = await fetch(url, {
     method: existingFile ? 'PATCH' : 'POST',
@@ -3137,6 +3827,42 @@ async function uploadOrUpdateDriveFile(
     await throwDriveError(uploadRes, 'Drive upload error');
   }
   return await uploadRes.json();
+}
+
+/**
+ * Ensures a folder path (e.g. `Γυμνάσιο Αρναίας` or `Γυμνάσιο Αρναίας/Α1`) exists inside the configured
+ * Google Drive folder hierarchy even if it currently contains 0 notebooks, without deleting anything.
+ */
+export async function syncDriveFolderStructureToGoogleDrive(
+  accessToken: string,
+  folderPath: string,
+  customBasePath?: string
+): Promise<{
+  folderId: string;
+  folderIds: string[];
+  targetPathDisplay: string;
+  folderWebViewLink: string;
+}> {
+  const tokenCheck = await verifyDriveAccessToken(accessToken);
+  if (!tokenCheck.valid) {
+    throw new Error('DRIVE_TOKEN_EXPIRED');
+  }
+  if (!tokenCheck.hasFullDriveScope) {
+    throw new Error('DRIVE_SCOPE_MISSING');
+  }
+
+  const {
+    folderId,
+    folderIds,
+    resolvedPathDisplay,
+  } = await resolveDriveTargetFolder(accessToken, customBasePath, folderPath);
+
+  return {
+    folderId,
+    folderIds,
+    targetPathDisplay: resolvedPathDisplay,
+    folderWebViewLink: `https://drive.google.com/drive/folders/${folderId}`,
+  };
 }
 
 /**
@@ -3155,34 +3881,65 @@ export async function syncNotebookPdfToGoogleDrive(
   pdfFileId: string;
   pdfFileName: string;
   webViewLink?: string;
+  folderWebViewLink?: string;
 }> {
-  // 1. Resolve the exact target folder in Google Drive (matching existing GoodNotes folders without creating duplicates)
-  const { folderId: targetFolderId, resolvedPathDisplay } = await resolveDriveTargetFolder(
-    accessToken,
-    customBasePath,
-    notebook.folder
-  );
+  // 0. Verify token validity & full Drive scope so we can see existing GoodNotes folders
+  const tokenCheck = await verifyDriveAccessToken(accessToken);
+  if (!tokenCheck.valid) {
+    throw new Error('DRIVE_TOKEN_EXPIRED');
+  }
+  if (!tokenCheck.hasFullDriveScope) {
+    throw new Error('DRIVE_SCOPE_MISSING');
+  }
+
+  // 1. Resolve the exact target folder(s) in Google Drive (matching existing GoodNotes folders without creating duplicates)
+  const {
+    folderId: targetFolderId,
+    folderIds: allTargetFolderIds,
+    resolvedPathDisplay,
+  } = await resolveDriveTargetFolder(accessToken, customBasePath, notebook.folder);
 
   // 2. Export notebook pages to a real multi-page PDF Blob
   const pdfBlob = await exportNotebookToPdfBlob(notebook, options);
   const safeTitle = (notebook.title || 'Σημείωση').trim().replace(/[/\\?%*:|"<>]/g, '-');
   const pdfFileName = safeTitle.toLowerCase().endsWith('.pdf') ? safeTitle : `${safeTitle}.pdf`;
 
-  // 3. Upload or update ONLY `<safeTitle>.pdf` inside targetFolderId (never deletes anything in Google Drive)
-  const uploaded = await uploadOrUpdateDriveFile(
-    accessToken,
-    targetFolderId,
-    pdfFileName,
-    'application/pdf',
-    pdfBlob
+  // 3. Upload or update `<safeTitle>.pdf` inside the primary target folder AND any secondary matching folder
+  //    (e.g. if an earlier sync created a duplicate folder alongside the shared GoodNotes folder)
+  const uniqueFolderIds = Array.from(new Set([targetFolderId, ...(allTargetFolderIds || [])])).slice(
+    0,
+    3
   );
+  let primaryUploaded: { id: string; name: string; webViewLink?: string } | null = null;
+  for (let i = 0; i < uniqueFolderIds.length; i++) {
+    const fId = uniqueFolderIds[i];
+    try {
+      const up = await uploadOrUpdateDriveFile(
+        accessToken,
+        fId,
+        pdfFileName,
+        'application/pdf',
+        pdfBlob
+      );
+      if (i === 0 || !primaryUploaded) {
+        primaryUploaded = up;
+      }
+    } catch (err) {
+      if (i === 0) throw err;
+    }
+  }
+
+  if (!primaryUploaded) {
+    throw new Error('Αποτυχία μεταφόρτωσης PDF στο Google Drive.');
+  }
 
   return {
     folderId: targetFolderId,
     targetPathDisplay: resolvedPathDisplay,
-    pdfFileId: uploaded.id,
+    pdfFileId: primaryUploaded.id,
     pdfFileName,
-    webViewLink: uploaded.webViewLink,
+    webViewLink: primaryUploaded.webViewLink,
+    folderWebViewLink: `https://drive.google.com/drive/folders/${targetFolderId}`,
   };
 }
 
@@ -3217,7 +3974,7 @@ export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<B
         ctx.drawImage(bgImg, 0, 0, logicalW, logicalH);
       }
     } else {
-      drawPaperTemplateForPdf(ctx, page.template, logicalW, logicalH);
+      drawPaperTemplateForPdf(ctx, page.template, logicalW, logicalH, page.paperColor);
     }
 
     const visibleLayerIds = new Set(
@@ -3263,7 +4020,8 @@ export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<B
     drawRulerAndPointersForPdf(ctx, page);
 
     for (const tx of page.texts || []) {
-      drawTextObjectForPdf(ctx, tx, page);
+      if (visibleLayerIds.size > 0 && tx.layerId && !visibleLayerIds.has(tx.layerId)) continue;
+      await drawTextObjectForPdf(ctx, tx, page);
     }
 
     // Enrich atomSims with precomputed 2D element info & 3D molecule geometry for standalone player
@@ -3271,7 +4029,7 @@ export async function exportNotebookToLivePdfHtml(notebook: Notebook): Promise<B
       const inferred = inferReactionFromCanvasAtoms((aSim.atoms || []).map((a) => a.z));
       const rawEq =
         aSim.userRawReactionText || aSim.reactionEquationText || inferred.equationDisplay;
-      const chemVal = validateAndCorrectChemicalEquation(rawEq);
+      const chemVal = validateAndCorrectChemicalEquation(rawEq, aSim.reactionEquationText);
       const mol3D = get3DMoleculeModel(
         aSim.activeReactionTerm || aSim.reactionEquationText || inferred.equationDisplay,
         (aSim.atoms || []).map((a) => a.z),

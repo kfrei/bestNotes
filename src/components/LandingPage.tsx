@@ -1599,40 +1599,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Σημειώσεις
               </button>
             </nav>
-            {currentUser ? (
-              <div className="flex items-center gap-2.5">
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
-                  <UserIcon className="w-3.5 h-3.5 text-[#0066ff]" />
-                  <span className="max-w-[150px] truncate">
-                    {currentUser.displayName || currentUser.email || 'Χρήστης'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => signOut(auth)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition cursor-pointer"
-                  title="Αποσύνδεση (Logout)"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Logout</span>
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onOpenAuthModal('signin')}
-                  className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-800 hover:bg-slate-100 transition cursor-pointer"
-                >
-                  Σύνδεση
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenAuthModal('signup')}
-                  className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs sm:text-sm font-bold text-[#0066ff] transition cursor-pointer"
-                >
-                  Εγγραφή
-                </button>
+            {currentUser && (
+              <div className="hidden sm:flex items-center gap-2 px-3 h-9 rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+                <UserIcon className="w-3.5 h-3.5 text-[#0066ff]" />
+                <span className="max-w-[150px] truncate">
+                  {currentUser.displayName || currentUser.email || 'Χρήστης'}
+                </span>
               </div>
             )}
 
@@ -1640,17 +1612,46 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <button
                 type="button"
                 onClick={onEnterLiveTvMode}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer"
+                className="min-w-[102px] h-9 px-3.5 rounded-xl bg-emerald-100/90 hover:bg-emerald-200/90 text-emerald-800 border border-emerald-200/90 text-xs sm:text-[13px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
                 title="Ζωντανή Προβολή 16:9 στον Διαδραστικό Πίνακα (Χωρίς Login & Χωρίς Μπάρες Chrome)"
               >
-                <span>📺 Live 16:9</span>
+                <span>Live</span>
               </button>
+            )}
+
+            {currentUser ? (
+              <button
+                type="button"
+                onClick={() => signOut(auth)}
+                className="min-w-[102px] h-9 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs sm:text-[13px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
+                title="Αποσύνδεση (Logout)"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onOpenAuthModal('signin')}
+                  className="h-9 px-3.5 rounded-xl text-xs sm:text-[13px] font-bold text-slate-800 hover:bg-slate-100 flex items-center justify-center transition cursor-pointer"
+                >
+                  Σύνδεση
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuthModal('signup')}
+                  className="h-9 px-3.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs sm:text-[13px] font-bold text-[#0066ff] flex items-center justify-center transition cursor-pointer"
+                >
+                  Εγγραφή
+                </button>
+              </div>
             )}
 
             <button
               type="button"
               onClick={onEnterApp}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#46c8f5] hover:bg-[#2bb8eb] text-slate-950 text-sm font-bold shadow-xs transition cursor-pointer"
+              className="min-w-[102px] h-9 px-3.5 rounded-xl bg-[#46c8f5] hover:bg-[#2bb8eb] text-slate-950 text-xs sm:text-[13px] font-bold flex items-center justify-center gap-1.5 shadow-2xs transition cursor-pointer"
             >
               <span>Έναρξη</span>
               <ChevronRight className="w-4 h-4" />

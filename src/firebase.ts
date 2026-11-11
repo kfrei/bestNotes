@@ -56,7 +56,14 @@ export async function signInToGoogleDrive(
   displayName: string;
 }> {
   if (forceAccountSelect) {
-    googleDriveProvider.setCustomParameters({ prompt: 'consent select_account' });
+    if (hintEmail && hintEmail.includes('@')) {
+      googleDriveProvider.setCustomParameters({
+        prompt: 'consent',
+        login_hint: hintEmail.trim(),
+      });
+    } else {
+      googleDriveProvider.setCustomParameters({ prompt: 'consent select_account' });
+    }
   } else if (hintEmail && hintEmail.includes('@')) {
     googleDriveProvider.setCustomParameters({ login_hint: hintEmail.trim() });
   } else {

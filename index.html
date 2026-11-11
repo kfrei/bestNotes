@@ -70,7 +70,28 @@
       }
       @font-face {
         font-family: 'ExplainBoardsPen';
-        src: url('/fonts/ExplainBoardsPen.otf') format('opentype');
+        src: url('/fonts/ExplainBoardsPen.otf?v=8') format('opentype');
+        font-weight: 400 500;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'ExplainBoardsPen';
+        src: url('/fonts/ExplainBoardsPenBold.otf?v=8') format('opentype');
+        font-weight: 600 800;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'ExplainBoardsPenBold';
+        src: url('/fonts/ExplainBoardsPenBold.otf?v=8') format('opentype');
+        font-weight: 400 800;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'ExplainBoardsPenLegacy';
+        src: url('/fonts/ExplainBoardsPenLegacy.otf') format('opentype');
         font-weight: 400 700;
         font-style: normal;
         font-display: swap;
@@ -87,6 +108,12 @@
       html[data-standalone-app='true'] .bn-safe-top-header {
         padding-top: max(env(safe-area-inset-top, 0px), 46px) !important;
         padding-bottom: 4px !important;
+      }
+      textarea[data-ghost-textarea='true']::selection,
+      textarea[data-ghost-textarea='true']::-moz-selection {
+        background: transparent !important;
+        background-color: transparent !important;
+        color: transparent !important;
       }
     </style>
   </head>

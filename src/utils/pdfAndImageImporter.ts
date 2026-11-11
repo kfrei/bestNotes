@@ -93,18 +93,20 @@ async function getOrLoadPdfDocProxy(notebookId: string): Promise<pdfjsLib.PDFDoc
   return loadPromise;
 }
 
-function setCachedPageDataUrl(cacheKey: string, dataUrl: string, isThumb: boolean) {
+export type PdfQualityMode = 'thumb' | 'med' | 'high' | 'full';
+
+function setCachedPageDataUrl(cacheKey: string, dataUrl: string, qualityMode: PdfQualityMode) {
   if (renderedPdfPageCache.has(cacheKey)) {
     renderedPdfPageCache.delete(cacheKey);
   }
   renderedPdfPageCache.set(cacheKey, dataUrl);
-  const maxEntries = isThumb ? 240 : 60;
-  if (renderedPdfPageCache.size > maxEntries + 60) {
+  const maxEntries = qualityMode === 'thumb' ? 260 : qualityMode === 'med' ? 140 : 80;
+  if (renderedPdfPageCache.size > maxEntries + 80) {
     let removed = 0;
     for (const k of renderedPdfPageCache.keys()) {
       renderedPdfPageCache.delete(k);
       removed++;
-      if (removed >= 20) break;
+      if (removed >= 24) break;
     }
   }
 }
@@ -113,7 +115,7 @@ interface QueuedPdfPageRender {
   cacheKey: string;
   notebookId: string;
   pageNumber: number;
-  qualityMode: 'full' | 'thumb';
+  qualityMode: PdfQualityMode;
   promise: Promise<string | null>;
   resolve: (val: string | null) => void;
 }
@@ -126,14 +128,18 @@ const MAX_PENDING_PDF_QUEUE = 28;
 async function executeSinglePdfPageRender(
   notebookId: string,
   pageNumber: number,
-  qualityMode: 'full' | 'thumb',
+  qualityMode: PdfQualityMode,
   cacheKey: string
 ): Promise<string | null> {
-  const alreadyCached = getCachedPdfPageDataUrl(notebookId, pageNumber, qualityMode);
-  if (alreadyCached) return alreadyCached;
+  const exactCached = renderedPdfPageCache.get(cacheKey);
+  if (exactCached) return exactCached;
 
   const pdfDoc = await getOrLoadPdfDocProxy(notebookId);
   if (!pdfDoc || pageNumber < 1 || pageNumber > pdfDoc.numPages) return null;
+
+  const totalPages = pdfDoc.numPages;
+  // Slightly scale down intermediate tiers on very large textbooks (50+ pages) to keep RAM/VRAM ultra-low
+  const largeDocFactor = totalPages > 80 ? 0.9 : totalPages > 30 ? 0.95 : 1.0;
 
   const pdfPage = await pdfDoc.getPage(pageNumber);
   const unscaledViewport = pdfPage.getViewport({ scale: 1 });
@@ -149,8 +155,23 @@ async function executeSinglePdfPageRender(
     ? Math.max(320, Math.round(A4_LONG_PX / aspect))
     : A4_LONG_PX;
 
-  const targetScale = qualityMode === 'thumb' ? 0.42 : 1.45;
-  const jpegQuality = qualityMode === 'thumb' ? 0.68 : 0.84;
+  const baseScale =
+    qualityMode === 'thumb'
+      ? 0.38
+      : qualityMode === 'med'
+      ? 0.72
+      : qualityMode === 'high'
+      ? 1.08
+      : 1.52;
+  const targetScale = baseScale * (qualityMode === 'full' ? 1.0 : largeDocFactor);
+  const jpegQuality =
+    qualityMode === 'thumb'
+      ? 0.64
+      : qualityMode === 'med'
+      ? 0.76
+      : qualityMode === 'high'
+      ? 0.82
+      : 0.86;
 
   const scale = Math.min(
     (customWidth * targetScale) / Math.max(1, unscaledViewport.width),
@@ -179,7 +200,7 @@ async function executeSinglePdfPageRender(
     // ignore
   }
 
-  setCachedPageDataUrl(cacheKey, dataUrl, qualityMode === 'thumb');
+  setCachedPageDataUrl(cacheKey, dataUrl, qualityMode);
   return dataUrl;
 }
 
@@ -206,14 +227,32 @@ function pumpPdfRenderQueue() {
 export function getCachedPdfPageDataUrl(
   notebookId: string,
   pageNumber: number,
-  qualityMode: 'full' | 'thumb' = 'full'
+  qualityMode: PdfQualityMode = 'full',
+  exactOnly = false
 ): string | undefined {
   const exactKey = `${notebookId}__p${pageNumber}__${qualityMode}`;
   const exact = renderedPdfPageCache.get(exactKey);
   if (exact) return exact;
-  if (qualityMode === 'thumb') {
-    const full = renderedPdfPageCache.get(`${notebookId}__p${pageNumber}__full`);
-    if (full) return full;
+  if (exactOnly) return undefined;
+
+  // If a higher-resolution render is already in cache, reuse it immediately without re-rendering!
+  const hierarchy: PdfQualityMode[] = ['full', 'high', 'med', 'thumb'];
+  const requestedRank = hierarchy.indexOf(qualityMode);
+  for (let i = 0; i < requestedRank; i++) {
+    const higher = renderedPdfPageCache.get(`${notebookId}__p${pageNumber}__${hierarchy[i]}`);
+    if (higher) return higher;
+  }
+  return undefined;
+}
+
+export function getBestAvailablePdfPageDataUrl(
+  notebookId: string,
+  pageNumber: number
+): string | undefined {
+  const hierarchy: PdfQualityMode[] = ['full', 'high', 'med', 'thumb'];
+  for (const mode of hierarchy) {
+    const found = renderedPdfPageCache.get(`${notebookId}__p${pageNumber}__${mode}`);
+    if (found) return found;
   }
   return undefined;
 }
@@ -221,9 +260,9 @@ export function getCachedPdfPageDataUrl(
 export function ensurePdfPageDataUrl(
   notebookId: string,
   pageNumber: number,
-  qualityMode: 'full' | 'thumb' = 'full'
+  qualityMode: PdfQualityMode = 'full'
 ): Promise<string | null> {
-  const existing = getCachedPdfPageDataUrl(notebookId, pageNumber, qualityMode);
+  const existing = getCachedPdfPageDataUrl(notebookId, pageNumber, qualityMode, false);
   if (existing) return Promise.resolve(existing);
 
   const cacheKey = `${notebookId}__p${pageNumber}__${qualityMode}`;
@@ -351,7 +390,7 @@ export async function renderPdfFileToPages(
 
         const renderedUrl = sharedCanvas.toDataURL('image/jpeg', i === 1 ? 0.78 : 0.82);
         if (notebookId) {
-          setCachedPageDataUrl(`${notebookId}__p${i}__full`, renderedUrl, false);
+          setCachedPageDataUrl(`${notebookId}__p${i}__full`, renderedUrl, 'full');
         }
         try {
           pdfPage.cleanup();

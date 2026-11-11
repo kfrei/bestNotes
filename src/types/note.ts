@@ -46,7 +46,10 @@ export type ShapePresetType =
   | 'voltage-source'
   | 'inclined-plane'
   | 'switch'
-  | 'fan';
+  | 'fan'
+  | 'ammeter'
+  | 'voltmeter'
+  | 'title-box';
 
 export type LineStyleType = 'solid' | 'dashed' | 'dotted';
 export type FillStyleType = 'none' | 'solid' | 'hatching' | 'gradient';
@@ -140,6 +143,7 @@ export interface TextObject {
   isMath?: boolean;
   color: string;
   fontSize: number;
+  lineHeight?: number;
   bold?: boolean;
   fontFamily?: TextFontStyle;
   textAlign?: 'left' | 'center' | 'right';
@@ -369,6 +373,7 @@ export interface AtomSimConfig {
   userRawReactionText?: string; // Raw user input (e.g. 'H2 + O2 -> H2O' or 'H + O -> HO') so missing/wrong subscripts & coefficients are highlighted in red
   activeReactionTerm?: string; // Currently clicked reactant/product term in the reaction bar (e.g. 'C', '2H₂', 'CH₄')
   reactionViewMode?: '2d' | '3d'; // '2d' (Bohr atoms & orbits) or '3d' (3D VSEPR model) when clicking a term in the reaction bar
+  showOxidationNumbers?: boolean; // Whether the Oxidation Numbers (Α.Ο.) bar/modal above the reaction card is visible (toggled from Simulation Dashboard)
   showBondLabel?: boolean; // Whether the bond description text below the molecule is visible (toggled by clicking the bond region)
   reactionArrowStep?: number; // Cycles modes on successive clicks of the reaction arrow ➔
   showAtomsBelowReaction?: boolean; // Whether the Bohr atom/molecule structure is visible below the reaction bar
@@ -389,6 +394,7 @@ export interface NotePage {
   title: string;
   tags?: string[];
   template: PaperTemplateType;
+  paperColor?: string; // Custom paper background hex color (white->grey or light beige->vintage beige)
   orientation?: 'portrait' | 'landscape';
   customWidth?: number; // Exact page width for standalone imported PDFs/images (no letterbox border)
   customHeight?: number; // Exact page height for standalone imported PDFs/images (no letterbox border)
@@ -460,4 +466,91 @@ export function getPageLogicalHeight(page?: NotePage): number {
   if (page?.customHeight && page.customHeight >= 200) return page.customHeight;
   return page?.orientation === 'landscape' ? A4_SHORT_PX : A4_LONG_PX;
 }
+
+export interface PaperColorSwatch {
+  id: string;
+  hex: string;
+  label: string;
+}
+
+export const PAPER_WHITE_GREY_SWATCHES: PaperColorSwatch[] = [
+  { id: 'pure-white', hex: '#ffffff', label: 'Λευκό' },
+  { id: 'cool-white', hex: '#f8fafc', label: 'Λευκό Απαλό' },
+  { id: 'soft-grey', hex: '#f1f4f8', label: 'Γκρι Ανοιχτό' },
+  { id: 'mist-grey', hex: '#e7ebf1', label: 'Γκρι Απαλό' },
+];
+
+export const PAPER_BEIGE_VINTAGE_SWATCHES: PaperColorSwatch[] = [
+  { id: 'cream-classic', hex: '#fffdf7', label: 'Κρεμ Ανοιχτό' },
+  { id: 'beige-light', hex: '#fbf6ea', label: 'Μπεζ Ανοιχτό' },
+  { id: 'beige-vintage', hex: '#f6eedc', label: 'Μπεζ Vintage' },
+  { id: 'vintage-warm', hex: '#efe4cd', label: 'Vintage Θερμό' },
+];
+
+export function getEffectivePaperColor(
+  page?: Pick<NotePage, 'template' | 'paperColor'> | null
+): string {
+  if (page?.paperColor && page.paperColor.trim().length > 0) {
+    return page.paperColor.trim();
+  }
+  if (page?.template === 'dark-grid') {
+    return '#0f172a';
+  }
+  return '#fffdf7';
+}
+
+export function isDarkPaperColor(hex?: string | null): boolean {
+  if (!hex) return false;
+  const clean = hex.replace('#', '').trim();
+  if (clean.length !== 6) return false;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return false;
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.38;
+}
+
+export function getPaperRuleColors(paperHex: string): {
+  grid: string;
+  pdfGrid: string;
+  dot: string;
+  cornell: string;
+} {
+  if (isDarkPaperColor(paperHex)) {
+    return {
+      grid: 'rgba(148, 163, 184, 0.18)',
+      pdfGrid: 'rgba(148, 163, 184, 0.18)',
+      dot: 'rgba(148, 163, 184, 0.42)',
+      cornell: 'rgba(248, 113, 113, 0.45)',
+    };
+  }
+  const low = paperHex.toLowerCase();
+  // Warm vintage beige tones -> subtle warm sepia-grey rulings so they never clash coldly
+  if (low === '#fbf6ea' || low === '#f6eedc' || low === '#efe4cd') {
+    return {
+      grid: 'rgba(142, 132, 114, 0.28)',
+      pdfGrid: 'rgba(115, 105, 88, 0.20)',
+      dot: 'rgba(125, 114, 96, 0.44)',
+      cornell: 'rgba(220, 38, 38, 0.36)',
+    };
+  }
+  // Cool light-grey tones -> slightly crisper slate rulings so lines stay clear on #f1f4f8 / #e7ebf1
+  if (low === '#f1f4f8' || low === '#e7ebf1') {
+    return {
+      grid: 'rgba(130, 144, 164, 0.36)',
+      pdfGrid: 'rgba(71, 85, 105, 0.18)',
+      dot: 'rgba(100, 116, 139, 0.48)',
+      cornell: 'rgba(239, 68, 68, 0.38)',
+    };
+  }
+  // Classic #fffdf7 / #ffffff / #f8fafc
+  return {
+    grid: 'rgba(180, 190, 205, 0.35)',
+    pdfGrid: 'rgba(71, 85, 105, 0.14)',
+    dot: 'rgba(120, 130, 145, 0.45)',
+    cornell: 'rgba(239, 68, 68, 0.40)',
+  };
+}
+
 

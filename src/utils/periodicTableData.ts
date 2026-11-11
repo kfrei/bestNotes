@@ -171,12 +171,21 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
     .replace(/\s+/g, '')
     .toUpperCase();
 
-  // Συχνές πρότυπες αντιδράσεις με ιδανική παιδαγωγική διάταξη ατόμων (π.χ. O - C - O για CO2, H - O - H για H2O)
-  if (norm.includes('CH4') && norm.includes('O2')) {
+  const rawElemMatches = rawEq.match(/[A-Z][a-z]?/g) || [];
+  const elemSet = new Set(
+    rawElemMatches
+      .map((s) => getPeriodicElementBySymbol(s)?.symbol)
+      .filter((s): s is string => Boolean(s))
+  );
+  const onlyHas = (...syms: string[]) =>
+    elemSet.size === syms.length && syms.every((s) => elemSet.has(s));
+
+  // Συχνές πρότυπες αντιδράσεις με ιδανική παιδαγωγική διάταξη ατόμων (ΜΟΝΟ όταν περιέχουν αποκλειστικά αυτά τα στοιχεία!)
+  if (onlyHas('C', 'H', 'O') && norm.includes('CH4') && norm.includes('O2') && !norm.includes('C2') && !norm.includes('C3')) {
     return {
       equationDisplay: 'CH₄ + 2O₂ → CO₂ + 2H₂O',
       bondType: 'covalent',
-      atomZList: [1, 8, 1], // Δείχνουμε το H2O / CO2
+      atomZList: [1, 8, 1],
       transfers: [],
       sharedPairs: [
         { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
@@ -184,11 +193,11 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       ],
     };
   }
-  if (norm.includes('CH4') || (norm.includes('C') && norm.includes('H') && !norm.includes('O') && !norm.includes('CL') && !norm.includes('CA'))) {
+  if (onlyHas('C', 'H') && !norm.includes('C2') && !norm.includes('C3') && !norm.includes('C4') && !norm.includes('C6')) {
     return {
       equationDisplay: 'C + 2H₂ → CH₄',
       bondType: 'covalent',
-      atomZList: [1, 6, 1, 1, 1], // C στο κέντρο (idx 1) με 4 H
+      atomZList: [1, 6, 1, 1, 1],
       transfers: [],
       sharedPairs: [
         { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
@@ -198,11 +207,11 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       ],
     };
   }
-  if (norm.includes('CO2') || (norm.includes('C') && norm.includes('O') && !norm.includes('CA') && !norm.includes('CL') && !norm.includes('CO3'))) {
+  if (onlyHas('C', 'O') && !norm.includes('CO+')) {
     return {
       equationDisplay: 'C + O₂ → CO₂',
       bondType: 'covalent',
-      atomZList: [8, 6, 8], // O — C — O
+      atomZList: [8, 6, 8],
       transfers: [],
       sharedPairs: [
         { atomAIdx: 0, atomBIdx: 1, pairsCount: 2 },
@@ -210,15 +219,11 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       ],
     };
   }
-  if (
-    norm.includes('H2O') ||
-    norm.includes('HO') ||
-    (norm.includes('H') && norm.includes('O') && !norm.includes('C') && !norm.includes('NA') && !norm.includes('K') && !norm.includes('MG'))
-  ) {
+  if (onlyHas('H', 'O') && !norm.includes('H2O2')) {
     return {
       equationDisplay: '2H₂ + O₂ → 2H₂O',
       bondType: 'covalent',
-      atomZList: [1, 8, 1], // H — O — H
+      atomZList: [1, 8, 1],
       transfers: [],
       sharedPairs: [
         { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
@@ -226,11 +231,11 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       ],
     };
   }
-  if (norm.includes('NH3') || norm.includes('NH') || (norm.includes('N') && norm.includes('H') && !norm.includes('NA'))) {
+  if (onlyHas('N', 'H')) {
     return {
       equationDisplay: 'N₂ + 3H₂ → 2NH₃',
       bondType: 'covalent',
-      atomZList: [1, 7, 1, 1], // H — N — H (+ H)
+      atomZList: [1, 7, 1, 1],
       transfers: [],
       sharedPairs: [
         { atomAIdx: 0, atomBIdx: 1, pairsCount: 1 },
@@ -239,56 +244,56 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       ],
     };
   }
-  if (norm.includes('NACL') || (norm.includes('NA') && norm.includes('CL'))) {
+  if (onlyHas('Na', 'Cl')) {
     return {
       equationDisplay: 'Na + Cl → Na⁺Cl⁻',
       bondType: 'ionic',
-      atomZList: [11, 17], // Na, Cl
+      atomZList: [11, 17],
       transfers: [{ fromAtomIdx: 0, toAtomIdx: 1, count: 1 }],
       sharedPairs: [],
     };
   }
-  if (norm.includes('KCL') || (norm.includes('K') && norm.includes('CL'))) {
+  if (onlyHas('K', 'Cl')) {
     return {
       equationDisplay: 'K + Cl → K⁺Cl⁻',
       bondType: 'ionic',
-      atomZList: [19, 17], // K, Cl
+      atomZList: [19, 17],
       transfers: [{ fromAtomIdx: 0, toAtomIdx: 1, count: 1 }],
       sharedPairs: [],
     };
   }
-  if (norm.includes('LIF') || (norm.includes('LI') && norm.includes('F'))) {
+  if (onlyHas('Li', 'F')) {
     return {
       equationDisplay: 'Li + F → Li⁺F⁻',
       bondType: 'ionic',
-      atomZList: [3, 9], // Li, F
+      atomZList: [3, 9],
       transfers: [{ fromAtomIdx: 0, toAtomIdx: 1, count: 1 }],
       sharedPairs: [],
     };
   }
-  if (norm.includes('MGO') || (norm.includes('MG') && norm.includes('O'))) {
+  if (onlyHas('Mg', 'O')) {
     return {
       equationDisplay: '2Mg + O₂ → 2MgO',
       bondType: 'ionic',
-      atomZList: [12, 8], // Mg, O
+      atomZList: [12, 8],
       transfers: [{ fromAtomIdx: 0, toAtomIdx: 1, count: 2 }],
       sharedPairs: [],
     };
   }
-  if (norm.includes('CAO') || (norm.includes('CA') && norm.includes('O'))) {
+  if (onlyHas('Ca', 'O')) {
     return {
       equationDisplay: '2Ca + O₂ → 2CaO',
       bondType: 'ionic',
-      atomZList: [20, 8], // Ca, O
+      atomZList: [20, 8],
       transfers: [{ fromAtomIdx: 0, toAtomIdx: 1, count: 2 }],
       sharedPairs: [],
     };
   }
-  if (norm.includes('MGCL2') || (norm.includes('MG') && norm.includes('CL'))) {
+  if (onlyHas('Mg', 'Cl')) {
     return {
       equationDisplay: 'Mg + Cl₂ → MgCl₂',
       bondType: 'ionic',
-      atomZList: [17, 12, 17], // Cl, Mg, Cl
+      atomZList: [17, 12, 17],
       transfers: [
         { fromAtomIdx: 1, toAtomIdx: 0, count: 1 },
         { fromAtomIdx: 1, toAtomIdx: 2, count: 1 },
@@ -296,11 +301,11 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       sharedPairs: [],
     };
   }
-  if (norm.includes('CACL2') || (norm.includes('CA') && norm.includes('CL'))) {
+  if (onlyHas('Ca', 'Cl')) {
     return {
       equationDisplay: 'Ca + Cl₂ → CaCl₂',
       bondType: 'ionic',
-      atomZList: [17, 20, 17], // Cl, Ca, Cl
+      atomZList: [17, 20, 17],
       transfers: [
         { fromAtomIdx: 1, toAtomIdx: 0, count: 1 },
         { fromAtomIdx: 1, toAtomIdx: 2, count: 1 },
@@ -308,11 +313,11 @@ export function parseChemicalReactionToAtomSetup(rawEq: string): ParsedReactionA
       sharedPairs: [],
     };
   }
-  if (norm.includes('HCL') || (norm.includes('H') && norm.includes('CL'))) {
+  if (onlyHas('H', 'Cl')) {
     return {
       equationDisplay: 'H₂ + Cl₂ → 2HCl',
       bondType: 'covalent',
-      atomZList: [1, 17], // H — Cl
+      atomZList: [1, 17],
       transfers: [],
       sharedPairs: [{ atomAIdx: 0, atomBIdx: 1, pairsCount: 1 }],
     };
@@ -603,12 +608,21 @@ function parseFormulaToken(tokenStr: string): ParsedTermToken {
   const clean = tokenStr.replace(/\s+/g, '');
   const mCoeff = clean.match(/^(\d+)(.*)$/);
   const coeff = mCoeff ? mCoeff[1] : '';
-  const rest = mCoeff ? mCoeff[2] : clean;
+  const rawRest = mCoeff ? mCoeff[2] : clean;
+
+  // Ανάπτυξη παρενθέσεων πολυατομικών ιόντων, π.χ. Ba(NO3)2 -> BaN2O6, Ca(OH)2 -> CaO2H2, Al2(SO4)3 -> Al2S3O12
+  const expandedRest = rawRest.replace(/\(([A-Za-z0-9]+)\)(\d*)/g, (_, inner: string, multStr: string) => {
+    const mult = Math.max(1, parseInt(multStr || '1', 10) || 1);
+    return inner.replace(/([A-Z][a-z]?)(\d*)/g, (__, sym: string, subStr: string) => {
+      const sub = Math.max(1, parseInt(subStr || '1', 10) || 1) * mult;
+      return `${sym}${sub > 1 ? sub : ''}`;
+    });
+  });
 
   const atoms: { sym: string; sub: string }[] = [];
   const regex = /([A-Z][a-z]?)(\d*)/g;
   let m: RegExpExecArray | null;
-  while ((m = regex.exec(rest)) !== null) {
+  while ((m = regex.exec(expandedRest)) !== null) {
     atoms.push({ sym: m[1], sub: m[2] || '' });
   }
   return { coeff, atoms };
@@ -626,7 +640,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'water',
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('H') && all.has('O') && !all.has('C') && !all.has('Na') && !all.has('Mg') && !all.has('Ca') && !raw.includes('H2O2');
+      return all.size === 2 && all.has('H') && all.has('O') && !raw.includes('H2O2');
     },
     lhs: [
       { coeff: '2', coeffReason: 'Συντελεστής 2 για ισοστάθμιση 4 ατόμων H', atoms: [{ sym: 'H', sub: '2', reason: 'Το Υδρογόνο είναι διατομικό μόριο (H₂)' }] },
@@ -644,10 +658,98 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     ],
   },
   {
+    id: 'br2_h2o_redox',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.size === 3 && all.has('Br') && all.has('H') && all.has('O') && raw.includes('BRO3');
+    },
+    lhs: [
+      {
+        coeff: '3',
+        coeffReason: 'Συντελεστής 3 στο 3Br₂ (οξειδοαναγωγή / δυσαναλογοποίηση Βρωμίου)',
+        atoms: [{ sym: 'Br', sub: '2', reason: 'Το Βρώμιο είναι διατομικό μόριο (Br₂)' }],
+      },
+      {
+        coeff: '3',
+        coeffReason: 'Συντελεστής 3 στο 3H₂O για ισοστάθμιση Οξυγόνου και Υδρογόνου',
+        atoms: [
+          { sym: 'H', sub: '2', reason: 'Δείκτης ₂ στο H₂O' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+    rhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'H', sub: '', reason: 'Βρωμικό οξύ (HBrO₃) — το Br οξειδώνεται από 0 σε +5' },
+          { sym: 'Br', sub: '' },
+          { sym: 'O', sub: '3', reason: 'Δείκτης ₃ στο HBrO₃' },
+        ],
+      },
+      {
+        coeff: '5',
+        coeffReason: 'Συντελεστής 5 στο 5HBr (5 άτομα Br ανάγονται από 0 σε -1)',
+        atoms: [
+          { sym: 'H', sub: '' },
+          { sym: 'Br', sub: '', reason: 'Υδροβρώμιο (HBr) — προϊόν αναγωγής του Br₂' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'cl2_h2o_redox',
+    matchElements: (lhs, rhs, raw) => {
+      const all = new Set([...lhs, ...rhs]);
+      return all.size === 3 && all.has('Cl') && all.has('H') && all.has('O') && raw.includes('CLO3');
+    },
+    lhs: [
+      {
+        coeff: '3',
+        coeffReason: 'Συντελεστής 3 στο 3Cl₂ (οξειδοαναγωγή / δυσαναλογοποίηση Χλωρίου)',
+        atoms: [{ sym: 'Cl', sub: '2', reason: 'Το Χλώριο είναι διατομικό μόριο (Cl₂)' }],
+      },
+      {
+        coeff: '3',
+        coeffReason: 'Συντελεστής 3 στο 3H₂O για ισοστάθμιση Οξυγόνου και Υδρογόνου',
+        atoms: [
+          { sym: 'H', sub: '2', reason: 'Δείκτης ₂ στο H₂O' },
+          { sym: 'O', sub: '' },
+        ],
+      },
+    ],
+    rhs: [
+      {
+        coeff: '',
+        atoms: [
+          { sym: 'H', sub: '', reason: 'Χλωρικό οξύ (HClO₃) — το Cl οξειδώνεται από 0 σε +5' },
+          { sym: 'Cl', sub: '' },
+          { sym: 'O', sub: '3', reason: 'Δείκτης ₃ στο HClO₃' },
+        ],
+      },
+      {
+        coeff: '5',
+        coeffReason: 'Συντελεστής 5 στο 5HCl (5 άτομα Cl ανάγονται από 0 σε -1)',
+        atoms: [
+          { sym: 'H', sub: '' },
+          { sym: 'Cl', sub: '', reason: 'Υδροχλώριο (HCl) — προϊόν αναγωγής του Cl₂' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'methane_combustion',
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('C') && all.has('H') && all.has('O') && (raw.includes('CH') || (lhs.includes('C') && lhs.includes('H') && lhs.includes('O')));
+      const cleanRaw = raw.replace(/\s+/g, '');
+      return (
+        all.size === 3 &&
+        all.has('C') &&
+        all.has('H') &&
+        all.has('O') &&
+        !/C[2-9]|CH3|COOH|CHO|OH\b/.test(cleanRaw) &&
+        (cleanRaw.includes('CH4') || cleanRaw.includes('CH+'))
+      );
     },
     lhs: [
       {
@@ -686,14 +788,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
       const cleanRaw = raw.replace(/\s+/g, '');
-      return (
-        all.has('C') &&
-        all.has('O') &&
-        !all.has('H') &&
-        !all.has('Ca') &&
-        !all.has('Na') &&
-        !cleanRaw.includes('CO+')
-      );
+      return all.size === 2 && all.has('C') && all.has('O') && !cleanRaw.includes('CO+');
     },
     lhs: [
       { coeff: '', atoms: [{ sym: 'C', sub: '' }] },
@@ -711,9 +806,9 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
   },
   {
     id: 'methane_synthesis',
-    matchElements: (lhs, rhs) => {
+    matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('C') && all.has('H') && !all.has('O') && !all.has('N') && !all.has('Cl');
+      return all.size === 2 && all.has('C') && all.has('H') && !/C[2-9]/.test(raw);
     },
     lhs: [
       { coeff: '', atoms: [{ sym: 'C', sub: '' }] },
@@ -733,7 +828,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'ammonia',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('N') && all.has('H') && !all.has('O') && !all.has('C') && !all.has('Cl');
+      return all.size === 2 && all.has('N') && all.has('H');
     },
     lhs: [
       { coeff: '', atoms: [{ sym: 'N', sub: '2', reason: 'Το Άζωτο είναι διατομικό μόριο (N₂)' }] },
@@ -754,7 +849,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'mgcl2',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Mg') && all.has('Cl');
+      return all.size === 2 && all.has('Mg') && all.has('Cl');
     },
     lhs: [
       { coeff: '', atoms: [{ sym: 'Mg', sub: '' }] },
@@ -774,7 +869,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'cacl2',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Ca') && all.has('Cl');
+      return all.size === 2 && all.has('Ca') && all.has('Cl');
     },
     lhs: [
       { coeff: '', atoms: [{ sym: 'Ca', sub: '' }] },
@@ -794,7 +889,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'hcl',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('H') && all.has('Cl') && !all.has('Na') && !all.has('Mg') && !all.has('Ca') && !all.has('O');
+      return all.size === 2 && all.has('H') && all.has('Cl');
     },
     lhs: [
       { coeff: '', atoms: [{ sym: 'H', sub: '2', reason: 'Διατομικό H₂' }] },
@@ -815,7 +910,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'nacl',
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Na') && all.has('Cl') && !all.has('O') && !all.has('H') && (raw.includes('CL2') || raw.includes('2NA'));
+      return all.size === 2 && all.has('Na') && all.has('Cl') && (raw.includes('CL2') || raw.includes('2NA') || raw.includes('NA+CL'));
     },
     lhs: [
       { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Na για ισοστάθμιση 2 ατόμων Na', atoms: [{ sym: 'Na', sub: '' }] },
@@ -836,17 +931,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'cao',
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return (
-        all.has('Ca') &&
-        all.has('O') &&
-        !all.has('C') &&
-        !all.has('H') &&
-        !all.has('Cl') &&
-        !all.has('S') &&
-        !all.has('N') &&
-        !raw.includes('⁺') &&
-        !raw.includes('⁻')
-      );
+      return all.size === 2 && all.has('Ca') && all.has('O') && !raw.includes('⁺') && !raw.includes('⁻');
     },
     lhs: [
       { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Ca για ισοστάθμιση 2 ατόμων Ca', atoms: [{ sym: 'Ca', sub: '' }] },
@@ -867,17 +952,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'mgo',
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return (
-        all.has('Mg') &&
-        all.has('O') &&
-        !all.has('C') &&
-        !all.has('H') &&
-        !all.has('Cl') &&
-        !all.has('S') &&
-        !all.has('N') &&
-        !raw.includes('⁺') &&
-        !raw.includes('⁻')
-      );
+      return all.size === 2 && all.has('Mg') && all.has('O') && !raw.includes('⁺') && !raw.includes('⁻');
     },
     lhs: [
       { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Mg για ισοστάθμιση 2 ατόμων Mg', atoms: [{ sym: 'Mg', sub: '' }] },
@@ -898,7 +973,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'na2o',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Na') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('Cl') && !all.has('S') && !all.has('N');
+      return all.size === 2 && all.has('Na') && all.has('O');
     },
     lhs: [
       { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4Na για ισοστάθμιση 4 ατόμων Na', atoms: [{ sym: 'Na', sub: '' }] },
@@ -919,7 +994,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'k2o',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('K') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('Cl') && !all.has('S') && !all.has('N');
+      return all.size === 2 && all.has('K') && all.has('O');
     },
     lhs: [
       { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4K για ισοστάθμιση 4 ατόμων K', atoms: [{ sym: 'K', sub: '' }] },
@@ -940,7 +1015,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'al2o3',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Al') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('Cl') && !all.has('S');
+      return all.size === 2 && all.has('Al') && all.has('O');
     },
     lhs: [
       { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4Al για ισοστάθμιση 4 ατόμων Al', atoms: [{ sym: 'Al', sub: '' }] },
@@ -961,7 +1036,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'fe2o3',
     matchElements: (lhs, rhs, raw) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Fe') && all.has('O') && !all.has('H') && !all.has('C') && !all.has('S') && !raw.includes('FE3O4');
+      return all.size === 2 && all.has('Fe') && all.has('O') && !raw.includes('FE3O4');
     },
     lhs: [
       { coeff: '4', coeffReason: 'Συντελεστής 4 στο 4Fe για ισοστάθμιση 4 ατόμων Fe', atoms: [{ sym: 'Fe', sub: '' }] },
@@ -982,7 +1057,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'cuo',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Cu') && all.has('O') && !all.has('H') && !all.has('S') && !all.has('N') && !all.has('C');
+      return all.size === 2 && all.has('Cu') && all.has('O');
     },
     lhs: [
       { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Cu για ισοστάθμιση 2 ατόμων Cu', atoms: [{ sym: 'Cu', sub: '' }] },
@@ -1003,7 +1078,7 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
     id: 'zno',
     matchElements: (lhs, rhs) => {
       const all = new Set([...lhs, ...rhs]);
-      return all.has('Zn') && all.has('O') && !all.has('H') && !all.has('S') && !all.has('N') && !all.has('C');
+      return all.size === 2 && all.has('Zn') && all.has('O');
     },
     lhs: [
       { coeff: '2', coeffReason: 'Συντελεστής 2 στο 2Zn για ισοστάθμιση 2 ατόμων Zn', atoms: [{ sym: 'Zn', sub: '' }] },
@@ -1022,52 +1097,444 @@ const CANONICAL_REACTIONS: CanonicalReactionSpec[] = [
   },
 ];
 
-// Αυτόματος αλγεβρικός ισοσταθμιστής συντελεστών για ΟΠΟΙΑΔΗΠΟΤΕ χημική εξίσωση (LHS -> RHS)
+// Πίνακας Κύριων & Επιτρεπτών Αριθμών Οξείδωσης (Α.Ο.) ανά Στοιχείο Περιοδικού Πίνακα
+const ELEMENT_PRIMARY_POS_AO: Record<string, number> = {
+  H: 1, Li: 1, Na: 1, K: 1, Rb: 1, Cs: 1, Ag: 1,
+  Be: 2, Mg: 2, Ca: 2, Sr: 2, Ba: 2, Zn: 2, Cd: 2, Hg: 2, Cu: 2, Fe: 2, Co: 2, Ni: 2, Mn: 2, Pb: 2, Sn: 2,
+  B: 3, Al: 3, Ga: 3, In: 3, Sc: 3, Y: 3, La: 3, Cr: 3, Bi: 3, Sb: 3, As: 3,
+  C: 4, Si: 4, Ge: 4, Ti: 4, Zr: 4, Pt: 4,
+  N: 3, P: 3, V: 5,
+  S: 4, Se: 4, Te: 4,
+  Cl: 1, Br: 1, I: 1, Au: 3,
+};
+
+const ELEMENT_ALLOWED_POS_AO: Record<string, number[]> = {
+  H: [1], Li: [1], Na: [1], K: [1], Rb: [1], Cs: [1], Ag: [1],
+  Be: [2], Mg: [2], Ca: [2], Sr: [2], Ba: [2], Zn: [2], Cd: [2],
+  B: [3], Al: [3], Ga: [3], In: [3], Sc: [3],
+  C: [2, 4], Si: [2, 3, 4], Ge: [2, 4], Sn: [2, 4], Pb: [2, 4],
+  N: [1, 2, 3, 4, 5], P: [3, 5], As: [3, 5], Sb: [3, 5], Bi: [3, 5],
+  S: [4, 6], Se: [4, 6], Te: [4, 6],
+  Cl: [1, 3, 5, 7], Br: [1, 3, 5, 7], I: [1, 3, 5, 7],
+  Fe: [2, 3], Cu: [1, 2], Cr: [2, 3, 6], Mn: [2, 3, 4, 6, 7], Co: [2, 3], Ni: [2], Hg: [1, 2], Au: [1, 3],
+};
+
+const ELEMENT_PRIMARY_NEG_AO: Record<string, number> = {
+  F: -1, Cl: -1, Br: -1, I: -1, H: -1,
+  O: -2, S: -2, Se: -2,
+  N: -3, P: -3, C: -4,
+};
+
+const DIATOMIC_ELEMENTS_SET = new Set(['H', 'N', 'O', 'F', 'Cl', 'Br', 'I']);
+
+export interface PolyatomicAnionSpec {
+  formulaAscii: string;
+  formulaPretty: string;
+  charge: number; // π.χ. -1 για NO3, -2 για SO4, -3 για PO4
+  nameStemEl: string; // π.χ. 'Νιτρικό', 'Θειικό', 'Υδροξείδιο'
+  centralSym: string;
+  centralAO: number;
+  peripheralSym: string;
+  peripheralCount: number;
+  peripheralAO: number;
+}
+
+const POLYATOMIC_ANIONS: PolyatomicAnionSpec[] = [
+  { formulaAscii: 'NO3', formulaPretty: 'NO₃', charge: -1, nameStemEl: 'Νιτρικό', centralSym: 'N', centralAO: 5, peripheralSym: 'O', peripheralCount: 3, peripheralAO: -2 },
+  { formulaAscii: 'NO2', formulaPretty: 'NO₂', charge: -1, nameStemEl: 'Νιτρώδες', centralSym: 'N', centralAO: 3, peripheralSym: 'O', peripheralCount: 2, peripheralAO: -2 },
+  { formulaAscii: 'OH', formulaPretty: 'OH', charge: -1, nameStemEl: 'Υδροξείδιο', centralSym: 'O', centralAO: -2, peripheralSym: 'H', peripheralCount: 1, peripheralAO: 1 },
+  { formulaAscii: 'SO4', formulaPretty: 'SO₄', charge: -2, nameStemEl: 'Θειικό', centralSym: 'S', centralAO: 6, peripheralSym: 'O', peripheralCount: 4, peripheralAO: -2 },
+  { formulaAscii: 'SO3', formulaPretty: 'SO₃', charge: -2, nameStemEl: 'Θειώδες', centralSym: 'S', centralAO: 4, peripheralSym: 'O', peripheralCount: 3, peripheralAO: -2 },
+  { formulaAscii: 'CO3', formulaPretty: 'CO₃', charge: -2, nameStemEl: 'Ανθρακικό', centralSym: 'C', centralAO: 4, peripheralSym: 'O', peripheralCount: 3, peripheralAO: -2 },
+  { formulaAscii: 'PO4', formulaPretty: 'PO₄', charge: -3, nameStemEl: 'Φωσφορικό', centralSym: 'P', centralAO: 5, peripheralSym: 'O', peripheralCount: 4, peripheralAO: -2 },
+  { formulaAscii: 'ClO4', formulaPretty: 'ClO₄', charge: -1, nameStemEl: 'Υπερχλωρικό', centralSym: 'Cl', centralAO: 7, peripheralSym: 'O', peripheralCount: 4, peripheralAO: -2 },
+  { formulaAscii: 'ClO3', formulaPretty: 'ClO₃', charge: -1, nameStemEl: 'Χλωρικό', centralSym: 'Cl', centralAO: 5, peripheralSym: 'O', peripheralCount: 3, peripheralAO: -2 },
+  { formulaAscii: 'ClO2', formulaPretty: 'ClO₂', charge: -1, nameStemEl: 'Χλωριώδες', centralSym: 'Cl', centralAO: 3, peripheralSym: 'O', peripheralCount: 2, peripheralAO: -2 },
+  { formulaAscii: 'ClO', formulaPretty: 'ClO', charge: -1, nameStemEl: 'Υποχλωριώδες', centralSym: 'Cl', centralAO: 1, peripheralSym: 'O', peripheralCount: 1, peripheralAO: -2 },
+  { formulaAscii: 'BrO3', formulaPretty: 'BrO₃', charge: -1, nameStemEl: 'Βρωμικό', centralSym: 'Br', centralAO: 5, peripheralSym: 'O', peripheralCount: 3, peripheralAO: -2 },
+  { formulaAscii: 'IO3', formulaPretty: 'IO₃', charge: -1, nameStemEl: 'Ιωδικό', centralSym: 'I', centralAO: 5, peripheralSym: 'O', peripheralCount: 3, peripheralAO: -2 },
+  { formulaAscii: 'MnO4', formulaPretty: 'MnO₄', charge: -1, nameStemEl: 'Υπερμαγγανικό', centralSym: 'Mn', centralAO: 7, peripheralSym: 'O', peripheralCount: 4, peripheralAO: -2 },
+];
+
+export interface CompoundOxidationAnalysis {
+  inputAscii: string;
+  inputPretty: string;
+  suggestedAscii: string;
+  suggestedPretty: string;
+  compoundNameEl: string;
+  isValidOxidation: boolean;
+  hadInitialError: boolean;
+  initialWrongPretty?: string;
+  items: { label: string; aoText: string; detail?: string }[];
+  sumEquationText: string;
+  explanationEl: string;
+  polyatomicMatch?: {
+    metalEl: PeriodicElement;
+    metalCount: number;
+    metalAO: number;
+    anion: PolyatomicAnionSpec;
+    anionCount: number;
+  };
+  alternativeCompounds?: {
+    posAO: number;
+    formulaAscii: string;
+    formulaPretty: string;
+    isCurrent: boolean;
+  }[];
+}
+
+export function analyzeCompoundOxidationNumbers(
+  formulaRaw: string,
+  rawReactionEquation?: string
+): CompoundOxidationAnalysis {
+  const gcd2 = (a: number, b: number): number => (b === 0 ? a : gcd2(b, a % b));
+  const cleanAscii = normalizeAsciiChem(formulaRaw || '')
+    .replace(/\s+/g, '')
+    .replace(/^\d+/, '');
+  const inputPretty = formatChemEquationText(cleanAscii);
+
+  // Αν δόθηκε η αρχική (χειρόγραφη) εξίσωση του μαθητή, βρες αν ο αντίστοιχος όρος είχε γραφτεί με λάθος Α.Ο. (π.χ. BaNO3 αντί Ba(NO3)2, SiO αντί SiO2, PCl αντί PCl3)
+  let userInitialTermAscii: string | undefined;
+  if (rawReactionEquation) {
+    const rawTerms = normalizeAsciiChem(rawReactionEquation)
+      .split(/->|\+/)
+      .map((t) => t.trim().replace(/^\d+/, ''))
+      .filter(Boolean);
+    const targetSyms = Array.from(cleanAscii.matchAll(/[A-Z][a-z]?/g)).map((m) => m[0]);
+    const matchedRaw = rawTerms.find((rt) => {
+      const rSyms = Array.from(rt.matchAll(/[A-Z][a-z]?/g)).map((m) => m[0]);
+      return (
+        rSyms.length === targetSyms.length &&
+        targetSyms.every((s) => rSyms.includes(s)) &&
+        rt.toUpperCase() !== cleanAscii.toUpperCase()
+      );
+    });
+    if (matchedRaw) {
+      userInitialTermAscii = matchedRaw;
+    }
+  }
+
+  // 1. Έλεγχος αν είναι άλας ή υδροξείδιο με πολυατομικό ανιόν: π.χ. Ba(NO3)2, BaNO3, Ca(OH)2, CaOH, Na2SO4, NaSO4, Al2(SO4)3
+  for (const anion of POLYATOMIC_ANIONS) {
+    const parenRegex = new RegExp(`^([A-Z][a-z]?)(\\d*)\\(${anion.formulaAscii}\\)(\\d+)$`);
+    const directRegex = new RegExp(`^([A-Z][a-z]?)(\\d*)${anion.formulaAscii}(\\d*)$`);
+    const mParen = cleanAscii.match(parenRegex);
+    const mDirect = !mParen ? cleanAscii.match(directRegex) : null;
+    const m = mParen || mDirect;
+    if (m && m[1] !== 'H') {
+      const metalEl = getPeriodicElementBySymbol(m[1]);
+      const metalAO = metalEl ? ELEMENT_PRIMARY_POS_AO[metalEl.symbol] : undefined;
+      if (metalEl && metalAO) {
+        const curMetalCount = Math.max(1, parseInt(m[2] || '1', 10) || 1);
+        const curAnionCount = Math.max(1, parseInt(m[3] || '1', 10) || 1);
+        const g = gcd2(metalAO, Math.abs(anion.charge));
+        const reqMetalCount = Math.abs(anion.charge) / g;
+        const reqAnionCount = metalAO / g;
+
+        const mSub = reqMetalCount > 1 ? String(reqMetalCount) : '';
+        const aPart =
+          reqAnionCount > 1 ? `(${anion.formulaAscii})${reqAnionCount}` : anion.formulaAscii;
+        const suggestedAscii = `${metalEl.symbol}${mSub}${aPart}`;
+        const suggestedPretty = formatChemEquationText(suggestedAscii);
+
+        const isValid = curMetalCount * metalAO + curAnionCount * anion.charge === 0;
+        const hadInitialError = !isValid || Boolean(userInitialTermAscii);
+        const wrongPretty = !isValid
+          ? inputPretty
+          : userInitialTermAscii
+          ? formatChemEquationText(userInitialTermAscii)
+          : undefined;
+
+        const compoundNameEl =
+          anion.formulaAscii === 'OH'
+            ? `Υδροξείδιο του ${metalEl.nameEl.endsWith('ο') ? metalEl.nameEl.slice(0, -1) + 'ου' : metalEl.nameEl}`
+            : `${anion.nameStemEl} ${metalEl.nameEl}`;
+
+        const anionSignStr = anion.charge < 0 ? String(anion.charge) : `+${anion.charge}`;
+        const periphSignStr = anion.peripheralAO < 0 ? String(anion.peripheralAO) : `+${anion.peripheralAO}`;
+        const centralSignStr = anion.centralAO > 0 ? `+${anion.centralAO}` : String(anion.centralAO);
+
+        return {
+          inputAscii: cleanAscii,
+          inputPretty,
+          suggestedAscii,
+          suggestedPretty,
+          compoundNameEl,
+          isValidOxidation: isValid,
+          hadInitialError,
+          initialWrongPretty: wrongPretty,
+          items: [
+            { label: metalEl.symbol, aoText: `+${metalAO}` },
+            {
+              label: `${anion.formulaPretty}${anion.charge === -1 ? '⁻' : `²⁻`}`,
+              aoText: anionSignStr,
+              detail: `${anion.centralSym}: ${centralSignStr}, ${anion.peripheralSym}: ${periphSignStr}`,
+            },
+          ],
+          sumEquationText: `${reqMetalCount > 1 ? `${reqMetalCount}·` : ''}(+${metalAO}) + ${reqAnionCount > 1 ? `${reqAnionCount}·` : ''}(${anionSignStr}) = 0`,
+          explanationEl: hadInitialError
+            ? `Το ${metalEl.nameEl} (${metalEl.symbol}) έχει Α.Ο. = +${metalAO} και το ιόν ${anion.formulaPretty} έχει φορτίο ${anionSignStr}. Για Σ(Α.Ο.) = 0 απαιτείται η ένωση ${suggestedPretty}.`
+            : `Σωστοί Αριθμοί Οξείδωσης: ${metalEl.symbol} (+${metalAO}) και ${anion.formulaPretty} (${anionSignStr}) με Σ(Α.Ο.) = 0.`,
+          polyatomicMatch: {
+            metalEl,
+            metalCount: reqMetalCount,
+            metalAO,
+            anion,
+            anionCount: reqAnionCount,
+          },
+        };
+      }
+    }
+  }
+
+  // 2. Έλεγχος αν ο μαθητής είχε γράψει αρχικά BaNO3 (χωρίς παρένθεση) και τώρα το cleanAscii είναι Ba(NO3)2
+  const parsed = parseFormulaToken(cleanAscii);
+
+  // 3. Ελεύθερο στοιχείο (π.χ. Si, O2, P4, Cl2, H2, Na)
+  if (parsed.atoms.length === 1) {
+    const a0 = parsed.atoms[0];
+    const el = getPeriodicElementBySymbol(a0.sym) || getPeriodicElementByZ(6);
+    const isDiatomic = DIATOMIC_ELEMENTS_SET.has(el.symbol);
+    const curSub = a0.sub || '1';
+    const isValid = !isDiatomic || curSub === '2' || curSub === '3';
+    const suggestedAscii = isDiatomic && curSub === '1' ? `${el.symbol}2` : cleanAscii;
+    const suggestedPretty = formatChemEquationText(suggestedAscii);
+    return {
+      inputAscii: cleanAscii,
+      inputPretty,
+      suggestedAscii,
+      suggestedPretty,
+      compoundNameEl: el.nameEl,
+      isValidOxidation: isValid,
+      hadInitialError: !isValid || Boolean(userInitialTermAscii),
+      initialWrongPretty: !isValid ? inputPretty : userInitialTermAscii ? formatChemEquationText(userInitialTermAscii) : undefined,
+      items: [{ label: el.symbol, aoText: '0', detail: 'Ελεύθερο στοιχείο' }],
+      sumEquationText: 'Α.Ο. = 0 (Ελεύθερο Στοιχείο)',
+      explanationEl: `Κάθε ελεύθερο χημικό στοιχείο (${suggestedPretty}) έχει Αριθμό Οξείδωσης Α.Ο. = 0.`,
+    };
+  }
+
+  // 4. Δυαδική ένωση AxBy (π.χ. SiO2, SiO, PCl3, PCl, BaCl2, HCl, Al2O3)
+  if (parsed.atoms.length === 2) {
+    const aA = parsed.atoms[0];
+    const aB = parsed.atoms[1];
+    const elA = getPeriodicElementBySymbol(aA.sym) || getPeriodicElementByZ(6);
+    const elB = getPeriodicElementBySymbol(aB.sym) || getPeriodicElementByZ(8);
+    const curX = Math.max(1, parseInt(aA.sub || '1', 10) || 1);
+    const curY = Math.max(1, parseInt(aB.sub || '1', 10) || 1);
+    const negB = ELEMENT_PRIMARY_NEG_AO[elB.symbol] ?? -1;
+    const allowedPosA = ELEMENT_ALLOWED_POS_AO[elA.symbol] || [ELEMENT_PRIMARY_POS_AO[elA.symbol] || 1];
+    const primaryPosA = ELEMENT_PRIMARY_POS_AO[elA.symbol] || allowedPosA[0] || 1;
+
+    const matchedPosA = allowedPosA.find((posAO) => curX * posAO + curY * negB === 0);
+    const isValid = Boolean(matchedPosA);
+    const activePosA = matchedPosA ?? primaryPosA;
+
+    const g = gcd2(activePosA, Math.abs(negB));
+    const reqX = isValid ? curX : Math.abs(negB) / g;
+    const reqY = isValid ? curY : activePosA / g;
+    const suggestedAscii = `${elA.symbol}${reqX > 1 ? reqX : ''}${elB.symbol}${reqY > 1 ? reqY : ''}`;
+    const suggestedPretty = formatChemEquationText(suggestedAscii);
+    const hadInitialError = !isValid || Boolean(userInitialTermAscii);
+    const wrongPretty = !isValid
+      ? inputPretty
+      : userInitialTermAscii
+      ? formatChemEquationText(userInitialTermAscii)
+      : undefined;
+
+    const alternativeCompounds =
+      allowedPosA.length > 1
+        ? allowedPosA.map((ao) => {
+            const ga = gcd2(ao, Math.abs(negB));
+            const rx = Math.abs(negB) / ga;
+            const ry = ao / ga;
+            const fAscii = `${elA.symbol}${rx > 1 ? rx : ''}${elB.symbol}${ry > 1 ? ry : ''}`;
+            return {
+              posAO: ao,
+              formulaAscii: fAscii,
+              formulaPretty: formatChemEquationText(fAscii),
+              isCurrent: ao === activePosA,
+            };
+          })
+        : undefined;
+
+    return {
+      inputAscii: cleanAscii,
+      inputPretty,
+      suggestedAscii,
+      suggestedPretty,
+      compoundNameEl: `${elA.nameEl} - ${elB.nameEl} (${suggestedPretty})`,
+      isValidOxidation: isValid,
+      hadInitialError,
+      initialWrongPretty: wrongPretty,
+      items: [
+        {
+          label: elA.symbol,
+          aoText: `+${activePosA}`,
+          detail: allowedPosA.length === 1 ? 'μοναδικός Α.Ο.' : `επιτρεπτοί: ${allowedPosA.map((x) => `+${x}`).join(', ')}`,
+        },
+        { label: elB.symbol, aoText: `${negB}` },
+      ],
+      sumEquationText: `${reqX > 1 ? `${reqX}·` : ''}(+${activePosA}) + ${reqY > 1 ? `${reqY}·` : ''}(${negB}) = 0`,
+      explanationEl: hadInitialError
+        ? `Α.Ο.(${elA.symbol}) = +${activePosA} και Α.Ο.(${elB.symbol}) = ${negB}. Για να ισχύει Σ(Α.Ο.) = 0 η σωστή ένωση είναι ${suggestedPretty}.`
+        : `Σωστοί Αριθμοί Οξείδωσης: ${elA.symbol} (+${activePosA}) και ${elB.symbol} (${negB}) με Σ(Α.Ο.) = 0.`,
+      alternativeCompounds,
+    };
+  }
+
+  // 5. Οξυοξέα / Τριαδικές ενώσεις HxXyOz (π.χ. HNO3, H2SO4, HBrO3, H2CO3, H3PO4)
+  if (parsed.atoms.length === 3 && parsed.atoms[0].sym === 'H' && parsed.atoms[2].sym === 'O') {
+    const aH = parsed.atoms[0];
+    const aX = parsed.atoms[1];
+    const aO = parsed.atoms[2];
+    const nH = Math.max(1, parseInt(aH.sub || '1', 10) || 1);
+    const nX = Math.max(1, parseInt(aX.sub || '1', 10) || 1);
+    const nO = Math.max(1, parseInt(aO.sub || '1', 10) || 1);
+    const xAO = Math.round((2 * nO - nH) / nX);
+    return {
+      inputAscii: cleanAscii,
+      inputPretty,
+      suggestedAscii: cleanAscii,
+      suggestedPretty: inputPretty,
+      compoundNameEl: inputPretty,
+      isValidOxidation: true,
+      hadInitialError: Boolean(userInitialTermAscii),
+      initialWrongPretty: userInitialTermAscii ? formatChemEquationText(userInitialTermAscii) : undefined,
+      items: [
+        { label: 'H', aoText: '+1' },
+        { label: aX.sym, aoText: `+${xAO}` },
+        { label: 'O', aoText: '-2' },
+      ],
+      sumEquationText: `${nH > 1 ? `${nH}·` : ''}(+1) + ${nX > 1 ? `${nX}·` : ''}(+${xAO}) + ${nO > 1 ? `${nO}·` : ''}(-2) = 0`,
+      explanationEl: `Αριθμοί Οξείδωσης στο ${inputPretty}: H (+1), ${aX.sym} (+${xAO}), O (-2) με Σ(Α.Ο.) = 0.`,
+    };
+  }
+
+  return {
+    inputAscii: cleanAscii,
+    inputPretty,
+    suggestedAscii: cleanAscii,
+    suggestedPretty: inputPretty,
+    compoundNameEl: inputPretty,
+    isValidOxidation: true,
+    hadInitialError: Boolean(userInitialTermAscii),
+    initialWrongPretty: userInitialTermAscii ? formatChemEquationText(userInitialTermAscii) : undefined,
+    items: parsed.atoms.map((a) => ({
+      label: a.sym,
+      aoText: a.sym === 'O' ? '-2' : a.sym === 'H' ? '+1' : `+${ELEMENT_PRIMARY_POS_AO[a.sym] || 2}`,
+    })),
+    sumEquationText: 'Σ(Α.Ο.) = 0',
+    explanationEl: `Έλεγχος Αριθμών Οξείδωσης για ${inputPretty}: Σ(Α.Ο.) = 0.`,
+  };
+}
+
+// Αυτόματος αλγεβρικός ισοσταθμιστής συντελεστών + Διορθωτής Αριθμών Οξείδωσης (Α.Ο.) για χημικές εξισώσεις (LHS -> RHS)
 function tryAutoBalanceReactionSpec(
   userLhs: ParsedTermToken[],
   userRhs: ParsedTermToken[]
 ): CanonicalReactionSpec | undefined {
   if (userLhs.length === 0 || userRhs.length === 0) return undefined;
   const totalTerms = userLhs.length + userRhs.length;
-  if (totalTerms < 2 || totalTerms > 5) return undefined;
+  if (totalTerms < 2 || totalTerms > 6) return undefined;
   if (userLhs.some((t) => t.atoms.length === 0) || userRhs.some((t) => t.atoms.length === 0)) {
     return undefined;
   }
 
-  const lhsElemSet = new Set(userLhs.flatMap((t) => t.atoms.map((a) => a.sym)));
-  const rhsElemSet = new Set(userRhs.flatMap((t) => t.atoms.map((a) => a.sym)));
+  const gcd2 = (a: number, b: number): number => (b === 0 ? a : gcd2(b, a % b));
+
+  // Βήμα 1: Έλεγχος & Διόρθωση Χημικών Τύπων μέσω Αριθμών Οξείδωσης (Σ(Α.Ο.) = 0) και Διατομικών Στοιχείων
+  const correctTermAtoms = (
+    term: ParsedTermToken
+  ): { sym: string; sub: string; reason?: string }[] => {
+    // 1α. Ελεύθερο διατομικό στοιχείο (H₂, N₂, O₂, F₂, Cl₂, Br₂, I₂) με Α.Ο. = 0
+    if (term.atoms.length === 1) {
+      const a0 = term.atoms[0];
+      if (DIATOMIC_ELEMENTS_SET.has(a0.sym) && (!a0.sub || a0.sub === '1')) {
+        return [{ sym: a0.sym, sub: '2', reason: `Διατομικό στοιχείο ${a0.sym}₂ (Α.Ο. = 0)` }];
+      }
+      return [{ sym: a0.sym, sub: a0.sub }];
+    }
+
+    // 1β. Δυαδική ένωση AxBy (π.χ. SiO -> SiO2, PCl -> PCl3, AlO -> Al2O3, BaCl -> BaCl2, NaO -> Na2O)
+    if (term.atoms.length === 2) {
+      const aA = term.atoms[0];
+      const aB = term.atoms[1];
+      const negB = ELEMENT_PRIMARY_NEG_AO[aB.sym];
+      const allowedPosA = ELEMENT_ALLOWED_POS_AO[aA.sym];
+      const primaryPosA = ELEMENT_PRIMARY_POS_AO[aA.sym];
+
+      if (negB && primaryPosA && allowedPosA) {
+        const curX = Math.max(1, parseInt(aA.sub || '1', 10) || 1);
+        const curY = Math.max(1, parseInt(aB.sub || '1', 10) || 1);
+        // Αν ο μαθητής έγραψε απλή σύνθεση 2 στοιχείων χωρίς συντελεστή και χωρίς δείκτες (π.χ. Si + O₂ → SiO),
+        // προτιμάμε τον κύριο Α.Ο. (+4 ⇒ SiO₂), ενώ αν έβαλε συντελεστή (2Si + O₂ → 2SiO) ή δείκτες (Si₂O₃), κρατάμε τον επιλεγμένο Α.Ο.!
+        const isUnsubscriptedSimpleSynthesis =
+          (aA.sym === 'Si' || aA.sym === 'Ge') &&
+          !aA.sub &&
+          !aB.sub &&
+          !term.coeff &&
+          userLhs.length === 2 &&
+          userRhs.length === 1;
+        // Ελέγχουμε αν οι τρέχοντες δείκτες ικανοποιούν Σ(Α.Ο.) = 0 για κάποιον επιτρεπτό Α.Ο. του A
+        const isValidAO =
+          !isUnsubscriptedSimpleSynthesis &&
+          allowedPosA.some((posAO) => curX * posAO + curY * negB === 0);
+        if (!isValidAO) {
+          const g = gcd2(primaryPosA, Math.abs(negB));
+          const reqX = Math.abs(negB) / g;
+          const reqY = primaryPosA / g;
+          const subX = reqX > 1 ? String(reqX) : '';
+          const subY = reqY > 1 ? String(reqY) : '';
+          const formulaUnicode = `${aA.sym}${toSubscriptDigits(subX)}${aB.sym}${toSubscriptDigits(subY)}`;
+          const aoReason = `Αριθμοί Οξείδωσης: ${aA.sym} (+${primaryPosA}) και ${aB.sym} (${negB}) ⇒ ${formulaUnicode}`;
+          return [
+            { sym: aA.sym, sub: subX, reason: subX !== aA.sub ? aoReason : undefined },
+            { sym: aB.sym, sub: subY, reason: subY !== aB.sub ? aoReason : undefined },
+          ];
+        }
+      }
+    }
+
+    return term.atoms.map((a) => ({ sym: a.sym, sub: a.sub }));
+  };
+
+  const corrLhsAtoms = userLhs.map(correctTermAtoms);
+  const corrRhsAtoms = userRhs.map(correctTermAtoms);
+
+  const lhsElemSet = new Set(corrLhsAtoms.flatMap((atoms) => atoms.map((a) => a.sym)));
+  const rhsElemSet = new Set(corrRhsAtoms.flatMap((atoms) => atoms.map((a) => a.sym)));
   if (lhsElemSet.size === 0 || lhsElemSet.size !== rhsElemSet.size) return undefined;
   for (const sym of lhsElemSet) {
     if (!rhsElemSet.has(sym)) return undefined;
   }
   const elements = Array.from(lhsElemSet);
 
-  const countAtomInTerm = (term: ParsedTermToken, sym: string): number =>
-    term.atoms
+  const countAtomInList = (atoms: { sym: string; sub: string }[], sym: string): number =>
+    atoms
       .filter((a) => a.sym === sym)
       .reduce((acc, a) => acc + Math.max(1, parseInt(a.sub || '1', 10) || 1), 0);
 
   const isBalancedWithCoeffs = (coeffs: number[]): boolean => {
     for (const sym of elements) {
       let lSum = 0;
-      for (let i = 0; i < userLhs.length; i++) {
-        lSum += coeffs[i] * countAtomInTerm(userLhs[i], sym);
+      for (let i = 0; i < corrLhsAtoms.length; i++) {
+        lSum += coeffs[i] * countAtomInList(corrLhsAtoms[i], sym);
       }
       let rSum = 0;
-      for (let j = 0; j < userRhs.length; j++) {
-        rSum += coeffs[userLhs.length + j] * countAtomInTerm(userRhs[j], sym);
+      for (let j = 0; j < corrRhsAtoms.length; j++) {
+        rSum += coeffs[corrLhsAtoms.length + j] * countAtomInList(corrRhsAtoms[j], sym);
       }
       if (lSum !== rSum || lSum === 0) return false;
     }
     return true;
   };
 
-  const gcd2 = (a: number, b: number): number => (b === 0 ? a : gcd2(b, a % b));
   const gcdArr = (arr: number[]): number => arr.reduce((g, x) => gcd2(g, x), arr[0] || 1);
 
   let bestCoeffs: number[] | null = null;
   let bestSum = Infinity;
-  const maxC = totalTerms <= 3 ? 12 : totalTerms === 4 ? 10 : 6;
+  const maxC = totalTerms <= 3 ? 12 : totalTerms === 4 ? 10 : totalTerms === 5 ? 8 : 5;
   const cur: number[] = new Array(totalTerms).fill(1);
 
   const search = (idx: number, runningSum: number) => {
@@ -1093,28 +1560,247 @@ function tryAutoBalanceReactionSpec(
   return {
     id: 'auto_balanced',
     matchElements: () => true,
-    lhs: userLhs.map((t, i) => {
+    lhs: corrLhsAtoms.map((atoms, i) => {
       const c = solved[i];
-      const formulaStr = t.atoms.map((a) => `${a.sym}${toSubscriptDigits(a.sub)}`).join('');
+      const formulaStr = atoms.map((a) => `${a.sym}${toSubscriptDigits(a.sub)}`).join('');
       return {
         coeff: c === 1 ? '' : String(c),
         coeffReason: c > 1 ? `Συντελεστής ${c} στο ${c}${formulaStr} για ισοστάθμιση των ατόμων` : undefined,
-        atoms: t.atoms.map((a) => ({ sym: a.sym, sub: a.sub })),
+        atoms,
       };
     }),
-    rhs: userRhs.map((t, j) => {
-      const c = solved[userLhs.length + j];
-      const formulaStr = t.atoms.map((a) => `${a.sym}${toSubscriptDigits(a.sub)}`).join('');
+    rhs: corrRhsAtoms.map((atoms, j) => {
+      const c = solved[corrLhsAtoms.length + j];
+      const formulaStr = atoms.map((a) => `${a.sym}${toSubscriptDigits(a.sub)}`).join('');
       return {
         coeff: c === 1 ? '' : String(c),
         coeffReason: c > 1 ? `Συντελεστής ${c} στο ${c}${formulaStr} για ισοστάθμιση των ατόμων` : undefined,
-        atoms: t.atoms.map((a) => ({ sym: a.sym, sub: a.sub })),
+        atoms,
       };
     }),
   };
 }
 
-export function validateAndCorrectChemicalEquation(userRawInput: string): ChemValidationResult {
+// Μνήμη Cache για αποτελέσματα AI ChemOCR / AI Ισοστάθμισης (Οξειδοαναγωγή, Οργανική Χημεία, Οξέα-Βάσεις)
+const aiChemValidationCache = new Map<string, ChemValidationResult>();
+
+function normalizeChemCacheKey(raw: string): string {
+  return normalizeAsciiChem(raw || '').replace(/\s+/g, '').toUpperCase();
+}
+
+/**
+ * Δημιουργεί δομή ChemValidationResult συγκρίνοντας χαρακτήρα-προς-χαρακτήρα (μέσω LCS ανά όρο)
+ * την αρχική εξίσωση του μαθητή (`rawInput`) με τη διορθωμένη/ισοσταθμισμένη εξίσωση του AI (`correctedEquation`),
+ * ώστε όσα έγραψε ο μαθητής να εμφανίζονται με ΜΑΥΡΟ και όσα συμπλήρωσε/διόρθωσε το AI με ΚΟΚΚΙΝΟ!
+ */
+export function buildChemValidationFromAiCorrection(
+  rawInput: string,
+  correctedEquation: string,
+  explanationNotes: string[] = []
+): ChemValidationResult {
+  const userFormatted = formatChemEquationText(rawInput);
+  const corrFormatted = formatChemEquationText(correctedEquation);
+
+  const userSides = userFormatted.split('→');
+  const corrSides = corrFormatted.split('→');
+  const segments: ChemDiffSegment[] = [];
+  let hasCorrections = false;
+  const defaultReason =
+    explanationNotes[0] || 'Συμπληρώθηκαν οι σωστοί δείκτες, ενώσεις & συντελεστές ισοστάθμισης';
+
+  const extractElemSyms = (term: string): string[] => {
+    const ascii = normalizeAsciiChem(term);
+    return Array.from(ascii.matchAll(/[A-Z][a-z]?/g)).map((m) => m[0]);
+  };
+
+  const diffTermStrings = (uStr: string, cStr: string, reasonNote: string): ChemDiffSegment[] => {
+    if (uStr === cStr) {
+      return [{ text: cStr, isCorrection: false }];
+    }
+    hasCorrections = true;
+    if (!uStr) {
+      return [{ text: cStr, isCorrection: true, reason: reasonNote }];
+    }
+    const uChars = Array.from(uStr);
+    const cChars = Array.from(cStr);
+    const m = uChars.length;
+    const n = cChars.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        if (uChars[i] === cChars[j]) {
+          dp[i][j] = 1 + dp[i + 1][j + 1];
+        } else {
+          dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+    }
+
+    const pairs: [number, number][] = [];
+    let i = 0;
+    let j = 0;
+    while (i < m && j < n) {
+      if (uChars[i] === cChars[j]) {
+        pairs.push([i, j]);
+        i++;
+        j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        i++;
+      } else {
+        j++;
+      }
+    }
+
+    const out: ChemDiffSegment[] = [];
+    let prevU = 0;
+    let prevC = 0;
+    for (const [uIdx, cIdx] of [...pairs, [m, n] as [number, number]]) {
+      const uRem = uChars.slice(prevU, uIdx).join('');
+      const cAdd = cChars.slice(prevC, cIdx).join('');
+      if (cAdd || uRem) {
+        out.push({
+          text: cAdd,
+          isCorrection: true,
+          wrongText: uRem || undefined,
+          reason: reasonNote,
+        });
+      }
+      if (uIdx < m && cIdx < n) {
+        const last = out[out.length - 1];
+        if (last && !last.isCorrection && !last.wrongText) {
+          last.text += cChars[cIdx];
+        } else {
+          out.push({ text: cChars[cIdx], isCorrection: false });
+        }
+      }
+      prevU = uIdx + 1;
+      prevC = cIdx + 1;
+    }
+    return out;
+  };
+
+  corrSides.forEach((corrSideStr, sIdx) => {
+    if (sIdx > 0) {
+      segments.push({ text: ' → ', isCorrection: false });
+    }
+    const cTerms = corrSideStr.split('+').map((t) => t.trim()).filter(Boolean);
+    const uTerms = (userSides[sIdx] || '').split('+').map((t) => t.trim()).filter(Boolean);
+    const usedU = new Set<number>();
+
+    cTerms.forEach((cTerm, tIdx) => {
+      if (tIdx > 0) {
+        segments.push({ text: ' + ', isCorrection: false });
+      }
+      const cSyms = extractElemSyms(cTerm);
+      let bestUIdx = -1;
+      let bestScore = 0;
+      uTerms.forEach((uTerm, uIdx) => {
+        if (usedU.has(uIdx)) return;
+        const uSyms = extractElemSyms(uTerm);
+        let score = 0;
+        for (const sym of cSyms) {
+          if (uSyms.includes(sym)) {
+            score += sym !== 'H' && sym !== 'O' ? 4 : 1;
+          }
+        }
+        if (uIdx === tIdx && score > 0) score += 0.5;
+        if (score > bestScore) {
+          bestScore = score;
+          bestUIdx = uIdx;
+        }
+      });
+      if (bestUIdx === -1 && tIdx < uTerms.length && !usedU.has(tIdx)) {
+        bestUIdx = tIdx;
+      }
+
+      const noteForTerm =
+        explanationNotes.find((n) => {
+          const asciiN = normalizeAsciiChem(n);
+          const asciiC = normalizeAsciiChem(cTerm);
+          return asciiN.includes(asciiC) || cSyms.some((sym) => sym !== 'H' && sym !== 'O' && asciiN.includes(sym));
+        }) || defaultReason;
+
+      if (bestUIdx >= 0) {
+        usedU.add(bestUIdx);
+        const termSegs = diffTermStrings(uTerms[bestUIdx], cTerm, noteForTerm);
+        segments.push(...termSegs);
+      } else {
+        hasCorrections = true;
+        segments.push({
+          text: cTerm,
+          isCorrection: true,
+          reason: noteForTerm,
+        });
+      }
+    });
+  });
+
+  return {
+    hasCorrections,
+    userRawFormatted: userFormatted,
+    correctedEquation: corrFormatted,
+    segments: segments.length > 0 ? segments : [{ text: corrFormatted, isCorrection: false }],
+    explanationNotes: explanationNotes.length > 0 ? explanationNotes : hasCorrections ? [defaultReason] : [],
+  };
+}
+
+function isEquationChemicallyValidAndBalanced(eqStr: string): boolean {
+  const ascii = normalizeAsciiChem(eqStr || '').trim();
+  if (!ascii.includes('->')) return false;
+  const parts = ascii.split('->');
+  if (parts.length !== 2) return false;
+  const lhsTokensRaw = parts[0].split('+').map((s) => s.trim()).filter(Boolean);
+  const rhsTokensRaw = parts[1].split('+').map((s) => s.trim()).filter(Boolean);
+  if (lhsTokensRaw.length === 0 || rhsTokensRaw.length === 0) return false;
+
+  for (const tok of [...lhsTokensRaw, ...rhsTokensRaw]) {
+    const ox = analyzeCompoundOxidationNumbers(tok);
+    if (!ox.isValidOxidation) return false;
+  }
+
+  const lhsParsed = lhsTokensRaw.map(parseFormulaToken);
+  const rhsParsed = rhsTokensRaw.map(parseFormulaToken);
+  const lhsCounts = new Map<string, number>();
+  const rhsCounts = new Map<string, number>();
+
+  for (const t of lhsParsed) {
+    const c = Math.max(1, parseInt(t.coeff || '1', 10) || 1);
+    for (const a of t.atoms) {
+      const sub = Math.max(1, parseInt(a.sub || '1', 10) || 1);
+      lhsCounts.set(a.sym, (lhsCounts.get(a.sym) || 0) + c * sub);
+    }
+  }
+  for (const t of rhsParsed) {
+    const c = Math.max(1, parseInt(t.coeff || '1', 10) || 1);
+    for (const a of t.atoms) {
+      const sub = Math.max(1, parseInt(a.sub || '1', 10) || 1);
+      rhsCounts.set(a.sym, (rhsCounts.get(a.sym) || 0) + c * sub);
+    }
+  }
+  if (lhsCounts.size === 0 || lhsCounts.size !== rhsCounts.size) return false;
+  for (const [sym, cnt] of lhsCounts.entries()) {
+    if (rhsCounts.get(sym) !== cnt) return false;
+  }
+  return true;
+}
+
+export function registerAiChemValidation(
+  rawInput: string,
+  correctedEquation: string,
+  explanationNotes: string[] = []
+): ChemValidationResult {
+  const res = buildChemValidationFromAiCorrection(rawInput, correctedEquation, explanationNotes);
+  const key = normalizeChemCacheKey(rawInput);
+  if (key && isEquationChemicallyValidAndBalanced(correctedEquation)) {
+    aiChemValidationCache.set(key, res);
+  }
+  return res;
+}
+
+export function validateAndCorrectChemicalEquation(
+  userRawInput: string,
+  savedOrAiCorrectedEq?: string
+): ChemValidationResult {
   const ascii = normalizeAsciiChem(userRawInput);
   const parts = ascii.split('->');
   const lhsRaw = (parts[0] || '').trim();
@@ -1122,6 +1808,32 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
 
   const lhsTokensRaw = lhsRaw ? lhsRaw.split('+').map((s) => s.trim()).filter(Boolean) : [];
   const rhsTokensRaw = rhsRaw ? rhsRaw.split('+').map((s) => s.trim()).filter(Boolean) : [];
+
+  // Αν η εξίσωση περιέχει άλας/υδροξείδιο με πολυατομικό ιόν (π.χ. BaNO3 -> Ba(NO3)2, CaOH -> Ca(OH)2),
+  // διορθώνουμε πρώτα τους πολυατομικούς τύπους με τις παρενθέσεις τους και ισοσταθμίζουμε τους συντελεστές!
+  if (lhsTokensRaw.length > 0 && rhsTokensRaw.length > 0) {
+    const lhsOx = lhsTokensRaw.map((t) => analyzeCompoundOxidationNumbers(t));
+    const rhsOx = rhsTokensRaw.map((t) => analyzeCompoundOxidationNumbers(t));
+    const hasPolyatomicTerm = [...lhsOx, ...rhsOx].some((ox) => Boolean(ox.polyatomicMatch));
+    if (hasPolyatomicTerm) {
+      const fixedLhsParsed = lhsOx.map((ox) => parseFormulaToken(ox.suggestedAscii));
+      const fixedRhsParsed = rhsOx.map((ox) => parseFormulaToken(ox.suggestedAscii));
+      const polyBalanced = tryAutoBalanceReactionSpec(fixedLhsParsed, fixedRhsParsed);
+      if (polyBalanced) {
+        const lhsStr = lhsOx
+          .map((ox, i) => `${polyBalanced.lhs[i]?.coeff || ''}${ox.suggestedPretty}`)
+          .join(' + ');
+        const rhsStr = rhsOx
+          .map((ox, j) => `${polyBalanced.rhs[j]?.coeff || ''}${ox.suggestedPretty}`)
+          .join(' + ');
+        const fullPolyEq = `${lhsStr} → ${rhsStr}`;
+        const polyNotes = [...lhsOx, ...rhsOx]
+          .filter((ox) => !ox.isValidOxidation)
+          .map((ox) => ox.explanationEl);
+        return buildChemValidationFromAiCorrection(userRawInput, fullPolyEq, polyNotes);
+      }
+    }
+  }
 
   const userLhs = lhsTokensRaw.map(parseFormulaToken);
   const userRhs = rhsTokensRaw.map(parseFormulaToken);
@@ -1140,13 +1852,43 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
     .join(' + ')}`.trim();
 
   const hasReactionStructure = ascii.includes('->') || ascii.includes('+');
-  const matchedSpec = hasReactionStructure
-    ? CANONICAL_REACTIONS.find((spec) =>
-        spec.matchElements(lhsSyms, rhsSyms, reconstructedAscii.toUpperCase())
-      ) || tryAutoBalanceReactionSpec(userLhs, userRhs)
+  const autoBalancedSpec = hasReactionStructure
+    ? tryAutoBalanceReactionSpec(userLhs, userRhs)
     : undefined;
+  const canonicalSpec = hasReactionStructure
+    ? CANONICAL_REACTIONS.find(
+        (spec) =>
+          spec.lhs.length === userLhs.length &&
+          spec.rhs.length === userRhs.length &&
+          spec.matchElements(lhsSyms, rhsSyms, reconstructedAscii.toUpperCase())
+      )
+    : undefined;
+  // Αν ο χρήστης επέλεξε ή έγραψε έγκυρη ένωση με δευτερεύοντα Α.Ο. (π.χ. 2Fe + O₂ → 2FeO, 4Cu + O₂ → 2Cu₂O, 2C + O₂ → 2CO, 4Si + 3O₂ → 2Si₂O₃)
+  // ή αντίδραση διάσπασης/δυσαναλογοποίησης (π.χ. 2Si₂O₃ → Si + 3SiO₂), προτιμάμε το autoBalancedSpec!
+  const rhsFirstAscii = userRhs[0]?.atoms.map((a) => `${a.sym}${a.sub}`).join('') || '';
+  const rhsHasExplicitValidAltAO =
+    userRhs.length === 1 &&
+    Boolean(rhsFirstAscii) &&
+    !['CH', 'NH', 'HO', 'OH'].includes(rhsFirstAscii.toUpperCase()) &&
+    analyzeCompoundOxidationNumbers(rhsFirstAscii).isValidOxidation;
+  const matchedSpec = rhsHasExplicitValidAltAO
+    ? autoBalancedSpec || canonicalSpec
+    : canonicalSpec || autoBalancedSpec;
 
   if (!matchedSpec) {
+    const cacheKey = normalizeChemCacheKey(userRawInput);
+    const cachedAi = cacheKey ? aiChemValidationCache.get(cacheKey) : undefined;
+    if (cachedAi && isEquationChemicallyValidAndBalanced(cachedAi.correctedEquation)) {
+      return cachedAi;
+    }
+    // Αν υπάρχει ήδη αποθηκευμένη/διορθωμένη εξίσωση (π.χ. από AI ChemOCR σε σύνθετη οξειδοαναγωγή/οργανική) ΚΑΙ είναι χημικά έγκυρη & ισοσταθμισμένη:
+    if (
+      savedOrAiCorrectedEq &&
+      normalizeChemCacheKey(savedOrAiCorrectedEq) !== normalizeChemCacheKey(userRawInput) &&
+      isEquationChemicallyValidAndBalanced(savedOrAiCorrectedEq)
+    ) {
+      return buildChemValidationFromAiCorrection(userRawInput, savedOrAiCorrectedEq);
+    }
     const formatted = formatChemEquationText(userRawInput);
     const arrowParts = formatted.split('→');
     const fallbackSegs: ChemDiffSegment[] = [];
@@ -1186,9 +1928,11 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
       // Βρες τον αντίστοιχο όρο που έγραψε ο μαθητής (με βάση το πρώτο χημικό σύμβολο)
       const primarySym = cTerm.atoms[0]?.sym;
       const uTerm =
-        userTerms.find((ut) => ut.atoms.some((ua) => ua.sym === primarySym)) ||
-        userTerms[idx] ||
-        ({ coeff: '', atoms: [] } as ParsedTermToken);
+        matchedSpec.id === 'auto_balanced'
+          ? userTerms[idx] || ({ coeff: '', atoms: [] } as ParsedTermToken)
+          : userTerms.find((ut) => ut.atoms.some((ua) => ua.sym === primarySym)) ||
+            userTerms[idx] ||
+            ({ coeff: '', atoms: [] } as ParsedTermToken);
 
       const uCoeffNorm = uTerm.coeff === '1' ? '' : uTerm.coeff;
       const cCoeffNorm = cTerm.coeff === '1' ? '' : cTerm.coeff;
@@ -1219,8 +1963,11 @@ export function validateAndCorrectChemicalEquation(userRawInput: string): ChemVa
       }
 
       // Σύγκριση κάθε ατόμου και του δείκτη του (subscript)
-      cTerm.atoms.forEach((cAtom) => {
-        const uAtom = uTerm.atoms.find((ua) => ua.sym === cAtom.sym);
+      cTerm.atoms.forEach((cAtom, aIdx) => {
+        const uAtom =
+          uTerm.atoms.length === cTerm.atoms.length && uTerm.atoms[aIdx]?.sym === cAtom.sym
+            ? uTerm.atoms[aIdx]
+            : uTerm.atoms.find((ua) => ua.sym === cAtom.sym);
         if (!uAtom) {
           // Ο μαθητής ξέχασε ολόκληρο το άτομο/δείκτη (π.χ. έγραψε μόνο αντιδρώντα "2H2 + O2 ->")
           hasCorrections = true;
@@ -1768,13 +2515,35 @@ const GREEK_COMPOUND_NAMES: Record<string, string> = {
   H2SO3: 'Θειώδες Οξύ',
   HNO2: 'Νιτρώδες Οξύ',
   HCLO4: 'Υπερχλωρικό Οξύ',
+  HCLO3: 'Χλωρικό Οξύ',
+  HCLO2: 'Χλωριώδες Οξύ',
   HCLO: 'Υποχλωριώδες Οξύ',
+  HBRO3: 'Βρωμικό Οξύ',
+  HBRO4: 'Υπερβρωμικό Οξύ',
+  HBRO: 'Υποβρωμιώδες Οξύ',
+  BRO3: 'Βρωμικό Ιόν',
+  CLO3: 'Χλωρικό Ιόν',
+  HIO3: 'Ιωδικό Οξύ',
+  KMNO4: 'Υπερμαγγανικό Κάλιο',
+  K2CR2O7: 'Διχρωμικό Κάλιο',
+  MNO2: 'Διοξείδιο του Μαγγανίου',
   CACO3: 'Ανθρακικό Ασβέστιο',
   NA2CO3: 'Ανθρακικό Νάτριο',
   NAHCO3: 'Όξινο Ανθρακικό Νάτριο',
   CUSO4: 'Θειικός Χαλκός',
   KNO3: 'Νιτρικό Κάλιο',
   NANO3: 'Νιτρικό Νάτριο',
+  BANO32: 'Νιτρικό Βάριο',
+  BAN2O6: 'Νιτρικό Βάριο',
+  BACL2: 'Χλωριούχο Βάριο',
+  BAO: 'Οξείδιο του Βαρίου',
+  SRO: 'Οξείδιο του Στροντίου',
+  SRCL2: 'Χλωριούχο Στρόντιο',
+  P4: 'Λευκός Φωσφόρος (P₄)',
+  CAOH2: 'Υδροξείδιο του Ασβεστίου',
+  CAO2H2: 'Υδροξείδιο του Ασβεστίου',
+  MGOH2: 'Υδροξείδιο του Μαγνησίου',
+  MGO2H2: 'Υδροξείδιο του Μαγνησίου',
   CH3OH: 'Μεθανόλη',
   C2H5OH: 'Αιθανόλη',
   CH3COOH: 'Οξικό Οξύ',
@@ -1924,7 +2693,137 @@ export function normalizeHandwrittenCompoundFormula(rawInput: string): string {
  * και κατασκευάζει αυτόματα τις 3D συντεταγμένες VSEPR, τα μονήρη ζεύγη, το χρωματικό νέφος φορτίου δ⁺/δ⁻ και την πολικότητα!
  */
 export function buildProcedural3DMoleculeFromFormula(formulaRaw: string): Molecule3DModel {
-  const cleanFormula = normalizeHandwrittenCompoundFormula(formulaRaw);
+  const oxInfo = analyzeCompoundOxidationNumbers(formulaRaw);
+  const cleanFormula = normalizeHandwrittenCompoundFormula(oxInfo.suggestedAscii || formulaRaw);
+
+  // Ειδικός 3D Γεννήτορας για Άλατα/Υδροξείδια με Πολυατομικά Ιόντα (π.χ. Ba(NO3)2, Ca(OH)2, Mg(OH)2, Cu(NO3)2, KNO3, CaCO3, Na2SO4)
+  if (oxInfo.polyatomicMatch) {
+    const { metalEl, metalCount, metalAO, anion, anionCount } = oxInfo.polyatomicMatch;
+    const centralAnionEl = getPeriodicElementBySymbol(anion.centralSym) || getPeriodicElementByZ(7);
+    const periphAnionEl = getPeriodicElementBySymbol(anion.peripheralSym) || getPeriodicElementByZ(8);
+    const chiMetal = PAULING_ELECTRONEGATIVITY[metalEl.z] ?? 1.0;
+    const chiCenter = PAULING_ELECTRONEGATIVITY[centralAnionEl.z] ?? 3.0;
+    const chiPeriph = PAULING_ELECTRONEGATIVITY[periphAnionEl.z] ?? 3.5;
+
+    const atoms3D: Atom3DNode[] = [
+      {
+        id: `${metalEl.symbol}0`,
+        z: metalEl.z,
+        symbol: metalEl.symbol,
+        x: 0,
+        y: 0,
+        z3d: 0,
+        radiusFactor: 1.28,
+        color: CPK_ATOM_COLORS[metalEl.z] || '#6366f1',
+        electronegativity: chiMetal,
+        partialCharge: 0.85,
+        chargeLabel: metalAO > 1 ? `δ⁺` : `δ⁺`,
+      },
+    ];
+    const bonds3D: Bond3DEdge[] = [];
+
+    // Αν έχουμε >1 κατιόντα μετάλλου (π.χ. Na2SO4, Na2CO3), τοποθέτησε το επιπλέον κατιόν από πάνω
+    for (let mIdx = 1; mIdx < Math.min(3, metalCount); mIdx++) {
+      atoms3D.push({
+        id: `${metalEl.symbol}${mIdx}`,
+        z: metalEl.z,
+        symbol: metalEl.symbol,
+        x: 0,
+        y: mIdx === 1 ? -0.95 : 0.95,
+        z3d: 0,
+        radiusFactor: 1.18,
+        color: CPK_ATOM_COLORS[metalEl.z] || '#6366f1',
+        electronegativity: chiMetal,
+        partialCharge: 0.8,
+        chargeLabel: 'δ⁺',
+      });
+    }
+
+    const nGroups = Math.min(3, Math.max(1, anionCount));
+    for (let gIdx = 0; gIdx < nGroups; gIdx++) {
+      const dirX = nGroups === 1 ? 0.88 : gIdx === 0 ? -0.95 : gIdx === 1 ? 0.95 : 0;
+      const dirY = nGroups === 3 && gIdx === 2 ? -0.95 : 0;
+      const cIdx = atoms3D.length;
+      atoms3D.push({
+        id: `${centralAnionEl.symbol}_${gIdx}`,
+        z: centralAnionEl.z,
+        symbol: centralAnionEl.symbol,
+        x: dirX,
+        y: dirY,
+        z3d: 0,
+        radiusFactor: centralAnionEl.z <= 10 ? 1.06 : 1.14,
+        color: CPK_ATOM_COLORS[centralAnionEl.z] || '#2563eb',
+        electronegativity: chiCenter,
+        partialCharge: 0.35,
+        chargeLabel: 'δ⁺',
+      });
+      bonds3D.push({
+        fromIdx: 0,
+        toIdx: cIdx,
+        order: 1,
+        isIonic: true,
+      });
+
+      const pCount = Math.min(4, Math.max(1, anion.peripheralCount));
+      const sign = dirX < 0 ? -1 : 1;
+      const pOffsets =
+        pCount === 1
+          ? [{ dx: sign * 0.58, dy: 0, dz: 0 }]
+          : pCount === 2
+          ? [
+              { dx: sign * 0.52, dy: 0.48, dz: 0.16 },
+              { dx: sign * 0.52, dy: -0.48, dz: -0.16 },
+            ]
+          : pCount === 3
+          ? [
+              { dx: sign * 0.62, dy: 0, dz: 0 },
+              { dx: sign * 0.24, dy: 0.58, dz: 0.24 * sign },
+              { dx: sign * 0.24, dy: -0.58, dz: -0.24 * sign },
+            ]
+          : [
+              { dx: sign * 0.62, dy: 0, dz: 0 },
+              { dx: sign * 0.22, dy: 0.58, dz: 0.28 },
+              { dx: sign * 0.22, dy: -0.58, dz: 0.28 },
+              { dx: sign * 0.22, dy: 0, dz: -0.58 },
+            ];
+
+      pOffsets.forEach((off, pIdx) => {
+        const pAtomIdx = atoms3D.length;
+        atoms3D.push({
+          id: `${periphAnionEl.symbol}_${gIdx}_${pIdx}`,
+          z: periphAnionEl.z,
+          symbol: periphAnionEl.symbol,
+          x: dirX + off.dx,
+          y: dirY + off.dy,
+          z3d: off.dz,
+          radiusFactor: periphAnionEl.z === 1 ? 0.72 : 0.96,
+          color: CPK_ATOM_COLORS[periphAnionEl.z] || '#ef4444',
+          electronegativity: chiPeriph,
+          partialCharge: periphAnionEl.z === 1 ? 0.35 : -0.55,
+          chargeLabel: periphAnionEl.z === 1 ? 'δ⁺' : 'δ⁻',
+        });
+        bonds3D.push({
+          fromIdx: cIdx,
+          toIdx: pAtomIdx,
+          order: pIdx === 0 && periphAnionEl.z === 8 && pCount >= 2 ? 2 : 1,
+          isIonic: false,
+        });
+      });
+    }
+
+    return {
+      id: oxInfo.suggestedAscii,
+      formula: oxInfo.suggestedPretty,
+      nameEl: `${oxInfo.compoundNameEl} (${oxInfo.suggestedPretty})`,
+      geometryLabel: `Ιοντική Ένωση ${metalEl.symbol}⁺${metalAO} με ${anionCount}× ${anion.formulaPretty}⁻`,
+      bondAngleText: anion.peripheralCount === 3 ? '120.0°' : '109.5°',
+      polarityLabel: 'Ιοντική Ένωση (Ισχυρά Πολική)',
+      atoms: atoms3D,
+      bonds: bonds3D,
+      lonePairs: [],
+    };
+  }
+
   const parsed = parseFormulaToken(cleanFormula);
   if (!parsed.atoms || parsed.atoms.length === 0) {
     return PRESET_3D_MOLECULES.H2O;
@@ -2037,6 +2936,49 @@ export function buildProcedural3DMoleculeFromFormula(formulaRaw: string): Molecu
     };
   }
 
+  // 1β. Τετρατομικό ομοπυρηνικό μόριο (π.χ. P4 — Τετραεδρικός Λευκός Φωσφόρος)
+  if (groups.length === 1 && groups[0].count === 4) {
+    const el = groups[0].el;
+    const chi = PAULING_ELECTRONEGATIVITY[el.z] ?? 2.19;
+    const col = CPK_ATOM_COLORS[el.z] || '#f97316';
+    const coords = [
+      { x: 0, y: -0.82, z3d: 0 },
+      { x: 0.78, y: 0.34, z3d: 0 },
+      { x: -0.39, y: 0.34, z3d: 0.68 },
+      { x: -0.39, y: 0.34, z3d: -0.68 },
+    ];
+    return {
+      id: canonicalAscii,
+      formula: prettyFormula,
+      nameEl: el.z === 15 ? `Λευκός Φωσφόρος (${prettyFormula})` : fullNameEl,
+      geometryLabel: 'Τετραεδρικό Κλουβί 3D (P₄)',
+      bondAngleText: '60.0°',
+      polarityLabel: 'Μη Πολικό Μόριο',
+      atoms: coords.map((c, idx) => ({
+        id: `${el.symbol}${idx + 1}`,
+        z: el.z,
+        symbol: el.symbol,
+        x: c.x,
+        y: c.y,
+        z3d: c.z3d,
+        radiusFactor: 1.14,
+        color: col,
+        electronegativity: chi,
+        partialCharge: 0,
+        chargeLabel: '',
+      })),
+      bonds: [
+        { fromIdx: 0, toIdx: 1, order: 1 },
+        { fromIdx: 0, toIdx: 2, order: 1 },
+        { fromIdx: 0, toIdx: 3, order: 1 },
+        { fromIdx: 1, toIdx: 2, order: 1 },
+        { fromIdx: 1, toIdx: 3, order: 1 },
+        { fromIdx: 2, toIdx: 3, order: 1 },
+      ],
+      lonePairs: [],
+    };
+  }
+
   // 2. Διατομικό ετεροπυρηνικό μόριο (π.χ. HCl, HF, HBr, HI, CO, NO, LiF, KCl, MgO, CaO)
   if (
     groups.length === 2 &&
@@ -2097,6 +3039,100 @@ export function buildProcedural3DMoleculeFromFormula(formulaRaw: string): Molecu
         },
       ],
       bonds: [{ fromIdx: 0, toIdx: 1, order: bondOrder, isIonic }],
+      lonePairs: [],
+    };
+  }
+
+  // 2β. Ενώσεις A₂B₃ (π.χ. Si₂O₃, Al₂O₃, Fe₂O₃, N₂O₃, P₂O₃, B₂O₃) — Δομή Γέφυρας B = A — B — A = B
+  if (groups.length === 2 && groups[0].count === 2 && groups[1].count === 3) {
+    const elA = groups[0].el;
+    const elB = groups[1].el;
+    const chiA = PAULING_ELECTRONEGATIVITY[elA.z] ?? 1.9;
+    const chiB = PAULING_ELECTRONEGATIVITY[elB.z] ?? 3.44;
+    const isIonic = isMetalEl(elA) && !isMetalEl(elB);
+    const colA = CPK_ATOM_COLORS[elA.z] || '#0284c7';
+    const colB = CPK_ATOM_COLORS[elB.z] || '#ef4444';
+    return {
+      id: canonicalAscii,
+      formula: prettyFormula,
+      nameEl: fullNameEl,
+      geometryLabel: `Γεφυρωμένη 3D Δομή (${elB.symbol}=${elA.symbol}—${elB.symbol}—${elA.symbol}=${elB.symbol})`,
+      bondAngleText: '120.0°',
+      polarityLabel: isIonic ? 'Ιοντική Ένωση (Ισχυρά Πολική)' : 'Πολικό Μόριο',
+      atoms: [
+        {
+          id: `${elB.symbol}_bridge`,
+          z: elB.z,
+          symbol: elB.symbol,
+          x: 0,
+          y: -0.26,
+          z3d: 0,
+          radiusFactor: 1.06,
+          color: colB,
+          electronegativity: chiB,
+          partialCharge: -0.48,
+          chargeLabel: 'δ⁻',
+        },
+        {
+          id: `${elA.symbol}1`,
+          z: elA.z,
+          symbol: elA.symbol,
+          x: -0.76,
+          y: 0.22,
+          z3d: 0.12,
+          radiusFactor: 1.18,
+          color: colA,
+          electronegativity: chiA,
+          partialCharge: 0.65,
+          chargeLabel: 'δ⁺',
+        },
+        {
+          id: `${elA.symbol}2`,
+          z: elA.z,
+          symbol: elA.symbol,
+          x: 0.76,
+          y: 0.22,
+          z3d: -0.12,
+          radiusFactor: 1.18,
+          color: colA,
+          electronegativity: chiA,
+          partialCharge: 0.65,
+          chargeLabel: 'δ⁺',
+        },
+        {
+          id: `${elB.symbol}_left`,
+          z: elB.z,
+          symbol: elB.symbol,
+          x: -1.36,
+          y: -0.28,
+          z3d: -0.22,
+          radiusFactor: 1.04,
+          color: colB,
+          electronegativity: chiB,
+          partialCharge: -0.45,
+          chargeLabel: 'δ⁻',
+        },
+        {
+          id: `${elB.symbol}_right`,
+          z: elB.z,
+          symbol: elB.symbol,
+          x: 1.36,
+          y: -0.28,
+          z3d: 0.22,
+          radiusFactor: 1.04,
+          color: colB,
+          electronegativity: chiB,
+          partialCharge: -0.45,
+          chargeLabel: 'δ⁻',
+        },
+      ],
+      bonds: [
+        { fromIdx: 0, toIdx: 1, order: 1, isIonic },
+        { fromIdx: 0, toIdx: 2, order: 1, isIonic },
+        { fromIdx: 1, toIdx: 3, order: isIonic ? 1 : 2, isIonic },
+        { fromIdx: 2, toIdx: 4, order: isIonic ? 1 : 2, isIonic },
+        ...(elA.z === 14 ? [{ fromIdx: 1, toIdx: 2, order: 1 as const, isIonic: false }] : []),
+      ],
       lonePairs: [],
     };
   }
@@ -2359,11 +3395,12 @@ export function getNaturalNucleusRadiusPx(z: number): number {
 export function getNaturalOuterOrbitRadiusPx(z: number): number {
   const el = getPeriodicElementByZ(z);
   const shells = el.shells.length;
-  if (shells <= 1) return 38; // 1 στιβάδα (H, He): μικρή τροχιά!
-  if (shells === 2) return 66; // 2 στιβάδες (C, N, O...)
-  if (shells === 3) return 82; // 3 στιβάδες (Na, Mg, Cl...)
-  if (shells === 4) return 94;
-  return 104;
+  if (shells <= 1) return 38;  // 1 στιβάδα (H, He): μικρή τροχιά!
+  if (shells === 2) return 66;  // 2 στιβάδες (C, N, O...)
+  if (shells === 3) return 84;  // 3 στιβάδες (Na, Mg, Cl...)
+  if (shells === 4) return 104; // 4 στιβάδες (K, Ca, Br...)
+  if (shells === 5) return 124; // 5 στιβάδες (Rb, Sr, I...)
+  return 144;                   // 6 στιβάδες (Cs, Ba, Au, Pb...) — άνετη απόσταση μεταξύ των 6 τροχιών!
 }
 
 export function buildAtomNodesAndBondsForTerm(
@@ -2388,20 +3425,127 @@ export function buildAtomNodesAndBondsForTerm(
     count: number;
   }[];
 } {
-  const ascii = normalizeAsciiChem(termRaw)
+  const oxInfo = analyzeCompoundOxidationNumbers(termRaw);
+  const ascii = normalizeAsciiChem(oxInfo.suggestedAscii || termRaw)
     .replace(/\s+/g, '')
     .replace(/[⁺⁻²³]/g, '');
   const parsed = parseFormulaToken(ascii);
   const ts = Date.now();
+  const covShellGap = 24;
+
+  // 0. Άλατα/Υδροξείδια με Πολυατομικά Ιόντα (π.χ. Ba(NO3)2, Ca(OH)2, Mg(OH)2, Cu(NO3)2, KNO3, CaCO3, Na2SO4)
+  if (oxInfo.polyatomicMatch) {
+    const { metalEl, metalCount, metalAO, anion, anionCount } = oxInfo.polyatomicMatch;
+    const centralAnionEl = getPeriodicElementBySymbol(anion.centralSym) || getPeriodicElementByZ(7);
+    const periphAnionEl = getPeriodicElementBySymbol(anion.peripheralSym) || getPeriodicElementByZ(8);
+    const rMetal = getNaturalOuterOrbitRadiusPx(metalEl.z);
+    const rAnionCenter = getNaturalOuterOrbitRadiusPx(centralAnionEl.z);
+    const rPeriph = getNaturalOuterOrbitRadiusPx(periphAnionEl.z);
+
+    const nodes: {
+      id: string;
+      z: number;
+      x: number;
+      y: number;
+      outerRadiusPx: number;
+      extraElectrons: number;
+      color: string;
+    }[] = [];
+    const bonds: {
+      id: string;
+      kind: 'ionic' | 'covalent';
+      fromAtomId: string;
+      toAtomId: string;
+      count: number;
+    }[] = [];
+
+    const mId = `atom-${ts}-metal0`;
+    nodes.push({
+      id: mId,
+      z: metalEl.z,
+      x: Math.round(centerX),
+      y: Math.round(centerY),
+      outerRadiusPx: rMetal,
+      extraElectrons: -metalAO,
+      color: '#0284c7',
+    });
+
+    for (let mIdx = 1; mIdx < Math.min(2, metalCount); mIdx++) {
+      const mId2 = `atom-${ts}-metal${mIdx}`;
+      nodes.push({
+        id: mId2,
+        z: metalEl.z,
+        x: Math.round(centerX),
+        y: Math.round(centerY - (rMetal * 2 + 28)),
+        outerRadiusPx: rMetal,
+        extraElectrons: -metalAO,
+        color: '#0284c7',
+      });
+    }
+
+    const nGroups = Math.min(2, Math.max(1, anionCount));
+    const distMetalToGroup = rMetal + rAnionCenter + 24;
+    const distGroupToPeriph = rAnionCenter + rPeriph + covShellGap;
+
+    for (let gIdx = 0; gIdx < nGroups; gIdx++) {
+      const sign = nGroups === 1 ? 1 : gIdx === 0 ? -1 : 1;
+      const gx = centerX + sign * distMetalToGroup;
+      const gy = centerY;
+      const gCenterId = `atom-${ts}-ac${gIdx}`;
+      nodes.push({
+        id: gCenterId,
+        z: centralAnionEl.z,
+        x: Math.round(gx),
+        y: Math.round(gy),
+        outerRadiusPx: rAnionCenter,
+        extraElectrons: Math.abs(anion.charge),
+        color: '#10b981',
+      });
+      bonds.push({
+        id: `abond-${ts}-ion-${gIdx}`,
+        kind: 'ionic',
+        fromAtomId: mId,
+        toAtomId: gCenterId,
+        count: Math.abs(anion.charge),
+      });
+
+      const pCount = Math.min(3, Math.max(1, anion.peripheralCount));
+      const baseAng = sign < 0 ? Math.PI : 0;
+      const pAngles =
+        pCount === 1
+          ? [baseAng]
+          : pCount === 2
+          ? [baseAng - 0.85, baseAng + 0.85]
+          : [baseAng, baseAng - 1.05, baseAng + 1.05];
+
+      pAngles.forEach((ang, pIdx) => {
+        const pId = `atom-${ts}-ap-${gIdx}-${pIdx}`;
+        nodes.push({
+          id: pId,
+          z: periphAnionEl.z,
+          x: Math.round(gx + Math.cos(ang) * distGroupToPeriph),
+          y: Math.round(gy + Math.sin(ang) * distGroupToPeriph),
+          outerRadiusPx: rPeriph,
+          extraElectrons: 0,
+          color: '#ef4444',
+        });
+        bonds.push({
+          id: `abond-${ts}-cov-${gIdx}-${pIdx}`,
+          kind: 'covalent',
+          fromAtomId: gCenterId,
+          toAtomId: pId,
+          count: pIdx === 0 && periphAnionEl.z === 8 && pCount >= 2 ? 2 : 1,
+        });
+      });
+    }
+
+    return { atoms: nodes, bonds };
+  }
 
   // Συνολική φόρμουλα χωρίς τον μπροστινό συντελεστή (π.χ. "2H2" -> "H2", "2H2O" -> "H2O", "CH4" -> "CH4")
   const formulaUpper = parsed.atoms
     .map((a) => `${a.sym.toUpperCase()}${a.sub}`)
     .join('');
-
-  // Απόσταση μεταξύ των εξωτερικών στιβάδων ομοιοπολικά συνδεδεμένων ατόμων (24px -> 12px εκατέρωθεν του κέντρου του δεσμού)
-  // ώστε τα κοινά ζεύγη ηλεκτρονίων να βρίσκονται έξω από τις εξωτερικές στιβάδες και η σιέλ έλλειψη να πατάει ελάχιστα (~1.5px) πάνω στην εξωτερική στιβάδα!
-  const covShellGap = 24;
 
   // 1. CH4 (Μεθάνιο): 1 Άνθρακας στο κέντρο + 4 μικρά Υδρογόνα γύρω του (πάνω, κάτω, αριστερά, δεξιά) με 4 απλούς ομοιοπολικούς δεσμούς!
   if (formulaUpper === 'CH4') {
@@ -2568,7 +3712,39 @@ export function buildAtomNodesAndBondsForTerm(
     };
   }
 
-  // 6. Μεμονωμένο άτομο (π.χ. C, Mg, Na, Ca, K, O, H)
+  // 5β. Τετρατομικά ομοπυρηνικά μόρια (π.χ. P4 — Λευκός Φωσφόρος)
+  if (parsed.atoms.length === 1 && parsed.atoms[0].sub === '4') {
+    const el = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(15);
+    const rOut = getNaturalOuterOrbitRadiusPx(el.z);
+    const step = Math.round((rOut * 2 + covShellGap) * 0.72);
+    const ids = [0, 1, 2, 3].map((i) => `atom-${ts}-p4-${i}`);
+    const colors = ['#0284c7', '#8b5cf6', '#10b981', '#f59e0b'];
+    const pos = [
+      { x: centerX - step, y: centerY - step },
+      { x: centerX + step, y: centerY - step },
+      { x: centerX + step, y: centerY + step },
+      { x: centerX - step, y: centerY + step },
+    ];
+    return {
+      atoms: pos.map((p, i) => ({
+        id: ids[i],
+        z: el.z,
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+        outerRadiusPx: rOut,
+        extraElectrons: 0,
+        color: colors[i],
+      })),
+      bonds: [
+        { id: `abond-${ts}-p4-01`, kind: 'covalent', fromAtomId: ids[0], toAtomId: ids[1], count: 1 },
+        { id: `abond-${ts}-p4-12`, kind: 'covalent', fromAtomId: ids[1], toAtomId: ids[2], count: 1 },
+        { id: `abond-${ts}-p4-23`, kind: 'covalent', fromAtomId: ids[2], toAtomId: ids[3], count: 1 },
+        { id: `abond-${ts}-p4-30`, kind: 'covalent', fromAtomId: ids[3], toAtomId: ids[0], count: 1 },
+      ],
+    };
+  }
+
+  // 6. Μεμονωμένο άτομο (π.χ. C, Mg, Na, Ca, K, O, H, Si)
   if (parsed.atoms.length === 1 && (!parsed.atoms[0].sub || parsed.atoms[0].sub === '1')) {
     const el = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(6);
     const rOut = getNaturalOuterOrbitRadiusPx(el.z);
@@ -2588,13 +3764,86 @@ export function buildAtomNodesAndBondsForTerm(
     };
   }
 
-  // 7. Τριατομικά ιοντικά AB2 (π.χ. MgCl2, CaCl2)
+  // 6β. Ενώσεις A₂B₃ (π.χ. Si₂O₃, Al₂O₃, Fe₂O₃, N₂O₃, P₂O₃, B₂O₃) — Δομή Γέφυρας B = A — B — A = B
+  if (parsed.atoms.length === 2 && parsed.atoms[0].sub === '2' && parsed.atoms[1].sub === '3') {
+    const elA = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(14);
+    const elB = getPeriodicElementBySymbol(parsed.atoms[1].sym) || getPeriodicElementByZ(8);
+    const rA = getNaturalOuterOrbitRadiusPx(elA.z);
+    const rB = getNaturalOuterOrbitRadiusPx(elB.z);
+    const isIonic = elA.category === 'metal' && elB.category !== 'metal';
+    const distAB = rA + rB + (isIonic ? 24 : covShellGap);
+    const oBridgeId = `atom-${ts}-ob`;
+    const a1Id = `atom-${ts}-a1`;
+    const a2Id = `atom-${ts}-a2`;
+    const oLeftId = `atom-${ts}-ol`;
+    const oRightId = `atom-${ts}-or`;
+
+    return {
+      atoms: [
+        {
+          id: oBridgeId,
+          z: elB.z,
+          x: Math.round(centerX),
+          y: Math.round(centerY - distAB * 0.36),
+          outerRadiusPx: rB,
+          extraElectrons: isIonic ? 2 : 0,
+          color: '#ef4444',
+        },
+        {
+          id: a1Id,
+          z: elA.z,
+          x: Math.round(centerX - distAB * 0.92),
+          y: Math.round(centerY + distAB * 0.12),
+          outerRadiusPx: rA,
+          extraElectrons: isIonic ? -3 : 0,
+          color: '#0284c7',
+        },
+        {
+          id: a2Id,
+          z: elA.z,
+          x: Math.round(centerX + distAB * 0.92),
+          y: Math.round(centerY + distAB * 0.12),
+          outerRadiusPx: rA,
+          extraElectrons: isIonic ? -3 : 0,
+          color: '#0284c7',
+        },
+        {
+          id: oLeftId,
+          z: elB.z,
+          x: Math.round(centerX - distAB * 0.92),
+          y: Math.round(centerY + distAB * 1.12),
+          outerRadiusPx: rB,
+          extraElectrons: isIonic ? 2 : 0,
+          color: '#8b5cf6',
+        },
+        {
+          id: oRightId,
+          z: elB.z,
+          x: Math.round(centerX + distAB * 0.92),
+          y: Math.round(centerY + distAB * 1.12),
+          outerRadiusPx: rB,
+          extraElectrons: isIonic ? 2 : 0,
+          color: '#10b981',
+        },
+      ],
+      bonds: [
+        { id: `abond-${ts}-b1`, kind: isIonic ? 'ionic' : 'covalent', fromAtomId: a1Id, toAtomId: oBridgeId, count: 1 },
+        { id: `abond-${ts}-b2`, kind: isIonic ? 'ionic' : 'covalent', fromAtomId: a2Id, toAtomId: oBridgeId, count: 1 },
+        { id: `abond-${ts}-t1`, kind: isIonic ? 'ionic' : 'covalent', fromAtomId: a1Id, toAtomId: oLeftId, count: isIonic ? 2 : 2 },
+        { id: `abond-${ts}-t2`, kind: isIonic ? 'ionic' : 'covalent', fromAtomId: a2Id, toAtomId: oRightId, count: isIonic ? 2 : 2 },
+      ],
+    };
+  }
+
+  // 7. Τριατομικά μόρια/ενώσεις AB2 (π.χ. MgCl2, CaCl2, BaCl2, SiO2, SO2, CS2)
   if (parsed.atoms.length === 2 && parsed.atoms[1].sub === '2') {
     const elA = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(12);
     const elB = getPeriodicElementBySymbol(parsed.atoms[1].sym) || getPeriodicElementByZ(17);
     const rA = getNaturalOuterOrbitRadiusPx(elA.z);
     const rB = getNaturalOuterOrbitRadiusPx(elB.z);
     const isIonic = elA.category === 'metal' && elB.category !== 'metal';
+    const valB = elB.shells[elB.shells.length - 1] || 7;
+    const covBondCount = elB.z === 1 ? 1 : Math.max(1, Math.min(2, 8 - valB));
     const dist = rA + rB + (isIonic ? 24 : covShellGap);
     const b1Id = `atom-${ts}-b1`;
     const aId = `atom-${ts}-a`;
@@ -2611,13 +3860,115 @@ export function buildAtomNodesAndBondsForTerm(
             { id: `abond-${ts}-ion2`, kind: 'ionic', fromAtomId: aId, toAtomId: b2Id, count: 1 },
           ]
         : [
-            { id: `abond-${ts}-cov1`, kind: 'covalent', fromAtomId: b1Id, toAtomId: aId, count: 1 },
-            { id: `abond-${ts}-cov2`, kind: 'covalent', fromAtomId: aId, toAtomId: b2Id, count: 1 },
+            { id: `abond-${ts}-cov1`, kind: 'covalent', fromAtomId: b1Id, toAtomId: aId, count: covBondCount },
+            { id: `abond-${ts}-cov2`, kind: 'covalent', fromAtomId: aId, toAtomId: b2Id, count: covBondCount },
           ],
     };
   }
 
-  // 8. Δυαδικές ενώσεις AB (π.χ. HCl, NaCl, MgO, CaO, LiF, KCl)
+  // 8. Πολυατομικά μόρια, οξυοξέα, οξείδια & οργανικές ενώσεις (π.χ. HBrO3, BrO3, HNO3, H2SO4, SO2, SO3, BF3, CCl4, CH3OH)
+  const expandedAtomsList: { sym: string; el: PeriodicElement }[] = [];
+  for (const a of parsed.atoms) {
+    const el = getPeriodicElementBySymbol(a.sym);
+    if (!el) continue;
+    const count = Math.min(8, Math.max(1, parseInt(a.sub || '1', 10) || 1));
+    for (let k = 0; k < count; k++) {
+      expandedAtomsList.push({ sym: a.sym, el });
+    }
+  }
+
+  if (expandedAtomsList.length >= 3) {
+    // Επιλογή κεντρικού ατόμου: προτεραιότητα σε C, Si, S, P, N, Br, Cl, I, B, Al, Mn, Cr, Fe (όχι H και κατά προτίμηση όχι O)
+    const centralPriority = (sym: string): number => {
+      if (sym === 'H') return 0;
+      if (sym === 'O' || sym === 'F') return 1;
+      if (['C', 'Si', 'S', 'P', 'N', 'B'].includes(sym)) return 10;
+      if (['Br', 'Cl', 'I', 'Mn', 'Cr', 'Al', 'Fe', 'Cu', 'Zn', 'Mg', 'Ca'].includes(sym)) return 8;
+      return 5;
+    };
+    let centralIdx = 0;
+    let bestPrio = -1;
+    expandedAtomsList.forEach((item, idx) => {
+      const p = centralPriority(item.sym);
+      if (p > bestPrio) {
+        bestPrio = p;
+        centralIdx = idx;
+      }
+    });
+
+    const centralItem = expandedAtomsList[centralIdx];
+    const peripheralItems = expandedAtomsList.filter((_, idx) => idx !== centralIdx);
+    const rCenter = getNaturalOuterOrbitRadiusPx(centralItem.el.z);
+    const centerId = `atom-${ts}-center`;
+    const colors = ['#ef4444', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1'];
+
+    const nodes: {
+      id: string;
+      z: number;
+      x: number;
+      y: number;
+      outerRadiusPx: number;
+      extraElectrons: number;
+      color: string;
+    }[] = [
+      {
+        id: centerId,
+        z: centralItem.el.z,
+        x: Math.round(centerX),
+        y: Math.round(centerY),
+        outerRadiusPx: rCenter,
+        extraElectrons: 0,
+        color: '#0284c7',
+      },
+    ];
+    const bonds: {
+      id: string;
+      kind: 'ionic' | 'covalent';
+      fromAtomId: string;
+      toAtomId: string;
+      count: number;
+    }[] = [];
+    const nPer = peripheralItems.length;
+
+    peripheralItems.forEach((pItem, pIdx) => {
+      const rPer = getNaturalOuterOrbitRadiusPx(pItem.el.z);
+      const isIonic =
+        (centralItem.el.category === 'metal' && pItem.el.category !== 'metal') ||
+        (pItem.el.category === 'metal' && centralItem.el.category !== 'metal');
+      const dist = rCenter + rPer + (isIonic ? 24 : covShellGap);
+      // Κατανομή γύρω από το κεντρικό άτομο
+      const angle =
+        nPer === 2
+          ? pIdx === 0
+            ? Math.PI
+            : 0
+          : nPer === 3
+          ? -Math.PI / 2 + (pIdx * 2 * Math.PI) / 3
+          : -Math.PI / 2 + (pIdx * 2 * Math.PI) / nPer;
+      const pId = `atom-${ts}-p${pIdx}`;
+      nodes.push({
+        id: pId,
+        z: pItem.el.z,
+        x: Math.round(centerX + Math.cos(angle) * dist),
+        y: Math.round(centerY + Math.sin(angle) * dist),
+        outerRadiusPx: rPer,
+        extraElectrons: 0,
+        color: colors[pIdx % colors.length],
+      });
+      const bondCount = !isIonic && pItem.sym === 'O' && nPer <= 3 ? 2 : 1;
+      bonds.push({
+        id: `abond-${ts}-p${pIdx}`,
+        kind: isIonic ? 'ionic' : 'covalent',
+        fromAtomId: centerId,
+        toAtomId: pId,
+        count: bondCount,
+      });
+    });
+
+    return { atoms: nodes, bonds };
+  }
+
+  // 9. Δυαδικές ενώσεις AB (π.χ. HCl, NaCl, MgO, CaO, LiF, KCl)
   if (parsed.atoms.length >= 2) {
     const el1 = getPeriodicElementBySymbol(parsed.atoms[0].sym) || getPeriodicElementByZ(11);
     const el2 = getPeriodicElementBySymbol(parsed.atoms[1].sym) || getPeriodicElementByZ(17);

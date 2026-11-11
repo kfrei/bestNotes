@@ -1247,9 +1247,9 @@ function buildPresetShape(
       };
     }
   }
-  if (preset === 'rectangle') {
+  if (preset === 'rectangle' || preset === 'title-box') {
     return {
-      shapeType: 'rectangle',
+      shapeType: preset,
       points: makePolygonBezier([
         { x: minX, y: minY },
         { x: minX + w, y: minY },
@@ -1370,7 +1370,9 @@ export function createPhysicsStencilStrokes(
     | 'voltage-source'
     | 'inclined-plane'
     | 'switch'
-    | 'fan',
+    | 'fan'
+    | 'ammeter'
+    | 'voltmeter',
   x: number,
   y: number,
   w: number,
@@ -1390,7 +1392,11 @@ export function createPhysicsStencilStrokes(
           ? `switch-grp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
           : preset === 'fan'
             ? `fan-grp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
-            : `group-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+            : preset === 'ammeter'
+              ? `ammeter-grp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+              : preset === 'voltmeter'
+                ? `voltmeter-grp-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+                : `group-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
   const out: StrokeObject[] = [];
 
   if (preset === 'cylinder') {
@@ -2495,6 +2501,196 @@ export function createPhysicsStencilStrokes(
       isShape: true,
       shapeType: 'fan-hub',
     });
+  } else if (preset === 'ammeter' || preset === 'voltmeter') {
+    const rCircle = Math.max(15, Math.min(w * 0.33, h * 0.34));
+    const ccx = x + w * 0.42;
+    const ccy = y + h * 0.58;
+    const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const needleShapeType = `${preset}-needle`;
+    const labelShapeType = `${preset}-label`;
+
+    const makeSmoothCirclePts = (mx: number, my: number, rad: number, steps = 44): BezierPoint[] => {
+      const pts: BezierPoint[] = [];
+      for (let i = 0; i <= steps; i++) {
+        const ang = (i / steps) * Math.PI * 2;
+        const px = mx + Math.cos(ang) * rad;
+        const py = my + Math.sin(ang) * rad;
+        const prev = pts.length > 0 ? pts[pts.length - 1] : null;
+        pts.push({
+          x: px,
+          y: py,
+          cx: prev ? (prev.x + px) / 2 : undefined,
+          cy: prev ? (prev.y + py) / 2 : undefined,
+          pressure: 0.7,
+          twist: i === 0 || i === steps ? 999 : undefined,
+        });
+      }
+      return pts;
+    };
+
+    // 1. Clean circular meter dial (transparent interior so grid remains visible, matching Image 2)
+    out.push({
+      id: `st-${ts}-${preset}-ring`,
+      tool: 'pen',
+      color,
+      fillStyle: 'none',
+      width: baseWidth,
+      opacity: 1,
+      points: makeSmoothCirclePts(ccx, ccy, rCircle, 44),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: preset,
+    });
+
+    // 2. Diagonal needle starting strictly ON the bottom-left perimeter of the circle,
+    //    passing straight through (ccx, ccy), and exiting clearly outside top-right so the arrowhead is not glued to the circle
+    const ang = -Math.PI / 4;
+    const pivX = ccx - Math.SQRT1_2 * rCircle;
+    const pivY = ccy + Math.SQRT1_2 * rCircle;
+    const needleLen = rCircle * 2.60;
+    const tipX = pivX + Math.cos(ang) * needleLen;
+    const tipY = pivY + Math.sin(ang) * needleLen;
+    const headLen = Math.max(8.0, rCircle * 0.32);
+    const headHalfW = headLen * 0.52;
+    const shaftEndX = tipX - Math.cos(ang) * headLen * 0.78;
+    const shaftEndY = tipY - Math.sin(ang) * headLen * 0.78;
+    const baseCenterX = tipX - Math.cos(ang) * headLen;
+    const baseCenterY = tipY - Math.sin(ang) * headLen;
+    const nx = -Math.sin(ang);
+    const ny = Math.cos(ang);
+
+    out.push({
+      id: `st-${ts}-${preset}-shaft`,
+      tool: 'pen',
+      color,
+      width: baseWidth,
+      opacity: 1,
+      points: [
+        { x: pivX, y: pivY, pressure: 0.7 },
+        {
+          x: shaftEndX,
+          y: shaftEndY,
+          cx: (pivX + shaftEndX) / 2,
+          cy: (pivY + shaftEndY) / 2,
+          pressure: 0.7,
+        },
+      ],
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: needleShapeType,
+    });
+
+    out.push({
+      id: `st-${ts}-${preset}-head`,
+      tool: 'pen',
+      color,
+      fillColor: color,
+      fillStyle: 'solid',
+      fillTransparency: 0,
+      width: Math.max(1.5, baseWidth * 0.85),
+      opacity: 1,
+      points: makePolygonBezier([
+        { x: tipX, y: tipY },
+        { x: baseCenterX + nx * headHalfW, y: baseCenterY + ny * headHalfW },
+        { x: baseCenterX - nx * headHalfW, y: baseCenterY - ny * headHalfW },
+      ]),
+      layerId,
+      groupId,
+      isShape: true,
+      shapeType: needleShapeType,
+    });
+
+    // 3. Crisp condensed bold 'A' or 'V' above-right of the needle arrowhead tip
+    const lblCx = tipX + rCircle * 0.25;
+    const lblBotY = tipY - rCircle * 0.04;
+    const lblH = Math.max(11.5, rCircle * 0.5);
+    const lblHalfW = Math.max(3.6, lblH * 0.31);
+    const lblTopY = lblBotY - lblH;
+    const lblStrokeW = Math.max(2.2, baseWidth * 1.12);
+
+    if (preset === 'ammeter') {
+      out.push({
+        id: `st-${ts}-ammeter-lbl1`,
+        tool: 'pen',
+        color,
+        width: lblStrokeW,
+        opacity: 1,
+        points: [
+          { x: lblCx - lblHalfW, y: lblBotY, pressure: 0.7 },
+          {
+            x: lblCx,
+            y: lblTopY,
+            cx: (lblCx - lblHalfW + lblCx) / 2,
+            cy: (lblBotY + lblTopY) / 2,
+            pressure: 0.7,
+          },
+          {
+            x: lblCx + lblHalfW,
+            y: lblBotY,
+            cx: (lblCx + lblCx + lblHalfW) / 2,
+            cy: (lblTopY + lblBotY) / 2,
+            pressure: 0.7,
+          },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: labelShapeType,
+      });
+      const barY = lblTopY + lblH * 0.64;
+      out.push({
+        id: `st-${ts}-ammeter-lbl2`,
+        tool: 'pen',
+        color,
+        width: Math.max(1.9, lblStrokeW * 0.9),
+        opacity: 1,
+        points: [
+          { x: lblCx - lblHalfW * 0.64, y: barY, pressure: 0.7 },
+          {
+            x: lblCx + lblHalfW * 0.64,
+            y: barY,
+            cx: lblCx,
+            cy: barY,
+            pressure: 0.7,
+          },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: labelShapeType,
+      });
+    } else {
+      out.push({
+        id: `st-${ts}-voltmeter-lbl1`,
+        tool: 'pen',
+        color,
+        width: lblStrokeW,
+        opacity: 1,
+        points: [
+          { x: lblCx - lblHalfW, y: lblTopY, pressure: 0.7 },
+          {
+            x: lblCx,
+            y: lblBotY,
+            cx: (lblCx - lblHalfW + lblCx) / 2,
+            cy: (lblTopY + lblBotY) / 2,
+            pressure: 0.7,
+          },
+          {
+            x: lblCx + lblHalfW,
+            y: lblTopY,
+            cx: (lblCx + lblCx + lblHalfW) / 2,
+            cy: (lblBotY + lblTopY) / 2,
+            pressure: 0.7,
+          },
+        ],
+        layerId,
+        groupId,
+        isShape: true,
+        shapeType: labelShapeType,
+      });
+    }
   }
 
   return out;
@@ -3995,46 +4191,211 @@ export function normalizeGreekSearchText(input: string): string {
     .trim();
 }
 
+const GREEKLISH_DIGRAPHS: [string, string][] = [
+  ['th', 'θ'],
+  ['ch', 'χ'],
+  ['kh', 'χ'],
+  ['ps', 'ψ'],
+  ['ks', 'ξ'],
+  ['ph', 'φ'],
+  ['ou', 'ου'],
+  ['oy', 'ου'],
+  ['mp', 'μπ'],
+  ['nt', 'ντ'],
+  ['gk', 'γκ'],
+  ['gg', 'γκ'],
+  ['tz', 'τζ'],
+  ['ts', 'τσ'],
+  ['ai', 'αι'],
+  ['ei', 'ει'],
+  ['oi', 'οι'],
+];
+
+const LATIN_TO_GREEK_PHONETIC_MAP: Record<string, string> = {
+  a: 'α',
+  b: 'β',
+  v: 'β',
+  g: 'γ',
+  d: 'δ',
+  e: 'ε',
+  z: 'ζ',
+  h: 'η',
+  '8': 'θ',
+  i: 'ι',
+  k: 'κ',
+  c: 'κ',
+  l: 'λ',
+  m: 'μ',
+  n: 'ν',
+  j: 'ξ',
+  '3': 'ξ',
+  o: 'ο',
+  p: 'π',
+  r: 'ρ',
+  s: 'σ',
+  t: 'τ',
+  u: 'υ',
+  y: 'υ',
+  f: 'φ',
+  x: 'χ',
+  '4': 'ψ',
+  w: 'ω',
+  q: 'κ',
+};
+
+const QWERTY_TO_GREEK_LAYOUT_MAP: Record<string, string> = {
+  a: 'α',
+  b: 'β',
+  c: 'ψ',
+  d: 'δ',
+  e: 'ε',
+  f: 'φ',
+  g: 'γ',
+  h: 'η',
+  i: 'ι',
+  j: 'ξ',
+  k: 'κ',
+  l: 'λ',
+  m: 'μ',
+  n: 'ν',
+  o: 'ο',
+  p: 'π',
+  q: 'κ',
+  r: 'ρ',
+  s: 'σ',
+  t: 'τ',
+  u: 'θ',
+  v: 'ω',
+  w: 'σ',
+  x: 'χ',
+  y: 'υ',
+  z: 'ζ',
+};
+
+function mapCharsWithTable(str: string, table: Record<string, string>): string {
+  let out = '';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    out += table[ch] ?? ch;
+  }
+  return out;
+}
+
+/**
+ * Generates Greeklish & Greek-QWERTY keyboard variants for tokens typed with Latin characters
+ * (e.g. "xartes" -> ["xartes", "χαρτεσ", "ξαρτεσ"], "mikitas" -> ["mikitas", "μικιτασ"],
+ *  "hfaisteio" -> ["hfaisteio", "ηφαιστειο"], "uermokrasia" -> [..., "θερμοκρασια"]).
+ */
+export function expandGreeklishAndKeyboardVariants(rawToken: string): string[] {
+  const t = normalizeGreekSearchText(rawToken);
+  if (!t) return [];
+  const variants: string[] = [t];
+  if (/[a-z348]/.test(t)) {
+    let s = t;
+    for (const [dg, gr] of GREEKLISH_DIGRAPHS) {
+      if (s.includes(dg)) s = s.split(dg).join(gr);
+    }
+    const v1 = mapCharsWithTable(s, LATIN_TO_GREEK_PHONETIC_MAP);
+    if (!variants.includes(v1)) variants.push(v1);
+    if (t.includes('x')) {
+      const v2 = mapCharsWithTable(s.replace(/x/g, 'ξ'), LATIN_TO_GREEK_PHONETIC_MAP);
+      if (!variants.includes(v2)) variants.push(v2);
+    }
+    const v3 = mapCharsWithTable(t, QWERTY_TO_GREEK_LAYOUT_MAP);
+    if (!variants.includes(v3)) variants.push(v3);
+  }
+  return variants;
+}
+
+/**
+ * Folds Greek orthographic vowel/consonant equivalences into a single phonetic representation:
+ * - "ου" -> "u" (protected before vowel collapsing)
+ * - "αυ"/"αβ"/"αφ" -> "αφ", "ευ"/"εβ"/"εφ" -> "εφ"
+ * - "ει", "οι", "υι", "η", "υ", "ι" -> "ι" (so "μηκιτας" === "μύκητας", "κιταρο" === "κύτταρο")
+ * - "αι", "ε" -> "ε" (so "ηφεστιο" === "ηφαίστειο")
+ * - "ω", "ο" -> "ο" (so "φοτοσινθεσι" === "φωτοσύνθεση", "αγογος" === "αγωγός")
+ * - "γγ" -> "γκ", "τζ" -> "τσ", and collapses double letters ("λλ" -> "λ", "ττ" -> "τ", etc.)
+ */
+export function toGreekPhonetic(rawWord: string): string {
+  let s = normalizeGreekSearchText(rawWord);
+  if (!s) return '';
+  s = s.replace(/ου/g, 'u');
+  s = s.replace(/α[υβφ]/g, 'αφ');
+  s = s.replace(/ε[υβφ]/g, 'εφ');
+  s = s.replace(/ει|οι|υι/g, 'ι');
+  s = s.replace(/[ηυ]/g, 'ι');
+  s = s.replace(/αι/g, 'ε');
+  s = s.replace(/ω/g, 'ο');
+  s = s.replace(/γγ/g, 'γκ');
+  s = s.replace(/τζ/g, 'τσ');
+  s = s.replace(/(.)\1+/g, '$1');
+  return s;
+}
+
+const RAW_GREEK_SUFFIXES = [
+  'ιουσ',
+  'ιων',
+  'ιου',
+  'ουδ',
+  'ματ',
+  'αδων',
+  'ηδων',
+  'εων',
+  'ουσ',
+  'ων',
+  'ου',
+  'οι',
+  'εσ',
+  'ησ',
+  'ασ',
+  'οσ',
+  'ια',
+  'ιο',
+  'εισ',
+  'ησε',
+  'ησα',
+  'α',
+  'ο',
+  'η',
+  'ε',
+  'υ',
+  'ι',
+  'ω',
+];
+
+const PHONETIC_GREEK_SUFFIXES = [
+  'ιuσ',
+  'ιu',
+  'ιον',
+  'ιεσ',
+  'ματ',
+  'αδον',
+  'ιδον',
+  'εον',
+  'uσ',
+  'ον',
+  'u',
+  'εσ',
+  'ισ',
+  'οσ',
+  'ασ',
+  'ια',
+  'ιο',
+  'α',
+  'ο',
+  'ι',
+  'ε',
+];
+
 /**
  * Computes the inflection-insensitive Greek stem of a single normalized word
- * so e.g. "νερο", "νερου", "νερα" -> "νερ" and "βροχη", "βροχησ", "βροχεσ" -> "βροχ".
+ * so e.g. "νερο", "νερου", "νερα" -> "νερ" and "χαρτης", "χαρτες" -> "χαρτ".
  */
 export function stemGreekWord(rawWord: string): string {
   const w = normalizeGreekSearchText(rawWord).replace(/[^a-zα-ω0-9]/g, '');
   if (w.length <= 3) return w;
 
-  // Ordered longest-first common Greek inflectional suffixes
-  const suffixes = [
-    'ιουσ',
-    'ιων',
-    'ιου',
-    'ουδ',
-    'ματ',
-    'αδων',
-    'ηδων',
-    'εων',
-    'ουσ',
-    'ων',
-    'ου',
-    'οι',
-    'εσ',
-    'ησ',
-    'ασ',
-    'οσ',
-    'ια',
-    'εισ',
-    'ησε',
-    'ησα',
-    'α',
-    'ο',
-    'η',
-    'ε',
-    'υ',
-    'ι',
-    'ω',
-  ];
-
-  for (const suf of suffixes) {
+  for (const suf of RAW_GREEK_SUFFIXES) {
     if (w.endsWith(suf) && w.length - suf.length >= 3) {
       return w.slice(0, w.length - suf.length);
     }
@@ -4042,55 +4403,260 @@ export function stemGreekWord(rawWord: string): string {
   return w;
 }
 
-/**
- * Checks whether a single normalized query token matches a candidate text string
- * using both accent-insensitive substring matching and Greek inflectional stem matching.
- */
-export function matchesSingleGreekToken(candidateText: string, rawToken: string): boolean {
-  const normCandidate = normalizeGreekSearchText(candidateText);
-  const normToken = normalizeGreekSearchText(rawToken).replace(/^#+/, '');
-  if (!normToken) return true;
-  if (!normCandidate) return false;
-
-  // 1. Direct accent-insensitive substring match (great while typing partial words)
-  if (normCandidate.includes(normToken)) return true;
-
-  // 2. Word-level Greek stem match (e.g. query "νερο" -> stem "νερ" matches "Νερού" -> stem "νερ")
-  const tokenStem = stemGreekWord(normToken);
-  if (tokenStem.length < 3) return false;
-
-  const candidateWords = normCandidate.split(/[^a-zα-ω0-9]+/).filter(Boolean);
-  for (const cw of candidateWords) {
-    if (cw.includes(tokenStem)) return true;
-    const cwStem = stemGreekWord(cw);
-    if (cwStem.length >= 3 && (cwStem.startsWith(tokenStem) || tokenStem.startsWith(cwStem))) {
-      return true;
+export function stemGreekPhonetic(phoneticWord: string): string {
+  if (phoneticWord.length <= 3) return phoneticWord;
+  for (const suf of PHONETIC_GREEK_SUFFIXES) {
+    if (phoneticWord.endsWith(suf) && phoneticWord.length - suf.length >= 3) {
+      return phoneticWord.slice(0, phoneticWord.length - suf.length);
     }
   }
-  return false;
+  return phoneticWord;
+}
+
+function damerauLevenshteinDistance(a: string, b: string): number {
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 2) return 99;
+  const d: number[][] = Array.from({ length: la + 1 }, () => new Array(lb + 1).fill(0));
+  for (let i = 0; i <= la; i++) d[i][0] = i;
+  for (let j = 0; j <= lb; j++) d[0][j] = j;
+  for (let i = 1; i <= la; i++) {
+    for (let j = 1; j <= lb; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let best = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        best = Math.min(best, d[i - 2][j - 2] + 1);
+      }
+      d[i][j] = best;
+    }
+  }
+  return d[la][lb];
+}
+
+function isOrderedSubsequence(sub: string, full: string): boolean {
+  let si = 0;
+  for (let fi = 0; fi < full.length && si < sub.length; fi++) {
+    if (sub[si] === full[fi]) si++;
+  }
+  return si === sub.length;
+}
+
+interface ParsedSearchWord {
+  raw: string;
+  rStem: string;
+  phon: string;
+  pStem: string;
+}
+
+const PARSED_HAYSTACK_CACHE = new Map<string, ParsedSearchWord[]>();
+
+function getParsedHaystackWords(normCandidate: string): ParsedSearchWord[] {
+  const cached = PARSED_HAYSTACK_CACHE.get(normCandidate);
+  if (cached) return cached;
+  const rawWords = normCandidate.split(/[^a-zα-ω0-9]+/).filter(Boolean);
+  const parsed: ParsedSearchWord[] = [];
+  const seen = new Set<string>();
+  for (const rw of rawWords) {
+    if (seen.has(rw)) continue;
+    seen.add(rw);
+    const phon = toGreekPhonetic(rw);
+    parsed.push({
+      raw: rw,
+      rStem: stemGreekWord(rw),
+      phon,
+      pStem: stemGreekPhonetic(phon),
+    });
+  }
+  if (PARSED_HAYSTACK_CACHE.size > 2500) {
+    PARSED_HAYSTACK_CACHE.clear();
+  }
+  PARSED_HAYSTACK_CACHE.set(normCandidate, parsed);
+  return parsed;
+}
+
+function scoreWordPair(q: ParsedSearchWord, w: ParsedSearchWord): number {
+  if (!q.phon || !w.phon) return 0;
+
+  // Prevent "χάρτης" / "χάρτες" ("xartes") from colliding with "χαρτί" / "χαρτιού" (litmus paper)
+  if (
+    (w.raw === 'χαρτι' || w.raw === 'χαρτιου' || w.raw === 'χαρτια') &&
+    (q.raw.endsWith('ησ') || q.raw.endsWith('εσ'))
+  ) {
+    return 0;
+  }
+
+  // 1. Exact raw word match
+  if (w.raw === q.raw) return 100;
+  // 2. Exact phonetic word match (e.g. "μηκιτας" === "μύκητας", "xartes" === "χάρτες")
+  if (w.phon === q.phon) return 96;
+  // 3. Exact raw prefix match (while typing)
+  if (w.raw.startsWith(q.raw) && q.raw.length >= 2) return 92;
+  // 4. Exact raw stem match (e.g. singular <-> plural "χάρτες" <-> "χάρτης")
+  if (q.rStem.length >= 3 && w.rStem === q.rStem && Math.abs(q.raw.length - w.raw.length) <= 3) {
+    return 90;
+  }
+  // 5. Phonetic prefix match (for queries >= 3 chars)
+  if (q.phon.length >= 3 && w.phon.startsWith(q.phon)) return 86;
+  // 6. Phonetic stem match (e.g. "ηφαιστια" -> "ιφεστ" === "ηφαίστειο" -> "ιφεστ", "xartes" -> "χαρτ" === "χάρτης" -> "χαρτ")
+  if (q.pStem.length >= 3 && w.pStem === q.pStem && Math.abs(q.phon.length - w.phon.length) <= 3) {
+    return 82;
+  }
+
+  // 7. Fuzzy matching requires same starting sound or adjacent transposition of first 2 letters
+  const sameStart =
+    q.phon[0] === w.phon[0] ||
+    (q.phon.length >= 2 &&
+      w.phon.length >= 2 &&
+      q.phon[0] === w.phon[1] &&
+      q.phon[1] === w.phon[0]);
+  if (!sameStart) return 0;
+
+  // 8. Omitted 1-2 internal letters while typing fast (ordered subsequence where start & end match)
+  const maxSkipWord = w.phon.length >= 6 ? 2 : 1;
+  if (
+    q.phon.length >= 4 &&
+    q.phon.length < w.phon.length &&
+    w.phon.length <= q.phon.length + maxSkipWord &&
+    q.phon[q.phon.length - 1] === w.phon[w.phon.length - 1] &&
+    isOrderedSubsequence(q.phon, w.phon)
+  ) {
+    return 74;
+  }
+  const maxSkipStem = w.pStem.length >= 6 ? 2 : 1;
+  if (
+    q.pStem.length >= 4 &&
+    q.pStem.length < w.pStem.length &&
+    w.pStem.length <= q.pStem.length + maxSkipStem &&
+    Math.abs(q.phon.length - w.phon.length) <= 2 &&
+    q.pStem[q.pStem.length - 1] === w.pStem[w.pStem.length - 1] &&
+    isOrderedSubsequence(q.pStem, w.pStem)
+  ) {
+    return 72;
+  }
+
+  // 9. Damerau-Levenshtein distance <= 1 (1 typo, 1 missing letter, or 1 swapped adjacent pair)
+  if (Math.abs(q.phon.length - w.phon.length) <= 1) {
+    const pairs: [string, string][] = [
+      [q.phon, w.phon],
+      [q.pStem, w.pStem],
+    ];
+    for (const [a, b] of pairs) {
+      const minL = Math.min(a.length, b.length);
+      const maxL = Math.max(a.length, b.length);
+      if (minL < 4 || maxL < 5 || maxL - minL > 1) continue;
+      // Avoid treating a shorter complete stem (e.g. "κικλ" from "κυκλος") as a 1-letter deletion of a different derivative stem ("κικλο" / "κικλομ")
+      if (b.length > a.length && b.startsWith(a)) continue;
+      if (damerauLevenshteinDistance(a, b) <= 1) {
+        return 68;
+      }
+    }
+  }
+
+  // 10. Damerau-Levenshtein distance <= 2 on longer words (stem >= 6 chars)
+  if (Math.min(q.pStem.length, w.pStem.length) >= 6 && Math.abs(q.phon.length - w.phon.length) <= 2) {
+    if (
+      damerauLevenshteinDistance(q.phon, w.phon) <= 2 ||
+      damerauLevenshteinDistance(q.pStem, w.pStem) <= 2
+    ) {
+      return 62;
+    }
+  }
+
+  return 0;
 }
 
 /**
- * Smart Greek query matcher for folders or simple titles.
- * - Comma-separated groups ("βροχη, νερο") act as OR.
- * - Space-separated words within a group ("κυκλος νερο") act as AND.
+ * Returns a match quality score (0 = no match, 60..100 = fuzzy to exact match)
+ * for a single query token against a candidate text string.
  */
-export function matchesGreekSmartQuery(candidateText: string, rawQuery: string): boolean {
+export function scoreSingleGreekTokenMatch(candidateText: string, rawToken: string): number {
+  const normCandidate = normalizeGreekSearchText(candidateText);
+  const cleanToken = normalizeGreekSearchText(rawToken).replace(/^#+/, '');
+  if (!cleanToken) return 100;
+  if (!normCandidate) return 0;
+
+  if (cleanToken.length <= 2) {
+    return normCandidate.includes(cleanToken) ? 90 : 0;
+  }
+
+  const candidateWords = getParsedHaystackWords(normCandidate);
+  const queryVariants = expandGreeklishAndKeyboardVariants(cleanToken).map((v) => {
+    const phon = toGreekPhonetic(v);
+    return {
+      raw: v,
+      rStem: stemGreekWord(v),
+      phon,
+      pStem: stemGreekPhonetic(phon),
+    };
+  });
+
+  let bestScore = 0;
+  for (const qv of queryVariants) {
+    for (const cw of candidateWords) {
+      const sc = scoreWordPair(qv, cw);
+      if (sc > bestScore) {
+        bestScore = sc;
+        if (bestScore === 100) return 100;
+      }
+    }
+  }
+  return bestScore;
+}
+
+/**
+ * Checks whether a single normalized query token matches a candidate text string
+ * using Greeklish conversion, phonetic/orthographic folding (η/ι/υ/ει/οι, ω/ο, αι/ε),
+ * Greek inflectional stem matching, and 1-2 letter omission/typo tolerance.
+ */
+export function matchesSingleGreekToken(candidateText: string, rawToken: string): boolean {
+  return scoreSingleGreekTokenMatch(candidateText, rawToken) > 0;
+}
+
+/**
+ * Returns the overall smart search match score (0 = no match, > 0 = match score)
+ * for comma-separated OR groups of space-separated AND tokens.
+ */
+export function scoreGreekSmartQuery(candidateText: string, rawQuery: string): number {
   const q = rawQuery.trim();
-  if (!q) return true;
+  if (!q) return 100;
   const orGroups = q
     .split(',')
     .map((g) => g.trim())
     .filter(Boolean);
-  if (orGroups.length === 0) return true;
+  if (orGroups.length === 0) return 100;
 
-  return orGroups.some((group) => {
+  let bestGroupScore = 0;
+  for (const group of orGroups) {
     const andTokens = group
       .split(/\s+/)
       .map((t) => t.replace(/^#+/, '').trim())
       .filter(Boolean);
-    return andTokens.every((tok) => matchesSingleGreekToken(candidateText, tok));
-  });
+    if (andTokens.length === 0) continue;
+    let groupSum = 0;
+    let allMatched = true;
+    for (const tok of andTokens) {
+      const sc = scoreSingleGreekTokenMatch(candidateText, tok);
+      if (sc <= 0) {
+        allMatched = false;
+        break;
+      }
+      groupSum += sc;
+    }
+    if (allMatched) {
+      const avg = groupSum / andTokens.length;
+      if (avg > bestGroupScore) bestGroupScore = avg;
+    }
+  }
+  return bestGroupScore;
+}
+
+/**
+ * Smart Greek query matcher for folders, titles, or catalog items.
+ * - Comma-separated groups ("βροχη, νερο") act as OR.
+ * - Space-separated words within a group ("κυκλος νερο") act as AND.
+ */
+export function matchesGreekSmartQuery(candidateText: string, rawQuery: string): boolean {
+  return scoreGreekSmartQuery(candidateText, rawQuery) > 0;
 }
 
 /**
@@ -5125,10 +5691,22 @@ export async function transcribeHandwrittenMathWithGemini(
  * Transcribes handwritten Chemical Reactions / Equations (ChemOCR) using Gemini Vision
  * (e.g. "C + O2 -> CO2", "2H2 + O2 -> 2H2O", "Na + Cl -> NaCl") and normalizes 0 -> O in O2/CO2/H2O.
  */
+export interface AiChemistryOcrResponse {
+  rawEquation: string;
+  formattedText: string;
+  correctedEquation?: string;
+  explanationNotes?: string[];
+}
+
+/**
+ * Transcribes handwritten Chemical Reactions / Equations (ChemOCR) using Gemini Vision
+ * AND performs full AI Chemical Analysis & Stoichiometric Balancing across General, Inorganic,
+ * Redox (Οξειδοαναγωγή), Acid-Base, and Organic Chemistry (Οργανική Χημεία).
+ */
 export async function transcribeHandwrittenChemistryWithGemini(
   imageDataUrl: string,
   notebookTitle = ''
-): Promise<{ rawEquation: string; formattedText: string } | null> {
+): Promise<AiChemistryOcrResponse | null> {
   const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
   const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
   if (!partA || !partB) return null;
@@ -5144,18 +5722,26 @@ export async function transcribeHandwrittenChemistryWithGemini(
 
   const parts: any[] = [
     {
-      text: `Είσαι εξειδικευμένο σύστημα ChemOCR (Αναγνώριση Χειρόγραφων Χημικών Αντιδράσεων & Χημικών Τύπων)${contextHint}.
-Διάβασε με απόλυτη ακρίβεια τη χειρόγραφη χημική αντίδραση ή χημικό τύπο στην εικόνα:
-1. ΟΛΙΣΤΙΚΗ ΑΝΑΛΥΣΗ ΟΛΟΚΛΗΡΗΣ ΤΗΣ ΑΝΤΙΔΡΑΣΗΣ (Αρχή Διατήρησης Χημικών Στοιχείων: Αντιδρώντα ↔ Προϊόντα):
-   - Πριν αποφασίσεις για ένα δυσανάγνωστο ή γρήγορα γραμμένο γράμμα στοιχείου, διάβασε ΟΛΟΚΛΗΡΗ την εξίσωση (αριστερά και δεξιά του βέλους "->")!
-   - Επειδή τα ίδια ακριβώς χημικά στοιχεία που υπάρχουν στα αντιδρώντα (αριστερά) ΠΡΕΠΕΙ να υπάρχουν και στα προϊόντα (δεξιά), χρησιμοποίησε τα καθαρά γραμμένα στοιχεία της μίας πλευράς για να συμπεράνεις τυχόν κακογραμμένο γράμμα στην άλλη πλευρά (π.χ. αν αριστερά έχει "C + O2 ->" και δεξιά φαίνεται "GO2" ή "CQ2" ή "C02", είναι 100% "CO2"· αν αριστερά έχει "N2 + H2 ->" και δεξιά φαίνεται "MH3", είναι "NH3"· αν αριστερά έχει "Na + Cl2 ->" και δεξιά φαίνεται "NaGl" ή "NaC1", είναι "NaCl"· αν αριστερά έχει "Fe + O2 ->" και δεξιά φαίνεται "Fc2O3", είναι "Fe2O3").
-   - Το "0" δίπλα σε χημικό τύπο ("02", "C02", "H20", "Mg0") είναι ΠΑΝΤΑ το στοιχείο Οξυγόνο "O" ("O2", "CO2", "H2O", "MgO").
-   - Το "C1" ή "CI" ("NaC1", "HC1", "MgC12") είναι ΠΑΝΤΑ Χλώριο "Cl" ("NaCl", "HCl", "MgCl2").
-2. ΠΟΛΥ ΣΗΜΑΝΤΙΚΟ: ΜΗΝ προσθέτεις και ΜΗΝ διορθώνεις συντελεστές ή αριθμητικούς δείκτες ατόμων που ΔΕΝ έγραψε ο μαθητής!
-   - Αν ο μαθητής έγραψε π.χ. "H2 + O2 -> H2O" (χωρίς το 2 μπροστά) ή "H + O -> HO" ή "C + O -> CO2" ή "Mg + Cl -> MgCl", κατέγραψε στο "rawEquation" ΑΚΡΙΒΩΣ τους αριθμούς που έγραψε ο μαθητής, ώστε ο αλγόριθμος ελέγχου να του συμπληρώσει με ΚΟΚΚΙΝΟ χρώμα ό,τι ξέχασε ή έκανε λάθος!
-3. Για το βέλος της αντίδρασης χρησιμοποίησε " -> " στο "rawEquation" και " → " στο "formattedText".
+      text: `Είσαι κορυφαίος Καθηγητής Χημείας (Ανόργανη, Οργανική Χημεία, Οξειδοαναγωγή, Ιοντικές & Στοιχειομετρικές Αντιδράσεις) και εξειδικευμένο σύστημα ChemOCR${contextHint}.
+Διάβασε με απόλυτη ακρίβεια τη χειρόγραφη χημική αντίδραση ή χημικό τύπο στην εικόνα και επέστρεψε τόσο την ακριβή χειρόγραφη μορφή όσο και την πλήρως ισοσταθμισμένη/διορθωμένη χημική εξίσωση:
+
+1. ΑΚΡΙΒΗΣ ΑΝΑΓΝΩΣΗ ΧΕΙΡΟΓΡΑΦΟΥ ("rawEquation"):
+   - Διάβασε ΟΛΟΚΛΗΡΗ την εξίσωση (αριστερά και δεξιά του βέλους "->") με βάση την Αρχή Διατήρησης των Στοιχείων!
+   - Διόρθωσε μόνο οπτικές παρανοήσεις γραφής (π.χ. "0" -> "O", "C1"/"CI" -> "Cl", "B r" -> "Br", "H20" -> "H2O").
+   - Στο "rawEquation" κατέγραψε ΑΚΡΙΒΩΣ ό,τι έγραψε ο μαθητής (π.χ. "Br + H2O -> BrO3 + H" ή "H2 + O2 -> H2O" ή "CH3CH2OH + O2 -> CO2 + H2O"), ΧΩΡΙΣ να προσθέσεις στο "rawEquation" συντελεστές ή δείκτες που παρέλειψε ο μαθητής!
+
+2. ΠΛΗΡΗΣ ΧΗΜΙΚΗ ΔΙΟΡΘΩΣΗ & ΙΣΟΣΤΑΘΜΙΣΗ ("correctedEquation"):
+   - Αναγνώρισε την πραγματική χημική αντίδραση που ήθελε να γράψει ο μαθητής — είτε είναι Ανόργανη, είτε Οξειδοαναγωγή (Redox, δυσαναλογοποίηση κ.λπ.), είτε Οργανική Χημεία (καύση, προσθήκη, υποκατάσταση, οξείδωση, εστεροποίηση κ.λπ.), είτε Οξέων-Βάσεων-Αλάτων!
+   - Συμπλήρωσε τυχόν ελλείποντες δείκτες διατομικών στοιχείων (H₂, O₂, N₂, F₂, Cl₂, Br₂, I₂), ολοκλήρωσε ημιτελείς χημικούς τύπους (π.χ. αν ο μαθητής έγραψε "Br + H2O -> BrO3 + H", η σωστή ισοσταθμισμένη αντίδραση είναι "3Br₂ + 3H₂O → HBrO₃ + 5HBr"· αν έγραψε "C2H4 + Br -> C2H4Br", είναι "C₂H₄ + Br₂ → C₂H₄Br₂"· αν έγραψε "CH4 + O2 -> CO2 + H2O", είναι "CH₄ + 2O₂ → CO₂ + 2H₂O") και ισοστάθμισε όλους τους στοιχειομετρικούς συντελεστές!
+   - ΠΟΤΕ μην αλλάζεις μια αντίδραση σε άσχετη αντίδραση (π.χ. ΠΟΤΕ μην μετατρέπεις αντίδραση με Br, Cl, S, N, Fe ή οργανική ένωση σε απλό "2H₂ + O₂ → 2H₂O")! Κράτα ΠΑΝΤΑ τα χημικά στοιχεία που έγραψε ο μαθητής.
+   - Στο "correctedEquation" και στο "formattedText" χρησιμοποίησε Unicode δείκτες (₀₁₂₃₄₅₆₇₈₉), εκθέτες ιόντων αν υπάρχουν (⁺, ⁻, ²⁺, ²⁻) και το βέλος " → " (με κενά γύρω από τα " + " και " → ").
+   - Αν η εικόνα περιέχει μόνο μία μεμονωμένη ένωση (χωρίς "+" και χωρίς βέλος αντίδρασης), επέστρεψε απλώς τον σωστό χημικό τύπο της ένωσης.
+
+3. ΕΠΕΞΗΓΗΣΕΙΣ ΔΙΟΡΘΩΣΕΩΝ ("explanationNotes"):
+   - Δώσε 1 έως 3 σύντομες, παιδαγωγικές επεξηγήσεις στα Ελληνικά για τους δείκτες/συντελεστές που συμπληρώθηκαν (π.χ. ["Οξειδοαναγωγή (δυσαναλογοποίηση Βρωμίου): 3Br₂ + 3H₂O → HBrO₃ + 5HBr", "Το Βρώμιο είναι διατομικό μόριο (Br₂)"]).
+
 Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
-{"rawEquation": "H2 + O2 -> H2O", "formattedText": "H₂ + O₂ → H₂O"}
+{"rawEquation": "Br + H2O -> BrO3 + H", "formattedText": "Br + H₂O → BrO₃ + H", "correctedEquation": "3Br₂ + 3H₂O → HBrO₃ + 5HBr", "explanationNotes": ["Οξειδοαναγωγή (δυσαναλογοποίηση Br₂ σε νερό): 3Br₂ + 3H₂O → HBrO₃ + 5HBr", "Το Βρώμιο είναι διατομικό μόριο (Br₂)"]}
 χωρίς κανένα άλλο σχόλιο.`,
     },
     {
@@ -5171,7 +5757,7 @@ export async function transcribeHandwrittenChemistryWithGemini(
   const tryChemWithModel = async (
     modelName: string,
     timeoutMs = 24000
-  ): Promise<{ rawEquation: string; formattedText: string } | null> => {
+  ): Promise<AiChemistryOcrResponse | null> => {
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -5208,9 +5794,25 @@ export async function transcribeHandwrittenChemistryWithGemini(
         .replace(/C02/gi, 'CO₂')
         .replace(/H20/gi, 'H₂O')
         .replace(/\b02\b/g, 'O₂');
+      const corrEq = (
+        typeof parsed?.correctedEquation === 'string' && parsed.correctedEquation.trim()
+          ? parsed.correctedEquation.trim()
+          : ''
+      )
+        .replace(/C02/gi, 'CO₂')
+        .replace(/H20/gi, 'H₂O')
+        .replace(/\b02\b/g, 'O₂');
+      const notes = Array.isArray(parsed?.explanationNotes)
+        ? parsed.explanationNotes.filter((n: any) => typeof n === 'string' && n.trim()).map((n: string) => n.trim())
+        : [];
       if (rawEq.length > 0) {
         cachedWorkingVisionModel = cleanName;
-        return { rawEquation: rawEq, formattedText: fmtTxt };
+        return {
+          rawEquation: rawEq,
+          formattedText: fmtTxt,
+          correctedEquation: corrEq || undefined,
+          explanationNotes: notes.length > 0 ? notes : undefined,
+        };
       }
     } catch {
       if (cachedWorkingVisionModel === modelName.replace(/^models\//, '')) {
@@ -5223,6 +5825,64 @@ export async function transcribeHandwrittenChemistryWithGemini(
   };
 
   return runVisionWithStaggeredHedge(candidateModels, tryChemWithModel, 1300, 24000);
+}
+
+/**
+ * Analyzes & balances a typed chemical reaction (Inorganic, Redox, Organic, Acid-Base) using Gemini AI.
+ */
+export async function analyzeTypedChemistryWithGemini(
+  rawUserReaction: string
+): Promise<AiChemistryOcrResponse | null> {
+  const partA = ((import.meta as any).env?.VITE_GV_A || '') as string;
+  const partB = ((import.meta as any).env?.VITE_GV_B || '') as string;
+  if (!partA || !partB || !rawUserReaction.trim()) return null;
+  const apiKey = (partA + partB).split('').reverse().join('');
+
+  const parts: any[] = [
+    {
+      text: `Είσαι κορυφαίος Καθηγητής Χημείας (Ανόργανη, Οργανική Χημεία, Οξειδοαναγωγή, Ιοντικές & Στοιχειομετρικές Αντιδράσεις).
+Ο μαθητής έγραψε την εξής χημική εξίσωση:
+"${rawUserReaction.trim()}"
+
+Συμπλήρωσε τυχόν ελλείποντες δείκτες (π.χ. διατομικά στοιχεία H₂, O₂, N₂, Cl₂, Br₂, I₂ ή ημιτελείς ενώσεις όπως "Br + H2O -> BrO3 + H" → "3Br₂ + 3H₂O → HBrO₃ + 5HBr") και ισοστάθμισε πλήρως τους συντελεστές της αντίδρασης (Ανόργανη, Οξειδοαναγωγή, Οργανική Χημεία, Οξέα-Βάσεις), κρατώντας τα χημικά στοιχεία που έγραψε ο μαθητής.
+Χρησιμοποίησε Unicode δείκτες (₀₁₂₃₄₅₆₇₈₉) και το βέλος " → ".
+Επέστρεψε ΑΥΣΤΗΡΑ JSON της μορφής:
+{"rawEquation": "${rawUserReaction.trim().replace(/"/g, '\\"')}", "formattedText": "...", "correctedEquation": "...", "explanationNotes": ["..."]}
+χωρίς κανένα άλλο σχόλιο.`,
+    },
+  ];
+
+  const candidateModels = getPrioritizedVisionModels();
+  const tryWithModel = async (
+    modelName: string,
+    timeoutMs = 15000
+  ): Promise<AiChemistryOcrResponse | null> => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const cleanName = modelName.replace(/^models\//, '');
+      const { ok, rawText } = await fetchVisionCompletionRawText(cleanName, parts, apiKey, ctrl.signal);
+      if (!ok || !rawText) return null;
+      const parsed = safeParseVisionJson(rawText);
+      const corrEq = typeof parsed?.correctedEquation === 'string' ? parsed.correctedEquation.trim() : '';
+      if (!corrEq) return null;
+      const notes = Array.isArray(parsed?.explanationNotes)
+        ? parsed.explanationNotes.filter((n: any) => typeof n === 'string' && n.trim())
+        : [];
+      return {
+        rawEquation: rawUserReaction.trim(),
+        formattedText: typeof parsed?.formattedText === 'string' ? parsed.formattedText.trim() : rawUserReaction.trim(),
+        correctedEquation: corrEq,
+        explanationNotes: notes,
+      };
+    } catch {
+      return null;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  };
+
+  return runVisionWithStaggeredHedge(candidateModels, tryWithModel, 1200, 15000);
 }
 
 /**
@@ -5499,7 +6159,9 @@ export type CircuitComponentKind =
   | 'bulb'
   | 'resistor'
   | 'switch'
-  | 'fan';
+  | 'fan'
+  | 'ammeter'
+  | 'voltmeter';
 
 export interface CircuitComponentInfo {
   key: string; // groupId or stroke.id
@@ -5517,6 +6179,10 @@ export interface CircuitComponentInfo {
   h: number;
   leftTerm: { x: number; y: number };
   rightTerm: { x: number; y: number };
+  circleCx?: number;
+  circleCy?: number;
+  circleR?: number;
+  orientation?: 'h' | 'v';
   switchClosed?: boolean;
 }
 
@@ -5528,6 +6194,8 @@ function classifyCircuitStrokeKind(s: StrokeObject): CircuitComponentKind | null
   if (st === 'resistor') return 'resistor';
   if (st === 'switch' || st === 'switch-blade' || st === 'switch-knob') return 'switch';
   if (st === 'fan' || st === 'fan-blade' || st === 'fan-hub') return 'fan';
+  if (st === 'ammeter' || st === 'ammeter-needle' || st === 'ammeter-label') return 'ammeter';
+  if (st === 'voltmeter' || st === 'voltmeter-needle' || st === 'voltmeter-label') return 'voltmeter';
   return null;
 }
 
@@ -5656,13 +6324,105 @@ export function getCircuitComponentsWithTerminals(
     if (!Number.isFinite(minX)) continue;
     const w = Math.max(12, maxX - minX);
     const h = Math.max(12, maxY - minY);
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
+    let cx = (minX + maxX) / 2;
+    let cy = (minY + maxY) / 2;
 
     let leftTerm = { x: minX, y: cy };
     let rightTerm = { x: maxX, y: cy };
+    let circleCx: number | undefined;
+    let circleCy: number | undefined;
+    let circleR: number | undefined;
+    let orientation: 'h' | 'v' | undefined;
 
-    if (entry.kind === 'bulb') {
+    if (entry.kind === 'ammeter' || entry.kind === 'voltmeter') {
+      const ringStroke = entry.strokes.find(
+        (s) => s.shapeType === entry.kind && s.points.length >= 4
+      );
+      if (ringStroke) {
+        let rMinX = Infinity,
+          rMinY = Infinity,
+          rMaxX = -Infinity,
+          rMaxY = -Infinity;
+        for (const p of ringStroke.points) {
+          if (p.x < rMinX) rMinX = p.x;
+          if (p.y < rMinY) rMinY = p.y;
+          if (p.x > rMaxX) rMaxX = p.x;
+          if (p.y > rMaxY) rMaxY = p.y;
+        }
+        if (Number.isFinite(rMinX)) {
+          circleCx = (rMinX + rMaxX) / 2;
+          circleCy = (rMinY + rMaxY) / 2;
+          circleR = Math.max(10, (rMaxX - rMinX + (rMaxY - rMinY)) / 4);
+        }
+      }
+      if (circleCx === undefined || circleCy === undefined || circleR === undefined) {
+        circleR = Math.max(14, Math.min(w, h) * 0.33);
+        circleCx = minX + w * 0.42;
+        circleCy = minY + h * 0.58;
+      }
+      cx = circleCx;
+      cy = circleCy;
+
+      // Detect whether wires attach vertically (top/bottom of circle) or horizontally (left/right of circle)
+      const entryIdSet = new Set(entry.strokes.map((s) => s.id));
+      let horizScore = 0;
+      let vertScore = 0;
+      const topPt = { x: circleCx, y: circleCy - circleR };
+      const botPt = { x: circleCx, y: circleCy + circleR };
+      const leftPt = { x: circleCx - circleR, y: circleCy };
+      const rightPt = { x: circleCx + circleR, y: circleCy };
+
+      for (const ws of strokes) {
+        if (entryIdSet.has(ws.id) || classifyCircuitStrokeKind(ws) !== null) continue;
+        if (ws.tool === 'highlighter' || ws.points.length < 2) continue;
+        if (ws.shapeType && ws.shapeType !== 'line') continue;
+        if (ws.points[0]?.twist === 999) continue;
+        for (let k = 0; k < ws.points.length - 1; k++) {
+          const a = ws.points[k];
+          const b = ws.points[k + 1];
+          const sdx = Math.abs(b.x - a.x);
+          const sdy = Math.abs(b.y - a.y);
+          if (Math.hypot(sdx, sdy) < 8) continue;
+          const isH = sdy <= Math.max(18, sdx * 0.35);
+          const isV = sdx <= Math.max(18, sdy * 0.35);
+          if (isH) {
+            const dL = Math.min(distance(a, leftPt), distance(b, leftPt));
+            const dR = Math.min(distance(a, rightPt), distance(b, rightPt));
+            if (dL <= 38) horizScore += 2;
+            if (dR <= 38) horizScore += 2;
+            if (
+              Math.min(a.x, b.x) < leftPt.x - 4 &&
+              Math.max(a.x, b.x) > rightPt.x + 4 &&
+              Math.abs((a.y + b.y) / 2 - circleCy) <= circleR * 1.3
+            ) {
+              horizScore += 3;
+            }
+          } else if (isV) {
+            const dT = Math.min(distance(a, topPt), distance(b, topPt));
+            const dB = Math.min(distance(a, botPt), distance(b, botPt));
+            if (dT <= 38) vertScore += 2;
+            if (dB <= 38) vertScore += 2;
+            if (
+              Math.min(a.y, b.y) < topPt.y - 4 &&
+              Math.max(a.y, b.y) > botPt.y + 4 &&
+              Math.abs((a.x + b.x) / 2 - circleCx) <= circleR * 1.3
+            ) {
+              vertScore += 3;
+            }
+          }
+        }
+      }
+
+      if (vertScore > horizScore && vertScore > 0) {
+        orientation = 'v';
+        leftTerm = topPt;
+        rightTerm = botPt;
+      } else {
+        orientation = 'h';
+        leftTerm = leftPt;
+        rightTerm = rightPt;
+      }
+    } else if (entry.kind === 'bulb') {
       const wlStroke = entry.strokes.find((s) => s.id.includes('-bulb-wl'));
       const wrStroke = entry.strokes.find((s) => s.id.includes('-bulb-wr'));
       const leftY =
@@ -5715,6 +6475,10 @@ export function getCircuitComponentsWithTerminals(
       h,
       leftTerm,
       rightTerm,
+      circleCx,
+      circleCy,
+      circleR,
+      orientation,
       switchClosed: entry.kind === 'switch' ? (switchClosed ?? true) : undefined,
     });
   }
@@ -5731,12 +6495,314 @@ export function splitWiresUnderCircuitComponent(
   const targetStrokes = strokes.filter((s) => compSet.has(s.id));
   if (targetStrokes.length === 0) return strokes;
 
-  const comps = getCircuitComponentsWithTerminals(targetStrokes);
+  const comps = getCircuitComponentsWithTerminals(strokes).filter((c) =>
+    c.strokeIds.some((id) => compSet.has(id))
+  );
   if (comps.length === 0) return strokes;
 
   let currentStrokes = [...strokes];
 
   for (const comp of comps) {
+    // For circular meters (ammeter / voltmeter), support centering & wire-splitting on BOTH horizontal and vertical wires!
+    if (comp.kind === 'ammeter' || comp.kind === 'voltmeter') {
+      let ccx = comp.circleCx ?? comp.cx;
+      let ccy = comp.circleCy ?? comp.cy;
+      const rC = comp.circleR ?? Math.max(14, Math.min(comp.w, comp.h) * 0.35);
+      const idSet = new Set(comp.strokeIds);
+      const SNAP_R = 44;
+
+      // Pass 1: Find the closest crossing or terminal-approaching horizontal or vertical wire to center the circle dead-on the wire!
+      let bestSnapAxis: 'h' | 'v' | null = null;
+      let bestSnapDist = Math.max(46, rC * 1.85);
+      let snapTargetCoord = 0;
+
+      for (const s of currentStrokes) {
+        if (idSet.has(s.id) || classifyCircuitStrokeKind(s) !== null) continue;
+        if (
+          !(s.shapeType === 'line' || (!s.isShape && s.points.length >= 2)) ||
+          s.points.length < 2 ||
+          s.points.length > 3
+        ) {
+          continue;
+        }
+        const p0 = s.points[0];
+        const p1 = s.points[s.points.length - 1];
+        const sdx = Math.abs(p1.x - p0.x);
+        const sdy = Math.abs(p1.y - p0.y);
+        const segLen = Math.hypot(sdx, sdy);
+        if (segLen < 12) continue;
+        const isH = sdy <= Math.max(20, sdx * 0.35);
+        const isV = sdx <= Math.max(20, sdy * 0.35);
+        if (isH) {
+          const wireY = (p0.y + p1.y) / 2;
+          const minWX = Math.min(p0.x, p1.x);
+          const maxWX = Math.max(p0.x, p1.x);
+          const crosses = minWX < ccx - rC - 4 && maxWX > ccx + rC + 4;
+          const touchesSide =
+            Math.hypot(p0.x - (ccx - rC), p0.y - ccy) <= SNAP_R ||
+            Math.hypot(p1.x - (ccx - rC), p1.y - ccy) <= SNAP_R ||
+            Math.hypot(p0.x - (ccx + rC), p0.y - ccy) <= SNAP_R ||
+            Math.hypot(p1.x - (ccx + rC), p1.y - ccy) <= SNAP_R;
+          const perpD = Math.abs(ccy - wireY);
+          if ((crosses || touchesSide) && perpD <= bestSnapDist) {
+            bestSnapDist = perpD;
+            bestSnapAxis = 'h';
+            snapTargetCoord = wireY;
+          }
+        } else if (isV) {
+          const wireX = (p0.x + p1.x) / 2;
+          const minWY = Math.min(p0.y, p1.y);
+          const maxWY = Math.max(p0.y, p1.y);
+          const crosses = minWY < ccy - rC - 4 && maxWY > ccy + rC + 4;
+          const touchesTopBot =
+            Math.hypot(p0.x - ccx, p0.y - (ccy - rC)) <= SNAP_R ||
+            Math.hypot(p1.x - ccx, p1.y - (ccy - rC)) <= SNAP_R ||
+            Math.hypot(p0.x - ccx, p0.y - (ccy + rC)) <= SNAP_R ||
+            Math.hypot(p1.x - ccx, p1.y - (ccy + rC)) <= SNAP_R;
+          const perpD = Math.abs(ccx - wireX);
+          if ((crosses || touchesTopBot) && perpD <= bestSnapDist) {
+            bestSnapDist = perpD;
+            bestSnapAxis = 'v';
+            snapTargetCoord = wireX;
+          }
+        }
+      }
+
+      if (bestSnapAxis === 'h') {
+        const dy = snapTargetCoord - ccy;
+        if (Math.abs(dy) >= 0.25) {
+          currentStrokes = currentStrokes.map((st) =>
+            idSet.has(st.id)
+              ? {
+                  ...st,
+                  points: st.points.map((pt) => ({
+                    ...pt,
+                    y: pt.y + dy,
+                    cy: pt.cy !== undefined ? pt.cy + dy : undefined,
+                  })),
+                }
+              : st
+          );
+          ccy = snapTargetCoord;
+        }
+      } else if (bestSnapAxis === 'v') {
+        const dx = snapTargetCoord - ccx;
+        if (Math.abs(dx) >= 0.25) {
+          currentStrokes = currentStrokes.map((st) =>
+            idSet.has(st.id)
+              ? {
+                  ...st,
+                  points: st.points.map((pt) => ({
+                    ...pt,
+                    x: pt.x + dx,
+                    cx: pt.cx !== undefined ? pt.cx + dx : undefined,
+                  })),
+                }
+              : st
+          );
+          ccx = snapTargetCoord;
+        }
+      }
+
+      // Pass 2: Split or endpoint-snap horizontal OR vertical wires right at the circle perimeter!
+      const meterNext: StrokeObject[] = [];
+      const leftTerm = { x: ccx - rC, y: ccy };
+      const rightTerm = { x: ccx + rC, y: ccy };
+      const topTerm = { x: ccx, y: ccy - rC };
+      const botTerm = { x: ccx, y: ccy + rC };
+
+      for (const s of currentStrokes) {
+        if (idSet.has(s.id) || classifyCircuitStrokeKind(s) !== null) {
+          meterNext.push(s);
+          continue;
+        }
+        if (
+          (s.shapeType === 'line' || (!s.isShape && s.points.length >= 2)) &&
+          s.points.length >= 2 &&
+          s.points.length <= 3
+        ) {
+          const pStart = s.points[0];
+          const pEnd = s.points[s.points.length - 1];
+          const sdx = Math.abs(pEnd.x - pStart.x);
+          const sdy = Math.abs(pEnd.y - pStart.y);
+          const segLen = Math.hypot(sdx, sdy);
+          const isH = sdy <= Math.max(20, sdx * 0.35);
+          const isV = sdx <= Math.max(20, sdy * 0.35);
+
+          if (isH && segLen > rC * 2.15) {
+            const wireY = (pStart.y + pEnd.y) / 2;
+            if (
+              Math.min(pStart.x, pEnd.x) < leftTerm.x - 4 &&
+              Math.max(pStart.x, pEnd.x) > rightTerm.x + 4 &&
+              Math.abs(wireY - ccy) <= Math.max(28, rC * 1.2)
+            ) {
+              const leftEndPt = pStart.x <= pEnd.x ? pStart : pEnd;
+              const rightEndPt = pStart.x <= pEnd.x ? pEnd : pStart;
+              meterNext.push(
+                {
+                  ...s,
+                  id: `st-${Date.now()}-mw1-${Math.random().toString(36).slice(2, 5)}`,
+                  fillStyle: 'none',
+                  fillColor: undefined,
+                  isShape: true,
+                  shapeType: 'line',
+                  points: [
+                    { x: leftEndPt.x, y: ccy, pressure: 0.7 },
+                    {
+                      x: leftTerm.x,
+                      y: ccy,
+                      cx: (leftEndPt.x + leftTerm.x) / 2,
+                      cy: ccy,
+                      pressure: 0.7,
+                    },
+                  ],
+                },
+                {
+                  ...s,
+                  id: `st-${Date.now()}-mw2-${Math.random().toString(36).slice(2, 5)}`,
+                  fillStyle: 'none',
+                  fillColor: undefined,
+                  isShape: true,
+                  shapeType: 'line',
+                  points: [
+                    { x: rightTerm.x, y: ccy, pressure: 0.7 },
+                    {
+                      x: rightEndPt.x,
+                      y: ccy,
+                      cx: (rightTerm.x + rightEndPt.x) / 2,
+                      cy: ccy,
+                      pressure: 0.7,
+                    },
+                  ],
+                }
+              );
+              continue;
+            }
+          }
+
+          if (isV && segLen > rC * 2.15) {
+            const wireX = (pStart.x + pEnd.x) / 2;
+            if (
+              Math.min(pStart.y, pEnd.y) < topTerm.y - 4 &&
+              Math.max(pStart.y, pEnd.y) > botTerm.y + 4 &&
+              Math.abs(wireX - ccx) <= Math.max(28, rC * 1.2)
+            ) {
+              const topEndPt = pStart.y <= pEnd.y ? pStart : pEnd;
+              const botEndPt = pStart.y <= pEnd.y ? pEnd : pStart;
+              meterNext.push(
+                {
+                  ...s,
+                  id: `st-${Date.now()}-mvw1-${Math.random().toString(36).slice(2, 5)}`,
+                  fillStyle: 'none',
+                  fillColor: undefined,
+                  isShape: true,
+                  shapeType: 'line',
+                  points: [
+                    { x: ccx, y: topEndPt.y, pressure: 0.7 },
+                    {
+                      x: ccx,
+                      y: topTerm.y,
+                      cx: ccx,
+                      cy: (topEndPt.y + topTerm.y) / 2,
+                      pressure: 0.7,
+                    },
+                  ],
+                },
+                {
+                  ...s,
+                  id: `st-${Date.now()}-mvw2-${Math.random().toString(36).slice(2, 5)}`,
+                  fillStyle: 'none',
+                  fillColor: undefined,
+                  isShape: true,
+                  shapeType: 'line',
+                  points: [
+                    { x: ccx, y: botTerm.y, pressure: 0.7 },
+                    {
+                      x: ccx,
+                      y: botEndPt.y,
+                      cx: ccx,
+                      cy: (botTerm.y + botEndPt.y) / 2,
+                      pressure: 0.7,
+                    },
+                  ],
+                }
+              );
+              continue;
+            }
+          }
+
+          if (isH && s.points.length === 2 && bestSnapAxis !== 'v') {
+            const dSL = distance(pStart, leftTerm);
+            const dSR = distance(pStart, rightTerm);
+            const dEL = distance(pEnd, leftTerm);
+            const dER = distance(pEnd, rightTerm);
+            if (dSL <= SNAP_R || dSR <= SNAP_R || dEL <= SNAP_R || dER <= SNAP_R) {
+              const n0 = { ...pStart };
+              const n1 = { ...pEnd };
+              if (dSL <= SNAP_R && dSL <= dSR && n1.x < leftTerm.x) {
+                n0.x = leftTerm.x;
+                n0.y = ccy;
+                if (Math.abs(n1.y - ccy) <= 24) n1.y = ccy;
+              } else if (dSR <= SNAP_R && n1.x > rightTerm.x) {
+                n0.x = rightTerm.x;
+                n0.y = ccy;
+                if (Math.abs(n1.y - ccy) <= 24) n1.y = ccy;
+              }
+              if (dEL <= SNAP_R && dEL <= dER && n0.x < leftTerm.x) {
+                n1.x = leftTerm.x;
+                n1.y = ccy;
+                if (Math.abs(n0.y - ccy) <= 24) n0.y = ccy;
+              } else if (dER <= SNAP_R && n0.x > rightTerm.x) {
+                n1.x = rightTerm.x;
+                n1.y = ccy;
+                if (Math.abs(n0.y - ccy) <= 24) n0.y = ccy;
+              }
+              n1.cx = (n0.x + n1.x) / 2;
+              n1.cy = (n0.y + n1.y) / 2;
+              meterNext.push({ ...s, points: [n0, n1] });
+              continue;
+            }
+          }
+
+          if (isV && s.points.length === 2 && bestSnapAxis !== 'h') {
+            const dST = distance(pStart, topTerm);
+            const dSB = distance(pStart, botTerm);
+            const dET = distance(pEnd, topTerm);
+            const dEB = distance(pEnd, botTerm);
+            if (dST <= SNAP_R || dSB <= SNAP_R || dET <= SNAP_R || dEB <= SNAP_R) {
+              const n0 = { ...pStart };
+              const n1 = { ...pEnd };
+              if (dST <= SNAP_R && dST <= dSB && n1.y < topTerm.y) {
+                n0.x = ccx;
+                n0.y = topTerm.y;
+                if (Math.abs(n1.x - ccx) <= 24) n1.x = ccx;
+              } else if (dSB <= SNAP_R && n1.y > botTerm.y) {
+                n0.x = ccx;
+                n0.y = botTerm.y;
+                if (Math.abs(n1.x - ccx) <= 24) n1.x = ccx;
+              }
+              if (dET <= SNAP_R && dET <= dEB && n0.y < topTerm.y) {
+                n1.x = ccx;
+                n1.y = topTerm.y;
+                if (Math.abs(n0.x - ccx) <= 24) n0.x = ccx;
+              } else if (dEB <= SNAP_R && n0.y > botTerm.y) {
+                n1.x = ccx;
+                n1.y = botTerm.y;
+                if (Math.abs(n0.x - ccx) <= 24) n0.x = ccx;
+              }
+              n1.cx = (n0.x + n1.x) / 2;
+              n1.cy = (n0.y + n1.y) / 2;
+              meterNext.push({ ...s, points: [n0, n1] });
+              continue;
+            }
+          }
+        }
+        meterNext.push(s);
+      }
+      currentStrokes = meterNext;
+      continue;
+    }
+
     const nextStrokes: StrokeObject[] = [];
     const padX = Math.max(6, comp.w * 0.08);
     const padY = Math.max(8, comp.h * 0.12);
@@ -5952,11 +7018,1676 @@ export function toggleSwitchStrokeGroup(
   return { strokes: out, newClosedState: nextClosed };
 }
 
-export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObject[] {
+export interface HandDrawnCircuitRecognitionResult {
+  changed: boolean;
+  strokes: StrokeObject[];
+  removedStrokeIds: string[];
+  addedCompStrokeIds: string[];
+  addedWireStrokeIds?: string[];
+  removedTextIds: string[];
+}
+
+function getStrokeBBoxHelper(s: StrokeObject): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  w: number;
+  h: number;
+  cx: number;
+  cy: number;
+} {
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const p of s.points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (!Number.isFinite(minX)) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0, w: 0, h: 0, cx: 0, cy: 0 };
+  }
+  const w = maxX - minX;
+  const h = maxY - minY;
+  return { minX, minY, maxX, maxY, w, h, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+}
+
+function classifyHandwrittenMeterLetter(
+  cluster: StrokeObject[]
+): 'ammeter' | 'voltmeter' | null {
+  if (cluster.length === 0 || cluster.length > 4) return null;
+  let gMinX = Infinity,
+    gMinY = Infinity,
+    gMaxX = -Infinity,
+    gMaxY = -Infinity;
+  for (const s of cluster) {
+    for (const p of s.points) {
+      if (p.x < gMinX) gMinX = p.x;
+      if (p.y < gMinY) gMinY = p.y;
+      if (p.x > gMaxX) gMaxX = p.x;
+      if (p.y > gMaxY) gMaxY = p.y;
+    }
+  }
+  const gw = gMaxX - gMinX;
+  const gh = gMaxY - gMinY;
+  if (gh < 6 || gw < 3.8 || gw / gh < 0.16 || gw / gh > 2.65) return null;
+
+  const isInvertedVStroke = (s: StrokeObject, lMinY: number, lW: number, lH: number): boolean => {
+    const pts = s.points;
+    if (pts.length < 3) return false;
+    const p0 = pts[0];
+    const pN = pts[pts.length - 1];
+    let topPt = pts[0];
+    for (const p of pts) {
+      if (p.y < topPt.y) topPt = p;
+    }
+    if (topPt.y > lMinY + Math.max(3, lH * 0.12)) return false;
+    if (p0.y < lMinY + lH * 0.44 || pN.y < lMinY + lH * 0.44) return false;
+    const footSpan = Math.abs(pN.x - p0.x);
+    if (footSpan < Math.max(3.8, lW * 0.30)) return false;
+    const minFootX = Math.min(p0.x, pN.x);
+    const maxFootX = Math.max(p0.x, pN.x);
+    return topPt.x >= minFootX - lW * 0.22 && topPt.x <= maxFootX + lW * 0.22;
+  };
+
+  // 1. Test Handwritten 'A' / 'Α'
+  if (cluster.length >= 2) {
+    for (const bar of cluster) {
+      const bb = getStrokeBBoxHelper(bar);
+      const isHorizBar =
+        bb.w >= Math.max(3.0, gw * 0.18) &&
+        bb.h <= Math.max(9.5, bb.w * 0.72) &&
+        bb.cy >= gMinY + gh * 0.22 &&
+        bb.cy <= gMinY + gh * 0.90;
+      if (!isHorizBar) continue;
+
+      const legs = cluster.filter((s) => s.id !== bar.id);
+      let lMinX = Infinity,
+        lMinY = Infinity,
+        lMaxX = -Infinity,
+        lMaxY = -Infinity;
+      for (const ls of legs) {
+        for (const p of ls.points) {
+          if (p.x < lMinX) lMinX = p.x;
+          if (p.y < lMinY) lMinY = p.y;
+          if (p.x > lMaxX) lMaxX = p.x;
+          if (p.y > lMaxY) lMaxY = p.y;
+        }
+      }
+      const lW = lMaxX - lMinX;
+      const lH = lMaxY - lMinY;
+      if (lH < gh * 0.68 || lW < Math.max(4.0, lH * 0.18)) continue;
+      if (bb.maxX < lMinX - 6 || bb.minX > lMaxX + 6) continue;
+
+      if (legs.length === 1) {
+        if (isInvertedVStroke(legs[0], lMinY, lW, lH)) return 'ammeter';
+      } else {
+        const sortedLegs = [...legs].sort(
+          (a, b) => getStrokeBBoxHelper(b).h - getStrokeBBoxHelper(a).h
+        );
+        if (isInvertedVStroke(sortedLegs[0], lMinY, lW, lH)) return 'ammeter';
+        const legA = sortedLegs[0];
+        const legB = sortedLegs[1];
+        const ba = getStrokeBBoxHelper(legA);
+        const bb2 = getStrokeBBoxHelper(legB);
+        if (ba.h >= lH * 0.50 && bb2.h >= lH * 0.50 && legA.points.length >= 2 && legB.points.length >= 2) {
+          const a0 = legA.points[0];
+          const a1 = legA.points[legA.points.length - 1];
+          const aTop = a0.y <= a1.y ? a0 : a1;
+          const aBot = a0.y <= a1.y ? a1 : a0;
+          const b0 = legB.points[0];
+          const b1 = legB.points[legB.points.length - 1];
+          const bTop = b0.y <= b1.y ? b0 : b1;
+          const bBot = b0.y <= b1.y ? b1 : b0;
+          const topDist = distance(aTop, bTop);
+          const botSpanX = Math.abs(aBot.x - bBot.x);
+          const topSpanX = Math.abs(aTop.x - bTop.x);
+          if (
+            topDist <= Math.max(15, lW * 0.62) &&
+            botSpanX >= Math.max(4.5, lW * 0.34) &&
+            (botSpanX > topSpanX * 1.18 || (topDist <= 9 && botSpanX >= 5.5))
+          ) {
+            return 'ammeter';
+          }
+        }
+      }
+    }
+  } else if (cluster.length === 1) {
+    // Single-stroke continuous 'A' (up to top peak, down to opposite foot, then across for crossbar)
+    const s = cluster[0];
+    const pts = s.points;
+    if (!s.isShape && pts.length >= 8) {
+      let pathLen = 0;
+      let topPt = pts[0];
+      let hasBL = false;
+      let hasBR = false;
+      for (let i = 0; i < pts.length; i++) {
+        if (i > 0) pathLen += distance(pts[i - 1], pts[i]);
+        if (pts[i].y < topPt.y) topPt = pts[i];
+        if (pts[i].x <= gMinX + gw * 0.38 && pts[i].y >= gMinY + gh * 0.62) hasBL = true;
+        if (pts[i].x >= gMaxX - gw * 0.38 && pts[i].y >= gMinY + gh * 0.62) hasBR = true;
+      }
+      if (
+        pathLen >= gh * 2.30 &&
+        pathLen <= gh * 6.2 &&
+        hasBL &&
+        hasBR &&
+        topPt.x >= gMinX + gw * 0.10 &&
+        topPt.x <= gMaxX - gw * 0.10
+      ) {
+        const tailStart = Math.floor(pts.length * 0.48);
+        let hasCrossSeg = false;
+        for (let i = tailStart; i < pts.length - 1 && !hasCrossSeg; i++) {
+          for (let j = i + 1; j < pts.length; j++) {
+            const dx = Math.abs(pts[j].x - pts[i].x);
+            const dy = Math.abs(pts[j].y - pts[i].y);
+            if (
+              dx >= gw * 0.30 &&
+              dy <= dx * 0.65 &&
+              pts[i].y >= gMinY + gh * 0.24 &&
+              pts[i].y <= gMinY + gh * 0.90 &&
+              pts[j].y >= gMinY + gh * 0.24 &&
+              pts[j].y <= gMinY + gh * 0.90
+            ) {
+              hasCrossSeg = true;
+              break;
+            }
+          }
+        }
+        if (hasCrossSeg) return 'ammeter';
+      }
+    }
+  }
+
+  // 2. Test Handwritten 'V' (no horizontal crossbar)
+  const hasAnyHorizBar = cluster.some((s) => {
+    const bb = getStrokeBBoxHelper(s);
+    return bb.w >= 4 && bb.h <= bb.w * 0.55;
+  });
+  if (hasAnyHorizBar) return null;
+
+  if (cluster.length === 1) {
+    const s = cluster[0];
+    const pts = s.points;
+    const isSnappedOpenUpCurve =
+      (s.shapeType === 'parabola' || s.shapeType === 'hyperbola' || s.shapeType === 'arc') &&
+      pts.length === 3;
+    if ((!s.isShape && pts.length >= 3) || isSnappedOpenUpCurve) {
+      const p0 = pts[0];
+      const pN = pts[pts.length - 1];
+      const topSpanX = Math.abs(pN.x - p0.x);
+      if (
+        p0.y <= gMinY + gh * 0.45 &&
+        pN.y <= gMinY + gh * 0.45 &&
+        topSpanX >= Math.max(4.2, gw * 0.42) &&
+        distance(p0, pN) >= Math.max(4.2, gw * 0.42)
+      ) {
+        let botIdx = 0;
+        let pathLen = 0;
+        for (let i = 0; i < pts.length; i++) {
+          if (i > 0) pathLen += distance(pts[i - 1], pts[i]);
+          if (pts[i].y > pts[botIdx].y) botIdx = i;
+        }
+        const botPt = pts[botIdx];
+        const minTopX = Math.min(p0.x, pN.x);
+        const maxTopX = Math.max(p0.x, pN.x);
+        if (
+          botIdx > 0 &&
+          botIdx < pts.length - 1 &&
+          botPt.x >= minTopX + topSpanX * 0.08 &&
+          botPt.x <= maxTopX - topSpanX * 0.08 &&
+          pathLen >= gh * 1.42 &&
+          pathLen <= Math.hypot(gw, gh) * 2.95
+        ) {
+          let monotonicDownUp = true;
+          let maxYSoFar = pts[0].y;
+          for (let i = 1; i <= botIdx; i++) {
+            if (pts[i].y > maxYSoFar) maxYSoFar = pts[i].y;
+            if (pts[i].y < maxYSoFar - gh * 0.25) {
+              monotonicDownUp = false;
+              break;
+            }
+          }
+          let minYAfter = pts[botIdx].y;
+          for (let i = botIdx + 1; i < pts.length && monotonicDownUp; i++) {
+            if (pts[i].y < minYAfter) minYAfter = pts[i].y;
+            if (pts[i].y > minYAfter + gh * 0.25) {
+              monotonicDownUp = false;
+              break;
+            }
+          }
+          if (monotonicDownUp) return 'voltmeter';
+        }
+      }
+    }
+  } else if (cluster.length === 2) {
+    const [legA, legB] = cluster;
+    const okTypeA = !legA.isShape || legA.shapeType === 'line';
+    const okTypeB = !legB.isShape || legB.shapeType === 'line';
+    const ba = getStrokeBBoxHelper(legA);
+    const bb = getStrokeBBoxHelper(legB);
+    if (
+      okTypeA &&
+      okTypeB &&
+      legA.points.length >= 2 &&
+      legB.points.length >= 2 &&
+      ba.h >= gh * 0.56 &&
+      bb.h >= gh * 0.56 &&
+      ba.w <= ba.h * 1.65 &&
+      bb.w <= bb.h * 1.65
+    ) {
+      const a0 = legA.points[0];
+      const a1 = legA.points[legA.points.length - 1];
+      const aTop = a0.y <= a1.y ? a0 : a1;
+      const aBot = a0.y <= a1.y ? a1 : a0;
+      const b0 = legB.points[0];
+      const b1 = legB.points[legB.points.length - 1];
+      const bTop = b0.y <= b1.y ? b0 : b1;
+      const bBot = b0.y <= b1.y ? b1 : b0;
+      const botDist = distance(aBot, bBot);
+      const topSpanX = Math.abs(aTop.x - bTop.x);
+      if (
+        aTop.y <= gMinY + gh * 0.40 &&
+        bTop.y <= gMinY + gh * 0.40 &&
+        aBot.y >= gMinY + gh * 0.65 &&
+        bBot.y >= gMinY + gh * 0.65 &&
+        botDist <= Math.max(14, gw * 0.48) &&
+        topSpanX >= Math.max(5.0, gw * 0.45) &&
+        (topSpanX >= botDist * 1.35 || (botDist <= 8.5 && topSpanX >= 5.5))
+      ) {
+        return 'voltmeter';
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Recognizes hand-drawn Ammeters ('A'/'Α' + circle), Voltmeters ('V' + circle),
+ * Pictorial & Schematic Batteries, Voltage Sources (long + short parallel plates),
+ * Pictorial & Schematic Light Bulbs, Zig-Zag Resistors, and Freehand Wires
+ * drawn by the user on/in an electric circuit and converts them into crisp interactive stencils.
+ */
+export function recognizeHandDrawnCircuitSymbols(
+  strokes: StrokeObject[],
+  texts: TextObject[] = [],
+  options?: {
+    requireCircuitContext?: boolean;
+    explicitCircuitIntent?: boolean;
+    convertFreehandWires?: boolean;
+  }
+): HandDrawnCircuitRecognitionResult {
+  const requireContext = options?.requireCircuitContext ?? false;
+  const explicitCircuitIntent = options?.explicitCircuitIntent ?? false;
+  const convertFreehandWires = options?.convertFreehandWires ?? false;
+  if (strokes.length === 0) {
+    return {
+      changed: false,
+      strokes,
+      removedStrokeIds: [],
+      addedCompStrokeIds: [],
+      addedWireStrokeIds: [],
+      removedTextIds: [],
+    };
+  }
+
+  const hasExistingCircuitCompOnPage = strokes.some((s) => classifyCircuitStrokeKind(s) !== null);
+  const consumedStrokeIds = new Set<string>();
+  const consumedTextIds = new Set<string>();
+  const replacements = new Map<string, StrokeObject[]>();
+  const addedCompStrokeIds: string[] = [];
+
+  const isWireLikeStroke = (ws: StrokeObject, excludeIds: Set<string>): boolean => {
+    if (excludeIds.has(ws.id) || classifyCircuitStrokeKind(ws) !== null) return false;
+    if (ws.tool === 'highlighter' || ws.points.length < 2) return false;
+    if (ws.shapeType && ws.shapeType !== 'line') return false;
+    if (ws.points[0]?.twist === 999) return false;
+    const p0 = ws.points[0];
+    const p1 = ws.points[ws.points.length - 1];
+    return distance(p0, p1) >= 18;
+  };
+
+  const circleTouchesOrCrossesWire = (
+    cx: number,
+    cy: number,
+    r: number,
+    excludeIds: Set<string>
+  ): boolean => {
+    for (const ws of strokes) {
+      if (!isWireLikeStroke(ws, excludeIds)) continue;
+      for (let k = 0; k < ws.points.length - 1; k++) {
+        const a = ws.points[k];
+        const b = ws.points[k + 1];
+        const sdx = b.x - a.x;
+        const sdy = b.y - a.y;
+        const lenSq = sdx * sdx + sdy * sdy;
+        if (lenSq < 64) continue;
+        const isHV =
+          Math.abs(sdy) <= Math.max(20, Math.abs(sdx) * 0.36) ||
+          Math.abs(sdx) <= Math.max(20, Math.abs(sdy) * 0.36);
+        if (!isHV) continue;
+        const t = Math.max(0, Math.min(1, ((cx - a.x) * sdx + (cy - a.y) * sdy) / lenSq));
+        const projX = a.x + t * sdx;
+        const projY = a.y + t * sdy;
+        const dCenter = Math.hypot(cx - projX, cy - projY);
+        if (dCenter <= r + 38) return true;
+      }
+    }
+    return false;
+  };
+
+  // Find candidate hand-drawn circles / ellipses
+  for (const cs of strokes) {
+    if (consumedStrokeIds.has(cs.id) || classifyCircuitStrokeKind(cs) !== null) continue;
+    if (cs.tool === 'highlighter' || cs.points.length < 4) continue;
+
+    const cb = getStrokeBBoxHelper(cs);
+    if (cb.w < 22 || cb.h < 22 || cb.w > 180 || cb.h > 180) continue;
+    const aspect = cb.w / cb.h;
+    if (aspect < 0.55 || aspect > 1.82) continue;
+
+    let isCircleCand = cs.shapeType === 'circle' || cs.shapeType === 'ellipse';
+    if (!isCircleCand && !cs.isShape && cs.points.length >= 7) {
+      const pFirst = cs.points[0];
+      const pLast = cs.points[cs.points.length - 1];
+      const diag = Math.hypot(cb.w, cb.h);
+      if (distance(pFirst, pLast) <= Math.max(26, diag * 0.42)) {
+        const rx = Math.max(10, cb.w / 2);
+        const ry = Math.max(10, cb.h / 2);
+        let errSum = 0;
+        for (const p of cs.points) {
+          const nr = Math.hypot((p.x - cb.cx) / rx, (p.y - cb.cy) / ry);
+          errSum += Math.abs(nr - 1);
+        }
+        if (errSum / cs.points.length <= 0.27) {
+          isCircleCand = true;
+        }
+      }
+    }
+    if (!isCircleCand) continue;
+
+    const cx = cb.cx;
+    const cy = cb.cy;
+    const r = Math.max(15, Math.min(58, (cb.w + cb.h) / 4));
+
+    // Look for an optional diagonal needle/slash/arrow stroke crossing through the circle
+    const needleIds: string[] = [];
+    let needleUpperTip: { x: number; y: number } | null = null;
+    for (const ns of strokes) {
+      if (ns.id === cs.id || consumedStrokeIds.has(ns.id) || classifyCircuitStrokeKind(ns) !== null) {
+        continue;
+      }
+      if (ns.tool === 'highlighter' || ns.points.length < 2) continue;
+      if (
+        ns.isShape &&
+        ns.shapeType !== 'line' &&
+        ns.shapeType !== 'arrow' &&
+        ns.shapeType !== 'spring-pointer'
+      ) {
+        continue;
+      }
+      if (!ns.isShape && ns.points.length > 3) {
+        // Check straightness for freehand diagonal slash
+        let pLen = 0;
+        for (let i = 1; i < ns.points.length; i++) pLen += distance(ns.points[i - 1], ns.points[i]);
+        if (distance(ns.points[0], ns.points[ns.points.length - 1]) < pLen * 0.76) continue;
+      }
+      const p0 = ns.points[0];
+      const p1 = ns.points[ns.points.length - 1];
+      const chord = distance(p0, p1);
+      if (chord < r * 1.15 || chord > r * 4.4) continue;
+      const deg = Math.abs((Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180) / Math.PI);
+      const isDiag = (deg >= 16 && deg <= 76) || (deg >= 104 && deg <= 164);
+      if (!isDiag) continue;
+      // Closest distance from circle center (cx, cy) to segment (p0, p1)
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const t = Math.max(0, Math.min(1, ((cx - p0.x) * dx + (cy - p0.y) * dy) / (dx * dx + dy * dy)));
+      const dMid = Math.hypot(cx - (p0.x + t * dx), cy - (p0.y + t * dy));
+      if (dMid <= r * 0.58) {
+        needleIds.push(ns.id);
+        needleUpperTip = p0.y <= p1.y ? p0 : p1;
+        break;
+      }
+    }
+
+    // Also detect any tiny manual 45° arrowhead sitting right on needleUpperTip (apex at top-right corner, no crossbar)
+    const needleTipHeadIds: string[] = [];
+    if (needleUpperTip) {
+      for (const hs of strokes) {
+        if (
+          hs.id === cs.id ||
+          needleIds.includes(hs.id) ||
+          consumedStrokeIds.has(hs.id) ||
+          classifyCircuitStrokeKind(hs) !== null ||
+          hs.tool === 'highlighter'
+        ) {
+          continue;
+        }
+        const hb = getStrokeBBoxHelper(hs);
+        if (hb.w < 3 || hb.h < 3 || hb.w > r * 0.95 || hb.h > r * 0.95) continue;
+        const nearTip = hs.points.some((p) => distance(p, needleUpperTip!) <= 15);
+        if (!nearTip) continue;
+        // Only treat as needle arrowhead if it is NOT itself 'A' or 'V'
+        if (classifyHandwrittenMeterLetter([hs]) === null) {
+          // Check if its apex is near (hb.maxX, hb.minY) or (hb.minX, hb.minY) right at the tip
+          if (distance({ x: hb.maxX, y: hb.minY }, needleUpperTip) <= 16) {
+            needleTipHeadIds.push(hs.id);
+          }
+        }
+      }
+    }
+
+    // A. Check Typed TextObject ('A'/'Α' or 'V') inside or near the circle
+    let matchedKind: 'ammeter' | 'voltmeter' | null = null;
+    let matchedLetterInside = false;
+    let matchedTextId: string | null = null;
+    let matchedLetterStrokeIds: string[] = [];
+
+    for (const tx of texts) {
+      if (consumedTextIds.has(tx.id)) continue;
+      const clean = (tx.text || '').trim();
+      let txKind: 'ammeter' | 'voltmeter' | null = null;
+      if (clean === 'A' || clean === 'Α' || clean === 'a' || clean === 'α') txKind = 'ammeter';
+      else if (clean === 'V' || clean === 'v') txKind = 'voltmeter';
+      if (!txKind) continue;
+      const fs = tx.fontSize || 24;
+      const tcx = tx.x + fs * 0.35;
+      const tcy = tx.y + fs * 0.55;
+      const dCenter = Math.hypot(tcx - cx, tcy - cy);
+      const dTip = needleUpperTip ? Math.hypot(tcx - needleUpperTip.x, tcy - needleUpperTip.y) : Infinity;
+      if (dCenter <= r * 2.5 || dTip <= Math.max(44, r * 1.35)) {
+        matchedKind = txKind;
+        matchedLetterInside = dCenter <= r * 0.85;
+        matchedTextId = tx.id;
+        break;
+      }
+    }
+
+    // B. Check Handwritten 'A'/'Α' or 'V' strokes inside or near the circle
+    if (!matchedKind) {
+      const excludeSet = new Set<string>([cs.id, ...needleIds, ...needleTipHeadIds]);
+      const candStrokes: StrokeObject[] = [];
+      for (const ls of strokes) {
+        if (excludeSet.has(ls.id) || consumedStrokeIds.has(ls.id)) continue;
+        if (classifyCircuitStrokeKind(ls) !== null || ls.tool === 'highlighter') continue;
+        if (ls.shapeType === 'circle' || ls.shapeType === 'ellipse' || ls.shapeType === 'rectangle') {
+          continue;
+        }
+        const lb = getStrokeBBoxHelper(ls);
+        if (lb.w < 2.5 && lb.h < 2.5) continue;
+        if (lb.w > Math.max(60, r * 2.15) || lb.h > Math.max(64, r * 2.25)) continue;
+        if (Math.hypot(lb.w, lb.h) > Math.max(76, r * 2.55)) continue;
+        const dCenter = Math.hypot(lb.cx - cx, lb.cy - cy);
+        const dTip = needleUpperTip
+          ? Math.hypot(lb.cx - needleUpperTip.x, lb.cy - needleUpperTip.y)
+          : Infinity;
+        if (dCenter <= r * 2.55 || dTip <= Math.max(44, r * 1.4)) {
+          candStrokes.push(ls);
+        }
+      }
+
+      // Group spatially close letter strokes (bbox gap <= 14px) into letter clusters
+      const visited = new Uint8Array(candStrokes.length);
+      const clusters: StrokeObject[][] = [];
+      for (let i = 0; i < candStrokes.length; i++) {
+        if (visited[i]) continue;
+        visited[i] = 1;
+        const grp: StrokeObject[] = [candStrokes[i]];
+        let b0 = getStrokeBBoxHelper(candStrokes[i]);
+        let gMinX = b0.minX,
+          gMinY = b0.minY,
+          gMaxX = b0.maxX,
+          gMaxY = b0.maxY;
+        let grew = true;
+        while (grew && grp.length < 4) {
+          grew = false;
+          for (let j = 0; j < candStrokes.length; j++) {
+            if (visited[j]) continue;
+            const bj = getStrokeBBoxHelper(candStrokes[j]);
+            const gapX = Math.max(0, gMinX - bj.maxX, bj.minX - gMaxX);
+            const gapY = Math.max(0, gMinY - bj.maxY, bj.minY - gMaxY);
+            if (gapX <= 14 && gapY <= 14) {
+              visited[j] = 1;
+              grp.push(candStrokes[j]);
+              gMinX = Math.min(gMinX, bj.minX);
+              gMinY = Math.min(gMinY, bj.minY);
+              gMaxX = Math.max(gMaxX, bj.maxX);
+              gMaxY = Math.max(gMaxY, bj.maxY);
+              grew = true;
+              if (grp.length >= 4) break;
+            }
+          }
+        }
+        clusters.push(grp);
+      }
+
+      // Sort clusters so inside-the-circle or closest-to-needle-tip clusters are tested first
+      clusters.sort((ca, cb2) => {
+        const ba = getStrokeBBoxHelper(ca[0]);
+        const bb = getStrokeBBoxHelper(cb2[0]);
+        const da = needleUpperTip
+          ? Math.min(Math.hypot(ba.cx - cx, ba.cy - cy), Math.hypot(ba.cx - needleUpperTip.x, ba.cy - needleUpperTip.y))
+          : Math.hypot(ba.cx - cx, ba.cy - cy);
+        const db = needleUpperTip
+          ? Math.min(Math.hypot(bb.cx - cx, bb.cy - cy), Math.hypot(bb.cx - needleUpperTip.x, bb.cy - needleUpperTip.y))
+          : Math.hypot(bb.cx - cx, bb.cy - cy);
+        return da - db;
+      });
+
+      for (const grp of clusters) {
+        const kind = classifyHandwrittenMeterLetter(grp);
+        if (kind) {
+          let lMinX = Infinity,
+            lMinY = Infinity,
+            lMaxX = -Infinity,
+            lMaxY = -Infinity;
+          for (const gs of grp) {
+            for (const p of gs.points) {
+              if (p.x < lMinX) lMinX = p.x;
+              if (p.y < lMinY) lMinY = p.y;
+              if (p.x > lMaxX) lMaxX = p.x;
+              if (p.y > lMaxY) lMaxY = p.y;
+            }
+          }
+          const lcx = (lMinX + lMaxX) / 2;
+          const lcy = (lMinY + lMaxY) / 2;
+          const lh = lMaxY - lMinY;
+          const dCircle = Math.hypot(lcx - cx, lcy - cy);
+          matchedKind = kind;
+          matchedLetterInside = dCircle <= r * 0.62 && lh >= r * 0.36;
+          matchedLetterStrokeIds = grp.map((gs) => gs.id);
+          break;
+        }
+      }
+    }
+
+    if (matchedKind) {
+      const allInvolved = new Set<string>([
+        cs.id,
+        ...needleIds,
+        ...needleTipHeadIds,
+        ...matchedLetterStrokeIds,
+      ]);
+      const hasWire = circleTouchesOrCrossesWire(cx, cy, r, allInvolved);
+      const passesContext =
+        !requireContext ||
+        needleIds.length > 0 ||
+        hasWire ||
+        hasExistingCircuitCompOnPage ||
+        (matchedLetterInside && r <= 50);
+
+      if (passesContext) {
+        const boxW = r / 0.33;
+        const boxH = r / 0.33;
+        const boxX = cx - boxW * 0.42;
+        const boxY = cy - boxH * 0.58;
+        const meterStrokes = createPhysicsStencilStrokes(
+          matchedKind,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          cs.color || '#111827',
+          cs.layerId || 'layer-1'
+        );
+        for (const id of allInvolved) consumedStrokeIds.add(id);
+        if (matchedTextId) consumedTextIds.add(matchedTextId);
+        replacements.set(cs.id, meterStrokes);
+        for (const ms of meterStrokes) addedCompStrokeIds.push(ms.id);
+        continue;
+      }
+    }
+
+    // C. Hand-drawn Schematic or Pictorial Lamp on a circle/dome:
+    //    (1) Circle + 'X' cross inside, OR
+    //    (2) Circle/dome + internal filament (loop/coil/M/arch) and/or screw-base lines right underneath!
+    const innerFilamentIds: string[] = [];
+    const innerDiagStrokes: { id: string; slope: number }[] = [];
+    for (const ds of strokes) {
+      if (ds.id === cs.id || consumedStrokeIds.has(ds.id) || classifyCircuitStrokeKind(ds) !== null) {
+        continue;
+      }
+      if (ds.tool === 'highlighter' || ds.points.length < 2) continue;
+      const db = getStrokeBBoxHelper(ds);
+      if (Math.hypot(db.cx - cx, db.cy - cy) > r * 0.65) continue;
+      if (db.w > cb.w * 1.15 || db.h > cb.h * 1.15) continue;
+      if (Math.hypot(db.w, db.h) < Math.max(7, r * 0.40)) continue;
+      innerFilamentIds.push(ds.id);
+
+      if (!ds.isShape || ds.shapeType === 'line') {
+        const p0 = ds.points[0];
+        const p1 = ds.points[ds.points.length - 1];
+        const chord = distance(p0, p1);
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        if (chord >= r * 0.75 && chord <= r * 2.4 && Math.abs(dx) >= r * 0.30 && Math.abs(dy) >= r * 0.30) {
+          innerDiagStrokes.push({ id: ds.id, slope: dy / dx });
+        }
+      }
+    }
+
+    const baseStrokeIds: string[] = [];
+    for (const bs of strokes) {
+      if (
+        bs.id === cs.id ||
+        innerFilamentIds.includes(bs.id) ||
+        consumedStrokeIds.has(bs.id) ||
+        classifyCircuitStrokeKind(bs) !== null ||
+        bs.tool === 'highlighter' ||
+        bs.points.length < 2
+      ) {
+        continue;
+      }
+      const bb = getStrokeBBoxHelper(bs);
+      if (bb.w > cb.w * 0.92 || bb.h > cb.h * 0.85) continue;
+      if (Math.hypot(bb.w, bb.h) > Math.max(92, cb.w * 1.35)) continue;
+      if (Math.hypot(bb.w, bb.h) < 4) continue;
+      if (
+        Math.abs(bb.cx - cx) <= cb.w * 0.52 &&
+        bb.cy >= cb.maxY - cb.h * 0.26 &&
+        bb.cy <= cb.maxY + cb.h * 0.82 &&
+        bb.minY >= cy - cb.h * 0.10
+      ) {
+        baseStrokeIds.push(bs.id);
+      }
+    }
+
+    const posDiag = innerDiagStrokes.find((d) => d.slope > 0.30 && d.slope < 3.1);
+    const negDiag = innerDiagStrokes.find((d) => d.slope < -0.30 && d.slope > -3.1);
+    const hasXCross = Boolean(posDiag && negDiag);
+    const isPictorialBulbWithBase = baseStrokeIds.length >= 1 && (innerFilamentIds.length >= 1 || !requireContext);
+    const isLassoCircleWithFilament = !requireContext && innerFilamentIds.length >= 1;
+
+    if (hasXCross || isPictorialBulbWithBase || isLassoCircleWithFilament) {
+      const lampInvolved = new Set<string>([
+        cs.id,
+        ...innerFilamentIds,
+        ...(isPictorialBulbWithBase ? baseStrokeIds : []),
+      ]);
+      const hasWire = circleTouchesOrCrossesWire(cx, cy, r + 14, lampInvolved);
+      if (!requireContext || hasWire || hasExistingCircuitCompOnPage || (hasXCross && baseStrokeIds.length >= 1)) {
+        const bw = 96;
+        const bh = 88;
+        const bx = cx - bw / 2;
+        const by = isPictorialBulbWithBase ? cb.minY : cy - bh * 0.848;
+        const bulbStrokes = createPhysicsStencilStrokes(
+          'bulb',
+          bx,
+          by,
+          bw,
+          bh,
+          cs.color || '#111827',
+          cs.layerId || 'layer-1'
+        );
+        for (const id of lampInvolved) consumedStrokeIds.add(id);
+        replacements.set(cs.id, bulbStrokes);
+        for (const bs of bulbStrokes) addedCompStrokeIds.push(bs.id);
+      }
+    }
+  }
+
+  // C2. Single-stroke Pear / Lightbulb Silhouette (wide rounded top dome + narrower bottom screw neck, or open-bottom arch dome + screw base!)
+  for (const ps of strokes) {
+    if (consumedStrokeIds.has(ps.id) || classifyCircuitStrokeKind(ps) !== null) continue;
+    if (ps.tool === 'highlighter' || ps.points.length < 5) continue;
+    const pb = getStrokeBBoxHelper(ps);
+    if (pb.w < 18 || pb.h < 24 || pb.w > 165 || pb.h > 190) continue;
+
+    // Open-bottom dome/arch ('arc', 'parabola', or inverted-U freehand) + bottom base/filament strokes
+    const pFirst = ps.points[0];
+    const pLast = ps.points[ps.points.length - 1];
+    const diag = Math.hypot(pb.w, pb.h);
+    const isArchDome =
+      ((ps.shapeType === 'arc' || ps.shapeType === 'parabola') &&
+        ps.points.length === 3 &&
+        ps.points[1].y < Math.min(pFirst.y, pLast.y) - pb.h * 0.35) ||
+      (!ps.isShape &&
+        pFirst.y >= pb.minY + pb.h * 0.45 &&
+        pLast.y >= pb.minY + pb.h * 0.45 &&
+        distance(pFirst, pLast) <= pb.w * 0.92);
+
+    // Closed pear silhouette: top 55% is wide dome, bottom 26% narrows into screw neck (and top 22% is NOT narrower than middle, distinguishing from vertical AA battery!)
+    let isPearBulb = false;
+    if (!ps.isShape && ps.points.length >= 8 && pb.h >= pb.w * 0.85 && pb.h <= pb.w * 2.35 && distance(pFirst, pLast) <= Math.max(36, diag * 0.50)) {
+      let topMinX = Infinity, topMaxX = -Infinity;
+      let upperMinX = Infinity, upperMaxX = -Infinity;
+      let lowerMinX = Infinity, lowerMaxX = -Infinity;
+      for (const pt of ps.points) {
+        if (pt.y <= pb.minY + pb.h * 0.25) {
+          if (pt.x < topMinX) topMinX = pt.x;
+          if (pt.x > topMaxX) topMaxX = pt.x;
+        }
+        if (pt.y <= pb.minY + pb.h * 0.58) {
+          if (pt.x < upperMinX) upperMinX = pt.x;
+          if (pt.x > upperMaxX) upperMaxX = pt.x;
+        }
+        if (pt.y >= pb.maxY - pb.h * 0.26) {
+          if (pt.x < lowerMinX) lowerMinX = pt.x;
+          if (pt.x > lowerMaxX) lowerMaxX = pt.x;
+        }
+      }
+      const topW = Number.isFinite(topMinX) ? topMaxX - topMinX : 0;
+      const upperW = Number.isFinite(upperMinX) ? upperMaxX - upperMinX : 0;
+      const lowerW = Number.isFinite(lowerMinX) ? lowerMaxX - lowerMinX : 0;
+      if (
+        upperW >= pb.w * 0.84 &&
+        topW >= lowerW * 0.92 &&
+        lowerW >= upperW * 0.14 &&
+        lowerW <= upperW * 0.74
+      ) {
+        isPearBulb = true;
+      }
+    }
+
+    if (!isPearBulb && !isArchDome) continue;
+
+    const extraBulbIds: string[] = [];
+    for (const es of strokes) {
+      if (es.id === ps.id || consumedStrokeIds.has(es.id) || classifyCircuitStrokeKind(es) !== null) continue;
+      if (es.tool === 'highlighter') continue;
+      const eb = getStrokeBBoxHelper(es);
+      if (eb.w > pb.w * 1.05 || eb.h > pb.h * 1.05 || Math.hypot(eb.w, eb.h) > Math.max(92, pb.w * 1.35)) continue;
+      const insideDome =
+        eb.cx >= pb.minX - 8 &&
+        eb.cx <= pb.maxX + 8 &&
+        eb.cy >= pb.minY - 6 &&
+        eb.cy <= pb.maxY + pb.h * 0.72;
+      if (insideDome) extraBulbIds.push(es.id);
+    }
+
+    if (isArchDome && extraBulbIds.length === 0) continue;
+    const involved = new Set<string>([ps.id, ...extraBulbIds]);
+    const hasWire = circleTouchesOrCrossesWire(pb.cx, pb.cy, Math.max(pb.w, pb.h) * 0.55, involved);
+    if (requireContext && !hasWire && !hasExistingCircuitCompOnPage) continue;
+
+    const bw = 96;
+    const bh = 88;
+    const bx = pb.cx - bw / 2;
+    const by = pb.minY;
+    const bulbStrokes = createPhysicsStencilStrokes(
+      'bulb',
+      bx,
+      by,
+      bw,
+      bh,
+      ps.color || '#111827',
+      ps.layerId || 'layer-1'
+    );
+    for (const id of involved) consumedStrokeIds.add(id);
+    replacements.set(ps.id, bulbStrokes);
+    for (const bs of bulbStrokes) addedCompStrokeIds.push(bs.id);
+  }
+
+  // Helper: check if a bounding box encloses an already-recognized component deep inside its interior (meaning it's an outer circuit wire loop!)
+  const boxEnclosesComponent = (minX: number, minY: number, maxX: number, maxY: number): boolean => {
+    for (const [repAnchorId] of replacements) {
+      const orig = strokes.find((st) => st.id === repAnchorId);
+      if (!orig) continue;
+      const ob = getStrokeBBoxHelper(orig);
+      if (ob.cx > minX + 12 && ob.cx < maxX - 12 && ob.cy > minY + 12 && ob.cy < maxY - 12) {
+        return true;
+      }
+    }
+    for (const st of strokes) {
+      if (classifyCircuitStrokeKind(st) === null) continue;
+      const ob = getStrokeBBoxHelper(st);
+      if (ob.cx > minX + 12 && ob.cx < maxX - 12 && ob.cy > minY + 12 && ob.cy < maxY - 12) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // D1. Hand-drawn Pictorial Battery ('battery'):
+  //     Supports:
+  //     - 1-stroke stepped battery outline (main rectangle with narrower protruding button cap on left, right, or top),
+  //     - 1-stroke OR multi-stroke (2..5 lines) rectangular/cylindrical box + small protruding cap nub,
+  //     - Box + '+' / '-' polarity signs or typed '+'/'-'/'1.5V'/'9V' text,
+  //     - Box + internal cell-band divider line!
+  interface HandBoxCand {
+    strokeIds: string[];
+    primary: StrokeObject;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+    w: number;
+    h: number;
+    cx: number;
+    cy: number;
+    isSteppedBattery: boolean;
+  }
+
+  const boxCandidates: HandBoxCand[] = [];
+
+  // (a) Single-stroke boxes, cylinders, or stepped battery silhouettes
+  for (const bs of strokes) {
+    if (consumedStrokeIds.has(bs.id) || classifyCircuitStrokeKind(bs) !== null) continue;
+    if (bs.tool === 'highlighter' || bs.points.length < 4) continue;
+    const bb = getStrokeBBoxHelper(bs);
+    if (bb.w < 22 || bb.h < 14 || bb.w > 225 || bb.h > 165) continue;
+    const ratio = bb.w / bb.h;
+    if (ratio < 0.30 || ratio > 4.2) continue;
+    if (boxEnclosesComponent(bb.minX, bb.minY, bb.maxX, bb.maxY)) continue;
+
+    const isSnappedBox =
+      bs.shapeType === 'rectangle' ||
+      bs.shapeType === 'parallelogram' ||
+      bs.shapeType === 'cuboid' ||
+      bs.shapeType === 'cylinder';
+    const p0 = bs.points[0];
+    const pLast = bs.points[bs.points.length - 1];
+    const diag = Math.hypot(bb.w, bb.h);
+    const isClosedFreehand =
+      !bs.isShape && bs.points.length >= 5 && distance(p0, pLast) <= Math.max(38, diag * 0.50);
+    if (!isSnappedBox && !isClosedFreehand) continue;
+
+    // Exclude smooth near-circular loops without corners unless they have stepped battery profile
+    let isSteppedBattery = false;
+    if (!bs.isShape && bs.points.length >= 7) {
+      if (bb.w >= bb.h * 1.05) {
+        let lMinY = Infinity, lMaxY = -Infinity;
+        let mrMinY = Infinity, mrMaxY = -Infinity;
+        let rMinY = Infinity, rMaxY = -Infinity;
+        let mlMinY = Infinity, mlMaxY = -Infinity;
+        for (const p of bs.points) {
+          if (p.x <= bb.minX + bb.w * 0.25) {
+            if (p.y < lMinY) lMinY = p.y;
+            if (p.y > lMaxY) lMaxY = p.y;
+          }
+          if (p.x >= bb.minX + bb.w * 0.33 && p.x <= bb.maxX - bb.w * 0.06) {
+            if (p.y < mrMinY) mrMinY = p.y;
+            if (p.y > mrMaxY) mrMaxY = p.y;
+          }
+          if (p.x >= bb.maxX - bb.w * 0.25) {
+            if (p.y < rMinY) rMinY = p.y;
+            if (p.y > rMaxY) rMaxY = p.y;
+          }
+          if (p.x >= bb.minX + bb.w * 0.06 && p.x <= bb.maxX - bb.w * 0.33) {
+            if (p.y < mlMinY) mlMinY = p.y;
+            if (p.y > mlMaxY) mlMaxY = p.y;
+          }
+        }
+        const lSpan = Number.isFinite(lMinY) ? lMaxY - lMinY : 0;
+        const mrSpan = Number.isFinite(mrMinY) ? mrMaxY - mrMinY : 0;
+        const rSpan = Number.isFinite(rMinY) ? rMaxY - rMinY : 0;
+        const mlSpan = Number.isFinite(mlMinY) ? mlMaxY - mlMinY : 0;
+        if (
+          (lSpan >= bb.h * 0.16 && lSpan <= bb.h * 0.76 && mrSpan >= bb.h * 0.85) ||
+          (rSpan >= bb.h * 0.16 && rSpan <= bb.h * 0.76 && mlSpan >= bb.h * 0.85)
+        ) {
+          isSteppedBattery = true;
+        }
+      } else if (bb.h > bb.w * 1.08) {
+        let tMinX = Infinity, tMaxX = -Infinity;
+        let mMinX = Infinity, mMaxX = -Infinity;
+        let bMinX = Infinity, bMaxX = -Infinity;
+        for (const p of bs.points) {
+          if (p.y <= bb.minY + bb.h * 0.25) {
+            if (p.x < tMinX) tMinX = p.x;
+            if (p.x > tMaxX) tMaxX = p.x;
+          }
+          if (p.y >= bb.minY + bb.h * 0.34 && p.y <= bb.maxY - bb.h * 0.22) {
+            if (p.x < mMinX) mMinX = p.x;
+            if (p.x > mMaxX) mMaxX = p.x;
+          }
+          if (p.y >= bb.maxY - bb.h * 0.22) {
+            if (p.x < bMinX) bMinX = p.x;
+            if (p.x > bMaxX) bMaxX = p.x;
+          }
+        }
+        const tSpan = Number.isFinite(tMinX) ? tMaxX - tMinX : 0;
+        const mSpan = Number.isFinite(mMinX) ? mMaxX - mMinX : 0;
+        const bSpan = Number.isFinite(bMinX) ? bMaxX - bMinX : 0;
+        if (tSpan >= bb.w * 0.16 && tSpan <= bb.w * 0.74 && mSpan >= bb.w * 0.85 && bSpan >= bb.w * 0.76) {
+          isSteppedBattery = true;
+        }
+      }
+
+      if (!isSteppedBattery && Math.abs(bb.w - bb.h) <= Math.max(bb.w, bb.h) * 0.35) {
+        const rx = Math.max(10, bb.w / 2);
+        const ry = Math.max(10, bb.h / 2);
+        let errSum = 0;
+        for (const p of bs.points) {
+          errSum += Math.abs(Math.hypot((p.x - bb.cx) / rx, (p.y - bb.cy) / ry) - 1);
+        }
+        // Pure smooth circle (not oblong rectangle/box) -> leave for bulb/circle logic unless it has battery cap/polarity!
+        if (errSum / bs.points.length <= 0.14) continue;
+      }
+    }
+
+    boxCandidates.push({
+      strokeIds: [bs.id],
+      primary: bs,
+      minX: bb.minX,
+      minY: bb.minY,
+      maxX: bb.maxX,
+      maxY: bb.maxY,
+      w: bb.w,
+      h: bb.h,
+      cx: bb.cx,
+      cy: bb.cy,
+      isSteppedBattery,
+    });
+  }
+
+  // (b) Multi-stroke (2..5 strokes) hand-drawn boxes (e.g. 4 separate wall lines or 2 L-brackets)
+  const wallPool = strokes.filter((s) => {
+    if (consumedStrokeIds.has(s.id) || classifyCircuitStrokeKind(s) !== null) return false;
+    if (s.tool === 'highlighter' || s.points.length < 2) return false;
+    if (s.isShape && s.shapeType !== 'line') return false;
+    if (boxCandidates.some((bc) => bc.strokeIds.includes(s.id))) return false;
+    const b = getStrokeBBoxHelper(s);
+    const d = Math.hypot(b.w, b.h);
+    return d >= 12 && d <= 220;
+  });
+  const wallVisited = new Uint8Array(wallPool.length);
+  for (let i = 0; i < wallPool.length; i++) {
+    if (wallVisited[i]) continue;
+    wallVisited[i] = 1;
+    const grp: StrokeObject[] = [wallPool[i]];
+    let grew = true;
+    while (grew && grp.length < 5) {
+      grew = false;
+      for (let j = 0; j < wallPool.length; j++) {
+        if (wallVisited[j]) continue;
+        const cand = wallPool[j];
+        const touchesGrp = grp.some((m) => {
+          const mp0 = m.points[0];
+          const mp1 = m.points[m.points.length - 1];
+          const cp0 = cand.points[0];
+          const cp1 = cand.points[cand.points.length - 1];
+          return (
+            distance(mp0, cp0) <= 20 ||
+            distance(mp0, cp1) <= 20 ||
+            distance(mp1, cp0) <= 20 ||
+            distance(mp1, cp1) <= 20
+          );
+        });
+        if (touchesGrp) {
+          // Only merge if combined bbox stays compact (<= 220x165)
+          let tMinX = Infinity, tMinY = Infinity, tMaxX = -Infinity, tMaxY = -Infinity;
+          for (const ms of [...grp, cand]) {
+            for (const p of ms.points) {
+              if (p.x < tMinX) tMinX = p.x;
+              if (p.y < tMinY) tMinY = p.y;
+              if (p.x > tMaxX) tMaxX = p.x;
+              if (p.y > tMaxY) tMaxY = p.y;
+            }
+          }
+          if (tMaxX - tMinX <= 225 && tMaxY - tMinY <= 165) {
+            wallVisited[j] = 1;
+            grp.push(cand);
+            grew = true;
+            if (grp.length >= 5) break;
+          }
+        }
+      }
+    }
+    if (grp.length >= 2) {
+      let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
+      for (const ms of grp) {
+        for (const p of ms.points) {
+          if (p.x < gMinX) gMinX = p.x;
+          if (p.y < gMinY) gMinY = p.y;
+          if (p.x > gMaxX) gMaxX = p.x;
+          if (p.y > gMaxY) gMaxY = p.y;
+        }
+      }
+      const gw = gMaxX - gMinX;
+      const gh = gMaxY - gMinY;
+      if (gw >= 34 && gh >= 22 && gw <= 225 && gh <= 165 && !boxEnclosesComponent(gMinX, gMinY, gMaxX, gMaxY)) {
+        let totalPts = 0;
+        let wallPts = 0;
+        let topMinX = Infinity, topMaxX = -Infinity;
+        let botMinX = Infinity, botMaxX = -Infinity;
+        let leftMinY = Infinity, leftMaxY = -Infinity;
+        let rightMinY = Infinity, rightMaxY = -Infinity;
+        const tolX = Math.max(6, gw * 0.22);
+        const tolY = Math.max(6, gh * 0.22);
+        for (const ms of grp) {
+          for (const p of ms.points) {
+            totalPts++;
+            const onTop = p.y <= gMinY + tolY;
+            const onBot = p.y >= gMaxY - tolY;
+            const onLeft = p.x <= gMinX + tolX;
+            const onRight = p.x >= gMaxX - tolX;
+            if (onTop || onBot || onLeft || onRight) wallPts++;
+            if (onTop) {
+              topMinX = Math.min(topMinX, p.x);
+              topMaxX = Math.max(topMaxX, p.x);
+            }
+            if (onBot) {
+              botMinX = Math.min(botMinX, p.x);
+              botMaxX = Math.max(botMaxX, p.x);
+            }
+            if (onLeft) {
+              leftMinY = Math.min(leftMinY, p.y);
+              leftMaxY = Math.max(leftMaxY, p.y);
+            }
+            if (onRight) {
+              rightMinY = Math.min(rightMinY, p.y);
+              rightMaxY = Math.max(rightMaxY, p.y);
+            }
+          }
+        }
+        const closedWalls =
+          totalPts >= 4 &&
+          wallPts / totalPts >= 0.80 &&
+          topMaxX - topMinX >= gw * 0.55 &&
+          botMaxX - botMinX >= gw * 0.55 &&
+          leftMaxY - leftMinY >= gh * 0.55 &&
+          rightMaxY - rightMinY >= gh * 0.55;
+        if (closedWalls) {
+          boxCandidates.push({
+            strokeIds: grp.map((s) => s.id),
+            primary: grp[0],
+            minX: gMinX,
+            minY: gMinY,
+            maxX: gMaxX,
+            maxY: gMaxY,
+            w: gw,
+            h: gh,
+            cx: (gMinX + gMaxX) / 2,
+            cy: (gMinY + gMaxY) / 2,
+            isSteppedBattery: false,
+          });
+        }
+      }
+    }
+  }
+
+  for (const bc of boxCandidates) {
+    if (bc.strokeIds.some((id) => consumedStrokeIds.has(id))) continue;
+    const boxIdSet = new Set<string>(bc.strokeIds);
+
+    // 1. Protruding battery cap nub on Left, Right, or Top wall
+    const capIds: string[] = [];
+    for (const cs of strokes) {
+      if (boxIdSet.has(cs.id) || consumedStrokeIds.has(cs.id) || classifyCircuitStrokeKind(cs) !== null) continue;
+      if (cs.tool === 'highlighter' || cs.points.length < 2) continue;
+      const cb = getStrokeBBoxHelper(cs);
+      if (Math.max(cb.w, cb.h) < 3.5) continue;
+      if (Math.hypot(cb.w, cb.h) > Math.max(64, Math.max(bc.w, bc.h) * 0.85)) continue;
+
+      // Reject pure straight horizontal/vertical wire leads (e.g. a 2-point straight wire going away from the box)
+      if (cs.shapeType === 'line' && cs.points.length === 2 && (cb.h <= 3 || cb.w <= 3) && Math.max(cb.w, cb.h) > 22) {
+        continue;
+      }
+
+      const isLeftCap =
+        cb.minX < bc.minX - 2 &&
+        cb.maxX >= bc.minX - 10 &&
+        cb.minX <= bc.minX + 10 &&
+        cb.w <= Math.max(32, bc.w * 0.42) &&
+        cb.h >= bc.h * 0.16 &&
+        cb.h <= bc.h * 0.80 &&
+        Math.abs(cb.cy - bc.cy) <= bc.h * 0.34 &&
+        (cs.points.length >= 3 || cb.h >= 8);
+      const isRightCap =
+        cb.maxX > bc.maxX + 2 &&
+        cb.minX <= bc.maxX + 10 &&
+        cb.maxX >= bc.maxX - 10 &&
+        cb.w <= Math.max(32, bc.w * 0.42) &&
+        cb.h >= bc.h * 0.16 &&
+        cb.h <= bc.h * 0.80 &&
+        Math.abs(cb.cy - bc.cy) <= bc.h * 0.34 &&
+        (cs.points.length >= 3 || cb.h >= 8);
+      const isTopCap =
+        cb.minY < bc.minY - 2 &&
+        cb.maxY >= bc.minY - 10 &&
+        cb.minY <= bc.minY + 10 &&
+        cb.h <= Math.max(32, bc.h * 0.42) &&
+        cb.w >= bc.w * 0.14 &&
+        cb.w <= bc.w * 0.76 &&
+        Math.abs(cb.cx - bc.cx) <= bc.w * 0.36 &&
+        (cs.points.length >= 3 || cb.w >= 8);
+
+      if (isLeftCap || isRightCap || isTopCap) {
+        capIds.push(cs.id);
+      }
+    }
+
+    // 2. '+' / '-' polarity strokes or typed '+'/'-'/'1.5V'/'9V' text near/inside the box
+    const signIds: string[] = [];
+    let hasPlusSign = false;
+    const nearbyShortStrokes = strokes.filter((ss) => {
+      if (boxIdSet.has(ss.id) || capIds.includes(ss.id) || consumedStrokeIds.has(ss.id)) return false;
+      if (classifyCircuitStrokeKind(ss) !== null || ss.tool === 'highlighter') return false;
+      const sb = getStrokeBBoxHelper(ss);
+      if (Math.max(sb.w, sb.h) < 3 || Math.max(sb.w, sb.h) > 40) return false;
+      return (
+        sb.cx >= bc.minX - 46 &&
+        sb.cx <= bc.maxX + 46 &&
+        sb.cy >= bc.minY - 36 &&
+        sb.cy <= bc.maxY + 36
+      );
+    });
+    for (let i = 0; i < nearbyShortStrokes.length; i++) {
+      const s1 = nearbyShortStrokes[i];
+      const b1 = getStrokeBBoxHelper(s1);
+      const isH1 = b1.w >= 3.5 && b1.h <= Math.max(8, b1.w * 0.50);
+      const isV1 = b1.h >= 3.5 && b1.w <= Math.max(8, b1.h * 0.50);
+      if (isH1) {
+        for (let j = 0; j < nearbyShortStrokes.length; j++) {
+          if (i === j) continue;
+          const s2 = nearbyShortStrokes[j];
+          const b2 = getStrokeBBoxHelper(s2);
+          const isV2 = b2.h >= 3.5 && b2.w <= Math.max(8, b2.h * 0.50);
+          if (isV2 && Math.hypot(b1.cx - b2.cx, b1.cy - b2.cy) <= 14) {
+            hasPlusSign = true;
+            if (!signIds.includes(s1.id)) signIds.push(s1.id);
+            if (!signIds.includes(s2.id)) signIds.push(s2.id);
+          }
+        }
+      } else if (isV1) {
+        // handled when paired with horizontal stroke
+      }
+    }
+    if (hasPlusSign || bc.isSteppedBattery || capIds.length > 0) {
+      for (const ss of nearbyShortStrokes) {
+        if (signIds.includes(ss.id)) continue;
+        const sb = getStrokeBBoxHelper(ss);
+        if (sb.w >= 3.5 && sb.w <= 30 && sb.h <= Math.max(7, sb.w * 0.45)) {
+          signIds.push(ss.id);
+        }
+      }
+    }
+
+    const matchedBatTextIds: string[] = [];
+    for (const tx of texts) {
+      if (consumedTextIds.has(tx.id)) continue;
+      const clean = (tx.text || '').trim();
+      if (!/^(\+|-|−|\+\s*\/?\s*-|\d+([.,]\d+)?\s*v|e)$/i.test(clean)) continue;
+      const fs = tx.fontSize || 22;
+      const tcx = tx.x + fs * 0.4;
+      const tcy = tx.y + fs * 0.5;
+      if (tcx >= bc.minX - 44 && tcx <= bc.maxX + 44 && tcy >= bc.minY - 36 && tcy <= bc.maxY + 36) {
+        matchedBatTextIds.push(tx.id);
+      }
+    }
+
+    // 3. Internal cell-band divider line across the battery body
+    const dividerIds: string[] = [];
+    for (const ds of strokes) {
+      if (
+        boxIdSet.has(ds.id) ||
+        capIds.includes(ds.id) ||
+        signIds.includes(ds.id) ||
+        consumedStrokeIds.has(ds.id) ||
+        classifyCircuitStrokeKind(ds) !== null ||
+        ds.tool === 'highlighter'
+      ) {
+        continue;
+      }
+      const db = getStrokeBBoxHelper(ds);
+      if (
+        bc.w >= bc.h * 1.12 &&
+        db.cx >= bc.minX + bc.w * 0.14 &&
+        db.cx <= bc.maxX - bc.w * 0.14 &&
+        Math.abs(db.cy - bc.cy) <= bc.h * 0.25 &&
+        db.h >= bc.h * 0.62 &&
+        db.h <= bc.h * 1.22 &&
+        db.w <= Math.max(12, db.h * 0.32)
+      ) {
+        dividerIds.push(ds.id);
+      } else if (
+        bc.h > bc.w * 1.12 &&
+        db.cy >= bc.minY + bc.h * 0.14 &&
+        db.cy <= bc.maxY - bc.h * 0.14 &&
+        Math.abs(db.cx - bc.cx) <= bc.w * 0.25 &&
+        db.w >= bc.w * 0.62 &&
+        db.w <= bc.w * 1.22 &&
+        db.h <= Math.max(12, db.w * 0.32)
+      ) {
+        dividerIds.push(ds.id);
+      }
+    }
+
+    const allBatInvolved = new Set<string>([
+      ...bc.strokeIds,
+      ...capIds,
+      ...signIds,
+      ...dividerIds,
+    ]);
+    const hasWire = circleTouchesOrCrossesWire(bc.cx, bc.cy, Math.max(bc.w, bc.h) * 0.55, allBatInvolved);
+    const isTier1Battery =
+      bc.isSteppedBattery ||
+      capIds.length > 0 ||
+      hasPlusSign ||
+      matchedBatTextIds.length > 0 ||
+      (dividerIds.length > 0 && (!requireContext || hasWire || hasExistingCircuitCompOnPage));
+
+    if (!isTier1Battery) continue;
+    if (
+      requireContext &&
+      !hasWire &&
+      !hasExistingCircuitCompOnPage &&
+      !hasPlusSign &&
+      matchedBatTextIds.length === 0 &&
+      !(bc.isSteppedBattery && capIds.length >= 0) &&
+      capIds.length === 0
+    ) {
+      continue;
+    }
+
+    const bw = Math.max(70, Math.min(104, Math.round(Math.max(bc.w, bc.h))));
+    const bh = Math.max(40, Math.min(58, Math.round(bw * 0.56)));
+    const bx = bc.cx - bw / 2;
+    const by = bc.cy - bh / 2;
+    const batStrokes = createPhysicsStencilStrokes(
+      'battery',
+      bx,
+      by,
+      bw,
+      bh,
+      bc.primary.color || '#111827',
+      bc.primary.layerId || 'layer-1'
+    );
+    for (const id of allBatInvolved) consumedStrokeIds.add(id);
+    for (const tid of matchedBatTextIds) consumedTextIds.add(tid);
+    replacements.set(bc.primary.id, batStrokes);
+    for (const bs of batStrokes) addedCompStrokeIds.push(bs.id);
+  }
+
+  // D2. Hand-drawn Schematic Voltage Source (Long + Short parallel plates, vertical OR horizontal, relaxed hand wobble!)
+  const plateBars = strokes.filter((s) => {
+    if (consumedStrokeIds.has(s.id) || classifyCircuitStrokeKind(s) !== null) return false;
+    if (s.tool === 'highlighter' || s.points.length < 2) return false;
+    if (s.isShape && s.shapeType !== 'line') return false;
+    const b = getStrokeBBoxHelper(s);
+    const isVertPlate = b.h >= 8 && b.h <= 145 && b.w <= Math.max(16, b.h * 0.42);
+    const isHorizPlate = b.w >= 8 && b.w <= 145 && b.h <= Math.max(16, b.w * 0.42);
+    if (!isVertPlate && !isHorizPlate) return false;
+    let pLen = 0;
+    for (let i = 1; i < s.points.length; i++) pLen += distance(s.points[i - 1], s.points[i]);
+    return distance(s.points[0], s.points[s.points.length - 1]) >= pLen * 0.72;
+  });
+
+  for (let i = 0; i < plateBars.length; i++) {
+    const a = plateBars[i];
+    if (consumedStrokeIds.has(a.id)) continue;
+    const ba = getStrokeBBoxHelper(a);
+    const aIsVert = ba.h >= ba.w;
+    for (let j = i + 1; j < plateBars.length; j++) {
+      const b = plateBars[j];
+      if (consumedStrokeIds.has(b.id)) continue;
+      const bb = getStrokeBBoxHelper(b);
+      const bIsVert = bb.h >= bb.w;
+      if (aIsVert !== bIsVert) continue;
+
+      const gap = aIsVert ? Math.abs(ba.cx - bb.cx) : Math.abs(ba.cy - bb.cy);
+      if (gap < 6 || gap > 52) continue;
+      const longBox = (aIsVert ? ba.h >= bb.h : ba.w >= bb.w) ? ba : bb;
+      const shortBox = longBox === ba ? bb : ba;
+      const longLen = aIsVert ? longBox.h : longBox.w;
+      const shortLen = aIsVert ? shortBox.h : shortBox.w;
+      if (longLen < 26 || shortLen < 8 || longLen < shortLen * 1.24 || shortLen > longLen * 0.80) continue;
+      const alignOff = aIsVert ? Math.abs(ba.cy - bb.cy) : Math.abs(ba.cx - bb.cx);
+      if (alignOff > longLen * 0.22) continue;
+      // Real voltage-source plates are centered: the long plate extends past BOTH ends of the short plate (rejects 'η' where tops align!)
+      const extendsBothEnds = aIsVert
+        ? longBox.minY < shortBox.minY - 2.5 && longBox.maxY > shortBox.maxY + 2.5
+        : longBox.minX < shortBox.minX - 2.5 && longBox.maxX > shortBox.maxX + 2.5;
+      if (!extendsBothEnds) continue;
+
+      // Reject if any stroke bridges across the gap between the two plates (e.g. 'π', 'Π', 'Η', 'η' arch/crossbar!)
+      const minPlateCoord = aIsVert ? Math.min(ba.cx, bb.cx) : Math.min(ba.cy, bb.cy);
+      const maxPlateCoord = aIsVert ? Math.max(ba.cx, bb.cx) : Math.max(ba.cy, bb.cy);
+      const hasBridgingStroke = strokes.some((bs) => {
+        if (bs.id === a.id || bs.id === b.id || consumedStrokeIds.has(bs.id)) return false;
+        const bsb = getStrokeBBoxHelper(bs);
+        if (aIsVert) {
+          return (
+            bsb.minX <= minPlateCoord + 4 &&
+            bsb.maxX >= maxPlateCoord - 4 &&
+            bsb.maxY >= Math.min(ba.minY, bb.minY) - 8 &&
+            bsb.minY <= Math.max(ba.maxY, bb.maxY) + 8 &&
+            bsb.w <= gap + 28
+          );
+        }
+        return (
+          bsb.minY <= minPlateCoord + 4 &&
+          bsb.maxY >= maxPlateCoord - 4 &&
+          bsb.maxX >= Math.min(ba.minX, bb.minX) - 8 &&
+          bsb.minX <= Math.max(ba.maxX, bb.maxX) + 8 &&
+          bsb.h <= gap + 28
+        );
+      });
+      if (hasBridgingStroke) continue;
+
+      const pairSet = new Set<string>([a.id, b.id]);
+      const midX = (ba.cx + bb.cx) / 2;
+      const midY = (ba.cy + bb.cy) / 2;
+      // Swallow any '+' / '-' short strokes right next to the plates
+      for (const ss of strokes) {
+        if (pairSet.has(ss.id) || consumedStrokeIds.has(ss.id) || classifyCircuitStrokeKind(ss) !== null) continue;
+        const sb = getStrokeBBoxHelper(ss);
+        if (Math.max(sb.w, sb.h) <= 28 && Math.hypot(sb.cx - midX, sb.cy - midY) <= 44) {
+          pairSet.add(ss.id);
+        }
+      }
+      const touchesWire = circleTouchesOrCrossesWire(midX, midY, gap / 2 + 16, pairSet);
+      if (requireContext && !touchesWire && !hasExistingCircuitCompOnPage) continue;
+
+      const vw = 72;
+      const vh = Math.max(46, Math.min(72, Math.round(longLen * 1.05)));
+      const vx = midX - vw / 2;
+      const vy = midY - vh / 2;
+      const vsStrokes = createPhysicsStencilStrokes(
+        'voltage-source',
+        vx,
+        vy,
+        vw,
+        vh,
+        a.color || '#111827',
+        a.layerId || 'layer-1'
+      );
+      for (const id of pairSet) consumedStrokeIds.add(id);
+      replacements.set(a.id, vsStrokes);
+      for (const vs of vsStrokes) addedCompStrokeIds.push(vs.id);
+      break;
+    }
+  }
+
+  // E. Hand-drawn Zig-Zag Resistor ('/\/\/\')
+  for (const rs of strokes) {
+    if (consumedStrokeIds.has(rs.id) || classifyCircuitStrokeKind(rs) !== null) continue;
+    if (rs.isShape || rs.tool === 'highlighter' || rs.points.length < 6) continue;
+    const rb = getStrokeBBoxHelper(rs);
+    if (rb.w < 24 || rb.w > 185 || rb.h < 10 || rb.h > 95 || rb.w < rb.h * 1.15) continue;
+    if (distance(rs.points[0], rs.points[rs.points.length - 1]) < rb.w * 0.48) continue;
+
+    let pathLen = 0;
+    let crossings = 0;
+    let lastSign = 0;
+    const dead = Math.max(2.8, rb.h * 0.16);
+    for (let i = 0; i < rs.points.length; i++) {
+      if (i > 0) pathLen += distance(rs.points[i - 1], rs.points[i]);
+      const dy = rs.points[i].y - rb.cy;
+      if (Math.abs(dy) >= dead) {
+        const sgn = dy > 0 ? 1 : -1;
+        if (lastSign !== 0 && sgn !== lastSign) crossings++;
+        lastSign = sgn;
+      }
+    }
+    if (crossings >= 3 && pathLen >= rb.w * 1.55) {
+      const inv = new Set<string>([rs.id]);
+      const hasWire = circleTouchesOrCrossesWire(rb.cx, rb.cy, rb.w * 0.55, inv);
+      if (requireContext && !hasWire && !hasExistingCircuitCompOnPage) continue;
+      const rw = Math.max(68, Math.min(92, Math.round(rb.w)));
+      const rh = 36;
+      const rx = rb.cx - rw / 2;
+      const ry = rb.cy - rh / 2;
+      const resStroke: StrokeObject = {
+        id: `st-${Date.now()}-hres-${Math.random().toString(36).slice(2, 6)}`,
+        tool: 'pen',
+        color: rs.color || '#111827',
+        width: 2.0,
+        opacity: 1,
+        points: makePolygonBezier([
+          { x: rx, y: ry },
+          { x: rx + rw, y: ry },
+          { x: rx + rw, y: ry + rh },
+          { x: rx, y: ry + rh },
+        ]),
+        layerId: rs.layerId || 'layer-1',
+        isShape: true,
+        shapeType: 'resistor',
+      };
+      consumedStrokeIds.add(rs.id);
+      replacements.set(rs.id, [resStroke]);
+      addedCompStrokeIds.push(resStroke.id);
+    }
+  }
+
+  // F. Tier-2 Explicit Circuit Intent Fallback (ONLY when user explicitly clicks Sim / Ένωση / Ολοκλήρωση on a Lasso selection!):
+  //    If the user sketched a hasty plain rectangular box (as Battery) + circle/load (as Bulb) without '+'/'-' or cap nub,
+  //    recognize them cleanly!
+  if (explicitCircuitIntent) {
+    const hasForceArrow = strokes.some(
+      (s) => Boolean(s.arrowEnd || s.shapeType === 'arrow' || s.shapeType === 'spring-pointer')
+    );
+    const hasSourceAlready =
+      strokes.some(
+        (s) =>
+          !consumedStrokeIds.has(s.id) &&
+          (s.shapeType === 'battery' || s.shapeType === 'voltage-source')
+      ) ||
+      Array.from(replacements.values()).some((arr) =>
+        arr.some((s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source')
+      );
+
+    if (!hasSourceAlready && !hasForceArrow) {
+      const remainingBoxes = boxCandidates
+        .filter(
+          (bc) =>
+            !bc.strokeIds.some((id) => consumedStrokeIds.has(id)) &&
+            !boxEnclosesComponent(bc.minX, bc.minY, bc.maxX, bc.maxY) &&
+            strokes.length > bc.strokeIds.length
+        )
+        .sort((a, b) => {
+          const scoreA = a.w >= a.h ? 2 : 1;
+          const scoreB = b.w >= b.h ? 2 : 1;
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          return a.w * a.h - b.w * b.h;
+        });
+
+      if (remainingBoxes.length > 0) {
+        const bc = remainingBoxes[0];
+        const bw = Math.max(70, Math.min(104, Math.round(Math.max(bc.w, bc.h))));
+        const bh = Math.max(40, Math.min(58, Math.round(bw * 0.56)));
+        const batStrokes = createPhysicsStencilStrokes(
+          'battery',
+          bc.cx - bw / 2,
+          bc.cy - bh / 2,
+          bw,
+          bh,
+          bc.primary.color || '#111827',
+          bc.primary.layerId || 'layer-1'
+        );
+        for (const id of bc.strokeIds) consumedStrokeIds.add(id);
+        replacements.set(bc.primary.id, batStrokes);
+        for (const bs of batStrokes) addedCompStrokeIds.push(bs.id);
+      }
+    }
+
+    const hasSourceNow =
+      strokes.some(
+        (s) =>
+          !consumedStrokeIds.has(s.id) &&
+          (s.shapeType === 'battery' || s.shapeType === 'voltage-source')
+      ) ||
+      Array.from(replacements.values()).some((arr) =>
+        arr.some((s) => s.shapeType === 'battery' || s.shapeType === 'voltage-source')
+      );
+    const hasLoadOrMeterNow =
+      strokes.some((s) => {
+        if (consumedStrokeIds.has(s.id)) return false;
+        const k = classifyCircuitStrokeKind(s);
+        return k !== null && k !== 'battery' && k !== 'voltage-source';
+      }) ||
+      Array.from(replacements.values()).some((arr) =>
+        arr.some((s) => {
+          const k = classifyCircuitStrokeKind(s);
+          return k !== null && k !== 'battery' && k !== 'voltage-source';
+        })
+      );
+
+    if (hasSourceNow && !hasLoadOrMeterNow && !hasForceArrow) {
+      for (const cs of strokes) {
+        if (consumedStrokeIds.has(cs.id) || classifyCircuitStrokeKind(cs) !== null) continue;
+        if (cs.tool === 'highlighter' || cs.points.length < 4) continue;
+        const cb = getStrokeBBoxHelper(cs);
+        if (cb.w < 18 || cb.h < 18 || cb.w > 155 || cb.h > 155) continue;
+        if (cb.w / cb.h < 0.52 || cb.w / cb.h > 1.85) continue;
+        const p0 = cs.points[0];
+        const pN = cs.points[cs.points.length - 1];
+        const isCirc =
+          cs.shapeType === 'circle' ||
+          cs.shapeType === 'ellipse' ||
+          (!cs.isShape && cs.points.length >= 6 && distance(p0, pN) <= Math.max(30, Math.hypot(cb.w, cb.h) * 0.45));
+        if (!isCirc) continue;
+        const bw = 96;
+        const bh = 88;
+        const bulbStrokes = createPhysicsStencilStrokes(
+          'bulb',
+          cb.cx - bw / 2,
+          cb.cy - bh * 0.848,
+          bw,
+          bh,
+          cs.color || '#111827',
+          cs.layerId || 'layer-1'
+        );
+        consumedStrokeIds.add(cs.id);
+        replacements.set(cs.id, bulbStrokes);
+        for (const bs of bulbStrokes) addedCompStrokeIds.push(bs.id);
+        break;
+      }
+    }
+  }
+
+  // G. Freehand Wire Corner-Splitting & Straightening (when convertFreehandWires === true):
+  //    Turns remaining hand-drawn freehand wire strokes (including L-shaped / U-shaped / rectangular wire paths!)
+  //    into clean 2-point `shapeType: 'line'` segments so circuit alignment & simulation handle them 100% natively!
+  const addedWireStrokeIds: string[] = [];
+  const hasAnyCircuitElementNow =
+    addedCompStrokeIds.length > 0 || strokes.some((s) => classifyCircuitStrokeKind(s) !== null);
+
+  if (convertFreehandWires && hasAnyCircuitElementNow) {
+    for (const ws of strokes) {
+      if (consumedStrokeIds.has(ws.id) || classifyCircuitStrokeKind(ws) !== null) continue;
+      if (ws.isShape || ws.tool === 'highlighter' || ws.points.length < 2) continue;
+      const wb = getStrokeBBoxHelper(ws);
+      const diag = Math.hypot(wb.w, wb.h);
+      if (diag < 14) continue;
+
+      const simplified = rdpSimplify(ws.points, Math.max(9, diag * 0.062));
+      const verts: { x: number; y: number }[] = [];
+      for (const pt of simplified) {
+        if (verts.length === 0 || distance(verts[verts.length - 1], pt) >= 12) {
+          verts.push({ x: pt.x, y: pt.y });
+        }
+      }
+      if (verts.length < 2) {
+        const p0 = ws.points[0];
+        const pN = ws.points[ws.points.length - 1];
+        if (distance(p0, pN) >= 12) {
+          verts.length = 0;
+          verts.push({ x: p0.x, y: p0.y }, { x: pN.x, y: pN.y });
+        }
+      }
+      if (verts.length < 2) continue;
+
+      // Orthogonalize nearly horizontal/vertical legs (<= 14°) while keeping consecutive vertices welded
+      for (let k = 0; k < verts.length - 1; k++) {
+        const a = verts[k];
+        const b = verts[k + 1];
+        const dx = Math.abs(b.x - a.x);
+        const dy = Math.abs(b.y - a.y);
+        if (dx >= 14 && dy <= dx * 0.25) {
+          const avgY = (a.y + b.y) / 2;
+          a.y = avgY;
+          b.y = avgY;
+        } else if (dy >= 14 && dx <= dy * 0.25) {
+          const avgX = (a.x + b.x) / 2;
+          a.x = avgX;
+          b.x = avgX;
+        }
+      }
+
+      const wireSegStrokes: StrokeObject[] = [];
+      for (let k = 0; k < verts.length - 1; k++) {
+        const a = verts[k];
+        const b = verts[k + 1];
+        if (distance(a, b) < 8) continue;
+        const wid = `st-${Date.now()}-hw-${k}-${Math.random().toString(36).slice(2, 6)}`;
+        wireSegStrokes.push({
+          ...ws,
+          id: wid,
+          isShape: true,
+          shapeType: 'line',
+          fillStyle: 'none',
+          fillColor: undefined,
+          keyNodeIndices: undefined,
+          points: [
+            { x: a.x, y: a.y, pressure: 0.7 },
+            {
+              x: b.x,
+              y: b.y,
+              cx: (a.x + b.x) / 2,
+              cy: (a.y + b.y) / 2,
+              pressure: 0.7,
+            },
+          ],
+        });
+        addedWireStrokeIds.push(wid);
+      }
+
+      if (wireSegStrokes.length > 0) {
+        consumedStrokeIds.add(ws.id);
+        replacements.set(ws.id, wireSegStrokes);
+      }
+    }
+  }
+
+  if (consumedStrokeIds.size === 0) {
+    return {
+      changed: false,
+      strokes,
+      removedStrokeIds: [],
+      addedCompStrokeIds: [],
+      addedWireStrokeIds: [],
+      removedTextIds: [],
+    };
+  }
+
+  const nextStrokes: StrokeObject[] = [];
+  for (const s of strokes) {
+    const rep = replacements.get(s.id);
+    if (rep) {
+      nextStrokes.push(...rep);
+      continue;
+    }
+    if (consumedStrokeIds.has(s.id)) continue;
+    nextStrokes.push(s);
+  }
+
+  return {
+    changed: true,
+    strokes: nextStrokes,
+    removedStrokeIds: Array.from(consumedStrokeIds),
+    addedCompStrokeIds,
+    addedWireStrokeIds,
+    removedTextIds: Array.from(consumedTextIds),
+  };
+}
+
+export function autoAlignAndConnectCircuit(
+  strokes: StrokeObject[],
+  options?: { recognizeHandDrawn?: boolean }
+): StrokeObject[] {
   let currentStrokes = strokes.map((s) => ({
     ...s,
     points: s.points.map((p) => ({ ...p })),
   }));
+
+  // 0a. Only run hand-drawn symbol guessing when explicitly requested by Simulation -> Circuits!
+  if (options?.recognizeHandDrawn === true) {
+    const handRec = recognizeHandDrawnCircuitSymbols(currentStrokes, [], {
+      requireCircuitContext: false,
+      explicitCircuitIntent: true,
+      convertFreehandWires: true,
+    });
+    if (handRec.changed) {
+      currentStrokes = handRec.strokes;
+    }
+  }
 
   // 0. Strip any legacy M-shaped bulb filament strokes ('-bulb-fil' or 5-point bulb filament),
   //    upgrade legacy 4-point diamond fans, and auto-repair any oversized fan/resistor from older conversions!
@@ -6111,6 +8842,45 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
         }
         return s;
       });
+    } else if (comp.kind === 'ammeter' || comp.kind === 'voltmeter') {
+      const rC = comp.circleR ?? Math.max(15, Math.min(comp.w, comp.h) * 0.33);
+      const ccx = comp.circleCx ?? comp.cx;
+      const ccy = comp.circleCy ?? comp.cy;
+      const shaftSt = currentStrokes.find(
+        (s) =>
+          comp.strokeIds.includes(s.id) &&
+          (s.shapeType === 'ammeter-needle' || s.shapeType === 'voltmeter-needle') &&
+          s.points.length === 2
+      );
+      if (shaftSt && distance(shaftSt.points[0], shaftSt.points[1]) < rC * 2.22) {
+        const boxW = Math.max(15, rC) / 0.33;
+        const boxH = boxW;
+        const boxX = ccx - boxW * 0.42;
+        const boxY = ccy - boxH * 0.58;
+        const upgradedMeter = createPhysicsStencilStrokes(
+          comp.kind,
+          boxX,
+          boxY,
+          boxW,
+          boxH,
+          comp.color,
+          comp.layerId
+        );
+        const removeSet = new Set(comp.strokeIds);
+        const next: StrokeObject[] = [];
+        let inserted = false;
+        for (const s of currentStrokes) {
+          if (removeSet.has(s.id)) {
+            if (!inserted) {
+              next.push(...upgradedMeter);
+              inserted = true;
+            }
+            continue;
+          }
+          next.push(s);
+        }
+        currentStrokes = next;
+      }
     }
   }
 
@@ -6122,7 +8892,9 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
         s.shapeType === 'battery' ||
         s.shapeType === 'voltage-source' ||
         s.shapeType === 'resistor' ||
-        s.shapeType === 'fan'
+        s.shapeType === 'fan' ||
+        s.shapeType === 'ammeter' ||
+        s.shapeType === 'voltmeter'
     )
     .map((s) => s.id);
   if (allCompStrokeIds.length > 0) {
@@ -6235,55 +9007,101 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     }
   }
 
-  // 3. Vertically align each circuit component to its nearest horizontal wire row ONLY if visibly close
+  // 3. Vertically align each horizontal-wired circuit component to its nearest horizontal wire row ONLY if visibly close
+  //    (chaining stepped 2-terminal bulb heights left-to-right so any meter/component after a bulb centers dead-on the wire!),
+  //    and horizontally align vertical-wired meters to their nearest vertical column!
   const maxRowAlignDist = repairedOversizedComp ? 95 : 42;
+  const compsByRowIdx = new Map<number, typeof initialComps>();
   for (const comp of initialComps) {
-    const termY = comp.leftTerm.y;
-    let bestRow: (typeof hRows)[number] | null = null;
+    if (comp.orientation === 'v') {
+      let bestCol: (typeof vCols)[number] | null = null;
+      let bestColDist = maxRowAlignDist;
+      const refX = comp.circleCx ?? comp.cx;
+      for (const col of vCols) {
+        const d = Math.abs(col.xCol - refX);
+        if (d <= bestColDist) {
+          bestColDist = d;
+          bestCol = col;
+        }
+      }
+      if (bestCol) {
+        const dx = bestCol.xCol - refX;
+        if (Math.abs(dx) >= 0.5) {
+          const idSet = new Set(comp.strokeIds);
+          currentStrokes = currentStrokes.map((s) =>
+            !idSet.has(s.id)
+              ? s
+              : {
+                  ...s,
+                  points: s.points.map((p) => ({
+                    ...p,
+                    x: p.x + dx,
+                    cx: p.cx !== undefined ? p.cx + dx : undefined,
+                  })),
+                }
+          );
+        }
+      }
+      continue;
+    }
+    const termY =
+      comp.kind === 'ammeter' || comp.kind === 'voltmeter'
+        ? (comp.circleCy ?? comp.cy)
+        : comp.leftTerm.y;
+    let bestRowIdx = -1;
     let bestDist = maxRowAlignDist;
-    for (const row of hRows) {
+    for (let rIdx = 0; rIdx < hRows.length; rIdx++) {
+      const row = hRows[rIdx];
       const d =
         comp.kind === 'bulb'
           ? Math.min(Math.abs(row.yRow - comp.leftTerm.y), Math.abs(row.yRow - comp.rightTerm.y))
           : Math.abs(row.yRow - termY);
       if (d <= bestDist) {
         bestDist = d;
-        bestRow = row;
+        bestRowIdx = rIdx;
       }
     }
-    if (bestRow) {
-      let dy = bestRow.yRow - termY;
-      if (comp.kind === 'bulb') {
-        const leftWires = bestRow.wireIndices
-          .map((wi) => wireRefs[wi])
-          .filter((w) => w.avgX < comp.cx - 4);
-        const rightWires = bestRow.wireIndices
-          .map((wi) => wireRefs[wi])
-          .filter((w) => w.avgX > comp.cx + 4);
-        if (leftWires.length > 0 && rightWires.length > 0) {
-          const avgLeftY =
-            leftWires.reduce((acc, w) => acc + w.avgY, 0) / leftWires.length;
-          const avgRightY =
-            rightWires.reduce((acc, w) => acc + w.avgY, 0) / rightWires.length;
-          // If the left wire is already near leftTerm.y and the right wire is near rightTerm.y (stepped bulb wires),
-          // align strictly to the left wire so the bulb never shifts down by (rightTerm.y - leftTerm.y)/2!
-          dy = avgLeftY - comp.leftTerm.y;
-          if (
-            Math.abs(avgLeftY - comp.leftTerm.y) <= 4 &&
-            Math.abs(avgRightY - comp.rightTerm.y) <= 4
-          ) {
-            dy = 0;
-          }
-        } else if (leftWires.length > 0) {
-          const avgLeftY =
-            leftWires.reduce((acc, w) => acc + w.avgY, 0) / leftWires.length;
-          dy = avgLeftY - comp.leftTerm.y;
-        } else if (rightWires.length > 0) {
-          const avgRightY =
-            rightWires.reduce((acc, w) => acc + w.avgY, 0) / rightWires.length;
-          dy = avgRightY - comp.rightTerm.y;
+    if (bestRowIdx >= 0) {
+      const list = compsByRowIdx.get(bestRowIdx) || [];
+      list.push(comp);
+      compsByRowIdx.set(bestRowIdx, list);
+    }
+  }
+
+  for (const [rIdx, list] of compsByRowIdx.entries()) {
+    const row = hRows[rIdx];
+    list.sort((a, b) => a.cx - b.cx);
+    let curWireY = row.yRow;
+    const firstBulb = list.find((c) => c.kind === 'bulb');
+    if (firstBulb && list[0].key === firstBulb.key) {
+      const leftWires = row.wireIndices
+        .map((wi) => wireRefs[wi])
+        .filter((w) => w.avgX < firstBulb.cx - 4);
+      const rightWires = row.wireIndices
+        .map((wi) => wireRefs[wi])
+        .filter((w) => w.avgX > firstBulb.cx + 4);
+      if (leftWires.length > 0 && rightWires.length > 0) {
+        const avgLeftY = leftWires.reduce((acc, w) => acc + w.avgY, 0) / leftWires.length;
+        const avgRightY = rightWires.reduce((acc, w) => acc + w.avgY, 0) / rightWires.length;
+        if (
+          Math.abs(avgLeftY - firstBulb.leftTerm.y) <= 4 &&
+          Math.abs(avgRightY - firstBulb.rightTerm.y) <= 4
+        ) {
+          curWireY = Math.round(firstBulb.leftTerm.y);
+          row.yRow = curWireY;
+        } else {
+          curWireY = Math.round(avgLeftY);
+          row.yRow = curWireY;
         }
       }
+    }
+
+    for (const comp of list) {
+      const refY =
+        comp.kind === 'ammeter' || comp.kind === 'voltmeter'
+          ? (comp.circleCy ?? comp.cy)
+          : comp.leftTerm.y;
+      const dy = Math.round(curWireY) - refY;
       if (Math.abs(dy) >= 0.5) {
         const idSet = new Set(comp.strokeIds);
         currentStrokes = currentStrokes.map((s) => {
@@ -6301,6 +9119,7 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
           };
         });
       }
+      curWireY += comp.rightTerm.y - comp.leftTerm.y;
     }
   }
 
@@ -6312,10 +9131,289 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     }
   }
 
-  // Recompute component terminal positions after vertical alignment
-  const alignedComps = getCircuitComponentsWithTerminals(currentStrokes);
   const CLOSE_SNAP_TOL = 44;
   const TERM_SNAP_TOL = 56;
+
+  // 3b. Symmetrically center Ammeters & Voltmeters along their horizontal or vertical wire spans
+  //     so the circle sits dead-center between its bounding junctions/components!
+  const preSymComps = getCircuitComponentsWithTerminals(currentStrokes);
+  for (let rIdx = 0; rIdx < hRows.length; rIdx++) {
+    const row = hRows[rIdx];
+    const yRow = row.yRow;
+    const rowComps = preSymComps
+      .filter(
+        (c) =>
+          c.orientation !== 'v' &&
+          (Math.abs(c.leftTerm.y - yRow) <= 44 || Math.abs(c.rightTerm.y - yRow) <= 44)
+      )
+      .sort((a, b) => a.cx - b.cx);
+    if (!rowComps.some((c) => c.kind === 'ammeter' || c.kind === 'voltmeter')) continue;
+
+    const activeRowCols = vCols
+      .filter((col) =>
+        col.wireIndices.some((cwi) => {
+          const cw = wireRefs[cwi];
+          const minY = Math.min(cw.y1, cw.y2) - CLOSE_SNAP_TOL;
+          const maxY = Math.max(cw.y1, cw.y2) + CLOSE_SNAP_TOL;
+          return yRow >= minY && yRow <= maxY;
+        })
+      )
+      .sort((a, b) => a.xCol - b.xCol);
+
+    let minRowWireX = Infinity;
+    let maxRowWireX = -Infinity;
+    for (const wi of row.wireIndices) {
+      const w = wireRefs[wi];
+      minRowWireX = Math.min(minRowWireX, w.x1, w.x2);
+      maxRowWireX = Math.max(maxRowWireX, w.x1, w.x2);
+    }
+
+    let idx = 0;
+    while (idx < rowComps.length) {
+      if (rowComps[idx].kind !== 'ammeter' && rowComps[idx].kind !== 'voltmeter') {
+        idx++;
+        continue;
+      }
+      const startIdx = idx;
+      while (
+        idx + 1 < rowComps.length &&
+        (rowComps[idx + 1].kind === 'ammeter' || rowComps[idx + 1].kind === 'voltmeter')
+      ) {
+        idx++;
+      }
+      const endIdx = idx;
+
+      const prevCompRight = startIdx > 0 ? rowComps[startIdx - 1].rightTerm.x : undefined;
+      const nextCompLeft =
+        endIdx < rowComps.length - 1 ? rowComps[endIdx + 1].leftTerm.x : undefined;
+
+      // Also respect any T-junction vertical column (e.g. parallel Voltmeter riser) between neighbors!
+      let boundL = prevCompRight;
+      for (const col of activeRowCols) {
+        if (
+          col.xCol <= rowComps[startIdx].leftTerm.x + 6 &&
+          (prevCompRight === undefined || col.xCol >= prevCompRight - 4)
+        ) {
+          boundL = boundL !== undefined ? Math.max(boundL, col.xCol) : col.xCol;
+        }
+      }
+      if (boundL === undefined && Number.isFinite(minRowWireX) && minRowWireX < rowComps[startIdx].leftTerm.x - 8) {
+        boundL = minRowWireX;
+      }
+
+      let boundR = nextCompLeft;
+      for (let ci = activeRowCols.length - 1; ci >= 0; ci--) {
+        const col = activeRowCols[ci];
+        if (
+          col.xCol >= rowComps[endIdx].rightTerm.x - 6 &&
+          (nextCompLeft === undefined || col.xCol <= nextCompLeft + 4)
+        ) {
+          boundR = boundR !== undefined ? Math.min(boundR, col.xCol) : col.xCol;
+        }
+      }
+      if (boundR === undefined && Number.isFinite(maxRowWireX) && maxRowWireX > rowComps[endIdx].rightTerm.x + 8) {
+        boundR = maxRowWireX;
+      }
+
+      if (boundL !== undefined && boundR !== undefined) {
+        const radii: number[] = [];
+        let sumDiam = 0;
+        for (let j = startIdx; j <= endIdx; j++) {
+          const rj =
+            rowComps[j].circleR ??
+            Math.max(15, (rowComps[j].rightTerm.x - rowComps[j].leftTerm.x) / 2);
+          radii.push(rj);
+          sumDiam += rj * 2;
+        }
+        const count = endIdx - startIdx + 1;
+        const freeW = boundR - boundL - sumDiam;
+        if (freeW >= (count + 1) * 10) {
+          const equalGap = freeW / (count + 1);
+          let cursorX = boundL;
+          for (let j = startIdx; j <= endIdx; j++) {
+            const mc = rowComps[j];
+            const rj = radii[j - startIdx];
+            const oldCx = mc.circleCx ?? mc.cx;
+            const oldLeftX = oldCx - rj;
+            const oldRightX = oldCx + rj;
+            const targetCx = Math.round(cursorX + equalGap + rj);
+            cursorX += equalGap + rj * 2;
+            const dx = targetCx - oldCx;
+            if (Math.abs(dx) >= 0.5) {
+              const idSet = new Set(mc.strokeIds);
+              currentStrokes = currentStrokes.map((s) =>
+                !idSet.has(s.id)
+                  ? s
+                  : {
+                      ...s,
+                      points: s.points.map((p) => ({
+                        ...p,
+                        x: p.x + dx,
+                        cx: p.cx !== undefined ? p.cx + dx : undefined,
+                      })),
+                    }
+              );
+              const newLeftX = targetCx - rj;
+              const newRightX = targetCx + rj;
+              for (const wi of row.wireIndices) {
+                const w = wireRefs[wi];
+                const minW = Math.min(w.x1, w.x2);
+                const maxW = Math.max(w.x1, w.x2);
+                if (maxW <= oldCx + 2 && Math.abs(maxW - oldLeftX) <= TERM_SNAP_TOL) {
+                  if (w.x1 >= w.x2) w.x1 = newLeftX;
+                  else w.x2 = newLeftX;
+                  w.avgX = (w.x1 + w.x2) / 2;
+                } else if (minW >= oldCx - 2 && Math.abs(minW - oldRightX) <= TERM_SNAP_TOL) {
+                  if (w.x1 <= w.x2) w.x1 = newRightX;
+                  else w.x2 = newRightX;
+                  w.avgX = (w.x1 + w.x2) / 2;
+                }
+              }
+            }
+          }
+        }
+      }
+      idx++;
+    }
+  }
+
+  for (let cIdx = 0; cIdx < vCols.length; cIdx++) {
+    const col = vCols[cIdx];
+    const xCol = col.xCol;
+    const colComps = preSymComps
+      .filter((c) => c.orientation === 'v' && Math.abs((c.circleCx ?? c.cx) - xCol) <= 38)
+      .sort((a, b) => a.cy - b.cy);
+    if (!colComps.some((c) => c.kind === 'ammeter' || c.kind === 'voltmeter')) continue;
+
+    const activeColRows = hRows
+      .filter((row) =>
+        row.wireIndices.some((rwi) => {
+          const rw = wireRefs[rwi];
+          const minX = Math.min(rw.x1, rw.x2) - CLOSE_SNAP_TOL;
+          const maxX = Math.max(rw.x1, rw.x2) + CLOSE_SNAP_TOL;
+          return xCol >= minX && xCol <= maxX;
+        })
+      )
+      .sort((a, b) => a.yRow - b.yRow);
+
+    let minColWireY = Infinity;
+    let maxColWireY = -Infinity;
+    for (const wi of col.wireIndices) {
+      const w = wireRefs[wi];
+      minColWireY = Math.min(minColWireY, w.y1, w.y2);
+      maxColWireY = Math.max(maxColWireY, w.y1, w.y2);
+    }
+
+    let idx = 0;
+    while (idx < colComps.length) {
+      if (colComps[idx].kind !== 'ammeter' && colComps[idx].kind !== 'voltmeter') {
+        idx++;
+        continue;
+      }
+      const startIdx = idx;
+      while (
+        idx + 1 < colComps.length &&
+        (colComps[idx + 1].kind === 'ammeter' || colComps[idx + 1].kind === 'voltmeter')
+      ) {
+        idx++;
+      }
+      const endIdx = idx;
+
+      const prevCompBot = startIdx > 0 ? colComps[startIdx - 1].rightTerm.y : undefined;
+      const nextCompTop =
+        endIdx < colComps.length - 1 ? colComps[endIdx + 1].leftTerm.y : undefined;
+
+      let boundT = prevCompBot;
+      for (const row of activeColRows) {
+        if (
+          row.yRow <= colComps[startIdx].leftTerm.y + 6 &&
+          (prevCompBot === undefined || row.yRow >= prevCompBot - 4)
+        ) {
+          boundT = boundT !== undefined ? Math.max(boundT, row.yRow) : row.yRow;
+        }
+      }
+      if (boundT === undefined && Number.isFinite(minColWireY) && minColWireY < colComps[startIdx].leftTerm.y - 8) {
+        boundT = minColWireY;
+      }
+
+      let boundB = nextCompTop;
+      for (let ri = activeColRows.length - 1; ri >= 0; ri--) {
+        const row = activeColRows[ri];
+        if (
+          row.yRow >= colComps[endIdx].rightTerm.y - 6 &&
+          (nextCompTop === undefined || row.yRow <= nextCompTop + 4)
+        ) {
+          boundB = boundB !== undefined ? Math.min(boundB, row.yRow) : row.yRow;
+        }
+      }
+      if (boundB === undefined && Number.isFinite(maxColWireY) && maxColWireY > colComps[endIdx].rightTerm.y + 8) {
+        boundB = maxColWireY;
+      }
+
+      if (boundT !== undefined && boundB !== undefined) {
+        const radii: number[] = [];
+        let sumDiam = 0;
+        for (let j = startIdx; j <= endIdx; j++) {
+          const rj =
+            colComps[j].circleR ??
+            Math.max(15, (colComps[j].rightTerm.y - colComps[j].leftTerm.y) / 2);
+          radii.push(rj);
+          sumDiam += rj * 2;
+        }
+        const count = endIdx - startIdx + 1;
+        const freeH = boundB - boundT - sumDiam;
+        if (freeH >= (count + 1) * 10) {
+          const equalGap = freeH / (count + 1);
+          let cursorY = boundT;
+          for (let j = startIdx; j <= endIdx; j++) {
+            const mc = colComps[j];
+            const rj = radii[j - startIdx];
+            const oldCy = mc.circleCy ?? mc.cy;
+            const oldTopY = oldCy - rj;
+            const oldBotY = oldCy + rj;
+            const targetCy = Math.round(cursorY + equalGap + rj);
+            cursorY += equalGap + rj * 2;
+            const dy = targetCy - oldCy;
+            if (Math.abs(dy) >= 0.5) {
+              const idSet = new Set(mc.strokeIds);
+              currentStrokes = currentStrokes.map((s) =>
+                !idSet.has(s.id)
+                  ? s
+                  : {
+                      ...s,
+                      points: s.points.map((p) => ({
+                        ...p,
+                        y: p.y + dy,
+                        cy: p.cy !== undefined ? p.cy + dy : undefined,
+                      })),
+                    }
+              );
+              const newTopY = targetCy - rj;
+              const newBotY = targetCy + rj;
+              for (const wi of col.wireIndices) {
+                const w = wireRefs[wi];
+                const minW = Math.min(w.y1, w.y2);
+                const maxW = Math.max(w.y1, w.y2);
+                if (maxW <= oldCy + 2 && Math.abs(maxW - oldTopY) <= TERM_SNAP_TOL) {
+                  if (w.y1 >= w.y2) w.y1 = newTopY;
+                  else w.y2 = newTopY;
+                  w.avgY = (w.y1 + w.y2) / 2;
+                } else if (minW >= oldCy - 2 && Math.abs(minW - oldBotY) <= TERM_SNAP_TOL) {
+                  if (w.y1 <= w.y2) w.y1 = newBotY;
+                  else w.y2 = newBotY;
+                  w.avgY = (w.y1 + w.y2) / 2;
+                }
+              }
+            }
+          }
+        }
+      }
+      idx++;
+    }
+  }
+
+  // Recompute component terminal positions after vertical & symmetric alignment
+  const alignedComps = getCircuitComponentsWithTerminals(currentStrokes);
 
   // 4. Snap horizontal wire endpoints when visibly close to a component terminal or vertical wire,
   //    never snap/merge across a component body, and merge collinear horizontal segments!
@@ -6355,18 +9453,27 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
     const row = hRows[rIdx];
     const yRow = row.yRow;
     const rowComps = alignedComps
-      .filter((c) => Math.abs(c.leftTerm.y - yRow) <= 36 || Math.abs(c.rightTerm.y - yRow) <= 36)
+      .filter(
+        (c) =>
+          c.orientation !== 'v' &&
+          (Math.abs(c.leftTerm.y - yRow) <= 44 || Math.abs(c.rightTerm.y - yRow) <= 44)
+      )
       .sort((a, b) => a.cx - b.cx);
 
-    // Helper: preserve stepped height difference (υψομετρική διαφορά) for horizontal wire segments
-    // connected to the left vs right of a 2-terminal bulb on this row!
+    // Helper: preserve stepped height difference (υψομετρική διαφορά) across every component on this row
+    // so horizontal wires always enter & exit meters symmetrically at the exact middle of the circle!
     const getRowSegY = (segXL: number, segXR: number): number => {
-      const rowBulb = rowComps.find((c) => c.kind === 'bulb');
-      if (!rowBulb) return yRow;
+      if (rowComps.length === 0) return yRow;
       const segMidX = (segXL + segXR) / 2;
-      return segMidX < rowBulb.cx
-        ? Math.round(rowBulb.leftTerm.y)
-        : Math.round(rowBulb.rightTerm.y);
+      let leftNeighbor: (typeof rowComps)[number] | null = null;
+      let rightNeighbor: (typeof rowComps)[number] | null = null;
+      for (const rc of rowComps) {
+        if (rc.cx <= segMidX) leftNeighbor = rc;
+        else if (!rightNeighbor) rightNeighbor = rc;
+      }
+      if (leftNeighbor) return Math.round(leftNeighbor.rightTerm.y);
+      if (rightNeighbor) return Math.round(rightNeighbor.leftTerm.y);
+      return yRow;
     };
 
     // Identify vertical columns that connect to this row
@@ -6651,6 +9758,9 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
   for (let cIdx = 0; cIdx < vCols.length; cIdx++) {
     const col = vCols[cIdx];
     const xCol = col.xCol;
+    const colComps = alignedComps
+      .filter((c) => c.orientation === 'v' && Math.abs(c.cx - xCol) <= 36)
+      .sort((a, b) => a.cy - b.cy);
     const vIntervals: { yT: number; yB: number; stroke: StrokeObject }[] = [];
 
     for (const wi of col.wireIndices) {
@@ -6669,9 +9779,37 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
           }
         }
       }
-      if (yB - yT >= 6) {
-        vIntervals.push({ yT, yB, stroke: w.stroke });
+      if (yB - yT < 6) continue;
+      let pieces = [{ yT, yB, stroke: w.stroke }];
+      for (const vc of colComps) {
+        const nextPieces: typeof pieces = [];
+        for (const p of pieces) {
+          if (p.yT < vc.leftTerm.y - 2 && p.yB > vc.rightTerm.y + 2) {
+            nextPieces.push({ yT: p.yT, yB: vc.leftTerm.y, stroke: p.stroke });
+            nextPieces.push({ yT: vc.rightTerm.y, yB: p.yB, stroke: p.stroke });
+          } else {
+            let pyT = p.yT;
+            let pyB = p.yB;
+            if (
+              Math.abs(pyB - vc.leftTerm.y) <= TERM_SNAP_TOL &&
+              pyT < vc.leftTerm.y - 4
+            ) {
+              pyB = vc.leftTerm.y;
+            }
+            if (
+              Math.abs(pyT - vc.rightTerm.y) <= TERM_SNAP_TOL &&
+              pyB > vc.rightTerm.y + 4
+            ) {
+              pyT = vc.rightTerm.y;
+            }
+            if (!(pyT >= vc.leftTerm.y - 4 && pyB <= vc.rightTerm.y + 4) && pyB - pyT >= 6) {
+              nextPieces.push({ yT: pyT, yB: pyB, stroke: p.stroke });
+            }
+          }
+        }
+        pieces = nextPieces;
       }
+      vIntervals.push(...pieces);
     }
 
     vIntervals.sort((a, b) => a.yT - b.yT);
@@ -6681,7 +9819,12 @@ export function autoAlignAndConnectCircuit(strokes: StrokeObject[]): StrokeObjec
         mergedV.push({ ...seg });
       } else {
         const prev = mergedV[mergedV.length - 1];
-        if (seg.yT - prev.yB <= 38) {
+        const vGapMin = Math.min(prev.yB, seg.yT) - 6;
+        const vGapMax = Math.max(prev.yB, seg.yT) + 6;
+        const vertCompBetween = colComps.some(
+          (vc) => vc.cy >= vGapMin && vc.cy <= vGapMax
+        );
+        if (seg.yT - prev.yB <= 38 && !vertCompBetween) {
           prev.yB = Math.max(prev.yB, seg.yB);
         } else {
           mergedV.push({ ...seg });
@@ -7326,6 +10469,23 @@ export function analyzeCircuitForSimulation(
       const c = cn.comp;
       const dL = distanceToComponentSide(pt, c, 'L');
       const dR = distanceToComponentSide(pt, c, 'R');
+      if (c.orientation === 'v') {
+        const rHalf = (c.circleR ?? c.h * 0.35) * 0.5;
+        if (dL <= dR && dL <= bestTermDist && otherEnd.y <= c.cy + rHalf) {
+          bestTermDist = dL;
+          bestTermNode = cn.u;
+        } else if (dR < dL && dR <= bestTermDist && otherEnd.y >= c.cy - rHalf) {
+          bestTermDist = dR;
+          bestTermNode = cn.v;
+        } else if (dL <= bestTermDist && dL <= dR) {
+          bestTermDist = dL;
+          bestTermNode = cn.u;
+        } else if (dR <= bestTermDist && dR < dL) {
+          bestTermDist = dR;
+          bestTermNode = cn.v;
+        }
+        continue;
+      }
       if (dL <= dR && dL <= bestTermDist && otherEnd.x <= c.cx + c.w * 0.25) {
         bestTermDist = dL;
         bestTermNode = cn.u;
@@ -7402,11 +10562,16 @@ export function analyzeCircuitForSimulation(
   }
 
   for (const cn of compNodes) {
-    if (cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source') {
+    if (
+      cn.comp.kind === 'battery' ||
+      cn.comp.kind === 'voltage-source' ||
+      cn.comp.kind === 'voltmeter'
+    ) {
+      // Sources are handled separately, and ideal Voltmeters have infinite internal resistance (zero loop current through a voltmeter)!
       continue;
     }
-    if (cn.comp.kind === 'switch') {
-      if (cn.comp.switchClosed === false) continue;
+    if (cn.comp.kind === 'switch' || cn.comp.kind === 'ammeter') {
+      if (cn.comp.kind === 'switch' && cn.comp.switchClosed === false) continue;
       adj[cn.u].push({
         to: cn.v,
         type: 'closed-switch',
@@ -7570,13 +10735,18 @@ export function analyzeCircuitForSimulation(
     for (const cn of compNodes) {
       if (!compInLoop.has(cn.comp.key)) continue;
       const dV = V[cn.u] - V[cn.v];
-      const rComp = cn.comp.kind === 'switch' ? 0.02 : 1.0;
+      const rComp = cn.comp.kind === 'switch' || cn.comp.kind === 'ammeter' ? 0.02 : 1.0;
       const physCurrent = dV / rComp;
       const flowMag =
         Math.abs(physCurrent) > 1e-5
           ? Math.max(0.75, Math.min(1.6, Math.abs(physCurrent) * 2.2 * voltageBoost))
           : 0.75;
-      const pwr = Math.max(0.5, Math.min(1.8, Math.abs(dV) * 1.15 * voltageBoost));
+      const pwr =
+        cn.comp.kind === 'ammeter'
+          ? Math.abs(physCurrent) > 1e-4
+            ? Math.max(0.55, Math.min(1.8, Math.abs(physCurrent) * 1.8 * voltageBoost))
+            : 0
+          : Math.max(0.5, Math.min(1.8, Math.abs(dV) * 1.15 * voltageBoost));
       compPowerMap.set(cn.comp.key, pwr);
       compSignedFlowMap.set(cn.comp.key, (dV >= 0 ? 1 : -1) * flowMag);
     }
@@ -8026,6 +11196,15 @@ export function analyzeCircuitForSimulation(
               Math.abs(yA - res.cy) <= 24
           );
           if (crossesResistor) continue;
+          const crossesMeter = comps.some(
+            (mc) =>
+              (mc.kind === 'ammeter' || mc.kind === 'voltmeter') &&
+              mc.orientation !== 'v' &&
+              Math.min(minAx, minBx) < mc.cx - 4 &&
+              Math.max(maxAx, maxBx) > mc.cx + 4 &&
+              Math.abs(yA - mc.cy) <= (mc.circleR ?? 24)
+          );
+          if (crossesMeter) continue;
           const gap = Math.max(minAx, minBx) - Math.min(maxAx, maxBx);
           if (gap <= 14) {
             const newMinX = Math.min(minAx, minBx);
@@ -8054,6 +11233,107 @@ export function analyzeCircuitForSimulation(
     }
   }
 
+  // Solve general nodal potentials (including open-circuit islands connected to Source + or -)
+  // so Voltmeters accurately detect voltage across a source or open switch even when zero current flows!
+  const voltmeterReadingMap = new Map<string, number>();
+  if (hasSource && comps.some((c) => c.kind === 'voltmeter')) {
+    const primarySourceNode = compNodes.find(
+      (cn) => cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source'
+    )!;
+    const passAdj: { to: number; g: number }[][] = Array.from(
+      { length: nodeCenters.length },
+      () => []
+    );
+    for (const wn of wireNodes) {
+      if (wn.u === wn.v) continue;
+      if (!circuitSwitchClosed && autoSwitch && wn.idx === autoSwitch.wireIdx) continue;
+      passAdj[wn.u].push({ to: wn.v, g: 4.0 });
+      passAdj[wn.v].push({ to: wn.u, g: 4.0 });
+    }
+    for (const cn of compNodes) {
+      const k = cn.comp.kind;
+      if (k === 'voltmeter' || k === 'battery' || k === 'voltage-source') continue;
+      if (k === 'switch' && cn.comp.switchClosed === false) continue;
+      const g = k === 'switch' || k === 'ammeter' ? 50.0 : 1.0;
+      passAdj[cn.u].push({ to: cn.v, g });
+      passAdj[cn.v].push({ to: cn.u, g });
+    }
+    if (sources.length > 1) {
+      for (let i = 1; i < compNodes.length; i++) {
+        const cn = compNodes[i];
+        if (cn.comp.kind === 'battery' || cn.comp.kind === 'voltage-source') {
+          passAdj[cn.u].push({ to: cn.v, g: 50.0 });
+          passAdj[cn.v].push({ to: cn.u, g: 50.0 });
+        }
+      }
+    }
+
+    const bfsReach = (start: number): Uint8Array => {
+      const seen = new Uint8Array(nodeCenters.length);
+      const q: number[] = [start];
+      seen[start] = 1;
+      for (let qi = 0; qi < q.length; qi++) {
+        const cur = q[qi];
+        for (const e of passAdj[cur]) {
+          if (!seen[e.to]) {
+            seen[e.to] = 1;
+            q.push(e.to);
+          }
+        }
+      }
+      return seen;
+    };
+
+    const reachPlus = bfsReach(primarySourceNode.u);
+    const reachMinus = bfsReach(primarySourceNode.v);
+    const Vgen = new Float64Array(nodeCenters.length).fill(NaN);
+    const fixedGen = new Uint8Array(nodeCenters.length);
+
+    for (let i = 0; i < nodeCenters.length; i++) {
+      if (reachPlus[i] && !reachMinus[i]) {
+        Vgen[i] = 1.0;
+        fixedGen[i] = 1;
+      } else if (reachMinus[i] && !reachPlus[i]) {
+        Vgen[i] = 0.0;
+        fixedGen[i] = 1;
+      } else if (reachPlus[i] && reachMinus[i]) {
+        Vgen[i] = 0.5;
+      }
+    }
+    Vgen[primarySourceNode.u] = 1.0;
+    fixedGen[primarySourceNode.u] = 1;
+    Vgen[primarySourceNode.v] = 0.0;
+    fixedGen[primarySourceNode.v] = 1;
+
+    for (let iter = 0; iter < 200; iter++) {
+      for (let u = 0; u < nodeCenters.length; u++) {
+        if (fixedGen[u] || !Number.isFinite(Vgen[u])) continue;
+        let sumGV = 0;
+        let sumG = 0;
+        for (const e of passAdj[u]) {
+          if (!Number.isFinite(Vgen[e.to])) continue;
+          sumGV += e.g * Vgen[e.to];
+          sumG += e.g;
+        }
+        if (sumG > 0) Vgen[u] = sumGV / sumG;
+      }
+    }
+
+    const vBoost = Math.min(2.2, 1 + (sources.length - 1) * 0.45);
+    for (const cn of compNodes) {
+      if (cn.comp.kind !== 'voltmeter') continue;
+      const vu = Vgen[cn.u];
+      const vv = Vgen[cn.v];
+      const diff = Number.isFinite(vu) && Number.isFinite(vv) ? Math.abs(vu - vv) : 0;
+      if (diff > 0.025) {
+        voltmeterReadingMap.set(
+          cn.comp.key,
+          Math.max(0.55, Math.min(1.8, diff * 1.15 * vBoost))
+        );
+      }
+    }
+  }
+
   const simulatedComps: SimulatedComponentState[] = comps.map((c) => {
     if (c.kind === 'battery' || c.kind === 'voltage-source') {
       return {
@@ -8067,6 +11347,14 @@ export function analyzeCircuitForSimulation(
         comp: c,
         active: Boolean(circuitSwitchClosed && c.switchClosed && anyClosedLoop),
         powerFactor: circuitSwitchClosed && c.switchClosed && anyClosedLoop ? 1 : 0,
+      };
+    }
+    if (c.kind === 'voltmeter') {
+      const vmPwr = voltmeterReadingMap.get(c.key) || 0;
+      return {
+        comp: c,
+        active: vmPwr > 0.01,
+        powerFactor: vmPwr,
       };
     }
     const pwr = circuitSwitchClosed ? compPowerMap.get(c.key) || 0 : 0;
