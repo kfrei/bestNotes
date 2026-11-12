@@ -1783,6 +1783,7 @@ export default function App() {
           showToolSubBar?: boolean;
           textFontSize?: number;
           textBold?: boolean;
+          textShadow?: boolean;
           textFontFamily?: TextFontStyle;
           textAlign?: 'left' | 'center' | 'right';
           activeLayerId?: string;
@@ -3135,6 +3136,7 @@ export default function App() {
     typeof initialSession?.textFontSize === 'number' ? initialSession.textFontSize : 22
   );
   const [textBold, setTextBold] = useState<boolean>(() => Boolean(initialSession?.textBold));
+  const [textShadow, setTextShadow] = useState<boolean>(() => Boolean((initialSession as any)?.textShadow));
   const [textFontFamily, setTextFontFamily] = useState<TextFontStyle>(
     () => initialSession?.textFontFamily || 'calligraphic'
   );
@@ -4032,6 +4034,7 @@ export default function App() {
       showToolSubBar,
       textFontSize,
       textBold,
+      textShadow,
       textFontFamily,
       textAlign,
       activeLayerId,
@@ -4084,6 +4087,7 @@ export default function App() {
       showToolSubBar,
       textFontSize,
       textBold,
+      textShadow,
       textFontFamily,
       textAlign,
       activeLayerId,
@@ -15275,6 +15279,14 @@ export default function App() {
   const getDefaultTextLineHeight = (fontFamily?: TextFontStyle): number =>
     fontFamily === 'marker' ? 1.44 : 1.18;
 
+  const getTextShadowCss = (hasShadow?: boolean, fontSize: number = 20): string | undefined => {
+    if (!hasShadow) return undefined;
+    const x = Math.max(0.7, fontSize * 0.035).toFixed(1);
+    const y = Math.max(1.1, fontSize * 0.055).toFixed(1);
+    const blur = Math.max(2.0, fontSize * 0.08).toFixed(1);
+    return `${x}px ${y}px ${blur}px rgba(71, 85, 105, 0.38)`;
+  };
+
   const getTextFontCss = (fontFamily?: TextFontStyle, isBold?: boolean): React.CSSProperties => {
     const boldActive = Boolean(isBold) || fontFamily === 'calligraphic-bold';
     switch (fontFamily) {
@@ -15499,6 +15511,7 @@ export default function App() {
           fontWeight={isBoldActive ? 700 : 500}
           stroke={isBoldActive ? tx.color : undefined}
           strokeWidth={isBoldActive ? 0.45 : undefined}
+          filter={tx.shadow ? 'drop-shadow(0.8px 1.2px 1.8px rgba(71,85,105,0.35))' : undefined}
           paintOrder="stroke fill"
           textAnchor={textAnchor}
         >
@@ -15606,40 +15619,47 @@ export default function App() {
       end: number
     ): {
       bold: boolean;
+      shadow: boolean;
       fontSize: number;
       color: string;
       fontFamily: TextFontStyle;
     } => {
       const baseBold = Boolean(txt.bold) || txt.fontFamily === 'calligraphic-bold';
+      const baseShadow = Boolean(txt.shadow);
       const baseFont: TextFontStyle =
         txt.fontFamily === 'calligraphic-bold' ? 'calligraphic' : txt.fontFamily || 'sans';
       const spans = txt.spans || [];
       if (spans.length === 0 || end <= start) {
         return {
           bold: baseBold,
+          shadow: baseShadow,
           fontSize: txt.fontSize,
           color: txt.color,
           fontFamily: baseFont,
         };
       }
       let allBold = true;
+      let allShadow = true;
       let firstFontSize = txt.fontSize;
       let firstColor = txt.color;
       let firstFontFamily: TextFontStyle = baseFont;
       for (let i = start; i < end; i++) {
         let chBold = baseBold;
+        let chShadow = baseShadow;
         let chSize = txt.fontSize;
         let chColor = txt.color;
         let chFont: TextFontStyle = baseFont;
         for (const sp of spans) {
           if (i >= sp.start && i < sp.end) {
             if (sp.bold !== undefined) chBold = sp.bold;
+            if (sp.shadow !== undefined) chShadow = sp.shadow;
             if (sp.fontSize !== undefined) chSize = sp.fontSize;
             if (sp.color !== undefined) chColor = sp.color;
             if (sp.fontFamily !== undefined) chFont = sp.fontFamily;
           }
         }
         if (!chBold) allBold = false;
+        if (!chShadow) allShadow = false;
         if (i === start) {
           firstFontSize = chSize;
           firstColor = chColor;
@@ -15648,6 +15668,7 @@ export default function App() {
       }
       return {
         bold: allBold,
+        shadow: allShadow,
         fontSize: firstFontSize,
         color: firstColor,
         fontFamily: firstFontFamily,
@@ -15678,6 +15699,7 @@ export default function App() {
         const spE = Math.max(0, Math.min(len, sp.end));
         for (let i = spS; i < spE; i++) {
           if (sp.bold !== undefined) chars[i].bold = sp.bold;
+          if (sp.shadow !== undefined) chars[i].shadow = sp.shadow;
           if (sp.fontSize !== undefined) chars[i].fontSize = sp.fontSize;
           if (sp.color !== undefined) chars[i].color = sp.color;
           if (sp.fontFamily !== undefined) chars[i].fontFamily = sp.fontFamily;
@@ -15685,6 +15707,7 @@ export default function App() {
       }
       for (let i = s0; i < e0; i++) {
         if (patch.bold !== undefined) chars[i].bold = patch.bold;
+        if (patch.shadow !== undefined) chars[i].shadow = patch.shadow;
         if (patch.fontSize !== undefined) chars[i].fontSize = patch.fontSize;
         if (patch.color !== undefined) chars[i].color = patch.color;
         if (patch.fontFamily !== undefined) chars[i].fontFamily = patch.fontFamily;
@@ -15696,6 +15719,7 @@ export default function App() {
         const c = chars[idx];
         const hasAny =
           c.bold !== undefined ||
+          c.shadow !== undefined ||
           c.fontSize !== undefined ||
           c.color !== undefined ||
           c.fontFamily !== undefined;
@@ -15707,6 +15731,7 @@ export default function App() {
         while (
           j < len &&
           chars[j].bold === c.bold &&
+          chars[j].shadow === c.shadow &&
           chars[j].fontSize === c.fontSize &&
           chars[j].color === c.color &&
           chars[j].fontFamily === c.fontFamily
@@ -15717,6 +15742,7 @@ export default function App() {
           start: idx,
           end: j,
           ...(c.bold !== undefined ? { bold: c.bold } : {}),
+          ...(c.shadow !== undefined ? { shadow: c.shadow } : {}),
           ...(c.fontSize !== undefined ? { fontSize: c.fontSize } : {}),
           ...(c.color !== undefined ? { color: c.color } : {}),
           ...(c.fontFamily !== undefined ? { fontFamily: c.fontFamily } : {}),
@@ -35945,6 +35971,7 @@ export default function App() {
         color: strokeColor,
         fontSize: textFontSize,
         bold: textBold,
+        shadow: textShadow,
         fontFamily: textFontFamily,
         textAlign,
         layerId: activeLayerId,
@@ -48816,6 +48843,7 @@ export default function App() {
           color: strokeColor,
           fontSize: textFontSize,
           bold: textBold,
+        shadow: textShadow,
           fontFamily: textFontFamily,
           layerId: activeLayerId,
         };
@@ -48865,6 +48893,7 @@ export default function App() {
       strokeColor,
       textFontSize,
       textBold,
+      textShadow,
       textFontFamily,
       textAlign,
       activeLayerId,
@@ -48888,6 +48917,7 @@ export default function App() {
           color: strokeColor,
           fontSize: textFontSize,
           bold: textBold,
+        shadow: textShadow,
           fontFamily: textFontFamily,
           layerId: activeLayerId,
         };
@@ -48937,6 +48967,7 @@ export default function App() {
       strokeColor,
       textFontSize,
       textBold,
+      textShadow,
       textFontFamily,
       textAlign,
       activeLayerId,
@@ -54780,6 +54811,7 @@ export default function App() {
                               color: strokeColor,
                               fontSize: textFontSize,
                               bold: textBold,
+        shadow: textShadow,
                               fontFamily: textFontFamily,
                               layerId: activeLayerId,
                             };
@@ -55605,6 +55637,11 @@ export default function App() {
                     : selTxt
                     ? Boolean(selTxt.bold) || selTxt.fontFamily === 'calligraphic-bold'
                     : textBold;
+                  const currentShadow = subStyle
+                    ? subStyle.shadow
+                    : selTxt
+                    ? Boolean(selTxt.shadow)
+                    : textShadow;
                   const currentSize = subStyle
                     ? subStyle.fontSize
                     : selTxt
@@ -55642,6 +55679,41 @@ export default function App() {
                           };
                         }),
                       }));
+                    }
+                  };
+
+                  const applyShadow = (nextS: boolean) => {
+                    setTextShadow(nextS);
+                    if (selTxt) {
+                      if (
+                        !selTxt.isMath &&
+                        activeTextRange?.textId === selTxt.id &&
+                        activeTextRange.end > activeTextRange.start
+                      ) {
+                        updateActivePage((page) => ({
+                          ...page,
+                          texts: (page.texts || []).map((t) =>
+                            t.id === selTxt.id
+                              ? {
+                                  ...t,
+                                  spans: applyStyleToTextRange(
+                                    t,
+                                    activeTextRange.start,
+                                    activeTextRange.end,
+                                    { shadow: nextS }
+                                  ),
+                                }
+                              : t
+                          ),
+                        }));
+                      } else {
+                        updateActivePage((page) => ({
+                          ...page,
+                          texts: (page.texts || []).map((t) =>
+                            t.id === selTxt.id ? { ...t, shadow: nextS } : t
+                          ),
+                        }));
+                      }
                     }
                   };
 
@@ -55700,6 +55772,25 @@ export default function App() {
                         title="Έντονα Γράμματα (Bold)"
                       >
                         B Έντονα
+                      </button>
+
+                      {/* Text Shadow Toggle */}
+                      <button
+                        onClick={() => applyShadow(!currentShadow)}
+                        className={`px-2.5 py-1 rounded-full font-semibold transition cursor-pointer flex items-center gap-1 ${
+                          currentShadow
+                            ? 'bg-[#234978] text-white shadow-xs'
+                            : 'bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] hover:bg-[#ece7dc]'
+                        }`}
+                        title="Διακριτική Απαλή Σκιά Γραμμάτων (Shadow)"
+                      >
+                        <span
+                          style={{ textShadow: '1px 1px 2px rgba(71,85,105,0.6)' }}
+                          className="font-bold text-[12px]"
+                        >
+                          S
+                        </span>{' '}
+                        Σκιά
                       </button>
 
                       {/* Greek Font Style Selector: Custom ExplainBoardsHand / Custom ExplainBoardsPen / Mansalva / Playpen / GFS / Printed */}
@@ -62499,6 +62590,7 @@ export default function App() {
                             fontSize: txt.fontSize,
                             fontWeight: txt.bold ? 700 : 500,
                             ...fontCss,
+                            textShadow: getTextShadowCss(txt.shadow, txt.fontSize),
                             lineHeight: effLineHeight,
                             touchAction: 'none',
                             pointerEvents:
@@ -63197,12 +63289,15 @@ export default function App() {
                               const displayedBold = effectiveSubStyle
                                 ? effectiveSubStyle.bold
                                 : Boolean(txt.bold || txt.fontFamily === 'calligraphic-bold');
+                              const displayedShadow = effectiveSubStyle
+                                ? effectiveSubStyle.shadow
+                                : Boolean(txt.shadow);
                               const displayedFontSize = effectiveSubStyle
                                 ? effectiveSubStyle.fontSize
                                 : (txt.fontSize || textFontSize);
                               const safeZoom = Math.max(0.25, zoom || 1);
                               const invZoom = 1 / safeZoom;
-                              const estBarW = 475 * invZoom;
+                              const estBarW = 505 * invZoom;
                               let barShiftX = 0;
                               if (txt.x + estBarW > pW - 8) {
                                 barShiftX = (pW - 8) - (txt.x + estBarW);
@@ -63453,6 +63548,72 @@ export default function App() {
                                       title="Bold (Έντονα — στο επιλεγμένο τμήμα ή σε όλο το πλαίσιο)"
                                     >
                                       B
+                                    </button>
+                                  )}
+                                  {!txt.isMath && (
+                                    <button
+                                      type="button"
+                                      onMouseDown={(ev) => ev.preventDefault()}
+                                      onClick={() => {
+                                        const liveRange = getActiveRangeForText(
+                                          txt.id,
+                                          (txt.text || '').length
+                                        );
+                                        if (liveRange) {
+                                          const curSub = getRangeEffectiveStyle(
+                                            txt,
+                                            liveRange.start,
+                                            liveRange.end
+                                          );
+                                          const nextS = !curSub.shadow;
+                                          const nextRng = {
+                                            textId: txt.id,
+                                            start: liveRange.start,
+                                            end: liveRange.end,
+                                          };
+                                          activeTextRangeRef.current = nextRng;
+                                          setActiveTextRange(nextRng);
+                                          setSelectedTextId(txt.id);
+                                          setEditingTextId(null);
+                                          updateActivePage((page) => ({
+                                            ...page,
+                                            texts: (page.texts || []).map((t) =>
+                                              t.id === txt.id
+                                                ? {
+                                                    ...t,
+                                                    spans: applyStyleToTextRange(
+                                                      t,
+                                                      liveRange.start,
+                                                      liveRange.end,
+                                                      { shadow: nextS }
+                                                    ),
+                                                  }
+                                                : t
+                                            ),
+                                          }));
+                                          return;
+                                        }
+                                        const nextS = !txt.shadow;
+                                        setTextShadow(nextS);
+                                        updateActivePage((page) => ({
+                                          ...page,
+                                          texts: (page.texts || []).map((t) => {
+                                            if (t.id !== txt.id) return t;
+                                            return {
+                                              ...t,
+                                              shadow: nextS,
+                                            };
+                                          }),
+                                        }));
+                                      }}
+                                      className={`w-[24px] min-w-[24px] max-w-[24px] py-1 rounded-md font-bold border transition cursor-pointer text-center flex items-center justify-center shrink-0 ${
+                                        displayedShadow
+                                          ? 'bg-[#234978] text-white border-[#1c3c63]'
+                                          : 'bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border-stone-300/80'
+                                      }`}
+                                      title="Σκιά (Διακριτική απαλή σκιά γραμμάτων)"
+                                    >
+                                      <span style={{ textShadow: '1px 1px 1.5px rgba(71,85,105,0.6)' }}>S</span>
                                     </button>
                                   )}
                                   <button
@@ -63956,6 +64117,7 @@ export default function App() {
                                                   style={{
                                                     fontWeight: segStyle.bold ? 700 : 500,
                                                     ...segCss,
+                                                    textShadow: getTextShadowCss(segStyle.shadow, segStyle.fontSize),
                                                     fontSize: `${segStyle.fontSize}px`,
                                                     color: segStyle.color,
                                                     backgroundColor: isSelectedSeg
@@ -64583,6 +64745,7 @@ export default function App() {
                                               style={{
                                                 fontWeight: segStyle.bold ? 700 : 500,
                                                 ...segCss,
+                                                textShadow: getTextShadowCss(segStyle.shadow, segStyle.fontSize),
                                                 fontSize: `${segStyle.fontSize}px`,
                                                 color: segStyle.color,
                                                 backgroundColor: isSubHighlighted

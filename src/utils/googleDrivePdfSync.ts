@@ -2240,6 +2240,12 @@ async function drawKatexMathObjectForPdf(
     };
 
     ctx.save();
+    if (tx.shadow) {
+      ctx.shadowColor = 'rgba(71, 85, 105, 0.35)';
+      ctx.shadowOffsetX = Math.max(0.7, fSize * 0.035);
+      ctx.shadowOffsetY = Math.max(1.1, fSize * 0.055);
+      ctx.shadowBlur = Math.max(2.0, fSize * 0.08);
+    }
     for (const kRoot of katexRoots) {
       // 1. CSS backgrounds & borders (fraction bars `.frac-line`, overlines, underlines, matrix rules)
       const allEls: HTMLElement[] = [kRoot, ...Array.from(kRoot.querySelectorAll<HTMLElement>('*'))];
@@ -2497,6 +2503,12 @@ async function drawTextObjectForPdf(
   }
 
   ctx.save();
+  if (tx.shadow) {
+    ctx.shadowColor = 'rgba(71, 85, 105, 0.35)';
+    ctx.shadowOffsetX = Math.max(0.7, fSize * 0.035);
+    ctx.shadowOffsetY = Math.max(1.1, fSize * 0.055);
+    ctx.shadowBlur = Math.max(2.0, fSize * 0.08);
+  }
   const makeFont = (sz: number, boldOverride?: boolean) =>
     `${fontStyle}${boldOverride ? 'bold ' : fontWeight}${Math.max(7, sz).toFixed(1)}px ${fontStack}`;
 
@@ -2666,12 +2678,14 @@ async function drawTextObjectForPdf(
     const getStyleAt = (charIdx: number) => {
       let segSz = fSize;
       let segBold = Boolean(tx.bold || tx.fontFamily === 'calligraphic-bold');
+      let segShadow = Boolean(tx.shadow);
       let segColor = tx.color || '#111827';
       let segFam = tx.fontFamily;
       for (const sp of tx.spans || []) {
         if (charIdx >= sp.start && charIdx < sp.end) {
           if (sp.fontSize !== undefined) segSz = sp.fontSize;
           if (sp.bold !== undefined) segBold = sp.bold;
+          if (sp.shadow !== undefined) segShadow = sp.shadow;
           if (sp.color !== undefined) segColor = sp.color;
           if (sp.fontFamily !== undefined) segFam = sp.fontFamily;
         }
@@ -2681,7 +2695,7 @@ async function drawTextObjectForPdf(
         7,
         segSz
       ).toFixed(1)}px ${getFontStackForFamily(segFam, segBold)}`;
-      return { sz: segSz, bold: segBold, color: segColor, font: segFont };
+      return { sz: segSz, bold: segBold, shadow: segShadow, color: segColor, font: segFont };
     };
 
     const splitIntoStyleRuns = (s: number, e: number) => {
@@ -2691,7 +2705,7 @@ async function drawTextObjectForPdf(
         if (sp.end > s && sp.end < e) bSet.add(sp.end);
       }
       const bounds = Array.from(bSet).sort((a, b) => a - b);
-      const runs: { text: string; sz: number; bold: boolean; color: string; font: string; width: number }[] = [];
+      const runs: { text: string; sz: number; bold: boolean; shadow: boolean; color: string; font: string; width: number }[] = [];
       for (let i = 0; i < bounds.length - 1; i++) {
         const rs = bounds[i];
         const re = bounds[i + 1];
@@ -2800,6 +2814,14 @@ async function drawTextObjectForPdf(
       for (const seg of rl.runs) {
         ctx.font = seg.font;
         ctx.fillStyle = seg.color;
+        if (seg.shadow) {
+          ctx.shadowColor = 'rgba(71, 85, 105, 0.35)';
+          ctx.shadowOffsetX = Math.max(0.7, seg.sz * 0.035);
+          ctx.shadowOffsetY = Math.max(1.1, seg.sz * 0.055);
+          ctx.shadowBlur = Math.max(2.0, seg.sz * 0.08);
+        } else {
+          ctx.shadowColor = 'transparent';
+        }
         ctx.fillText(seg.text, curX, baseY);
         curX += seg.width;
       }

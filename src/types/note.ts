@@ -127,6 +127,7 @@ export interface TextStyleSpan {
   start: number; // Inclusive character index in text
   end: number;   // Exclusive character index in text
   bold?: boolean;
+  shadow?: boolean;
   fontSize?: number;
   color?: string;
   fontFamily?: TextFontStyle;
@@ -145,6 +146,7 @@ export interface TextObject {
   fontSize: number;
   lineHeight?: number;
   bold?: boolean;
+  shadow?: boolean; // Discreet, light, soft gray graded text shadow
   fontFamily?: TextFontStyle;
   textAlign?: 'left' | 'center' | 'right';
   spans?: TextStyleSpan[];
