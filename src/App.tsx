@@ -635,7 +635,7 @@ function cleanNotebookForStorage(nb: Notebook): Notebook {
   const cached = cleanedNotebookStorageCache.get(nb);
   if (cached) return cached;
   // Strip duplicate base64 originalDataUrl when image is already cropped to a data: URL
-  // (keeps external https:// or /mind_maps/ originalDataUrl since it is only ~75 bytes)
+  // and purge empty or whitespace-only non-math text boxes
   const cleaned: Notebook = {
     ...nb,
     pages: (nb.pages || []).map((p) => {
@@ -648,16 +648,30 @@ function cleanNotebookForStorage(nb: Notebook): Notebook {
           break;
         }
       }
-      if (!anyImgChanged) return p;
+      const texts = p.texts || [];
+      const cleanTexts = texts.filter((t) => {
+        if (!t) return false;
+        if (t.isMath) {
+          return Boolean(
+            (t.text && t.text.trim().length > 0) || (t.latex && t.latex.trim().length > 0)
+          );
+        }
+        return Boolean(t.text && t.text.trim().length > 0);
+      });
+      const textsChanged = cleanTexts.length !== texts.length;
+      if (!anyImgChanged && !textsChanged) return p;
       return {
         ...p,
-        images: imgs.map((im) => ({
-          ...im,
-          originalDataUrl:
-            im.originalDataUrl && im.originalDataUrl.startsWith('data:')
-              ? undefined
-              : im.originalDataUrl,
-        })),
+        texts: textsChanged ? cleanTexts : p.texts,
+        images: anyImgChanged
+          ? imgs.map((im) => ({
+              ...im,
+              originalDataUrl:
+                im.originalDataUrl && im.originalDataUrl.startsWith('data:')
+                  ? undefined
+                  : im.originalDataUrl,
+            }))
+          : p.images,
       };
     }),
   };
@@ -1605,7 +1619,21 @@ function repairNotebookPagesAndMetrisiMazas(nb: Notebook): { nb: Notebook; repai
       }
       return s;
     });
-    return pageModified ? { ...p, id: pid, strokes: nextStrokes } : p;
+    const origTexts = p.texts || [];
+    const nextTexts = origTexts.filter((t) => {
+      if (!t) return false;
+      if (t.isMath) {
+        return Boolean(
+          (t.text && t.text.trim().length > 0) || (t.latex && t.latex.trim().length > 0)
+        );
+      }
+      return Boolean(t.text && t.text.trim().length > 0);
+    });
+    if (nextTexts.length !== origTexts.length) {
+      pageModified = true;
+      repaired = true;
+    }
+    return pageModified ? { ...p, id: pid, strokes: nextStrokes, texts: nextTexts } : p;
   });
 
   // Self-healing guard for "Κύκλος Νερού" (nb-1792959661594):
@@ -15927,15 +15955,20 @@ export default function App() {
     setSelectedTextId(null);
     updateActivePage(
       (page) => {
-        const targetTxt = (page.texts || []).find((t) => t.id === activeId);
-        if (
-          targetTxt &&
-          !targetTxt.isMath &&
-          (!targetTxt.text || targetTxt.text.trim().length === 0)
-        ) {
+        const origTexts = page.texts || [];
+        const nextTexts = origTexts.filter((t) => {
+          if (!t) return false;
+          if (t.isMath) {
+            return Boolean(
+              (t.text && t.text.trim().length > 0) || (t.latex && t.latex.trim().length > 0)
+            );
+          }
+          return Boolean(t.text && t.text.trim().length > 0);
+        });
+        if (nextTexts.length !== origTexts.length) {
           const nextPage = {
             ...page,
-            texts: (page.texts || []).filter((t) => t.id !== activeId),
+            texts: nextTexts,
           };
           const curStack = undoStackRef.current;
           if (
@@ -46731,9 +46764,15 @@ export default function App() {
           }
           updateActivePage((page) => ({
             ...page,
-            texts: (page.texts || []).filter((t) => t.id !== targetTxtId),
+            texts: (page.texts || []).filter(
+              (t) => t.id !== targetTxtId && (t.isMath || (t.text && t.text.trim().length > 0))
+            ),
           }));
           setSelectedTextId(null);
+          setEditingTextId(null);
+          if (currentUser) {
+            saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
+          }
           showToast('🗑️ Διαγράφηκε το πλαίσιο κειμένου!');
           return;
         }
@@ -50176,6 +50215,15 @@ export default function App() {
               const nb = notebooks.find((n) => n.id === nbId);
               if (!nb) return null;
               const isActive = nb.id === activeNotebook.id && viewMode === 'editor';
+              const cleanFolder = (nb.folder || '').trim();
+              const folderBreadcrumb =
+                cleanFolder && cleanFolder !== 'root' && cleanFolder !== '/'
+                  ? cleanFolder
+                      .split('/')
+                      .map((s) => s.trim())
+                      .filter((s) => s && s !== 'root')
+                      .join(' › ')
+                  : null;
               const tabMaxWidthClass =
                 displayedTabIds.length === 1
                   ? 'max-w-[440px]'
@@ -50196,8 +50244,12 @@ export default function App() {
                     setPan({ x: 0, y: 0 });
                     setViewMode('editor');
                   }}
-                  title={`${nb.title} (Πάτα πάνω στο όνομα για μετονομασία)`}
-                  className={`w-fit shrink-0 ${tabMaxWidthClass} flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+                  title={
+                    folderBreadcrumb
+                      ? `${nb.title}\n📁 ${folderBreadcrumb}\n(Πάτα πάνω στο όνομα για μετονομασία)`
+                      : `${nb.title} (Πάτα πάνω στο όνομα για μετονομασία)`
+                  }
+                  className={`w-fit shrink-0 ${tabMaxWidthClass} flex items-center gap-2 px-3 py-1 rounded-t-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                     isActive
                       ? 'bg-[#f4f5f7] text-[#1b2a4a] font-semibold shadow-sm'
                       : 'bg-[#263961] text-slate-300 hover:bg-[#2f4573]'
@@ -50228,24 +50280,37 @@ export default function App() {
                       className="w-44 min-w-[70px] px-1.5 py-0.5 rounded bg-white text-[#1b2a4a] text-xs font-semibold border border-[#0066ff] focus:outline-none"
                     />
                   ) : (
-                    <span
-                      onClick={(e) => {
-                        if (isActive) {
+                    <div className="flex flex-col min-w-0 justify-center">
+                      {folderBreadcrumb && (
+                        <div
+                          className={`text-[9.5px] leading-tight font-normal truncate max-w-full flex items-center gap-1 ${
+                            isActive ? 'text-slate-500 font-medium' : 'text-slate-400'
+                          }`}
+                          title={`Φάκελος: ${folderBreadcrumb}`}
+                        >
+                          <span className="text-[9px] opacity-75">📁</span>
+                          <span className="truncate">{folderBreadcrumb}</span>
+                        </div>
+                      )}
+                      <span
+                        onClick={(e) => {
+                          if (isActive) {
+                            e.stopPropagation();
+                            startRenamingNotebook(nb, 'tab');
+                          }
+                        }}
+                        onDoubleClick={(e) => {
                           e.stopPropagation();
                           startRenamingNotebook(nb, 'tab');
-                        }
-                      }}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        startRenamingNotebook(nb, 'tab');
-                      }}
-                      title="Πάτα για μετονομασία σημείωσης"
-                      className={`min-w-0 truncate text-left ${
-                        isActive ? 'hover:underline decoration-[#0066ff]/50 cursor-text' : ''
-                      }`}
-                    >
-                      {nb.title}
-                    </span>
+                        }}
+                        title="Πάτα για μετονομασία σημείωσης"
+                        className={`min-w-0 truncate text-left leading-tight ${
+                          isActive ? 'hover:underline decoration-[#0066ff]/50 cursor-text' : ''
+                        }`}
+                      >
+                        {nb.title}
+                      </span>
+                    </div>
                   )}
                   <button
                     onClick={(e) => {
@@ -63621,10 +63686,15 @@ export default function App() {
                                     onClick={() => {
                                       updateActivePage((page) => ({
                                         ...page,
-                                        texts: (page.texts || []).filter((t) => t.id !== txt.id),
+                                        texts: (page.texts || []).filter(
+                                          (t) => t.id !== txt.id && (t.isMath || (t.text && t.text.trim().length > 0))
+                                        ),
                                       }));
                                       setSelectedTextId(null);
                                       setEditingTextId(null);
+                                      if (currentUser) {
+                                        saveNotebooksToLocalAndIdb(currentUser.uid, notebooksRef.current);
+                                      }
                                     }}
                                     className="w-[26px] min-w-[26px] max-w-[26px] p-1.5 rounded-md bg-[#fdfbf7] hover:bg-[#efeadd] text-[#333333] border border-stone-300/80 flex items-center justify-center shrink-0 transition cursor-pointer"
                                     title="Διαγραφή κειμένου"
@@ -64417,7 +64487,7 @@ export default function App() {
                                   return <span>{renderLineTokens(txt.text)}</span>;
                                 })()
                               ) : (
-                                txt.text || 'Κείμενο...'
+                                txt.text || ''
                               )}
                             </div>
                           ))}
