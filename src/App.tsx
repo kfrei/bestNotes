@@ -62725,6 +62725,9 @@ export default function App() {
                               const displayedBold = effectiveSubStyle
                                 ? effectiveSubStyle.bold
                                 : Boolean(txt.bold || txt.fontFamily === 'calligraphic-bold');
+                              const displayedFontSize = effectiveSubStyle
+                                ? effectiveSubStyle.fontSize
+                                : (txt.fontSize || textFontSize);
                               const safeZoom = Math.max(0.25, zoom || 1);
                               const invZoom = 1 / safeZoom;
                               const estHalfBarW = 230 * invZoom;
@@ -63063,6 +63066,12 @@ export default function App() {
                                   >
                                     A-
                                   </button>
+                                  <span
+                                    className="px-1.5 py-1 rounded-md font-bold text-[11.5px] tabular-nums bg-[#fdfbf7] text-[#1e3a5f] border border-stone-300/80 select-none flex items-center justify-center min-w-[24px]"
+                                    title={`Μέγεθος γραμματοσειράς: ${displayedFontSize}px`}
+                                  >
+                                    {displayedFontSize}
+                                  </span>
                                   <button
                                     type="button"
                                     onMouseDown={(ev) => ev.preventDefault()}
