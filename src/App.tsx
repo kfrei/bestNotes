@@ -823,8 +823,33 @@ function saveCustomFoldersToLocalAndIdb(uid: string, folders: CustomFolderMeta[]
 function saveNotebooksToLocalAndIdb(uid: string, nbs: Notebook[]): void {
   void saveNotebooksToIndexedDB(uid, nbs);
   try {
-    // Fast pre-check: never run synchronous JSON.stringify on 30-50MB PDF books for localStorage
-    // (IndexedDB already stores all notebooks natively without JSON.stringify!)
+    // 1. Always cache the currently active notebook in localStorage if it fits (up to 1.8MB)
+    // so on page refresh, the active notebook is ready SYNCHRONOUSLY on the very first frame!
+    const rawSess =
+      localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_${uid}`) ||
+      localStorage.getItem(`${UI_SESSION_STORAGE_KEY}_latest`);
+    let activeId = '';
+    if (rawSess) {
+      try {
+        activeId = JSON.parse(rawSess)?.activeNotebookId || '';
+      } catch {
+        // ignore
+      }
+    }
+    const targetNb = (activeId ? nbs.find((n) => n.id === activeId) : null) || nbs[0];
+    if (targetNb) {
+      try {
+        const activeSerialized = JSON.stringify(cleanNotebookForStorage(targetNb));
+        if (activeSerialized.length <= 1_800_000) {
+          localStorage.setItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${uid}`, activeSerialized);
+          localStorage.setItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`, activeSerialized);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2. Full collection check for localStorage (if whole collection fits under 1.5MB)
     let estimatedChars = 0;
     for (let i = 0; i < nbs.length; i++) {
       const pages = nbs[i].pages || [];
@@ -1062,6 +1087,7 @@ async function saveNotebookToFirestoreChunked(
 }
 
 const STORAGE_KEY = 'bestnotes_notebooks_v2';
+const ACTIVE_NOTEBOOK_STORAGE_KEY = 'bestnotes_active_nb_cache_v2';
 const CUSTOM_FOLDERS_STORAGE_KEY = 'bestnotes_custom_folders_v2';
 const SHAPE_LIBRARY_STORAGE_KEY = 'bestnotes_shape_library_v2';
 const UI_SESSION_STORAGE_KEY = 'bestnotes_ui_session_v2';
@@ -1729,20 +1755,34 @@ export default function App() {
   })();
 
   const [notebooks, setNotebooks] = useState<Notebook[]>(() => {
-    if (initialAuthUid) {
-      try {
-        const saved = localStorage.getItem(`${STORAGE_KEY}_${initialAuthUid}`);
+    try {
+      const authUid = initialAuthUid;
+      // 1. Try full collection from localStorage if available
+      if (authUid) {
+        const saved = localStorage.getItem(`${STORAGE_KEY}_${authUid}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             return parsed
               .filter((n: Notebook) => !(n.id === 'nb-blank-1' && getNotebookContentScore(n) === 0))
               .map((n: Notebook) => repairNotebookPagesAndMetrisiMazas(n).nb);
           }
         }
-      } catch {
-        // ignore
       }
+      // 2. Fast-path cache for instant refresh without library flash:
+      // Load the active notebook synchronously so frame 0 already has the open file!
+      const activeRaw =
+        (authUid ? localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${authUid}`) : null) ||
+        localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
+      if (activeRaw) {
+        const parsed = JSON.parse(activeRaw);
+        if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+          const repaired = repairNotebookPagesAndMetrisiMazas(parsed).nb;
+          return [repaired];
+        }
+      }
+    } catch {
+      // ignore
     }
     return createDefaultBlankNotebooks();
   });
@@ -1919,8 +1959,26 @@ export default function App() {
               // ignore
             }
           }
-          const finalNbs = loadedNbs || createDefaultBlankNotebooks();
-          setNotebooks(finalNbs);
+          if (loadedNbs && loadedNbs.length > 0) {
+            setNotebooks(loadedNbs);
+          } else {
+            // If full collection not in localStorage, preserve any fast-cached active notebook
+            // instead of resetting notebooks to [] while IndexedDB loads in background!
+            const activeRaw =
+              localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${user.uid}`) ||
+              localStorage.getItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
+            if (activeRaw) {
+              try {
+                const parsed = JSON.parse(activeRaw);
+                if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+                  const repaired = repairNotebookPagesAndMetrisiMazas(parsed).nb;
+                  setNotebooks((prev) => (prev.length > 0 ? prev : [repaired]));
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
 
           // Preserve exact viewMode, activeLibraryFolder, openNotebookIds, activeNotebookId & page across Refresh
           let restoredActiveId = '';
@@ -2120,6 +2178,7 @@ export default function App() {
           setCloudInitialLoaded(false);
           localStorage.removeItem(AUTH_FLAG_STORAGE_KEY);
           localStorage.removeItem(AUTH_UID_STORAGE_KEY);
+          localStorage.removeItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`);
           // Guest mode: strictly ephemeral empty library (0 notes, 0 folders, 0 recycle bin)
           const freshBlank = createDefaultBlankNotebooks();
           setNotebooks(freshBlank);
@@ -4135,6 +4194,18 @@ export default function App() {
         if (uid) {
           localStorage.setItem(`${UI_SESSION_STORAGE_KEY}_${uid}`, serialized);
         }
+        if (notebooks.length > 0) {
+          const curActive =
+            notebooks.find((n) => n.id === activeNotebookId) ||
+            notebooks[0];
+          if (curActive) {
+            const activeStr = JSON.stringify(cleanNotebookForStorage(curActive));
+            if (activeStr.length <= 1_800_000) {
+              if (uid) localStorage.setItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_${uid}`, activeStr);
+              localStorage.setItem(`${ACTIVE_NOTEBOOK_STORAGE_KEY}_latest`, activeStr);
+            }
+          }
+        }
       } catch {
         // ignore
       }
@@ -4145,7 +4216,7 @@ export default function App() {
       window.removeEventListener('beforeunload', flushSessionBeforeReload);
       window.removeEventListener('pagehide', flushSessionBeforeReload);
     };
-  }, [currentUser, buildCurrentSessionSnapshot]);
+  }, [currentUser, buildCurrentSessionSnapshot, notebooks, activeNotebookId]);
 
   // Automatic New-Version Detector for iPad Home-Screen Web App ("ψευδο app") & Desktop tabs:
   // Whenever the app starts or wakes up from background, checks if a newer JS bundle hash exists on the server.
@@ -51201,8 +51272,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* IF IN LIBRARY VIEW (OR IF USER HAS 0 NOTEBOOKS YET) */}
-      {(viewMode === 'library' || notebooks.length === 0) && !isCleanProjectorMode ? (
+      {/* IF IN LIBRARY VIEW (OR IF USER HAS 0 NOTEBOOKS YET IN GUEST / NON-EDITOR MODE) */}
+      {(viewMode === 'library' || (viewMode !== 'editor' && notebooks.length === 0)) && !isCleanProjectorMode ? (
         <div
           data-library-scroll-container="true"
           onScroll={() => clearLibraryThumbHoverPreview()}

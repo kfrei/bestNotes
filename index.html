@@ -44,7 +44,12 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,500;0,700;1,500;1,700&family=Arima:wght@500;600;700&family=Comic+Relief:wght@400;700&family=GFS+Neohellenic:ital,wght@0,400;0,700;1,400;1,700&family=Mansalva&family=Mynerve&family=Playpen+Sans:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Ysabeau+Infant:ital,wght@0,500;0,700;1,500;1,700&display=swap" rel="stylesheet" />
+    <!-- Preload Primary Handwriting & Pen Fonts to prevent Flash of Unstyled Text (FOUT) on load / refresh -->
+    <link rel="preload" href="/fonts/ExplainBoardsPen.otf?v=11" as="font" type="font/otf" crossorigin />
+    <link rel="preload" href="/fonts/ExplainBoardsPenBold.otf?v=11" as="font" type="font/otf" crossorigin />
+    <link rel="preload" href="/fonts/ExplainBoardsHand.otf?v=7" as="font" type="font/otf" crossorigin />
+    <link rel="preload" href="/fonts/ExplainBoardsHandBold.otf?v=7" as="font" type="font/otf" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,500;0,700;1,500;1,700&family=Arima:wght@500;600;700&family=Comic+Relief:wght@400;700&family=GFS+Neohellenic:ital,wght@0,400;0,700;1,400;1,700&family=Mansalva&family=Mynerve&family=Playpen+Sans:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Ysabeau+Infant:ital,wght@0,500;0,700;1,500;1,700&display=block" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
     <style>
       @font-face {
@@ -52,49 +57,49 @@
         src: url('/fonts/ExplainBoardsHand.otf?v=7') format('opentype');
         font-weight: 400 500;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
       }
       @font-face {
         font-family: 'ExplainBoardsHand';
         src: url('/fonts/ExplainBoardsHandBold.otf?v=7') format('opentype');
         font-weight: 600 800;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
       }
       @font-face {
         font-family: 'ExplainBoardsHandBold';
         src: url('/fonts/ExplainBoardsHandBold.otf?v=7') format('opentype');
         font-weight: 400 800;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
       }
       @font-face {
         font-family: 'ExplainBoardsPen';
         src: url('/fonts/ExplainBoardsPen.otf?v=11') format('opentype');
         font-weight: 400 500;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
       }
       @font-face {
         font-family: 'ExplainBoardsPen';
         src: url('/fonts/ExplainBoardsPenBold.otf?v=11') format('opentype');
         font-weight: 600 800;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
       }
       @font-face {
         font-family: 'ExplainBoardsPenBold';
         src: url('/fonts/ExplainBoardsPenBold.otf?v=11') format('opentype');
         font-weight: 400 800;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
       }
       @font-face {
         font-family: 'ExplainBoardsPenLegacy';
         src: url('/fonts/ExplainBoardsPenLegacy.otf') format('opentype');
         font-weight: 400 700;
         font-style: normal;
-        font-display: swap;
+        font-display: block;
       }
       .bn-safe-top-header {
         padding-top: max(env(safe-area-inset-top, 0px), 6px);
@@ -118,6 +123,19 @@
     </style>
   </head>
   <body class="bg-[#f1f3f6] text-slate-800 select-none overflow-hidden touch-none m-0 p-0 w-screen h-[100dvh]">
+    <script>
+      // Warm up custom handwriting fonts in memory before React mounts
+      try {
+        if (document.fonts && document.fonts.load) {
+          void Promise.all([
+            document.fonts.load('20px ExplainBoardsPen'),
+            document.fonts.load('bold 20px ExplainBoardsPenBold'),
+            document.fonts.load('20px ExplainBoardsHand'),
+            document.fonts.load('bold 20px ExplainBoardsHandBold')
+          ]);
+        }
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
