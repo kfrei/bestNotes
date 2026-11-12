@@ -2885,6 +2885,19 @@ export default function App() {
   const layerDragMovedRef = useRef<boolean>(false);
   const [layersPanelPos, setLayersPanelPos] = useState<{ x: number; y: number } | null>(null);
   const layersPanelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+
+  const getStickyNavBottom = useCallback((): number => {
+    if (typeof document === 'undefined') return 120;
+    let maxBottom = 0;
+    const stickyNavs = document.querySelectorAll('[data-sticky-app-nav="true"]');
+    stickyNavs.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom > maxBottom && rect.bottom < window.innerHeight * 0.5) {
+        maxBottom = rect.bottom;
+      }
+    });
+    return Math.max(Math.round(maxBottom) + 8, 120);
+  }, []);
   const [aiAnimateModal, setAiAnimateModal] = useState<{
     targetImageId: string | null;
     snapshotDataUrl: string;
@@ -50491,21 +50504,21 @@ export default function App() {
             {showUserDropdown && (
               <div
                 data-popover-panel="user"
-                className="absolute right-0 top-full mt-2 w-72 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-3.5 z-50 space-y-3"
+                className="absolute right-0 top-full mt-2 w-72 bg-[#fdfbf7]/98 backdrop-blur-md text-[#2c3e50] rounded-2xl shadow-2xl border border-[#dfd8cb] p-3.5 z-50 space-y-3"
               >
                 {/* 1. User Account Info (Name + Email) & Logout */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-[#1b2a4a] text-white flex items-center justify-center shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center shrink-0">
                       <UserIcon className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-[#1b2a4a] truncate">
+                      <div className="text-xs font-bold text-[#1e3a5f] truncate">
                         {currentUser
                           ? currentUser.displayName || currentUser.email?.split('@')[0] || 'Χρήστης BestNotes'
                           : 'Επισκέπτης (Guest)'}
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate">
+                      <div className="text-[11px] text-[#64748b] truncate">
                         {currentUser?.email || 'Χωρίς σύνδεση λογαριασμού'}
                       </div>
                     </div>
@@ -50532,7 +50545,7 @@ export default function App() {
                         setViewMode('landing');
                         showToast('👋 Αποσυνδέθηκες και επέστρεψες στην Αρχική Σελίδα.');
                       }}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 transition cursor-pointer"
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#fdf6f6] hover:bg-[#fae8e8] border border-[#f3d4d4] text-xs font-bold text-[#b91c1c] transition cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Logout (Αποσύνδεση)</span>
@@ -50545,7 +50558,7 @@ export default function App() {
                           setAuthMode('signin');
                           setShowAuthModal(true);
                         }}
-                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#007185] hover:bg-[#005f70] text-xs font-bold text-white transition cursor-pointer"
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#1e3a5f] hover:bg-[#162d4a] text-xs font-bold text-white transition cursor-pointer"
                       >
                         <LogIn className="w-3.5 h-3.5" />
                         <span>Σύνδεση</span>
@@ -50556,7 +50569,7 @@ export default function App() {
                           setAuthMode('signup');
                           setShowAuthModal(true);
                         }}
-                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0066ff] hover:bg-blue-700 text-xs font-bold text-white transition cursor-pointer"
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-xs font-bold text-[#1e3a5f] transition cursor-pointer"
                       >
                         <UserIcon className="w-3.5 h-3.5" />
                         <span>Εγγραφή</span>
@@ -50566,21 +50579,21 @@ export default function App() {
                 </div>
 
                 {/* 2. Google Drive Login & GoodNotes / Custom Folder Same-Name PDF Sync */}
-                <div className="pt-2.5 border-t border-slate-200 space-y-2">
+                <div className="pt-2.5 border-t border-[#dfd8cb] space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-[#1b2a4a] flex items-center gap-1.5">
-                      <Cloud className="w-3.5 h-3.5 text-[#0066ff]" />
+                    <span className="text-[11px] font-bold text-[#1e3a5f] flex items-center gap-1.5">
+                      <Cloud className="w-3.5 h-3.5 text-[#1e3a5f]" />
                       <span>Google Drive Sync (PDF)</span>
                     </span>
                     {(driveAccessToken || driveEmail) && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold">
+                      <span className="px-1.5 py-0.5 rounded-full bg-[#efebe3] border border-[#dfd8cb] text-[#1e3a5f] text-[9px] font-bold">
                         Συνδεδεμένο
                       </span>
                     )}
                   </div>
 
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 space-y-1">
-                    <div className="text-[10px] font-semibold text-slate-500 flex items-center justify-between">
+                  <div className="bg-[#f7f5f0] border border-[#dfd8cb] rounded-xl px-2.5 py-1.5 space-y-1">
+                    <div className="text-[10px] font-semibold text-[#64748b] flex items-center justify-between">
                       <span>Φάκελος Προορισμού Google Drive:</span>
                     </div>
                     <input
@@ -50588,19 +50601,19 @@ export default function App() {
                       value={driveBasePath}
                       onChange={(e) => saveDriveBasePath(e.target.value)}
                       placeholder="GoodNotes/x Σ Χ Ο Λ Ε Ι Α/2025-2026/Γυμνάσιο Αρναίας"
-                      className="w-full px-2 py-1 rounded-lg bg-white border border-slate-200 text-[10.5px] font-semibold text-[#1b2a4a] focus:outline-none focus:border-[#0066ff]"
+                      className="w-full px-2 py-1 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] text-[10.5px] font-semibold text-[#1e3a5f] focus:outline-none focus:border-[#1e3a5f]"
                       title="Διαδρομή φακέλου στο Google Drive (ή επικόλληση Link φακέλου Drive)"
                     />
                   </div>
 
                   {driveAccessToken || driveEmail ? (
                     <div className="space-y-2">
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px]">
-                        <div className="text-slate-500">Λογαριασμός Google Drive:</div>
-                        <div className="font-semibold text-slate-800 truncate">
+                      <div className="bg-[#f7f5f0] border border-[#dfd8cb] rounded-xl px-2.5 py-1.5 text-[11px]">
+                        <div className="text-[#64748b]">Λογαριασμός Google Drive:</div>
+                        <div className="font-semibold text-[#2c3e50] truncate">
                           {driveEmail || currentUser?.email || 'Google Drive Account'}
                         </div>
-                        <div className="text-[10px] text-sky-700 font-medium mt-0.5 break-words leading-tight">
+                        <div className="text-[10px] text-[#1e3a5f] font-medium mt-0.5 break-words leading-tight">
                           {viewMode === 'library' && activeLibraryFolder ? (
                             <>
                               📁 {driveBasePath}
@@ -50609,7 +50622,7 @@ export default function App() {
                                 : activeLibraryFolder.includes('/')
                                 ? ` / ${activeLibraryFolder.split('/').slice(1).join(' / ')}`
                                 : ''}{' '}
-                              <span className="text-emerald-700 font-semibold">
+                              <span className="text-[#1e3a5f] font-semibold">
                                 (Φάκελος «{activeLibraryFolder.split('/').pop()}»)
                               </span>
                             </>
@@ -50628,9 +50641,9 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 space-y-1">
+                      <div className="bg-[#f7f5f0] border border-[#dfd8cb] rounded-xl px-2.5 py-1.5 space-y-1">
                         <div className="flex items-center justify-between text-[10.5px]">
-                          <span className="font-semibold text-slate-600">Αυτόματος Συγχρονισμός:</span>
+                          <span className="font-semibold text-[#64748b]">Αυτόματος Συγχρονισμός:</span>
                           <select
                             value={driveAutoSyncIntervalMin}
                             onChange={(e) => {
@@ -50653,7 +50666,7 @@ export default function App() {
                                 }!`
                               );
                             }}
-                            className="px-1.5 py-0.5 rounded-md bg-white border border-slate-200 text-[10.5px] font-bold text-[#0066ff] cursor-pointer focus:outline-none"
+                            className="px-1.5 py-0.5 rounded-md bg-[#fdfbf7] border border-[#dfd8cb] text-[10.5px] font-bold text-[#1e3a5f] cursor-pointer focus:outline-none"
                           >
                             <option value={30}>Κάθε 30 λεπτά</option>
                             <option value={60}>Κάθε 1 ώρα</option>
@@ -50662,9 +50675,9 @@ export default function App() {
                           </select>
                         </div>
                         {lastDriveAutoSyncAt > 0 && (
-                          <div className="text-[9.5px] text-slate-500">
+                          <div className="text-[9.5px] text-[#64748b]">
                             Τελευταίος συγχρονισμός:{' '}
-                            <span className="font-semibold text-slate-700">
+                            <span className="font-semibold text-[#2c3e50]">
                               {new Date(lastDriveAutoSyncAt).toLocaleTimeString('el-GR', {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -50683,7 +50696,7 @@ export default function App() {
                           }
                         }}
                         disabled={syncStatus === 'syncing' || driveSyncingAll || Boolean(syncingDriveFolderPath)}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#1e3a5f] hover:bg-[#162d4a] disabled:opacity-50 text-white text-xs font-bold shadow-2xs transition cursor-pointer"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'syncing' && !driveSyncingAll ? 'animate-spin' : ''}`} />
                         <span className="truncate">
@@ -50698,9 +50711,9 @@ export default function App() {
                       <button
                         onClick={() => void performAllNotebooksDrivePdfSync()}
                         disabled={driveSyncingAll || syncStatus === 'syncing'}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 disabled:opacity-50 text-[#1b2a4a] text-[11px] font-semibold transition cursor-pointer"
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] disabled:opacity-50 text-[#1e3a5f] text-[11px] font-semibold transition cursor-pointer"
                       >
-                        <Cloud className={`w-3.5 h-3.5 text-sky-600 ${driveSyncingAll ? 'animate-pulse' : ''}`} />
+                        <Cloud className={`w-3.5 h-3.5 text-[#1e3a5f] ${driveSyncingAll ? 'animate-pulse' : ''}`} />
                         <span className="truncate">
                           {driveSyncingAll
                             ? driveSyncProgressText || 'Συγχρονισμός όλων των φακέλων...'
@@ -50714,7 +50727,7 @@ export default function App() {
                             href={lastDrivePdfLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-semibold text-emerald-700 transition"
+                            className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[11px] font-semibold text-[#1e3a5f] transition"
                             title="Άνοιγμα του συγχρονισμένου PDF στο Google Drive"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -50733,7 +50746,7 @@ export default function App() {
                           }}
                           className={`${
                             lastDrivePdfLink ? 'px-3' : 'w-full'
-                          } py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-600 transition cursor-pointer`}
+                          } py-1.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[11px] font-semibold text-[#475569] transition cursor-pointer`}
                           title="Αλλαγή ή ανανέωση λογαριασμού Google Drive"
                         >
                           Αλλαγή Λογαριασμού
@@ -50742,7 +50755,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-[11px] text-slate-500 leading-snug">
+                      <p className="text-[11px] text-[#64748b] leading-snug">
                         Συνδέσου στο Google Drive για να συγχρονίζονται αυτόματα οι σημειώσεις και οι υποφάκελοί σου (<b>Α1, Β1, Γ1, Γ2</b>) σε <b>PDF</b> μέσα στον φάκελο του GoodNotes σου, χωρίς να διαγράφεται τίποτα.
                       </p>
                       <button
@@ -50756,7 +50769,7 @@ export default function App() {
                             showToast(`⚠️ Σφάλμα Google Drive Login: ${err?.message || 'Ακυρώθηκε'}`);
                           }
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[#0066ff] hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-bold shadow-xs transition cursor-pointer"
                       >
                         <Cloud className="w-4 h-4" />
                         <span>Google Drive Login</span>
@@ -53691,10 +53704,10 @@ export default function App() {
                     >
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-slate-200/90 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#fdfbf7] rounded-3xl shadow-2xl border border-[#dfd8cb] p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-[#2c3e50]"
                       >
                         {/* Header with Live Preview + Favorite Star + Close */}
-                        <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#dfd8cb]">
                           <div className="flex items-center gap-3 min-w-0">
                             <div
                               style={{
@@ -53710,17 +53723,17 @@ export default function App() {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <h3 className="text-base font-extrabold text-[#1b2a4a] truncate">
+                              <h3 className="text-base font-extrabold text-[#1e3a5f] truncate">
                                 Επεξεργασία Φακέλου
                               </h3>
-                              <p className="text-xs text-slate-500 truncate">
+                              <p className="text-xs text-[#64748b] truncate">
                                 {editingFolderModal.parentPath
                                   ? `Βιβλιοθήκη › ${editingFolderModal.parentPath.replace(
                                       /\//g,
                                       ' › '
                                     )} › `
                                   : 'Βιβλιοθήκη › '}
-                                <span className="font-bold text-[#0066ff]">
+                                <span className="font-bold text-[#1e3a5f]">
                                   {editingFolderModal.name || 'Φάκελος'}
                                 </span>
                               </p>
@@ -53738,7 +53751,7 @@ export default function App() {
                               className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer focus:outline-none ${
                                 editingFolderModal.favorite
                                   ? 'bg-amber-50 border-amber-300 text-amber-700'
-                                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-amber-600'
+                                  : 'bg-[#efebe3] border-[#dfd8cb] text-[#64748b] hover:text-amber-600'
                               }`}
                               title="Προσθήκη / Αφαίρεση από τα Αγαπημένα"
                             >
@@ -53754,7 +53767,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => setEditingFolderModal(null)}
-                              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                              className="p-1.5 rounded-xl text-[#a8a29e] hover:text-[#1e3a5f] hover:bg-[#efebe3] cursor-pointer transition"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -53763,7 +53776,7 @@ export default function App() {
 
                         {/* 1. Folder Name Input */}
                         <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-slate-700">
+                          <label className="block text-xs font-bold text-[#1e3a5f]">
                             Όνομα Φακέλου
                           </label>
                           <input
@@ -53792,13 +53805,13 @@ export default function App() {
                               }
                             }}
                             placeholder="Πληκτρολόγησε όνομα φακέλου..."
-                            className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-[#1b2a4a] focus:outline-none focus:border-[#0066ff]"
+                            className="w-full px-3 py-2 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-sm font-bold text-[#1e3a5f] focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30"
                           />
                         </div>
 
                         {/* 2. Folder Color (12 Two-Tone Colors matching the Folder Card) */}
                         <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-slate-700">
+                          <label className="block text-xs font-bold text-[#1e3a5f]">
                             Χρώμα Φακέλου
                           </label>
                           <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
@@ -53817,7 +53830,7 @@ export default function App() {
                                   style={{ borderColor: `${col.hex}88` }}
                                   className={`relative w-full h-8 rounded-md bg-white border overflow-hidden flex flex-col transition cursor-pointer focus:outline-none ${
                                     isSelectedColor
-                                      ? 'ring-2 ring-[#1b2a4a] scale-105 shadow-md'
+                                      ? 'ring-2 ring-[#1e3a5f] scale-105 shadow-md'
                                       : 'opacity-90 hover:opacity-100 hover:scale-105'
                                   }`}
                                   title={col.label}
@@ -53846,7 +53859,7 @@ export default function App() {
 
                         {/* 3. Folder Icon (30 Ready-Made Icons) */}
                         <div className="space-y-1.5">
-                          <label className="block text-xs font-bold text-slate-700">
+                          <label className="block text-xs font-bold text-[#1e3a5f]">
                             Εικονίδιο Φακέλου (30 Icons)
                           </label>
                           <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
@@ -53863,8 +53876,8 @@ export default function App() {
                                   }
                                   className={`h-10 rounded-xl border flex items-center justify-center transition cursor-pointer focus:outline-none ${
                                     isSelectedIcon
-                                      ? 'bg-sky-50 border-[#0066ff] ring-2 ring-[#0066ff]/25 scale-105 shadow-xs'
-                                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200/90'
+                                      ? 'bg-[#efebe3] border-[#1e3a5f] ring-2 ring-[#1e3a5f]/30 scale-105 shadow-xs'
+                                      : 'bg-[#fdfbf7] hover:bg-[#efebe3] border-[#dfd8cb]'
                                   }`}
                                   title={ic.label}
                                 >
@@ -53888,17 +53901,17 @@ export default function App() {
                                 prev ? { ...prev, showMoveTree: !prev.showMoveTree } : null
                               )
                             }
-                            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 text-xs font-bold text-[#1b2a4a] transition cursor-pointer focus:outline-none"
+                            className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-xs font-bold text-[#1e3a5f] transition cursor-pointer focus:outline-none"
                           >
                             <span className="flex items-center gap-2 min-w-0 truncate">
-                              <span className="text-slate-500 font-semibold">Μετακίνηση σε:</span>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-[#0066ff] font-bold truncate">
+                              <span className="text-[#64748b] font-semibold">Μετακίνηση σε:</span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] text-[#1e3a5f] font-bold truncate">
                                 {editingFolderModal.parentPath
                                   ? `📁 ${editingFolderModal.parentPath.replace(/\//g, ' › ')}`
                                   : '🏠 Βιβλιοθήκη (Αρχικός)'}
                               </span>
                             </span>
-                            <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+                            <span className="text-[11px] font-semibold text-[#64748b] shrink-0">
                               {editingFolderModal.showMoveTree ? 'Κλείσιμο ▴' : 'Δέντρο ▾'}
                             </span>
                           </button>
@@ -53951,7 +53964,7 @@ export default function App() {
 
                               const isRootSelected = editingFolderModal.parentPath === '';
                               return (
-                                <div className="max-h-56 overflow-y-auto p-2 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-1">
+                                <div className="max-h-56 overflow-y-auto p-2 bg-[#efebe3]/40 rounded-2xl border border-[#dfd8cb] space-y-1">
                                   {/* Root Node: Βιβλιοθήκη */}
                                   <button
                                     type="button"
@@ -53962,24 +53975,24 @@ export default function App() {
                                     }
                                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer focus:outline-none ${
                                       isRootSelected
-                                        ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-200/90 shadow-2xs'
-                                        : 'bg-white hover:bg-emerald-50/70 text-[#1b2a4a] border border-slate-200/70'
+                                        ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                        : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70'
                                     }`}
                                   >
                                     <span className="flex items-center gap-2">
                                       <Home
                                         className={`w-4 h-4 ${
-                                          isRootSelected ? 'text-emerald-700' : 'text-emerald-600'
+                                          isRootSelected ? 'text-white' : 'text-[#1e3a5f]'
                                         }`}
                                       />
                                       <span>Βιβλιοθήκη (Αρχικός Φάκελος)</span>
                                     </span>
                                     {isRootSelected ? (
-                                      <span className="text-[10px] font-semibold bg-emerald-200/70 text-emerald-800 px-1.5 py-0.5 rounded-md">
+                                      <span className="text-[10px] font-semibold bg-white/20 text-white px-1.5 py-0.5 rounded-md">
                                         Επιλεγμένο
                                       </span>
                                     ) : (
-                                      <span className="text-[10px] font-semibold text-emerald-700 opacity-85">
+                                      <span className="text-[10px] font-semibold text-[#1e3a5f] opacity-85">
                                         Μετακίνηση εδώ
                                       </span>
                                     )}
@@ -54006,14 +54019,14 @@ export default function App() {
                                         style={{ paddingLeft: `${(node.depth + 1) * 18 + 8}px` }}
                                         className={`w-full flex items-center justify-between pr-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer focus:outline-none ${
                                           isSelectedParent
-                                            ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-200/90 shadow-2xs'
-                                            : 'bg-white hover:bg-emerald-50/70 text-slate-700 border border-slate-200/70'
+                                            ? 'bg-[#1e3a5f] text-white shadow-2xs'
+                                            : 'bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb]/70'
                                         }`}
                                       >
                                         <span className="flex items-center gap-1.5 min-w-0 truncate">
                                           <span
                                             className={`font-mono text-[11px] select-none ${
-                                              isSelectedParent ? 'text-emerald-700/75' : 'text-slate-300'
+                                              isSelectedParent ? 'text-white/70' : 'text-[#a8a29e]'
                                             }`}
                                           >
                                             {node.isLastSibling ? '└─' : '├─'}
@@ -54028,11 +54041,11 @@ export default function App() {
                                           <span className="truncate font-bold">{node.name}</span>
                                         </span>
                                         {isSelectedParent ? (
-                                          <span className="text-[10px] font-semibold bg-emerald-200/70 text-emerald-800 px-1.5 py-0.5 rounded-md shrink-0 ml-2">
+                                          <span className="text-[10px] font-semibold bg-white/20 text-white px-1.5 py-0.5 rounded-md shrink-0 ml-2">
                                             Επιλεγμένο
                                           </span>
                                         ) : (
-                                          <span className="text-[10px] font-semibold text-emerald-700 opacity-85 shrink-0 ml-2">
+                                          <span className="text-[10px] font-semibold text-[#1e3a5f] opacity-85 shrink-0 ml-2">
                                             Μετακίνηση εδώ
                                           </span>
                                         )}
@@ -54049,7 +54062,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => setEditingFolderModal(null)}
-                            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                            className="px-4 py-2.5 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] text-[#2c3e50] border border-[#dfd8cb] text-xs font-bold transition cursor-pointer"
                           >
                             Ακύρωση
                           </button>
@@ -54066,7 +54079,7 @@ export default function App() {
                               );
                               setEditingFolderModal(null);
                             }}
-                            className="px-4 py-2.5 rounded-xl bg-emerald-100/90 hover:bg-emerald-200/90 text-emerald-800 border border-emerald-200/90 text-xs font-bold shadow-xs transition cursor-pointer"
+                            className="px-4 py-2.5 rounded-xl bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-bold shadow-xs transition cursor-pointer"
                           >
                             Αποθήκευση
                           </button>
@@ -54507,7 +54520,21 @@ export default function App() {
                   <button
                     data-popover-trigger="layers"
                     onClick={() => {
-                      setShowLayersPanel((v) => !v);
+                      setShowLayersPanel((v) => {
+                        const nextVal = !v;
+                        if (nextVal) {
+                          const minTop = getStickyNavBottom();
+                          setLayersPanelPos((cur) => {
+                            const defaultX = Math.max(16, window.innerWidth - 340);
+                            if (!cur) return { x: defaultX, y: minTop + 6 };
+                            return {
+                              x: Math.max(8, Math.min(window.innerWidth - 328, cur.x)),
+                              y: Math.max(minTop, Math.min(window.innerHeight - 120, cur.y)),
+                            };
+                          });
+                        }
+                        return nextVal;
+                      });
                       setShowShapeLibraryPanel(false);
                       setShowWidthPopover(false);
                       setShowColorPopover(false);
@@ -56844,7 +56871,7 @@ export default function App() {
                 }
                 className={`fixed ${
                   shapeLibPos ? '' : 'right-4 sm:right-12'
-                } z-50 w-[360px] sm:w-[465px] rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 flex flex-col max-h-[78vh]`}
+                } z-50 w-[360px] sm:w-[465px] rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-2xl p-3.5 text-[#2c3e50] flex flex-col max-h-[78vh]`}
               >
                 {(() => {
                   const skHex = (stickerCustomColor || '#1d4ed8').replace('#', '');
@@ -56913,19 +56940,19 @@ export default function App() {
                   }}
                   style={{ touchAction: 'none' }}
                   title="Σύρε από εδώ για μετακίνηση του παραθύρου"
-                  className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 shrink-0 cursor-grab active:cursor-grabbing select-none"
+                  className="flex items-center justify-between pb-2.5 mb-2 border-b border-[#dfd8cb] shrink-0 cursor-grab active:cursor-grabbing select-none"
                 >
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-emerald-800">
+                    <span className="text-xs font-bold text-[#1e3a5f]">
                       Συλλογή Εικόνων & Σχημάτων
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-[#64748b]">
                       Σύρε τον τίτλο για μετακίνηση • Πάτα σε εικόνα για εισαγωγή
                     </span>
                   </div>
                   <button
                     onClick={() => setShowShapeLibraryPanel(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    className="p-1 rounded-lg text-[#64748b] hover:text-[#1e3a5f] hover:bg-[#efebe3] cursor-pointer transition"
                     title="Κλείσιμο Συλλογής Εικόνων"
                   >
                     <X className="w-4 h-4" />
@@ -56939,13 +56966,13 @@ export default function App() {
                   ).length;
                   const iconsTotal = CURATED_STICKERS_CATALOG.length - sketchesTotal;
                   return (
-                    <div className="flex items-center justify-between gap-0.5 p-1 bg-slate-100 rounded-xl mb-2.5 shrink-0">
+                    <div className="flex items-center justify-between gap-0.5 p-1 bg-[#efebe3] rounded-xl mb-2.5 shrink-0 border border-[#dfd8cb]">
                       <button
                         onClick={() => setLibraryTab('all')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'all'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-[#1e3a5f] text-white shadow-xs'
+                            : 'text-[#475569] hover:text-[#1e3a5f]'
                         }`}
                       >
                         Όλα ({MIND_MAPS_CATALOG.length + CURATED_STICKERS_CATALOG.length + shapeLibrary.length})
@@ -56954,8 +56981,8 @@ export default function App() {
                         onClick={() => setLibraryTab('educational')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'educational'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-[#1e3a5f] text-white shadow-xs'
+                            : 'text-[#475569] hover:text-[#1e3a5f]'
                         }`}
                       >
                         Επιστήμες ({MIND_MAPS_CATALOG.length})
@@ -56964,8 +56991,8 @@ export default function App() {
                         onClick={() => setLibraryTab('sketches')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'sketches'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-[#1e3a5f] text-white shadow-xs'
+                            : 'text-[#475569] hover:text-[#1e3a5f]'
                         }`}
                       >
                         Σκίτσα ({sketchesTotal})
@@ -56974,8 +57001,8 @@ export default function App() {
                         onClick={() => setLibraryTab('stickers')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'stickers'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-[#1e3a5f] text-white shadow-xs'
+                            : 'text-[#475569] hover:text-[#1e3a5f]'
                         }`}
                       >
                         Εικονίδια ({iconsTotal})
@@ -56984,8 +57011,8 @@ export default function App() {
                         onClick={() => setLibraryTab('custom')}
                         className={`flex-1 py-1.5 px-1 rounded-lg text-[9.5px] font-bold transition cursor-pointer whitespace-nowrap text-center ${
                           libraryTab === 'custom'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-[#1e3a5f] text-white shadow-xs'
+                            : 'text-[#475569] hover:text-[#1e3a5f]'
                         }`}
                       >
                         Δικά μου ({shapeLibrary.length})
@@ -57148,7 +57175,7 @@ export default function App() {
                               setStickerSearchQuery(e.target.value);
                             }}
                             placeholder="Αναζήτηση σε όλα (π.χ. φορτίο, βάρκα, τροφή, κύτταρο, βέλος)..."
-                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-xs text-[#2c3e50] placeholder:text-[#a8a29e] focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30"
                           />
                           {shapeLibSearchQuery && (
                             <button
@@ -57156,7 +57183,7 @@ export default function App() {
                                 setShapeLibSearchQuery('');
                                 setStickerSearchQuery('');
                               }}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a8a29e] hover:text-[#1e3a5f] cursor-pointer"
                               title="Καθαρισμός αναζήτησης"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -57165,19 +57192,19 @@ export default function App() {
                         </div>
 
                         {/* Live Category Breakdown Bar */}
-                        <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap text-[10px]">
+                        <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-[#dfd8cb] shrink-0 flex-wrap text-[10px]">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
                               onClick={() => setLibraryTab('educational')}
-                              className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold hover:bg-emerald-100 cursor-pointer"
+                              className="px-2 py-0.5 rounded-full bg-[#efebe3] text-[#1e3a5f] border border-[#dfd8cb] font-bold hover:bg-[#e4ded2] cursor-pointer"
                             >
                               {matchedLessons.length} επιστήμες
                             </button>
                             <button
                               type="button"
                               onClick={() => setLibraryTab('stickers')}
-                              className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200 font-bold hover:bg-sky-100 cursor-pointer"
+                              className="px-2 py-0.5 rounded-full bg-[#efebe3] text-[#1e3a5f] border border-[#dfd8cb] font-bold hover:bg-[#e4ded2] cursor-pointer"
                             >
                               {matchedStickers.length} εικονίδια
                               {isSearchingOnlineStickers ? ' (...)' : ''}
@@ -57186,21 +57213,21 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() => setLibraryTab('custom')}
-                                className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-bold hover:bg-amber-100 cursor-pointer"
+                                className="px-2 py-0.5 rounded-full bg-[#efebe3] text-[#1e3a5f] border border-[#dfd8cb] font-bold hover:bg-[#e4ded2] cursor-pointer"
                               >
                                 {matchedCustom.length} δικά μου
                               </button>
                             )}
                           </div>
-                          <span className="font-bold text-emerald-700 shrink-0">
+                          <span className="font-bold text-[#1e3a5f] shrink-0">
                             {totalFound} σύνολο
                           </span>
                         </div>
 
                         {totalFound === 0 && !isSearchingOnlineStickers ? (
-                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                            <Search className="w-6 h-6 text-slate-400" />
-                            <p className="text-xs font-semibold text-slate-600">
+                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-[#efebe3]/30 rounded-xl border border-dashed border-[#dfd8cb]">
+                            <Search className="w-6 h-6 text-[#a8a29e]" />
+                            <p className="text-xs font-semibold text-[#2c3e50]">
                               Δεν βρέθηκαν αποτελέσματα για «{shapeLibSearchQuery}»
                             </p>
                             <button
@@ -57208,7 +57235,7 @@ export default function App() {
                                 setShapeLibSearchQuery('');
                                 setStickerSearchQuery('');
                               }}
-                              className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold cursor-pointer hover:bg-emerald-700"
+                              className="px-3 py-1 rounded-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[11px] font-semibold cursor-pointer shadow-xs transition"
                             >
                               Καθαρισμός Αναζήτησης
                             </button>
@@ -57504,7 +57531,7 @@ export default function App() {
                               setStickerSearchQuery(e.target.value);
                             }}
                             placeholder="Αναζήτηση (π.χ. κύτταρο, δύναμη, φορτίο, τροφή, χάρτης)..."
-                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-xs text-[#2c3e50] placeholder:text-[#a8a29e] focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30"
                           />
                           {shapeLibSearchQuery && (
                             <button
@@ -57512,7 +57539,7 @@ export default function App() {
                                 setShapeLibSearchQuery('');
                                 setStickerSearchQuery('');
                               }}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a8a29e] hover:text-[#1e3a5f] cursor-pointer"
                               title="Καθαρισμός αναζήτησης"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -57521,7 +57548,7 @@ export default function App() {
                         </div>
 
                         {/* Subject Filter Pills */}
-                        <div className="flex items-center justify-between gap-1 mb-2 pb-2 border-b border-slate-100 shrink-0">
+                        <div className="flex items-center justify-between gap-1 mb-2 pb-2 border-b border-[#dfd8cb] shrink-0">
                           <div className="flex items-center gap-1 flex-wrap">
                             {(
                               [
@@ -57537,8 +57564,8 @@ export default function App() {
                                 onClick={() => setLibrarySubjectFilter(s.id)}
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
                                   librarySubjectFilter === s.id
-                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                    ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-2xs'
+                                    : 'bg-[#efebe3] text-[#2c3e50] border-[#dfd8cb] hover:bg-[#e4ded2]'
                                 }`}
                               >
                                 {s.label}
@@ -57553,7 +57580,7 @@ export default function App() {
                               }}
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
                                 shapeLibSearchQuery.trim().toLowerCase() === 'premium'
-                                  ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-2xs'
                                   : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                               }`}
                               title="Εμφάνιση όλων των Premium εικονιδίων"
@@ -57561,16 +57588,16 @@ export default function App() {
                               Premium
                             </button>
                           </div>
-                          <span className="text-[10px] font-bold text-emerald-700 shrink-0">
+                          <span className="text-[10px] font-bold text-[#1e3a5f] shrink-0">
                             {`${filteredCatalog.length} εικόνες`}
                           </span>
                         </div>
 
                         {/* Results Grid */}
                         {filteredCatalog.length === 0 ? (
-                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                            <Search className="w-6 h-6 text-slate-400" />
-                            <p className="text-xs font-semibold text-slate-600">
+                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-[#efebe3]/30 rounded-xl border border-dashed border-[#dfd8cb]">
+                            <Search className="w-6 h-6 text-[#a8a29e]" />
+                            <p className="text-xs font-semibold text-[#2c3e50]">
                               Δεν βρέθηκαν εικόνες με αυτά τα φίλτρα
                             </p>
                             <button
@@ -57580,7 +57607,7 @@ export default function App() {
                                 setShapeLibSearchQuery('');
                                 setStickerSearchQuery('');
                               }}
-                              className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold cursor-pointer hover:bg-emerald-700"
+                              className="px-3 py-1 rounded-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[11px] font-semibold cursor-pointer shadow-xs transition"
                             >
                               Επαναφορά Φίλτρων
                             </button>
@@ -57861,7 +57888,7 @@ export default function App() {
                                 ? 'Αναζήτηση σε σκίτσα (π.χ. Νεύτωνας, Αϊνστάιν, βρασμός, νερό)...'
                                 : 'Αναζήτηση (π.χ. βέλος, βάρκα, φορτίο, τροφή, γρανάζι)...'
                             }
-                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-xs text-[#2c3e50] placeholder:text-[#a8a29e] focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30"
                           />
                           {stickerSearchQuery && (
                             <button
@@ -57869,7 +57896,7 @@ export default function App() {
                                 setStickerSearchQuery('');
                                 setShapeLibSearchQuery('');
                               }}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a8a29e] hover:text-[#1e3a5f] cursor-pointer"
                               title="Καθαρισμός αναζήτησης"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -57878,7 +57905,7 @@ export default function App() {
                         </div>
 
                         {/* 4 Compact Category Filter Pills (for Εικονίδια & Σκίτσα) + Count */}
-                        <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-slate-100 shrink-0 flex-wrap">
+                        <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-[#dfd8cb] shrink-0 flex-wrap">
                           {!isSketchesMode ? (
                             <div className="flex items-center gap-1 flex-wrap">
                               {compactIconCategories.map((cat) => (
@@ -57887,8 +57914,8 @@ export default function App() {
                                   onClick={() => setStickerCategoryFilter(cat.id)}
                                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
                                     stickerCategoryFilter === cat.id
-                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                      ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-2xs'
+                                      : 'bg-[#efebe3] text-[#2c3e50] border-[#dfd8cb] hover:bg-[#e4ded2]'
                                   }`}
                                 >
                                   {cat.label}
@@ -57910,8 +57937,8 @@ export default function App() {
                                   onClick={() => setSketchSubFilter(sub.id)}
                                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
                                     sketchSubFilter === sub.id
-                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                      ? 'bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-2xs'
+                                      : 'bg-[#efebe3] text-[#2c3e50] border-[#dfd8cb] hover:bg-[#e4ded2]'
                                   }`}
                                 >
                                   {sub.label}
@@ -57919,7 +57946,7 @@ export default function App() {
                               ))}
                             </div>
                           )}
-                          <span className="text-[10px] font-bold text-emerald-700 shrink-0">
+                          <span className="text-[10px] font-bold text-[#1e3a5f] shrink-0">
                             {isSearchingOnlineStickers && !isSketchesMode
                               ? 'Online αναζήτηση...'
                               : `${combinedStickers.length} ${isSketchesMode ? 'σκίτσα' : 'εικονίδια'}`}
@@ -57928,9 +57955,9 @@ export default function App() {
 
                         {/* Stickers Results Grid */}
                         {combinedStickers.length === 0 ? (
-                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                            <Search className="w-6 h-6 text-slate-400" />
-                            <p className="text-xs font-semibold text-slate-600">
+                          <div className="py-8 px-3 text-center flex flex-col items-center gap-2 bg-[#efebe3]/30 rounded-xl border border-dashed border-[#dfd8cb]">
+                            <Search className="w-6 h-6 text-[#a8a29e]" />
+                            <p className="text-xs font-semibold text-[#2c3e50]">
                               Δεν βρέθηκαν εικονίδια με αυτά τα φίλτρα
                             </p>
                             <button
@@ -57940,7 +57967,7 @@ export default function App() {
                                 setStickerColorStyleFilter('all');
                                 setStickerSearchQuery('');
                               }}
-                              className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold cursor-pointer hover:bg-emerald-700"
+                              className="px-3 py-1 rounded-full bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[11px] font-semibold cursor-pointer shadow-xs transition"
                             >
                               Επαναφορά Φίλτρων
                             </button>
@@ -58039,7 +58066,7 @@ export default function App() {
                                     Math.min(combinedStickers.length, prev + 48)
                                   )
                                 }
-                                className="col-span-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold cursor-pointer transition"
+                                className="col-span-3 py-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] text-[#1e3a5f] border border-[#dfd8cb] text-xs font-bold cursor-pointer transition shadow-2xs"
                               >
                                 Εμφάνιση περισσότερων ({visibleStickers.length} από{' '}
                                 {combinedStickers.length})
@@ -58111,22 +58138,22 @@ export default function App() {
                       <div className="flex flex-col min-h-0 flex-1 space-y-2.5">
                         {/* Inline Name & Tags Editor Panel (auto-opens when +Βιβλιοθήκη is clicked or ✏️ is pressed) */}
                         {editingItem && (
-                          <div className="p-2.5 rounded-xl bg-emerald-50/90 border-2 border-emerald-400 shadow-sm space-y-2 shrink-0">
+                          <div className="p-2.5 rounded-xl bg-[#efebe3] border border-[#dfd8cb] shadow-sm space-y-2 shrink-0">
                             <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-emerald-900">
+                              <span className="text-[11px] font-bold text-[#1e3a5f]">
                                 ✏️ Ονομασία & Tags Σχήματος
                               </span>
                               <button
                                 type="button"
                                 onClick={() => setEditingLibItemId(null)}
-                                className="text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
+                                className="text-[#a8a29e] hover:text-[#1e3a5f] p-0.5 rounded cursor-pointer"
                                 title="Κλείσιμο επεξεργασίας"
                               >
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             </div>
                             <div className="flex items-start gap-2.5">
-                              <div className="w-16 h-16 rounded-lg bg-[#fffdf7] border border-emerald-200 flex items-center justify-center overflow-hidden p-1 shrink-0">
+                              <div className="w-16 h-16 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] flex items-center justify-center overflow-hidden p-1 shrink-0">
                                 <img
                                   src={editingItem.thumbnailDataUrl}
                                   alt={editingItem.title}
@@ -58135,7 +58162,7 @@ export default function App() {
                               </div>
                               <div className="flex-1 space-y-1.5">
                                 <div>
-                                  <label className="block text-[9.5px] font-bold text-emerald-800 mb-0.5">
+                                  <label className="block text-[9.5px] font-bold text-[#1e3a5f] mb-0.5">
                                     Όνομα:
                                   </label>
                                   <input
@@ -58151,11 +58178,11 @@ export default function App() {
                                       }
                                     }}
                                     placeholder="π.χ. Ελατήριο με μάζα, Κύκλωμα..."
-                                    className="w-full px-2 py-1 rounded-lg bg-white border border-emerald-300 text-xs font-semibold text-slate-800 focus:outline-none focus:border-emerald-600"
+                                    className="w-full px-2 py-1 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] text-xs font-semibold text-[#1e3a5f] focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30"
                                   />
                                 </div>
                                 <div>
-                                  <label className="block text-[9.5px] font-bold text-emerald-800 mb-0.5">
+                                  <label className="block text-[9.5px] font-bold text-[#1e3a5f] mb-0.5">
                                     Tags (χωρισμένα με κόμμα):
                                   </label>
                                   <input
@@ -58169,7 +58196,7 @@ export default function App() {
                                       }
                                     }}
                                     placeholder="π.χ. φυσική, ταλάντωση, ελατήριο..."
-                                    className="w-full px-2 py-1 rounded-lg bg-white border border-emerald-300 text-[11px] text-slate-700 focus:outline-none focus:border-emerald-600"
+                                    className="w-full px-2 py-1 rounded-lg bg-[#fdfbf7] border border-[#dfd8cb] text-[11px] text-[#2c3e50] focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30"
                                   />
                                 </div>
                               </div>
@@ -58177,7 +58204,7 @@ export default function App() {
 
                             {/* Quick 1-click Tag Presets */}
                             <div className="flex items-center flex-wrap gap-1 pt-0.5">
-                              <span className="text-[9px] font-semibold text-emerald-800 mr-0.5">
+                              <span className="text-[9px] font-semibold text-[#1e3a5f] mr-0.5">
                                 Γρήγορα tags:
                               </span>
                               {quickTagPresets.map((preset) => {
@@ -58202,8 +58229,8 @@ export default function App() {
                                     }}
                                     className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold border transition cursor-pointer ${
                                       isAdded
-                                        ? 'bg-emerald-600 text-white border-emerald-600'
-                                        : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                                        ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                                        : 'bg-[#fdfbf7] text-[#1e3a5f] border-[#dfd8cb] hover:bg-[#efebe3]'
                                     }`}
                                   >
                                     {isAdded ? `✓ ${preset}` : `+ ${preset}`}
@@ -58216,14 +58243,14 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() => setEditingLibItemId(null)}
-                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 text-[10.5px] font-semibold cursor-pointer"
+                                className="px-2.5 py-1 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] text-[#2c3e50] border border-[#dfd8cb] text-[10.5px] font-semibold cursor-pointer"
                               >
                                 Ακύρωση
                               </button>
                               <button
                                 type="button"
                                 onClick={saveEditingLibItem}
-                                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold shadow-xs cursor-pointer"
+                                className="px-3 py-1 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[10.5px] font-bold shadow-xs cursor-pointer"
                               >
                                 ✓ Αποθήκευση
                               </button>
@@ -58239,13 +58266,13 @@ export default function App() {
                             value={shapeLibSearchQuery}
                             onChange={(e) => setShapeLibSearchQuery(e.target.value)}
                             placeholder="Αναζήτηση στα δικά μου (όνομα ή #tag)..."
-                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                            className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-xs text-[#2c3e50] placeholder:text-[#a8a29e] focus:outline-none focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30"
                           />
                           {shapeLibSearchQuery && (
                             <button
                               type="button"
                               onClick={() => setShapeLibSearchQuery('')}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a8a29e] hover:text-[#1e3a5f] cursor-pointer"
                               title="Καθαρισμός αναζήτησης"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -58265,8 +58292,8 @@ export default function App() {
                                 onClick={() => handleInsertFromShapeLibrary(item)}
                                 className={`group relative flex flex-col items-center justify-between p-2 rounded-xl border transition cursor-pointer shadow-2xs ${
                                   isBeingEdited
-                                    ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-300'
-                                    : 'border-slate-200 bg-slate-50/70 hover:bg-emerald-50/60 hover:border-emerald-400'
+                                    ? 'border-[#1e3a5f] bg-[#efebe3] ring-2 ring-[#1e3a5f]/30'
+                                    : 'border-[#dfd8cb] bg-[#fdfbf7] hover:bg-[#efebe3]/50 hover:border-[#1e3a5f]/40'
                                 }`}
                                 title={`Εισαγωγή "${item.title}" στη σελίδα`}
                               >
@@ -58279,7 +58306,7 @@ export default function App() {
                                       setEditingLibTitle(item.title);
                                       setEditingLibTagsInput((item.tags || []).join(', '));
                                     }}
-                                    className="p-1 rounded-lg bg-white/95 hover:bg-emerald-50 text-emerald-700 border border-slate-200/90 text-[10px] leading-none transition cursor-pointer"
+                                    className="p-1 rounded-lg bg-[#fdfbf7] hover:bg-[#efebe3] text-[#1e3a5f] border border-[#dfd8cb] text-[10px] leading-none transition cursor-pointer"
                                     title="Μετονομασία & επεξεργασία tags"
                                   >
                                     ✏️
@@ -58294,14 +58321,14 @@ export default function App() {
                                       setShapeLibrary((prev) => prev.filter((x) => x.id !== item.id));
                                       showToast('🗑️ Αφαιρέθηκε από τη Βιβλιοθήκη Σχημάτων!');
                                     }}
-                                    className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition cursor-pointer"
+                                    className="p-1 rounded-lg bg-[#fdf6f6] hover:bg-[#fae8e8] text-[#b91c1c] border border-[#f3d4d4] transition cursor-pointer"
                                     title="Διαγραφή αυτού του σχήματος από τη Βιβλιοθήκη"
                                   >
                                     <Trash2 className="w-3 h-3" />
                                   </button>
                                 </div>
 
-                                <div className="w-full h-24 rounded-lg bg-[#fffdf7] border border-slate-200/80 flex items-center justify-center overflow-hidden p-1.5">
+                                <div className="w-full h-24 rounded-lg bg-[#fffdf7] border border-[#dfd8cb] flex items-center justify-center overflow-hidden p-1.5">
                                   <img
                                     src={item.thumbnailDataUrl}
                                     alt={item.title}
@@ -58310,10 +58337,10 @@ export default function App() {
                                 </div>
 
                                 <div className="w-full flex items-center justify-between mt-1.5 px-0.5 gap-1">
-                                  <span className="text-[10.5px] font-bold text-slate-700 truncate">
+                                  <span className="text-[10.5px] font-bold text-[#2c3e50] truncate">
                                     {item.title}
                                   </span>
-                                  <span className="text-[9px] text-slate-400 shrink-0">
+                                  <span className="text-[9px] text-[#64748b] shrink-0">
                                     {item.createdAt}
                                   </span>
                                 </div>
@@ -58327,7 +58354,7 @@ export default function App() {
                                           e.stopPropagation();
                                           setShapeLibSearchQuery(tg);
                                         }}
-                                        className="px-1.5 py-0.2 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[8.5px] font-semibold cursor-pointer"
+                                        className="px-1.5 py-0.2 rounded-full bg-[#efebe3] hover:bg-[#e4ded2] text-[#1e3a5f] border border-[#dfd8cb] text-[8.5px] font-semibold cursor-pointer transition"
                                         title={`Φιλτράρισμα με #${tg}`}
                                       >
                                         #{tg}
@@ -60678,8 +60705,9 @@ export default function App() {
                         drag.origX + (e.clientX - drag.startX)
                       )
                     );
+                    const minTop = getStickyNavBottom();
                     const nextY = Math.max(
-                      8,
+                      minTop,
                       Math.min(
                         window.innerHeight - 100,
                         drag.origY + (e.clientY - drag.startY)
@@ -60694,8 +60722,8 @@ export default function App() {
                     periodicTableDragRef.current = null;
                   }}
                   onWheel={(e) => e.stopPropagation()}
-                  className="fixed z-50 overflow-auto rounded-2xl bg-white/98 backdrop-blur-md border-2 border-indigo-200 shadow-2xl text-slate-800 select-none cursor-grab active:cursor-grabbing"
-                  title="Σύρε από οποιοδήποτε λευκό σημείο για μετακίνηση ή από τις γωνίες για αυξομείωση μεγέθους"
+                  className="fixed z-50 overflow-auto rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-2xl text-[#2c3e50] select-none cursor-grab active:cursor-grabbing"
+                  title="Σύρε από οποιοδήποτε σημείο για μετακίνηση ή από τις γωνίες για αυξομείωση μεγέθους"
                 >
                   {/* 4 Γωνίες Αυξομείωσης Μεγέθους (Corner Resize Handles) */}
                   <div
@@ -60731,7 +60759,7 @@ export default function App() {
                     onPointerMove={moveCornerResize}
                     onPointerUp={endCornerResize}
                     onPointerCancel={endCornerResize}
-                    className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-20 flex items-end justify-end pr-1 pb-1 text-slate-400 hover:text-indigo-600"
+                    className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-20 flex items-end justify-end pr-1 pb-1 text-[#64748b] hover:text-[#1e3a5f]"
                     title="Σύρε τη γωνία για αυξομείωση μεγέθους"
                   >
                     <svg width="10" height="10" viewBox="0 0 10 10" className="pointer-events-none">
@@ -60742,20 +60770,20 @@ export default function App() {
 
                   {/* Header */}
                   <div
-                    className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2.5 border-b border-slate-200"
+                    className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2.5 border-b border-[#dfd8cb]"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
+                      <span className="w-6 h-6 rounded-lg bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-bold">
                         ⚛️
                       </span>
                       <span
-                        className="font-extrabold text-[#1b2a4a]"
+                        className="font-extrabold text-[#1e3a5f]"
                         style={{ fontSize: `${(12 * Math.max(1, ptScale * 0.92)).toFixed(1)}px` }}
                       >
                         Περιοδικός Πίνακας Στοιχείων
                       </span>
                       <span
-                        className="text-slate-400 font-semibold"
+                        className="text-[#64748b] font-semibold"
                         style={{ fontSize: `${(10 * Math.max(1, ptScale * 0.9)).toFixed(1)}px` }}
                       >
                         (Κλικ = ενημέρωση επιλεγμένου ατόμου • Shift+Κλικ = προσθήκη δίπλα)
@@ -60764,7 +60792,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setShowPeriodicTableModal(false)}
-                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      className="p-1 rounded-lg hover:bg-[#efebe3] text-[#64748b] hover:text-[#2c3e50] cursor-pointer transition"
                       title="Κλείσιμο Περιοδικού Πίνακα"
                     >
                       <X className="w-4 h-4" />
@@ -60865,37 +60893,39 @@ export default function App() {
             })()}
 
             {/* Floating Layers Popover (Draggable Window, Draggable Layer Reordering, Click-to-Rename, Lock, Visibility & Delete!) */}
-            {showLayersPanel && (
+            {showLayersPanel && (() => {
+              const safeNavBottom = getStickyNavBottom();
+              const effLayersX = layersPanelPos
+                ? Math.max(8, Math.min(window.innerWidth - 328, layersPanelPos.x))
+                : Math.max(16, window.innerWidth - 340);
+              const effLayersY = layersPanelPos
+                ? Math.max(safeNavBottom, Math.min(window.innerHeight - 120, layersPanelPos.y))
+                : safeNavBottom + 6;
+
+              return (
               <div
                 data-ui-panel="true"
                 data-popover-panel="layers"
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                style={
-                  layersPanelPos
-                    ? { left: `${layersPanelPos.x}px`, top: `${layersPanelPos.y}px` }
-                    : undefined
-                }
-                className={`fixed z-40 w-80 rounded-2xl bg-white border border-slate-200 shadow-2xl p-3.5 text-slate-800 ${
-                  layersPanelPos ? '' : 'right-5 top-28'
-                }`}
+                style={{
+                  left: `${effLayersX}px`,
+                  top: `${effLayersY}px`,
+                }}
+                className="fixed z-50 w-80 rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-2xl p-3.5 text-[#2c3e50]"
               >
                 <div
                   style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
                   onDragStart={(e) => e.preventDefault()}
                   onPointerDown={(e) => {
                     const targetEl = e.target as HTMLElement | null;
-                    if (targetEl?.closest('button')) return;
+                    if (targetEl?.closest('button') || targetEl?.closest('input')) return;
                     e.stopPropagation();
-                    const panelEl = e.currentTarget.parentElement;
-                    const rect = panelEl?.getBoundingClientRect();
-                    const origX = layersPanelPos ? layersPanelPos.x : rect ? rect.left : window.innerWidth - 340;
-                    const origY = layersPanelPos ? layersPanelPos.y : rect ? rect.top : 112;
                     layersPanelDragRef.current = {
                       startX: e.clientX,
                       startY: e.clientY,
-                      origX,
-                      origY,
+                      origX: effLayersX,
+                      origY: effLayersY,
                     };
                     try {
                       e.currentTarget.setPointerCapture(e.pointerId);
@@ -60908,8 +60938,9 @@ export default function App() {
                     e.stopPropagation();
                     const dx = e.clientX - layersPanelDragRef.current.startX;
                     const dy = e.clientY - layersPanelDragRef.current.startY;
+                    const minY = getStickyNavBottom();
                     const nextX = Math.max(8, Math.min(window.innerWidth - 328, layersPanelDragRef.current.origX + dx));
-                    const nextY = Math.max(8, Math.min(window.innerHeight - 120, layersPanelDragRef.current.origY + dy));
+                    const nextY = Math.max(minY, Math.min(window.innerHeight - 120, layersPanelDragRef.current.origY + dy));
                     setLayersPanelPos({ x: Math.round(nextX), y: Math.round(nextY) });
                   }}
                   onPointerUp={(e) => {
@@ -60927,15 +60958,15 @@ export default function App() {
                   onPointerCancel={() => {
                     layersPanelDragRef.current = null;
                   }}
-                  className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 cursor-move select-none"
+                  className="flex items-center justify-between pb-2.5 mb-2 border-b border-[#dfd8cb] cursor-move select-none"
                   title="Σύρετε από εδώ για να μετακινήσετε το παράθυρο των Layers"
                 >
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-[#1b2a4a] flex items-center gap-1">
-                      <GripVertical className="w-3.5 h-3.5 text-slate-400 -ml-1 shrink-0" />
+                    <span className="text-xs font-bold text-[#1e3a5f] flex items-center gap-1">
+                      <GripVertical className="w-3.5 h-3.5 text-[#a8a29e] -ml-1 shrink-0" />
                       Layers (Επίπεδα Σελίδας)
                     </span>
-                    <span className="text-[10px] text-slate-400">Σύρε πάνω/κάτω (Πάνω = Μπροστά)</span>
+                    <span className="text-[10px] text-[#64748b]">Σύρε πάνω/κάτω (Πάνω = Μπροστά)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {copiedLayerClip && (
@@ -60998,7 +61029,7 @@ export default function App() {
                             `📥 Επικολλήθηκε ως νέο Layer «${copiedLayerClip.name}» στη σελίδα!`
                           );
                         }}
-                        className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold cursor-pointer flex items-center gap-1 shadow-2xs"
+                        className="px-2 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] text-[#1e3a5f] border border-[#dfd8cb] text-[11px] font-semibold cursor-pointer flex items-center gap-1 shadow-2xs transition"
                         title={`Επικόλληση του αντιγραμμένου Layer «${copiedLayerClip.name}» ως νέο Layer σε αυτή τη σελίδα`}
                       >
                         <ClipboardPaste className="w-3.5 h-3.5" />
@@ -61026,7 +61057,7 @@ export default function App() {
                         }));
                         setActiveLayerId(newId);
                       }}
-                      className="px-2.5 py-1 rounded-lg bg-[#0066ff] hover:bg-blue-600 text-white text-[11px] font-semibold cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-[11px] font-semibold cursor-pointer shadow-2xs transition"
                     >
                       + Layer
                     </button>
@@ -61034,7 +61065,7 @@ export default function App() {
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => setShowLayersPanel(false)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                      className="p-1 rounded-lg text-[#64748b] hover:text-[#1e3a5f] hover:bg-[#efebe3] transition cursor-pointer"
                       title="Κλείσιμο παραθύρου Layers"
                     >
                       <X className="w-4 h-4" />
@@ -61102,10 +61133,10 @@ export default function App() {
                         onClick={() => setActiveLayerId(layer.id)}
                         className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition ${
                           isBeingDragged
-                            ? 'bg-sky-100 border-[#0066ff] ring-2 ring-[#0066ff] shadow-md scale-[1.01]'
+                            ? 'bg-[#efebe3] border-[#1e3a5f] ring-2 ring-[#1e3a5f] shadow-md scale-[1.01]'
                             : isCurrent
-                            ? 'bg-sky-50 border-[#0066ff] text-[#1b2a4a]'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80'
+                            ? 'bg-[#efebe3]/80 border-[#1e3a5f] text-[#1e3a5f] ring-1 ring-[#1e3a5f]/30'
+                            : 'bg-[#fdfbf7] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#efebe3]/40'
                         }`}
                       >
                         {/* Left: Touch/Pencil/Mouse Drag Handle + Click-to-Edit Layer Name & Item Count */}
@@ -61173,7 +61204,7 @@ export default function App() {
                           className="flex items-center gap-1.5 min-w-0 flex-1 pr-2 cursor-grab active:cursor-grabbing"
                           title="Σύρε πάνω/κάτω για αλλαγή σειράς του Layer (ή κάνε κλικ στο όνομα για μετονομασία)"
                         >
-                          <div className="p-1 -ml-0.5 rounded-lg text-slate-400 hover:text-[#0066ff] hover:bg-slate-200/70 shrink-0">
+                          <div className="p-1 -ml-0.5 rounded-lg text-[#a8a29e] hover:text-[#1e3a5f] hover:bg-[#efebe3] shrink-0">
                             <GripVertical className="w-4 h-4" />
                           </div>
 
@@ -61231,7 +61262,7 @@ export default function App() {
                                   }
                                   setEditingLayerId(null);
                                 }}
-                                className="w-full px-1.5 py-0.5 rounded bg-white border border-[#0066ff] text-xs font-semibold text-slate-900 outline-none shadow-2xs"
+                                className="w-full px-1.5 py-0.5 rounded bg-[#fdfbf7] border border-[#1e3a5f] text-xs font-semibold text-[#1e3a5f] outline-none shadow-2xs"
                               />
                             ) : (
                               <span
@@ -61241,13 +61272,13 @@ export default function App() {
                                   setActiveLayerId(layer.id);
                                   setEditingLayerId(layer.id);
                                 }}
-                                className="font-semibold truncate hover:text-[#0066ff] hover:underline decoration-dotted cursor-text"
+                                className="font-semibold truncate hover:text-[#1e3a5f] hover:underline decoration-dotted cursor-text"
                                 title="Κλικ για μετονομασία του Layer"
                               >
                                 {layer.name}
                               </span>
                             )}
-                            <span className="text-[10px] text-slate-400">{count} αντικείμενα</span>
+                            <span className="text-[10px] text-[#64748b]">{count} αντικείμενα</span>
                           </div>
                         </div>
 
@@ -61314,7 +61345,7 @@ export default function App() {
                                   setActiveLayerId(layer.id);
                                   showToast(`📥 Το επιλεγμένο αντικείμενο μεταφέρθηκε στο "${layer.name}"!`);
                                 }}
-                                className="px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-semibold text-center whitespace-nowrap transition cursor-pointer"
+                                className="px-1.5 py-0.5 rounded-md bg-[#efebe3] hover:bg-[#e4ded2] text-[#1e3a5f] border border-[#dfd8cb] text-[10px] font-semibold text-center whitespace-nowrap transition cursor-pointer"
                                 title={`Άμεση μεταφορά του επιλεγμένου αντικειμένου στο "${layer.name}"`}
                               >
                                 📥 Εδώ
@@ -61334,7 +61365,7 @@ export default function App() {
                                     setActiveLayerId(layer.id);
                                     pasteFromInternalClipboard(layer.id);
                                   }}
-                                  className="px-1.5 py-0.5 rounded-md bg-sky-50 hover:bg-sky-100 text-[#0066ff] border border-sky-200 text-[10px] font-semibold text-center whitespace-nowrap transition cursor-pointer"
+                                  className="px-1.5 py-0.5 rounded-md bg-[#efebe3] hover:bg-[#e4ded2] text-[#1e3a5f] border border-[#dfd8cb] text-[10px] font-semibold text-center whitespace-nowrap transition cursor-pointer"
                                   title={`Επικόλληση (Paste) στο "${layer.name}"`}
                                 >
                                   📋 Paste
@@ -61369,7 +61400,7 @@ export default function App() {
                                   className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold border text-center whitespace-nowrap transition cursor-pointer ${
                                     isAnimActive
                                       ? 'bg-amber-100 text-amber-800 border-amber-300'
-                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                      : 'bg-[#efebe3] text-[#1e3a5f] border-[#dfd8cb] hover:bg-[#e4ded2]'
                                   }`}
                                   title={
                                     isAnimActive
@@ -61429,7 +61460,7 @@ export default function App() {
                                 `📋 Αντιγράφηκε το Layer «${layer.name}» (${totalItems} αντικείμενα) — πηγαίνετε σε άλλη σελίδα και πατήστε «+Layer» ή «📋 Paste»!`
                               );
                             }}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-[#0066ff] hover:bg-sky-50 transition cursor-pointer"
+                            className="p-1.5 rounded-lg text-[#64748b] hover:text-[#1e3a5f] hover:bg-[#efebe3] transition cursor-pointer"
                             title={`Αντιγραφή ολόκληρου του Layer «${layer.name}» (${count} αντικείμενα)`}
                           >
                             <Copy className="w-3.5 h-3.5" />
@@ -61446,7 +61477,7 @@ export default function App() {
                               }));
                             }}
                             className={`p-1.5 rounded-lg cursor-pointer ${
-                              layer.locked ? 'bg-amber-100 text-amber-700' : 'text-slate-400 hover:bg-slate-200'
+                              layer.locked ? 'bg-amber-100 text-amber-700 border border-amber-300' : 'text-[#a8a29e] hover:text-[#1e3a5f] hover:bg-[#efebe3]'
                             }`}
                             title={layer.locked ? 'Ξεκλείδωμα Layer' : 'Κλείδωμα Layer'}
                           >
@@ -61464,7 +61495,7 @@ export default function App() {
                               }));
                             }}
                             className={`p-1.5 rounded-lg cursor-pointer ${
-                              !layer.visible ? 'text-slate-300' : 'text-[#0066ff] hover:bg-slate-200'
+                              !layer.visible ? 'text-[#cbd5e1]' : 'text-[#1e3a5f] hover:bg-[#efebe3]'
                             }`}
                             title={layer.visible ? 'Απόκρυψη Layer' : 'Εμφάνιση Layer'}
                           >
@@ -61478,7 +61509,7 @@ export default function App() {
                               e.stopPropagation();
                               handleDeleteLayer();
                             }}
-                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 transition cursor-pointer ml-0.5"
+                            className="p-1.5 rounded-lg bg-[#fdf6f6] hover:bg-[#fae8e8] text-[#b91c1c] border border-[#f3d4d4] transition cursor-pointer ml-0.5"
                             title="Διαγραφή Layer (σβήνει το Layer και ό,τι περιέχει!)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -61489,7 +61520,8 @@ export default function App() {
                   })}
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* WORD-STYLE CONTINUOUS MULTI-PAGE VERTICAL OR SIDE-BY-SIDE DOCUMENT STACK (WITH 2x RETINA 120HZ CANVASES) */}
             <div
@@ -64993,17 +65025,17 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             style={{ width: '94vw', maxWidth: '1024px', height: '85vh' }}
-            className="rounded-2xl bg-[#f4f5f7] text-slate-800 border border-slate-300 shadow-2xl overflow-hidden flex flex-col"
+            className="rounded-2xl bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] shadow-2xl overflow-hidden flex flex-col"
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 bg-[#1b2a4a] text-white shrink-0 flex-wrap gap-2">
+            <div className="flex items-center justify-between px-5 py-3.5 bg-[#1e3a5f] text-white shrink-0 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
-                <LayoutGrid className="w-5 h-5 text-sky-300" />
+                <LayoutGrid className="w-5 h-5 text-[#dfd8cb]" />
                 <div>
                   <h2 id="thumbnailsDialogTitle" className="text-sm sm:text-base font-bold">
                     Μικρογραφίες Σελίδων — {activeNotebook.title}
                   </h2>
-                  <p className="text-[11px] text-slate-300">
+                  <p className="text-[11px] text-[#dfd8cb]/80">
                     Σύνολο: {activeNotebook.pages.length} σελίδες • Πάτησε σε οποιαδήποτε σελίδα για άμεση μετάβαση
                   </p>
                 </div>
@@ -65012,7 +65044,7 @@ export default function App() {
               <div className="flex items-center gap-2.5 flex-wrap">
                 {activeNotebook.pages.length > 6 && (
                   <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl text-xs">
-                    <span className="text-sky-200 font-semibold whitespace-nowrap">
+                    <span className="text-[#efebe3] font-semibold whitespace-nowrap">
                       Σελ. {activePageIndex + 1}/{activeNotebook.pages.length}
                     </span>
                     <input
@@ -65041,14 +65073,14 @@ export default function App() {
                           setThumbModalScrollTop(targetScroll);
                         }
                       }}
-                      className="w-28 sm:w-40 accent-sky-400 cursor-pointer"
+                      className="w-28 sm:w-40 accent-[#efebe3] cursor-pointer"
                       title="Γρήγορη κύλιση σε οποιαδήποτε σελίδα"
                     />
                   </div>
                 )}
                 <button
                   onClick={() => setShowThumbnailsModal(false)}
-                  className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold text-white cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold text-white cursor-pointer transition"
                 >
                   Κλείσιμο ✕
                 </button>
@@ -65126,10 +65158,10 @@ export default function App() {
                       <div
                         key={pObj.id}
                         data-thumb-page-idx={pIdx}
-                        className={`group flex flex-col rounded-xl bg-white border-2 shadow-sm hover:shadow-md transition overflow-hidden ${
+                        className={`group flex flex-col rounded-xl bg-white border-2 shadow-xs hover:shadow-md transition overflow-hidden ${
                           isSelectedPage
-                            ? 'border-[#0066ff] ring-2 ring-[#0066ff]/25'
-                            : 'border-slate-200 hover:border-sky-400'
+                            ? 'border-[#1e3a5f] ring-2 ring-[#1e3a5f]/25 bg-[#efebe3]/30'
+                            : 'border-[#dfd8cb] hover:border-[#1e3a5f]'
                         }`}
                       >
                         {/* Clickable Miniature Page Preview */}
@@ -65150,15 +65182,15 @@ export default function App() {
                         >
                           {/* Page Number Badge */}
                           <div
-                            className={`absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-full text-xs font-bold shadow ${
-                              isSelectedPage ? 'bg-[#0066ff] text-white' : 'bg-[#1b2a4a]/85 text-white'
+                            className={`absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-xs ${
+                              isSelectedPage ? 'bg-[#1e3a5f] text-white' : 'bg-[#2c3e50]/85 text-white'
                             }`}
                           >
                             {pIdx + 1}
                           </div>
 
                           {isSelectedPage && (
-                            <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow">
+                            <div className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full bg-[#1e3a5f] text-white text-[10px] font-bold shadow-xs">
                               Ενεργή
                             </div>
                           )}
@@ -65171,7 +65203,7 @@ export default function App() {
                                 e.stopPropagation();
                                 deletePageAtIndex(pIdx);
                               }}
-                              className="absolute bottom-2.5 right-2.5 z-10 p-2.5 rounded-xl bg-white/95 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200/90 shadow-md transition cursor-pointer"
+                              className="absolute bottom-2.5 right-2.5 z-10 p-2.5 rounded-xl bg-[#fdf6f6] hover:bg-[#b91c1c] text-[#b91c1c] hover:text-white border border-[#f3d4d4] shadow-md transition cursor-pointer"
                               title="Διαγραφή αυτής της σελίδας"
                             >
                               <Trash2 className="w-5 h-5" />
@@ -65273,23 +65305,23 @@ export default function App() {
             data-popover-panel="math"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-lg shadow-2xl space-y-4"
+            className="rounded-2xl bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] p-6 w-full max-w-lg shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between">
-              <h2 id="mathDialogTitle" className="text-lg font-bold text-[#1b2a4a] flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-purple-600" />
+              <h2 id="mathDialogTitle" className="text-lg font-bold text-[#1e3a5f] flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-[#1e3a5f]" />
                 <span>Μετατροπή σε LaTeX & Offline CAS Solver</span>
               </h2>
               <button
                 onClick={() => setShowMathModal(false)}
-                className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-[#efebe3] border border-[#dfd8cb] text-xs font-medium text-[#2c3e50] hover:bg-[#e4ded2] transition cursor-pointer"
               >
                 Κλείσιμο
               </button>
             </div>
 
             <div>
-              <label className="block text-xs text-slate-500 mb-1">
+              <label className="block text-xs font-semibold text-[#64748b] mb-1">
                 Επίλυση Εξίσωσης Φυσικής / Μαθηματικών (100% Εγγενώς & Offline CAS):
               </label>
               <div className="flex gap-2">
@@ -65298,14 +65330,14 @@ export default function App() {
                   value={mathEquationToSolve}
                   onChange={(e) => setMathEquationToSolve(e.target.value)}
                   placeholder="π.χ. 15 * t = 90 ή 20 * 3600 / 1000"
-                  className="flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm text-slate-900 select-text"
+                  className="flex-1 px-3 py-2 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-sm text-[#2c3e50] placeholder:text-[#94a3b8] focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30 select-text outline-none"
                 />
                 <button
                   onClick={() => {
                     const res = solveMathExpressionOffline(mathEquationToSolve);
                     setMathInput(res.latex);
                   }}
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-bold cursor-pointer transition shadow-2xs"
                 >
                   🧮 Λύσε
                 </button>
@@ -65314,7 +65346,7 @@ export default function App() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs text-slate-500">
+                <label className="block text-xs font-semibold text-[#64748b]">
                   Κώδικας LaTeX (πατήστε Enter για νέα σειρά εξίσωσης):
                 </label>
                 <button
@@ -65337,7 +65369,7 @@ export default function App() {
                     }
                     setMathInput(cleaned.join('\n'));
                   }}
-                  className="px-2.5 py-1 rounded-lg bg-violet-100 hover:bg-violet-200 text-violet-800 text-[11px] font-bold cursor-pointer transition-colors"
+                  className="px-2.5 py-1 rounded-lg bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#1e3a5f] text-[11px] font-bold cursor-pointer transition"
                   title="Αυτόματος χωρισμός μεγάλης συνεπαγωγής σε 2 σειρές"
                 >
                   ↵ Χωρισμός σε 2 σειρές
@@ -65348,11 +65380,11 @@ export default function App() {
                 value={mathInput}
                 onChange={(e) => setMathInput(e.target.value)}
                 placeholder="Γράψτε μία εξίσωση ανά σειρά (πατήστε Enter για νέα σειρά)..."
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono text-sky-700 select-text resize-y leading-relaxed"
+                className="w-full px-3 py-2 rounded-xl bg-[#fdfbf7] border border-[#dfd8cb] text-sm font-mono text-[#1e3a5f] placeholder:text-[#94a3b8] focus:border-[#1e3a5f] focus:ring-1 focus:ring-[#1e3a5f]/30 select-text resize-y leading-relaxed outline-none"
               />
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 overflow-x-auto">
+            <div className="p-4 rounded-xl bg-[#efebe3]/40 border border-[#dfd8cb] text-[#2c3e50] overflow-x-auto">
               <div className="flex flex-col items-start gap-2">
                 {splitAndCleanMathLatexLines(mathInput || 'I = \\frac{q}{t}').map((rowLatex, rIdx) => (
                   <div
@@ -65473,7 +65505,7 @@ export default function App() {
                     `📈 Διάγραμμα (${graphRes.kindLabel}): Σχεδιάζεται δίπλα στην εξίσωση!`
                   );
                 }}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shadow-xs"
+                className="px-4 py-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-[#1e3a5f] text-xs font-bold cursor-pointer transition shadow-2xs"
               >
                 📈 Εισαγωγή + Διάγραμμα δίπλα
               </button>
@@ -65507,7 +65539,7 @@ export default function App() {
                   }
                   setShowMathModal(false);
                 }}
-                className="px-4 py-2 rounded-xl bg-[#0066ff] text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#1e3a5f] hover:bg-[#162d4a] text-white text-xs font-bold cursor-pointer transition shadow-xs"
               >
                 {(activePage.texts || []).some((t) => t.id === selectedTextId && t.isMath)
                   ? '✓ Ενημέρωση Εξίσωσης'
@@ -65529,15 +65561,15 @@ export default function App() {
             data-popover-panel="settings"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-md shadow-2xl space-y-4"
+            className="rounded-2xl bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] p-6 w-full max-w-md shadow-2xl space-y-4"
           >
             <div className="flex items-center justify-between">
-              <h2 id="settingsDialogTitle" className="text-lg font-bold text-[#1b2a4a]">
+              <h2 id="settingsDialogTitle" className="text-lg font-bold text-[#1e3a5f]">
                 Ρυθμίσεις Σελίδας & Apple Pencil
               </h2>
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs text-slate-600 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-[#efebe3] border border-[#dfd8cb] text-xs font-semibold text-[#2c3e50] hover:bg-[#e4ded2] transition cursor-pointer"
               >
                 Κλείσιμο
               </button>
@@ -65545,7 +65577,7 @@ export default function App() {
 
             {/* Page Orientation: Portrait / Landscape + 90° Rotation */}
             <div>
-              <label className="block text-xs text-slate-500 mb-1.5">
+              <label className="block text-xs font-semibold text-[#1e3a5f] mb-1.5">
                 Προσανατολισμός & Περιστροφή Σελίδας:
               </label>
               <div className="grid grid-cols-2 gap-2 mb-2">
@@ -65553,10 +65585,10 @@ export default function App() {
                   onClick={() =>
                     updateActivePage((page) => ({ ...page, orientation: 'portrait' }))
                   }
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer transition ${
                     (activePage.orientation || 'portrait') === 'portrait'
-                      ? 'bg-[#0066ff] border-[#0066ff] text-white'
-                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                      ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white shadow-xs'
+                      : 'bg-[#efebe3] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#e4ded2]'
                   }`}
                 >
                   📄 Κάθετη (Portrait)
@@ -65565,10 +65597,10 @@ export default function App() {
                   onClick={() =>
                     updateActivePage((page) => ({ ...page, orientation: 'landscape' }))
                   }
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer ${
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer transition ${
                     activePage.orientation === 'landscape'
-                      ? 'bg-[#0066ff] border-[#0066ff] text-white'
-                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                      ? 'bg-[#1e3a5f] border-[#1e3a5f] text-white shadow-xs'
+                      : 'bg-[#efebe3] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#e4ded2]'
                   }`}
                 >
                   🖼️ Οριζόντια (Landscape)
@@ -65577,14 +65609,14 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => handleRotatePage('left')}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-xs font-semibold text-[#2c3e50] cursor-pointer transition"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Περιστροφή -90° Αριστερά</span>
                 </button>
                 <button
                   onClick={() => handleRotatePage('right')}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-800 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#efebe3] hover:bg-[#e4ded2] border border-[#dfd8cb] text-xs font-semibold text-[#2c3e50] cursor-pointer transition"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
                   <span>Περιστροφή +90° Δεξιά</span>
@@ -65593,7 +65625,7 @@ export default function App() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+              <label className="block text-xs font-semibold text-[#1e3a5f] mb-1.5">
                 Χρώμα & Πρότυπο Χαρτιού (Paper Color & Template):
               </label>
               {(() => {
@@ -65687,7 +65719,7 @@ export default function App() {
                   templateOptions.find((t) => t.id === activePattern)?.label || 'Τετραγων.';
 
                 return (
-                  <div className="rounded-2xl bg-slate-50/90 border border-slate-200/90 p-3 space-y-3">
+                  <div className="rounded-2xl bg-[#efebe3]/40 border border-[#dfd8cb] p-3 space-y-3">
                     {/* Top Row: Live Paper Sheet Miniature + Dual Color Gradations */}
                     <div className="flex items-center gap-3.5">
                       {/* Live Paper Sheet Miniature */}
@@ -65721,7 +65753,7 @@ export default function App() {
                             />
                           </svg>
                         </div>
-                        <span className="mt-1 text-[10px] font-semibold text-slate-600 text-center leading-tight">
+                        <span className="mt-1 text-[10px] font-semibold text-[#64748b] text-center leading-tight">
                           {activeColorLabel}
                         </span>
                       </div>
@@ -65729,7 +65761,7 @@ export default function App() {
                       {/* Right: Two Color Gradation Rows (White -> Soft Grey & Cream -> Vintage Beige) */}
                       <div className="flex-1 min-w-0 space-y-2">
                         <div>
-                          <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 mb-1">
+                          <div className="flex items-center justify-between text-[10px] font-medium text-[#64748b] mb-1">
                             <span>Λευκό → Απαλό Γκρι</span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -65751,12 +65783,12 @@ export default function App() {
                                   title={sw.label}
                                   className={`h-7 flex-1 rounded-lg border transition cursor-pointer flex items-center justify-center ${
                                     isSel
-                                      ? 'border-[#0066ff] ring-2 ring-[#0066ff]/35 shadow-xs'
-                                      : 'border-slate-300 hover:border-slate-400'
+                                      ? 'border-[#1e3a5f] ring-2 ring-[#1e3a5f]/35 shadow-xs'
+                                      : 'border-[#dfd8cb] hover:border-[#a8a29e]'
                                   }`}
                                 >
                                   {isSel && (
-                                    <span className="w-2 h-2 rounded-full bg-[#0066ff]" />
+                                    <span className="w-2 h-2 rounded-full bg-[#1e3a5f]" />
                                   )}
                                 </button>
                               );
@@ -65777,7 +65809,7 @@ export default function App() {
                                   title="Σκούρο Χαρτί"
                                   className={`h-7 w-7 shrink-0 rounded-lg border transition cursor-pointer flex items-center justify-center ${
                                     isDarkSel
-                                      ? 'border-[#38bdf8] ring-2 ring-[#0066ff]/45 shadow-xs'
+                                      ? 'border-[#38bdf8] ring-2 ring-[#1e3a5f]/45 shadow-xs'
                                       : 'border-slate-600 hover:border-slate-400'
                                   }`}
                                 >
@@ -65791,7 +65823,7 @@ export default function App() {
                         </div>
 
                         <div>
-                          <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 mb-1">
+                          <div className="flex items-center justify-between text-[10px] font-medium text-[#64748b] mb-1">
                             <span>Μπεζ Ανοιχτό → Vintage (ήπιοι τόνοι)</span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -65813,12 +65845,12 @@ export default function App() {
                                   title={sw.label}
                                   className={`h-7 flex-1 rounded-lg border transition cursor-pointer flex items-center justify-center ${
                                     isSel
-                                      ? 'border-[#0066ff] ring-2 ring-[#0066ff]/35 shadow-xs'
-                                      : 'border-amber-900/20 hover:border-amber-900/40'
+                                      ? 'border-[#1e3a5f] ring-2 ring-[#1e3a5f]/35 shadow-xs'
+                                      : 'border-[#dfd8cb] hover:border-[#a8a29e]'
                                   }`}
                                 >
                                   {isSel && (
-                                    <span className="w-2 h-2 rounded-full bg-[#0066ff]" />
+                                    <span className="w-2 h-2 rounded-full bg-[#1e3a5f]" />
                                   )}
                                 </button>
                               );
@@ -65829,7 +65861,7 @@ export default function App() {
                     </div>
 
                     {/* Bottom Row: 5 Visual Paper Template Cards */}
-                    <div className="grid grid-cols-5 gap-1.5 pt-1 border-t border-slate-200/70">
+                    <div className="grid grid-cols-5 gap-1.5 pt-1 border-t border-[#dfd8cb]">
                       {templateOptions.map((tpl) => {
                         const isSelTpl = activePattern === tpl.id;
                         return (
@@ -65845,8 +65877,8 @@ export default function App() {
                             }
                             className={`flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl border text-[11px] font-semibold transition cursor-pointer ${
                               isSelTpl
-                                ? 'bg-[#0066ff]/10 border-[#0066ff] text-[#0052cc] shadow-2xs'
-                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                                ? 'bg-[#efebe3] border-[#1e3a5f] text-[#1e3a5f] ring-1 ring-[#1e3a5f]/30 shadow-2xs font-bold'
+                                : 'bg-[#fdfbf7] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#efebe3]/50'
                             }`}
                           >
                             <div
@@ -65854,7 +65886,7 @@ export default function App() {
                               className={`relative w-8 h-10 rounded border overflow-hidden shadow-2xs ${
                                 isDarkPaperColor(activePaperHex)
                                   ? 'border-slate-600'
-                                  : 'border-slate-300'
+                                  : 'border-[#dfd8cb]'
                               }`}
                             >
                               {renderMiniPatternSvg(tpl.id, 32, 40, 6.4)}
@@ -65869,55 +65901,53 @@ export default function App() {
               })()}
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <label className="flex items-center justify-between text-xs font-medium">
-                <span>✨ Hold-to-Snap (Αυτόματο σχήμα σε 0.3s)</span>
-                <input
-                  type="checkbox"
-                  checked={holdToSnapEnabled}
-                  onChange={(e) => setHoldToSnapEnabled(e.target.checked)}
-                />
-              </label>
-              <label className="flex items-center justify-between text-xs font-medium">
-                <span>🧹 Scribble-to-Erase (Μουτζούρωμα για σβήσιμο)</span>
-                <input
-                  type="checkbox"
-                  checked={scribbleToEraseEnabled}
-                  onChange={(e) => setScribbleToEraseEnabled(e.target.checked)}
-                />
-              </label>
+            <div className="space-y-2 pt-2 border-t border-[#dfd8cb]">
+              <WarmStudioToggle
+                checked={holdToSnapEnabled}
+                onChange={(val) => setHoldToSnapEnabled(val)}
+                label="Hold-to-Snap (Αυτόματο σχήμα σε 0.3s)"
+                icon={<Sparkles className="w-4 h-4" />}
+                className="w-full justify-between"
+              />
+              <WarmStudioToggle
+                checked={scribbleToEraseEnabled}
+                onChange={(val) => setScribbleToEraseEnabled(val)}
+                label="Scribble-to-Erase (Μουτζούρωμα για σβήσιμο)"
+                icon={<Eraser className="w-4 h-4" />}
+                className="w-full justify-between"
+              />
             </div>
 
             {/* Keyboard Shortcuts Quick Reference (English first -> Greek, for instant mnemonic connection with key letter) */}
-            <div className="pt-2 border-t border-slate-100">
+            <div className="pt-2 border-t border-[#dfd8cb]">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold text-[#1b2a4a]">Συντομεύσεις Πληκτρολογίου (EN / GR):</span>
-                <span className="text-[10px] text-slate-400">SHORTCUTS.md</span>
+                <span className="text-xs font-bold text-[#1e3a5f]">Συντομεύσεις Πληκτρολογίου (EN / GR):</span>
+                <span className="text-[10px] text-[#64748b]">SHORTCUTS.md</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                 {[
-                  { keys: 'P / Π', label: 'Pen (Μολύβι)', icon: <Pen className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'E / Ε', label: 'Erase (Σβήστρα)', icon: <Eraser className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'O / Ο', label: 'Objects (Σχήματα)', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'L / Λ', label: 'Laser (Κόκκινο Laser)', icon: <Radio className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'F / Φ', label: 'Fill (Γέμισμα)', icon: <Shapes className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'C / Ψ', label: 'Crop (Ξάκρισμα)', icon: <Scissors className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'N / Ν', label: 'Nodes (Κόμβοι)', icon: <BezierNodesIcon className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'H / Η', label: 'Highlight (Υπογραμμιστής)', icon: <Highlighter className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'T / Τ', label: 'Text (Κείμενο)', icon: <Type className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'G / Γ', label: 'Group (Ομαδοποίηση)', icon: <Layers className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
-                  { keys: 'Esc', label: 'Escape (Κλείσιμο)', icon: <X className="w-3.5 h-3.5 text-slate-600 shrink-0" /> },
+                  { keys: 'P / Π', label: 'Pen (Μολύβι)', icon: <Pen className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'E / Ε', label: 'Erase (Σβήστρα)', icon: <Eraser className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'O / Ο', label: 'Objects (Σχήματα)', icon: <Shapes className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'L / Λ', label: 'Laser (Κόκκινο Laser)', icon: <Radio className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'F / Φ', label: 'Fill (Γέμισμα)', icon: <Shapes className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'S / Σ', label: 'Select (Λάσο)', icon: <Lasso className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'C / Ψ', label: 'Crop (Ξάκρισμα)', icon: <Scissors className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'N / Ν', label: 'Nodes (Κόμβοι)', icon: <BezierNodesIcon className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'H / Η', label: 'Highlight (Υπογραμμιστής)', icon: <Highlighter className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'T / Τ', label: 'Text (Κείμενο)', icon: <Type className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'G / Γ', label: 'Group (Ομαδοποίηση)', icon: <Layers className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
+                  { keys: 'Esc', label: 'Escape (Κλείσιμο)', icon: <X className="w-3.5 h-3.5 text-[#64748b] shrink-0" /> },
                 ].map((sc) => (
                   <div
                     key={sc.keys}
-                    className="flex items-center justify-between gap-1.5 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1"
+                    className="flex items-center justify-between gap-1.5 bg-[#efebe3]/50 border border-[#dfd8cb] rounded-lg px-2 py-1"
                   >
-                    <span className="flex items-center gap-1.5 text-slate-700 font-medium truncate">
+                    <span className="flex items-center gap-1.5 text-[#2c3e50] font-medium truncate">
                       {sc.icon}
                       <span className="truncate">{sc.label}</span>
                     </span>
-                    <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-[10px] font-bold text-[#0066ff] shadow-2xs shrink-0">
+                    <kbd className="px-1.5 py-0.5 rounded bg-[#fdfbf7] border border-[#dfd8cb] text-[10px] font-bold text-[#1e3a5f] shadow-2xs shrink-0">
                       {sc.keys}
                     </kbd>
                   </div>
@@ -66345,9 +66375,9 @@ export default function App() {
                   : undefined,
                 width: 224,
               }}
-              className="bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 z-[9999] space-y-1 text-left"
+              className="bg-[#fdfbf7] border border-[#dfd8cb] rounded-2xl shadow-2xl p-2 z-[9999] space-y-1 text-left"
             >
-              <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b] truncate">
                 Λήψη «{targetNb.title}»
               </div>
               <button
@@ -66356,9 +66386,9 @@ export default function App() {
                   setShareMenuTarget(null);
                   void handleDownloadActiveNotebookPdf(targetNb);
                 }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-sky-50 text-slate-700 hover:text-[#0066ff] text-xs font-semibold transition cursor-pointer text-left"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#1e3a5f] text-xs font-semibold transition cursor-pointer text-left"
               >
-                <FileText className="w-4 h-4 text-[#0066ff] shrink-0" />
+                <FileText className="w-4 h-4 text-[#1e3a5f] shrink-0" />
                 <span>Λήψη PDF (.pdf)</span>
               </button>
               <button
@@ -66367,9 +66397,9 @@ export default function App() {
                   setShareMenuTarget(null);
                   handleExportBestnotesFile(targetNb);
                 }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 text-xs font-semibold transition cursor-pointer text-left"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#efebe3] text-[#2c3e50] hover:text-[#1e3a5f] text-xs font-semibold transition cursor-pointer text-left"
               >
-                <Download className="w-4 h-4 text-emerald-600 shrink-0" />
+                <Download className="w-4 h-4 text-[#1e3a5f] shrink-0" />
                 <span>Λήψη .bestnotes</span>
               </button>
             </div>

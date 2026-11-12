@@ -387,3 +387,17 @@
 
 ### 🌊 5. Διαδιδόμενα & Στάσιμα Κύματα (`Traveling & Standing Wave Animation`)
 * Πατώντας `▶️ Play` σε καμπύλη **Ημιτόνου (`sine`)** ή **Συνημιτόνου (`cosine`)** πάνω σε άξονες (`wave-axes`), η φάση $\varphi(t) = \omega t$ εξελίσσεται ζωντανά ώστε το κύμα να **διαδίδεται οριζόντια ($y(x,t) = A\sin(\omega t - kx)$)** ή να πάλλεται ως **στάσιμο κύμα** ανάμεσα στις δύο διακεκομμένες γραμμές $+A$ και $-A$!
+
+
+---
+
+## 🎨 Warm Studio + Minimal Navy Design Constitution
+
+Όλα τα νέα και υφιστάμενα παράθυρα (modals), αναδυόμενα μενού (popovers), αιωρούμενοι πίνακες (panels) και μπάρες εργαλείων ακολουθούν ενιαία αρχιτεκτονική αισθητικής και λειτουργικότητας:
+
+* **Backgrounds:** `#fdfbf7` (επιφάνειες διαλόγων και καρτών), `#f7f5f0` (toolbars & sub-toolbars), `#efebe3` (ανενεργές καταστάσεις, tracks, κουμπιά).
+* **Borders:** `#dfd8cb` (κομψά hairlines 1px με διακριτική σκίαση `shadow-2xl` ή `shadow-xs`).
+* **Active Accent:** Navy `#1e3a5f` με λευκό κείμενο (`text-white`) και ήπιο hover `#162d4a`.
+* **Danger / Actions:** `#fdf6f6` φόντο, `#f3d4d4` περίγραμμα και `#b91c1c` κείμενο.
+* **Toggles:** Χρήση του component `WarmStudioToggle` αντί για browser checkboxes.
+* **Layers & Panels Clamping:** Τα πλωτά παράθυρα προστατεύονται από το `getStickyNavBottom()` ώστε να μην επικαλύπτονται ποτέ από τις sticky μπάρες πλοήγησης και τα εργαλεία της εφαρμογής.

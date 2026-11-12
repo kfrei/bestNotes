@@ -482,3 +482,40 @@ sequenceDiagram
 | **6. 🔢 Αριθμητικά Ηλεκτρικά Κυκλώματα ($V, I, R$) & Ψηφιακές Ενδείξεις Οργάνων (`⏳ Επόμενο Milestone`)** | `battery`, `voltage-source`, `resistor`, `bulb`, `ammeter`, `voltmeter` | • **Αριθμητικές Τιμές Στοιχείων:** Δυνατότητα ορισμού τάσης πηγής ($V$ / $\mathcal{E}$, π.χ. $12\,\text{V}$, και προαιρετικής εσωτερικής αντίστασης $r$) και ωμικής αντίστασης ($R$, π.χ. $4\,\Omega$, $6\,\Omega$) σε αντιστάτες και λαμπτήρες.<br>• **Επίλυση Κυκλώματος σε Πραγματικό Χρόνο (Νόμος του Ohm & Κανόνες Kirchhoff):** Αυτόματος υπολογισμός της έντασης ρεύματος $I = V / R_{\text{ολ}}$ σε κάθε κλάδο και της πτώσης τάσης $\Delta V = I \cdot R$ σε κάθε δίπολο (σε σειρά, παράλληλα και μικτά κυκλώματα).<br>• **Ψηφιακή Ένδειξη στα Όργανα Μέτρησης:** Live αριθμητική ένδειξη δίπλα/κάτω από το **Αμπερόμετρο** (π.χ. `2.0 A` ή `250 mA`) και το **Βολτόμετρο** (π.χ. `12.0 V`), συγχρονισμένη με την ταχύτητα ροής ηλεκτρονίων και τη φωτεινότητα των λαμπτήρων! |
 
 
+
+
+---
+
+## 11. 🎨 WARM STUDIO + MINIMAL NAVY DESIGN CONSTITUTION (ΥΠΟΧΡΕΩΤΙΚΟ ΓΙΑ ΟΛΑ ΤΑ UI)
+
+> [!IMPORTANT]
+> **Κανόνας Απαράβατης Ομοιομορφίας (UI Constitution):**
+> Κάθε νέο ή υφιστάμενο παράθυρο διαλόγου (modal), αναδυόμενο μενού (popover), αιωρούμενος πίνακας (floating panel), dashboard προσομοίωσης και μπάρα εργαλείων **ΠΡΕΠΕΙ** να ακολουθεί αυστηρά τους παρακάτω κανόνες σχεδίασης και χρωματικούς κώδικες (Warm Studio + Minimal Navy). Απαγορεύονται τα νέον/flashy χρώματα (π.χ. φούξια, λαχανί, έντονο μπλε `#0066ff`), οι προεπιλεγμένοι διακόπτες browser και οι άναρχες επικαλύψεις.
+
+### 11.1 Χρωματική Παλέτα & Tokens Συστήματος (Design Tokens)
+
+| Ρόλος Στοιχείου UI | Χρώμα / Hex Code | Tailwind Token / Χρήση |
+| :--- | :--- | :--- |
+| **Επιφάνεια Παραθύρων & Modals** | `#fdfbf7` | `bg-[#fdfbf7] text-[#2c3e50] border-[#dfd8cb]` (ζεστό εκρού χαρτιού) |
+| **Μπάρες Εργαλείων (Toolbars)** | `#f7f5f0` | `bg-[#f7f5f0]/95 backdrop-blur-md border-[#dfd8cb]` |
+| **Υποδοχές & Κάρτες (Cards / Tracks)** | `#efebe3` | `bg-[#efebe3] border-[#dfd8cb]` (ανενεργές καταστάσεις, φόντο input/pills) |
+| **Περιγράμματα (Borders / Dividers)** | `#dfd8cb` | `border-[#dfd8cb]` (διακριτικά, κομψά hairlines 1px) |
+| **Κύριο Ενεργό Χρώμα (Primary Navy)** | `#1e3a5f` | `bg-[#1e3a5f] text-white hover:bg-[#162d4a]` (βαθύ navy studio) |
+| **Κύριο Κείμενο (Body Text)** | `#2c3e50` | `text-[#2c3e50]` (ευανάγνωστο ανθρακί-μπλε) |
+| **Δευτερεύον / Υποστηρικτικό Κείμενο** | `#64748b` | `text-[#64748b]` (ήπιο slate για επεξηγήσεις και labels) |
+| **Επικίνδυνες Ενέργειες (Danger / Delete)** | `#fdf6f6` / `#b91c1c` | `bg-[#fdf6f6] border-[#f3d4d4] text-[#b91c1c] hover:bg-[#b91c1c] hover:text-white` |
+| **Διακόπτες Επιλογής (Toggles)** | `WarmStudioToggle` | Χρήση του component `WarmStudioToggle` με track `#efebe3` / thumb `#ffffff` και ενεργό `#1e3a5f`. Πλήρης απαγόρευση των standard HTML checkboxes. |
+
+### 11.2 Κανόνες Τοποθέτησης & Ανεξάρτητων Panels (`Layers`, `Periodic Table`, `Dashboard`)
+
+1. **Μέτρηση Sticky Bars (`getStickyNavBottom()`):**
+   - Κάθε πλωτό panel (όπως το παράθυρο Επιπέδων `Layers`, ο Περιοδικός Πίνακας ή τα Dashboards) **δεν επιτρέπεται** να τοποθετείται ή να σύρεται πίσω από τις sticky μπάρες πλοήγησης (`header`, `toolbar`, `sub-toolbar`).
+   - Χρησιμοποιείται πάντοτε η συνάρτηση `getStickyNavBottom()` για να υπολογίζεται δυναμικά το ακριβές κάτω όριο των κολλώμενων στοιχείων (λαμβάνοντας υπόψη iPad standalone notch & safe area).
+   - Στο `onPointerMove`, το `nextY` περιορίζεται αυστηρά: `nextY = Math.max(getStickyNavBottom(), ...)`.
+2. **Σειρά Εμφάνισης (Z-Index Hierarchy):**
+   - Sticky Toolbars: `z-40`
+   - Floating Modals & Panels: `z-50`
+   - Toast & High-priority Dropdowns: `z-[9999]`
+3. **Ομαδοποίηση OCR & Εργαλείων:**
+   - 3 καθαρά κουμπιά: `Text OCR` (άμεση εκτέλεση), `Math` Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο), `Chem` Dropdown (Αντιδράσεις, 3D, Άτομο).
+   - Τα ενεργά κουμπιά φέρουν φόντο `#1e3a5f` με λευκό κείμενο, ενώ τα ανενεργά φόντο `#efebe3` με περίγραμμα `#dfd8cb` και κείμενο `#2c3e50`.
