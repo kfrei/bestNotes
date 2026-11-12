@@ -1476,6 +1476,33 @@ const DEFAULT_COLOR_SLOTS = [
   '#db2777',
   '#0d9488',
 ];
+
+function parseHexColor(hex: string): [number, number, number] {
+  let clean = (hex || '').trim().replace(/^#/, '');
+  if (clean.length === 3) {
+    clean = clean.split('').map((ch) => ch + ch).join('');
+  }
+  const n = parseInt(clean, 16);
+  if (isNaN(n) || clean.length < 6) return [0, 0, 0];
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function areColorsSimilar(c1: string, c2: string, threshold = 26): boolean {
+  if (!c1 || !c2) return false;
+  if (c1.toLowerCase() === c2.toLowerCase()) return true;
+  const [r1, g1, b1] = parseHexColor(c1);
+  const [r2, g2, b2] = parseHexColor(c2);
+  const rMean = (r1 + r2) / 2;
+  const dr = r1 - r2;
+  const dg = g1 - g2;
+  const db = b1 - b2;
+  const dist = Math.sqrt(
+    (2 + rMean / 256) * dr * dr +
+    4 * dg * dg +
+    (2 + (255 - rMean) / 256) * db * db
+  );
+  return dist < threshold;
+}
 const THICKNESS_PRESETS = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 14.0, 20.0];
 const CANVAS_DPR = 2; // 2x Retina HiDPI backing resolution (1840x2520) for razor-sharp, zero-"ζαγρέ" curves
 const PAGE_GAP = 44; // Vertical gap (px) between pages in Word-style continuous multi-page scroll
@@ -2194,7 +2221,31 @@ export default function App() {
       const saved = localStorage.getItem(COLOR_SLOTS_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === 10) return parsed;
+        if (Array.isArray(parsed) && parsed.length === 10) {
+          const primary5 = parsed.slice(0, 5).map((c, i) => (typeof c === 'string' && c.startsWith('#') ? c : DEFAULT_COLOR_SLOTS[i]));
+          const rawRecent = parsed.slice(5, 10);
+          const sanitizedRecent: string[] = [];
+          for (const rc of rawRecent) {
+            if (
+              typeof rc === 'string' &&
+              rc.startsWith('#') &&
+              !sanitizedRecent.some((sc) => areColorsSimilar(sc, rc, 25)) &&
+              !primary5.some((pc) => areColorsSimilar(pc, rc, 22))
+            ) {
+              sanitizedRecent.push(rc);
+            }
+          }
+          for (let i = 5; sanitizedRecent.length < 5 && i < DEFAULT_COLOR_SLOTS.length; i++) {
+            const defC = DEFAULT_COLOR_SLOTS[i];
+            if (
+              !sanitizedRecent.some((sc) => areColorsSimilar(sc, defC, 25)) &&
+              !primary5.some((pc) => areColorsSimilar(pc, defC, 22))
+            ) {
+              sanitizedRecent.push(defC);
+            }
+          }
+          return [...primary5, ...sanitizedRecent];
+        }
       }
     } catch {
       // ignore
@@ -2202,6 +2253,8 @@ export default function App() {
     return DEFAULT_COLOR_SLOTS;
   });
   const colorStripRef = useRef<HTMLDivElement | null>(null);
+  const [colorStripPage, setColorStripPage] = useState<0 | 1>(0);
+  const recentColorDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try {
       localStorage.setItem(COLOR_SLOTS_STORAGE_KEY, JSON.stringify(colorSlots));
@@ -2210,13 +2263,28 @@ export default function App() {
     }
   }, [colorSlots]);
   const recordRecentColor = useCallback((c: string) => {
+    if (!c || typeof c !== 'string' || !c.startsWith('#')) return;
     setColorSlots((prev) => {
       const primary5 = prev.slice(0, 5);
       const recent5 = prev.slice(5, 10);
-      if (primary5.includes(c)) return prev;
-      const nextRecent = [c, ...recent5.filter((rc) => rc !== c)].slice(0, 5);
-      while (nextRecent.length < 5) {
-        nextRecent.push(DEFAULT_COLOR_SLOTS[5 + nextRecent.length] || '#64748b');
+      // 1. If it's already one of the 5 primary colors visually, don't duplicate into recent!
+      if (primary5.some((pc) => areColorsSimilar(pc, c, 22))) return prev;
+
+      // 2. Filter out any color in recent5 that is visually near-identical to `c`
+      const filteredRecent = recent5.filter((rc) => !areColorsSimilar(rc, c, 26));
+
+      // 3. Prepend `c` as the newest recent color
+      const nextRecent = [c, ...filteredRecent].slice(0, 5);
+
+      // 4. Fill up to 5 with distinct default colors if needed
+      for (let i = 5; nextRecent.length < 5 && i < DEFAULT_COLOR_SLOTS.length; i++) {
+        const fallback = DEFAULT_COLOR_SLOTS[i];
+        if (
+          !nextRecent.some((nc) => areColorsSimilar(nc, fallback, 26)) &&
+          !primary5.some((pc) => areColorsSimilar(pc, fallback, 22))
+        ) {
+          nextRecent.push(fallback);
+        }
       }
       return [...primary5, ...nextRecent];
     });
@@ -45407,10 +45475,12 @@ export default function App() {
 
   // Apply Color, Thickness, or Line Style to any selected line, shape, group of lines, recently drawn shape, or selected Text Box!
   const applyColorToSelection = useCallback(
-    (c: string) => {
+    (c: string, options?: { skipRecentRecord?: boolean }) => {
       setStrokeColor(c);
       setFillColor(c);
-      recordRecentColor(c);
+      if (!options?.skipRecentRecord) {
+        recordRecentColor(c);
+      }
 
       // Αν υπάρχει επιλεγμένος πυρήνας ατόμου (selectedAtomId), άλλαξε όλες τις αποχρώσεις του ατόμου (και των ίδιων ατόμων Z στην ένωση) στο επιλεγμένο χρώμα!
       updateActivePage((page) => {
@@ -55112,10 +55182,47 @@ export default function App() {
 
                     <div className="h-5 w-px bg-[#dfd8cb]" />
 
-                    {/* 5 Color Memories + Scroll Left/Right for 5 Most Recent Colors + Rainbow Picker + Fill Controls */}
-                    <div className="flex items-center gap-1">
+                    {/* 5 Color Memories + 5 Most Recent Colors + Switcher + Rainbow Picker + Fill Controls */}
+                    <div className="flex items-center gap-1.5">
+                      {/* Page Switcher: "Βασικά ● ○" <-> "Πρόσφατα ○ ●" */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextPage: 0 | 1 = colorStripPage === 0 ? 1 : 0;
+                          setColorStripPage(nextPage);
+                          colorStripRef.current?.scrollTo({
+                            left: nextPage === 1 ? 152 : 0,
+                            behavior: 'smooth',
+                          });
+                        }}
+                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full hover:bg-[#ece7dc] border border-[#dfd8cb] bg-[#efebe3]/80 transition cursor-pointer text-[10px] font-semibold text-[#2c3e50] shrink-0 select-none"
+                        title={
+                          colorStripPage === 0
+                            ? 'Προβολή: 5 Βασικά Χρώματα — Κλικ για τα 5 Πρόσφατα'
+                            : 'Προβολή: 5 Πρόσφατα Χρώματα — Κλικ για τα 5 Βασικά'
+                        }
+                      >
+                        <span className="leading-none">{colorStripPage === 0 ? 'Βασικά' : 'Πρόσφατα'}</span>
+                        <span className="flex gap-1 items-center">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                              colorStripPage === 0 ? 'bg-[#0066ff]' : 'bg-[#c5bfae]'
+                            }`}
+                          />
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                              colorStripPage === 1 ? 'bg-[#0066ff]' : 'bg-[#c5bfae]'
+                            }`}
+                          />
+                        </span>
+                      </button>
+
                       <div
                         ref={colorStripRef}
+                        onScroll={(e) => {
+                          const sl = e.currentTarget.scrollLeft;
+                          setColorStripPage(sl > 76 ? 1 : 0);
+                        }}
                         onWheel={(e) => {
                           const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
                           if (Math.abs(delta) > 2) {
@@ -55130,7 +55237,11 @@ export default function App() {
                           WebkitOverflowScrolling: 'touch',
                         }}
                         className="w-[152px] overflow-x-auto snap-x snap-mandatory flex items-center scroll-smooth [&::-webkit-scrollbar]:hidden"
-                        title="5 Μνήμες Χρωμάτων — Κάνε scroll δεξιά-αριστερά για τα 5 πιο πρόσφατα χρώματα!"
+                        title={
+                          colorStripPage === 0
+                            ? '5 Βασικά Χρώματα — Κλικ στο «Βασικά» ή σύρετε για τα 5 Πρόσφατα'
+                            : '5 Πρόσφατα Χρώματα — Κλικ στο «Πρόσφατα» ή σύρετε για τα 5 Βασικά'
+                        }
                       >
                         {/* Page 1: 5 Primary Color Memories */}
                         <div className="snap-start shrink-0 w-[152px] flex items-center justify-between px-1 py-1">
@@ -55145,7 +55256,7 @@ export default function App() {
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
-                              title={`Μνήμη Χρώματος #${idx + 1} (${c}) — Σύρε αριστερά για τα 5 πρόσφατα`}
+                              title={`Βασικό Χρώμα #${idx + 1} (${c}) — Κλικ στο «Βασικά» για τα Πρόσφατα`}
                             />
                           ))}
                         </div>
@@ -55162,7 +55273,7 @@ export default function App() {
                                   : 'opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: c }}
-                              title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Σύρε δεξιά για τις 5 βασικές μνήμες`}
+                              title={`Πρόσφατο Χρώμα #${idx + 1} (${c}) — Κλικ στο «Πρόσφατα» για τα Βασικά`}
                             />
                           ))}
                         </div>
@@ -55421,7 +55532,8 @@ export default function App() {
                     key={c}
                     onClick={() => {
                       applyColorToSelection(c);
-                      if (!colorSlots.slice(0, 5).includes(c)) {
+                      if (!colorSlots.slice(0, 5).some((pc) => areColorsSimilar(pc, c, 22))) {
+                        setColorStripPage(1);
                         colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
                       }
                     }}
@@ -55439,10 +55551,17 @@ export default function App() {
                   value={strokeColor}
                   onChange={(e) => {
                     const c = e.target.value;
-                    applyColorToSelection(c);
-                    if (!colorSlots.slice(0, 5).includes(c)) {
-                      colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
+                    applyColorToSelection(c, { skipRecentRecord: true });
+                    if (recentColorDebounceTimerRef.current) {
+                      clearTimeout(recentColorDebounceTimerRef.current);
                     }
+                    recentColorDebounceTimerRef.current = setTimeout(() => {
+                      recordRecentColor(c);
+                      if (!colorSlots.slice(0, 5).some((pc) => areColorsSimilar(pc, c, 22))) {
+                        setColorStripPage(1);
+                        colorStripRef.current?.scrollTo({ left: 152, behavior: 'smooth' });
+                      }
+                    }, 250);
                   }}
                   className="w-8 h-7 rounded cursor-pointer border border-[#dfd8cb]"
                 />
