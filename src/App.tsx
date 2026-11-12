@@ -12833,18 +12833,15 @@ export default function App() {
       if (barEl) {
         const invZ = 1 / Math.max(0.25, clampedZoom);
         const txtX = Number(barEl.getAttribute('data-txt-x') || 0);
-        const boxW = Number(barEl.getAttribute('data-txt-w') || 180);
         const pW = Number(barEl.getAttribute('data-page-w') || pageWidth || 920);
         const placeBelow = barEl.getAttribute('data-place-below') === '1';
-        const estHalfBarW = 190 * invZ;
-        const boxCenterX = txtX + boxW / 2;
+        const estBarW = 475 * invZ;
         let shiftX = 0;
-        if (estHalfBarW * 2 < pW - 12) {
-          if (boxCenterX - estHalfBarW < 6) {
-            shiftX = 6 - (boxCenterX - estHalfBarW);
-          } else if (boxCenterX + estHalfBarW > pW - 6) {
-            shiftX = pW - 6 - (boxCenterX + estHalfBarW);
-          }
+        if (txtX + estBarW > pW - 8) {
+          shiftX = (pW - 8) - (txtX + estBarW);
+        }
+        if (txtX + shiftX < 8) {
+          shiftX = 8 - txtX;
         }
         const gapPx = Math.max(2, Math.round(8 * invZ));
         if (placeBelow) {
@@ -12852,8 +12849,10 @@ export default function App() {
         } else {
           barEl.style.bottom = `calc(100% + ${gapPx}px)`;
         }
+        barEl.style.left = '0px';
+        barEl.style.transformOrigin = placeBelow ? '0% 0%' : '0% 100%';
         barEl.style.transform = `${
-          shiftX ? `translateX(calc(-50% + ${Math.round(shiftX)}px))` : 'translateX(-50%)'
+          shiftX ? `translateX(${Math.round(shiftX)}px)` : 'translateX(0px)'
         } scale(${invZ})`;
       }
 
@@ -63081,16 +63080,13 @@ export default function App() {
                                 : (txt.fontSize || textFontSize);
                               const safeZoom = Math.max(0.25, zoom || 1);
                               const invZoom = 1 / safeZoom;
-                              const estHalfBarW = 230 * invZoom;
-                              const boxWForBar = effTxtW > 0 ? effTxtW : 180;
-                              const boxCenterX = txt.x + boxWForBar / 2;
+                              const estBarW = 475 * invZoom;
                               let barShiftX = 0;
-                              if (estHalfBarW * 2 < pW - 12) {
-                                if (boxCenterX - estHalfBarW < 6) {
-                                  barShiftX = 6 - (boxCenterX - estHalfBarW);
-                                } else if (boxCenterX + estHalfBarW > pW - 6) {
-                                  barShiftX = pW - 6 - (boxCenterX + estHalfBarW);
-                                }
+                              if (txt.x + estBarW > pW - 8) {
+                                barShiftX = (pW - 8) - (txt.x + estBarW);
+                              }
+                              if (txt.x + barShiftX < 8) {
+                                barShiftX = 8 - txt.x;
                               }
                               const placeBarBelow = txt.y * safeZoom < 46;
                               const barGapPx = Math.max(2, Math.round(8 * invZoom));
@@ -63100,7 +63096,6 @@ export default function App() {
                                   ref={activeTextFloatingBarRef}
                                   data-text-drag="true"
                                   data-txt-x={Math.round(txt.x)}
-                                  data-txt-w={Math.round(boxWForBar)}
                                   data-page-w={Math.round(pW)}
                                   data-place-below={placeBarBelow ? '1' : '0'}
                                   onMouseDown={(ev) => ev.preventDefault()}
@@ -63127,15 +63122,15 @@ export default function App() {
                                     }
                                   }}
                                   style={{
-                                    left: '50%',
+                                    left: 0,
                                     ...(placeBarBelow
                                       ? { top: `calc(100% + ${barGapPx}px)` }
                                       : { bottom: `calc(100% + ${barGapPx}px)` }),
-                                    transformOrigin: placeBarBelow ? '50% 0%' : '50% 100%',
+                                    transformOrigin: placeBarBelow ? '0% 0%' : '0% 100%',
                                     transform: `${
                                       barShiftX
-                                        ? `translateX(calc(-50% + ${Math.round(barShiftX)}px))`
-                                        : 'translateX(-50%)'
+                                        ? `translateX(${Math.round(barShiftX)}px)`
+                                        : 'translateX(0px)'
                                     } scale(${invZoom})`,
                                     touchAction: 'none',
                                     WebkitUserSelect: 'none',
