@@ -138,7 +138,7 @@ flowchart TD
 
 ---
 
-### 3.4 Σύστημα Σχεδιασμού Warm Studio & Minimal Navy (`#1e3a5f`) — Υποχρεωτικό Σύνταγμα UI/UX
+### 3.4 Σύστημα Σχεδιασμού Warm Studio & Minimal Navy (`#0066ff`) — Υποχρεωτικό Σύνταγμα UI/UX
 
 > [!IMPORTANT]
 > **ΥΠΟΧΡΕΩΤΙΚΟΣ ΚΑΝΟΝΑΣ ΣΧΕΔΙΑΣΜΟΥ ΓΙΑ ΚΑΘΕ ΝΕΟ ΣΤΟΙΧΕΙΟ, ΜΕΝΟΥ, DASHBOARD Ή POPOVER:**
@@ -152,11 +152,11 @@ flowchart TD
 | **Track / Group Background** | `#efebe3` / `#ece7dc` | Διαδρομές ομαδοποιημένων κουμπιών (font tracks, category tabs, button groups). |
 | **Borders & Dividers** | `#dfd8cb` | Εξωτερικό περίγραμμα κουμπιών, panels και popovers (`border-[#dfd8cb]`). |
 | **Hairline Dividers** | `#e8e2d6` | Εσωτερικοί διαχωριστές καρτών & ενοτήτων (`divide-[#e8e2d6]`, `border-t border-[#e8e2d6]`). |
-| **Primary Navy Active** | `#1e3a5f` | **Το κυρίαρχο χρώμα ενεργής κατάστασης.** Χρησιμοποιείται σε ενεργά εργαλεία, ενεργές καρτέλες, sliders, ενεργούς διακόπτες και active rings (`bg-[#1e3a5f] text-white`). |
+| **Primary Navy Active** | `#0066ff` | **Το κυρίαρχο χρώμα ενεργής κατάστασης.** Χρησιμοποιείται σε ενεργά εργαλεία, ενεργές καρτέλες, sliders, ενεργούς διακόπτες και active rings (`bg-[#0066ff] text-white`). |
 | **Inactive Text / Icons** | `#475569` / `#2c3e50` | Σκούρο γκρι/μπλε για ξεκούραστη ανάγνωση χωρίς έντονη αντίθεση. |
 | **Muted Labels & Drag Grips**| `#64748b` / `#a8a29e` | Ετικέτες υποκατηγοριών, κουκκίδες λαβών μετακίνησης (`⠿`). |
 | **Danger / Delete State** | `#fdf6f6` / `#b91c1c` | Απαλό ροζέ φόντο (`#fdf6f6`), λεπτό περίγραμμα (`#f3d4d4`) και διακριτικό κόκκινο κείμενο (`#b91c1c`). |
-| **Toggle Switches** | `WarmStudioToggle` | Ενιαίος iOS-style διακόπτης: ενεργός `#1e3a5f`, ανενεργός `#dfd8cb` με λευκό slider thumb. |
+| **Toggle Switches** | `WarmStudioToggle` | Ενιαίος iOS-style διακόπτης: ενεργός `#0066ff`, ανενεργός `#dfd8cb` με λευκό slider thumb. |
 
 #### 🔘 Ενοποίηση των OCR Εργαλείων σε Ακριβώς 3 Κουμπιά
 Αντί για τον παλιό υπερκορεσμό 7 διάσπαρτων κουμπιών (`Πολύγωνο`, `textOCR`, `MathOCR`, `ChemOCR`, `3D.OCR`, `Διάγραμμα`, `Άτομο`), η υπο-μπάρα Λάσο περιλαμβάνει **ακριβώς 3 εργονομικά κουμπιά**:
@@ -302,11 +302,11 @@ sequenceDiagram
 
 ### 9.1 ✅ Τι Έχουμε Ολοκληρώσει Πλήρως έως την `v0.99 (WarmStudio)`
 
-#### Α0000000. Πλήρης Εναρμόνιση Warm Studio & Minimal Navy (`#1e3a5f`), 3 Κουμπιά OCR & Option B Dashboards (`v0.99 — WarmStudio`)
-* **🏛️ Ενιαία Χρωματική Παλέτα Warm Studio & Minimal Navy (`#1e3a5f`):**
+#### Α0000000. Πλήρης Εναρμόνιση Warm Studio & Minimal Navy (`#0066ff`), 3 Κουμπιά OCR & Option B Dashboards (`v0.99 — WarmStudio`)
+* **🏛️ Ενιαία Χρωματική Παλέτα Warm Studio & Minimal Navy (`#0066ff`):**
   * Πλήρης κατάργηση των έντονων "χτυπητών" χρωμάτων (neon μπλε `#0066ff`, σμαραγδί `#22c55e`, μωβ `#7c3aed`, κλπ.) από όλες τις εργαλειοθήκες, υπο-μπάρες, popovers, αιωρούμενα pills και dashboards προσομοιώσεων.
   * Κεντρική μπάρα εργαλείων & υπο-μπάρες σε θερμό φόντο `#f7f5f0` με λεπτό περίγραμμα `#dfd8cb`.
-  * Όλα τα κουμπιά εργαλείων, μνήμης πάχους, διακεκομμένης γραμμής, στρωσίματος και ενεργών επιλογών έχουν κοινό **ενεργό φόντο Navy `#1e3a5f`** με λευκό κείμενο/εικονίδιο (`text-white`) και **ανενεργό φόντο `#fdfbf7`** με περίγραμμα `#dfd8cb`.
+  * Όλα τα κουμπιά εργαλείων, μνήμης πάχους, διακεκομμένης γραμμής, στρωσίματος και ενεργών επιλογών έχουν κοινό **ενεργό φόντο Navy `#0066ff`** με λευκό κείμενο/εικονίδιο (`text-white`) και **ανενεργό φόντο `#fdfbf7`** με περίγραμμα `#dfd8cb`.
 * **🔘 Ενοποίηση των Εργαλείων OCR σε Ακριβώς 3 Εργονομικά Κουμπιά:**
   * **`T textOCR` (Άμεσο πάτημα):** Μετατροπή χειρόγραφου κειμένου στην επιλεγμένη γραμματοσειρά (`Πένα`, `Καλλιγραφική`, κλπ.).
   * **`Σ Math ▾` (Dropdown Popover):** Συγκεντρώνει `Εξίσωση` (MathOCR / LaTeX), `Διάγραμμα` (Συναρτήσεις / Άξονες) και `Πολύγωνο` (Ένωση ευθειών).
@@ -314,11 +314,11 @@ sequenceDiagram
   * Αυτόματο κλείσιμο των dropdowns με κλικ οπουδήποτε εκτός (`data-popover-panel="lasso-ocr"`) ή με πλήκτρο `Escape`.
 * **⚙️ Ανασχεδιασμός Dashboards Προσομοίωσης (Option B Warm Studio):**
   * Ενιαίο συμπαγές παράθυρο σε `#fdfbf7` με λεπτό περίγραμμα `#dfd8cb` και διακριτική ένδειξη ενεργής προσομοίωσης (Navy/Green dot).
-  * Διαδρομή επιλογής κατηγορίας (`Κυκλώματα`, `Ελατήρια`, `Δυνάμεις`, `Άτομο`) σε `#efebe3` με ενεργό tab `#1e3a5f`.
-  * Ενιαίος διακόπτης **`WarmStudioToggle`** (iOS-style switch με ενεργό `#1e3a5f` και ανενεργό `#dfd8cb`) που αντικατέστησε όλα τα ετερόκλητα native browser checkboxes σε όλες τις καρτέλες.
+  * Διαδρομή επιλογής κατηγορίας (`Κυκλώματα`, `Ελατήρια`, `Δυνάμεις`, `Άτομο`) σε `#efebe3` με ενεργό tab `#0066ff`.
+  * Ενιαίος διακόπτης **`WarmStudioToggle`** (iOS-style switch με ενεργό `#0066ff` και ανενεργό `#dfd8cb`) που αντικατέστησε όλα τα ετερόκλητα native browser checkboxes σε όλες τις καρτέλες.
   * Καθαρά μονόχρωμα διανυσματικά εικονίδια (`currentColor`) στη θέση παλιών emojis μέσα στο UI.
 * **🏷️ Ανασχεδιασμός Βιβλιοθήκης (Screens 1 & 2):**
-  * Navy Blue `#1e3a5f` & Dot-Grid `#f8f7f4`, μεγαλύτερες portrait μικρογραφίες (`76×102px`) στα `Πρόσφατα Ανοιγμένα`, δυναμικά chips φίλτρων με όριο `count >= 3`, και ακαριαίο desktop hover preview 1ης σελίδας.
+  * Navy Blue `#0066ff` & Dot-Grid `#f8f7f4`, μεγαλύτερες portrait μικρογραφίες (`76×102px`) στα `Πρόσφατα Ανοιγμένα`, δυναμικά chips φίλτρων με όριο `count >= 3`, και ακαριαίο desktop hover preview 1ης σελίδας.
 
 #### Α000000. Δελταϊκός Συγχρονισμός Φακέλων Google Drive με Auto-Resume, Πραγματικό `KaTeX` στο PDF, Κόκκινες Γραμμές Ευθυγράμμισης Κειμένου, Μικρο-Κινήσεις Πληκτρολογίου & Επέκταση Βιβλιοθήκης STEM (`v0.98 — mainFixes`)
 * **🔄 Αναδρομικός Δελταϊκός Συγχρονισμός Φακέλων με Google Drive (`handleSyncFolderTreeToGoogleDrive`):**
@@ -500,11 +500,11 @@ sequenceDiagram
 | **Μπάρες Εργαλείων (Toolbars)** | `#f7f5f0` | `bg-[#f7f5f0]/95 backdrop-blur-md border-[#dfd8cb]` |
 | **Υποδοχές & Κάρτες (Cards / Tracks)** | `#efebe3` | `bg-[#efebe3] border-[#dfd8cb]` (ανενεργές καταστάσεις, φόντο input/pills) |
 | **Περιγράμματα (Borders / Dividers)** | `#dfd8cb` | `border-[#dfd8cb]` (διακριτικά, κομψά hairlines 1px) |
-| **Κύριο Ενεργό Χρώμα (Primary Navy)** | `#1e3a5f` | `bg-[#1e3a5f] text-white hover:bg-[#162d4a]` (βαθύ navy studio) |
+| **Κύριο Ενεργό Χρώμα (Primary Navy)** | `#0066ff` | `bg-[#0066ff] text-white hover:bg-[#0055d4]` (βαθύ navy studio) |
 | **Κύριο Κείμενο (Body Text)** | `#2c3e50` | `text-[#2c3e50]` (ευανάγνωστο ανθρακί-μπλε) |
 | **Δευτερεύον / Υποστηρικτικό Κείμενο** | `#64748b` | `text-[#64748b]` (ήπιο slate για επεξηγήσεις και labels) |
 | **Επικίνδυνες Ενέργειες (Danger / Delete)** | `#fdf6f6` / `#b91c1c` | `bg-[#fdf6f6] border-[#f3d4d4] text-[#b91c1c] hover:bg-[#b91c1c] hover:text-white` |
-| **Διακόπτες Επιλογής (Toggles)** | `WarmStudioToggle` | Χρήση του component `WarmStudioToggle` με track `#efebe3` / thumb `#ffffff` και ενεργό `#1e3a5f`. Πλήρης απαγόρευση των standard HTML checkboxes. |
+| **Διακόπτες Επιλογής (Toggles)** | `WarmStudioToggle` | Χρήση του component `WarmStudioToggle` με track `#efebe3` / thumb `#ffffff` και ενεργό `#0066ff`. Πλήρης απαγόρευση των standard HTML checkboxes. |
 
 ### 11.2 Κανόνες Τοποθέτησης & Ανεξάρτητων Panels (`Layers`, `Periodic Table`, `Dashboard`)
 
@@ -518,4 +518,4 @@ sequenceDiagram
    - Toast & High-priority Dropdowns: `z-[9999]`
 3. **Ομαδοποίηση OCR & Εργαλείων:**
    - 3 καθαρά κουμπιά: `Text OCR` (άμεση εκτέλεση), `Math` Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο), `Chem` Dropdown (Αντιδράσεις, 3D, Άτομο).
-   - Τα ενεργά κουμπιά φέρουν φόντο `#1e3a5f` με λευκό κείμενο, ενώ τα ανενεργά φόντο `#efebe3` με περίγραμμα `#dfd8cb` και κείμενο `#2c3e50`.
+   - Τα ενεργά κουμπιά φέρουν φόντο `#0066ff` με λευκό κείμενο, ενώ τα ανενεργά φόντο `#efebe3` με περίγραμμα `#dfd8cb` και κείμενο `#2c3e50`.

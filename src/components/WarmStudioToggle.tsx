@@ -13,7 +13,7 @@ interface WarmStudioToggleProps {
 
 /**
  * Reusable Warm Studio Toggle Switch
- * Follows the Navy (#1e3a5f) + Warm Paper (#fdfbf7/#dfd8cb) aesthetic.
+ * Follows the Navy (#0066ff) + Warm Paper (#fdfbf7/#dfd8cb) aesthetic.
  * Replaces native browser checkboxes with a calm, tactile switch.
  */
 export const WarmStudioToggle: React.FC<WarmStudioToggleProps> = ({
@@ -40,7 +40,7 @@ export const WarmStudioToggle: React.FC<WarmStudioToggleProps> = ({
     >
       {(icon || label) && (
         <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#2c3e50] tracking-tight">
-          {icon && <span className="text-[#64748b] group-hover:text-[#1e3a5f] transition-colors">{icon}</span>}
+          {icon && <span className="text-[#64748b] group-hover:text-[#0066ff] transition-colors">{icon}</span>}
           {label && <span>{label}</span>}
           {badge}
         </span>
@@ -56,8 +56,8 @@ export const WarmStudioToggle: React.FC<WarmStudioToggleProps> = ({
             onChange(!checked);
           }
         }}
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f]/40 ${
-          checked ? 'bg-[#1e3a5f]' : 'bg-[#dfd8cb] group-hover:bg-[#d5cdc0]'
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0066ff]/40 ${
+          checked ? 'bg-[#0066ff]' : 'bg-[#dfd8cb] group-hover:bg-[#d5cdc0]'
         }`}
       >
         <span
