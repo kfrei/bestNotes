@@ -55687,7 +55687,7 @@ export default function App() {
                               isSelected
                                 ? 'bg-[#efebe3] border-[#1e3a5f] ring-2 ring-[#1e3a5f]/25 shadow-xs'
                                 : isSim
-                                  ? 'bg-[#f7f5f0] border-[#dfd8cb] hover:bg-[#ece7dc]'
+                                  ? 'bg-[#ffffff] border-[#d8d1c3] shadow-2xs hover:bg-[#f5f2eb] hover:border-[#1e3a5f]/40'
                                   : 'bg-[#fdfbf7] border-[#dfd8cb] hover:bg-[#ece7dc]'
                             }`}
                           >
