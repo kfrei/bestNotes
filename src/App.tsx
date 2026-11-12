@@ -50504,7 +50504,7 @@ export default function App() {
             {showUserDropdown && (
               <div
                 data-popover-panel="user"
-                className="absolute right-0 top-full mt-2 w-72 bg-[#fdfbf7]/98 backdrop-blur-md text-[#2c3e50] rounded-2xl shadow-2xl border border-[#dfd8cb] p-3.5 z-50 space-y-3"
+                className="absolute right-0 top-full mt-2 w-72 bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 text-[#2c3e50] rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-3.5 z-50 space-y-3"
               >
                 {/* 1. User Account Info (Name + Email) & Logout */}
                 <div className="space-y-2">
@@ -52835,7 +52835,7 @@ export default function App() {
                                         <div
                                           data-popover-panel="lib-folder"
                                           onClick={(e) => e.stopPropagation()}
-                                          className="absolute left-0 bottom-full mb-1.5 w-48 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 space-y-1 text-left"
+                                          className="absolute left-0 bottom-full mb-1.5 w-48 max-h-56 overflow-y-auto bg-[#fdfbf7]/88 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-1.5 z-50 space-y-1 text-left"
                                         >
                                           <div className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
                                             Μετακίνηση σε Φάκελο
@@ -53040,7 +53040,7 @@ export default function App() {
                                   <div
                                     data-popover-panel="lib-tags"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="mt-1.5 w-48 bg-white border border-sky-300 rounded-xl p-2 shadow-lg space-y-1.5 z-30"
+                                    className="mt-1.5 w-48 bg-[#fdfbf7]/88 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 rounded-2xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 space-y-1.5 z-30"
                                   >
                                     <div className="flex items-center gap-1">
                                       <input
@@ -53700,11 +53700,11 @@ export default function App() {
                   {editingFolderModal && (
                     <div
                       onClick={() => setEditingFolderModal(null)}
-                      className="fixed inset-0 z-[220] bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4"
+                      className="fixed inset-0 z-[220] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
                     >
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#fdfbf7] rounded-3xl shadow-2xl border border-[#dfd8cb] p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-[#2c3e50]"
+                        className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-[#2c3e50]"
                       >
                         {/* Header with Live Preview + Favorite Star + Close */}
                         <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#dfd8cb]">
@@ -54092,11 +54092,11 @@ export default function App() {
                   {pendingDeleteNotebook && (
                     <div
                       onClick={() => setPendingDeleteNotebook(null)}
-                      className="fixed inset-0 z-[220] bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4"
+                      className="fixed inset-0 z-[220] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
                     >
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-200/90 p-6 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-150"
+                        className="w-full max-w-sm bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-6 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-150"
                       >
                         <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200/80 flex items-center justify-center text-rose-600 mb-4 shadow-2xs">
                           <Trash2 className="w-7 h-7" />
@@ -54959,7 +54959,7 @@ export default function App() {
                     top: fillTransPopoverPos.top,
                     left: fillTransPopoverPos.left,
                   }}
-                  className="fixed z-50 bg-[#fdfbf7]/98 backdrop-blur-md rounded-2xl shadow-xl border border-[#dfd8cb] px-3 py-2.5 flex flex-col gap-2 w-[248px]"
+                  className="fixed z-50 bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 px-3.5 py-3 flex flex-col gap-2 w-[252px]"
                 >
                   <div className="flex items-center justify-between text-[11px] font-bold text-[#2c3e50]">
                     <div className="flex items-center gap-1.5">
@@ -55017,7 +55017,7 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="width"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-20 top-24 z-50 bg-[#fdfbf7]/98 backdrop-blur-md rounded-2xl shadow-2xl border border-[#dfd8cb] p-3.5 flex flex-col gap-3 w-72"
+              className="fixed right-20 top-24 z-50 bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-4 flex flex-col gap-3 w-72"
             >
               <div className="flex items-center justify-between text-xs font-bold text-[#0066ff]">
                 <span>Πάχος Γραμμής (12 Επιλογές)</span>
@@ -55093,7 +55093,7 @@ export default function App() {
               data-ui-panel="true"
               data-popover-panel="color"
               onPointerDown={(e) => e.stopPropagation()}
-              className="fixed right-6 top-24 z-50 bg-[#fdfbf7]/98 backdrop-blur-md rounded-2xl shadow-2xl border border-[#dfd8cb] p-3 flex flex-col gap-2.5 w-64"
+              className="fixed right-6 top-24 z-50 bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 ring-1 ring-black/5 p-3.5 flex flex-col gap-2.5 w-64"
             >
               <div className="flex items-center justify-between text-xs font-bold text-[#0066ff]">
                 <span>Παλέτα Χρωμάτων</span>
@@ -56058,7 +56058,7 @@ export default function App() {
                               data-ui-panel="true"
                               data-popover-panel="lasso-ocr"
                               onPointerDown={(e) => e.stopPropagation()}
-                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] rounded-2xl shadow-xl p-1.5 flex flex-col gap-1"
+                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 flex flex-col gap-1"
                             >
                               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                 Math · Μαθηματικά & Γεωμετρία
@@ -56134,7 +56134,7 @@ export default function App() {
                               data-ui-panel="true"
                               data-popover-panel="lasso-ocr"
                               onPointerDown={(e) => e.stopPropagation()}
-                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] rounded-2xl shadow-xl p-1.5 flex flex-col gap-1"
+                              className="fixed md:absolute top-full left-0 mt-1.5 z-50 w-64 bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 flex flex-col gap-1"
                             >
                               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                 Chem · Χημεία & Άτομα
@@ -56871,7 +56871,7 @@ export default function App() {
                 }
                 className={`fixed ${
                   shapeLibPos ? '' : 'right-4 sm:right-12'
-                } z-50 w-[360px] sm:w-[465px] rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-2xl p-3.5 text-[#2c3e50] flex flex-col max-h-[78vh]`}
+                } z-50 w-[360px] sm:w-[465px] rounded-3xl bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-4 text-[#2c3e50] flex flex-col max-h-[78vh]`}
               >
                 {(() => {
                   const skHex = (stickerCustomColor || '#1d4ed8').replace('#', '');
@@ -58381,7 +58381,7 @@ export default function App() {
                 style={{ left: simPanelPos.x, top: simPanelPos.y }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
-                className="fixed z-40 w-76 max-h-[82vh] overflow-y-auto rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-xl p-3 text-[#2c3e50] space-y-2.5 select-none"
+                className="fixed z-40 w-76 max-h-[82vh] overflow-y-auto rounded-3xl bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-3.5 text-[#2c3e50] space-y-2.5 select-none"
               >
                 {/* Compact Draggable Header ("Προσομοίωση") */}
                 <div
@@ -58440,7 +58440,7 @@ export default function App() {
                 </div>
 
                 {/* Top-Level Physics & Chemistry Simulation Category Switcher: "Κυκλώματα" | "Ελατήρια" | "Δυνάμεις" | "Άτομο" */}
-                <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[#efebe3] border border-[#dfd8cb]">
+                <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-[#efebe3]/65 backdrop-blur-md border border-white/70 shadow-inner">
                   <button
                     type="button"
                     onClick={() => {
@@ -58575,7 +58575,7 @@ export default function App() {
                     });
 
                   return (
-                    <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                    <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                       {selectedStrokeIds.length > 0 && !isSelectionAlreadyRegisteredSim && (
                         <button
                           type="button"
@@ -59105,7 +59105,7 @@ export default function App() {
                 </div>
 
                 {/* Simulation Visual Options */}
-                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2 divide-y divide-[#e8e2d6]/70">
+                <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2 divide-y divide-[#e8e2d6]/70">
                   <div className="space-y-1.5">
                     <WarmStudioToggle
                       checked={simShowElectrons}
@@ -59191,7 +59191,7 @@ export default function App() {
                     return (
                       <div className="space-y-2.5">
                         {/* 1. Named Spring Simulations Selector (ελ01, ελ02, ...) */}
-                        <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-1.5">
+                        <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-1.5">
                           {hasSelectedSpring && (
                             <button
                               type="button"
@@ -59484,7 +59484,7 @@ export default function App() {
                                 )}
 
                                 {/* 3. Initial Phase / Starting Position Selector (x=0, +A, -A) */}
-                                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-1.5">
+                                <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-1.5">
                                   <div className="flex items-center justify-between">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                       Αρχική Θέση (t = 0):
@@ -59552,7 +59552,7 @@ export default function App() {
                                   const maxFreqHz = maxRootRatio / (2 * Math.PI);
 
                                   return (
-                                    <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                                    <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                                       <div className="space-y-0.5">
                                         <div className="flex items-center justify-between text-[10.5px] font-bold text-[#2c3e50]">
                                           <span>⚖ Μάζα Σώματος (m):</span>
@@ -59664,7 +59664,7 @@ export default function App() {
                                 })()}
 
                                 {/* 5. Canvas Display Checkboxes (Unified Position Scale + Amplitude +A/-A & Θ.Ι., Natural Length l₀, Force Vectors) */}
-                                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-1.5 divide-y divide-[#e8e2d6]/70">
+                                <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-1.5 divide-y divide-[#e8e2d6]/70">
                                   <WarmStudioToggle
                                     checked={activeSpring.showAmplitudeLines}
                                     onChange={(checked) => {
@@ -59720,7 +59720,7 @@ export default function App() {
                                 </div>
 
                                 {/* 6. Live Animated Diagrams Checkboxes: x(t) [Red], υ(t) [Green], α(t) [Purple] */}
-                                <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                                <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                                       Ζωντανά Διαγράμματα:
@@ -59895,7 +59895,7 @@ export default function App() {
                         </div>
 
                         {/* 2. Active Force Simulations List (δυν01, δυν02, ...) */}
-                        <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                        <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                           {selectedStrokeIds.length > 0 && (
                             <button
                               type="button"
@@ -60013,7 +60013,7 @@ export default function App() {
                         {/* 3. Mode-Specific Interactive Controls */}
                         {activeForce &&
                           (activeForce.mode === 'analysis' || activeForce.mode === 'synthesis') && (
-                            <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6]">
+                            <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs">
                               {isForceSimAtIntegerValues(activeForce, activePage) ? (
                                 <WarmStudioToggle
                                   checked={Boolean(activeForce.showCalc)}
@@ -60037,7 +60037,7 @@ export default function App() {
                           )}
 
                         {activeForce && activeForce.mode === 'incline' && (
-                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                          <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                             <p className="text-[10px] text-[#64748b] leading-snug">
                               Σύρε την <b>πράσινη λαβή</b> στην κορυφή του κεκλιμένου (15°–60°) για αλλαγή γωνίας θ.
                             </p>
@@ -60098,7 +60098,7 @@ export default function App() {
                         )}
 
                         {activeForce && activeForce.mode === 'pendulum' && (
-                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                          <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                             <div className="grid grid-cols-2 gap-1.5">
                               <button
                                 type="button"
@@ -60247,7 +60247,7 @@ export default function App() {
                         </button>
 
                         {/* 2. Ενεργή Προσομοίωση Ατόμου & Λίστα Ατόμων στη σκηνή */}
-                        <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                        <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
                               Προσομοιώσεις Ατόμου:
@@ -60431,7 +60431,7 @@ export default function App() {
 
                         {/* 3. Επιλογή Εμφάνισης Τροχιών (Όλες vs Μόνο Εξωτερική με αχνές διακεκομμένες τις εσωτερικές) */}
                         {activeAtomSim && (
-                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                          <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                             <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider block">
                               Εμφάνιση Τροχιών:
                             </span>
@@ -60482,7 +60482,7 @@ export default function App() {
 
                         {/* 4. Χημική Αντίδραση & 2s Κίνηση Ηλεκτρονίων (➔) */}
                         {activeAtomSim && (
-                          <div className="bg-[#fdfbf7] rounded-xl p-2.5 border border-[#e8e2d6] space-y-2">
+                          <div className="bg-white/60 backdrop-blur-md rounded-2xl p-2.5 border border-white/80 shadow-2xs space-y-2">
                             <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider block">
                               Χημικοί Δεσμοί & Αντίδραση:
                             </span>
@@ -60722,7 +60722,7 @@ export default function App() {
                     periodicTableDragRef.current = null;
                   }}
                   onWheel={(e) => e.stopPropagation()}
-                  className="fixed z-50 overflow-auto rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-2xl text-[#2c3e50] select-none cursor-grab active:cursor-grabbing"
+                  className="fixed z-50 overflow-auto rounded-3xl bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 text-[#2c3e50] select-none cursor-grab active:cursor-grabbing"
                   title="Σύρε από οποιοδήποτε σημείο για μετακίνηση ή από τις γωνίες για αυξομείωση μεγέθους"
                 >
                   {/* 4 Γωνίες Αυξομείωσης Μεγέθους (Corner Resize Handles) */}
@@ -60912,7 +60912,7 @@ export default function App() {
                   left: `${effLayersX}px`,
                   top: `${effLayersY}px`,
                 }}
-                className="fixed z-50 w-80 rounded-2xl bg-[#fdfbf7]/98 backdrop-blur-md border border-[#dfd8cb] shadow-2xl p-3.5 text-[#2c3e50]"
+                className="fixed z-50 w-80 rounded-3xl bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-3.5 text-[#2c3e50]"
               >
                 <div
                   style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
@@ -61131,12 +61131,12 @@ export default function App() {
                         key={layer.id}
                         data-layer-row-id={layer.id}
                         onClick={() => setActiveLayerId(layer.id)}
-                        className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition ${
+                        className={`flex items-center justify-between p-2.5 rounded-2xl border text-xs cursor-pointer select-none transition ${
                           isBeingDragged
-                            ? 'bg-[#efebe3] border-[#0066ff] ring-2 ring-[#0066ff] shadow-md scale-[1.01]'
+                            ? 'bg-white/95 border-[#0066ff] ring-2 ring-[#0066ff] shadow-md scale-[1.01]'
                             : isCurrent
-                            ? 'bg-[#efebe3]/80 border-[#0066ff] text-[#0066ff] ring-1 ring-[#0066ff]/30'
-                            : 'bg-[#fdfbf7] border-[#dfd8cb] text-[#2c3e50] hover:bg-[#efebe3]/40'
+                            ? 'bg-white/85 backdrop-blur-md border-[#0066ff] text-[#0066ff] ring-2 ring-[#0066ff]/25 shadow-xs'
+                            : 'bg-white/55 backdrop-blur-md border-white/80 text-[#2c3e50] hover:bg-white/75 shadow-2xs'
                         }`}
                       >
                         {/* Left: Touch/Pencil/Mouse Drag Handle + Click-to-Edit Layer Name & Item Count */}
@@ -62796,7 +62796,7 @@ export default function App() {
                                     letterSpacing: 'normal',
                                     WebkitTextStroke: '0px',
                                   }}
-                                  className="absolute flex items-center gap-1 bg-[#e5dfd3]/95 backdrop-blur-xs border border-stone-300/90 text-[#333333] px-2 py-1 rounded-lg shadow-sm text-[11.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
+                                  className="absolute flex items-center gap-1 bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 ring-1 ring-black/5 text-[#2c3e50] px-2.5 py-1.5 rounded-2xl shadow-[0_12px_32px_-6px_rgba(0,0,0,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] text-[11.5px] leading-none font-normal whitespace-nowrap z-50 cursor-grab active:cursor-grabbing"
                                 >
                                   <span
                                     className="px-1 py-0.5 text-[#333333]/75 text-[12.5px] font-normal select-none"
@@ -65026,7 +65026,7 @@ export default function App() {
       {showThumbnailsModal && (
         <div
           onClick={() => setShowThumbnailsModal(false)}
-          className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
         >
           <div
             data-ui-panel="true"
@@ -65034,7 +65034,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             style={{ width: '94vw', maxWidth: '1024px', height: '85vh' }}
-            className="rounded-2xl bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] shadow-2xl overflow-hidden flex flex-col"
+            className="rounded-3xl bg-[#fdfbf7]/88 backdrop-blur-2xl backdrop-saturate-150 text-[#2c3e50] border border-white/80 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 overflow-hidden flex flex-col"
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-3.5 bg-[#0066ff] text-white shrink-0 flex-wrap gap-2">
@@ -65307,14 +65307,14 @@ export default function App() {
       {showMathModal && (
         <div
           onClick={() => setShowMathModal(false)}
-          className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
         >
           <div
             data-ui-panel="true"
             data-popover-panel="math"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="rounded-2xl bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] p-6 w-full max-w-lg shadow-2xl space-y-4"
+            className="rounded-3xl bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 text-[#2c3e50] border border-white/80 p-6 w-full max-w-lg shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4"
           >
             <div className="flex items-center justify-between">
               <h2 id="mathDialogTitle" className="text-lg font-bold text-[#0066ff] flex items-center gap-2">
@@ -65563,14 +65563,14 @@ export default function App() {
       {showSettingsModal && (
         <div
           onClick={() => setShowSettingsModal(false)}
-          className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
         >
           <div
             data-ui-panel="true"
             data-popover-panel="settings"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="rounded-2xl bg-[#fdfbf7] text-[#2c3e50] border border-[#dfd8cb] p-6 w-full max-w-md shadow-2xl space-y-4"
+            className="rounded-3xl bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 text-[#2c3e50] border border-white/80 p-6 w-full max-w-md shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4"
           >
             <div className="flex items-center justify-between">
               <h2 id="settingsDialogTitle" className="text-lg font-bold text-[#0066ff]">
@@ -65971,12 +65971,12 @@ export default function App() {
       {pendingShareFile && (
         <div
           onClick={() => setPendingShareFile(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4"
         >
           <div
             data-ui-panel="true"
             onClick={(e) => e.stopPropagation()}
-            className="rounded-2xl bg-white text-slate-800 border border-slate-200 p-6 w-full max-w-sm shadow-2xl space-y-4 text-center"
+            className="rounded-3xl bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 text-[#2c3e50] border border-white/80 p-6 w-full max-w-sm shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 space-y-4 text-center"
           >
             <div className="w-12 h-12 mx-auto rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0066ff]">
               <Share2 className="w-6 h-6" />
@@ -66031,11 +66031,11 @@ export default function App() {
       {/* Modal επιλογής διαγράμματος για Εξίσωση Κύματος δύο μεταβλητών (x, t): Στιγμιότυπο f(x) ή Ταλάντωση Σημείου f(t) */}
       {waveDiagramPrompt && (
         <div
-          className="fixed inset-0 z-[1050] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1050] bg-slate-950/40 backdrop-blur-md flex items-center justify-center p-4"
           onClick={() => setWaveDiagramPrompt(null)}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5 flex flex-col gap-3.5"
+            className="w-full max-w-md rounded-3xl bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-5 flex flex-col gap-3.5 text-[#2c3e50]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -66125,14 +66125,14 @@ export default function App() {
       {/* AI ANIMATE STUDIO MODAL (Smart Sketch Animator with Vision & Audio) */}
       {aiAnimateModal && (
         <div
-          className="fixed inset-0 z-[1060] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1060] bg-slate-950/40 backdrop-blur-md flex items-center justify-center p-4"
           onClick={() => setAiAnimateModal(null)}
         >
           <div
             data-ui-panel="true"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white text-slate-800 border border-slate-200 shadow-2xl p-5 flex flex-col gap-4"
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-[#fdfbf7]/88 backdrop-blur-2xl backdrop-saturate-150 text-[#2c3e50] border border-white/80 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-5 flex flex-col gap-4"
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
@@ -66384,7 +66384,7 @@ export default function App() {
                   : undefined,
                 width: 224,
               }}
-              className="bg-[#fdfbf7] border border-[#dfd8cb] rounded-2xl shadow-2xl p-2 z-[9999] space-y-1 text-left"
+              className="bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 rounded-3xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5 p-2 z-[9999] space-y-1 text-left"
             >
               <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#64748b] truncate">
                 Λήψη «{targetNb.title}»

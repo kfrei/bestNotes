@@ -519,3 +519,19 @@ sequenceDiagram
 3. **Ομαδοποίηση OCR & Εργαλείων:**
    - 3 καθαρά κουμπιά: `Text OCR` (άμεση εκτέλεση), `Math` Dropdown (Εξίσωση, Διάγραμμα, Πολύγωνο), `Chem` Dropdown (Αντιδράσεις, 3D, Άτομο).
    - Τα ενεργά κουμπιά φέρουν φόντο `#0066ff` με λευκό κείμενο, ενώ τα ανενεργά φόντο `#efebe3` με περίγραμμα `#dfd8cb` και κείμενο `#2c3e50`.
+
+### 11.3 iPadOS Liquid Glass UI (Frosted Translucency & Vibrancy)
+
+Για πλήρη εναρμόνιση με το σύγχρονο design language του iPadOS και των Apple native apps, όλα τα παράθυρα, τα dashboards και τα modals υιοθετούν την αισθητική **Liquid Frosted Glass**:
+
+1. **Αιωρούμενα Dashboards & Popovers (`Layers`, `Simulation`, `Color`, `Width`, `OCR Dropdowns`):**
+   - **Βασικό Φόντο & Διάχυση:** `bg-[#fdfbf7]/82 backdrop-blur-2xl backdrop-saturate-150` (παρέχει αυθεντικό Apple frosted glass εφέ όπου το χαρτί και οι γραμμές του καμβά αχνοφαίνονται διακριτικά πίσω από το γυαλί διατηρώντας 100% ευανάγνωστα τα κείμενα).
+   - **Περίγραμμα Αντανάκλασης & Σκιές (Specular Rim):** `rounded-3xl border border-white/80 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.14),0_4px_16px_-2px_rgba(0,0,0,0.05),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5`.
+2. **Κεντρικά Modals & Διαλόγοι (`Thumbnails`, `Folder Editor`, `Math/CAS`, `Settings`, `Wave`, `Share`):**
+   - **Backdrop Overlay:** `fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-md` (αντικαθιστά τις σκληρές μαύρες επικαλύψεις με απαλή κινηματογραφική θόλωση βάθους).
+   - **Κάρτα Modal:** `bg-[#fdfbf7]/85 backdrop-blur-2xl backdrop-saturate-150 rounded-3xl border border-white/80 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.95)] ring-1 ring-black/5`.
+3. **Εσωτερικοί Δίσκοι & Υπο-κάρτες (Inner Cards & Tracks):**
+   - **Category Switcher / Segmented Pill Track:** `bg-[#efebe3]/65 backdrop-blur-md border border-white/70 rounded-2xl shadow-inner`.
+   - **Ανενεργές Υπο-κάρτες / Layer Rows:** `bg-white/55 backdrop-blur-md border border-white/80 rounded-2xl shadow-2xs`.
+   - **Ενεργή Επιλογή:** `bg-white/85 backdrop-blur-md border-[#0066ff] text-[#0066ff] ring-2 ring-[#0066ff]/25 shadow-xs`.
+
